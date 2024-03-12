@@ -125,7 +125,7 @@ def send_user_verification_email(
     msg.attach(body)
 
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
-        if SMTP_USER is not None and SMTP_PASS is not None:
+        if SMTP_USER is not None and SMTP_USER != '':
             s.starttls()
             # If credentials fails with gmail, check (You need an app password, not just the basic email password)
             # https://support.google.com/accounts/answer/185833?sjid=8512343437447396151-NA
