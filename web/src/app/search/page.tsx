@@ -1,5 +1,6 @@
 import { SearchSection } from "@/components/search/SearchSection";
 import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 import {
   AuthTypeMetadata,
   getAuthTypeMetadataSS,
@@ -169,6 +170,7 @@ export default async function Home() {
           />
         </div>
       </div>
+      <Footer />
     </>
   );
 }

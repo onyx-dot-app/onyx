@@ -30,3 +30,11 @@
   width: 8px; /* Vertical scrollbar width */
   height: 8px; /* Horizontal scrollbar height */
 }
+
+.min-h-screen {
+  min-height:calc(100vh - 143px);
+}
+
+.h-screen {
+  height:calc(100vh - 66px);
+}

@@ -12,6 +12,7 @@ import { SignInButton } from "./SignInButton";
 import { EmailPasswordForm } from "./EmailPasswordForm";
 import { Card, Title, Text } from "@tremor/react";
 import Link from "next/link";
+import { Footer } from "@/components/Footer";
 
 const Page = async ({
   searchParams,
@@ -70,7 +71,7 @@ const Page = async ({
       <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div>
           <div className="h-16 w-16 mx-auto">
-            <Image src="/logo.png" alt="Logo" width="1419" height="1520" />
+            <Image src="/eea_logo.png" alt="Logo" width="1419" height="1520" />
           </div>
           {authUrl && authTypeMetadata && (
             <>
@@ -103,6 +104,9 @@ const Page = async ({
             </Card>
           )}
         </div>
+      </div>
+      <div className="absolute bottom-0 w-full">
+        <Footer />
       </div>
     </main>
   );

@@ -7,6 +7,7 @@ import { Chat } from "./Chat";
 import { DocumentSet, Tag, User, ValidSources } from "@/lib/types";
 import { Persona } from "../admin/personas/interfaces";
 import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 
@@ -63,6 +64,7 @@ export function ChatLayout({
           documentSidebarInitialWidth={documentSidebarInitialWidth}
         />
       </div>
+      <Footer />
     </>
   );
 }

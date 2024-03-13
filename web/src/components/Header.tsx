@@ -59,10 +59,10 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
         <Link className="py-4" href="/search">
           <div className="flex">
             <div className="h-[32px] w-[30px]">
-              <Image src="/logo.png" alt="Logo" width="1419" height="1520" />
+              <Image src="/eea_logo.png" alt="Logo" width="1419" height="1520" />
             </div>
             <h1 className="flex text-2xl text-strong font-bold my-auto">
-              Danswer
+              &nbsp;Danswer
             </h1>
           </div>
         </Link>

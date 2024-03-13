@@ -10,6 +10,8 @@ import Image from "next/image";
 import { EmailPasswordForm } from "../login/EmailPasswordForm";
 import { Card, Title, Text } from "@tremor/react";
 import Link from "next/link";
+import { Footer } from "@/components/Footer";
+
 
 const Page = async () => {
   // catch cases where the backend is completely unreachable here
@@ -76,6 +78,10 @@ const Page = async () => {
           </Card>
         </div>
       </div>
+      <div className="absolute bottom-0 w-full">
+        <Footer />
+      </div>
+
     </main>
   );
 };

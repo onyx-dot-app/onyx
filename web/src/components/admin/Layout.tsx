@@ -1,4 +1,5 @@
 import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 import { AdminSidebar } from "@/components/admin/connectors/AdminSidebar";
 import {
   NotebookIcon,
@@ -181,6 +182,9 @@ export async function Layout({ children }: { children: React.ReactNode }) {
         <div className="px-12 pt-8 pb-8 h-full overflow-y-auto w-full">
           {children}
         </div>
+      </div>
+      <div className="absolute bottom-0 z-50 w-full">
+        <Footer />
       </div>
     </div>
   );

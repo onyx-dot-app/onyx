@@ -86,7 +86,7 @@ export function EmailPasswordForm({
               name="email"
               label="Email"
               type="email"
-              placeholder="email@yourcompany.com"
+              placeholder="email@eea.europa.eu"
             />
 
             <TextFormField
