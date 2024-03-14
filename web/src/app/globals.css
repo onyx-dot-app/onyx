@@ -35,6 +35,10 @@
   min-height:calc(100vh - 143px);
 }
 
+.min-h-screen-full {
+  min-height:100vh;
+}
+
 .h-screen {
   height:calc(100vh - 66px);
 }
