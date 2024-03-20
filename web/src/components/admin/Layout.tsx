@@ -58,7 +58,7 @@ export async function Layout({ children }: { children: React.ReactNode }) {
         <Header user={user} />
       </div>
       <div className="flex h-full pt-16">
-        <div className="w-80 pt-12 pb-8 h-full border-r border-border">
+        <div className="w-80 pt-12 pb-8 h-full border-r border-border overflow-y-auto">
           <AdminSidebar
             collections={[
               {
