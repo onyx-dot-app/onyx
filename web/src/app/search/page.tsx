@@ -24,6 +24,7 @@ import { personaComparator } from "../admin/personas/lib";
 import { FullEmbeddingModelResponse } from "../admin/models/embedding/embeddingModels";
 import { NoSourcesModal } from "@/components/initialSetup/search/NoSourcesModal";
 import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
+import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
 
 export default async function Home() {
   // Disable caching so we always get the up to date connector / document set / persona info
@@ -157,6 +158,7 @@ export default async function Home() {
         <NoCompleteSourcesModal ccPairs={ccPairs} />
       )}
 
+      <UserDisclaimerModal />
       <InstantSSRAutoRefresh />
 
       <div className="px-24 pt-10 flex flex-col items-center min-h-screen overflow-y-auto">
