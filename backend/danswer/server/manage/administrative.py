@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_admin_user
 from danswer.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
+from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import GEN_AI_API_KEY_STORAGE_KEY
 from danswer.configs.constants import GEN_AI_DETECTED_MODEL
 from danswer.configs.model_configs import GEN_AI_MODEL_PROVIDER
@@ -21,10 +22,11 @@ from danswer.db.engine import get_session
 from danswer.db.feedback import fetch_docs_ranked_by_boost
 from danswer.db.feedback import update_document_boost
 from danswer.db.feedback import update_document_hidden
+from danswer.db.file_store import get_default_file_store
 from danswer.db.models import User
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
-from danswer.dynamic_configs import get_dynamic_config_store
+from danswer.dynamic_configs.factory import get_dynamic_config_store
 from danswer.dynamic_configs.interface import ConfigNotFoundError
 from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_default_llm
@@ -254,3 +256,9 @@ def create_deletion_attempt_for_connector_id(
     cleanup_connector_credential_pair_task.apply_async(
         kwargs=dict(connector_id=connector_id, credential_id=credential_id),
     )
+
+    if cc_pair.connector.source == DocumentSource.FILE:
+        connector = cc_pair.connector
+        file_store = get_default_file_store(db_session)
+        for file_name in connector.connector_specific_config["file_locations"]:
+            file_store.delete_file(file_name)

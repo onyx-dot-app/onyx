@@ -12,7 +12,6 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk.models.blocks import DividerBlock
 from sqlalchemy.orm import Session
 
-from danswer.chat.chat_utils import compute_max_document_tokens
 from danswer.configs.danswerbot_configs import DANSWER_BOT_ANSWER_GENERATION_TIMEOUT
 from danswer.configs.danswerbot_configs import DANSWER_BOT_DISABLE_COT
 from danswer.configs.danswerbot_configs import DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER
@@ -39,6 +38,7 @@ from danswer.danswerbot.slack.utils import update_emote_react
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.models import SlackBotConfig
 from danswer.db.models import SlackBotResponseType
+from danswer.llm.answering.prompts.citations_prompt import compute_max_document_tokens
 from danswer.llm.utils import check_number_of_tokens
 from danswer.llm.utils import get_default_llm_version
 from danswer.llm.utils import get_max_input_tokens

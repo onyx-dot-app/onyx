@@ -79,7 +79,11 @@ export function PersonasTable({ personas }: { personas: Persona[] }) {
                 {!persona.default_persona && (
                   <FiEdit
                     className="mr-1 my-auto cursor-pointer"
-                    onClick={() => router.push(`/admin/personas/${persona.id}`)}
+                    onClick={() =>
+                      router.push(
+                        `/admin/personas/${persona.id}?u=${Date.now()}`
+                      )
+                    }
                   />
                 )}
                 <p className="text font-medium whitespace-normal break-none">

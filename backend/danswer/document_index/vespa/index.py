@@ -64,8 +64,8 @@ from danswer.document_index.vespa.utils import remove_invalid_unicode_chars
 from danswer.indexing.models import DocMetadataAwareIndexChunk
 from danswer.indexing.models import InferenceChunk
 from danswer.search.models import IndexFilters
-from danswer.search.search_runner import query_processing
-from danswer.search.search_runner import remove_stop_words_and_punctuation
+from danswer.search.retrieval.search_runner import query_processing
+from danswer.search.retrieval.search_runner import remove_stop_words_and_punctuation
 from danswer.utils.batching import batch_generator
 from danswer.utils.logger import setup_logger
 from danswer.utils.threadpool_concurrency import run_functions_tuples_in_parallel

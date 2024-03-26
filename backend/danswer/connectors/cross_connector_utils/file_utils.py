@@ -2,8 +2,7 @@ import json
 import os
 import re
 import zipfile
-from collections.abc import Generator
-from pathlib import Path
+from collections.abc import Iterator
 from typing import Any
 from typing import IO
 
@@ -78,11 +77,11 @@ def is_macos_resource_fork_file(file_name: str) -> bool:
 # to the zip file. This file should contain a list of objects with the following format:
 # [{ "filename": "file1.txt", "link": "https://example.com/file1.txt" }]
 def load_files_from_zip(
-    zip_location: str | Path,
+    zip_file_io: IO,
     ignore_macos_resource_fork_files: bool = True,
     ignore_dirs: bool = True,
-) -> Generator[tuple[zipfile.ZipInfo, IO[Any], dict[str, Any]], None, None]:
-    with zipfile.ZipFile(zip_location, "r") as zip_file:
+) -> Iterator[tuple[zipfile.ZipInfo, IO[Any], dict[str, Any]]]:
+    with zipfile.ZipFile(zip_file_io, "r") as zip_file:
         zip_metadata = {}
         try:
             metadata_file_info = zip_file.getinfo(".danswer_metadata.json")
@@ -109,18 +108,19 @@ def load_files_from_zip(
                 yield file_info, file, zip_metadata.get(file_info.filename, {})
 
 
-def detect_encoding(file_path: str | Path) -> str:
-    with open(file_path, "rb") as file:
-        raw_data = file.read(50000)  # Read a portion of the file to guess encoding
-    return chardet.detect(raw_data)["encoding"] or "utf-8"
+def detect_encoding(file: IO[bytes]) -> str:
+    raw_data = file.read(50000)
+    encoding = chardet.detect(raw_data)["encoding"] or "utf-8"
+    file.seek(0)
+    return encoding
 
 
 def read_file(
-    file_reader: IO[Any], encoding: str = "utf-8", errors: str = "replace"
+    file: IO, encoding: str = "utf-8", errors: str = "replace"
 ) -> tuple[str, dict]:
     metadata = {}
     file_content_raw = ""
-    for ind, line in enumerate(file_reader):
+    for ind, line in enumerate(file):
         try:
             line = line.decode(encoding) if isinstance(line, bytes) else line
         except UnicodeDecodeError:

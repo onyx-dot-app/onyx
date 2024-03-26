@@ -11,8 +11,8 @@ from danswer.db.models import User
 from danswer.document_index.factory import get_default_document_index
 from danswer.llm.utils import get_default_llm_token_encode
 from danswer.prompts.prompt_utils import build_doc_context_str
-from danswer.search.access_filters import build_access_filters_for_user
 from danswer.search.models import IndexFilters
+from danswer.search.preprocessing.access_filters import build_access_filters_for_user
 from danswer.server.documents.models import ChunkInfo
 from danswer.server.documents.models import DocumentInfo
 

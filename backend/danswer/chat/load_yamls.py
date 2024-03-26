@@ -13,7 +13,7 @@ from danswer.db.document_set import get_or_create_document_set_by_name
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.models import DocumentSet as DocumentSetDBModel
 from danswer.db.models import Prompt as PromptDBModel
-from danswer.search.models import RecencyBiasSetting
+from danswer.search.enums import RecencyBiasSetting
 
 
 def load_prompts_from_yaml(prompts_yaml: str = PROMPTS_YAML) -> None:
@@ -97,6 +97,7 @@ def load_personas_from_yaml(
                 document_sets=doc_sets,
                 default_persona=True,
                 shared=True,
+                is_public=True,
                 db_session=db_session,
             )
 

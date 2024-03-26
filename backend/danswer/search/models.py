@@ -1,44 +1,22 @@
 from datetime import datetime
-from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
 
 from danswer.configs.chat_configs import DISABLE_LLM_CHUNK_FILTER
+from danswer.configs.chat_configs import HYBRID_ALPHA
 from danswer.configs.chat_configs import NUM_RERANKED_RESULTS
 from danswer.configs.chat_configs import NUM_RETURNED_HITS
 from danswer.configs.constants import DocumentSource
 from danswer.configs.model_configs import ENABLE_RERANKING_REAL_TIME_FLOW
+from danswer.db.models import Persona
+from danswer.search.enums import OptionalSearchSetting
+from danswer.search.enums import SearchType
+
 
 MAX_METRICS_CONTENT = (
     200  # Just need enough characters to identify where in the doc the chunk is
 )
-
-
-class OptionalSearchSetting(str, Enum):
-    ALWAYS = "always"
-    NEVER = "never"
-    # Determine whether to run search based on history and latest query
-    AUTO = "auto"
-
-
-class RecencyBiasSetting(str, Enum):
-    FAVOR_RECENT = "favor_recent"  # 2x decay rate
-    BASE_DECAY = "base_decay"
-    NO_DECAY = "no_decay"
-    # Determine based on query if to use base_decay or favor_recent
-    AUTO = "auto"
-
-
-class SearchType(str, Enum):
-    KEYWORD = "keyword"
-    SEMANTIC = "semantic"
-    HYBRID = "hybrid"
-
-
-class QueryFlow(str, Enum):
-    SEARCH = "search"
-    QUESTION_ANSWER = "question-answer"
 
 
 class Tag(BaseModel):
@@ -62,6 +40,28 @@ class ChunkMetric(BaseModel):
     chunk_content_start: str
     first_link: str | None
     score: float
+
+
+class SearchRequest(BaseModel):
+    """Input to the SearchPipeline."""
+
+    query: str
+    search_type: SearchType = SearchType.HYBRID
+
+    human_selected_filters: BaseFilters | None = None
+    enable_auto_detect_filters: bool | None = None
+    persona: Persona | None = None
+
+    # if None, no offset / limit
+    offset: int | None = None
+    limit: int | None = None
+
+    recency_bias_multiplier: float = 1.0
+    hybrid_alpha: float = HYBRID_ALPHA
+    skip_rerank: bool = True
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class SearchQuery(BaseModel):

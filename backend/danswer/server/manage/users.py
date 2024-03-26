@@ -11,7 +11,7 @@ from danswer.auth.schemas import UserRead
 from danswer.auth.schemas import UserRole
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
-from danswer.auth.users import optional_valid_user
+from danswer.auth.users import optional_user
 from danswer.db.engine import get_session
 from danswer.db.engine import get_sqlalchemy_async_engine
 from danswer.db.models import User
@@ -57,7 +57,7 @@ async def get_user_role(user: User = Depends(current_user)) -> UserRoleResponse:
 
 
 @router.get("/me")
-def verify_user_logged_in(user: User | None = Depends(optional_valid_user)) -> UserInfo:
+def verify_user_logged_in(user: User | None = Depends(optional_user)) -> UserInfo:
     # NOTE: this does not use `current_user` / `current_admin_user` because we don't want
     # to enforce user verification here - the frontend always wants to get the info about
     # the current user regardless of if they are currently verified

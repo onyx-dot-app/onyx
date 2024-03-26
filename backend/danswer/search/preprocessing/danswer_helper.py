@@ -1,10 +1,10 @@
 from typing import TYPE_CHECKING
 
-from danswer.search.models import QueryFlow
+from danswer.search.enums import QueryFlow
 from danswer.search.models import SearchType
+from danswer.search.retrieval.search_runner import remove_stop_words_and_punctuation
 from danswer.search.search_nlp_models import get_default_tokenizer
 from danswer.search.search_nlp_models import IntentModel
-from danswer.search.search_runner import remove_stop_words_and_punctuation
 from danswer.server.query_and_chat.models import HelperResponse
 from danswer.utils.logger import setup_logger
 

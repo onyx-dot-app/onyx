@@ -5,16 +5,8 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
-from danswer.chat.chat_utils import build_chat_system_message
-from danswer.chat.chat_utils import build_chat_user_message
-from danswer.chat.chat_utils import compute_max_document_tokens
-from danswer.chat.chat_utils import compute_max_llm_input_tokens
 from danswer.chat.chat_utils import create_chat_chain
-from danswer.chat.chat_utils import drop_messages_history_overflow
-from danswer.chat.chat_utils import extract_citations_from_stream
-from danswer.chat.chat_utils import get_chunks_for_qa
 from danswer.chat.chat_utils import llm_doc_from_inference_chunk
-from danswer.chat.chat_utils import map_document_id_order
 from danswer.chat.models import CitationInfo
 from danswer.chat.models import DanswerAnswerPiece
 from danswer.chat.models import LlmDoc
@@ -23,9 +15,7 @@ from danswer.chat.models import QADocsResponse
 from danswer.chat.models import StreamingError
 from danswer.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from danswer.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from danswer.configs.constants import DISABLED_GEN_AI_MSG
 from danswer.configs.constants import MessageType
-from danswer.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from danswer.db.chat import create_db_search_doc
 from danswer.db.chat import create_new_chat_message
 from danswer.db.chat import get_chat_message
@@ -36,27 +26,23 @@ from danswer.db.chat import get_or_create_root_message
 from danswer.db.chat import translate_db_message_to_chat_message_detail
 from danswer.db.chat import translate_db_search_doc_to_server_search_doc
 from danswer.db.embedding_model import get_current_db_embedding_model
-from danswer.db.models import ChatMessage
-from danswer.db.models import Persona
+from danswer.db.engine import get_session_context_manager
 from danswer.db.models import SearchDoc as DbSearchDoc
 from danswer.db.models import User
 from danswer.document_index.factory import get_default_document_index
-from danswer.indexing.models import InferenceChunk
+from danswer.llm.answering.answer import Answer
+from danswer.llm.answering.models import AnswerStyleConfig
+from danswer.llm.answering.models import CitationConfig
+from danswer.llm.answering.models import DocumentPruningConfig
+from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_default_llm
-from danswer.llm.interfaces import LLM
 from danswer.llm.utils import get_default_llm_tokenizer
-from danswer.llm.utils import get_default_llm_version
-from danswer.llm.utils import get_max_input_tokens
-from danswer.llm.utils import tokenizer_trim_content
-from danswer.llm.utils import translate_history_to_basemessages
-from danswer.prompts.prompt_utils import build_doc_context_str
 from danswer.search.models import OptionalSearchSetting
-from danswer.search.models import RetrievalDetails
-from danswer.search.request_preprocessing import retrieval_preprocessing
-from danswer.search.search_runner import chunks_to_search_docs
-from danswer.search.search_runner import full_chunk_search_generator
-from danswer.search.search_runner import inference_documents_from_ids
+from danswer.search.models import SearchRequest
+from danswer.search.pipeline import SearchPipeline
+from danswer.search.retrieval.search_runner import inference_documents_from_ids
+from danswer.search.utils import chunks_to_search_docs
 from danswer.secondary_llm_flows.choose_search import check_if_need_search
 from danswer.secondary_llm_flows.query_expansion import history_based_query_rephrase
 from danswer.server.query_and_chat.models import ChatMessageDetail
@@ -66,72 +52,6 @@ from danswer.utils.logger import setup_logger
 from danswer.utils.timing import log_generator_function_time
 
 logger = setup_logger()
-
-
-def generate_ai_chat_response(
-    query_message: ChatMessage,
-    history: list[ChatMessage],
-    persona: Persona,
-    context_docs: list[LlmDoc],
-    doc_id_to_rank_map: dict[str, int],
-    llm: LLM | None,
-    llm_tokenizer_encode_func: Callable,
-    all_doc_useful: bool,
-) -> Iterator[DanswerAnswerPiece | CitationInfo | StreamingError]:
-    if llm is None:
-        try:
-            llm = get_default_llm()
-        except GenAIDisabledException:
-            # Not an error if it's a user configuration
-            yield DanswerAnswerPiece(answer_piece=DISABLED_GEN_AI_MSG)
-            return
-
-    if query_message.prompt is None:
-        raise RuntimeError("No prompt received for generating Gen AI answer.")
-
-    try:
-        context_exists = len(context_docs) > 0
-
-        system_message_or_none, system_tokens = build_chat_system_message(
-            prompt=query_message.prompt,
-            context_exists=context_exists,
-            llm_tokenizer_encode_func=llm_tokenizer_encode_func,
-        )
-
-        history_basemessages, history_token_counts = translate_history_to_basemessages(
-            history
-        )
-
-        # Be sure the context_docs passed to build_chat_user_message
-        # Is the same as passed in later for extracting citations
-        user_message, user_tokens = build_chat_user_message(
-            chat_message=query_message,
-            prompt=query_message.prompt,
-            context_docs=context_docs,
-            llm_tokenizer_encode_func=llm_tokenizer_encode_func,
-            all_doc_useful=all_doc_useful,
-        )
-
-        prompt = drop_messages_history_overflow(
-            system_msg=system_message_or_none,
-            system_token_count=system_tokens,
-            history_msgs=history_basemessages,
-            history_token_counts=history_token_counts,
-            final_msg=user_message,
-            final_msg_token_count=user_tokens,
-            max_allowed_tokens=compute_max_llm_input_tokens(persona),
-        )
-
-        # Good Debug/Breakpoint
-        tokens = llm.stream(prompt)
-
-        yield from extract_citations_from_stream(
-            tokens, context_docs, doc_id_to_rank_map
-        )
-
-    except Exception as e:
-        logger.exception(f"LLM failed to produce valid chat message, error: {e}")
-        yield StreamingError(error=str(e))
 
 
 def translate_citations(
@@ -154,24 +74,26 @@ def translate_citations(
     return citation_to_saved_doc_id_map
 
 
-def stream_chat_message_objects(
-    new_msg_req: CreateChatMessageRequest,
-    user: User | None,
-    db_session: Session,
-    # Needed to translate persona num_chunks to tokens to the LLM
-    default_num_chunks: float = MAX_CHUNKS_FED_TO_CHAT,
-    default_chunk_size: int = DOC_EMBEDDING_CONTEXT_SIZE,
-    # For flow with search, don't include as many chunks as possible since we need to leave space
-    # for the chat history, for smaller models, we likely won't get MAX_CHUNKS_FED_TO_CHAT chunks
-    max_document_percentage: float = CHAT_TARGET_CHUNK_PERCENTAGE,
-) -> Iterator[
+ChatPacketStream = Iterator[
     StreamingError
     | QADocsResponse
     | LLMRelevanceFilterResponse
     | ChatMessageDetail
     | DanswerAnswerPiece
     | CitationInfo
-]:
+]
+
+
+def stream_chat_message_objects(
+    new_msg_req: CreateChatMessageRequest,
+    user: User | None,
+    db_session: Session,
+    # Needed to translate persona num_chunks to tokens to the LLM
+    default_num_chunks: float = MAX_CHUNKS_FED_TO_CHAT,
+    # For flow with search, don't include as many chunks as possible since we need to leave space
+    # for the chat history, for smaller models, we likely won't get MAX_CHUNKS_FED_TO_CHAT chunks
+    max_document_percentage: float = CHAT_TARGET_CHUNK_PERCENTAGE,
+) -> ChatPacketStream:
     """Streams in order:
     1. [conditional] Retrieved documents if a search needs to be run
     2. [conditional] LLM selected chunk indices if LLM chunk filtering is turned on
@@ -277,10 +199,6 @@ def stream_chat_message_objects(
                     query_message=final_msg, history=history_msgs, llm=llm
                 )
 
-        max_document_tokens = compute_max_document_tokens(
-            persona=persona, actual_user_input=message_text
-        )
-
         rephrased_query = None
         if reference_doc_ids:
             identifier_tuples = get_doc_query_identifiers_from_model(
@@ -296,64 +214,8 @@ def stream_chat_message_objects(
                 doc_identifiers=identifier_tuples,
                 document_index=document_index,
             )
-
-            # truncate the last document if it exceeds the token limit
-            tokens_per_doc = [
-                len(
-                    llm_tokenizer_encode_func(
-                        build_doc_context_str(
-                            semantic_identifier=llm_doc.semantic_identifier,
-                            source_type=llm_doc.source_type,
-                            content=llm_doc.content,
-                            metadata_dict=llm_doc.metadata,
-                            updated_at=llm_doc.updated_at,
-                            ind=ind,
-                        )
-                    )
-                )
-                for ind, llm_doc in enumerate(llm_docs)
-            ]
-            final_doc_ind = None
-            total_tokens = 0
-            for ind, tokens in enumerate(tokens_per_doc):
-                total_tokens += tokens
-                if total_tokens > max_document_tokens:
-                    final_doc_ind = ind
-                    break
-            if final_doc_ind is not None:
-                # only allow the final document to get truncated
-                # if more than that, then the user message is too long
-                if final_doc_ind != len(tokens_per_doc) - 1:
-                    yield StreamingError(
-                        error="LLM context window exceeded. Please de-select some documents or shorten your query."
-                    )
-                    return
-
-                final_doc_desired_length = tokens_per_doc[final_doc_ind] - (
-                    total_tokens - max_document_tokens
-                )
-                # 75 tokens is a reasonable over-estimate of the metadata and title
-                final_doc_content_length = final_doc_desired_length - 75
-                # this could occur if we only have space for the title / metadata
-                # not ideal, but it's the most reasonable thing to do
-                # NOTE: the frontend prevents documents from being selected if
-                # less than 75 tokens are available to try and avoid this situation
-                # from occuring in the first place
-                if final_doc_content_length <= 0:
-                    logger.error(
-                        f"Final doc ({llm_docs[final_doc_ind].semantic_identifier}) content "
-                        "length is less than 0. Removing this doc from the final prompt."
-                    )
-                    llm_docs.pop()
-                else:
-                    llm_docs[final_doc_ind].content = tokenizer_trim_content(
-                        content=llm_docs[final_doc_ind].content,
-                        desired_length=final_doc_content_length,
-                        tokenizer=llm_tokenizer,
-                    )
-
-            doc_id_to_rank_map = map_document_id_order(
-                cast(list[InferenceChunk | LlmDoc], llm_docs)
+            document_pruning_config = DocumentPruningConfig(
+                is_manually_selected_docs=True
             )
 
             # In case the search doc is deleted, just don't include it
@@ -376,36 +238,21 @@ def stream_chat_message_objects(
                 else query_override
             )
 
-            (
-                retrieval_request,
-                predicted_search_type,
-                predicted_flow,
-            ) = retrieval_preprocessing(
-                query=rephrased_query,
-                retrieval_details=cast(RetrievalDetails, retrieval_options),
-                persona=persona,
+            search_pipeline = SearchPipeline(
+                search_request=SearchRequest(
+                    query=rephrased_query,
+                    human_selected_filters=retrieval_options.filters
+                    if retrieval_options
+                    else None,
+                    persona=persona,
+                    offset=retrieval_options.offset if retrieval_options else None,
+                    limit=retrieval_options.limit if retrieval_options else None,
+                ),
                 user=user,
                 db_session=db_session,
             )
 
-            documents_generator = full_chunk_search_generator(
-                search_query=retrieval_request,
-                document_index=document_index,
-                db_session=db_session,
-            )
-            time_cutoff = retrieval_request.filters.time_cutoff
-            recency_bias_multiplier = retrieval_request.recency_bias_multiplier
-            run_llm_chunk_filter = not retrieval_request.skip_llm_chunk_filter
-
-            # First fetch and return the top chunks to the UI so the user can
-            # immediately see some results
-            top_chunks = cast(list[InferenceChunk], next(documents_generator))
-
-            # Get ranking of the documents for citation purposes later
-            doc_id_to_rank_map = map_document_id_order(
-                cast(list[InferenceChunk | LlmDoc], top_chunks)
-            )
-
+            top_chunks = search_pipeline.reranked_docs
             top_docs = chunks_to_search_docs(top_chunks)
 
             reference_db_search_docs = [
@@ -421,62 +268,35 @@ def stream_chat_message_objects(
             initial_response = QADocsResponse(
                 rephrased_query=rephrased_query,
                 top_documents=response_docs,
-                predicted_flow=predicted_flow,
-                predicted_search=predicted_search_type,
-                applied_source_filters=retrieval_request.filters.source_type,
-                applied_time_cutoff=time_cutoff,
-                recency_bias_multiplier=recency_bias_multiplier,
+                predicted_flow=search_pipeline.predicted_flow,
+                predicted_search=search_pipeline.predicted_search_type,
+                applied_source_filters=search_pipeline.search_query.filters.source_type,
+                applied_time_cutoff=search_pipeline.search_query.filters.time_cutoff,
+                recency_bias_multiplier=search_pipeline.search_query.recency_bias_multiplier,
             )
             yield initial_response
 
-            # Get the final ordering of chunks for the LLM call
-            llm_chunk_selection = cast(list[bool], next(documents_generator))
-
             # Yield the list of LLM selected chunks for showing the LLM selected icons in the UI
             llm_relevance_filtering_response = LLMRelevanceFilterResponse(
-                relevant_chunk_indices=[
-                    index for index, value in enumerate(llm_chunk_selection) if value
-                ]
-                if run_llm_chunk_filter
-                else []
+                relevant_chunk_indices=search_pipeline.relevant_chunk_indicies
             )
             yield llm_relevance_filtering_response
 
-            # Prep chunks to pass to LLM
-            num_llm_chunks = (
-                persona.num_chunks
-                if persona.num_chunks is not None
-                else default_num_chunks
+            document_pruning_config = DocumentPruningConfig(
+                max_chunks=int(
+                    persona.num_chunks
+                    if persona.num_chunks is not None
+                    else default_num_chunks
+                ),
+                max_window_percentage=max_document_percentage,
             )
 
-            llm_name = get_default_llm_version()[0]
-            if persona.llm_model_version_override:
-                llm_name = persona.llm_model_version_override
-
-            llm_max_input_tokens = get_max_input_tokens(model_name=llm_name)
-
-            llm_token_based_chunk_lim = max_document_percentage * llm_max_input_tokens
-
-            chunk_token_limit = int(
-                min(
-                    num_llm_chunks * default_chunk_size,
-                    max_document_tokens,
-                    llm_token_based_chunk_lim,
-                )
-            )
-            llm_chunks_indices = get_chunks_for_qa(
-                chunks=top_chunks,
-                llm_chunk_selection=llm_chunk_selection,
-                token_limit=chunk_token_limit,
-                llm_tokenizer=llm_tokenizer,
-            )
-            llm_chunks = [top_chunks[i] for i in llm_chunks_indices]
-            llm_docs = [llm_doc_from_inference_chunk(chunk) for chunk in llm_chunks]
+            llm_docs = [llm_doc_from_inference_chunk(chunk) for chunk in top_chunks]
 
         else:
             llm_docs = []
-            doc_id_to_rank_map = {}
             reference_db_search_docs = None
+            document_pruning_config = DocumentPruningConfig()
 
         # Cannot determine these without the LLM step or breaking out early
         partial_response = partial(
@@ -514,33 +334,24 @@ def stream_chat_message_objects(
             return
 
         # LLM prompt building, response capturing, etc.
-        response_packets = generate_ai_chat_response(
-            query_message=final_msg,
-            history=history_msgs,
+        answer = Answer(
+            question=final_msg.message,
+            docs=llm_docs,
+            answer_style_config=AnswerStyleConfig(
+                citation_config=CitationConfig(
+                    all_docs_useful=reference_db_search_docs is not None
+                ),
+                document_pruning_config=document_pruning_config,
+            ),
+            prompt=final_msg.prompt,
             persona=persona,
-            context_docs=llm_docs,
-            doc_id_to_rank_map=doc_id_to_rank_map,
-            llm=llm,
-            llm_tokenizer_encode_func=llm_tokenizer_encode_func,
-            all_doc_useful=reference_doc_ids is not None,
+            message_history=[
+                PreviousMessage.from_chat_message(msg) for msg in history_msgs
+            ],
         )
+        # generator will not include quotes, so we can cast
+        yield from cast(ChatPacketStream, answer.processed_streamed_output)
 
-        # Capture outputs and errors
-        llm_output = ""
-        error: str | None = None
-        citations: list[CitationInfo] = []
-        for packet in response_packets:
-            if isinstance(packet, DanswerAnswerPiece):
-                token = packet.answer_piece
-                if token:
-                    llm_output += token
-            elif isinstance(packet, StreamingError):
-                error = packet.error
-            elif isinstance(packet, CitationInfo):
-                citations.append(packet)
-                continue
-
-            yield packet
     except Exception as e:
         logger.exception(e)
 
@@ -554,16 +365,16 @@ def stream_chat_message_objects(
         db_citations = None
         if reference_db_search_docs:
             db_citations = translate_citations(
-                citations_list=citations,
+                citations_list=answer.citations,
                 db_docs=reference_db_search_docs,
             )
 
         # Saving Gen AI answer and responding with message info
         gen_ai_response_message = partial_response(
-            message=llm_output,
-            token_count=len(llm_tokenizer_encode_func(llm_output)),
+            message=answer.llm_answer,
+            token_count=len(llm_tokenizer_encode_func(answer.llm_answer)),
             citations=db_citations,
-            error=error,
+            error=None,
         )
 
         msg_detail_response = translate_db_message_to_chat_message_detail(
@@ -582,12 +393,12 @@ def stream_chat_message_objects(
 def stream_chat_message(
     new_msg_req: CreateChatMessageRequest,
     user: User | None,
-    db_session: Session,
 ) -> Iterator[str]:
-    objects = stream_chat_message_objects(
-        new_msg_req=new_msg_req,
-        user=user,
-        db_session=db_session,
-    )
-    for obj in objects:
-        yield get_json_line(obj.dict())
+    with get_session_context_manager() as db_session:
+        objects = stream_chat_message_objects(
+            new_msg_req=new_msg_req,
+            user=user,
+            db_session=db_session,
+        )
+        for obj in objects:
+            yield get_json_line(obj.dict())

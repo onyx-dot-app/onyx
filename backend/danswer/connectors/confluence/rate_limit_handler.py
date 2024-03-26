@@ -10,6 +10,9 @@ from retry import retry
 F = TypeVar("F", bound=Callable[..., Any])
 
 
+RATE_LIMIT_MESSAGE_LOWERCASE = "Rate limit exceeded".lower()
+
+
 class ConfluenceRateLimitError(Exception):
     pass
 
@@ -27,7 +30,10 @@ def make_confluence_call_handle_rate_limit(confluence_call: F) -> F:
         try:
             return confluence_call(*args, **kwargs)
         except HTTPError as e:
-            if e.response.status_code == 429:
+            if (
+                e.response.status_code == 429
+                or RATE_LIMIT_MESSAGE_LOWERCASE in e.response.text.lower()
+            ):
                 raise ConfluenceRateLimitError()
             raise
 

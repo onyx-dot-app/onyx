@@ -6,13 +6,9 @@ from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.engine import get_session
-from danswer.document_index.factory import get_default_document_index
-from danswer.search.access_filters import build_access_filters_for_user
-from danswer.search.models import IndexFilters
-from danswer.search.models import SearchQuery
-from danswer.search.search_runner import full_chunk_search
+from danswer.search.models import SearchRequest
+from danswer.search.pipeline import SearchPipeline
 from danswer.server.danswer_api.ingestion import api_key_dep
 from danswer.utils.logger import setup_logger
 
@@ -70,27 +66,13 @@ def gpt_search(
     _: str | None = Depends(api_key_dep),
     db_session: Session = Depends(get_session),
 ) -> GptSearchResponse:
-    query = search_request.query
-
-    user_acl_filters = build_access_filters_for_user(None, db_session)
-    final_filters = IndexFilters(access_control_list=user_acl_filters)
-
-    search_query = SearchQuery(
-        query=query,
-        filters=final_filters,
-        recency_bias_multiplier=1.0,
-        skip_llm_chunk_filter=True,
-    )
-
-    embedding_model = get_current_db_embedding_model(db_session)
-
-    document_index = get_default_document_index(
-        primary_index_name=embedding_model.index_name, secondary_index_name=None
-    )
-
-    top_chunks, __ = full_chunk_search(
-        query=search_query, document_index=document_index, db_session=db_session
-    )
+    top_chunks = SearchPipeline(
+        search_request=SearchRequest(
+            query=search_request.query,
+        ),
+        user=None,
+        db_session=db_session,
+    ).reranked_docs
 
     return GptSearchResponse(
         matching_document_chunks=[

@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "danswer-stack.fullname" . }}-webserver
+  labels:
+    {{- include "danswer-stack.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.webserver.autoscaling.enabled }}
+  replicas: {{ .Values.webserver.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "danswer-stack.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.webserver.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "danswer-stack.labels" . | nindent 8 }}
+        {{- with .Values.webserver.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "danswer-stack.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.webserver.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.webserver.securityContext | nindent 12 }}
+          image: "{{ .Values.webserver.image.repository }}:{{ .Values.webserver.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.webserver.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.webserver.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {{- toYaml .Values.webserver.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "danswer-stack.fullname" . }}
+          env:
+            - name: INTERNAL_URL
+              value: {{ (list "http://" (include "danswer-stack.fullname" .) "-api:" .Values.api.service.port | join "") | quote }}
+            - name: VESPA_HOST
+              value: {{ (list (include "danswer-stack.fullname" .) "vespa" | join "-") }}
+            {{- if .Values.postgresql.enabled }}
+            - name: POSTGRES_HOST
+              value: {{ (list .Release.Name "postgresql" | join "-") }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgresql.auth.database }}
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.auth.username }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ (list .Release.Name "postgresql" | join "-") }}
+                  key: password
+            {{- end }}
+          {{- with .Values.webserver.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.webserver.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webserver.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webserver.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webserver.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

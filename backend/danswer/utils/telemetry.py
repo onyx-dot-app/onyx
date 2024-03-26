@@ -6,7 +6,7 @@ from typing import cast
 import requests
 
 from danswer.configs.app_configs import DISABLE_TELEMETRY
-from danswer.dynamic_configs import get_dynamic_config_store
+from danswer.dynamic_configs.factory import get_dynamic_config_store
 from danswer.dynamic_configs.interface import ConfigNotFoundError
 
 CUSTOMER_UUID_KEY = "customer_uuid"

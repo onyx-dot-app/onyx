@@ -19,7 +19,7 @@ from danswer.db.embedding_model import get_secondary_db_embedding_model
 from danswer.db.engine import get_session
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
-from danswer.dynamic_configs import get_dynamic_config_store
+from danswer.dynamic_configs.factory import get_dynamic_config_store
 from danswer.dynamic_configs.interface import ConfigNotFoundError
 from danswer.indexing.embedder import DefaultIndexingEmbedder
 from danswer.indexing.indexing_pipeline import build_indexing_pipeline

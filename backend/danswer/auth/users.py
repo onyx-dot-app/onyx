@@ -280,13 +280,32 @@ fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
 # take care of that in `double_check_user` ourself. This is needed, since
 # we want the /me endpoint to still return a user even if they are not
 # yet verified, so that the frontend knows they exist
-optional_valid_user = fastapi_users.current_user(active=True, optional=True)
+optional_fastapi_current_user = fastapi_users.current_user(active=True, optional=True)
 
 
-async def double_check_user(
+async def optional_user_(
     request: Request,
     user: User | None,
     db_session: Session,
+) -> User | None:
+    """NOTE: `request` and `db_session` are not used here, but are included
+    for the EE version of this function."""
+    return user
+
+
+async def optional_user(
+    request: Request,
+    user: User | None = Depends(optional_fastapi_current_user),
+    db_session: Session = Depends(get_session),
+) -> User | None:
+    versioned_fetch_user = fetch_versioned_implementation(
+        "danswer.auth.users", "optional_user_"
+    )
+    return await versioned_fetch_user(request, user, db_session)
+
+
+async def double_check_user(
+    user: User | None,
     optional: bool = DISABLE_AUTH,
 ) -> User | None:
     if optional:
@@ -308,15 +327,9 @@ async def double_check_user(
 
 
 async def current_user(
-    request: Request,
-    user: User | None = Depends(optional_valid_user),
-    db_session: Session = Depends(get_session),
+    user: User | None = Depends(optional_user),
 ) -> User | None:
-    double_check_user = fetch_versioned_implementation(
-        "danswer.auth.users", "double_check_user"
-    )
-    user = await double_check_user(request, user, db_session)
-    return user
+    return await double_check_user(user)
 
 
 async def current_admin_user(user: User | None = Depends(current_user)) -> User | None:

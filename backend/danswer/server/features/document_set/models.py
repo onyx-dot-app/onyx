@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import BaseModel
 
 from danswer.db.models import DocumentSet as DocumentSetDBModel
@@ -10,15 +12,27 @@ class DocumentSetCreationRequest(BaseModel):
     name: str
     description: str
     cc_pair_ids: list[int]
+    is_public: bool
+    # For Private Document Sets, who should be able to access these
+    users: list[UUID] | None = None
+    groups: list[int] | None = None
 
 
 class DocumentSetUpdateRequest(BaseModel):
     id: int
     description: str
     cc_pair_ids: list[int]
+    is_public: bool
+    # For Private Document Sets, who should be able to access these
+    users: list[UUID]
+    groups: list[int]
 
 
 class CheckDocSetPublicRequest(BaseModel):
+    """Note that this does not mean that the Document Set itself is to be viewable by everyone
+    Rather, this refers to the CC-Pairs in the Document Set, and if every CC-Pair is public
+    """
+
     document_set_ids: list[int]
 
 
@@ -33,6 +47,10 @@ class DocumentSet(BaseModel):
     cc_pair_descriptors: list[ConnectorCredentialPairDescriptor]
     is_up_to_date: bool
     contains_non_public: bool
+    is_public: bool
+    # For Private Document Sets, who should be able to access these
+    users: list[UUID]
+    groups: list[int]
 
     @classmethod
     def from_model(cls, document_set_model: DocumentSetDBModel) -> "DocumentSet":
@@ -60,4 +78,7 @@ class DocumentSet(BaseModel):
                 for cc_pair in document_set_model.connector_credential_pairs
             ],
             is_up_to_date=document_set_model.is_up_to_date,
+            is_public=document_set_model.is_public,
+            users=[user.id for user in document_set_model.users],
+            groups=[group.id for group in document_set_model.groups],
         )

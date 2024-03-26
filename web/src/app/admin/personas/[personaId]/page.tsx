@@ -6,7 +6,6 @@ import { DocumentSet } from "@/lib/types";
 import { BackButton } from "@/components/BackButton";
 import { Card, Title } from "@tremor/react";
 import { DeletePersonaButton } from "./DeletePersonaButton";
-import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 
 export default async function Page({
   params,
@@ -68,8 +67,6 @@ export default async function Page({
 
   return (
     <div>
-      <InstantSSRAutoRefresh />
-
       <BackButton />
       <div className="pb-2 mb-4 flex">
         <h1 className="text-3xl font-bold pl-2">Edit Persona</h1>

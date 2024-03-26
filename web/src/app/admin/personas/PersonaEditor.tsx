@@ -1,6 +1,6 @@
 "use client";
 
-import { DocumentSet } from "@/lib/types";
+import { DocumentSet, UserGroup } from "@/lib/types";
 import { Button, Divider, Text } from "@tremor/react";
 import {
   ArrayHelpers,
@@ -25,6 +25,10 @@ import {
 } from "@/components/admin/connectors/Field";
 import { HidableSection } from "./HidableSection";
 import { FiPlus, FiX } from "react-icons/fi";
+import { EE_ENABLED } from "@/lib/constants";
+import { useUserGroups } from "@/lib/hooks";
+import { Bubble } from "@/components/Bubble";
+import { GroupsIcon } from "@/components/icons/icons";
 
 function Label({ children }: { children: string | JSX.Element }) {
   return (
@@ -49,6 +53,9 @@ export function PersonaEditor({
 }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
+
+  // EE only
+  const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
 
   const [finalPrompt, setFinalPrompt] = useState<string | null>("");
   const [finalPromptError, setFinalPromptError] = useState<string>("");
@@ -92,6 +99,7 @@ export function PersonaEditor({
           system_prompt: existingPrompt?.system_prompt ?? "",
           task_prompt: existingPrompt?.task_prompt ?? "",
           disable_retrieval: (existingPersona?.num_chunks ?? 10) === 0,
+          is_public: existingPersona?.is_public ?? true,
           document_set_ids:
             existingPersona?.document_sets?.map(
               (documentSet) => documentSet.id
@@ -103,6 +111,8 @@ export function PersonaEditor({
           llm_model_version_override:
             existingPersona?.llm_model_version_override ?? null,
           starter_messages: existingPersona?.starter_messages ?? [],
+          // EE Only
+          groups: existingPersona?.groups ?? [],
         }}
         validationSchema={Yup.object()
           .shape({
@@ -113,6 +123,7 @@ export function PersonaEditor({
             system_prompt: Yup.string(),
             task_prompt: Yup.string(),
             disable_retrieval: Yup.boolean().required(),
+            is_public: Yup.boolean().required(),
             document_set_ids: Yup.array().of(Yup.number()),
             num_chunks: Yup.number().max(20).nullable(),
             include_citations: Yup.boolean().required(),
@@ -125,6 +136,8 @@ export function PersonaEditor({
                 message: Yup.string().required(),
               })
             ),
+            // EE Only
+            groups: Yup.array().of(Yup.number()),
           })
           .test(
             "system-prompt-or-task-prompt",
@@ -163,6 +176,9 @@ export function PersonaEditor({
             ? 0
             : values.num_chunks || 10;
 
+          // don't set groups if marked as public
+          const groups = values.is_public ? [] : values.groups;
+
           let promptResponse;
           let personaResponse;
           if (isUpdate) {
@@ -171,11 +187,13 @@ export function PersonaEditor({
               existingPromptId: existingPrompt?.id,
               ...values,
               num_chunks: numChunks,
+              groups,
             });
           } else {
             [promptResponse, personaResponse] = await createPersona({
               ...values,
               num_chunks: numChunks,
+              groups,
             });
           }
 
@@ -371,6 +389,67 @@ export function PersonaEditor({
                     </>
                   </HidableSection>
 
+                  <Divider />
+                </>
+              )}
+
+              {EE_ENABLED && userGroups && (
+                <>
+                  <HidableSection sectionTitle="Which groups should have access to this Persona?">
+                    <>
+                      <BooleanFormField
+                        name="is_public"
+                        label="Is Public?"
+                        subtext="If set, this Persona will be available to all users. If not, only the specified User Groups will be able to access it."
+                      />
+
+                      {userGroups &&
+                        userGroups.length > 0 &&
+                        !values.is_public && (
+                          <div>
+                            <Text>
+                              Select which User Groups should have access to
+                              this Persona.
+                            </Text>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {userGroups.map((userGroup) => {
+                                const isSelected = values.groups.includes(
+                                  userGroup.id
+                                );
+                                return (
+                                  <Bubble
+                                    key={userGroup.id}
+                                    isSelected={isSelected}
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        setFieldValue(
+                                          "groups",
+                                          values.groups.filter(
+                                            (id) => id !== userGroup.id
+                                          )
+                                        );
+                                      } else {
+                                        setFieldValue("groups", [
+                                          ...values.groups,
+                                          userGroup.id,
+                                        ]);
+                                      }
+                                    }}
+                                  >
+                                    <div className="flex">
+                                      <GroupsIcon />
+                                      <div className="ml-1">
+                                        {userGroup.name}
+                                      </div>
+                                    </div>
+                                  </Bubble>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                    </>
+                  </HidableSection>
                   <Divider />
                 </>
               )}

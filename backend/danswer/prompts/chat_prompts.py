@@ -48,9 +48,11 @@ CHAT_USER_CONTEXT_FREE_PROMPT = f"""
 #   consider doing COT for this and keep it brief, but likely only small gains.
 SKIP_SEARCH = "Skip Search"
 YES_SEARCH = "Yes Search"
+
 AGGRESSIVE_SEARCH_TEMPLATE = f"""
 Given the conversation history and a follow up query, determine if the system should call \
 an external search tool to better answer the latest user input.
+Your default response is {YES_SEARCH}.
 
 Respond "{SKIP_SEARCH}" if either:
 - There is sufficient information in chat history to FULLY and ACCURATELY answer the query AND \
@@ -62,7 +64,32 @@ Conversation History:
 {{chat_history}}
 {GENERAL_SEP_PAT}
 
-If you are unsure, respond with {YES_SEARCH}.
+If you are at all unsure, respond with {YES_SEARCH}.
+Respond with EXACTLY and ONLY "{YES_SEARCH}" or "{SKIP_SEARCH}"
+
+Follow Up Input:
+{{final_query}}
+""".strip()
+
+
+# TODO, templatize this so users don't need to make code changes to use this
+AGGRESSIVE_SEARCH_TEMPLATE_LLAMA2 = f"""
+You are an expert of a critical system. Given the conversation history and a follow up query, \
+determine if the system should call an external search tool to better answer the latest user input.
+
+Your default response is {YES_SEARCH}.
+If you are even slightly unsure, respond with {YES_SEARCH}.
+
+Respond "{SKIP_SEARCH}" if any of these are true:
+- There is sufficient information in chat history to FULLY and ACCURATELY answer the query.
+- The query is some form of request that does not require additional information to handle.
+- You are absolutely sure about the question and there is no ambiguity in the answer or question.
+
+Conversation History:
+{GENERAL_SEP_PAT}
+{{chat_history}}
+{GENERAL_SEP_PAT}
+
 Respond with EXACTLY and ONLY "{YES_SEARCH}" or "{SKIP_SEARCH}"
 
 Follow Up Input:

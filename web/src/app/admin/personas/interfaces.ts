@@ -23,6 +23,7 @@ export interface Persona {
   name: string;
   shared: boolean;
   is_visible: boolean;
+  is_public: boolean;
   display_priority: number | null;
   description: string;
   document_sets: DocumentSet[];
@@ -33,4 +34,5 @@ export interface Persona {
   llm_model_version_override?: string;
   starter_messages: StarterMessage[] | null;
   default_persona: boolean;
+  groups: number[];
 }

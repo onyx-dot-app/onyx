@@ -5,6 +5,7 @@ from typing import cast
 
 from bs4 import BeautifulSoup
 from bs4 import Tag
+from sqlalchemy.orm import Session
 
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.constants import DocumentSource
@@ -15,6 +16,8 @@ from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import LoadConnector
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
+from danswer.db.engine import get_sqlalchemy_engine
+from danswer.db.file_store import get_default_file_store
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -66,8 +69,13 @@ class GoogleSitesConnector(LoadConnector):
     def load_from_state(self) -> GenerateDocumentsOutput:
         documents: list[Document] = []
 
+        with Session(get_sqlalchemy_engine()) as db_session:
+            file_content_io = get_default_file_store(db_session).read_file(
+                self.zip_path, mode="b"
+            )
+
         # load the HTML files
-        files = load_files_from_zip(self.zip_path)
+        files = load_files_from_zip(file_content_io)
         count = 0
         for file_info, file_io, _metadata in files:
             # skip non-published files

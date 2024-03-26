@@ -388,7 +388,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector):
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, str] | None:
         """Checks for two different types of credentials.
-        (1) A credential which holds a token acquired via a user going thorugh
+        (1) A credential which holds a token acquired via a user going thorough
         the Google OAuth flow.
         (2) A credential which holds a service account key JSON file, which
         can then be used to impersonate any user in the workspace.

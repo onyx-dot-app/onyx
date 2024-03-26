@@ -186,10 +186,11 @@ class SharepointConnector(LoadConnector, PollConnector):
             end=end,
         )
 
-        # goes over all urls, converts them into Document objects and then yjelds them in batches
+        # goes over all urls, converts them into Document objects and then yields them in batches
         doc_batch: list[Document] = []
         batch_count = 0
         for driveitem_object in driveitem_list:
+            logger.debug(f"Processing: {driveitem_object.web_url}")
             doc_batch.append(
                 self.convert_driveitem_object_to_document(driveitem_object)
             )

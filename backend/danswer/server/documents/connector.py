@@ -1,3 +1,5 @@
+import os
+import uuid
 from typing import cast
 
 from fastapi import APIRouter
@@ -13,7 +15,6 @@ from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
 from danswer.background.celery.celery_utils import get_deletion_status
 from danswer.configs.constants import DocumentSource
-from danswer.connectors.file.utils import write_temp_files
 from danswer.connectors.gmail.connector_auth import delete_gmail_service_account_key
 from danswer.connectors.gmail.connector_auth import delete_google_app_gmail_cred
 from danswer.connectors.gmail.connector_auth import get_gmail_auth_url
@@ -57,6 +58,7 @@ from danswer.db.deletion_attempt import check_deletion_attempt_is_allowed
 from danswer.db.document import get_document_cnts_for_cc_pairs
 from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.engine import get_session
+from danswer.db.file_store import get_default_file_store
 from danswer.db.index_attempt import cancel_indexing_attempts_for_connector
 from danswer.db.index_attempt import cancel_indexing_attempts_past_model
 from danswer.db.index_attempt import create_index_attempt
@@ -335,18 +337,23 @@ def admin_google_drive_auth(
 
 @router.post("/admin/connector/file/upload")
 def upload_files(
-    files: list[UploadFile], _: User = Depends(current_admin_user)
+    files: list[UploadFile],
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
     for file in files:
         if not file.filename:
             raise HTTPException(status_code=400, detail="File name cannot be empty")
     try:
-        file_paths = write_temp_files(
-            [(cast(str, file.filename), file.file) for file in files]
-        )
+        file_store = get_default_file_store(db_session)
+        deduped_file_paths = []
+        for file in files:
+            file_path = os.path.join(str(uuid.uuid4()), cast(str, file.filename))
+            deduped_file_paths.append(file_path)
+            file_store.save_file(file_name=file_path, content=file.file)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return FileUploadResponse(file_paths=file_paths)
+    return FileUploadResponse(file_paths=deduped_file_paths)
 
 
 @router.get("/admin/connector/indexing-status")

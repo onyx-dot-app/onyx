@@ -24,7 +24,7 @@ from danswer.connectors.gmail.constants import GMAIL_SERVICE_ACCOUNT_KEY
 from danswer.connectors.gmail.constants import SCOPES
 from danswer.db.credentials import update_credential_json
 from danswer.db.models import User
-from danswer.dynamic_configs import get_dynamic_config_store
+from danswer.dynamic_configs.factory import get_dynamic_config_store
 from danswer.server.documents.models import CredentialBase
 from danswer.server.documents.models import GoogleAppCredentials
 from danswer.server.documents.models import GoogleServiceAccountKey

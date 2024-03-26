@@ -12,7 +12,7 @@ from danswer.db.models import Persona
 from danswer.db.models import Persona__DocumentSet
 from danswer.db.models import SlackBotConfig
 from danswer.db.models import SlackBotResponseType
-from danswer.search.models import RecencyBiasSetting
+from danswer.search.enums import RecencyBiasSetting
 
 
 def _build_persona_name(channel_names: list[str]) -> str:
@@ -62,6 +62,7 @@ def create_slack_bot_persona(
         llm_model_version_override=None,
         starter_messages=None,
         shared=True,
+        is_public=True,
         default_persona=False,
         db_session=db_session,
         commit=False,

@@ -4,7 +4,7 @@ export function Bubble({
   children,
 }: {
   isSelected: boolean;
-  onClick: () => void;
+  onClick?: () => void;
   children: string | JSX.Element;
 }) {
   return (

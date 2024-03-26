@@ -43,7 +43,10 @@ const extractSpaceFromDataCenterUrl = (wikiUrl: string): string => {
 // Copied from the `extract_confluence_keys_from_url` function
 const extractSpaceFromUrl = (wikiUrl: string): string | null => {
   try {
-    if (wikiUrl.includes(".atlassian.net/wiki/spaces/")) {
+    if (
+      wikiUrl.includes(".atlassian.net/wiki/spaces/") ||
+      wikiUrl.includes(".jira.com/wiki/spaces/")
+    ) {
       return extractSpaceFromCloudUrl(wikiUrl);
     }
     return extractSpaceFromDataCenterUrl(wikiUrl);

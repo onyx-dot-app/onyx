@@ -20,11 +20,14 @@ from danswer.db.models import ChatMessage
 from danswer.db.models import ChatSession
 from danswer.db.models import DocumentSet as DBDocumentSet
 from danswer.db.models import Persona
+from danswer.db.models import Persona__User
+from danswer.db.models import Persona__UserGroup
 from danswer.db.models import Prompt
 from danswer.db.models import SearchDoc
 from danswer.db.models import SearchDoc as DBSearchDoc
 from danswer.db.models import StarterMessage
-from danswer.search.models import RecencyBiasSetting
+from danswer.db.models import User__UserGroup
+from danswer.search.enums import RecencyBiasSetting
 from danswer.search.models import RetrievalDocs
 from danswer.search.models import SavedSearchDoc
 from danswer.search.models import SearchDoc as ServerSearchDoc
@@ -35,11 +38,17 @@ logger = setup_logger()
 
 
 def get_chat_session_by_id(
-    chat_session_id: int, user_id: UUID | None, db_session: Session
+    chat_session_id: int,
+    user_id: UUID | None,
+    db_session: Session,
+    include_deleted: bool = False,
 ) -> ChatSession:
-    stmt = select(ChatSession).where(
-        ChatSession.id == chat_session_id, ChatSession.user_id == user_id
-    )
+    stmt = select(ChatSession).where(ChatSession.id == chat_session_id)
+
+    # if user_id is None, assume this is an admin who should be able
+    # to view all chat sessions
+    if user_id is not None:
+        stmt = stmt.where(ChatSession.user_id == user_id)
 
     result = db_session.execute(stmt)
     chat_session = result.scalar_one_or_none()
@@ -47,7 +56,7 @@ def get_chat_session_by_id(
     if not chat_session:
         raise ValueError("Invalid Chat Session ID provided")
 
-    if chat_session.deleted:
+    if not include_deleted and chat_session.deleted:
         raise ValueError("Chat session has been deleted")
 
     return chat_session
@@ -468,6 +477,7 @@ def upsert_persona(
     llm_model_version_override: str | None,
     starter_messages: list[StarterMessage] | None,
     shared: bool,
+    is_public: bool,
     db_session: Session,
     persona_id: int | None = None,
     default_persona: bool = False,
@@ -494,6 +504,7 @@ def upsert_persona(
         persona.llm_model_version_override = llm_model_version_override
         persona.starter_messages = starter_messages
         persona.deleted = False  # Un-delete if previously deleted
+        persona.is_public = is_public
 
         # Do not delete any associations manually added unless
         # a new updated list is provided
@@ -509,6 +520,7 @@ def upsert_persona(
         persona = Persona(
             id=persona_id,
             user_id=None if shared else user_id,
+            is_public=is_public,
             name=name,
             description=description,
             num_chunks=num_chunks,
@@ -638,9 +650,28 @@ def get_personas(
     include_slack_bot_personas: bool = False,
     include_deleted: bool = False,
 ) -> Sequence[Persona]:
-    stmt = select(Persona)
+    stmt = select(Persona).distinct()
     if user_id is not None:
-        stmt = stmt.where(or_(Persona.user_id == user_id, Persona.user_id.is_(None)))
+        # Subquery to find all groups the user belongs to
+        user_groups_subquery = (
+            select(User__UserGroup.user_group_id)
+            .where(User__UserGroup.user_id == user_id)
+            .subquery()
+        )
+
+        # Include personas where the user is directly related or part of a user group that has access
+        access_conditions = or_(
+            Persona.is_public == True,  # noqa: E712
+            Persona.id.in_(  # User has access through list of users with access
+                select(Persona__User.persona_id).where(Persona__User.user_id == user_id)
+            ),
+            Persona.id.in_(  # User is part of a group that has access
+                select(Persona__UserGroup.persona_id).where(
+                    Persona__UserGroup.user_group_id.in_(user_groups_subquery)  # type: ignore
+                )
+            ),
+        )
+        stmt = stmt.where(access_conditions)
 
     if not include_default:
         stmt = stmt.where(Persona.default_persona.is_(False))

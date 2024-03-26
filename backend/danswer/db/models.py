@@ -35,8 +35,9 @@ from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import MessageType
 from danswer.configs.constants import SearchFeedbackType
 from danswer.connectors.models import InputType
-from danswer.search.models import RecencyBiasSetting
-from danswer.search.models import SearchType
+from danswer.dynamic_configs.interface import JSON_ro
+from danswer.search.enums import RecencyBiasSetting
+from danswer.search.enums import SearchType
 
 
 class IndexingStatus(str, PyEnum):
@@ -96,6 +97,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "ChatSession", back_populates="user"
     )
     prompts: Mapped[List["Prompt"]] = relationship("Prompt", back_populates="user")
+    # Personas owned by this user
     personas: Mapped[List["Persona"]] = relationship("Persona", back_populates="user")
 
 
@@ -138,6 +140,22 @@ class Persona__Prompt(Base):
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
     prompt_id: Mapped[int] = mapped_column(ForeignKey("prompt.id"), primary_key=True)
+
+
+class Persona__User(Base):
+    __tablename__ = "persona__user"
+
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), primary_key=True)
+
+
+class DocumentSet__User(Base):
+    __tablename__ = "document_set__user"
+
+    document_set_id: Mapped[int] = mapped_column(
+        ForeignKey("document_set.id"), primary_key=True
+    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), primary_key=True)
 
 
 class DocumentSet__ConnectorCredentialPair(Base):
@@ -224,7 +242,7 @@ class ConnectorCredentialPair(Base):
         DateTime(timezone=True), default=None
     )
     last_attempt_status: Mapped[IndexingStatus | None] = mapped_column(
-        Enum(IndexingStatus)
+        Enum(IndexingStatus, native_enum=False)
     )
     total_docs_indexed: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -291,7 +309,9 @@ class Tag(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tag_key: Mapped[str] = mapped_column(String)
     tag_value: Mapped[str] = mapped_column(String)
-    source: Mapped[DocumentSource] = mapped_column(Enum(DocumentSource))
+    source: Mapped[DocumentSource] = mapped_column(
+        Enum(DocumentSource, native_enum=False)
+    )
 
     documents = relationship(
         "Document",
@@ -378,7 +398,9 @@ class EmbeddingModel(Base):
     normalize: Mapped[bool] = mapped_column(Boolean)
     query_prefix: Mapped[str] = mapped_column(String)
     passage_prefix: Mapped[str] = mapped_column(String)
-    status: Mapped[IndexModelStatus] = mapped_column(Enum(IndexModelStatus))
+    status: Mapped[IndexModelStatus] = mapped_column(
+        Enum(IndexModelStatus, native_enum=False)
+    )
     index_name: Mapped[str] = mapped_column(String)
 
     index_attempts: Mapped[List["IndexAttempt"]] = relationship(
@@ -423,7 +445,9 @@ class IndexAttempt(Base):
     # This is only for attempts that are explicitly marked as from the start via
     # the run once API
     from_beginning: Mapped[bool] = mapped_column(Boolean)
-    status: Mapped[IndexingStatus] = mapped_column(Enum(IndexingStatus))
+    status: Mapped[IndexingStatus] = mapped_column(
+        Enum(IndexingStatus, native_enum=False)
+    )
     # The two below may be slightly out of sync if user switches Embedding Model
     new_docs_indexed: Mapped[int | None] = mapped_column(Integer, default=0)
     total_docs_indexed: Mapped[int | None] = mapped_column(Integer, default=0)
@@ -526,7 +550,9 @@ class SearchDoc(Base):
     link: Mapped[str | None] = mapped_column(String, nullable=True)
     blurb: Mapped[str] = mapped_column(String)
     boost: Mapped[int] = mapped_column(Integer)
-    source_type: Mapped[DocumentSource] = mapped_column(Enum(DocumentSource))
+    source_type: Mapped[DocumentSource] = mapped_column(
+        Enum(DocumentSource, native_enum=False)
+    )
     hidden: Mapped[bool] = mapped_column(Boolean)
     doc_metadata: Mapped[dict[str, str | list[str]]] = mapped_column(postgresql.JSONB())
     score: Mapped[float] = mapped_column(Float)
@@ -599,7 +625,9 @@ class ChatMessage(Base):
     # If prompt is None, then token_count is 0 as this message won't be passed into
     # the LLM's context (not included in the history of messages)
     token_count: Mapped[int] = mapped_column(Integer)
-    message_type: Mapped[MessageType] = mapped_column(Enum(MessageType))
+    message_type: Mapped[MessageType] = mapped_column(
+        Enum(MessageType, native_enum=False)
+    )
     # Maps the citation numbers to a SearchDoc id
     citations: Mapped[dict[int, int]] = mapped_column(postgresql.JSONB(), nullable=True)
     # Only applies for LLM
@@ -616,7 +644,7 @@ class ChatMessage(Base):
     document_feedbacks: Mapped[List["DocumentRetrievalFeedback"]] = relationship(
         "DocumentRetrievalFeedback", back_populates="chat_message"
     )
-    search_docs = relationship(
+    search_docs: Mapped[list["SearchDoc"]] = relationship(
         "SearchDoc",
         secondary="chat_message__search_doc",
         back_populates="chat_messages",
@@ -638,7 +666,7 @@ class DocumentRetrievalFeedback(Base):
     document_rank: Mapped[int] = mapped_column(Integer)
     clicked: Mapped[bool] = mapped_column(Boolean, default=False)
     feedback: Mapped[SearchFeedbackType | None] = mapped_column(
-        Enum(SearchFeedbackType), nullable=True
+        Enum(SearchFeedbackType, native_enum=False), nullable=True
     )
 
     chat_message: Mapped[ChatMessage] = relationship(
@@ -677,6 +705,9 @@ class DocumentSet(Base):
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
     # Whether changes to the document set have been propagated
     is_up_to_date: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # If `False`, then the document set is not visible to users who are not explicitly
+    # given access to it either via the `users` or `groups` relationships
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     connector_credential_pairs: Mapped[list[ConnectorCredentialPair]] = relationship(
         "ConnectorCredentialPair",
@@ -688,6 +719,18 @@ class DocumentSet(Base):
         "Persona",
         secondary=Persona__DocumentSet.__table__,
         back_populates="document_sets",
+    )
+    # Other users with access
+    users: Mapped[list[User]] = relationship(
+        "User",
+        secondary=DocumentSet__User.__table__,
+        viewonly=True,
+    )
+    # EE only
+    groups: Mapped[list["UserGroup"]] = relationship(
+        "UserGroup",
+        secondary="document_set__user_group",
+        viewonly=True,
     )
 
 
@@ -735,7 +778,7 @@ class Persona(Base):
     description: Mapped[str] = mapped_column(String)
     # Currently stored but unused, all flows use hybrid
     search_type: Mapped[SearchType] = mapped_column(
-        Enum(SearchType), default=SearchType.HYBRID
+        Enum(SearchType, native_enum=False), default=SearchType.HYBRID
     )
     # Number of chunks to pass to the LLM for generation.
     num_chunks: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -745,7 +788,9 @@ class Persona(Base):
     # Enables using LLM to extract time and source type filters
     # Can also be admin disabled globally
     llm_filter_extraction: Mapped[bool] = mapped_column(Boolean)
-    recency_bias: Mapped[RecencyBiasSetting] = mapped_column(Enum(RecencyBiasSetting))
+    recency_bias: Mapped[RecencyBiasSetting] = mapped_column(
+        Enum(RecencyBiasSetting, native_enum=False)
+    )
     # Allows the Persona to specify a different LLM version than is controlled
     # globablly via env variables. For flexibility, validity is not currently enforced
     # NOTE: only is applied on the actual response generation - is not used for things like
@@ -766,6 +811,7 @@ class Persona(Base):
     # where lower value IDs (e.g. created earlier) are displayed first
     display_priority: Mapped[int] = mapped_column(Integer, nullable=True, default=None)
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # These are only defaults, users can select from all if desired
     prompts: Mapped[list[Prompt]] = relationship(
@@ -779,7 +825,20 @@ class Persona(Base):
         secondary=Persona__DocumentSet.__table__,
         back_populates="personas",
     )
+    # Owner
     user: Mapped[User] = relationship("User", back_populates="personas")
+    # Other users with access
+    users: Mapped[list[User]] = relationship(
+        "User",
+        secondary=Persona__User.__table__,
+        viewonly=True,
+    )
+    # EE only
+    groups: Mapped[list["UserGroup"]] = relationship(
+        "UserGroup",
+        secondary="persona__user_group",
+        viewonly=True,
+    )
 
     # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
@@ -844,10 +903,143 @@ class TaskQueueState(Base):
     # For any job type, this would be the same
     task_name: Mapped[str] = mapped_column(String)
     # Note that if the task dies, this won't necessarily be marked FAILED correctly
-    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus))
+    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus, native_enum=False))
     start_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
     register_time: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class KVStore(Base):
+    __tablename__ = "key_value_store"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=False)
+
+
+class PGFileStore(Base):
+    __tablename__ = "file_store"
+    file_name = mapped_column(String, primary_key=True)
+    lobj_oid = mapped_column(Integer, nullable=False)
+
+
+"""
+************************************************************************
+Enterprise Edition Models
+************************************************************************
+
+These models are only used in Enterprise Edition only features in Danswer.
+They are kept here to simplify the codebase and avoid having different assumptions
+on the shape of data being passed around between the MIT and EE versions of Danswer.
+
+In the MIT version of Danswer, assume these tables are always empty.
+"""
+
+
+class SamlAccount(Base):
+    __tablename__ = "saml"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), unique=True)
+    encrypted_cookie: Mapped[str] = mapped_column(Text, unique=True)
+    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped[User] = relationship("User")
+
+
+class User__UserGroup(Base):
+    __tablename__ = "user__user_group"
+
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id"), primary_key=True
+    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), primary_key=True)
+
+
+class UserGroup__ConnectorCredentialPair(Base):
+    __tablename__ = "user_group__connector_credential_pair"
+
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id"), primary_key=True
+    )
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id"), primary_key=True
+    )
+    # if `True`, then is part of the current state of the UserGroup
+    # if `False`, then is a part of the prior state of the UserGroup
+    # rows with `is_current=False` should be deleted when the UserGroup
+    # is updated and should not exist for a given UserGroup if
+    # `UserGroup.is_up_to_date == True`
+    is_current: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        primary_key=True,
+    )
+
+    cc_pair: Mapped[ConnectorCredentialPair] = relationship(
+        "ConnectorCredentialPair",
+    )
+
+
+class Persona__UserGroup(Base):
+    __tablename__ = "persona__user_group"
+
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id"), primary_key=True
+    )
+
+
+class DocumentSet__UserGroup(Base):
+    __tablename__ = "document_set__user_group"
+
+    document_set_id: Mapped[int] = mapped_column(
+        ForeignKey("document_set.id"), primary_key=True
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id"), primary_key=True
+    )
+
+
+class UserGroup(Base):
+    __tablename__ = "user_group"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+    # whether or not changes to the UserGroup have been propagated to Vespa
+    is_up_to_date: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # tell the sync job to clean up the group
+    is_up_for_deletion: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+
+    users: Mapped[list[User]] = relationship(
+        "User",
+        secondary=User__UserGroup.__table__,
+    )
+    cc_pairs: Mapped[list[ConnectorCredentialPair]] = relationship(
+        "ConnectorCredentialPair",
+        secondary=UserGroup__ConnectorCredentialPair.__table__,
+        viewonly=True,
+    )
+    cc_pair_relationships: Mapped[
+        list[UserGroup__ConnectorCredentialPair]
+    ] = relationship(
+        "UserGroup__ConnectorCredentialPair",
+        viewonly=True,
+    )
+    personas: Mapped[list[Persona]] = relationship(
+        "Persona",
+        secondary=Persona__UserGroup.__table__,
+        viewonly=True,
+    )
+    document_sets: Mapped[list[DocumentSet]] = relationship(
+        "DocumentSet",
+        secondary=DocumentSet__UserGroup.__table__,
+        viewonly=True,
     )

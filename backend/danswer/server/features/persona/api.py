@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -9,16 +8,14 @@ from danswer.auth.users import current_user
 from danswer.configs.model_configs import GEN_AI_MODEL_PROVIDER
 from danswer.db.chat import get_persona_by_id
 from danswer.db.chat import get_personas
-from danswer.db.chat import get_prompts_by_ids
 from danswer.db.chat import mark_persona_as_deleted
 from danswer.db.chat import update_all_personas_display_priority
 from danswer.db.chat import update_persona_visibility
-from danswer.db.chat import upsert_persona
-from danswer.db.document_set import get_document_sets_by_ids
 from danswer.db.engine import get_session
 from danswer.db.models import User
+from danswer.db.persona import create_update_persona
+from danswer.llm.answering.prompts.utils import build_dummy_prompt
 from danswer.llm.utils import get_default_llm_version
-from danswer.one_shot_answer.qa_block import build_dummy_prompt
 from danswer.server.features.persona.models import CreatePersonaRequest
 from danswer.server.features.persona.models import PersonaSnapshot
 from danswer.server.features.persona.models import PromptTemplateResponse
@@ -29,51 +26,6 @@ logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/persona")
 basic_router = APIRouter(prefix="/persona")
-
-
-def create_update_persona(
-    persona_id: int | None,
-    create_persona_request: CreatePersonaRequest,
-    user: User | None,
-    db_session: Session,
-) -> PersonaSnapshot:
-    user_id = user.id if user is not None else None
-
-    # Permission to actually use these is checked later
-    document_sets = list(
-        get_document_sets_by_ids(
-            document_set_ids=create_persona_request.document_set_ids,
-            db_session=db_session,
-        )
-    )
-    prompts = list(
-        get_prompts_by_ids(
-            prompt_ids=create_persona_request.prompt_ids,
-            db_session=db_session,
-        )
-    )
-
-    try:
-        persona = upsert_persona(
-            persona_id=persona_id,
-            user_id=user_id,
-            name=create_persona_request.name,
-            description=create_persona_request.description,
-            num_chunks=create_persona_request.num_chunks,
-            llm_relevance_filter=create_persona_request.llm_relevance_filter,
-            llm_filter_extraction=create_persona_request.llm_filter_extraction,
-            recency_bias=create_persona_request.recency_bias,
-            prompts=prompts,
-            document_sets=document_sets,
-            llm_model_version_override=create_persona_request.llm_model_version_override,
-            starter_messages=create_persona_request.starter_messages,
-            shared=create_persona_request.shared,
-            db_session=db_session,
-        )
-    except ValueError as e:
-        logger.exception("Failed to create persona")
-        raise HTTPException(status_code=400, detail=str(e))
-    return PersonaSnapshot.from_model(persona)
 
 
 @admin_router.post("")
@@ -151,6 +103,25 @@ def delete_persona(
         user_id=user.id if user is not None else None,
         db_session=db_session,
     )
+
+
+@admin_router.get("")
+def list_personas_admin(
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+    include_deleted: bool = False,
+) -> list[PersonaSnapshot]:
+    return [
+        PersonaSnapshot.from_model(persona)
+        for persona in get_personas(
+            db_session=db_session,
+            user_id=None,  # user_id = None -> give back all personas
+            include_deleted=include_deleted,
+        )
+    ]
+
+
+"""Endpoints for all"""
 
 
 @basic_router.get("")

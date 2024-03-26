@@ -1,13 +1,19 @@
 interface DocumentSetCreationRequest {
   name: string;
   description: string;
-  ccPairIds: number[];
+  cc_pair_ids: number[];
+  is_public: boolean;
+  users: string[];
+  groups: number[];
 }
 
 export const createDocumentSet = async ({
   name,
   description,
-  ccPairIds,
+  cc_pair_ids,
+  is_public,
+  users,
+  groups,
 }: DocumentSetCreationRequest) => {
   return fetch("/api/manage/admin/document-set", {
     method: "POST",
@@ -17,7 +23,10 @@ export const createDocumentSet = async ({
     body: JSON.stringify({
       name,
       description,
-      cc_pair_ids: ccPairIds,
+      cc_pair_ids,
+      is_public,
+      users,
+      groups,
     }),
   });
 };
@@ -25,13 +34,19 @@ export const createDocumentSet = async ({
 interface DocumentSetUpdateRequest {
   id: number;
   description: string;
-  ccPairIds: number[];
+  cc_pair_ids: number[];
+  is_public: boolean;
+  users: string[];
+  groups: number[];
 }
 
 export const updateDocumentSet = async ({
   id,
   description,
-  ccPairIds,
+  cc_pair_ids,
+  is_public,
+  users,
+  groups,
 }: DocumentSetUpdateRequest) => {
   return fetch("/api/manage/admin/document-set", {
     method: "PATCH",
@@ -41,7 +56,10 @@ export const updateDocumentSet = async ({
     body: JSON.stringify({
       id,
       description,
-      cc_pair_ids: ccPairIds,
+      cc_pair_ids,
+      is_public,
+      users,
+      groups,
     }),
   });
 };

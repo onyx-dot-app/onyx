@@ -1,10 +1,15 @@
 import json
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
 from filelock import FileLock
+from sqlalchemy.orm import Session
 
+from danswer.db.engine import SessionFactory
+from danswer.db.models import KVStore
 from danswer.dynamic_configs.interface import ConfigNotFoundError
 from danswer.dynamic_configs.interface import DynamicConfigStore
 from danswer.dynamic_configs.interface import JSON_ro
@@ -46,3 +51,38 @@ class FileSystemBackedDynamicConfigStore(DynamicConfigStore):
         lock = _get_file_lock(file_path)
         with lock.acquire(timeout=FILE_LOCK_TIMEOUT):
             os.remove(file_path)
+
+
+class PostgresBackedDynamicConfigStore(DynamicConfigStore):
+    @contextmanager
+    def get_session(self) -> Iterator[Session]:
+        session: Session = SessionFactory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def store(self, key: str, val: JSON_ro) -> None:
+        with self.get_session() as session:
+            obj = session.query(KVStore).filter_by(key=key).first()
+            if obj:
+                obj.value = val
+            else:
+                obj = KVStore(key=key, value=val)  # type: ignore
+                session.query(KVStore).filter_by(key=key).delete()
+                session.add(obj)
+            session.commit()
+
+    def load(self, key: str) -> JSON_ro:
+        with self.get_session() as session:
+            obj = session.query(KVStore).filter_by(key=key).first()
+            if not obj:
+                raise ConfigNotFoundError
+            return cast(JSON_ro, obj.value)
+
+    def delete(self, key: str) -> None:
+        with self.get_session() as session:
+            result = session.query(KVStore).filter_by(key=key).delete()  # type: ignore
+            if result == 0:
+                raise ConfigNotFoundError
+            session.commit()

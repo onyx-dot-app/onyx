@@ -75,7 +75,10 @@ def _extract_confluence_keys_from_datacenter_url(wiki_url: str) -> tuple[str, st
 
 
 def extract_confluence_keys_from_url(wiki_url: str) -> tuple[str, str, bool]:
-    is_confluence_cloud = ".atlassian.net/wiki/spaces/" in wiki_url
+    is_confluence_cloud = (
+        ".atlassian.net/wiki/spaces/" in wiki_url
+        or ".jira.com/wiki/spaces/" in wiki_url
+    )
 
     try:
         if is_confluence_cloud:

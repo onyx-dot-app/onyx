@@ -3,9 +3,11 @@ import {
   Credential,
   DocumentBoostStatus,
   Tag,
+  User,
+  UserGroup,
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
-import { fetcher } from "./fetcher";
+import { errorHandlingFetcher, fetcher } from "./fetcher";
 import { useState } from "react";
 import { DateRangePickerValue } from "@tremor/react";
 import { SourceMetadata } from "./search/interfaces";
@@ -95,3 +97,28 @@ export function useFilters() {
     setSelectedTags,
   };
 }
+
+export const useUsers = () => {
+  const url = "/api/manage/users";
+  const swrResponse = useSWR<User[]>(url, errorHandlingFetcher);
+
+  return {
+    ...swrResponse,
+    refreshIndexingStatus: () => mutate(url),
+  };
+};
+
+/* 
+EE Only APIs
+*/
+
+const USER_GROUP_URL = "/api/manage/admin/user-group";
+
+export const useUserGroups = () => {
+  const swrResponse = useSWR<UserGroup[]>(USER_GROUP_URL, errorHandlingFetcher);
+
+  return {
+    ...swrResponse,
+    refreshUserGroups: () => mutate(USER_GROUP_URL),
+  };
+};

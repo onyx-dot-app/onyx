@@ -1,14 +1,8 @@
 "use client";
 
-import { LoadingAnimation, ThreeDotsLoader } from "@/components/Loading";
+import { ThreeDotsLoader } from "@/components/Loading";
 import { PageSelector } from "@/components/PageSelector";
-import { BasicTable } from "@/components/admin/connectors/BasicTable";
-import {
-  BookmarkIcon,
-  EditIcon,
-  InfoIcon,
-  TrashIcon,
-} from "@/components/icons/icons";
+import { BookmarkIcon, InfoIcon } from "@/components/icons/icons";
 import {
   Table,
   TableHead,
@@ -24,7 +18,6 @@ import { useConnectorCredentialIndexingStatus } from "@/lib/hooks";
 import { ConnectorIndexingStatus, DocumentSet } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
-import { DocumentSetCreationForm } from "./DocumentSetCreationForm";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
@@ -37,49 +30,31 @@ import {
   FiEdit,
 } from "react-icons/fi";
 import { DeleteButton } from "@/components/DeleteButton";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const numToDisplay = 50;
 
-const EditRow = ({
-  documentSet,
-  ccPairs,
-  setPopup,
-  refreshDocumentSets,
-}: {
-  documentSet: DocumentSet;
-  ccPairs: ConnectorIndexingStatus<any, any>[];
-  setPopup: (popupSpec: PopupSpec | null) => void;
-  refreshDocumentSets: () => void;
-}) => {
-  const [isEditPopupOpen, setEditPopupOpen] = useState(false);
+const EditRow = ({ documentSet }: { documentSet: DocumentSet }) => {
+  const router = useRouter();
+
   const [isSyncingTooltipOpen, setIsSyncingTooltipOpen] = useState(false);
   return (
     <div className="relative flex">
-      {isEditPopupOpen && (
-        <DocumentSetCreationForm
-          ccPairs={ccPairs}
-          onClose={() => {
-            setEditPopupOpen(false);
-            refreshDocumentSets();
-          }}
-          setPopup={setPopup}
-          existingDocumentSet={documentSet}
-        />
-      )}
       {isSyncingTooltipOpen && (
-        <div className="flex flex-nowrap absolute w-64 top-0 left-0 mt-8 border border-border bg-background px-3 py-2 rounded shadow-lg">
+        <div className="flex flex-nowrap absolute w-72 top-0 left-0 mt-8 border border-border bg-background px-3 py-2 rounded shadow-lg z-40">
           <InfoIcon className="mt-1 flex flex-shrink-0 mr-2" /> Cannot update
           while syncing! Wait for the sync to finish, then try again.
         </div>
       )}
       <div
         className={
-          "text-emphasis font-medium my-auto p-1 hover:bg-hover-light flex" +
-          (documentSet.is_up_to_date ? " cursor-pointer" : "")
+          "text-emphasis font-medium my-auto p-1 hover:bg-hover-light flex cursor-pointer select-none" +
+          (documentSet.is_up_to_date ? " cursor-pointer" : " cursor-default")
         }
         onClick={() => {
           if (documentSet.is_up_to_date) {
-            setEditPopupOpen(true);
+            router.push(`/admin/documents/sets/${documentSet.id}`);
           }
         }}
         onMouseEnter={() => {
@@ -109,7 +84,6 @@ interface DocumentFeedbackTableProps {
 
 const DocumentSetTable = ({
   documentSets,
-  ccPairs,
   refresh,
   setPopup,
 }: DocumentFeedbackTableProps) => {
@@ -146,12 +120,7 @@ const DocumentSetTable = ({
                 <TableRow key={documentSet.id}>
                   <TableCell className="whitespace-normal break-all">
                     <div className="flex gap-x-1 text-emphasis">
-                      <EditRow
-                        documentSet={documentSet}
-                        ccPairs={ccPairs}
-                        setPopup={setPopup}
-                        refreshDocumentSets={refresh}
-                      />
+                      <EditRow documentSet={documentSet} />
                     </div>
                   </TableCell>
                   <TableCell>
@@ -237,7 +206,6 @@ const DocumentSetTable = ({
 };
 
 const Main = () => {
-  const [isOpen, setIsOpen] = useState(false);
   const { popup, setPopup } = usePopup();
   const {
     data: documentSets,
@@ -278,14 +246,11 @@ const Main = () => {
       <div className="mb-3"></div>
 
       <div className="flex mb-6">
-        <Button
-          size="xs"
-          color="green"
-          className="ml-2 my-auto"
-          onClick={() => setIsOpen(true)}
-        >
-          New Document Set
-        </Button>
+        <Link href="/admin/documents/sets/new">
+          <Button size="xs" color="green" className="ml-2 my-auto">
+            New Document Set
+          </Button>
+        </Link>
       </div>
 
       {documentSets.length > 0 && (
@@ -298,17 +263,6 @@ const Main = () => {
             setPopup={setPopup}
           />
         </>
-      )}
-
-      {isOpen && (
-        <DocumentSetCreationForm
-          ccPairs={ccPairs}
-          onClose={() => {
-            refreshDocumentSets();
-            setIsOpen(false);
-          }}
-          setPopup={setPopup}
-        />
       )}
     </div>
   );

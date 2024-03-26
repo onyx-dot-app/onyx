@@ -1,4 +1,5 @@
 import io
+import socket
 from enum import Enum
 from typing import Any
 from typing import cast
@@ -27,6 +28,7 @@ from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.utils.logger import setup_logger
 
+
 logger = setup_logger()
 
 
@@ -39,6 +41,17 @@ class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
     SITEMAP = "sitemap"
     # Given a file upload where every line is a URL, parse all the URLs provided
     UPLOAD = "upload"
+
+
+def check_internet_connection() -> None:
+    dns_servers = [("1.1.1.1", 53), ("8.8.8.8", 53)]
+    for server in dns_servers:
+        try:
+            socket.create_connection(server, timeout=3)
+            return
+        except OSError:
+            continue
+    raise Exception("Unable to contact DNS server - check your internet connection")
 
 
 def is_valid_url(url: str) -> bool:
@@ -100,12 +113,17 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     response.raise_for_status()
 
     soup = BeautifulSoup(response.content, "html.parser")
-    return [_ensure_absolute_url(sitemap_url, loc_tag.text) for loc_tag in soup.find_all("loc")]
+    return [
+        _ensure_absolute_url(sitemap_url, loc_tag.text)
+        for loc_tag in soup.find_all("loc")
+    ]
 
-def _ensure_absolute_url(source_url:str, maybe_relative_url: str) -> str:
+
+def _ensure_absolute_url(source_url: str, maybe_relative_url: str) -> str:
     if not urlparse(maybe_relative_url).netloc:
         return urljoin(source_url, maybe_relative_url)
     return maybe_relative_url
+
 
 def _ensure_valid_url(url: str) -> str:
     if "://" not in url:
@@ -143,6 +161,10 @@ class WebConnector(LoadConnector):
             self.to_visit_list = extract_urls_from_sitemap(_ensure_valid_url(base_url))
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD:
+            logger.warning(
+                "This is not a UI supported Web Connector flow, "
+                "are you sure you want to do this?"
+            )
             self.to_visit_list = _read_urls_file(base_url)
 
         else:
@@ -163,6 +185,7 @@ class WebConnector(LoadConnector):
         base_url = to_visit[0]  # For the recursive case
         doc_batch: list[Document] = []
 
+        check_internet_connection()
         playwright, context = start_playwright()
         restart_playwright = False
         while to_visit:

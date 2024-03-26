@@ -1,0 +1,24 @@
+apiVersion: v2
+name: danswer-stack
+description: A Helm chart for Kubernetes
+home: https://www.danswer.ai/
+sources:
+  - "https://github.com/danswer-ai/danswer"
+type: application
+version: 0.1.0
+appVersion: "v0.3.42"
+annotations:
+  category: Productivity
+  licenses: MIT
+  images: |
+    - name: webserver
+      image: docker.io/danswer/danswer-web-server:v0.3.42
+    - name: background
+      image: docker.io/danswer/danswer-backend:v0.3.42
+    - name: vespa
+      image: vespaengine/vespa:8.277.17
+dependencies:
+  - name: postgresql
+    version: "14.1.0"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled

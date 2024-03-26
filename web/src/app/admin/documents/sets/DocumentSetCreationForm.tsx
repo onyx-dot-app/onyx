@@ -2,13 +2,19 @@ import { ArrayHelpers, FieldArray, Form, Formik } from "formik";
 import * as Yup from "yup";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { createDocumentSet, updateDocumentSet } from "./lib";
-import { ConnectorIndexingStatus, DocumentSet } from "@/lib/types";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { ConnectorIndexingStatus, DocumentSet, UserGroup } from "@/lib/types";
+import {
+  BooleanFormField,
+  TextFormField,
+} from "@/components/admin/connectors/Field";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
-import { Button } from "@tremor/react";
+import { Button, Divider, Text } from "@tremor/react";
+import { EE_ENABLED } from "@/lib/constants";
+import { FiUsers } from "react-icons/fi";
 
 interface SetCreationPopupProps {
   ccPairs: ConnectorIndexingStatus<any, any>[];
+  userGroups: UserGroup[] | undefined;
   onClose: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
   existingDocumentSet?: DocumentSet;
@@ -16,6 +22,7 @@ interface SetCreationPopupProps {
 
 export const DocumentSetCreationForm = ({
   ccPairs,
+  userGroups,
   onClose,
   setPopup,
   existingDocumentSet,
@@ -24,107 +31,106 @@ export const DocumentSetCreationForm = ({
 
   return (
     <div>
-      <div
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-        onClick={onClose}
+      <Formik
+        initialValues={{
+          name: existingDocumentSet ? existingDocumentSet.name : "",
+          description: existingDocumentSet
+            ? existingDocumentSet.description
+            : "",
+          cc_pair_ids: existingDocumentSet
+            ? existingDocumentSet.cc_pair_descriptors.map(
+                (ccPairDescriptor) => {
+                  return ccPairDescriptor.id;
+                }
+              )
+            : ([] as number[]),
+          is_public: existingDocumentSet ? existingDocumentSet.is_public : true,
+          users: existingDocumentSet ? existingDocumentSet.users : [],
+          groups: existingDocumentSet ? existingDocumentSet.groups : [],
+        }}
+        validationSchema={Yup.object().shape({
+          name: Yup.string().required("Please enter a name for the set"),
+          description: Yup.string().required(
+            "Please enter a description for the set"
+          ),
+          cc_pair_ids: Yup.array()
+            .of(Yup.number().required())
+            .required("Please select at least one connector"),
+        })}
+        onSubmit={async (values, formikHelpers) => {
+          formikHelpers.setSubmitting(true);
+          // If the document set is public, then we don't want to send any groups
+          const processedValues = {
+            ...values,
+            groups: values.is_public ? [] : values.groups,
+          };
+
+          let response;
+          if (isUpdate) {
+            response = await updateDocumentSet({
+              id: existingDocumentSet.id,
+              ...processedValues,
+            });
+          } else {
+            response = await createDocumentSet(processedValues);
+          }
+          formikHelpers.setSubmitting(false);
+          if (response.ok) {
+            setPopup({
+              message: isUpdate
+                ? "Successfully updated document set!"
+                : "Successfully created document set!",
+              type: "success",
+            });
+            onClose();
+          } else {
+            const errorMsg = await response.text();
+            setPopup({
+              message: isUpdate
+                ? `Error updating document set - ${errorMsg}`
+                : `Error creating document set - ${errorMsg}`,
+              type: "error",
+            });
+          }
+        }}
       >
-        <div
-          className="bg-background p-6 rounded border border-border shadow-lg relative w-1/2 text-sm"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <Formik
-            initialValues={{
-              name: existingDocumentSet ? existingDocumentSet.name : "",
-              description: existingDocumentSet
-                ? existingDocumentSet.description
-                : "",
-              ccPairIds: existingDocumentSet
-                ? existingDocumentSet.cc_pair_descriptors.map(
-                    (ccPairDescriptor) => {
-                      return ccPairDescriptor.id;
-                    }
-                  )
-                : ([] as number[]),
-            }}
-            validationSchema={Yup.object().shape({
-              name: Yup.string().required("Please enter a name for the set"),
-              description: Yup.string().required(
-                "Please enter a description for the set"
-              ),
-              ccPairIds: Yup.array()
-                .of(Yup.number().required())
-                .required("Please select at least one connector"),
-            })}
-            onSubmit={async (values, formikHelpers) => {
-              formikHelpers.setSubmitting(true);
-              let response;
-              if (isUpdate) {
-                response = await updateDocumentSet({
-                  id: existingDocumentSet.id,
-                  ...values,
-                });
-              } else {
-                response = await createDocumentSet(values);
-              }
-              formikHelpers.setSubmitting(false);
-              if (response.ok) {
-                setPopup({
-                  message: isUpdate
-                    ? "Successfully updated document set!"
-                    : "Successfully created document set!",
-                  type: "success",
-                });
-                onClose();
-              } else {
-                const errorMsg = await response.text();
-                setPopup({
-                  message: isUpdate
-                    ? `Error updating document set - ${errorMsg}`
-                    : `Error creating document set - ${errorMsg}`,
-                  type: "error",
-                });
-              }
-            }}
-          >
-            {({ isSubmitting, values }) => (
-              <Form>
-                <h2 className="text-lg text-emphasis font-bold mb-3">
-                  {isUpdate
-                    ? "Update a Document Set"
-                    : "Create a new Document Set"}
-                </h2>
-                <TextFormField
-                  name="name"
-                  label="Name:"
-                  placeholder="A name for the document set"
-                  disabled={isUpdate}
-                  autoCompleteDisabled={true}
-                />
-                <TextFormField
-                  name="description"
-                  label="Description:"
-                  placeholder="Describe what the document set represents"
-                  autoCompleteDisabled={true}
-                />
-                <h2 className="mb-1 font-medium text-base">
-                  Pick your connectors:
-                </h2>
-                <p className="mb-3 text-xs">
-                  All documents indexed by the selected connectors will be a
-                  part of this document set.
-                </p>
-                <FieldArray
-                  name="ccPairIds"
-                  render={(arrayHelpers: ArrayHelpers) => (
-                    <div className="mb-3 flex gap-2 flex-wrap">
-                      {ccPairs.map((ccPair) => {
-                        const ind = values.ccPairIds.indexOf(ccPair.cc_pair_id);
-                        let isSelected = ind !== -1;
-                        return (
-                          <div
-                            key={`${ccPair.connector.id}-${ccPair.credential.id}`}
-                            className={
-                              `
+        {({ isSubmitting, values }) => (
+          <Form>
+            <TextFormField
+              name="name"
+              label="Name:"
+              placeholder="A name for the document set"
+              disabled={isUpdate}
+              autoCompleteDisabled={true}
+            />
+            <TextFormField
+              name="description"
+              label="Description:"
+              placeholder="Describe what the document set represents"
+              autoCompleteDisabled={true}
+            />
+
+            <Divider />
+
+            <h2 className="mb-1 font-medium text-base">
+              Pick your connectors:
+            </h2>
+            <p className="mb-3 text-xs">
+              All documents indexed by the selected connectors will be a part of
+              this document set.
+            </p>
+            <FieldArray
+              name="cc_pair_ids"
+              render={(arrayHelpers: ArrayHelpers) => (
+                <div className="mb-3 flex gap-2 flex-wrap">
+                  {ccPairs.map((ccPair) => {
+                    const ind = values.cc_pair_ids.indexOf(ccPair.cc_pair_id);
+                    let isSelected = ind !== -1;
+                    return (
+                      <div
+                        key={`${ccPair.connector.id}-${ccPair.credential.id}`}
+                        className={
+                          `
                               px-3 
                               py-1
                               rounded-lg 
@@ -133,47 +139,126 @@ export const DocumentSetCreationForm = ({
                               w-fit 
                               flex 
                               cursor-pointer ` +
-                              (isSelected
-                                ? " bg-background-strong"
-                                : " hover:bg-hover")
-                            }
-                            onClick={() => {
-                              if (isSelected) {
-                                arrayHelpers.remove(ind);
-                              } else {
-                                arrayHelpers.push(ccPair.cc_pair_id);
-                              }
-                            }}
-                          >
-                            <div className="my-auto">
-                              <ConnectorTitle
-                                connector={ccPair.connector}
-                                ccPairId={ccPair.cc_pair_id}
-                                ccPairName={ccPair.name}
-                                isLink={false}
-                                showMetadata={false}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                />
-                <div className="flex">
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-64 mx-auto"
-                  >
-                    {isUpdate ? "Update!" : "Create!"}
-                  </Button>
+                          (isSelected
+                            ? " bg-background-strong"
+                            : " hover:bg-hover")
+                        }
+                        onClick={() => {
+                          if (isSelected) {
+                            arrayHelpers.remove(ind);
+                          } else {
+                            arrayHelpers.push(ccPair.cc_pair_id);
+                          }
+                        }}
+                      >
+                        <div className="my-auto">
+                          <ConnectorTitle
+                            connector={ccPair.connector}
+                            ccPairId={ccPair.cc_pair_id}
+                            ccPairName={ccPair.name}
+                            isLink={false}
+                            showMetadata={false}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </Form>
+              )}
+            />
+
+            {EE_ENABLED && userGroups && userGroups.length > 0 && (
+              <div>
+                <Divider />
+
+                <BooleanFormField
+                  name="is_public"
+                  label="Is Public?"
+                  subtext={
+                    <>
+                      If the document set is public, then it will be visible to{" "}
+                      <b>all users</b>. If it is not public, then only users in
+                      the specified groups will be able to see it.
+                    </>
+                  }
+                />
+
+                <Divider />
+                <h2 className="mb-1 font-medium text-base">
+                  Groups with Access
+                </h2>
+                {!values.is_public ? (
+                  <>
+                    <Text className="mb-3">
+                      If any groups are specified, then this Document Set will
+                      only be visible to the specified groups. If no groups are
+                      specified, then the Document Set will be visible to all
+                      users.
+                    </Text>
+                    <FieldArray
+                      name="groups"
+                      render={(arrayHelpers: ArrayHelpers) => (
+                        <div className="flex gap-2 flex-wrap">
+                          {userGroups.map((userGroup) => {
+                            const ind = values.groups.indexOf(userGroup.id);
+                            let isSelected = ind !== -1;
+                            return (
+                              <div
+                                key={userGroup.id}
+                                className={
+                                  `
+                              px-3 
+                              py-1
+                              rounded-lg 
+                              border
+                              border-border 
+                              w-fit 
+                              flex 
+                              cursor-pointer ` +
+                                  (isSelected
+                                    ? " bg-background-strong"
+                                    : " hover:bg-hover")
+                                }
+                                onClick={() => {
+                                  if (isSelected) {
+                                    arrayHelpers.remove(ind);
+                                  } else {
+                                    arrayHelpers.push(userGroup.id);
+                                  }
+                                }}
+                              >
+                                <div className="my-auto flex">
+                                  <FiUsers className="my-auto mr-2" />{" "}
+                                  {userGroup.name}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    />
+                  </>
+                ) : (
+                  <Text>
+                    This Document Set is public, so this does not apply. If you
+                    want to control which user groups see this Document Set,
+                    mark it as non-public!
+                  </Text>
+                )}
+              </div>
             )}
-          </Formik>
-        </div>
-      </div>
+            <div className="flex mt-6">
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-64 mx-auto"
+              >
+                {isUpdate ? "Update!" : "Create!"}
+              </Button>
+            </div>
+          </Form>
+        )}
+      </Formik>
     </div>
   );
 };

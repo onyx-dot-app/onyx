@@ -1,7 +1,7 @@
 import os
 from typing import cast
 
-from danswer.dynamic_configs import get_dynamic_config_store
+from danswer.dynamic_configs.factory import get_dynamic_config_store
 from danswer.server.manage.models import SlackBotTokens
 
 

@@ -9,7 +9,7 @@ import { RobotIcon } from "@/components/icons/icons";
 import { AdminPageTitle } from "@/components/admin/Title";
 
 export default async function Page() {
-  const personaResponse = await fetchSS("/persona");
+  const personaResponse = await fetchSS("/admin/persona");
 
   if (!personaResponse.ok) {
     return (

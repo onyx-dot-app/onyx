@@ -5,10 +5,10 @@ from typing import Any
 from pydantic import BaseModel
 
 from danswer.configs.constants import DocumentSource
-from danswer.search.models import QueryFlow
+from danswer.search.enums import QueryFlow
+from danswer.search.enums import SearchType
 from danswer.search.models import RetrievalDocs
 from danswer.search.models import SearchResponse
-from danswer.search.models import SearchType
 
 
 class LlmDoc(BaseModel):
@@ -16,11 +16,13 @@ class LlmDoc(BaseModel):
 
     document_id: str
     content: str
+    blurb: str
     semantic_identifier: str
     source_type: DocumentSource
     metadata: dict[str, str | list[str]]
     updated_at: datetime | None
     link: str | None
+    source_links: dict[int, str] | None
 
 
 # First chunk of info for streaming QA
@@ -100,9 +102,12 @@ class QAResponse(SearchResponse, DanswerAnswer):
     error_msg: str | None = None
 
 
-AnswerQuestionStreamReturn = Iterator[
-    DanswerAnswerPiece | DanswerQuotes | DanswerContexts | StreamingError
-]
+AnswerQuestionPossibleReturn = (
+    DanswerAnswerPiece | DanswerQuotes | CitationInfo | DanswerContexts | StreamingError
+)
+
+
+AnswerQuestionStreamReturn = Iterator[AnswerQuestionPossibleReturn]
 
 
 class LLMMetricsContainer(BaseModel):

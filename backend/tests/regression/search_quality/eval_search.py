@@ -7,16 +7,13 @@ from typing import TextIO
 
 from sqlalchemy.orm import Session
 
-from danswer.chat.chat_utils import get_chunks_for_qa
-from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.engine import get_sqlalchemy_engine
-from danswer.document_index.factory import get_default_document_index
 from danswer.indexing.models import InferenceChunk
-from danswer.search.models import IndexFilters
+from danswer.llm.answering.doc_pruning import reorder_docs
 from danswer.search.models import RerankMetricsContainer
 from danswer.search.models import RetrievalMetricsContainer
-from danswer.search.models import SearchQuery
-from danswer.search.search_runner import full_chunk_search
+from danswer.search.models import SearchRequest
+from danswer.search.pipeline import SearchPipeline
 from danswer.utils.callbacks import MetricsHander
 
 
@@ -81,46 +78,25 @@ def get_search_results(
     RetrievalMetricsContainer | None,
     RerankMetricsContainer | None,
 ]:
-    filters = IndexFilters(
-        source_type=None,
-        document_set=None,
-        time_cutoff=None,
-        access_control_list=None,
-    )
-    search_query = SearchQuery(
-        query=query,
-        filters=filters,
-        recency_bias_multiplier=1.0,
-    )
-
     retrieval_metrics = MetricsHander[RetrievalMetricsContainer]()
     rerank_metrics = MetricsHander[RerankMetricsContainer]()
 
     with Session(get_sqlalchemy_engine()) as db_session:
-        embedding_model = get_current_db_embedding_model(db_session)
+        search_pipeline = SearchPipeline(
+            search_request=SearchRequest(
+                query=query,
+            ),
+            user=None,
+            db_session=db_session,
+            retrieval_metrics_callback=retrieval_metrics.record_metric,
+            rerank_metrics_callback=rerank_metrics.record_metric,
+        )
 
-    document_index = get_default_document_index(
-        primary_index_name=embedding_model.index_name, secondary_index_name=None
-    )
-
-    top_chunks, llm_chunk_selection = full_chunk_search(
-        query=search_query,
-        document_index=document_index,
-        db_session=db_session,
-        retrieval_metrics_callback=retrieval_metrics.record_metric,
-        rerank_metrics_callback=rerank_metrics.record_metric,
-    )
-
-    llm_chunks_indices = get_chunks_for_qa(
-        chunks=top_chunks,
-        llm_chunk_selection=llm_chunk_selection,
-        token_limit=None,
-    )
-
-    llm_chunks = [top_chunks[i] for i in llm_chunks_indices]
+        top_chunks = search_pipeline.reranked_docs
+        llm_chunk_selection = search_pipeline.chunk_relevance_list
 
     return (
-        llm_chunks,
+        reorder_docs(top_chunks, llm_chunk_selection),
         retrieval_metrics.metrics,
         rerank_metrics.metrics,
     )
