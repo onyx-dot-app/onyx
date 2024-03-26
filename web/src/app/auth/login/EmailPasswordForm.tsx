@@ -11,6 +11,7 @@ import { requestEmailVerification } from "../lib";
 import { useState } from "react";
 import { Spinner } from "@/components/Spinner";
 
+
 export function EmailPasswordForm({
   isSignup = false,
   shouldVerify,
@@ -59,6 +60,7 @@ export function EmailPasswordForm({
 
           const loginResponse = await basicLogin(values.email, values.password);
           if (loginResponse.ok) {
+            window.justLoggedIn = true;
             if (isSignup && shouldVerify) {
               await requestEmailVerification(values.email);
               router.push("/auth/waiting-on-verification");
