@@ -223,9 +223,9 @@ const MainSection = () => {
               name: "sites",
               label: "Sites:",
               subtext:
-                "Specify 0 or more sites to index. For example, specifying the site " +
-                "'support' for the 'danswerai' sharepoint will cause us to only index documents " +
-                "within the 'https://danswerai.sharepoint.com/sites/support' site. " +
+                "Specify 0 or more sites' URL to index. For example, specifying the site " +
+                "'https://danswerai.sharepoint.com/sites/support' will cause us to only index documents " +
+                "within the 'support' site. " +
                 "If no sites are specified, all sites in your organization will be indexed.",
             })}
             validationSchema={Yup.object().shape({
