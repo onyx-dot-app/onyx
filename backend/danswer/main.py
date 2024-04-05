@@ -82,6 +82,8 @@ from danswer.utils.telemetry import RecordType
 from danswer.utils.variable_functionality import fetch_versioned_implementation
 
 
+from danswer.server.eea_config.eea_config_backend import router as eea_config_router
+
 logger = setup_logger()
 
 
@@ -274,6 +276,8 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, state_router)
     include_router_with_global_prefix_prepended(application, danswer_api_router)
     include_router_with_global_prefix_prepended(application, gpts_router)
+
+    include_router_with_global_prefix_prepended(application, eea_config_router)
 
     if AUTH_TYPE == AuthType.DISABLED:
         # Server logs this during auth setup verification step
