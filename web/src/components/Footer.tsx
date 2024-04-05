@@ -19,7 +19,7 @@ export const Footer: React.FC<FooterProps> = () => {
             <div className="h-[32px] w-[30px]">
               <Image src="/logo.png" alt="Logo" width="1419" height="1520" />
             </div>
-            <h3 className="flex text-xl text-strong my-auto">
+            <h3 className="flex text-l text-strong my-auto">
               &nbsp;Powered by Danswer.ai
             </h3>
           </div>

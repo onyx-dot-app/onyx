@@ -23,6 +23,10 @@ export function EmailPasswordForm({
   const { popup, setPopup } = usePopup();
   const [isWorking, setIsWorking] = useState(false);
 
+  let email_subtext = ""
+  if (isSignup){
+    email_subtext="Signup is restricted to eea domain mail address"
+  }
   return (
     <>
       {isWorking && <Spinner />}
@@ -88,6 +92,7 @@ export function EmailPasswordForm({
               name="email"
               label="Email"
               type="email"
+              subtext={email_subtext}
               placeholder="email@eea.europa.eu"
             />
 
