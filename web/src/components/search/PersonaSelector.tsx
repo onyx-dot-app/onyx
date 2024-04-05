@@ -38,6 +38,7 @@ export function PersonaSelector({
               <DefaultDropdownElement
                 key={persona.id}
                 name={persona.name}
+                title={persona.llm_model_version_override || "default model"}
                 onSelect={() => onPersonaChange(persona)}
                 isSelected={isSelected}
               />
@@ -46,7 +47,8 @@ export function PersonaSelector({
         </div>
       }
     >
-      <div className="select-none text-sm font-bold flex text-emphasis px-2 py-1.5 cursor-pointer w-fit hover:bg-hover rounded">
+      <div className="select-none text-sm font-bold flex text-emphasis px-2 py-1.5 cursor-pointer w-fit hover:bg-hover rounded"
+        title={currentlySelectedPersona?.llm_model_version_override || "default model"}>
         {currentlySelectedPersona?.name || "Default"}
         <FiChevronDown className="my-auto ml-2" />
       </div>

@@ -15,13 +15,15 @@ const MAX_PERSONAS_TO_DISPLAY = 4;
 function HelperItemDisplay({
   title,
   description,
+  model,
 }: {
   title: string;
   description: string;
+  model: string;
 }) {
   return (
     <div className="cursor-pointer hover:bg-hover-light border border-border rounded py-2 px-4">
-      <div className="text-emphasis font-bold text-lg flex">{title}</div>
+      <div className="text-emphasis font-bold text-lg flex title-with-info">{title}<FiInfo title={model}/></div>
       <div className="text-sm">{description}</div>
     </div>
   );
@@ -68,6 +70,7 @@ function AllPersonaOptionDisplay({
               <HelperItemDisplay
                 title={persona.name}
                 description={persona.description}
+                model={persona.llm_model_version_override || "default model"}
               />
             </div>
           ))}
@@ -213,6 +216,7 @@ export function ChatIntro({
                       <HelperItemDisplay
                         title={persona.name}
                         description={persona.description}
+                        model={persona.llm_model_version_override || "default model"}
                       />
                     </div>
                   ))}

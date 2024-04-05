@@ -329,6 +329,7 @@ export function DefaultDropdownElement({
   description,
   onSelect,
   isSelected,
+  title = "",
   includeCheckbox = false,
 }: {
   name: string | JSX.Element;
@@ -336,6 +337,7 @@ export function DefaultDropdownElement({
   description?: string;
   onSelect?: () => void;
   isSelected?: boolean;
+  title?: string;
   includeCheckbox?: boolean;
 }) {
   return (
@@ -354,6 +356,7 @@ export function DefaultDropdownElement({
         hover:bg-hover-light
       `}
       onClick={onSelect}
+      title={title}
     >
       <div>
         <div className="flex">
