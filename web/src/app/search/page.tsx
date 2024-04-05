@@ -40,6 +40,7 @@ export default async function Home() {
     fetchSS("/persona"),
     fetchSS("/query/valid-tags"),
     fetchSS("/secondary-index/get-embedding-models"),
+    fetchSS("/eea_config/get_eea_config"),
   ];
 
   // catch cases where the backend is completely unreachable here
@@ -51,7 +52,7 @@ export default async function Home() {
     | AuthTypeMetadata
     | FullEmbeddingModelResponse
     | null
-  )[] = [null, null, null, null, null, null, null];
+  )[] = [null, null, null, null, null, null, null, null];
   try {
     results = await Promise.all(tasks);
   } catch (e) {
@@ -64,7 +65,21 @@ export default async function Home() {
   const personaResponse = results[4] as Response | null;
   const tagsResponse = results[5] as Response | null;
   const embeddingModelResponse = results[6] as Response | null;
-
+  const EEAConfigResponse = results[7] as Response | null;
+  let disclaimerTitle = "";
+  let disclaimerText = "";
+  if (EEAConfigResponse?.ok) {
+    const eea_config = await EEAConfigResponse.json();
+    let conf = {"disclaimer":{"disclaimer_title":"", "disclaimer_text": ""}}
+    try{
+      conf = JSON.parse(eea_config?.config)
+    }
+    catch(e){
+      console.log("error parsing eea_conf")
+    }
+    disclaimerTitle = conf?.disclaimer?.disclaimer_title || "";
+    disclaimerText = conf?.disclaimer?.disclaimer_text || "";
+  }
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
     return redirect("/auth/login");
@@ -158,7 +173,7 @@ export default async function Home() {
         <NoCompleteSourcesModal ccPairs={ccPairs} />
       )}
 
-      <UserDisclaimerModal />
+      <UserDisclaimerModal disclaimerText={disclaimerText} disclaimerTitle={disclaimerTitle}/>
       <InstantSSRAutoRefresh />
 
       <div className="px-24 pt-10 flex flex-col items-center min-h-screen overflow-y-auto">
