@@ -176,6 +176,20 @@ export async function Layout({ children }: { children: React.ReactNode }) {
                   },
                 ],
               },
+              {
+                name: "EEA customizations",
+                items: [
+                  {
+                    name: (
+                      <div className="flex">
+                        <FiCpu size={18} />
+                        <div className="ml-1">Disclaimer</div>
+                      </div>
+                    ),
+                    link: "/admin/eea_config/disclaimer",
+                  },
+                ],
+              },
             ]}
           />
         </div>
@@ -183,7 +197,7 @@ export async function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </div>
-      <div className="absolute bottom-0 z-50 w-full">
+      <div className="absolute bottom-0 z-20 w-full">
         <Footer />
       </div>
     </div>
