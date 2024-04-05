@@ -32,13 +32,18 @@
 }
 
 .min-h-screen {
-  min-height:calc(100vh - 143px);
+  min-height: calc(100vh - 143px);
 }
 
 .min-h-screen-full {
-  min-height:100vh;
+  min-height: 100vh;
 }
 
 .h-screen {
-  height:calc(100vh - 66px);
+  height: calc(100vh - 66px);
+}
+
+.title-with-info {
+  gap:5px;
+  align-items:center;
 }
