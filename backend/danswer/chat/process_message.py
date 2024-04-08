@@ -34,7 +34,9 @@ from danswer.llm.answering.answer import Answer
 from danswer.llm.answering.models import AnswerStyleConfig
 from danswer.llm.answering.models import CitationConfig
 from danswer.llm.answering.models import DocumentPruningConfig
+from danswer.llm.answering.models import LLMConfig
 from danswer.llm.answering.models import PreviousMessage
+from danswer.llm.answering.models import PromptConfig
 from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_default_llm
 from danswer.llm.utils import get_default_llm_tokenizer
@@ -93,6 +95,10 @@ def stream_chat_message_objects(
     # For flow with search, don't include as many chunks as possible since we need to leave space
     # for the chat history, for smaller models, we likely won't get MAX_CHUNKS_FED_TO_CHAT chunks
     max_document_percentage: float = CHAT_TARGET_CHUNK_PERCENTAGE,
+    # if specified, uses the last user message and does not create a new user message based
+    # on the `new_msg_req.message`. Currently, requires a state where the last message is a
+    # user message (e.g. this can only be used for the chat-seeding flow).
+    use_existing_user_message: bool = False,
 ) -> ChatPacketStream:
     """Streams in order:
     1. [conditional] Retrieved documents if a search needs to be run
@@ -159,33 +165,43 @@ def stream_chat_message_objects(
         else:
             parent_message = root_message
 
-        # Create new message at the right place in the tree and update the parent's child pointer
-        # Don't commit yet until we verify the chat message chain
-        new_user_message = create_new_chat_message(
-            chat_session_id=chat_session_id,
-            parent_message=parent_message,
-            prompt_id=prompt_id,
-            message=message_text,
-            token_count=len(llm_tokenizer_encode_func(message_text)),
-            message_type=MessageType.USER,
-            db_session=db_session,
-            commit=False,
-        )
-
-        # Create linear history of messages
-        final_msg, history_msgs = create_chat_chain(
-            chat_session_id=chat_session_id, db_session=db_session
-        )
-
-        if final_msg.id != new_user_message.id:
-            db_session.rollback()
-            raise RuntimeError(
-                "The new message was not on the mainline. "
-                "Be sure to update the chat pointers before calling this."
+        if not use_existing_user_message:
+            # Create new message at the right place in the tree and update the parent's child pointer
+            # Don't commit yet until we verify the chat message chain
+            user_message = create_new_chat_message(
+                chat_session_id=chat_session_id,
+                parent_message=parent_message,
+                prompt_id=prompt_id,
+                message=message_text,
+                token_count=len(llm_tokenizer_encode_func(message_text)),
+                message_type=MessageType.USER,
+                db_session=db_session,
+                commit=False,
             )
+            # re-create linear history of messages
+            final_msg, history_msgs = create_chat_chain(
+                chat_session_id=chat_session_id, db_session=db_session
+            )
+            if final_msg.id != user_message.id:
+                db_session.rollback()
+                raise RuntimeError(
+                    "The new message was not on the mainline. "
+                    "Be sure to update the chat pointers before calling this."
+                )
 
-        # Save now to save the latest chat message
-        db_session.commit()
+            # Save now to save the latest chat message
+            db_session.commit()
+        else:
+            # re-create linear history of messages
+            final_msg, history_msgs = create_chat_chain(
+                chat_session_id=chat_session_id, db_session=db_session
+            )
+            if final_msg.message_type != MessageType.USER:
+                raise RuntimeError(
+                    "The last message was not a user message. Cannot call "
+                    "`stream_chat_message_objects` with `is_regenerate=True` "
+                    "when the last message is not a user message."
+                )
 
         run_search = False
         # Retrieval options are only None if reference_doc_ids are provided
@@ -302,7 +318,7 @@ def stream_chat_message_objects(
         partial_response = partial(
             create_new_chat_message,
             chat_session_id=chat_session_id,
-            parent_message=new_user_message,
+            parent_message=final_msg,
             prompt_id=prompt_id,
             # message=,
             rephrased_query=rephrased_query,
@@ -343,8 +359,16 @@ def stream_chat_message_objects(
                 ),
                 document_pruning_config=document_pruning_config,
             ),
-            prompt=final_msg.prompt,
-            persona=persona,
+            prompt_config=PromptConfig.from_model(
+                final_msg.prompt,
+                prompt_override=(
+                    new_msg_req.prompt_override or chat_session.prompt_override
+                ),
+            ),
+            llm_config=LLMConfig.from_persona(
+                persona,
+                llm_override=(new_msg_req.llm_override or chat_session.llm_override),
+            ),
             message_history=[
                 PreviousMessage.from_chat_message(msg) for msg in history_msgs
             ],
@@ -393,12 +417,14 @@ def stream_chat_message_objects(
 def stream_chat_message(
     new_msg_req: CreateChatMessageRequest,
     user: User | None,
+    use_existing_user_message: bool = False,
 ) -> Iterator[str]:
     with get_session_context_manager() as db_session:
         objects = stream_chat_message_objects(
             new_msg_req=new_msg_req,
             user=user,
             db_session=db_session,
+            use_existing_user_message=use_existing_user_message,
         )
         for obj in objects:
             yield get_json_line(obj.dict())

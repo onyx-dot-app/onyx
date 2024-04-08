@@ -27,6 +27,8 @@ import { personaComparator } from "../admin/personas/lib";
 import { ChatLayout } from "./ChatPage";
 import { FullEmbeddingModelResponse } from "../admin/models/embedding/embeddingModels";
 import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
+import { getSettingsSS } from "@/lib/settings";
+import { Settings } from "../admin/settings/interfaces";
 
 export default async function Page({
   searchParams,
@@ -43,7 +45,7 @@ export default async function Page({
     fetchSS("/persona?include_default=true"),
     fetchSS("/chat/get-user-chat-sessions"),
     fetchSS("/query/valid-tags"),
-    fetchSS("/secondary-index/get-embedding-models"),
+    getSettingsSS(),
   ];
 
   // catch cases where the backend is completely unreachable here
@@ -54,8 +56,9 @@ export default async function Page({
     | Response
     | AuthTypeMetadata
     | FullEmbeddingModelResponse
+    | Settings
     | null
-  )[] = [null, null, null, null, null, null, null, null, null];
+  )[] = [null, null, null, null, null, null, null, null, null, null];
   try {
     results = await Promise.all(tasks);
   } catch (e) {
@@ -68,7 +71,7 @@ export default async function Page({
   const personasResponse = results[4] as Response | null;
   const chatSessionsResponse = results[5] as Response | null;
   const tagsResponse = results[6] as Response | null;
-  const embeddingModelResponse = results[7] as Response | null;
+  const settings = results[7] as Settings | null;
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
@@ -77,6 +80,10 @@ export default async function Page({
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
     return redirect("/auth/waiting-on-verification");
+  }
+
+  if (settings && !settings.chat_page_enabled) {
+    return redirect("/search");
   }
 
   let ccPairs: CCPairBasicInfo[] = [];
@@ -130,15 +137,6 @@ export default async function Page({
     console.log(`Failed to fetch tags - ${tagsResponse?.status}`);
   }
 
-  const embeddingModelVersionInfo =
-    embeddingModelResponse && embeddingModelResponse.ok
-      ? ((await embeddingModelResponse.json()) as FullEmbeddingModelResponse)
-      : null;
-  const currentEmbeddingModelName =
-    embeddingModelVersionInfo?.current_model_name;
-  const nextEmbeddingModelName =
-    embeddingModelVersionInfo?.secondary_model_name;
-
   const defaultPersonaIdRaw = searchParams["personaId"];
   const defaultPersonaId = defaultPersonaIdRaw
     ? parseInt(defaultPersonaIdRaw)
@@ -183,6 +181,7 @@ export default async function Page({
 
       <ChatLayout
         user={user}
+        settings={settings}
         chatSessions={chatSessions}
         availableSources={availableSources}
         availableDocumentSets={documentSets}

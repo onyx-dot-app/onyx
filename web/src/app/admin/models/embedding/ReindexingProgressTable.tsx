@@ -1,14 +1,14 @@
 import { PageSelector } from "@/components/PageSelector";
-import { CCPairStatus, IndexAttemptStatus } from "@/components/Status";
-import { ConnectorIndexingStatus, ValidStatuses } from "@/lib/types";
+import { IndexAttemptStatus } from "@/components/Status";
+import { ConnectorIndexingStatus } from "@/lib/types";
 import {
-  Button,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeaderCell,
   TableRow,
+  Text,
 } from "@tremor/react";
 import Link from "next/link";
 import { useState } from "react";
@@ -30,6 +30,7 @@ export function ReindexingProgressTable({
             <TableHeaderCell>Connector Name</TableHeaderCell>
             <TableHeaderCell>Status</TableHeaderCell>
             <TableHeaderCell>Docs Re-Indexed</TableHeaderCell>
+            <TableHeaderCell>Error Message</TableHeaderCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -57,6 +58,13 @@ export function ReindexingProgressTable({
                   <TableCell>
                     {reindexingProgress?.latest_index_attempt
                       ?.total_docs_indexed || "-"}
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <Text className="flex flex-wrap whitespace-normal">
+                        {reindexingProgress.error_msg || "-"}
+                      </Text>
+                    </div>
                   </TableCell>
                 </TableRow>
               );

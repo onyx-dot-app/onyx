@@ -4,8 +4,8 @@ from langchain.schema.messages import HumanMessage
 from danswer.chat.models import LlmDoc
 from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.configs.chat_configs import QA_PROMPT_OVERRIDE
-from danswer.db.models import Prompt
 from danswer.indexing.models import InferenceChunk
+from danswer.llm.answering.models import PromptConfig
 from danswer.prompts.direct_qa_prompts import CONTEXT_BLOCK
 from danswer.prompts.direct_qa_prompts import HISTORY_BLOCK
 from danswer.prompts.direct_qa_prompts import JSON_PROMPT
@@ -18,7 +18,7 @@ def _build_weak_llm_quotes_prompt(
     question: str,
     context_docs: list[LlmDoc] | list[InferenceChunk],
     history_str: str,
-    prompt: Prompt,
+    prompt: PromptConfig,
     use_language_hint: bool,
 ) -> list[BaseMessage]:
     """Since Danswer supports a variety of LLMs, this less demanding prompt is provided
@@ -43,7 +43,7 @@ def _build_strong_llm_quotes_prompt(
     question: str,
     context_docs: list[LlmDoc] | list[InferenceChunk],
     history_str: str,
-    prompt: Prompt,
+    prompt: PromptConfig,
     use_language_hint: bool,
 ) -> list[BaseMessage]:
     context_block = ""
@@ -70,7 +70,7 @@ def build_quotes_prompt(
     question: str,
     context_docs: list[LlmDoc] | list[InferenceChunk],
     history_str: str,
-    prompt: Prompt,
+    prompt: PromptConfig,
     use_language_hint: bool = bool(MULTILINGUAL_QUERY_EXPANSION),
 ) -> list[BaseMessage]:
     prompt_builder = (

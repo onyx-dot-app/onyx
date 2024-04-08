@@ -38,5 +38,7 @@ jobs:
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       with:
+        # To run locally: trivy image --severity HIGH,CRITICAL danswer/danswer-backend
         image-ref: docker.io/danswer/danswer-backend:${{ github.ref_name }}
         severity: 'CRITICAL,HIGH'
+        trivyignores: ./backend/.trivyignore

@@ -10,11 +10,11 @@ from danswer.chat.models import DanswerAnswerPiece
 from danswer.chat.models import LlmDoc
 from danswer.configs.chat_configs import QA_PROMPT_OVERRIDE
 from danswer.configs.chat_configs import QA_TIMEOUT
-from danswer.db.models import Persona
-from danswer.db.models import Prompt
 from danswer.llm.answering.doc_pruning import prune_documents
 from danswer.llm.answering.models import AnswerStyleConfig
+from danswer.llm.answering.models import LLMConfig
 from danswer.llm.answering.models import PreviousMessage
+from danswer.llm.answering.models import PromptConfig
 from danswer.llm.answering.models import StreamProcessor
 from danswer.llm.answering.prompts.citations_prompt import build_citations_prompt
 from danswer.llm.answering.prompts.quotes_prompt import (
@@ -51,8 +51,8 @@ class Answer:
         question: str,
         docs: list[LlmDoc],
         answer_style_config: AnswerStyleConfig,
-        prompt: Prompt,
-        persona: Persona,
+        llm_config: LLMConfig,
+        prompt_config: PromptConfig,
         # must be the same length as `docs`. If None, all docs are considered "relevant"
         doc_relevance_list: list[bool] | None = None,
         message_history: list[PreviousMessage] | None = None,
@@ -72,15 +72,16 @@ class Answer:
         self.single_message_history = single_message_history
 
         self.answer_style_config = answer_style_config
+        self.llm_config = llm_config
+        self.prompt_config = prompt_config
 
         self.llm = get_default_llm(
-            gen_ai_model_version_override=persona.llm_model_version_override,
+            gen_ai_model_provider=self.llm_config.model_provider,
+            gen_ai_model_version_override=self.llm_config.model_version,
             timeout=timeout,
+            temperature=self.llm_config.temperature,
         )
         self.llm_tokenizer = get_default_llm_tokenizer()
-
-        self.prompt = prompt
-        self.persona = persona
 
         self.process_stream_fn = _get_stream_processor(docs, answer_style_config)
 
@@ -99,7 +100,8 @@ class Answer:
         self._pruned_docs = prune_documents(
             docs=self.docs,
             doc_relevance_list=self.doc_relevance_list,
-            persona=self.persona,
+            prompt_config=self.prompt_config,
+            llm_config=self.llm_config,
             question=self.question,
             document_pruning_config=self.answer_style_config.document_pruning_config,
         )
@@ -114,8 +116,8 @@ class Answer:
             self._final_prompt = build_citations_prompt(
                 question=self.question,
                 message_history=self.message_history,
-                persona=self.persona,
-                prompt=self.prompt,
+                llm_config=self.llm_config,
+                prompt_config=self.prompt_config,
                 context_docs=self.pruned_docs,
                 all_doc_useful=self.answer_style_config.citation_config.all_docs_useful,
                 llm_tokenizer_encode_func=self.llm_tokenizer.encode,
@@ -126,7 +128,7 @@ class Answer:
                 question=self.question,
                 context_docs=self.pruned_docs,
                 history_str=self.single_message_history or "",
-                prompt=self.prompt,
+                prompt=self.prompt_config,
             )
 
         return cast(list[BaseMessage], self._final_prompt)

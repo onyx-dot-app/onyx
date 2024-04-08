@@ -76,3 +76,12 @@ export function checkModelNameIsValid(modelName: string | undefined | null) {
   }
   return true;
 }
+
+export function fillOutEmeddingModelDescriptor(
+  embeddingModel: EmbeddingModelDescriptor | FullEmbeddingModelDescriptor
+): FullEmbeddingModelDescriptor {
+  return {
+    ...embeddingModel,
+    description: "",
+  };
+}

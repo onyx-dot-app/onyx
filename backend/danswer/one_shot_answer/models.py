@@ -27,6 +27,9 @@ class DirectQARequest(BaseModel):
     prompt_id: int | None
     persona_id: int
     retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
+    # This is to forcibly skip (or run) the step, if None it uses the system defaults
+    skip_rerank: bool | None = None
+    skip_llm_chunk_filter: bool | None = None
     chain_of_thought: bool = False
     return_contexts: bool = False
 

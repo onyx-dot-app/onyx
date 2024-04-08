@@ -37,35 +37,12 @@ ASYM_QUERY_PREFIX = os.environ.get("ASYM_QUERY_PREFIX", "query: ")
 ASYM_PASSAGE_PREFIX = os.environ.get("ASYM_PASSAGE_PREFIX", "passage: ")
 # Purely an optimization, memory limitation consideration
 BATCH_SIZE_ENCODE_CHUNKS = 8
-# This controls the minimum number of pytorch "threads" to allocate to the embedding
-# model. If torch finds more threads on its own, this value is not used.
-MIN_THREADS_ML_MODELS = int(os.environ.get("MIN_THREADS_ML_MODELS") or 1)
-
-# Cross Encoder Settings
-ENABLE_RERANKING_ASYNC_FLOW = (
-    os.environ.get("ENABLE_RERANKING_ASYNC_FLOW", "").lower() == "true"
-)
-ENABLE_RERANKING_REAL_TIME_FLOW = (
-    os.environ.get("ENABLE_RERANKING_REAL_TIME_FLOW", "").lower() == "true"
-)
-# https://www.sbert.net/docs/pretrained-models/ce-msmarco.html
-CROSS_ENCODER_MODEL_ENSEMBLE = [
-    "cross-encoder/ms-marco-MiniLM-L-4-v2",
-    "cross-encoder/ms-marco-TinyBERT-L-2-v2",
-]
-# For score normalizing purposes, only way is to know the expected ranges
+# For score display purposes, only way is to know the expected ranges
 CROSS_ENCODER_RANGE_MAX = 12
 CROSS_ENCODER_RANGE_MIN = -12
-CROSS_EMBED_CONTEXT_SIZE = 512
 
 # Unused currently, can't be used with the current default encoder model due to its output range
 SEARCH_DISTANCE_CUTOFF = 0
-
-# Intent model max context size
-QUERY_MAX_CONTEXT_SIZE = 256
-
-# Danswer custom Deep Learning Models
-INTENT_MODEL_VERSION = "danswer/intent-model"
 
 
 #####

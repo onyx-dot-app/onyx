@@ -15,6 +15,7 @@ from danswer.danswerbot.slack.blocks import build_follow_up_resolved_blocks
 from danswer.danswerbot.slack.blocks import get_document_feedback_blocks
 from danswer.danswerbot.slack.config import get_slack_bot_config_for_channel
 from danswer.danswerbot.slack.constants import DISLIKE_BLOCK_ACTION_ID
+from danswer.danswerbot.slack.constants import FeedbackVisibility
 from danswer.danswerbot.slack.constants import LIKE_BLOCK_ACTION_ID
 from danswer.danswerbot.slack.constants import VIEW_DOC_FEEDBACK_ID
 from danswer.danswerbot.slack.utils import build_feedback_id
@@ -22,6 +23,7 @@ from danswer.danswerbot.slack.utils import decompose_action_id
 from danswer.danswerbot.slack.utils import fetch_groupids_from_names
 from danswer.danswerbot.slack.utils import fetch_userids_from_emails
 from danswer.danswerbot.slack.utils import get_channel_name_from_id
+from danswer.danswerbot.slack.utils import get_feedback_visibility
 from danswer.danswerbot.slack.utils import respond_in_thread
 from danswer.danswerbot.slack.utils import update_emote_react
 from danswer.db.engine import get_sqlalchemy_engine
@@ -120,13 +122,33 @@ def handle_slack_feedback(
         else:
             logger_base.error(f"Feedback type '{feedback_type}' not supported")
 
-    # post message to slack confirming that feedback was received
-    client.chat_postEphemeral(
-        channel=channel_id_to_post_confirmation,
-        user=user_id_to_post_confirmation,
-        thread_ts=thread_ts_to_post_confirmation,
-        text="Thanks for your feedback!",
-    )
+    if get_feedback_visibility() == FeedbackVisibility.PRIVATE or feedback_type not in [
+        LIKE_BLOCK_ACTION_ID,
+        DISLIKE_BLOCK_ACTION_ID,
+    ]:
+        client.chat_postEphemeral(
+            channel=channel_id_to_post_confirmation,
+            user=user_id_to_post_confirmation,
+            thread_ts=thread_ts_to_post_confirmation,
+            text="Thanks for your feedback!",
+        )
+    else:
+        feedback_response_txt = (
+            "liked" if feedback_type == LIKE_BLOCK_ACTION_ID else "disliked"
+        )
+
+        if get_feedback_visibility() == FeedbackVisibility.ANONYMOUS:
+            msg = f"A user has {feedback_response_txt} the AI Answer"
+        else:
+            msg = f"<@{user_id_to_post_confirmation}> has {feedback_response_txt} the AI Answer"
+
+        respond_in_thread(
+            client=client,
+            channel=channel_id_to_post_confirmation,
+            text=msg,
+            thread_ts=thread_ts_to_post_confirmation,
+            unfurl=False,
+        )
 
 
 def handle_followup_button(

@@ -21,6 +21,7 @@ from danswer.utils.logger import setup_logger
 from danswer.utils.threadpool_concurrency import FunctionCall
 from danswer.utils.threadpool_concurrency import run_functions_in_parallel
 from danswer.utils.timing import log_function_time
+from shared_configs.nlp_model_configs import ENABLE_RERANKING_REAL_TIME_FLOW
 
 
 logger = setup_logger()
@@ -141,10 +142,21 @@ def retrieval_preprocessing(
     )
 
     llm_chunk_filter = False
-    if persona:
+    if search_request.skip_llm_chunk_filter is not None:
+        llm_chunk_filter = not search_request.skip_llm_chunk_filter
+    elif persona:
         llm_chunk_filter = persona.llm_relevance_filter
+
     if disable_llm_chunk_filter:
+        if llm_chunk_filter:
+            logger.info(
+                "LLM chunk filtering would have run but has been globally disabled"
+            )
         llm_chunk_filter = False
+
+    skip_rerank = search_request.skip_rerank
+    if skip_rerank is None:
+        skip_rerank = not ENABLE_RERANKING_REAL_TIME_FLOW
 
     # Decays at 1 / (1 + (multiplier * num years))
     if persona and persona.recency_bias == RecencyBiasSetting.NO_DECAY:
@@ -167,7 +179,7 @@ def retrieval_preprocessing(
             recency_bias_multiplier=recency_bias_multiplier,
             num_hits=limit if limit is not None else NUM_RETURNED_HITS,
             offset=offset or 0,
-            skip_rerank=search_request.skip_rerank,
+            skip_rerank=skip_rerank,
             skip_llm_chunk_filter=not llm_chunk_filter,
         ),
         predicted_search_type,

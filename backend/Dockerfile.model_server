@@ -25,11 +25,8 @@ COPY ./danswer/utils/telemetry.py /app/danswer/utils/telemetry.py
 # Place to fetch version information
 COPY ./danswer/__init__.py /app/danswer/__init__.py
 
-# Shared implementations for running NLP models locally
-COPY ./danswer/search/search_nlp_models.py /app/danswer/search/search_nlp_models.py
-
 # Request/Response models
-COPY ./shared_models /app/shared_models
+COPY ./shared_configs /app/shared_configs
 
 # Model Server main code
 COPY ./model_server /app/model_server

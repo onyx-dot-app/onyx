@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from dataclasses import fields
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
@@ -8,6 +9,9 @@ from danswer.access.models import DocumentAccess
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.models import Document
 from danswer.utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from danswer.db.models import EmbeddingModel
 
 
 logger = setup_logger()
@@ -130,3 +134,13 @@ class EmbeddingModelDetail(BaseModel):
     normalize: bool
     query_prefix: str | None
     passage_prefix: str | None
+
+    @classmethod
+    def from_model(cls, embedding_model: "EmbeddingModel") -> "EmbeddingModelDetail":
+        return cls(
+            model_name=embedding_model.model_name,
+            model_dim=embedding_model.model_dim,
+            normalize=embedding_model.normalize,
+            query_prefix=embedding_model.query_prefix,
+            passage_prefix=embedding_model.passage_prefix,
+        )

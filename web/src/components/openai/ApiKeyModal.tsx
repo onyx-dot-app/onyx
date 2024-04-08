@@ -19,7 +19,6 @@ export const ApiKeyModal = () => {
 
   useEffect(() => {
     checkApiKey().then((error) => {
-      console.log(error);
       if (error) {
         setErrorMsg(error);
       }

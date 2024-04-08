@@ -158,6 +158,7 @@ def search_postprocessing(
     post_processing_tasks: list[FunctionCall] = []
 
     rerank_task_id = None
+    chunks_yielded = False
     if should_rerank(search_query):
         post_processing_tasks.append(
             FunctionCall(
@@ -219,4 +220,4 @@ def search_postprocessing(
             if chunk.unique_id in llm_chunk_selection
         ]
     else:
-        yield []
+        yield cast(list[str], [])

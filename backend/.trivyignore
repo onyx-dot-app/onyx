@@ -1,0 +1,46 @@
+# https://github.com/madler/zlib/issues/868
+# Pulled in with base Debian image, it's part of the contrib folder but unused
+# zlib1g is fine
+# Will be gone with Debian image upgrade
+# No impact in our settings
+CVE-2023-45853
+
+# krb5 related, worst case is denial of service by resource exhaustion
+# Accept the risk
+CVE-2024-26458
+CVE-2024-26461
+CVE-2024-26462
+CVE-2024-26458
+CVE-2024-26461
+CVE-2024-26462
+CVE-2024-26458
+CVE-2024-26461
+CVE-2024-26462
+CVE-2024-26458
+CVE-2024-26461
+CVE-2024-26462
+
+# Specific to Firefox which we do not use
+# No impact in our settings
+CVE-2024-0743
+
+# bind9 related, worst case is denial of service by CPU resource exhaustion
+# Accept the risk
+CVE-2023-50387
+CVE-2023-50868
+CVE-2023-50387
+CVE-2023-50868
+
+# libexpat1, XML parsing resource exhaustion
+# We don't parse any user provided XMLs
+# No impact in our settings
+CVE-2023-52425
+CVE-2024-28757
+
+# sqlite, only used by NLTK library to grab word lemmatizer and stopwords
+# No impact in our settings
+CVE-2023-7104
+
+# libharfbuzz0b, O(n^2) growth, worst case is denial of service
+# Accept the risk
+CVE-2023-25193

@@ -1,5 +1,4 @@
 import io
-import socket
 from enum import Enum
 from typing import Any
 from typing import cast
@@ -43,15 +42,12 @@ class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
     UPLOAD = "upload"
 
 
-def check_internet_connection() -> None:
-    dns_servers = [("1.1.1.1", 53), ("8.8.8.8", 53)]
-    for server in dns_servers:
-        try:
-            socket.create_connection(server, timeout=3)
-            return
-        except OSError:
-            continue
-    raise Exception("Unable to contact DNS server - check your internet connection")
+def check_internet_connection(url: str) -> None:
+    try:
+        response = requests.get(url, timeout=3)
+        response.raise_for_status()
+    except (requests.RequestException, ValueError):
+        raise Exception(f"Unable to reach {url} - check your internet connection")
 
 
 def is_valid_url(url: str) -> bool:
@@ -185,7 +181,6 @@ class WebConnector(LoadConnector):
         base_url = to_visit[0]  # For the recursive case
         doc_batch: list[Document] = []
 
-        check_internet_connection()
         playwright, context = start_playwright()
         restart_playwright = False
         while to_visit:
@@ -197,6 +192,7 @@ class WebConnector(LoadConnector):
             logger.info(f"Visiting {current_url}")
 
             try:
+                check_internet_connection(current_url)
                 if restart_playwright:
                     playwright, context = start_playwright()
                     restart_playwright = False

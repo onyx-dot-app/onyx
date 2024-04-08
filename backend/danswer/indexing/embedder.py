@@ -16,8 +16,9 @@ from danswer.indexing.chunker import split_chunk_text_into_mini_chunks
 from danswer.indexing.models import ChunkEmbedding
 from danswer.indexing.models import DocAwareChunk
 from danswer.indexing.models import IndexChunk
+from danswer.search.enums import EmbedTextType
 from danswer.search.search_nlp_models import EmbeddingModel
-from danswer.search.search_nlp_models import EmbedTextType
+from danswer.utils.batching import batch_list
 from danswer.utils.logger import setup_logger
 
 
@@ -73,6 +74,8 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         title_embed_dict: dict[str, list[float]] = {}
         embedded_chunks: list[IndexChunk] = []
 
+        # Create Mini Chunks for more precise matching of details
+        # Off by default with unedited settings
         chunk_texts = []
         chunk_mini_chunks_count = {}
         for chunk_ind, chunk in enumerate(chunks):
@@ -85,23 +88,41 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             chunk_texts.extend(mini_chunk_texts)
             chunk_mini_chunks_count[chunk_ind] = 1 + len(mini_chunk_texts)
 
-        text_batches = [
-            chunk_texts[i : i + batch_size]
-            for i in range(0, len(chunk_texts), batch_size)
-        ]
+        # Batching for embedding
+        text_batches = batch_list(chunk_texts, batch_size)
 
         embeddings: list[list[float]] = []
         len_text_batches = len(text_batches)
         for idx, text_batch in enumerate(text_batches, start=1):
-            logger.debug(f"Embedding text batch {idx} of {len_text_batches}")
-            # Normalize embeddings is only configured via model_configs.py, be sure to use right value for the set loss
+            logger.debug(f"Embedding Content Texts batch {idx} of {len_text_batches}")
+            # Normalize embeddings is only configured via model_configs.py, be sure to use right
+            # value for the set loss
             embeddings.extend(
                 self.embedding_model.encode(text_batch, text_type=EmbedTextType.PASSAGE)
             )
 
-            # Replace line above with the line below for easy debugging of indexing flow, skipping the actual model
+            # Replace line above with the line below for easy debugging of indexing flow
+            # skipping the actual model
             # embeddings.extend([[0.0] * 384 for _ in range(len(text_batch))])
 
+        chunk_titles = {
+            chunk.source_document.get_title_for_document_index() for chunk in chunks
+        }
+        chunk_titles.discard(None)
+
+        # Embed Titles in batches
+        title_batches = batch_list(list(chunk_titles), batch_size)
+        len_title_batches = len(title_batches)
+        for ind_batch, title_batch in enumerate(title_batches, start=1):
+            logger.debug(f"Embedding Titles batch {ind_batch} of {len_title_batches}")
+            title_embeddings = self.embedding_model.encode(
+                title_batch, text_type=EmbedTextType.PASSAGE
+            )
+            title_embed_dict.update(
+                {title: vector for title, vector in zip(title_batch, title_embeddings)}
+            )
+
+        # Mapping embeddings to chunks
         embedding_ind_start = 0
         for chunk_ind, chunk in enumerate(chunks):
             num_embeddings = chunk_mini_chunks_count[chunk_ind]
@@ -114,9 +135,12 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             title_embedding = None
             if title:
                 if title in title_embed_dict:
-                    # Using cached value for speedup
+                    # Using cached value to avoid recalculating for every chunk
                     title_embedding = title_embed_dict[title]
                 else:
+                    logger.error(
+                        "Title had to be embedded separately, this should not happen!"
+                    )
                     title_embedding = self.embedding_model.encode(
                         [title], text_type=EmbedTextType.PASSAGE
                     )[0]

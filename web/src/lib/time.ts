@@ -59,3 +59,19 @@ export function localizeAndPrettify(dateString: string) {
   const date = new Date(dateString);
   return date.toLocaleString();
 }
+
+export function humanReadableFormat(dateString: string): string {
+  // Create a Date object from the dateString
+  const date = new Date(dateString);
+
+  // Use Intl.DateTimeFormat to format the date
+  // Specify the locale as 'en-US' and options for month, day, and year
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    month: "long", // full month name
+    day: "numeric", // numeric day
+    year: "numeric", // numeric year
+  });
+
+  // Format the date and return it
+  return formatter.format(date);
+}

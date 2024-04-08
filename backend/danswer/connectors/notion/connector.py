@@ -93,7 +93,9 @@ class NotionConnector(LoadConnector, PollConnector):
         self.recursive_index_enabled = recursive_index_enabled or self.root_page_id
 
     @retry(tries=3, delay=1, backoff=2)
-    def _fetch_blocks(self, block_id: str, cursor: str | None = None) -> dict[str, Any]:
+    def _fetch_child_blocks(
+        self, block_id: str, cursor: str | None = None
+    ) -> dict[str, Any] | None:
         """Fetch all child blocks via the Notion API."""
         logger.debug(f"Fetching children of block with ID '{block_id}'")
         block_url = f"https://api.notion.com/v1/blocks/{block_id}/children"
@@ -107,6 +109,15 @@ class NotionConnector(LoadConnector, PollConnector):
         try:
             res.raise_for_status()
         except Exception as e:
+            if res.status_code == 404:
+                # this happens when a page is not shared with the integration
+                # in this case, we should just ignore the page
+                logger.error(
+                    f"Unable to access block with ID '{block_id}'. "
+                    f"This is likely due to the block not being shared "
+                    f"with the Danswer integration. Exact exception:\n\n{e}"
+                )
+                return None
             logger.exception(f"Error fetching blocks - {res.json()}")
             raise e
         return res.json()
@@ -187,24 +198,30 @@ class NotionConnector(LoadConnector, PollConnector):
         return result_pages
 
     def _read_blocks(
-        self, page_block_id: str
+        self, base_block_id: str
     ) -> tuple[list[tuple[str, str]], list[str]]:
-        """Reads blocks for a page"""
+        """Reads all child blocks for the specified block"""
         result_lines: list[tuple[str, str]] = []
         child_pages: list[str] = []
         cursor = None
         while True:
-            data = self._fetch_blocks(page_block_id, cursor)
+            data = self._fetch_child_blocks(base_block_id, cursor)
+
+            # this happens when a block is not shared with the integration
+            if data is None:
+                return result_lines, child_pages
 
             for result in data["results"]:
-                logger.debug(f"Found block for page '{page_block_id}': {result}")
+                logger.debug(
+                    f"Found child block for block with ID '{base_block_id}': {result}"
+                )
                 result_block_id = result["id"]
                 result_type = result["type"]
                 result_obj = result[result_type]
 
                 if result_type == "ai_block":
                     logger.warning(
-                        f"Skipping 'ai_block' ('{result_block_id}') for page '{page_block_id}': "
+                        f"Skipping 'ai_block' ('{result_block_id}') for base block '{base_block_id}': "
                         f"Notion API does not currently support reading AI blocks (as of 24/02/09) "
                         f"(discussion: https://github.com/danswer-ai/danswer/issues/1053)"
                     )

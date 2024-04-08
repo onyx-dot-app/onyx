@@ -11,6 +11,7 @@ from danswer.db.models import AllowedAnswerFilters
 from danswer.db.models import ChannelConfig
 from danswer.db.models import SlackBotConfig as SlackBotConfigModel
 from danswer.db.models import SlackBotResponseType
+from danswer.indexing.models import EmbeddingModelDetail
 from danswer.server.features.persona.models import PersonaSnapshot
 
 
@@ -125,10 +126,6 @@ class SlackBotConfig(BaseModel):
         )
 
 
-class ModelVersionResponse(BaseModel):
-    model_name: str | None  # None only applicable to secondary index
-
-
 class FullModelVersionResponse(BaseModel):
-    current_model_name: str
-    secondary_model_name: str | None
+    current_model: EmbeddingModelDetail
+    secondary_model: EmbeddingModelDetail | None

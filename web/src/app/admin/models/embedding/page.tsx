@@ -6,7 +6,7 @@ import { KeyIcon, TrashIcon } from "@/components/icons/icons";
 import { ApiKeyForm } from "@/components/openai/ApiKeyForm";
 import { GEN_AI_API_KEY_URL } from "@/components/openai/constants";
 import { errorHandlingFetcher, fetcher } from "@/lib/fetcher";
-import { Button, Divider, Text, Title } from "@tremor/react";
+import { Button, Card, Divider, Text, Title } from "@tremor/react";
 import { FiCpu, FiPackage } from "react-icons/fi";
 import useSWR, { mutate } from "swr";
 import { ModelOption, ModelSelector } from "./ModelSelector";
@@ -16,17 +16,18 @@ import { ReindexingProgressTable } from "./ReindexingProgressTable";
 import { Modal } from "@/components/Modal";
 import {
   AVAILABLE_MODELS,
-  EmbeddingModelResponse,
+  EmbeddingModelDescriptor,
   INVALID_OLD_MODEL,
+  fillOutEmeddingModelDescriptor,
 } from "./embeddingModels";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Connector, ConnectorIndexingStatus } from "@/lib/types";
 import Link from "next/link";
+import { CustomModelForm } from "./CustomModelForm";
 
 function Main() {
-  const [tentativeNewEmbeddingModel, setTentativeNewEmbeddingModel] = useState<
-    string | null
-  >(null);
+  const [tentativeNewEmbeddingModel, setTentativeNewEmbeddingModel] =
+    useState<EmbeddingModelDescriptor | null>(null);
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
   const [showAddConnectorPopup, setShowAddConnectorPopup] =
     useState<boolean>(false);
@@ -35,16 +36,16 @@ function Main() {
     data: currentEmeddingModel,
     isLoading: isLoadingCurrentModel,
     error: currentEmeddingModelError,
-  } = useSWR<EmbeddingModelResponse>(
+  } = useSWR<EmbeddingModelDescriptor>(
     "/api/secondary-index/get-current-embedding-model",
     errorHandlingFetcher,
     { refreshInterval: 5000 } // 5 seconds
   );
   const {
-    data: futureEmeddingModel,
+    data: futureEmbeddingModel,
     isLoading: isLoadingFutureModel,
     error: futureEmeddingModelError,
-  } = useSWR<EmbeddingModelResponse>(
+  } = useSWR<EmbeddingModelDescriptor | null>(
     "/api/secondary-index/get-secondary-embedding-model",
     errorHandlingFetcher,
     { refreshInterval: 5000 } // 5 seconds
@@ -63,24 +64,20 @@ function Main() {
     { refreshInterval: 5000 } // 5 seconds
   );
 
-  const onSelect = async (modelName: string) => {
+  const onSelect = async (model: EmbeddingModelDescriptor) => {
     if (currentEmeddingModel?.model_name === INVALID_OLD_MODEL) {
-      await onConfirm(modelName);
+      await onConfirm(model);
     } else {
-      setTentativeNewEmbeddingModel(modelName);
+      setTentativeNewEmbeddingModel(model);
     }
   };
 
-  const onConfirm = async (modelName: string) => {
-    const modelDescriptor = AVAILABLE_MODELS.find(
-      (model) => model.model_name === modelName
-    );
-
+  const onConfirm = async (model: EmbeddingModelDescriptor) => {
     const response = await fetch(
       "/api/secondary-index/set-new-embedding-model",
       {
         method: "POST",
-        body: JSON.stringify(modelDescriptor),
+        body: JSON.stringify(model),
         headers: {
           "Content-Type": "application/json",
         },
@@ -120,26 +117,33 @@ function Main() {
   if (
     currentEmeddingModelError ||
     !currentEmeddingModel ||
-    futureEmeddingModelError ||
-    !futureEmeddingModel
+    futureEmeddingModelError
   ) {
     return <ErrorCallout errorTitle="Failed to fetch embedding model status" />;
   }
 
   const currentModelName = currentEmeddingModel.model_name;
-  const currentModel = AVAILABLE_MODELS.find(
-    (model) => model.model_name === currentModelName
-  );
+  const currentModel =
+    AVAILABLE_MODELS.find((model) => model.model_name === currentModelName) ||
+    fillOutEmeddingModelDescriptor(currentEmeddingModel);
 
-  const newModelSelection = AVAILABLE_MODELS.find(
-    (model) => model.model_name === futureEmeddingModel.model_name
-  );
+  const newModelSelection = futureEmbeddingModel
+    ? AVAILABLE_MODELS.find(
+        (model) => model.model_name === futureEmbeddingModel.model_name
+      ) || fillOutEmeddingModelDescriptor(futureEmbeddingModel)
+    : null;
 
   return (
     <div>
       {tentativeNewEmbeddingModel && (
         <ModelSelectionConfirmaionModal
           selectedModel={tentativeNewEmbeddingModel}
+          isCustom={
+            AVAILABLE_MODELS.find(
+              (model) =>
+                model.model_name === tentativeNewEmbeddingModel.model_name
+            ) === undefined
+          }
           onConfirm={() => onConfirm(tentativeNewEmbeddingModel)}
           onCancel={() => setTentativeNewEmbeddingModel(null)}
         />
@@ -243,12 +247,49 @@ function Main() {
               </>
             )}
 
+            <Text className="mb-4">
+              Below are a curated selection of quality models that we recommend
+              you choose from.
+            </Text>
+
             <ModelSelector
               modelOptions={AVAILABLE_MODELS.filter(
                 (modelOption) => modelOption.model_name !== currentModelName
               )}
               setSelectedModel={onSelect}
             />
+
+            <Text className="mt-6">
+              Alternatively, (if you know what you&apos;re doing) you can
+              specify a{" "}
+              <a
+                target="_blank"
+                href="https://www.sbert.net/"
+                className="text-link"
+              >
+                SentenceTransformers
+              </a>
+              -compatible model of your choice below. The rough list of
+              supported models can be found{" "}
+              <a
+                target="_blank"
+                href="https://huggingface.co/models?library=sentence-transformers&sort=trending"
+                className="text-link"
+              >
+                here
+              </a>
+              .
+              <br />
+              <b>NOTE:</b> not all models listed will work with Danswer, since
+              some have unique interfaces or special requirements. If in doubt,
+              reach out to the Danswer team.
+            </Text>
+
+            <div className="w-full flex">
+              <Card className="mt-4 2xl:w-4/6 mx-auto">
+                <CustomModelForm onSubmit={onSelect} />
+              </Card>
+            </div>
           </div>
         ) : (
           connectors &&
@@ -272,10 +313,10 @@ function Main() {
 
                 <Text className="my-4">
                   The table below shows the re-indexing progress of all existing
-                  connectors. Once all connectors have been re-indexed, the new
-                  model will be used for all search queries. Until then, we will
-                  use the old model so that no downtime is necessary during this
-                  transition.
+                  connectors. Once all connectors have been re-indexed
+                  successfully, the new model will be used for all search
+                  queries. Until then, we will use the old model so that no
+                  downtime is necessary during this transition.
                 </Text>
 
                 {isLoadingOngoingReIndexingStatus ? (

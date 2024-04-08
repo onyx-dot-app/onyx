@@ -1,3 +1,4 @@
+import { Settings } from "@/app/admin/settings/interfaces";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { AdminSidebar } from "@/components/admin/connectors/AdminSidebar";
@@ -13,6 +14,7 @@ import {
   ConnectorIcon,
   SlackIcon,
 } from "@/components/icons/icons";
+import { getSettingsSS } from "@/lib/settings";
 import { User } from "@/lib/types";
 import {
   AuthTypeMetadata,
@@ -20,15 +22,21 @@ import {
   getCurrentUserSS,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
-import { FiCpu, FiLayers, FiPackage, FiSlack } from "react-icons/fi";
+import {
+  FiCpu,
+  FiLayers,
+  FiPackage,
+  FiSettings,
+  FiSlack,
+} from "react-icons/fi";
 
 export async function Layout({ children }: { children: React.ReactNode }) {
-  const tasks = [getAuthTypeMetadataSS(), getCurrentUserSS()];
+  const tasks = [getAuthTypeMetadataSS(), getCurrentUserSS(), getSettingsSS()];
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
   // will not render
-  let results: (User | AuthTypeMetadata | null)[] = [null, null];
+  let results: (User | AuthTypeMetadata | Settings | null)[] = [null, null];
   try {
     results = await Promise.all(tasks);
   } catch (e) {
@@ -37,6 +45,7 @@ export async function Layout({ children }: { children: React.ReactNode }) {
 
   const authTypeMetadata = results[0] as AuthTypeMetadata | null;
   const user = results[1] as User | null;
+  const settings = results[2] as Settings | null;
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
   const requiresVerification = authTypeMetadata?.requiresVerification;
@@ -55,7 +64,7 @@ export async function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="h-screen overflow-y-hidden">
       <div className="absolute top-0 z-50 w-full">
-        <Header user={user} />
+        <Header user={user} settings={settings} />
       </div>
       <div className="flex h-full pt-16">
         <div className="w-80 pt-12 pb-8 h-full border-r border-border overflow-y-auto">
@@ -173,6 +182,20 @@ export async function Layout({ children }: { children: React.ReactNode }) {
                       </div>
                     ),
                     link: "/admin/users",
+                  },
+                ],
+              },
+              {
+                name: "Settings",
+                items: [
+                  {
+                    name: (
+                      <div className="flex">
+                        <FiSettings size={18} />
+                        <div className="ml-1">Workspace Settings</div>
+                      </div>
+                    ),
+                    link: "/admin/settings",
                   },
                 ],
               },

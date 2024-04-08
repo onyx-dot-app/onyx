@@ -35,38 +35,16 @@ from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import MessageType
 from danswer.configs.constants import SearchFeedbackType
 from danswer.connectors.models import InputType
+from danswer.db.enums import ChatSessionSharedStatus
+from danswer.db.enums import IndexingStatus
+from danswer.db.enums import IndexModelStatus
+from danswer.db.enums import TaskStatus
+from danswer.db.pydantic_type import PydanticType
 from danswer.dynamic_configs.interface import JSON_ro
+from danswer.llm.override_models import LLMOverride
+from danswer.llm.override_models import PromptOverride
 from danswer.search.enums import RecencyBiasSetting
 from danswer.search.enums import SearchType
-
-
-class IndexingStatus(str, PyEnum):
-    NOT_STARTED = "not_started"
-    IN_PROGRESS = "in_progress"
-    SUCCESS = "success"
-    FAILED = "failed"
-
-
-# these may differ in the future, which is why we're okay with this duplication
-class DeletionStatus(str, PyEnum):
-    NOT_STARTED = "not_started"
-    IN_PROGRESS = "in_progress"
-    SUCCESS = "success"
-    FAILED = "failed"
-
-
-# Consistent with Celery task statuses
-class TaskStatus(str, PyEnum):
-    PENDING = "PENDING"
-    STARTED = "STARTED"
-    SUCCESS = "SUCCESS"
-    FAILURE = "FAILURE"
-
-
-class IndexModelStatus(str, PyEnum):
-    PAST = "PAST"
-    PRESENT = "PRESENT"
-    FUTURE = "FUTURE"
 
 
 class Base(DeclarativeBase):
@@ -586,6 +564,25 @@ class ChatSession(Base):
     one_shot: Mapped[bool] = mapped_column(Boolean, default=False)
     # Only ever set to True if system is set to not hard-delete chats
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    # controls whether or not this conversation is viewable by others
+    shared_status: Mapped[ChatSessionSharedStatus] = mapped_column(
+        Enum(ChatSessionSharedStatus, native_enum=False),
+        default=ChatSessionSharedStatus.PRIVATE,
+    )
+
+    # the latest "overrides" specified by the user. These take precedence over
+    # the attached persona. However, overrides specified directly in the
+    # `send-message` call will take precedence over these.
+    # NOTE: currently only used by the chat seeding flow, will be used in the
+    # future once we allow users to override default values via the Chat UI
+    # itself
+    llm_override: Mapped[LLMOverride | None] = mapped_column(
+        PydanticType(LLMOverride), nullable=True
+    )
+    prompt_override: Mapped[PromptOverride | None] = mapped_column(
+        PydanticType(PromptOverride), nullable=True
+    )
+
     time_updated: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

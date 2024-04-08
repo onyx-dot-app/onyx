@@ -10,9 +10,11 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
+import { Settings } from "../admin/settings/interfaces";
 
 export function ChatLayout({
   user,
+  settings,
   chatSessions,
   availableSources,
   availableDocumentSets,
@@ -22,6 +24,7 @@ export function ChatLayout({
   documentSidebarInitialWidth,
 }: {
   user: User | null;
+  settings: Settings | null;
   chatSessions: ChatSession[];
   availableSources: ValidSources[];
   availableDocumentSets: DocumentSet[];
@@ -41,7 +44,7 @@ export function ChatLayout({
   return (
     <>
       <div className="absolute top-0 z-40 w-full">
-        <Header user={user} />
+        <Header user={user} settings={settings} />
       </div>
       <HealthCheckBanner />
       <InstantSSRAutoRefresh />

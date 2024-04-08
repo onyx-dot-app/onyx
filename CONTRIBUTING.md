@@ -85,6 +85,7 @@ Install the required python dependencies:
 ```bash
 pip install -r danswer/backend/requirements/default.txt
 pip install -r danswer/backend/requirements/dev.txt
+pip install -r danswer/backend/requirements/model_server.txt
 ```
 
 Install [Node.js and npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) for the frontend.
@@ -112,26 +113,24 @@ docker compose -f docker-compose.dev.yml -p danswer-stack up -d index relational
 (index refers to Vespa and relational_db refers to Postgres)
 
 #### Running Danswer
-
-Setup a folder to store config. Navigate to `danswer/backend` and run:
-```bash
-mkdir dynamic_config_storage
-```
-
 To start the frontend, navigate to `danswer/web` and run:
 ```bash
 npm run dev
 ```
 
-Package the Vespa schema. This will only need to be done when the Vespa schema is updated locally.
-
-Navigate to `danswer/backend/danswer/document_index/vespa/app_config` and run:
+Next, start the model server which runs the local NLP models.
+Navigate to `danswer/backend` and run:
 ```bash
-zip -r ../vespa-app.zip .
+uvicorn model_server.main:app --reload --port 9000
 ```
-- Note: If you don't have the `zip` utility, you will need to install it prior to running the above
+_For Windows (for compatibility with both PowerShell and Command Prompt):_
+```bash
+powershell -Command "
+    uvicorn model_server.main:app --reload --port 9000
+"
+```
 
-The first time running Danswer, you will also need to run the DB migrations for Postgres.
+The first time running Danswer, you will need to run the DB migrations for Postgres.
 After the first time, this is no longer required unless the DB models change.
 
 Navigate to `danswer/backend` and with the venv active, run:
@@ -149,17 +148,12 @@ python ./scripts/dev_run_background_jobs.py
 
 To run the backend API server, navigate back to `danswer/backend` and run:
 ```bash
-AUTH_TYPE=disabled \
-DYNAMIC_CONFIG_DIR_PATH=./dynamic_config_storage \
-VESPA_DEPLOYMENT_ZIP=./danswer/document_index/vespa/vespa-app.zip \
-uvicorn danswer.main:app --reload --port 8080
+AUTH_TYPE=disabled uvicorn danswer.main:app --reload --port 8080
 ```
 _For Windows (for compatibility with both PowerShell and Command Prompt):_
 ```bash
 powershell -Command "
     $env:AUTH_TYPE='disabled'
-    $env:DYNAMIC_CONFIG_DIR_PATH='./dynamic_config_storage'
-    $env:VESPA_DEPLOYMENT_ZIP='./danswer/document_index/vespa/vespa-app.zip'
     uvicorn danswer.main:app --reload --port 8080 
 "
 ```
@@ -178,20 +172,16 @@ pre-commit install
 
 Additionally, we use `mypy` for static type checking.
 Danswer is fully type-annotated, and we would like to keep it that way! 
-Right now, there is no automated type checking at the moment (coming soon), but we ask you to manually run it before
-creating a pull requests with `python -m mypy .` from the `danswer/backend` directory.
+To run the mypy checks manually, run `python -m mypy .` from the `danswer/backend` directory.
 
 
 #### Web
 We use `prettier` for formatting. The desired version (2.8.8) will be installed via a `npm i` from the `danswer/web` directory. 
 To run the formatter, use `npx prettier --write .` from the `danswer/web` directory.
-Like `mypy`, we have no automated formatting yet (coming soon), but we request that, for now,
-you run this manually before creating a pull request.
+Please double check that prettier passes before creating a pull request.
 
 
 ### Release Process
 Danswer follows the semver versioning standard.
 A set of Docker containers will be pushed automatically to DockerHub with every tag.
 You can see the containers [here](https://hub.docker.com/search?q=danswer%2F).
-
-As pre-1.0 software, even patch releases may contain breaking or non-backwards-compatible changes.

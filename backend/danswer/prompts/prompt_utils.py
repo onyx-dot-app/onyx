@@ -6,6 +6,7 @@ from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.configs.constants import DocumentSource
 from danswer.db.models import Prompt
 from danswer.indexing.models import InferenceChunk
+from danswer.llm.answering.models import PromptConfig
 from danswer.prompts.chat_prompts import CITATION_REMINDER
 from danswer.prompts.constants import CODE_BLOCK_PAT
 from danswer.prompts.direct_qa_prompts import LANGUAGE_HINT
@@ -20,7 +21,7 @@ def get_current_llm_day_time() -> str:
 
 
 def build_task_prompt_reminders(
-    prompt: Prompt,
+    prompt: Prompt | PromptConfig,
     use_language_hint: bool = bool(MULTILINGUAL_QUERY_EXPANSION),
     citation_str: str = CITATION_REMINDER,
     language_hint_str: str = LANGUAGE_HINT,

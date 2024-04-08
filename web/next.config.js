@@ -24,13 +24,7 @@ const nextConfig = {
     // In production, something else (nginx in the one box setup) should take
     // care of this redirect. TODO (chris): better support setups where
     // web_server and api_server are on different machines.
-    const defaultRedirects = [
-      {
-        source: "/",
-        destination: "/search",
-        permanent: true,
-      },
-    ];
+    const defaultRedirects = [];
 
     if (process.env.NODE_ENV === "production") return defaultRedirects;
 

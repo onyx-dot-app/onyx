@@ -9,14 +9,15 @@ import React, { useEffect, useRef, useState } from "react";
 import { CustomDropdown, DefaultDropdownElement } from "./Dropdown";
 import { FiMessageSquare, FiSearch } from "react-icons/fi";
 import { usePathname } from "next/navigation";
+import { Settings } from "@/app/admin/settings/interfaces";
 
 interface HeaderProps {
   user: User | null;
+  settings: Settings | null;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user }) => {
+export function Header({ user, settings }: HeaderProps) {
   const router = useRouter();
-  const pathname = usePathname();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -56,7 +57,12 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
   return (
     <header className="border-b border-border bg-background-emphasis">
       <div className="mx-8 flex h-16">
-        <Link className="py-4" href="/search">
+        <Link
+          className="py-4"
+          href={
+            settings && settings.default_page === "chat" ? "/chat" : "/search"
+          }
+        >
           <div className="flex">
             <div className="h-[32px] w-[80px]">
               <Image
@@ -72,26 +78,31 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
           </div>
         </Link>
 
-        <Link
-          href="/search"
-          className={"ml-6 h-full flex flex-col hover:bg-hover"}
-        >
-          <div className="w-24 flex my-auto">
-            <div className={"mx-auto flex text-strong px-2"}>
-              <FiSearch className="my-auto mr-1" />
-              <h1 className="flex text-sm font-bold my-auto">Search</h1>
-            </div>
-          </div>
-        </Link>
+        {(!settings ||
+          (settings.search_page_enabled && settings.chat_page_enabled)) && (
+          <>
+            <Link
+              href="/search"
+              className={"ml-6 h-full flex flex-col hover:bg-hover"}
+            >
+              <div className="w-24 flex my-auto">
+                <div className={"mx-auto flex text-strong px-2"}>
+                  <FiSearch className="my-auto mr-1" />
+                  <h1 className="flex text-sm font-bold my-auto">Search</h1>
+                </div>
+              </div>
+            </Link>
 
-        <Link href="/chat" className="h-full flex flex-col hover:bg-hover">
-          <div className="w-24 flex my-auto">
-            <div className="mx-auto flex text-strong px-2">
-              <FiMessageSquare className="my-auto mr-1" />
-              <h1 className="flex text-sm font-bold my-auto">Chat</h1>
-            </div>
-          </div>
-        </Link>
+            <Link href="/chat" className="h-full flex flex-col hover:bg-hover">
+              <div className="w-24 flex my-auto">
+                <div className="mx-auto flex text-strong px-2">
+                  <FiMessageSquare className="my-auto mr-1" />
+                  <h1 className="flex text-sm font-bold my-auto">Chat</h1>
+                </div>
+              </div>
+            </Link>
+          </>
+        )}
 
         <div className="ml-auto h-full flex flex-col">
           <div className="my-auto">
@@ -129,7 +140,7 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
       </div>
     </header>
   );
-};
+}
 
 /* 
 

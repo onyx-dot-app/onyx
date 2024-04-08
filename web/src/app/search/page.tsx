@@ -25,6 +25,8 @@ import { FullEmbeddingModelResponse } from "../admin/models/embedding/embeddingM
 import { NoSourcesModal } from "@/components/initialSetup/search/NoSourcesModal";
 import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
 import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
+import { getSettingsSS } from "@/lib/settings";
+import { Settings } from "../admin/settings/interfaces";
 
 export default async function Home() {
   // Disable caching so we always get the up to date connector / document set / persona info
@@ -40,6 +42,7 @@ export default async function Home() {
     fetchSS("/persona"),
     fetchSS("/query/valid-tags"),
     fetchSS("/secondary-index/get-embedding-models"),
+    getSettingsSS(),
     fetchSS("/eea_config/get_eea_config"),
   ];
 
@@ -51,6 +54,7 @@ export default async function Home() {
     | Response
     | AuthTypeMetadata
     | FullEmbeddingModelResponse
+    | Settings
     | null
   )[] = [null, null, null, null, null, null, null, null];
   try {
@@ -65,7 +69,8 @@ export default async function Home() {
   const personaResponse = results[4] as Response | null;
   const tagsResponse = results[5] as Response | null;
   const embeddingModelResponse = results[6] as Response | null;
-  const EEAConfigResponse = results[7] as Response | null;
+  const settings = results[7] as Settings | null;
+  const EEAConfigResponse = results[8] as Response | null;
   let disclaimerTitle = "";
   let disclaimerText = "";
   if (EEAConfigResponse?.ok) {
@@ -87,6 +92,10 @@ export default async function Home() {
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
     return redirect("/auth/waiting-on-verification");
+  }
+
+  if (settings && !settings.search_page_enabled) {
+    return redirect("/chat");
   }
 
   let ccPairs: CCPairBasicInfo[] = [];
@@ -160,7 +169,7 @@ export default async function Home() {
 
   return (
     <>
-      <Header user={user} />
+      <Header user={user} settings={settings} />
       <div className="m-3">
         <HealthCheckBanner />
       </div>

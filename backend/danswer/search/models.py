@@ -8,10 +8,10 @@ from danswer.configs.chat_configs import HYBRID_ALPHA
 from danswer.configs.chat_configs import NUM_RERANKED_RESULTS
 from danswer.configs.chat_configs import NUM_RETURNED_HITS
 from danswer.configs.constants import DocumentSource
-from danswer.configs.model_configs import ENABLE_RERANKING_REAL_TIME_FLOW
 from danswer.db.models import Persona
 from danswer.search.enums import OptionalSearchSetting
 from danswer.search.enums import SearchType
+from shared_configs.nlp_model_configs import ENABLE_RERANKING_REAL_TIME_FLOW
 
 
 MAX_METRICS_CONTENT = (
@@ -58,7 +58,9 @@ class SearchRequest(BaseModel):
 
     recency_bias_multiplier: float = 1.0
     hybrid_alpha: float = HYBRID_ALPHA
-    skip_rerank: bool = True
+    # This is to forcibly skip (or run) the step, if None it uses the system defaults
+    skip_rerank: bool | None = None
+    skip_llm_chunk_filter: bool | None = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -72,9 +74,9 @@ class SearchQuery(BaseModel):
     offset: int = 0
     search_type: SearchType = SearchType.HYBRID
     skip_rerank: bool = not ENABLE_RERANKING_REAL_TIME_FLOW
+    skip_llm_chunk_filter: bool = DISABLE_LLM_CHUNK_FILTER
     # Only used if not skip_rerank
     num_rerank: int | None = NUM_RERANKED_RESULTS
-    skip_llm_chunk_filter: bool = DISABLE_LLM_CHUNK_FILTER
     # Only used if not skip_llm_chunk_filter
     max_llm_filter_chunks: int = NUM_RERANKED_RESULTS
 
@@ -138,9 +140,11 @@ class SavedSearchDoc(SearchDoc):
     def from_search_doc(
         cls, search_doc: SearchDoc, db_doc_id: int = 0
     ) -> "SavedSearchDoc":
-        """IMPORTANT: careful using this and not providing a db_doc_id"""
+        """IMPORTANT: careful using this and not providing a db_doc_id If db_doc_id is not
+        provided, it won't be able to actually fetch the saved doc and info later on. So only skip
+        providing this if the SavedSearchDoc will not be used in the future"""
         search_doc_data = search_doc.dict()
-        search_doc_data["score"] = search_doc_data.get("score", 0.0)
+        search_doc_data["score"] = search_doc_data.get("score") or 0.0
         return cls(**search_doc_data, db_doc_id=db_doc_id)
 
 

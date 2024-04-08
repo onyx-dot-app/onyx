@@ -15,8 +15,13 @@ import {
   StreamingError,
 } from "./interfaces";
 import { Persona } from "../admin/personas/interfaces";
+import { ReadonlyURLSearchParams } from "next/navigation";
+import { SEARCH_PARAM_NAMES } from "./searchParams";
 
-export async function createChatSession(personaId: number): Promise<number> {
+export async function createChatSession(
+  personaId: number,
+  description: string | null
+): Promise<number> {
   const createChatSessionResponse = await fetch(
     "/api/chat/create-chat-session",
     {
@@ -26,6 +31,7 @@ export async function createChatSession(personaId: number): Promise<number> {
       },
       body: JSON.stringify({
         persona_id: personaId,
+        description,
       }),
     }
   );
@@ -39,17 +45,6 @@ export async function createChatSession(personaId: number): Promise<number> {
   return chatSessionResponseJson.chat_session_id;
 }
 
-export interface SendMessageRequest {
-  message: string;
-  parentMessageId: number | null;
-  chatSessionId: number;
-  promptId: number | null | undefined;
-  filters: Filters | null;
-  selectedDocumentIds: number[] | null;
-  queryOverride?: string;
-  forceSearch?: boolean;
-}
-
 export async function* sendMessage({
   message,
   parentMessageId,
@@ -59,7 +54,28 @@ export async function* sendMessage({
   selectedDocumentIds,
   queryOverride,
   forceSearch,
-}: SendMessageRequest) {
+  modelVersion,
+  temperature,
+  systemPromptOverride,
+  useExistingUserMessage,
+}: {
+  message: string;
+  parentMessageId: number | null;
+  chatSessionId: number;
+  promptId: number | null | undefined;
+  filters: Filters | null;
+  selectedDocumentIds: number[] | null;
+  queryOverride?: string;
+  forceSearch?: boolean;
+  // LLM overrides
+  modelVersion?: string;
+  temperature?: number;
+  // prompt overrides
+  systemPromptOverride?: string;
+  // if specified, will use the existing latest user message
+  // and will ignore the specified `message`
+  useExistingUserMessage?: boolean;
+}) {
   const documentsAreSelected =
     selectedDocumentIds && selectedDocumentIds.length > 0;
   const sendMessageResponse = await fetch("/api/chat/send-message", {
@@ -87,6 +103,19 @@ export async function* sendMessage({
           }
         : null,
       query_override: queryOverride,
+      prompt_override: systemPromptOverride
+        ? {
+            system_prompt: systemPromptOverride,
+          }
+        : null,
+      llm_override:
+        temperature || modelVersion
+          ? {
+              temperature,
+              model_version: modelVersion,
+            }
+          : null,
+      use_existing_user_message: useExistingUserMessage,
     }),
   });
   if (!sendMessageResponse.ok) {
@@ -353,4 +382,40 @@ export function processRawChatHistory(rawMessages: BackendMessage[]) {
 
 export function personaIncludesRetrieval(selectedPersona: Persona) {
   return selectedPersona.num_chunks !== 0;
+}
+
+const PARAMS_TO_SKIP = [
+  SEARCH_PARAM_NAMES.SUBMIT_ON_LOAD,
+  SEARCH_PARAM_NAMES.USER_MESSAGE,
+  SEARCH_PARAM_NAMES.TITLE,
+  // only use these if explicitly passed in
+  SEARCH_PARAM_NAMES.CHAT_ID,
+  SEARCH_PARAM_NAMES.PERSONA_ID,
+];
+
+export function buildChatUrl(
+  existingSearchParams: ReadonlyURLSearchParams,
+  chatSessionId: number | null,
+  personaId: number | null
+) {
+  const finalSearchParams: string[] = [];
+  if (chatSessionId) {
+    finalSearchParams.push(`${SEARCH_PARAM_NAMES.CHAT_ID}=${chatSessionId}`);
+  }
+  if (personaId) {
+    finalSearchParams.push(`${SEARCH_PARAM_NAMES.PERSONA_ID}=${personaId}`);
+  }
+
+  existingSearchParams.forEach((value, key) => {
+    if (!PARAMS_TO_SKIP.includes(key)) {
+      finalSearchParams.push(`${key}=${value}`);
+    }
+  });
+  const finalSearchParamsString = finalSearchParams.join("&");
+
+  if (finalSearchParamsString) {
+    return `/chat?${finalSearchParamsString}`;
+  }
+
+  return "/chat";
 }

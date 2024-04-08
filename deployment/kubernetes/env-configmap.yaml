@@ -43,9 +43,9 @@ data:
   ASYM_PASSAGE_PREFIX: ""
   ENABLE_RERANKING_REAL_TIME_FLOW: ""
   ENABLE_RERANKING_ASYNC_FLOW: ""
-  MODEL_SERVER_HOST: ""
+  MODEL_SERVER_HOST: "inference-model-server-service"
   MODEL_SERVER_PORT: ""
-  INDEXING_MODEL_SERVER_HOST: ""
+  INDEXING_MODEL_SERVER_HOST: "indexing-model-server-service"
   MIN_THREADS_ML_MODELS: ""
   # Indexing Configs
   NUM_INDEXING_WORKERS: ""

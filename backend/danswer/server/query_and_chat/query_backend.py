@@ -29,6 +29,7 @@ from danswer.server.query_and_chat.models import QueryValidationResponse
 from danswer.server.query_and_chat.models import SimpleQueryRequest
 from danswer.server.query_and_chat.models import SourceTag
 from danswer.server.query_and_chat.models import TagResponse
+from danswer.server.query_and_chat.token_budget import check_token_budget
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -148,6 +149,7 @@ def stream_query_validation(
 def get_answer_with_quote(
     query_request: DirectQARequest,
     user: User = Depends(current_user),
+    _: bool = Depends(check_token_budget),
 ) -> StreamingResponse:
     query = query_request.messages[0].message
     logger.info(f"Received query for one shot answer with quotes: {query}")

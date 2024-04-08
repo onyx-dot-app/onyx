@@ -1,5 +1,8 @@
+from collections.abc import Callable
+from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
+from typing import TypeVar
 
 from dateutil.parser import parse
 
@@ -43,3 +46,14 @@ def get_experts_stores_representations(
 
     reps = [basic_expert_info_representation(owner) for owner in experts]
     return [owner for owner in reps if owner is not None]
+
+
+T = TypeVar("T")
+U = TypeVar("U")
+
+
+def process_in_batches(
+    objects: list[T], process_function: Callable[[T], U], batch_size: int
+) -> Iterator[list[U]]:
+    for i in range(0, len(objects), batch_size):
+        yield [process_function(obj) for obj in objects[i : i + batch_size]]

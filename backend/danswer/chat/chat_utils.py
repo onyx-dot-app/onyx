@@ -55,7 +55,7 @@ def create_chat_chain(
     id_to_msg = {msg.id: msg for msg in all_chat_messages}
 
     if not all_chat_messages:
-        raise ValueError("No messages in Chat Session")
+        raise RuntimeError("No messages in Chat Session")
 
     root_message = all_chat_messages[0]
     if root_message.parent_message is not None:

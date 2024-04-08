@@ -21,6 +21,14 @@ DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER = os.environ.get(
 DANSWER_REACT_EMOJI = os.environ.get("DANSWER_REACT_EMOJI") or "eyes"
 # When User needs more help, what should the emoji be
 DANSWER_FOLLOWUP_EMOJI = os.environ.get("DANSWER_FOLLOWUP_EMOJI") or "sos"
+# What kind of message should be shown when someone gives an AI answer feedback to DanswerBot
+# Defaults to Private if not provided or invalid
+# Private: Only visible to user clicking the feedback
+# Anonymous: Public but anonymous
+# Public: Visible with the user name who submitted the feedback
+DANSWER_BOT_FEEDBACK_VISIBILITY = (
+    os.environ.get("DANSWER_BOT_FEEDBACK_VISIBILITY") or "private"
+)
 # Should DanswerBot send an apology message if it's not able to find an answer
 # That way the user isn't confused as to why DanswerBot reacted but then said nothing
 # Off by default to be less intrusive (don't want to give a notif that just says we couldnt help)

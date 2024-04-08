@@ -5,17 +5,21 @@ from typing import TYPE_CHECKING
 from danswer.configs.app_configs import BLURB_SIZE
 from danswer.configs.app_configs import CHUNK_OVERLAP
 from danswer.configs.app_configs import MINI_CHUNK_SIZE
+from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import SECTION_SEPARATOR
 from danswer.configs.constants import TITLE_SEPARATOR
 from danswer.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from danswer.connectors.models import Document
 from danswer.indexing.models import DocAwareChunk
 from danswer.search.search_nlp_models import get_default_tokenizer
+from danswer.utils.logger import setup_logger
 from danswer.utils.text_processing import shared_precompare_cleanup
-
 
 if TYPE_CHECKING:
     from transformers import AutoTokenizer  # type:ignore
+
+
+logger = setup_logger()
 
 ChunkFunc = Callable[[Document], list[DocAwareChunk]]
 
@@ -178,4 +182,7 @@ class Chunker:
 
 class DefaultChunker(Chunker):
     def chunk(self, document: Document) -> list[DocAwareChunk]:
+        # Specifically for reproducing an issue with gmail
+        if document.source == DocumentSource.GMAIL:
+            logger.debug(f"Chunking {document.semantic_identifier}")
         return chunk_document(document)

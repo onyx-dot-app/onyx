@@ -1,6 +1,7 @@
 import { Quote } from "@/lib/search/interfaces";
 import { ResponseSection, StatusOptions } from "./ResponseSection";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const TEMP_STRING = "__$%^TEMP$%^__";
 
@@ -40,7 +41,10 @@ export const AnswerSection = (props: AnswerSectionProps) => {
     header = <>AI answer</>;
     if (props.answer) {
       body = (
-        <ReactMarkdown className="prose text-sm max-w-full">
+        <ReactMarkdown
+          className="prose text-sm max-w-full"
+          remarkPlugins={[remarkGfm]}
+        >
           {replaceNewlines(props.answer)}
         </ReactMarkdown>
       );
@@ -62,7 +66,10 @@ export const AnswerSection = (props: AnswerSectionProps) => {
     status = "success";
     header = <>AI answer</>;
     body = (
-      <ReactMarkdown className="prose text-sm max-w-full">
+      <ReactMarkdown
+        className="prose text-sm max-w-full"
+        remarkPlugins={[remarkGfm]}
+      >
         {replaceNewlines(props.answer)}
       </ReactMarkdown>
     );

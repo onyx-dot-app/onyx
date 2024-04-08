@@ -18,11 +18,13 @@ from sqlalchemy.orm import Session
 from danswer.configs.app_configs import DISABLE_TELEMETRY
 from danswer.configs.constants import ID_SEPARATOR
 from danswer.configs.constants import MessageType
+from danswer.configs.danswerbot_configs import DANSWER_BOT_FEEDBACK_VISIBILITY
 from danswer.configs.danswerbot_configs import DANSWER_BOT_MAX_QPM
 from danswer.configs.danswerbot_configs import DANSWER_BOT_MAX_WAIT_TIME
 from danswer.configs.danswerbot_configs import DANSWER_BOT_NUM_RETRIES
 from danswer.connectors.slack.utils import make_slack_api_rate_limited
 from danswer.connectors.slack.utils import SlackTextCleaner
+from danswer.danswerbot.slack.constants import FeedbackVisibility
 from danswer.danswerbot.slack.constants import SLACK_CHANNEL_ID
 from danswer.danswerbot.slack.tokens import fetch_tokens
 from danswer.db.engine import get_sqlalchemy_engine
@@ -449,3 +451,10 @@ class SlackRateLimiter:
             self.refill()
 
         del self.waiting_questions[0]
+
+
+def get_feedback_visibility() -> FeedbackVisibility:
+    try:
+        return FeedbackVisibility(DANSWER_BOT_FEEDBACK_VISIBILITY.lower())
+    except ValueError:
+        return FeedbackVisibility.PRIVATE

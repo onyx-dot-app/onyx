@@ -1,4 +1,5 @@
 import {
+  AxeroIcon,
   BookstackIcon,
   ConfluenceIcon,
   Document360Icon,
@@ -152,6 +153,11 @@ const SOURCE_METADATA_MAP: SourceMap = {
   sharepoint: {
     icon: SharepointIcon,
     displayName: "Sharepoint",
+    category: SourceCategory.AppConnection,
+  },
+  axero: {
+    icon: AxeroIcon,
+    displayName: "Axero",
     category: SourceCategory.AppConnection,
   },
   requesttracker: {

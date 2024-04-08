@@ -6,17 +6,14 @@ NOTE: cannot use Celery directly due to
 https://github.com/celery/celery/issues/7007#issuecomment-1740139367"""
 from collections.abc import Callable
 from dataclasses import dataclass
+from multiprocessing import Process
 from typing import Any
 from typing import Literal
 from typing import Optional
-from typing import TYPE_CHECKING
 
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
-
-if TYPE_CHECKING:
-    from torch.multiprocessing import Process
 
 JobStatusType = (
     Literal["error"]
@@ -89,8 +86,6 @@ class SimpleJobClient:
 
     def submit(self, func: Callable, *args: Any, pure: bool = True) -> SimpleJob | None:
         """NOTE: `pure` arg is needed so this can be a drop in replacement for Dask"""
-        from torch.multiprocessing import Process
-
         self._cleanup_completed_jobs()
         if len(self.jobs) >= self.n_workers:
             logger.debug("No available workers to run job")

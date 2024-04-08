@@ -14,6 +14,8 @@ import { SearchSummary, ShowHideDocsButton } from "./SearchSummary";
 import { SourceIcon } from "@/components/SourceIcon";
 import { ThreeDots } from "react-loader-spinner";
 import { SkippedSearch } from "./SkippedSearch";
+import remarkGfm from "remark-gfm";
+import { CopyButton } from "@/components/CopyButton";
 
 export const Hoverable: React.FC<{
   children: JSX.Element;
@@ -21,7 +23,7 @@ export const Hoverable: React.FC<{
 }> = ({ children, onClick }) => {
   return (
     <div
-      className="hover:bg-neutral-300 p-2 rounded h-fit cursor-pointer"
+      className="hover:bg-hover p-2 rounded h-fit cursor-pointer"
       onClick={onClick}
     >
       {children}
@@ -132,6 +134,7 @@ export const AIMessage = ({
                         />
                       ),
                     }}
+                    remarkPlugins={[remarkGfm]}
                   >
                     {content}
                   </ReactMarkdown>
@@ -199,15 +202,7 @@ export const AIMessage = ({
           </div>
           {handleFeedback && (
             <div className="flex flex-col md:flex-row gap-x-0.5 ml-8 mt-1">
-              <Hoverable
-                onClick={() => {
-                  navigator.clipboard.writeText(content.toString());
-                  setCopyClicked(true);
-                  setTimeout(() => setCopyClicked(false), 3000);
-                }}
-              >
-                {copyClicked ? <FiCheck /> : <FiCopy />}
-              </Hoverable>
+              <CopyButton content={content.toString()} />
               <Hoverable onClick={() => handleFeedback("like")}>
                 <FiThumbsUp />
               </Hoverable>
@@ -255,6 +250,7 @@ export const HumanMessage = ({
                       />
                     ),
                   }}
+                  remarkPlugins={[remarkGfm]}
                 >
                   {content}
                 </ReactMarkdown>

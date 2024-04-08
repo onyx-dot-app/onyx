@@ -11,12 +11,12 @@ from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.configs.model_configs import GEN_AI_SINGLE_USER_MESSAGE_EXPECTED_MAX_TOKENS
 from danswer.db.chat import get_default_prompt
 from danswer.db.models import Persona
-from danswer.db.models import Prompt
 from danswer.indexing.models import InferenceChunk
+from danswer.llm.answering.models import LLMConfig
 from danswer.llm.answering.models import PreviousMessage
+from danswer.llm.answering.models import PromptConfig
 from danswer.llm.utils import check_number_of_tokens
 from danswer.llm.utils import get_default_llm_tokenizer
-from danswer.llm.utils import get_default_llm_version
 from danswer.llm.utils import get_max_input_tokens
 from danswer.llm.utils import translate_history_to_basemessages
 from danswer.prompts.chat_prompts import ADDITIONAL_INFO
@@ -92,16 +92,16 @@ def drop_messages_history_overflow(
     return prompt
 
 
-def get_prompt_tokens(prompt: Prompt) -> int:
+def get_prompt_tokens(prompt_config: PromptConfig) -> int:
     # Note: currently custom prompts do not allow datetime aware, only default prompts
     return (
-        check_number_of_tokens(prompt.system_prompt)
-        + check_number_of_tokens(prompt.task_prompt)
+        check_number_of_tokens(prompt_config.system_prompt)
+        + check_number_of_tokens(prompt_config.task_prompt)
         + CHAT_USER_PROMPT_WITH_CONTEXT_OVERHEAD_TOKEN_CNT
         + CITATION_STATEMENT_TOKEN_CNT
         + CITATION_REMINDER_TOKEN_CNT
         + (LANGUAGE_HINT_TOKEN_CNT if bool(MULTILINGUAL_QUERY_EXPANSION) else 0)
-        + (ADDITIONAL_INFO_TOKEN_CNT if prompt.datetime_aware else 0)
+        + (ADDITIONAL_INFO_TOKEN_CNT if prompt_config.datetime_aware else 0)
     )
 
 
@@ -111,7 +111,8 @@ _MISC_BUFFER = 40
 
 
 def compute_max_document_tokens(
-    persona: Persona,
+    prompt_config: PromptConfig,
+    llm_config: LLMConfig,
     actual_user_input: str | None = None,
     max_llm_token_override: int | None = None,
 ) -> int:
@@ -126,21 +127,13 @@ def compute_max_document_tokens(
     if we're trying to determine if the user should be able to select another document) then we just set an
     arbitrary "upper bound".
     """
-    llm_name = get_default_llm_version()[0]
-    if persona.llm_model_version_override:
-        llm_name = persona.llm_model_version_override
-
     # if we can't find a number of tokens, just assume some common default
     max_input_tokens = (
         max_llm_token_override
         if max_llm_token_override
-        else get_max_input_tokens(model_name=llm_name)
+        else get_max_input_tokens(model_name=llm_config.model_version)
     )
-    if persona.prompts:
-        # TODO this may not always be the first prompt
-        prompt_tokens = get_prompt_tokens(persona.prompts[0])
-    else:
-        prompt_tokens = get_prompt_tokens(get_default_prompt())
+    prompt_tokens = get_prompt_tokens(prompt_config)
 
     user_input_tokens = (
         check_number_of_tokens(actual_user_input)
@@ -151,31 +144,44 @@ def compute_max_document_tokens(
     return max_input_tokens - prompt_tokens - user_input_tokens - _MISC_BUFFER
 
 
-def compute_max_llm_input_tokens(persona: Persona) -> int:
-    """Maximum tokens allows in the input to the LLM (of any type)."""
-    llm_name = get_default_llm_version()[0]
-    if persona.llm_model_version_override:
-        llm_name = persona.llm_model_version_override
+def compute_max_document_tokens_for_persona(
+    persona: Persona,
+    actual_user_input: str | None = None,
+    max_llm_token_override: int | None = None,
+) -> int:
+    prompt = persona.prompts[0] if persona.prompts else get_default_prompt()
+    return compute_max_document_tokens(
+        prompt_config=PromptConfig.from_model(prompt),
+        llm_config=LLMConfig.from_persona(persona),
+        actual_user_input=actual_user_input,
+        max_llm_token_override=max_llm_token_override,
+    )
 
-    input_tokens = get_max_input_tokens(model_name=llm_name)
+
+def compute_max_llm_input_tokens(llm_config: LLMConfig) -> int:
+    """Maximum tokens allows in the input to the LLM (of any type)."""
+
+    input_tokens = get_max_input_tokens(
+        model_name=llm_config.model_version, model_provider=llm_config.model_provider
+    )
     return input_tokens - _MISC_BUFFER
 
 
 @lru_cache()
 def build_system_message(
-    prompt: Prompt,
+    prompt_config: PromptConfig,
     context_exists: bool,
     llm_tokenizer_encode_func: Callable,
     citation_line: str = REQUIRE_CITATION_STATEMENT,
     no_citation_line: str = NO_CITATION_STATEMENT,
 ) -> tuple[SystemMessage | None, int]:
-    system_prompt = prompt.system_prompt.strip()
-    if prompt.include_citations:
+    system_prompt = prompt_config.system_prompt.strip()
+    if prompt_config.include_citations:
         if context_exists:
             system_prompt += citation_line
         else:
             system_prompt += no_citation_line
-    if prompt.datetime_aware:
+    if prompt_config.datetime_aware:
         if system_prompt:
             system_prompt += ADDITIONAL_INFO.format(
                 datetime_info=get_current_llm_day_time()
@@ -194,7 +200,7 @@ def build_system_message(
 
 def build_user_message(
     question: str,
-    prompt: Prompt,
+    prompt_config: PromptConfig,
     context_docs: list[LlmDoc] | list[InferenceChunk],
     all_doc_useful: bool,
     history_message: str,
@@ -206,9 +212,9 @@ def build_user_message(
         # Simpler prompt for cases where there is no context
         user_prompt = (
             CHAT_USER_CONTEXT_FREE_PROMPT.format(
-                task_prompt=prompt.task_prompt, user_query=question
+                task_prompt=prompt_config.task_prompt, user_query=question
             )
-            if prompt.task_prompt
+            if prompt_config.task_prompt
             else question
         )
         user_prompt = user_prompt.strip()
@@ -219,7 +225,7 @@ def build_user_message(
     context_docs_str = build_complete_context_str(context_docs)
     optional_ignore = "" if all_doc_useful else DEFAULT_IGNORE_STATEMENT
 
-    task_prompt_with_reminder = build_task_prompt_reminders(prompt)
+    task_prompt_with_reminder = build_task_prompt_reminders(prompt_config)
 
     user_prompt = CITATIONS_PROMPT.format(
         optional_ignore_statement=optional_ignore,
@@ -239,8 +245,8 @@ def build_user_message(
 def build_citations_prompt(
     question: str,
     message_history: list[PreviousMessage],
-    persona: Persona,
-    prompt: Prompt,
+    prompt_config: PromptConfig,
+    llm_config: LLMConfig,
     context_docs: list[LlmDoc] | list[InferenceChunk],
     all_doc_useful: bool,
     history_message: str,
@@ -249,7 +255,7 @@ def build_citations_prompt(
     context_exists = len(context_docs) > 0
 
     system_message_or_none, system_tokens = build_system_message(
-        prompt=prompt,
+        prompt_config=prompt_config,
         context_exists=context_exists,
         llm_tokenizer_encode_func=llm_tokenizer_encode_func,
     )
@@ -262,7 +268,7 @@ def build_citations_prompt(
     # Is the same as passed in later for extracting citations
     user_message, user_tokens = build_user_message(
         question=question,
-        prompt=prompt,
+        prompt_config=prompt_config,
         context_docs=context_docs,
         all_doc_useful=all_doc_useful,
         history_message=history_message,
@@ -275,7 +281,7 @@ def build_citations_prompt(
         history_token_counts=history_token_counts,
         final_msg=user_message,
         final_msg_token_count=user_tokens,
-        max_allowed_tokens=compute_max_llm_input_tokens(persona),
+        max_allowed_tokens=compute_max_llm_input_tokens(llm_config),
     )
 
     return final_prompt_msgs

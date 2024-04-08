@@ -22,9 +22,7 @@ services:
     volumes:
       - local_dynamic_storage:/home/storage
       - file_connector_tmp_storage:/home/file_connector_storage
-      - model_cache_torch:/root/.cache/torch/
       - model_cache_nltk:/root/nltk_data/
-      - model_cache_huggingface:/root/.cache/huggingface/
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
@@ -32,6 +30,8 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+
+
   background:
     image: danswer/danswer-backend:latest
     build:
@@ -51,9 +51,7 @@ services:
     volumes:
       - local_dynamic_storage:/home/storage
       - file_connector_tmp_storage:/home/file_connector_storage
-      - model_cache_torch:/root/.cache/torch/
       - model_cache_nltk:/root/nltk_data/
-      - model_cache_huggingface:/root/.cache/huggingface/
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
@@ -61,6 +59,8 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+
+
   web_server:
     image: danswer/danswer-web-server:latest
     build:
@@ -94,6 +94,63 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+
+
+  inference_model_server:
+    image: danswer/danswer-model-server:latest
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.model_server
+    command: >
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+        echo 'Skipping service...';
+        exit 0;
+      else
+        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
+      fi"
+    restart: on-failure
+    environment:
+      - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
+      # Set to debug to get more fine-grained logs
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - model_cache_torch:/root/.cache/torch/
+      - model_cache_huggingface:/root/.cache/huggingface/
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+
+  indexing_model_server:
+    image: danswer/danswer-model-server:latest
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.model_server
+    command: >
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+        echo 'Skipping service...';
+        exit 0;
+      else
+        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
+      fi"
+    restart: on-failure
+    environment:
+      - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
+      - INDEXING_ONLY=True
+      # Set to debug to get more fine-grained logs
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - model_cache_torch:/root/.cache/torch/
+      - model_cache_huggingface:/root/.cache/huggingface/
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
     image: vespaengine/vespa:8.277.17
@@ -108,6 +165,8 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+
+
   nginx:
     image: nginx:1.23.4-alpine
     restart: always
@@ -141,6 +200,8 @@ services:
       && /etc/nginx/conf.d/run-nginx.sh app.conf.template"
     env_file:
       - .env.nginx
+
+
   # follows https://pentacent.medium.com/nginx-and-lets-encrypt-with-docker-in-less-than-5-minutes-b4b8a60d3a71
   certbot:
     image: certbot/certbot
@@ -154,30 +215,8 @@ services:
         max-size: "50m"
         max-file: "6"
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-  # Run with --profile model-server to bring up the danswer-model-server container
-  model_server:
-    image: danswer/danswer-model-server:latest
-    build:
-      context: ../../backend
-      dockerfile: Dockerfile.model_server
-    profiles:
-      - "model-server"
-    command: uvicorn model_server.main:app --host 0.0.0.0 --port 9000
-    restart: always
-    environment:
-      - DOCUMENT_ENCODER_MODEL=${DOCUMENT_ENCODER_MODEL:-}
-      - NORMALIZE_EMBEDDINGS=${NORMALIZE_EMBEDDINGS:-}
-      - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
-      # Set to debug to get more fine-grained logs
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-    volumes:
-      - model_cache_torch:/root/.cache/torch/
-      - model_cache_huggingface:/root/.cache/huggingface/
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "6"
+
+
 volumes:
   local_dynamic_storage:
   file_connector_tmp_storage:  # used to store files uploaded by the user temporarily while we are indexing them

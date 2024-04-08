@@ -174,8 +174,9 @@ def build_final_template_prompt(
 Putting here for now, since we have no other flows which use this."""
 
 GPT_4_MODEL_VERSIONS = [
-    "gpt-4-1106-preview",
     "gpt-4",
+    "gpt-4-turbo-preview",
+    "gpt-4-1106-preview",
     "gpt-4-32k",
     "gpt-4-0613",
     "gpt-4-32k-0613",
@@ -183,8 +184,9 @@ GPT_4_MODEL_VERSIONS = [
     "gpt-4-32k-0314",
 ]
 GPT_3_5_TURBO_MODEL_VERSIONS = [
-    "gpt-3.5-turbo-1106",
     "gpt-3.5-turbo",
+    "gpt-3.5-turbo-0125",
+    "gpt-3.5-turbo-1106",
     "gpt-3.5-turbo-16k",
     "gpt-3.5-turbo-0613",
     "gpt-3.5-turbo-16k-0613",

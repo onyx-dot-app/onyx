@@ -28,3 +28,8 @@ class SearchType(str, Enum):
 class QueryFlow(str, Enum):
     SEARCH = "search"
     QUESTION_ANSWER = "question-answer"
+
+
+class EmbedTextType(str, Enum):
+    QUERY = "query"
+    PASSAGE = "passage"

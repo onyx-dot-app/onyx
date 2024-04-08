@@ -22,11 +22,12 @@
 </a>
 </p>
 
-<strong>[Danswer](https://www.danswer.ai/)</strong> is the ChatGPT for teams. Danswer provides a Chat interface and plugs into any LLM of
-your choice. Danswer can be deployed anywhere and for any scale - on a laptop, on-premise, or to cloud. Since you own
-the deployment, your user data and chats are fully in your own control. Danswer is MIT licensed and designed to be
-modular and easily extensible. The system also comes fully ready for production usage with user authentication, role
-management (admin/basic users), chat persistence, and a UI for configuring Personas (AI Assistants) and their Prompts.
+<strong>[Danswer](https://www.danswer.ai/)</strong> is the AI Assistant connected to your company's docs, apps, and people. 
+Danswer provides a Chat interface and plugs into any LLM of your choice. Danswer can be deployed anywhere and for any 
+scale - on a laptop, on-premise, or to cloud. Since you own the deployment, your user data and chats are fully in your 
+own control. Danswer is MIT licensed and designed to be modular and easily extensible. The system also comes fully ready 
+for production usage with user authentication, role management (admin/basic users), chat persistence, and a UI for 
+configuring Personas (AI Assistants) and their Prompts.
 
 Danswer also serves as a Unified Search across all common workplace tools such as Slack, Google Drive, Confluence, etc.
 By combining LLMs and team specific knowledge, Danswer becomes a subject matter expert for the team. Imagine ChatGPT if

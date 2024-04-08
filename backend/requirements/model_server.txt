@@ -1,8 +1,8 @@
-fastapi==0.109.1
+fastapi==0.109.2
 pydantic==1.10.7
-safetensors==0.3.1
-sentence-transformers==2.2.2
+safetensors==0.4.2
+sentence-transformers==2.6.1
 tensorflow==2.15.0
 torch==2.0.1
-transformers==4.36.2
+transformers==4.39.2
 uvicorn==0.21.1

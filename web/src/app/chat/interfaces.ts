@@ -6,6 +6,11 @@ export enum RetrievalType {
   SelectedDocs = "selectedDocs",
 }
 
+export enum ChatSessionSharedStatus {
+  Private = "private",
+  Public = "public",
+}
+
 export interface RetrievalDetails {
   run_search: "always" | "never" | "auto";
   real_time: boolean;
@@ -20,6 +25,7 @@ export interface ChatSession {
   name: string;
   persona_id: number;
   time_created: string;
+  shared_status: ChatSessionSharedStatus;
 }
 
 export interface Message {
@@ -36,7 +42,10 @@ export interface BackendChatSession {
   chat_session_id: number;
   description: string;
   persona_id: number;
+  persona_name: string;
   messages: BackendMessage[];
+  time_created: string;
+  shared_status: ChatSessionSharedStatus;
 }
 
 export interface BackendMessage {

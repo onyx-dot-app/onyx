@@ -6,9 +6,10 @@ from danswer.chat.models import (
 )
 from danswer.configs.constants import IGNORE_FOR_QA
 from danswer.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
-from danswer.db.models import Persona
 from danswer.indexing.models import InferenceChunk
 from danswer.llm.answering.models import DocumentPruningConfig
+from danswer.llm.answering.models import LLMConfig
+from danswer.llm.answering.models import PromptConfig
 from danswer.llm.answering.prompts.citations_prompt import compute_max_document_tokens
 from danswer.llm.utils import get_default_llm_tokenizer
 from danswer.llm.utils import tokenizer_trim_content
@@ -28,14 +29,15 @@ class PruningError(Exception):
 
 
 def _compute_limit(
-    persona: Persona,
+    prompt_config: PromptConfig,
+    llm_config: LLMConfig,
     question: str,
     max_chunks: int | None,
     max_window_percentage: float | None,
     max_tokens: int | None,
 ) -> int:
     llm_max_document_tokens = compute_max_document_tokens(
-        persona=persona, actual_user_input=question
+        prompt_config=prompt_config, llm_config=llm_config, actual_user_input=question
     )
 
     window_percentage_based_limit = (
@@ -183,7 +185,8 @@ def _apply_pruning(
 def prune_documents(
     docs: list[LlmDoc],
     doc_relevance_list: list[bool] | None,
-    persona: Persona,
+    prompt_config: PromptConfig,
+    llm_config: LLMConfig,
     question: str,
     document_pruning_config: DocumentPruningConfig,
 ) -> list[LlmDoc]:
@@ -191,7 +194,8 @@ def prune_documents(
         assert len(docs) == len(doc_relevance_list)
 
     doc_token_limit = _compute_limit(
-        persona=persona,
+        prompt_config=prompt_config,
+        llm_config=llm_config,
         question=question,
         max_chunks=document_pruning_config.max_chunks,
         max_window_percentage=document_pruning_config.max_window_percentage,

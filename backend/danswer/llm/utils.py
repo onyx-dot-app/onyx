@@ -4,6 +4,8 @@ from copy import copy
 from functools import lru_cache
 from typing import Any
 from typing import cast
+from typing import TYPE_CHECKING
+from typing import Union
 
 import litellm  # type: ignore
 import tiktoken
@@ -33,9 +35,11 @@ from danswer.db.models import ChatMessage
 from danswer.dynamic_configs.factory import get_dynamic_config_store
 from danswer.dynamic_configs.interface import ConfigNotFoundError
 from danswer.indexing.models import InferenceChunk
-from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.interfaces import LLM
 from danswer.utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from danswer.llm.answering.models import PreviousMessage
 
 logger = setup_logger()
 
@@ -116,7 +120,7 @@ def tokenizer_trim_chunks(
 
 
 def translate_danswer_msg_to_langchain(
-    msg: ChatMessage | PreviousMessage,
+    msg: Union[ChatMessage, "PreviousMessage"],
 ) -> BaseMessage:
     if msg.message_type == MessageType.SYSTEM:
         raise ValueError("System messages are not currently part of history")
@@ -129,7 +133,7 @@ def translate_danswer_msg_to_langchain(
 
 
 def translate_history_to_basemessages(
-    history: list[ChatMessage] | list[PreviousMessage],
+    history: list[ChatMessage] | list["PreviousMessage"],
 ) -> tuple[list[BaseMessage], list[int]]:
     history_basemessages = [
         translate_danswer_msg_to_langchain(msg)
@@ -241,6 +245,7 @@ def test_llm(llm: LLM) -> str | None:
 
 
 def get_llm_max_tokens(
+    model_map: dict,
     model_name: str | None = GEN_AI_MODEL_VERSION,
     model_provider: str = GEN_AI_MODEL_PROVIDER,
 ) -> int:
@@ -250,22 +255,18 @@ def get_llm_max_tokens(
         return GEN_AI_MAX_TOKENS
 
     model_name = model_name or get_default_llm_version()[0]
-    # NOTE: we previously used `litellm.get_max_tokens()`, but despite the name, this actually
-    # returns the max OUTPUT tokens. Under the hood, this uses the `litellm.model_cost` dict,
-    # and there is no other interface to get what we want. This should be okay though, since the
-    # `model_cost` dict is a named public interface:
-    # https://litellm.vercel.app/docs/completion/token_usage#7-model_cost
-    litellm_model_map = litellm.model_cost
 
     try:
         if model_provider == "openai":
-            model_obj = litellm_model_map[model_name]
+            model_obj = model_map[model_name]
         else:
-            model_obj = litellm_model_map[f"{model_provider}/{model_name}"]
+            model_obj = model_map[f"{model_provider}/{model_name}"]
+
+        if "max_input_tokens" in model_obj:
+            return model_obj["max_input_tokens"]
+
         if "max_tokens" in model_obj:
             return model_obj["max_tokens"]
-        elif "max_input_tokens" in model_obj and "max_output_tokens" in model_obj:
-            return model_obj["max_input_tokens"] + model_obj["max_output_tokens"]
 
         raise RuntimeError("No max tokens found for LLM")
     except Exception:
@@ -280,9 +281,22 @@ def get_max_input_tokens(
     model_provider: str = GEN_AI_MODEL_PROVIDER,
     output_tokens: int = GEN_AI_MAX_OUTPUT_TOKENS,
 ) -> int:
+    # NOTE: we previously used `litellm.get_max_tokens()`, but despite the name, this actually
+    # returns the max OUTPUT tokens. Under the hood, this uses the `litellm.model_cost` dict,
+    # and there is no other interface to get what we want. This should be okay though, since the
+    # `model_cost` dict is a named public interface:
+    # https://litellm.vercel.app/docs/completion/token_usage#7-model_cost
+    # model_map is  litellm.model_cost
+    litellm_model_map = litellm.model_cost
+
     model_name = model_name or get_default_llm_version()[0]
+
     input_toks = (
-        get_llm_max_tokens(model_name=model_name, model_provider=model_provider)
+        get_llm_max_tokens(
+            model_name=model_name,
+            model_provider=model_provider,
+            model_map=litellm_model_map,
+        )
         - output_tokens
     )
 

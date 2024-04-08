@@ -1,6 +1,7 @@
 from danswer.configs.app_configs import DISABLE_GENERATIVE_AI
 from danswer.configs.chat_configs import QA_TIMEOUT
 from danswer.configs.model_configs import GEN_AI_MODEL_PROVIDER
+from danswer.configs.model_configs import GEN_AI_TEMPERATURE
 from danswer.llm.chat_llm import DefaultMultiLLM
 from danswer.llm.custom_llm import CustomModelServer
 from danswer.llm.exceptions import GenAIDisabledException
@@ -14,6 +15,7 @@ def get_default_llm(
     gen_ai_model_provider: str = GEN_AI_MODEL_PROVIDER,
     api_key: str | None = None,
     timeout: int = QA_TIMEOUT,
+    temperature: float = GEN_AI_TEMPERATURE,
     use_fast_llm: bool = False,
     gen_ai_model_version_override: str | None = None,
 ) -> LLM:
@@ -34,8 +36,13 @@ def get_default_llm(
         return CustomModelServer(api_key=api_key, timeout=timeout)
 
     if gen_ai_model_provider.lower() == "gpt4all":
-        return DanswerGPT4All(model_version=model_version, timeout=timeout)
+        return DanswerGPT4All(
+            model_version=model_version, timeout=timeout, temperature=temperature
+        )
 
     return DefaultMultiLLM(
-        model_version=model_version, api_key=api_key, timeout=timeout
+        model_version=model_version,
+        api_key=api_key,
+        timeout=timeout,
+        temperature=temperature,
     )

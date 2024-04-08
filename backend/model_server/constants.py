@@ -1,0 +1,1 @@
+MODEL_WARM_UP_STRING = "hi " * 512
