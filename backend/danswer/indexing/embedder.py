@@ -108,10 +108,12 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         chunk_titles = {
             chunk.source_document.get_title_for_document_index() for chunk in chunks
         }
-        chunk_titles.discard(None)
+
+        # Drop any None or empty strings
+        chunk_titles_list = [title for title in chunk_titles if title]
 
         # Embed Titles in batches
-        title_batches = batch_list(list(chunk_titles), batch_size)
+        title_batches = batch_list(chunk_titles_list, batch_size)
         len_title_batches = len(title_batches)
         for ind_batch, title_batch in enumerate(title_batches, start=1):
             logger.debug(f"Embedding Titles batch {ind_batch} of {len_title_batches}")
