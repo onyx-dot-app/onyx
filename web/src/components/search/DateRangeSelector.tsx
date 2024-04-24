@@ -1,4 +1,4 @@
-import { getXDaysAgo } from "@/lib/dateUtils";
+import { getXDaysAgo, getXYearsAgo } from "@/lib/dateUtils";
 import { DateRangePickerValue } from "@tremor/react";
 import { FiCalendar, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown, DefaultDropdownElement } from "../Dropdown";
@@ -31,6 +31,8 @@ function DateSelectorItem({
   );
 }
 
+export const LAST_2_YEARS = "Last 2 years";
+export const LAST_YEAR = "Last year";
 export const LAST_30_DAYS = "Last 30 days";
 export const LAST_7_DAYS = "Last 7 days";
 export const TODAY = "Today";
@@ -60,6 +62,32 @@ export function DateRangeSelector({
               flex
               overscroll-contain`}
           >
+            <DefaultDropdownElement
+              key={LAST_2_YEARS}
+              name={LAST_2_YEARS}
+              onSelect={() =>
+                onValueChange({
+                  to: new Date(),
+                  from: getXYearsAgo(2),
+                  selectValue: LAST_2_YEARS,
+                })
+              }
+              isSelected={value?.selectValue === LAST_2_YEARS}
+            />
+
+            <DefaultDropdownElement
+              key={LAST_YEAR}
+              name={LAST_YEAR}
+              onSelect={() =>
+                onValueChange({
+                  to: new Date(),
+                  from: getXYearsAgo(1),
+                  selectValue: LAST_YEAR,
+                })
+              }
+              isSelected={value?.selectValue === LAST_YEAR}
+            />
+
             <DefaultDropdownElement
               key={LAST_30_DAYS}
               name={LAST_30_DAYS}

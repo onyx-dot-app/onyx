@@ -15,7 +15,7 @@ import { listSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { BasicClickable } from "@/components/BasicClickable";
 import { ControlledPopup, DefaultDropdownElement } from "@/components/Dropdown";
-import { getXDaysAgo } from "@/lib/dateUtils";
+import { getXDaysAgo, getXYearsAgo } from "@/lib/dateUtils";
 import { SourceSelectorProps } from "@/components/search/filtering/Filters";
 import { containsObject, objectsAreEquivalent } from "@/lib/contains";
 
@@ -151,6 +151,8 @@ function KnowledgeSetsSection({
   );
 }
 
+const LAST_2_YEARS = "Last 2 years";
+const LAST_YEAR = "Last year";
 const LAST_30_DAYS = "Last 30 days";
 const LAST_7_DAYS = "Last 7 days";
 const TODAY = "Today";
@@ -164,6 +166,32 @@ function TimeRangeSection({
 }) {
   return (
     <div className="w-64">
+      <DefaultDropdownElement
+        key={LAST_2_YEARS}
+        name={LAST_2_YEARS}
+        onSelect={() =>
+          onSelect({
+            to: new Date(),
+            from: getXYearsAgo(2),
+            selectValue: LAST_2_YEARS,
+          })
+        }
+        isSelected={selectedTimeRange === LAST_2_YEARS}
+      />
+
+      <DefaultDropdownElement
+        key={LAST_YEAR}
+        name={LAST_YEAR}
+        onSelect={() =>
+          onSelect({
+            to: new Date(),
+            from: getXYearsAgo(1),
+            selectValue: LAST_YEAR,
+          })
+        }
+        isSelected={selectedTimeRange === LAST_YEAR}
+      />
+
       <DefaultDropdownElement
         key={LAST_30_DAYS}
         name={LAST_30_DAYS}
