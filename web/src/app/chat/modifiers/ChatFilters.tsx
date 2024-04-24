@@ -137,7 +137,7 @@ function KnowledgeSetsSection({
 }) {
   return (
     <div className="w-64">
-      {documentSets.map((documentSet) => (
+      {documentSets.sort(function(a,b){return b.name < a.name ? 1 : b.name > a.name ? -1 : 0}).map((documentSet) => (
         <DefaultDropdownElement
           key={documentSet.name}
           name={documentSet.name}

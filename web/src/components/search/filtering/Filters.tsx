@@ -116,7 +116,7 @@ export function SourceSelector({
             <SectionTitle>Knowledge Sets</SectionTitle>
           </div>
           <div className="px-1">
-            {availableDocumentSets.map((documentSet) => (
+            {availableDocumentSets.sort(function(a,b){return b.name < a.name ? 1 : b.name > a.name ? -1 : 0}).map((documentSet) => (
               <div key={documentSet.name} className="my-1.5 flex">
                 <div
                   key={documentSet.name}
