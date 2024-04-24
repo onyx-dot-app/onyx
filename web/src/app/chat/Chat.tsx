@@ -61,6 +61,7 @@ export const Chat = ({
   defaultSelectedPersonaId,
   documentSidebarInitialWidth,
   shouldhideBeforeScroll,
+  defaultModel,
 }: {
   existingChatSessionId: number | null;
   existingChatSessionPersonaId: number | undefined;
@@ -71,6 +72,7 @@ export const Chat = ({
   defaultSelectedPersonaId?: number; // what persona to default to
   documentSidebarInitialWidth?: number;
   shouldhideBeforeScroll?: boolean;
+  defaultModel: string;
 }) => {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -600,6 +602,7 @@ export const Chat = ({
                     <ChatPersonaSelector
                       personas={availablePersonas}
                       selectedPersonaId={livePersona.id}
+                      defaultModel={defaultModel}
                       onPersonaChange={(persona) => {
                         if (persona) {
                           setSelectedPersona(persona);
@@ -629,6 +632,7 @@ export const Chat = ({
                   <ChatIntro
                     availableSources={finalAvailableSources}
                     availablePersonas={availablePersonas}
+                    defaultModel={defaultModel}
                     selectedPersona={selectedPersona}
                     handlePersonaSelect={(persona) => {
                       setSelectedPersona(persona);

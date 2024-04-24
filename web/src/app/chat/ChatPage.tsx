@@ -22,6 +22,7 @@ export function ChatLayout({
   availableTags,
   defaultSelectedPersonaId,
   documentSidebarInitialWidth,
+  defaultModel,
 }: {
   user: User | null;
   settings: Settings | null;
@@ -32,6 +33,7 @@ export function ChatLayout({
   availableTags: Tag[];
   defaultSelectedPersonaId?: number; // what persona to default to
   documentSidebarInitialWidth?: number;
+  defaultModel: string;
 }) {
   const searchParams = useSearchParams();
   const chatIdRaw = searchParams.get("chatId");
@@ -65,6 +67,7 @@ export function ChatLayout({
           availableTags={availableTags}
           defaultSelectedPersonaId={defaultSelectedPersonaId}
           documentSidebarInitialWidth={documentSidebarInitialWidth}
+          defaultModel={defaultModel}
         />
       </div>
       <Footer />

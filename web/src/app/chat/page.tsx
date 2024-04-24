@@ -46,6 +46,7 @@ export default async function Page({
     fetchSS("/chat/get-user-chat-sessions"),
     fetchSS("/query/valid-tags"),
     getSettingsSS(),
+    fetchSS("/persona/default-model"),
   ];
 
   // catch cases where the backend is completely unreachable here
@@ -72,6 +73,7 @@ export default async function Page({
   const chatSessionsResponse = results[5] as Response | null;
   const tagsResponse = results[6] as Response | null;
   const settings = results[7] as Settings | null;
+  const defaultModelResponse = results[8] as Response | null;
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
@@ -117,6 +119,13 @@ export default async function Page({
     console.log(
       `Failed to fetch document sets - ${documentSetsResponse?.status}`
     );
+  }
+
+  let defaultModel = "default model";
+  if (defaultModelResponse?.ok) {
+    defaultModel = await defaultModelResponse.json();
+  } else {
+    console.log(`Failed to fetch default_model - ${defaultModelResponse?.status}`);
   }
 
   let personas: Persona[] = [];
@@ -189,6 +198,7 @@ export default async function Page({
         availableTags={tags}
         defaultSelectedPersonaId={defaultPersonaId}
         documentSidebarInitialWidth={finalDocumentSidebarInitialWidth}
+        defaultModel={defaultModel}
       />
     </>
   );

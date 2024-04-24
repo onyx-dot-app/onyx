@@ -31,10 +31,12 @@ function HelperItemDisplay({
 
 function AllPersonaOptionDisplay({
   availablePersonas,
+  defaultModel,
   handlePersonaSelect,
   handleClose,
 }: {
   availablePersonas: Persona[];
+  defaultModel: string;
   handlePersonaSelect: (persona: Persona) => void;
   handleClose: () => void;
 }) {
@@ -70,7 +72,7 @@ function AllPersonaOptionDisplay({
               <HelperItemDisplay
                 title={persona.name}
                 description={persona.description}
-                model={persona.llm_model_version_override || "default model"}
+                model={persona.llm_model_version_override || defaultModel}
               />
             </div>
           ))}
@@ -83,11 +85,13 @@ function AllPersonaOptionDisplay({
 export function ChatIntro({
   availableSources,
   availablePersonas,
+  defaultModel,
   selectedPersona,
   handlePersonaSelect,
 }: {
   availableSources: ValidSources[];
   availablePersonas: Persona[];
+  defaultModel?: string;
   selectedPersona?: Persona;
   handlePersonaSelect: (persona: Persona) => void;
 }) {
@@ -95,13 +99,13 @@ export function ChatIntro({
     useState(false);
 
   const availableSourceMetadata = getSourceMetadataForSources(availableSources);
-
   return (
     <>
       {isAllPersonaOptionVisible && (
         <AllPersonaOptionDisplay
           handleClose={() => setIsAllPersonaOptionVisible(false)}
           availablePersonas={availablePersonas}
+          defaultModel={defaultModel}
           handlePersonaSelect={handlePersonaSelect}
         />
       )}
@@ -216,7 +220,7 @@ export function ChatIntro({
                       <HelperItemDisplay
                         title={persona.name}
                         description={persona.description}
-                        model={persona.llm_model_version_override || "default model"}
+                        model={persona.llm_model_version_override || defaultModel}
                       />
                     </div>
                   ))}

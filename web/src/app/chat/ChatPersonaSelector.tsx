@@ -13,7 +13,7 @@ function PersonaItem({
   name: string;
   onSelect: (personaId: number) => void;
   isSelected: boolean;
-  model: string;
+  model?: string;
 }) {
   return (
     <div
@@ -50,10 +50,12 @@ function PersonaItem({
 export function ChatPersonaSelector({
   personas,
   selectedPersonaId,
+  defaultModel,
   onPersonaChange,
 }: {
   personas: Persona[];
   selectedPersonaId: number | null;
+  defaultModel?: string;
   onPersonaChange: (persona: Persona | null) => void;
 }) {
   const currentlySelectedPersona = personas.find(
@@ -84,7 +86,7 @@ export function ChatPersonaSelector({
                 key={persona.id}
                 id={persona.id}
                 name={persona.name}
-                model={persona.llm_model_version_override || "default model"}
+                model={persona.llm_model_version_override || defaultModel}
                 onSelect={(clickedPersonaId) => {
                   const clickedPersona = personas.find(
                     (persona) => persona.id === clickedPersonaId
@@ -101,7 +103,7 @@ export function ChatPersonaSelector({
       }
     >
       <div className="select-none text-xl font-bold flex px-2 py-1.5 text-strong rounded cursor-pointer hover:bg-hover-light">
-        <div className="my-auto" title={currentlySelectedPersona?.llm_model_version_override || "default model"}>
+        <div className="my-auto" title={currentlySelectedPersona?.llm_model_version_override || defaultModel}>
           {currentlySelectedPersona?.name || "Default"}
         </div>
         <FiChevronDown className="my-auto ml-1" />

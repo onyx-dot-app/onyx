@@ -43,6 +43,7 @@ export default async function Home() {
     fetchSS("/query/valid-tags"),
     fetchSS("/secondary-index/get-embedding-models"),
     getSettingsSS(),
+    fetchSS("/persona/default-model"),
     fetchSS("/eea_config/get_eea_config"),
   ];
 
@@ -70,7 +71,8 @@ export default async function Home() {
   const tagsResponse = results[5] as Response | null;
   const embeddingModelResponse = results[6] as Response | null;
   const settings = results[7] as Settings | null;
-  const EEAConfigResponse = results[8] as Response | null;
+  const defaultModelResponse = results[8] as Response | null;
+  const EEAConfigResponse = results[9] as Response | null;
   let disclaimerTitle = "";
   let disclaimerText = "";
   if (EEAConfigResponse?.ok) {
@@ -126,6 +128,13 @@ export default async function Home() {
   personas = personas.filter((persona) => persona.num_chunks !== 0);
   // sort them in priority order
   personas.sort(personaComparator);
+
+  let defaultModel = "default model";
+  if (defaultModelResponse?.ok) {
+    defaultModel = await defaultModelResponse.json();
+  } else {
+    console.log(`Failed to fetch default_model - ${defaultModelResponse?.status}`);
+  }
 
   let tags: Tag[] = [];
   if (tagsResponse?.ok) {
@@ -193,6 +202,7 @@ export default async function Home() {
             personas={personas}
             tags={tags}
             defaultSearchType={searchTypeDefault}
+            defaultModel={defaultModel}
           />
         </div>
       </div>

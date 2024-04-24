@@ -138,6 +138,12 @@ def list_personas(
         )
     ]
 
+@basic_router.get("/default-model")
+def default_model(
+    _: User | None = Depends(current_user),
+) -> str:
+    return get_default_llm_version()[0]
+
 
 @basic_router.get("/{persona_id}")
 def get_persona(
