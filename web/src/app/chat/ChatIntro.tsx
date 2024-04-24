@@ -23,8 +23,9 @@ function HelperItemDisplay({
 }) {
   return (
     <div className="cursor-pointer hover:bg-hover-light border border-border rounded py-2 px-4">
-      <div className="text-emphasis font-bold text-lg flex title-with-info">{title}<FiInfo title={model}/></div>
+      <div className="text-emphasis font-bold text-lg flex">{title}</div>
       <div className="text-sm">{description}</div>
+      <div className="text-sm">Using model <i>{model}</i></div>
     </div>
   );
 }
@@ -91,7 +92,7 @@ export function ChatIntro({
 }: {
   availableSources: ValidSources[];
   availablePersonas: Persona[];
-  defaultModel?: string;
+  defaultModel: string;
   selectedPersona?: Persona;
   handlePersonaSelect: (persona: Persona) => void;
 }) {
@@ -126,7 +127,10 @@ export function ChatIntro({
                   {selectedPersona?.name || "How can I help you today?"}
                 </div>
                 {selectedPersona && (
-                  <div className="mt-1">{selectedPersona.description}</div>
+                  <>
+                    <div className="mt-1">{selectedPersona.description}</div>
+                    <div>Using model <i>{selectedPersona.llm_model_version_override || defaultModel}</i></div>
+                  </>
                 )}
               </div>
             </div>

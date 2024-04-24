@@ -679,6 +679,7 @@ export function ChatLayout({
                         availableSources={finalAvailableSources}
                         availablePersonas={availablePersonas}
                         selectedPersona={selectedPersona}
+                        defaultModel={defaultModel}
                         handlePersonaSelect={(persona) => {
                           setSelectedPersona(persona);
                           textareaRef.current?.focus();

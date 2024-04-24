@@ -17,7 +17,7 @@ function PersonaItem({
 }) {
   return (
     <div
-      title={model}
+      title={`Using ${model}`}
       key={id}
       className={`
     flex
@@ -103,7 +103,7 @@ export function ChatPersonaSelector({
       }
     >
       <div className="select-none text-xl font-bold flex px-2 py-1.5 text-strong rounded cursor-pointer hover:bg-hover-light">
-        <div className="my-auto" title={currentlySelectedPersona?.llm_model_version_override || defaultModel}>
+        <div className="my-auto" title={`Using ${currentlySelectedPersona?.llm_model_version_override || defaultModel}`}>
           {currentlySelectedPersona?.name || "Default"}
         </div>
         <FiChevronDown className="my-auto ml-1" />
