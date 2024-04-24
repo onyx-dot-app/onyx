@@ -5,18 +5,17 @@ import { logout } from "@/lib/user";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import React, { useEffect, useRef, useState } from "react";
-import { CustomDropdown, DefaultDropdownElement } from "./Dropdown";
+import React, { useContext, useEffect, useRef, useState } from "react";
+import { CustomDropdown, DefaultDropdownElement } from "../Dropdown";
 import { FiMessageSquare, FiSearch } from "react-icons/fi";
-import { usePathname } from "next/navigation";
-import { Settings } from "@/app/admin/settings/interfaces";
+import { HeaderWrapper } from "./HeaderWrapper";
+import { SettingsContext } from "../settings/SettingsProvider";
 
 interface HeaderProps {
   user: User | null;
-  settings: Settings | null;
 }
 
-export function Header({ user, settings }: HeaderProps) {
+export function Header({ user }: HeaderProps) {
   const router = useRouter();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -54,9 +53,15 @@ export function Header({ user, settings }: HeaderProps) {
     };
   }, [dropdownOpen]);
 
+  const combinedSettings = useContext(SettingsContext);
+  if (!combinedSettings) {
+    return null;
+  }
+  const settings = combinedSettings.settings;
+
   return (
-    <header className="border-b border-border bg-background-emphasis">
-      <div className="mx-8 flex h-16">
+    <HeaderWrapper>
+      <div className="flex h-full">
         <Link
           className="py-4"
           href={
@@ -138,7 +143,7 @@ export function Header({ user, settings }: HeaderProps) {
           </div>
         </div>
       </div>
-    </header>
+    </HeaderWrapper>
   );
 }
 

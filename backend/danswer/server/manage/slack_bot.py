@@ -140,7 +140,7 @@ def patch_slack_bot_config(
         existing_persona_id = existing_slack_bot_config.persona_id
         if existing_persona_id is not None:
             persona = get_persona_by_id(
-                persona_id=existing_persona_id, user_id=None, db_session=db_session
+                persona_id=existing_persona_id, user=None, db_session=db_session
             )
 
             if not persona.name.startswith(SLACK_BOT_PERSONA_PREFIX):
@@ -192,12 +192,15 @@ def list_slack_bot_configs(
 
 
 @router.put("/admin/slack-bot/tokens")
-def put_tokens(tokens: SlackBotTokens) -> None:
+def put_tokens(
+    tokens: SlackBotTokens,
+    _: User | None = Depends(current_admin_user),
+) -> None:
     save_tokens(tokens=tokens)
 
 
 @router.get("/admin/slack-bot/tokens")
-def get_tokens() -> SlackBotTokens:
+def get_tokens(_: User | None = Depends(current_admin_user)) -> SlackBotTokens:
     try:
         return fetch_tokens()
     except ConfigNotFoundError:

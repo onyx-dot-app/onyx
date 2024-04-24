@@ -4,8 +4,6 @@ from abc import abstractmethod
 from sqlalchemy.orm import Session
 
 from danswer.configs.app_configs import ENABLE_MINI_CHUNK
-from danswer.configs.app_configs import INDEXING_MODEL_SERVER_HOST
-from danswer.configs.app_configs import MODEL_SERVER_PORT
 from danswer.configs.model_configs import BATCH_SIZE_ENCODE_CHUNKS
 from danswer.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from danswer.db.embedding_model import get_current_db_embedding_model
@@ -20,6 +18,8 @@ from danswer.search.enums import EmbedTextType
 from danswer.search.search_nlp_models import EmbeddingModel
 from danswer.utils.batching import batch_list
 from danswer.utils.logger import setup_logger
+from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
+from shared_configs.configs import MODEL_SERVER_PORT
 
 
 logger = setup_logger()
@@ -149,7 +149,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                     title_embed_dict[title] = title_embedding
 
             new_embedded_chunk = IndexChunk(
-                **{k: getattr(chunk, k) for k in chunk.__dataclass_fields__},
+                **chunk.dict(),
                 embeddings=ChunkEmbedding(
                     full_embedding=chunk_embeddings[0],
                     mini_chunk_embeddings=chunk_embeddings[1:],

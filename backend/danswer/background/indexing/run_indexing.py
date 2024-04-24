@@ -142,6 +142,7 @@ def _run_indexing(
         document_index=document_index,
         ignore_time_skip=index_attempt.from_beginning
         or (db_embedding_model.status == IndexModelStatus.FUTURE),
+        db_session=db_session,
     )
 
     db_connector = index_attempt.connector

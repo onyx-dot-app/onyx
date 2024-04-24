@@ -21,21 +21,50 @@ import {
   HEADER_PADDING,
   NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA,
 } from "@/lib/constants";
-
-interface ChatSidebarProps {
-  existingChats: ChatSession[];
-  currentChatSession: ChatSession | null | undefined;
-  user: User | null;
-}
+import { ChatTab } from "./ChatTab";
+import { AssistantsTab } from "./AssistantsTab";
+import { Persona } from "@/app/admin/assistants/interfaces";
+import Cookies from "js-cookie";
+import { SIDEBAR_TAB_COOKIE, Tabs } from "./constants";
 
 export const ChatSidebar = ({
   existingChats,
   currentChatSession,
+  personas,
+  onPersonaChange,
   user,
-}: ChatSidebarProps) => {
+  defaultTab,
+}: {
+  existingChats: ChatSession[];
+  currentChatSession: ChatSession | null | undefined;
+  personas: Persona[];
+  onPersonaChange: (persona: Persona | null) => void;
+  user: User | null;
+  defaultTab?: Tabs;
+}) => {
   const router = useRouter();
 
-  const groupedChatSessions = groupSessionsByDateRange(existingChats);
+  const [openTab, _setOpenTab] = useState(defaultTab || Tabs.CHATS);
+  const setOpenTab = (tab: Tabs) => {
+    Cookies.set(SIDEBAR_TAB_COOKIE, tab);
+    _setOpenTab(tab);
+  };
+
+  function TabOption({ tab }: { tab: Tabs }) {
+    return (
+      <div
+        className={
+          "font-bold p-1 rounded-lg hover:bg-hover cursor-pointer " +
+          (openTab === tab ? "bg-hover" : "")
+        }
+        onClick={() => {
+          setOpenTab(tab);
+        }}
+      >
+        {tab}
+      </div>
+    );
+  }
 
   const [userInfoVisible, setUserInfoVisible] = useState(false);
   const userInfoRef = useRef<HTMLDivElement>(null);
@@ -78,8 +107,9 @@ export const ChatSidebar = ({
   return (
     <div
       className={`
+        flex-none
         w-64
-        2xl:w-72
+        3xl:w-72
         ${HEADER_PADDING}
         border-r 
         border-border 
@@ -89,48 +119,52 @@ export const ChatSidebar = ({
         transition-transform`}
       id="chat-sidebar"
     >
-      <Link
-        href={
-          "/chat" +
-          (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA && currentChatSession
-            ? `?personaId=${currentChatSession.persona_id}`
-            : "")
-        }
-        className="mx-3 mt-5"
-      >
-        <BasicClickable fullWidth>
-          <div className="flex text-sm">
-            <FiPlusSquare className="my-auto mr-2" /> New Chat
-          </div>
-        </BasicClickable>
-      </Link>
-
-      <div className="mt-1 pb-1 mb-1 ml-3 overflow-y-auto h-full">
-        {Object.entries(groupedChatSessions).map(
-          ([dateRange, chatSessions]) => {
-            if (chatSessions.length > 0) {
-              return (
-                <div key={dateRange}>
-                  <div className="text-xs text-subtle flex pb-0.5 mb-1.5 mt-5 font-bold">
-                    {dateRange}
-                  </div>
-                  {chatSessions.map((chat) => {
-                    const isSelected = currentChatId === chat.id;
-                    return (
-                      <div key={`${chat.id}-${chat.name}`} className="mr-3">
-                        <ChatSessionDisplay
-                          chatSession={chat}
-                          isSelected={isSelected}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            }
-          }
-        )}
+      <div className="flex w-full mx-4 mt-4 text-sm gap-x-4 pb-2 border-b border-border">
+        <TabOption tab={Tabs.CHATS} />
+        <TabOption tab={Tabs.ASSISTANTS} />
       </div>
+
+      {openTab == Tabs.CHATS && (
+        <>
+          <Link
+            href={
+              "/chat" +
+              (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA &&
+              currentChatSession
+                ? `?assistantId=${currentChatSession.persona_id}`
+                : "")
+            }
+            className="mx-3 mt-5"
+          >
+            <BasicClickable fullWidth>
+              <div className="flex text-sm">
+                <FiPlusSquare className="my-auto mr-2" /> New Chat
+              </div>
+            </BasicClickable>
+          </Link>
+          <ChatTab
+            existingChats={existingChats}
+            currentChatId={currentChatId}
+          />
+        </>
+      )}
+
+      {openTab == Tabs.ASSISTANTS && (
+        <>
+          <Link href="/assistants/new" className="mx-3 mt-5">
+            <BasicClickable fullWidth>
+              <div className="flex text-sm">
+                <FiPlusSquare className="my-auto mr-2" /> New Assistant
+              </div>
+            </BasicClickable>
+          </Link>
+          <AssistantsTab
+            personas={personas}
+            onPersonaChange={onPersonaChange}
+            user={user}
+          />
+        </>
+      )}
 
       <div
         className="mt-auto py-2 border-t border-border px-3"

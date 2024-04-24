@@ -14,7 +14,7 @@ import {
 } from "@/lib/types";
 import { ChatSession } from "./interfaces";
 import { unstable_noStore as noStore } from "next/cache";
-import { Persona } from "../admin/personas/interfaces";
+import { Persona } from "../admin/assistants/interfaces";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import {
   WelcomeModal,
@@ -23,12 +23,12 @@ import {
 import { ApiKeyModal } from "@/components/openai/ApiKeyModal";
 import { cookies } from "next/headers";
 import { DOCUMENT_SIDEBAR_WIDTH_COOKIE_NAME } from "@/components/resizable/contants";
-import { personaComparator } from "../admin/personas/lib";
+import { personaComparator } from "../admin/assistants/lib";
 import { ChatLayout } from "./ChatPage";
 import { FullEmbeddingModelResponse } from "../admin/models/embedding/embeddingModels";
 import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
-import { getSettingsSS } from "@/lib/settings";
 import { Settings } from "../admin/settings/interfaces";
+import { SIDEBAR_TAB_COOKIE, Tabs } from "./sessionSidebar/constants";
 
 export default async function Page({
   searchParams,
@@ -45,7 +45,6 @@ export default async function Page({
     fetchSS("/persona?include_default=true"),
     fetchSS("/chat/get-user-chat-sessions"),
     fetchSS("/query/valid-tags"),
-    getSettingsSS(),
     fetchSS("/persona/default-model"),
   ];
 
@@ -59,7 +58,7 @@ export default async function Page({
     | FullEmbeddingModelResponse
     | Settings
     | null
-  )[] = [null, null, null, null, null, null, null, null, null, null];
+  )[] = [null, null, null, null, null, null, null, null, null];
   try {
     results = await Promise.all(tasks);
   } catch (e) {
@@ -72,8 +71,7 @@ export default async function Page({
   const personasResponse = results[4] as Response | null;
   const chatSessionsResponse = results[5] as Response | null;
   const tagsResponse = results[6] as Response | null;
-  const settings = results[7] as Settings | null;
-  const defaultModelResponse = results[8] as Response | null;
+  const defaultModelResponse = results[7] as Response | null;
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
@@ -82,10 +80,6 @@ export default async function Page({
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
     return redirect("/auth/waiting-on-verification");
-  }
-
-  if (settings && !settings.chat_page_enabled) {
-    return redirect("/search");
   }
 
   let ccPairs: CCPairBasicInfo[] = [];
@@ -146,7 +140,7 @@ export default async function Page({
     console.log(`Failed to fetch tags - ${tagsResponse?.status}`);
   }
 
-  const defaultPersonaIdRaw = searchParams["personaId"];
+  const defaultPersonaIdRaw = searchParams["assistantId"];
   const defaultPersonaId = defaultPersonaIdRaw
     ? parseInt(defaultPersonaIdRaw)
     : undefined;
@@ -157,6 +151,10 @@ export default async function Page({
   const finalDocumentSidebarInitialWidth = documentSidebarCookieInitialWidth
     ? parseInt(documentSidebarCookieInitialWidth.value)
     : undefined;
+
+  const defaultSidebarTab = cookies().get(SIDEBAR_TAB_COOKIE)?.value as
+    | Tabs
+    | undefined;
 
   const hasAnyConnectors = ccPairs.length > 0;
   const shouldShowWelcomeModal =
@@ -190,7 +188,6 @@ export default async function Page({
 
       <ChatLayout
         user={user}
-        settings={settings}
         chatSessions={chatSessions}
         availableSources={availableSources}
         availableDocumentSets={documentSets}
@@ -198,6 +195,7 @@ export default async function Page({
         availableTags={tags}
         defaultSelectedPersonaId={defaultPersonaId}
         documentSidebarInitialWidth={finalDocumentSidebarInitialWidth}
+        defaultSidebarTab={defaultSidebarTab}
         defaultModel={defaultModel}
       />
     </>

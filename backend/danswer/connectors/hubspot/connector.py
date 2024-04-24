@@ -94,6 +94,8 @@ class HubSpotConnector(LoadConnector, PollConnector):
                         note = api_client.crm.objects.notes.basic_api.get_by_id(
                             note_id=note.id, properties=["content", "hs_body_preview"]
                         )
+                        if note.properties["hs_body_preview"] is None:
+                            continue
                         associated_notes.append(note.properties["hs_body_preview"])
 
             associated_emails_str = " ,".join(associated_emails)

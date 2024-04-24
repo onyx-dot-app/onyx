@@ -1,5 +1,11 @@
 FROM node:20-alpine AS base
 
+LABEL com.danswer.maintainer="founders@danswer.ai"
+LABEL com.danswer.description="This image is for the frontend/webserver of Danswer. It is MIT \
+Licensed and free for all to use. You can find it at \
+https://hub.docker.com/r/danswer/danswer-web-server. For more details, visit \
+https://github.com/danswer-ai/danswer."
+
 # Default DANSWER_VERSION, typically overriden during builds by GitHub Actions.
 ARG DANSWER_VERSION=0.3-dev
 ENV DANSWER_VERSION=${DANSWER_VERSION}

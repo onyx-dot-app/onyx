@@ -1,5 +1,10 @@
 FROM python:3.11.7-slim-bookworm
 
+LABEL com.danswer.maintainer="founders@danswer.ai"
+LABEL com.danswer.description="This image is for the backend of Danswer. It is MIT Licensed and \
+free for all to use. You can find it at https://hub.docker.com/r/danswer/danswer-backend. For \
+more details, visit https://github.com/danswer-ai/danswer."
+
 # Default DANSWER_VERSION, typically overriden during builds by GitHub Actions.
 ARG DANSWER_VERSION=0.3-dev
 ENV DANSWER_VERSION=${DANSWER_VERSION}
@@ -36,6 +41,15 @@ RUN apt-get remove -y --allow-remove-essential perl-base xserver-common xvfb cma
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* && \
     rm /usr/local/lib/python3.11/site-packages/tornado/test/test.key
+
+# Pre-downloading models for setups with limited egress
+RUN python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('intfloat/e5-base-v2')"
+
+# Pre-downloading NLTK for setups with limited egress
+RUN python -c "import nltk; \
+nltk.download('stopwords', quiet=True); \
+nltk.download('wordnet', quiet=True); \
+nltk.download('punkt', quiet=True);"
 
 # Set up application files
 WORKDIR /app

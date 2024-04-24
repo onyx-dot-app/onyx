@@ -1,5 +1,4 @@
 import secrets
-from typing import cast
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -25,7 +24,6 @@ from danswer.indexing.embedder import DefaultIndexingEmbedder
 from danswer.indexing.indexing_pipeline import build_indexing_pipeline
 from danswer.server.danswer_api.models import IngestionDocument
 from danswer.server.danswer_api.models import IngestionResult
-from danswer.server.models import ApiKey
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -67,26 +65,6 @@ def api_key_dep(authorization: str = Header(...)) -> str:
     if token != saved_key or not saved_key:
         raise HTTPException(status_code=401, detail="Invalid API key")
     return token
-
-
-# Provides a way to recover if the api key is deleted for some reason
-# Can also just restart the server to regenerate a new one
-def api_key_dep_if_exist(authorization: str | None = Header(None)) -> str | None:
-    token = authorization.removeprefix("Bearer ").strip() if authorization else None
-    saved_key = get_danswer_api_key(dont_regenerate=True)
-    if not saved_key:
-        return None
-
-    if token != saved_key:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-
-    return token
-
-
-@router.post("/regenerate-key")
-def regenerate_key(_: str | None = Depends(api_key_dep_if_exist)) -> ApiKey:
-    delete_danswer_api_key()
-    return ApiKey(api_key=cast(str, get_danswer_api_key()))
 
 
 @router.post("/doc-ingestion")
@@ -165,6 +143,7 @@ def document_ingestion(
         embedder=index_embedding_model,
         document_index=curr_doc_index,
         ignore_time_skip=True,
+        db_session=db_session,
     )
 
     new_doc, chunks = indexing_pipeline(
@@ -200,6 +179,7 @@ def document_ingestion(
             embedder=new_index_embedding_model,
             document_index=sec_doc_index,
             ignore_time_skip=True,
+            db_session=db_session,
         )
 
         sec_ind_pipeline(

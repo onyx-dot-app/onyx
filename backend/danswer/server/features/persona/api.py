@@ -28,35 +28,6 @@ admin_router = APIRouter(prefix="/admin/persona")
 basic_router = APIRouter(prefix="/persona")
 
 
-@admin_router.post("")
-def create_persona(
-    create_persona_request: CreatePersonaRequest,
-    user: User | None = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),
-) -> PersonaSnapshot:
-    return create_update_persona(
-        persona_id=None,
-        create_persona_request=create_persona_request,
-        user=user,
-        db_session=db_session,
-    )
-
-
-@admin_router.patch("/{persona_id}")
-def update_persona(
-    persona_id: int,
-    update_persona_request: CreatePersonaRequest,
-    user: User | None = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),
-) -> PersonaSnapshot:
-    return create_update_persona(
-        persona_id=persona_id,
-        create_persona_request=update_persona_request,
-        user=user,
-        db_session=db_session,
-    )
-
-
 class IsVisibleRequest(BaseModel):
     is_visible: bool
 
@@ -92,19 +63,6 @@ def patch_persona_display_priority(
     )
 
 
-@admin_router.delete("/{persona_id}")
-def delete_persona(
-    persona_id: int,
-    user: User | None = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),
-) -> None:
-    mark_persona_as_deleted(
-        persona_id=persona_id,
-        user_id=user.id if user is not None else None,
-        db_session=db_session,
-    )
-
-
 @admin_router.get("")
 def list_personas_admin(
     _: User | None = Depends(current_admin_user),
@@ -122,6 +80,48 @@ def list_personas_admin(
 
 
 """Endpoints for all"""
+
+
+@basic_router.post("")
+def create_persona(
+    create_persona_request: CreatePersonaRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> PersonaSnapshot:
+    return create_update_persona(
+        persona_id=None,
+        create_persona_request=create_persona_request,
+        user=user,
+        db_session=db_session,
+    )
+
+
+@basic_router.patch("/{persona_id}")
+def update_persona(
+    persona_id: int,
+    update_persona_request: CreatePersonaRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> PersonaSnapshot:
+    return create_update_persona(
+        persona_id=persona_id,
+        create_persona_request=update_persona_request,
+        user=user,
+        db_session=db_session,
+    )
+
+
+@basic_router.delete("/{persona_id}")
+def delete_persona(
+    persona_id: int,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    mark_persona_as_deleted(
+        persona_id=persona_id,
+        user=user,
+        db_session=db_session,
+    )
 
 
 @basic_router.get("")
@@ -154,7 +154,7 @@ def get_persona(
     return PersonaSnapshot.from_model(
         get_persona_by_id(
             persona_id=persona_id,
-            user_id=user.id if user is not None else None,
+            user=user,
             db_session=db_session,
         )
     )
@@ -200,9 +200,9 @@ GPT_3_5_TURBO_MODEL_VERSIONS = [
 ]
 
 
-@admin_router.get("/utils/list-available-models")
+@basic_router.get("/utils/list-available-models")
 def list_available_model_versions(
-    _: User | None = Depends(current_admin_user),
+    _: User | None = Depends(current_user),
 ) -> list[str]:
     # currently only support selecting different models for OpenAI
     if GEN_AI_MODEL_PROVIDER != "openai":
@@ -211,9 +211,9 @@ def list_available_model_versions(
     return GPT_4_MODEL_VERSIONS + GPT_3_5_TURBO_MODEL_VERSIONS
 
 
-@admin_router.get("/utils/default-model")
+@basic_router.get("/utils/default-model")
 def get_default_model(
-    _: User | None = Depends(current_admin_user),
+    _: User | None = Depends(current_user),
 ) -> str:
     # currently only support selecting different models for OpenAI
     if GEN_AI_MODEL_PROVIDER != "openai":

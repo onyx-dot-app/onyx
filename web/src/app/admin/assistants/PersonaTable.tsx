@@ -12,6 +12,18 @@ import { deletePersona, personaComparator } from "./lib";
 import { FiEdit } from "react-icons/fi";
 import { TrashIcon } from "@/components/icons/icons";
 
+function PersonaTypeDisplay({ persona }: { persona: Persona }) {
+  if (persona.default_persona) {
+    return <Text>Built-In</Text>;
+  }
+
+  if (persona.is_public) {
+    return <Text>Global</Text>;
+  }
+
+  return <Text>Personal {persona.owner && <>({persona.owner.email})</>}</Text>;
+}
+
 export function PersonasTable({ personas }: { personas: Persona[] }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
@@ -64,13 +76,13 @@ export function PersonasTable({ personas }: { personas: Persona[] }) {
       {popup}
 
       <Text className="my-2">
-        Personas will be displayed as options on the Chat / Search interfaces in
-        the order they are displayed below. Personas marked as hidden will not
-        be displayed.
+        Assistants will be displayed as options on the Chat / Search interfaces
+        in the order they are displayed below. Assistants marked as hidden will
+        not be displayed.
       </Text>
 
       <DraggableTable
-        headers={["Name", "Description", "Built-In", "Is Visible", "Delete"]}
+        headers={["Name", "Description", "Type", "Is Visible", "Delete"]}
         rows={finalPersonaValues.map((persona) => {
           return {
             id: persona.id.toString(),
@@ -81,7 +93,7 @@ export function PersonasTable({ personas }: { personas: Persona[] }) {
                     className="mr-1 my-auto cursor-pointer"
                     onClick={() =>
                       router.push(
-                        `/admin/personas/${persona.id}?u=${Date.now()}`
+                        `/admin/assistants/${persona.id}?u=${Date.now()}`
                       )
                     }
                   />
@@ -96,7 +108,7 @@ export function PersonasTable({ personas }: { personas: Persona[] }) {
               >
                 {persona.description}
               </p>,
-              persona.default_persona ? "Yes" : "No",
+              <PersonaTypeDisplay key={persona.id} persona={persona} />,
               <div
                 key="is_visible"
                 onClick={async () => {
@@ -142,7 +154,7 @@ export function PersonasTable({ personas }: { personas: Persona[] }) {
                       onClick={async () => {
                         const response = await deletePersona(persona.id);
                         if (response.ok) {
-                          router.push(`/admin/personas?u=${Date.now()}`);
+                          router.refresh();
                         } else {
                           alert(
                             `Failed to delete persona - ${await response.text()}`

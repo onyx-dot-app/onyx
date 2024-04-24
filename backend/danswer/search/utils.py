@@ -1,8 +1,13 @@
-from danswer.indexing.models import InferenceChunk
+from collections.abc import Sequence
+
+from danswer.search.models import InferenceChunk
+from danswer.search.models import InferenceSection
 from danswer.search.models import SearchDoc
 
 
-def chunks_to_search_docs(chunks: list[InferenceChunk] | None) -> list[SearchDoc]:
+def chunks_or_sections_to_search_docs(
+    chunks: Sequence[InferenceChunk | InferenceSection] | None,
+) -> list[SearchDoc]:
     search_docs = (
         [
             SearchDoc(

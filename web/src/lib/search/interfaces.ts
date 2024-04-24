@@ -1,6 +1,6 @@
 import { DateRangePickerValue } from "@tremor/react";
 import { Tag, ValidSources } from "../types";
-import { Persona } from "@/app/admin/personas/interfaces";
+import { Persona } from "@/app/admin/assistants/interfaces";
 
 export const FlowType = {
   SEARCH: "search",

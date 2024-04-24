@@ -6,7 +6,6 @@ from danswer.db.models import Prompt
 class CreatePromptRequest(BaseModel):
     name: str
     description: str
-    shared: bool
     system_prompt: str
     task_prompt: str
     include_citations: bool = False
@@ -17,7 +16,6 @@ class CreatePromptRequest(BaseModel):
 class PromptSnapshot(BaseModel):
     id: int
     name: str
-    shared: bool
     description: str
     system_prompt: str
     task_prompt: str
@@ -34,7 +32,6 @@ class PromptSnapshot(BaseModel):
         return PromptSnapshot(
             id=prompt.id,
             name=prompt.name,
-            shared=prompt.user_id is None,
             description=prompt.description,
             system_prompt=prompt.system_prompt,
             task_prompt=prompt.task_prompt,

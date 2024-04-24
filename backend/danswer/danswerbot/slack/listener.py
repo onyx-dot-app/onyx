@@ -3,15 +3,12 @@ from threading import Event
 from typing import Any
 from typing import cast
 
-import nltk  # type: ignore
 from slack_sdk import WebClient
 from slack_sdk.socket_mode import SocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from sqlalchemy.orm import Session
 
-from danswer.configs.app_configs import MODEL_SERVER_HOST
-from danswer.configs.app_configs import MODEL_SERVER_PORT
 from danswer.configs.constants import MessageType
 from danswer.configs.danswerbot_configs import DANSWER_BOT_RESPOND_EVERY_CHANNEL
 from danswer.configs.danswerbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
@@ -44,9 +41,12 @@ from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.dynamic_configs.interface import ConfigNotFoundError
 from danswer.one_shot_answer.models import ThreadMessage
+from danswer.search.retrieval.search_runner import download_nltk_data
 from danswer.search.search_nlp_models import warm_up_encoders
 from danswer.server.manage.models import SlackBotTokens
 from danswer.utils.logger import setup_logger
+from shared_configs.configs import MODEL_SERVER_HOST
+from shared_configs.configs import MODEL_SERVER_PORT
 
 logger = setup_logger()
 
@@ -375,8 +375,7 @@ if __name__ == "__main__":
     socket_client: SocketModeClient | None = None
 
     logger.info("Verifying query preprocessing (NLTK) data is downloaded")
-    nltk.download("stopwords", quiet=True)
-    nltk.download("punkt", quiet=True)
+    download_nltk_data()
 
     while True:
         try:

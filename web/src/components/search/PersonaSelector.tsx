@@ -1,4 +1,4 @@
-import { Persona } from "@/app/admin/personas/interfaces";
+import { Persona } from "@/app/admin/assistants/interfaces";
 import { CustomDropdown, DefaultDropdownElement } from "../Dropdown";
 import { FiChevronDown } from "react-icons/fi";
 

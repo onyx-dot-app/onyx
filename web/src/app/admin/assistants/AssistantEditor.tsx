@@ -1,7 +1,7 @@
 "use client";
 
-import { DocumentSet, UserGroup } from "@/lib/types";
-import { Button, Divider, Text } from "@tremor/react";
+import { CCPairBasicInfo, DocumentSet, User, UserGroup } from "@/lib/types";
+import { Button, Divider, Italic, Text } from "@tremor/react";
 import {
   ArrayHelpers,
   ErrorMessage,
@@ -29,6 +29,8 @@ import { EE_ENABLED } from "@/lib/constants";
 import { useUserGroups } from "@/lib/hooks";
 import { Bubble } from "@/components/Bubble";
 import { GroupsIcon } from "@/components/icons/icons";
+import { SuccessfulPersonaUpdateRedirectType } from "./enums";
+import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 
 function Label({ children }: { children: string | JSX.Element }) {
   return (
@@ -40,16 +42,24 @@ function SubLabel({ children }: { children: string | JSX.Element }) {
   return <div className="text-sm text-subtle mb-2">{children}</div>;
 }
 
-export function PersonaEditor({
+export function AssistantEditor({
   existingPersona,
+  ccPairs,
   documentSets,
   llmOverrideOptions,
   defaultLLM,
+  user,
+  defaultPublic,
+  redirectType,
 }: {
   existingPersona?: Persona | null;
+  ccPairs: CCPairBasicInfo[];
   documentSets: DocumentSet[];
   llmOverrideOptions: string[];
   defaultLLM: string;
+  user: User | null;
+  defaultPublic: boolean;
+  redirectType: SuccessfulPersonaUpdateRedirectType;
 }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
@@ -99,7 +109,7 @@ export function PersonaEditor({
           system_prompt: existingPrompt?.system_prompt ?? "",
           task_prompt: existingPrompt?.task_prompt ?? "",
           disable_retrieval: (existingPersona?.num_chunks ?? 10) === 0,
-          is_public: existingPersona?.is_public ?? true,
+          is_public: existingPersona?.is_public ?? defaultPublic,
           document_set_ids:
             existingPersona?.document_sets?.map(
               (documentSet) => documentSet.id
@@ -116,9 +126,9 @@ export function PersonaEditor({
         }}
         validationSchema={Yup.object()
           .shape({
-            name: Yup.string().required("Must give the Persona a name!"),
+            name: Yup.string().required("Must give the Assistant a name!"),
             description: Yup.string().required(
-              "Must give the Persona a description!"
+              "Must give the Assistant a description!"
             ),
             system_prompt: Yup.string(),
             task_prompt: Yup.string(),
@@ -187,12 +197,14 @@ export function PersonaEditor({
               existingPromptId: existingPrompt?.id,
               ...values,
               num_chunks: numChunks,
+              users: user ? [user.id] : undefined,
               groups,
             });
           } else {
             [promptResponse, personaResponse] = await createPersona({
               ...values,
               num_chunks: numChunks,
+              users: user ? [user.id] : undefined,
               groups,
             });
           }
@@ -201,51 +213,53 @@ export function PersonaEditor({
           if (!promptResponse.ok) {
             error = await promptResponse.text();
           }
-          if (personaResponse && !personaResponse.ok) {
+          if (!personaResponse) {
+            error = "Failed to create Assistant - no response received";
+          } else if (!personaResponse.ok) {
             error = await personaResponse.text();
           }
 
-          if (error) {
+          if (error || !personaResponse) {
             setPopup({
               type: "error",
-              message: `Failed to create Persona - ${error}`,
+              message: `Failed to create Assistant - ${error}`,
             });
             formikHelpers.setSubmitting(false);
           } else {
-            router.push(`/admin/personas?u=${Date.now()}`);
+            router.push(
+              redirectType === SuccessfulPersonaUpdateRedirectType.ADMIN
+                ? `/admin/assistants?u=${Date.now()}`
+                : `/chat?assistantId=${
+                    ((await personaResponse.json()) as Persona).id
+                  }`
+            );
           }
         }}
       >
         {({ isSubmitting, values, setFieldValue }) => (
           <Form>
             <div className="pb-6">
-              <HidableSection sectionTitle="Who am I?">
+              <HidableSection sectionTitle="Basics">
                 <>
                   <TextFormField
                     name="name"
                     label="Name"
                     disabled={isUpdate}
-                    subtext="Users will be able to select this Persona based on this name."
+                    subtext="Users will be able to select this Assistant based on this name."
                   />
 
                   <TextFormField
                     name="description"
                     label="Description"
-                    subtext="Provide a short descriptions which gives users a hint as to what they should use this Persona for."
+                    subtext="Provide a short descriptions which gives users a hint as to what they should use this Assistant for."
                   />
-                </>
-              </HidableSection>
 
-              <Divider />
-
-              <HidableSection sectionTitle="Customize my response style">
-                <>
                   <TextFormField
                     name="system_prompt"
                     label="System Prompt"
                     isTextArea={true}
                     subtext={
-                      'Give general info about what the Persona is about. For example, "You are an assistant for On-Call engineers. Your goal is to read the provided context documents and give recommendations as to how to resolve the issue."'
+                      'Give general info about what the Assistant is about. For example, "You are an assistant for On-Call engineers. Your goal is to read the provided context documents and give recommendations as to how to resolve the issue."'
                     }
                     onChange={(e) => {
                       setFieldValue("system_prompt", e.target.value);
@@ -260,11 +274,11 @@ export function PersonaEditor({
 
                   <TextFormField
                     name="task_prompt"
-                    label="Task Prompt"
+                    label="Task Prompt (Optional)"
                     isTextArea={true}
-                    subtext={
-                      'Give specific instructions as to what to do with the user query. For example, "Find any relevant sections from the provided documents that can help the user resolve their issue and explain how they are relevant."'
-                    }
+                    subtext={`Give specific instructions as to what to do with the user query. 
+                      For example, "Find any relevant sections from the provided documents that can 
+                      help the user resolve their issue and explain how they are relevant."`}
                     onChange={(e) => {
                       setFieldValue("task_prompt", e.target.value);
                       triggerFinalPromptUpdate(
@@ -274,35 +288,6 @@ export function PersonaEditor({
                       );
                     }}
                     error={finalPromptError}
-                  />
-
-                  {!values.disable_retrieval && (
-                    <BooleanFormField
-                      name="include_citations"
-                      label="Include Citations"
-                      subtext={`
-                        If set, the response will include bracket citations ([1], [2], etc.) 
-                        for each document used by the LLM to help inform the response. This is 
-                        the same technique used by the default Personas. In general, we recommend 
-                        to leave this enabled in order to increase trust in the LLM answer.`}
-                    />
-                  )}
-
-                  <BooleanFormField
-                    name="disable_retrieval"
-                    label="Disable Retrieval"
-                    subtext={`
-                      If set, the Persona will not fetch any context documents to aid in the response. 
-                      Instead, it will only use the supplied system and task prompts plus the user 
-                      query in order to generate a response`}
-                    onChange={(e) => {
-                      setFieldValue("disable_retrieval", e.target.checked);
-                      triggerFinalPromptUpdate(
-                        values.system_prompt,
-                        values.task_prompt,
-                        e.target.checked
-                      );
-                    }}
                   />
 
                   <Label>Final Prompt</Label>
@@ -319,73 +304,100 @@ export function PersonaEditor({
 
               <Divider />
 
-              {!values.disable_retrieval && (
+              {ccPairs.length > 0 && (
                 <>
-                  <HidableSection sectionTitle="What data should I have access to?">
+                  <HidableSection
+                    sectionTitle="[Advanced] Knowledge Base"
+                    defaultHidden
+                  >
                     <>
-                      <FieldArray
-                        name="document_set_ids"
-                        render={(arrayHelpers: ArrayHelpers) => (
+                      <BooleanFormField
+                        name="disable_retrieval"
+                        label="Disable Retrieval"
+                        subtext={`
+                          If set, the Assistant will not fetch any context documents to aid in the response. 
+                          Instead, it will only use the supplied system and task prompts plus the user 
+                          query in order to generate a response`}
+                        onChange={(e) => {
+                          setFieldValue("disable_retrieval", e.target.checked);
+                          triggerFinalPromptUpdate(
+                            values.system_prompt,
+                            values.task_prompt,
+                            e.target.checked
+                          );
+                        }}
+                      />
+
+                      {!values.disable_retrieval && (
+                        <>
                           <div>
-                            <div>
-                              <SubLabel>
-                                <>
-                                  Select which{" "}
+                            <SubLabel>
+                              <>
+                                Select which{" "}
+                                {!user || user.role === "admin" ? (
                                   <Link
                                     href="/admin/documents/sets"
                                     className="text-blue-500"
                                     target="_blank"
                                   >
                                     Document Sets
-                                  </Link>{" "}
-                                  that this Persona should search through. If
-                                  none are specified, the Persona will search
-                                  through all available documents in order to
-                                  try and response to queries.
-                                </>
-                              </SubLabel>
-                            </div>
-                            <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
-                              {documentSets.map((documentSet) => {
-                                const ind = values.document_set_ids.indexOf(
-                                  documentSet.id
-                                );
-                                let isSelected = ind !== -1;
-                                return (
-                                  <div
-                                    key={documentSet.id}
-                                    className={
-                                      `
-                                      px-3 
-                                      py-1
-                                      rounded-lg 
-                                      border
-                                      border-border
-                                      w-fit 
-                                      flex 
-                                      cursor-pointer ` +
-                                      (isSelected
-                                        ? " bg-hover"
-                                        : " bg-background hover:bg-hover-light")
-                                    }
-                                    onClick={() => {
-                                      if (isSelected) {
-                                        arrayHelpers.remove(ind);
-                                      } else {
-                                        arrayHelpers.push(documentSet.id);
-                                      }
-                                    }}
-                                  >
-                                    <div className="my-auto">
-                                      {documentSet.name}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                  </Link>
+                                ) : (
+                                  "Document Sets"
+                                )}{" "}
+                                that this Assistant should search through. If
+                                none are specified, the Assistant will search
+                                through all available documents in order to try
+                                and respond to queries.
+                              </>
+                            </SubLabel>
                           </div>
-                        )}
-                      />
+
+                          {documentSets.length > 0 ? (
+                            <FieldArray
+                              name="document_set_ids"
+                              render={(arrayHelpers: ArrayHelpers) => (
+                                <div>
+                                  <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
+                                    {documentSets.map((documentSet) => {
+                                      const ind =
+                                        values.document_set_ids.indexOf(
+                                          documentSet.id
+                                        );
+                                      let isSelected = ind !== -1;
+                                      return (
+                                        <DocumentSetSelectable
+                                          key={documentSet.id}
+                                          documentSet={documentSet}
+                                          isSelected={isSelected}
+                                          onSelect={() => {
+                                            if (isSelected) {
+                                              arrayHelpers.remove(ind);
+                                            } else {
+                                              arrayHelpers.push(documentSet.id);
+                                            }
+                                          }}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            />
+                          ) : (
+                            <Italic className="text-sm">
+                              No Document Sets available.{" "}
+                              {user?.role !== "admin" && (
+                                <>
+                                  If this functionality would be useful, reach
+                                  out to the administrators of Danswer for
+                                  assistance.
+                                </>
+                              )}
+                            </Italic>
+                          )}
+                        </>
+                      )}
                     </>
                   </HidableSection>
 
@@ -393,73 +405,38 @@ export function PersonaEditor({
                 </>
               )}
 
-              {EE_ENABLED && userGroups && (
+              {!values.disable_retrieval && (
                 <>
-                  <HidableSection sectionTitle="Which groups should have access to this Persona?">
+                  <HidableSection
+                    sectionTitle="[Advanced] Response Style"
+                    defaultHidden
+                  >
                     <>
                       <BooleanFormField
-                        name="is_public"
-                        label="Is Public?"
-                        subtext="If set, this Persona will be available to all users. If not, only the specified User Groups will be able to access it."
+                        name="include_citations"
+                        label="Include Citations"
+                        subtext={`
+                        If set, the response will include bracket citations ([1], [2], etc.) 
+                        for each document used by the LLM to help inform the response. This is 
+                        the same technique used by the default Assistants. In general, we recommend 
+                        to leave this enabled in order to increase trust in the LLM answer.`}
                       />
-
-                      {userGroups &&
-                        userGroups.length > 0 &&
-                        !values.is_public && (
-                          <div>
-                            <Text>
-                              Select which User Groups should have access to
-                              this Persona.
-                            </Text>
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {userGroups.map((userGroup) => {
-                                const isSelected = values.groups.includes(
-                                  userGroup.id
-                                );
-                                return (
-                                  <Bubble
-                                    key={userGroup.id}
-                                    isSelected={isSelected}
-                                    onClick={() => {
-                                      if (isSelected) {
-                                        setFieldValue(
-                                          "groups",
-                                          values.groups.filter(
-                                            (id) => id !== userGroup.id
-                                          )
-                                        );
-                                      } else {
-                                        setFieldValue("groups", [
-                                          ...values.groups,
-                                          userGroup.id,
-                                        ]);
-                                      }
-                                    }}
-                                  >
-                                    <div className="flex">
-                                      <GroupsIcon />
-                                      <div className="ml-1">
-                                        {userGroup.name}
-                                      </div>
-                                    </div>
-                                  </Bubble>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
                     </>
                   </HidableSection>
+
                   <Divider />
                 </>
               )}
 
               {llmOverrideOptions.length > 0 && defaultLLM && (
                 <>
-                  <HidableSection sectionTitle="[Advanced] Model Selection">
+                  <HidableSection
+                    sectionTitle="[Advanced] Model Selection"
+                    defaultHidden
+                  >
                     <>
                       <Text>
-                        Pick which LLM to use for this Persona. If left as
+                        Pick which LLM to use for this Assistant. If left as
                         Default, will use <b className="italic">{defaultLLM}</b>
                         .
                         <br />
@@ -496,7 +473,10 @@ export function PersonaEditor({
 
               {!values.disable_retrieval && (
                 <>
-                  <HidableSection sectionTitle="[Advanced] Retrieval Customization">
+                  <HidableSection
+                    sectionTitle="[Advanced] Retrieval Customization"
+                    defaultHidden
+                  >
                     <>
                       <TextFormField
                         name="num_chunks"
@@ -505,10 +485,7 @@ export function PersonaEditor({
                           <div>
                             How many chunks should we feed into the LLM when
                             generating the final response? Each chunk is ~400
-                            words long. If you are using gpt-3.5-turbo or other
-                            similar models, setting this to a value greater than
-                            5 will result in errors at query time due to the
-                            model&apos;s input length limit.
+                            words long.
                             <br />
                             <br />
                             If unspecified, will use 10 chunks.
@@ -537,14 +514,17 @@ export function PersonaEditor({
                 </>
               )}
 
-              <HidableSection sectionTitle="[Advanced] Starter Messages">
+              <HidableSection
+                sectionTitle="[Advanced] Starter Messages"
+                defaultHidden
+              >
                 <>
                   <div className="mb-4">
                     <SubLabel>
-                      Starter Messages help guide users to use this Persona.
+                      Starter Messages help guide users to use this Assistant.
                       They are shown to the user as clickable options when they
-                      select this Persona. When selected, the specified message
-                      is sent to the LLM as the initial user message.
+                      select this Assistant. When selected, the specified
+                      message is sent to the LLM as the initial user message.
                     </SubLabel>
                   </div>
 
@@ -685,6 +665,67 @@ export function PersonaEditor({
               </HidableSection>
 
               <Divider />
+
+              {EE_ENABLED && userGroups && (!user || user.role === "admin") && (
+                <>
+                  <HidableSection sectionTitle="Access">
+                    <>
+                      <BooleanFormField
+                        name="is_public"
+                        label="Is Public?"
+                        subtext="If set, this Assistant will be available to all users. If not, only the specified User Groups will be able to access it."
+                      />
+
+                      {userGroups &&
+                        userGroups.length > 0 &&
+                        !values.is_public && (
+                          <div>
+                            <Text>
+                              Select which User Groups should have access to
+                              this Assistant.
+                            </Text>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {userGroups.map((userGroup) => {
+                                const isSelected = values.groups.includes(
+                                  userGroup.id
+                                );
+                                return (
+                                  <Bubble
+                                    key={userGroup.id}
+                                    isSelected={isSelected}
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        setFieldValue(
+                                          "groups",
+                                          values.groups.filter(
+                                            (id) => id !== userGroup.id
+                                          )
+                                        );
+                                      } else {
+                                        setFieldValue("groups", [
+                                          ...values.groups,
+                                          userGroup.id,
+                                        ]);
+                                      }
+                                    }}
+                                  >
+                                    <div className="flex">
+                                      <GroupsIcon />
+                                      <div className="ml-1">
+                                        {userGroup.name}
+                                      </div>
+                                    </div>
+                                  </Bubble>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                    </>
+                  </HidableSection>
+                  <Divider />
+                </>
+              )}
 
               <div className="flex">
                 <Button

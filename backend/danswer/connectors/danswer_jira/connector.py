@@ -8,6 +8,7 @@ from jira import JIRA
 from jira.resources import Issue
 
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
+from danswer.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from danswer.connectors.interfaces import GenerateDocumentsOutput
@@ -68,6 +69,7 @@ def fetch_jira_issues_batch(
     jira_client: JIRA,
     batch_size: int = INDEX_BATCH_SIZE,
     comment_email_blacklist: tuple[str, ...] = (),
+    labels_to_skip: set[str] | None = None,
 ) -> tuple[list[Document], int]:
     doc_batch = []
 
@@ -80,6 +82,15 @@ def fetch_jira_issues_batch(
     for jira in batch:
         if type(jira) != Issue:
             logger.warning(f"Found Jira object not of type Issue {jira}")
+            continue
+
+        if labels_to_skip and any(
+            label in jira.fields.labels for label in labels_to_skip
+        ):
+            logger.info(
+                f"Skipping {jira.key} because it has a label to skip. Found "
+                f"labels: {jira.fields.labels}. Labels to skip: {labels_to_skip}."
+            )
             continue
 
         comments = _get_comment_strs(jira, comment_email_blacklist)
@@ -143,11 +154,17 @@ class JiraConnector(LoadConnector, PollConnector):
         jira_project_url: str,
         comment_email_blacklist: list[str] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
+        # if a ticket has one of the labels specified in this list, we will just
+        # skip it. This is generally used to avoid indexing extra sensitive
+        # tickets.
+        labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
     ) -> None:
         self.batch_size = batch_size
         self.jira_base, self.jira_project = extract_jira_project(jira_project_url)
         self.jira_client: JIRA | None = None
         self._comment_email_blacklist = comment_email_blacklist or []
+
+        self.labels_to_skip = set(labels_to_skip)
 
     @property
     def comment_email_blacklist(self) -> tuple:
@@ -182,6 +199,8 @@ class JiraConnector(LoadConnector, PollConnector):
                 start_index=start_ind,
                 jira_client=self.jira_client,
                 batch_size=self.batch_size,
+                comment_email_blacklist=self.comment_email_blacklist,
+                labels_to_skip=self.labels_to_skip,
             )
 
             if doc_batch:
@@ -218,6 +237,7 @@ class JiraConnector(LoadConnector, PollConnector):
                 jira_client=self.jira_client,
                 batch_size=self.batch_size,
                 comment_email_blacklist=self.comment_email_blacklist,
+                labels_to_skip=self.labels_to_skip,
             )
 
             if doc_batch:

@@ -3,7 +3,7 @@ import {
   SlackBotResponseType,
   SlackBotTokens,
 } from "@/lib/types";
-import { Persona } from "../personas/interfaces";
+import { Persona } from "../assistants/interfaces";
 
 interface SlackBotConfigCreationRequest {
   document_sets: number[];

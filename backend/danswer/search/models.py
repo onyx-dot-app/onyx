@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
+from pydantic import validator
 
 from danswer.configs.chat_configs import DISABLE_LLM_CHUNK_FILTER
 from danswer.configs.chat_configs import HYBRID_ALPHA
@@ -9,9 +10,10 @@ from danswer.configs.chat_configs import NUM_RERANKED_RESULTS
 from danswer.configs.chat_configs import NUM_RETURNED_HITS
 from danswer.configs.constants import DocumentSource
 from danswer.db.models import Persona
+from danswer.indexing.models import BaseChunk
 from danswer.search.enums import OptionalSearchSetting
 from danswer.search.enums import SearchType
-from shared_configs.nlp_model_configs import ENABLE_RERANKING_REAL_TIME_FLOW
+from shared_configs.configs import ENABLE_RERANKING_REAL_TIME_FLOW
 
 
 MAX_METRICS_CONTENT = (
@@ -42,7 +44,21 @@ class ChunkMetric(BaseModel):
     score: float
 
 
-class SearchRequest(BaseModel):
+class ChunkContext(BaseModel):
+    # Additional surrounding context options, if full doc, then chunks are deduped
+    # If surrounding context overlap, it is combined into one
+    chunks_above: int = 0
+    chunks_below: int = 0
+    full_doc: bool = False
+
+    @validator("chunks_above", "chunks_below", pre=True, each_item=False)
+    def check_non_negative(cls, value: int, field: Any) -> int:
+        if value < 0:
+            raise ValueError(f"{field.name} must be non-negative")
+        return value
+
+
+class SearchRequest(ChunkContext):
     """Input to the SearchPipeline."""
 
     query: str
@@ -66,7 +82,7 @@ class SearchRequest(BaseModel):
         arbitrary_types_allowed = True
 
 
-class SearchQuery(BaseModel):
+class SearchQuery(ChunkContext):
     query: str
     filters: IndexFilters
     recency_bias_multiplier: float
@@ -84,7 +100,7 @@ class SearchQuery(BaseModel):
         frozen = True
 
 
-class RetrievalDetails(BaseModel):
+class RetrievalDetails(ChunkContext):
     # Use LLM to determine whether to do a retrieval or only rely on existing history
     # If the Persona is configured to not run search (0 chunks), this is bypassed
     # If no Prompt is configured, the only search results are shown, this is bypassed
@@ -92,13 +108,70 @@ class RetrievalDetails(BaseModel):
     # Is this a real-time/streaming call or a question where Danswer can take more time?
     # Used to determine reranking flow
     real_time: bool = True
-    # The following have defaults in the Persona settings which can be overriden via
+    # The following have defaults in the Persona settings which can be overridden via
     # the query, if None, then use Persona settings
     filters: BaseFilters | None = None
     enable_auto_detect_filters: bool | None = None
     # if None, no offset / limit
     offset: int | None = None
     limit: int | None = None
+
+
+class InferenceChunk(BaseChunk):
+    document_id: str
+    source_type: DocumentSource
+    semantic_identifier: str
+    boost: int
+    recency_bias: float
+    score: float | None
+    hidden: bool
+    metadata: dict[str, str | list[str]]
+    # Matched sections in the chunk. Uses Vespa syntax e.g. <hi>TEXT</hi>
+    # to specify that a set of words should be highlighted. For example:
+    # ["<hi>the</hi> <hi>answer</hi> is 42", "he couldn't find an <hi>answer</hi>"]
+    match_highlights: list[str]
+    # when the doc was last updated
+    updated_at: datetime | None
+    primary_owners: list[str] | None = None
+    secondary_owners: list[str] | None = None
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self.document_id}__{self.chunk_id}"
+
+    def __repr__(self) -> str:
+        blurb_words = self.blurb.split()
+        short_blurb = ""
+        for word in blurb_words:
+            if not short_blurb:
+                short_blurb = word
+                continue
+            if len(short_blurb) > 25:
+                break
+            short_blurb += " " + word
+        return f"Inference Chunk: {self.document_id} - {short_blurb}..."
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, InferenceChunk):
+            return False
+        return (self.document_id, self.chunk_id) == (other.document_id, other.chunk_id)
+
+    def __hash__(self) -> int:
+        return hash((self.document_id, self.chunk_id))
+
+
+class InferenceSection(InferenceChunk):
+    """Section is a combination of chunks. A section could be a single chunk, several consecutive
+    chunks or the entire document"""
+
+    combined_content: str
+
+    @classmethod
+    def from_chunk(
+        cls, inf_chunk: InferenceChunk, content: str | None = None
+    ) -> "InferenceSection":
+        inf_chunk_data = inf_chunk.dict()
+        return cls(**inf_chunk_data, combined_content=content or inf_chunk.content)
 
 
 class SearchDoc(BaseModel):

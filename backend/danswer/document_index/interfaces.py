@@ -5,8 +5,8 @@ from typing import Any
 
 from danswer.access.models import DocumentAccess
 from danswer.indexing.models import DocMetadataAwareIndexChunk
-from danswer.indexing.models import InferenceChunk
 from danswer.search.models import IndexFilters
+from danswer.search.models import InferenceChunk
 
 
 @dataclass(frozen=True)
@@ -183,7 +183,8 @@ class IdRetrievalCapable(abc.ABC):
     def id_based_retrieval(
         self,
         document_id: str,
-        chunk_ind: int | None,
+        min_chunk_ind: int | None,
+        max_chunk_ind: int | None,
         filters: IndexFilters,
     ) -> list[InferenceChunk]:
         """
@@ -196,7 +197,8 @@ class IdRetrievalCapable(abc.ABC):
 
         Parameters:
         - document_id: document id for which to retrieve the chunk(s)
-        - chunk_ind: chunk index to return, if None, return all of the chunks in order
+        - min_chunk_ind: if None then fetch from the start of doc
+        - max_chunk_ind:
         - filters: standard filters object, in this case only the access filter is applied as a
                 permission check
 

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from danswer.db.chat import get_prompts_by_ids
 from danswer.db.chat import upsert_persona
 from danswer.db.document_set import get_document_sets_by_ids
+from danswer.db.models import Persona__User
 from danswer.db.models import User
 from danswer.server.features.persona.models import CreatePersonaRequest
 from danswer.server.features.persona.models import PersonaSnapshot
@@ -21,9 +22,19 @@ def make_persona_private(
     group_ids: list[int] | None,
     db_session: Session,
 ) -> None:
+    if user_ids is not None:
+        db_session.query(Persona__User).filter(
+            Persona__User.persona_id == persona_id
+        ).delete(synchronize_session="fetch")
+
+        for user_uuid in user_ids:
+            db_session.add(Persona__User(persona_id=persona_id, user_id=user_uuid))
+
+        db_session.commit()
+
     # May cause error if someone switches down to MIT from EE
-    if user_ids or group_ids:
-        raise NotImplementedError("Danswer MIT does not support private Document Sets")
+    if group_ids:
+        raise NotImplementedError("Danswer MIT does not support private Personas")
 
 
 def create_update_persona(
@@ -32,8 +43,6 @@ def create_update_persona(
     user: User | None,
     db_session: Session,
 ) -> PersonaSnapshot:
-    user_id = user.id if user is not None else None
-
     # Permission to actually use these is checked later
     document_sets = list(
         get_document_sets_by_ids(
@@ -51,7 +60,7 @@ def create_update_persona(
     try:
         persona = upsert_persona(
             persona_id=persona_id,
-            user_id=user_id,
+            user=user,
             name=create_persona_request.name,
             description=create_persona_request.description,
             num_chunks=create_persona_request.num_chunks,
@@ -62,7 +71,6 @@ def create_update_persona(
             document_sets=document_sets,
             llm_model_version_override=create_persona_request.llm_model_version_override,
             starter_messages=create_persona_request.starter_messages,
-            shared=create_persona_request.shared,
             is_public=create_persona_request.is_public,
             db_session=db_session,
         )

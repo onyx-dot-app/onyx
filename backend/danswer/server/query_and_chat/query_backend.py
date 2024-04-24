@@ -19,7 +19,7 @@ from danswer.search.models import IndexFilters
 from danswer.search.models import SearchDoc
 from danswer.search.preprocessing.access_filters import build_access_filters_for_user
 from danswer.search.preprocessing.danswer_helper import recommend_search_flow
-from danswer.search.utils import chunks_to_search_docs
+from danswer.search.utils import chunks_or_sections_to_search_docs
 from danswer.secondary_llm_flows.query_validation import get_query_answerability
 from danswer.secondary_llm_flows.query_validation import stream_query_answerability
 from danswer.server.query_and_chat.models import AdminSearchRequest
@@ -69,7 +69,7 @@ def admin_search(
 
     matching_chunks = document_index.admin_retrieval(query=query, filters=final_filters)
 
-    documents = chunks_to_search_docs(matching_chunks)
+    documents = chunks_or_sections_to_search_docs(matching_chunks)
 
     # Deduplicate documents by id
     deduplicated_documents: list[SearchDoc] = []

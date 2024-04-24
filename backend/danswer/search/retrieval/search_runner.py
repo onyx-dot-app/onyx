@@ -1,22 +1,21 @@
 import string
 from collections.abc import Callable
 
+import nltk  # type:ignore
 from nltk.corpus import stopwords  # type:ignore
 from nltk.stem import WordNetLemmatizer  # type:ignore
 from nltk.tokenize import word_tokenize  # type:ignore
 from sqlalchemy.orm import Session
 
 from danswer.chat.models import LlmDoc
-from danswer.configs.app_configs import MODEL_SERVER_HOST
-from danswer.configs.app_configs import MODEL_SERVER_PORT
 from danswer.configs.chat_configs import HYBRID_ALPHA
 from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.document_index.interfaces import DocumentIndex
-from danswer.indexing.models import InferenceChunk
 from danswer.search.enums import EmbedTextType
 from danswer.search.models import ChunkMetric
 from danswer.search.models import IndexFilters
+from danswer.search.models import InferenceChunk
 from danswer.search.models import MAX_METRICS_CONTENT
 from danswer.search.models import RetrievalMetricsContainer
 from danswer.search.models import SearchQuery
@@ -26,26 +25,54 @@ from danswer.secondary_llm_flows.query_expansion import multilingual_query_expan
 from danswer.utils.logger import setup_logger
 from danswer.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from danswer.utils.timing import log_function_time
+from shared_configs.configs import MODEL_SERVER_HOST
+from shared_configs.configs import MODEL_SERVER_PORT
 
 
 logger = setup_logger()
 
 
+def download_nltk_data() -> None:
+    resources = {
+        "stopwords": "corpora/stopwords",
+        "wordnet": "corpora/wordnet",
+        "punkt": "tokenizers/punkt",
+    }
+
+    for resource_name, resource_path in resources.items():
+        try:
+            nltk.data.find(resource_path)
+            logger.info(f"{resource_name} is already downloaded.")
+        except LookupError:
+            try:
+                logger.info(f"Downloading {resource_name}...")
+                nltk.download(resource_name, quiet=True)
+                logger.info(f"{resource_name} downloaded successfully.")
+            except Exception as e:
+                logger.error(f"Failed to download {resource_name}. Error: {e}")
+
+
 def lemmatize_text(text: str) -> list[str]:
-    lemmatizer = WordNetLemmatizer()
-    word_tokens = word_tokenize(text)
-    return [lemmatizer.lemmatize(word) for word in word_tokens]
+    try:
+        lemmatizer = WordNetLemmatizer()
+        word_tokens = word_tokenize(text)
+        return [lemmatizer.lemmatize(word) for word in word_tokens]
+    except Exception:
+        return text.split(" ")
 
 
 def remove_stop_words_and_punctuation(text: str) -> list[str]:
-    stop_words = set(stopwords.words("english"))
-    word_tokens = word_tokenize(text)
-    text_trimmed = [
-        word
-        for word in word_tokens
-        if (word.casefold() not in stop_words and word not in string.punctuation)
-    ]
-    return text_trimmed or word_tokens
+    try:
+        stop_words = set(stopwords.words("english"))
+        word_tokens = word_tokenize(text)
+        text_trimmed = [
+            word
+            for word in word_tokens
+            if (word.casefold() not in stop_words and word not in string.punctuation)
+        ]
+        return text_trimmed or word_tokens
+    except Exception:
+        return text.split(" ")
 
 
 def query_processing(
@@ -244,7 +271,7 @@ def inference_documents_from_ids(
     filters = IndexFilters(access_control_list=None)
 
     functions_with_args: list[tuple[Callable, tuple]] = [
-        (document_index.id_based_retrieval, (doc_id, None, filters))
+        (document_index.id_based_retrieval, (doc_id, None, None, filters))
         for doc_id in doc_ids_set
     ]
 

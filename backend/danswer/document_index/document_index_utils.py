@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.embedding_model import get_secondary_db_embedding_model
 from danswer.indexing.models import IndexChunk
-from danswer.indexing.models import InferenceChunk
+from danswer.search.models import InferenceChunk
 
 
 DEFAULT_BATCH_SIZE = 30

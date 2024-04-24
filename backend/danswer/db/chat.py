@@ -12,6 +12,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session
 
+from danswer.auth.schemas import UserRole
 from danswer.configs.chat_configs import HARD_DELETE_CHATS
 from danswer.configs.constants import MessageType
 from danswer.db.constants import SLACK_BOT_PERSONA_PREFIX
@@ -27,6 +28,7 @@ from danswer.db.models import Prompt
 from danswer.db.models import SearchDoc
 from danswer.db.models import SearchDoc as DBSearchDoc
 from danswer.db.models import StarterMessage
+from danswer.db.models import User
 from danswer.db.models import User__UserGroup
 from danswer.llm.override_models import LLMOverride
 from danswer.llm.override_models import PromptOverride
@@ -313,13 +315,16 @@ def set_as_latest_chat_message(
 
 def get_prompt_by_id(
     prompt_id: int,
-    user_id: UUID | None,
+    user: User | None,
     db_session: Session,
     include_deleted: bool = False,
 ) -> Prompt:
-    stmt = select(Prompt).where(
-        Prompt.id == prompt_id, or_(Prompt.user_id == user_id, Prompt.user_id.is_(None))
-    )
+    stmt = select(Prompt).where(Prompt.id == prompt_id)
+
+    # if user is not specified OR they are an admin, they should
+    # have access to all prompts, so this where clause is not needed
+    if user and user.role != UserRole.ADMIN:
+        stmt = stmt.where(or_(Prompt.user_id == user.id, Prompt.user_id.is_(None)))
 
     if not include_deleted:
         stmt = stmt.where(Prompt.deleted.is_(False))
@@ -351,14 +356,16 @@ def get_default_prompt() -> Prompt:
 
 def get_persona_by_id(
     persona_id: int,
-    # if user_id is `None` assume the user is an admin or auth is disabled
-    user_id: UUID | None,
+    # if user is `None` assume the user is an admin or auth is disabled
+    user: User | None,
     db_session: Session,
     include_deleted: bool = False,
 ) -> Persona:
     stmt = select(Persona).where(Persona.id == persona_id)
-    if user_id is not None:
-        stmt = stmt.where(or_(Persona.user_id == user_id, Persona.user_id.is_(None)))
+
+    # if user is an admin, they should have access to all Personas
+    if user is not None and user.role != UserRole.ADMIN:
+        stmt = stmt.where(or_(Persona.user_id == user.id, Persona.user_id.is_(None)))
 
     if not include_deleted:
         stmt = stmt.where(Persona.deleted.is_(False))
@@ -397,33 +404,33 @@ def get_personas_by_ids(
 
 
 def get_prompt_by_name(
-    prompt_name: str, user_id: UUID | None, shared: bool, db_session: Session
+    prompt_name: str, user: User | None, db_session: Session
 ) -> Prompt | None:
-    """Cannot do shared and user owned simultaneously as there may be two of those"""
     stmt = select(Prompt).where(Prompt.name == prompt_name)
-    if shared:
-        stmt = stmt.where(Prompt.user_id.is_(None))
-    else:
-        stmt = stmt.where(Prompt.user_id == user_id)
+
+    # if user is not specified OR they are an admin, they should
+    # have access to all prompts, so this where clause is not needed
+    if user and user.role != UserRole.ADMIN:
+        stmt = stmt.where(Prompt.user_id == user.id)
+
     result = db_session.execute(stmt).scalar_one_or_none()
     return result
 
 
 def get_persona_by_name(
-    persona_name: str, user_id: UUID | None, shared: bool, db_session: Session
+    persona_name: str, user: User | None, db_session: Session
 ) -> Persona | None:
-    """Cannot do shared and user owned simultaneously as there may be two of those"""
+    """Admins can see all, regular users can only fetch their own.
+    If user is None, assume the user is an admin or auth is disabled."""
     stmt = select(Persona).where(Persona.name == persona_name)
-    if shared:
-        stmt = stmt.where(Persona.user_id.is_(None))
-    else:
-        stmt = stmt.where(Persona.user_id == user_id)
+    if user and user.role != UserRole.ADMIN:
+        stmt = stmt.where(Persona.user_id == user.id)
     result = db_session.execute(stmt).scalar_one_or_none()
     return result
 
 
 def upsert_prompt(
-    user_id: UUID | None,
+    user: User | None,
     name: str,
     description: str,
     system_prompt: str,
@@ -431,7 +438,6 @@ def upsert_prompt(
     include_citations: bool,
     datetime_aware: bool,
     personas: list[Persona] | None,
-    shared: bool,
     db_session: Session,
     prompt_id: int | None = None,
     default_prompt: bool = True,
@@ -440,9 +446,7 @@ def upsert_prompt(
     if prompt_id is not None:
         prompt = db_session.query(Prompt).filter_by(id=prompt_id).first()
     else:
-        prompt = get_prompt_by_name(
-            prompt_name=name, user_id=user_id, shared=shared, db_session=db_session
-        )
+        prompt = get_prompt_by_name(prompt_name=name, user=user, db_session=db_session)
 
     if prompt:
         if not default_prompt and prompt.default_prompt:
@@ -463,7 +467,7 @@ def upsert_prompt(
     else:
         prompt = Prompt(
             id=prompt_id,
-            user_id=None if shared else user_id,
+            user_id=user.id if user else None,
             name=name,
             description=description,
             system_prompt=system_prompt,
@@ -485,7 +489,7 @@ def upsert_prompt(
 
 
 def upsert_persona(
-    user_id: UUID | None,
+    user: User | None,
     name: str,
     description: str,
     num_chunks: float,
@@ -496,7 +500,6 @@ def upsert_persona(
     document_sets: list[DBDocumentSet] | None,
     llm_model_version_override: str | None,
     starter_messages: list[StarterMessage] | None,
-    shared: bool,
     is_public: bool,
     db_session: Session,
     persona_id: int | None = None,
@@ -507,7 +510,7 @@ def upsert_persona(
         persona = db_session.query(Persona).filter_by(id=persona_id).first()
     else:
         persona = get_persona_by_name(
-            persona_name=name, user_id=user_id, shared=shared, db_session=db_session
+            persona_name=name, user=user, db_session=db_session
         )
 
     if persona:
@@ -539,7 +542,7 @@ def upsert_persona(
     else:
         persona = Persona(
             id=persona_id,
-            user_id=None if shared else user_id,
+            user_id=user.id if user else None,
             is_public=is_public,
             name=name,
             description=description,
@@ -566,24 +569,20 @@ def upsert_persona(
 
 def mark_prompt_as_deleted(
     prompt_id: int,
-    user_id: UUID | None,
+    user: User | None,
     db_session: Session,
 ) -> None:
-    prompt = get_prompt_by_id(
-        prompt_id=prompt_id, user_id=user_id, db_session=db_session
-    )
+    prompt = get_prompt_by_id(prompt_id=prompt_id, user=user, db_session=db_session)
     prompt.deleted = True
     db_session.commit()
 
 
 def mark_persona_as_deleted(
     persona_id: int,
-    user_id: UUID | None,
+    user: User | None,
     db_session: Session,
 ) -> None:
-    persona = get_persona_by_id(
-        persona_id=persona_id, user_id=user_id, db_session=db_session
-    )
+    persona = get_persona_by_id(persona_id=persona_id, user=user, db_session=db_session)
     persona.deleted = True
     db_session.commit()
 
@@ -621,9 +620,7 @@ def update_persona_visibility(
     is_visible: bool,
     db_session: Session,
 ) -> None:
-    persona = get_persona_by_id(
-        persona_id=persona_id, user_id=None, db_session=db_session
-    )
+    persona = get_persona_by_id(persona_id=persona_id, user=None, db_session=db_session)
     persona.is_visible = is_visible
     db_session.commit()
 

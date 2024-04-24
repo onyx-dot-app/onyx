@@ -114,13 +114,13 @@ def extract_citations_from_stream(
 
 
 def build_citation_processor(
-    context_docs: list[LlmDoc],
+    context_docs: list[LlmDoc], search_order_docs: list[LlmDoc]
 ) -> StreamProcessor:
     def stream_processor(tokens: Iterator[str]) -> AnswerQuestionStreamReturn:
         yield from extract_citations_from_stream(
             tokens=tokens,
             context_docs=context_docs,
-            doc_id_to_rank_map=map_document_id_order(context_docs),
+            doc_id_to_rank_map=map_document_id_order(search_order_docs),
         )
 
     return stream_processor

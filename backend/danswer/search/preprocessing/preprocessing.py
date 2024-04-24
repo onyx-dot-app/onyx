@@ -21,7 +21,7 @@ from danswer.utils.logger import setup_logger
 from danswer.utils.threadpool_concurrency import FunctionCall
 from danswer.utils.threadpool_concurrency import run_functions_in_parallel
 from danswer.utils.timing import log_function_time
-from shared_configs.nlp_model_configs import ENABLE_RERANKING_REAL_TIME_FLOW
+from shared_configs.configs import ENABLE_RERANKING_REAL_TIME_FLOW
 
 
 logger = setup_logger()
@@ -181,6 +181,9 @@ def retrieval_preprocessing(
             offset=offset or 0,
             skip_rerank=skip_rerank,
             skip_llm_chunk_filter=not llm_chunk_filter,
+            chunks_above=search_request.chunks_above,
+            chunks_below=search_request.chunks_below,
+            full_doc=search_request.full_doc,
         ),
         predicted_search_type,
         predicted_flow,

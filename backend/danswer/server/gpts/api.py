@@ -72,7 +72,7 @@ def gpt_search(
         ),
         user=None,
         db_session=db_session,
-    ).reranked_docs
+    ).reranked_chunks
 
     return GptSearchResponse(
         matching_document_chunks=[

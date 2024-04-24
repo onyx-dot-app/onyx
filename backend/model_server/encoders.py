@@ -9,13 +9,13 @@ from sentence_transformers import SentenceTransformer  # type: ignore
 from danswer.utils.logger import setup_logger
 from model_server.constants import MODEL_WARM_UP_STRING
 from model_server.utils import simple_log_function_time
+from shared_configs.configs import CROSS_EMBED_CONTEXT_SIZE
+from shared_configs.configs import CROSS_ENCODER_MODEL_ENSEMBLE
+from shared_configs.configs import INDEXING_ONLY
 from shared_configs.model_server_models import EmbedRequest
 from shared_configs.model_server_models import EmbedResponse
 from shared_configs.model_server_models import RerankRequest
 from shared_configs.model_server_models import RerankResponse
-from shared_configs.nlp_model_configs import CROSS_EMBED_CONTEXT_SIZE
-from shared_configs.nlp_model_configs import CROSS_ENCODER_MODEL_ENSEMBLE
-from shared_configs.nlp_model_configs import INDEXING_ONLY
 
 logger = setup_logger()
 

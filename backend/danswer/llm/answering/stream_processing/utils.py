@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 
 from danswer.chat.models import LlmDoc
-from danswer.indexing.models import InferenceChunk
+from danswer.search.models import InferenceChunk
 
 
 def map_document_id_order(

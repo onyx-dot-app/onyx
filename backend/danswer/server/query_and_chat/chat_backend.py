@@ -108,7 +108,12 @@ def get_chat_session(
         db_session.commit()
 
     session_messages = get_chat_messages_by_session(
-        chat_session_id=session_id, user_id=user_id, db_session=db_session
+        chat_session_id=session_id,
+        user_id=user_id,
+        db_session=db_session,
+        # we already did a permission check above with the call to
+        # `get_chat_session_by_id`, so we can skip it here
+        skip_permission_check=True,
     )
 
     return ChatSessionDetailResponse(
@@ -322,7 +327,7 @@ def get_max_document_tokens(
     try:
         persona = get_persona_by_id(
             persona_id=persona_id,
-            user_id=user.id if user else None,
+            user=user,
             db_session=db_session,
         )
     except ValueError:

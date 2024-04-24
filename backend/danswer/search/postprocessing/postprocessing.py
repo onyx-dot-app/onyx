@@ -9,8 +9,8 @@ from danswer.configs.model_configs import CROSS_ENCODER_RANGE_MIN
 from danswer.document_index.document_index_utils import (
     translate_boost_count_to_multiplier,
 )
-from danswer.indexing.models import InferenceChunk
 from danswer.search.models import ChunkMetric
+from danswer.search.models import InferenceChunk
 from danswer.search.models import MAX_METRICS_CONTENT
 from danswer.search.models import RerankMetricsContainer
 from danswer.search.models import SearchQuery

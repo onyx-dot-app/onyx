@@ -4,7 +4,6 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
-from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
 from danswer.db.chat import get_personas_by_ids
 from danswer.db.chat import get_prompt_by_id
@@ -32,8 +31,6 @@ def create_update_prompt(
     user: User | None,
     db_session: Session,
 ) -> PromptSnapshot:
-    user_id = user.id if user is not None else None
-
     personas = (
         list(
             get_personas_by_ids(
@@ -47,7 +44,7 @@ def create_update_prompt(
 
     prompt = upsert_prompt(
         prompt_id=prompt_id,
-        user_id=user_id,
+        user=user,
         name=create_prompt_request.name,
         description=create_prompt_request.description,
         system_prompt=create_prompt_request.system_prompt,
@@ -55,7 +52,6 @@ def create_update_prompt(
         include_citations=create_prompt_request.include_citations,
         datetime_aware=create_prompt_request.datetime_aware,
         personas=personas,
-        shared=create_prompt_request.shared,
         db_session=db_session,
     )
     return PromptSnapshot.from_model(prompt)
@@ -64,7 +60,7 @@ def create_update_prompt(
 @basic_router.post("")
 def create_prompt(
     create_prompt_request: CreatePromptRequest,
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> PromptSnapshot:
     try:
@@ -124,7 +120,7 @@ def delete_prompt(
 ) -> None:
     mark_prompt_as_deleted(
         prompt_id=prompt_id,
-        user_id=user.id if user is not None else None,
+        user=user,
         db_session=db_session,
     )
 
@@ -150,7 +146,7 @@ def get_prompt(
     return PromptSnapshot.from_model(
         get_prompt_by_id(
             prompt_id=prompt_id,
-            user_id=user.id if user is not None else None,
+            user=user,
             db_session=db_session,
         )
     )

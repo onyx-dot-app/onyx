@@ -295,6 +295,9 @@ def count_unique_cc_pairs_with_successful_index_attempts(
     embedding_model_id: int | None,
     db_session: Session,
 ) -> int:
+    """Collect all of the Index Attempts that are successful and for the specified embedding model
+    Then do distinct by connector_id and credential_id which is equivalent to the cc-pair. Finally,
+    do a count to get the total number of unique cc-pairs with successful attempts"""
     unique_pairs_count = (
         db_session.query(IndexAttempt.connector_id, IndexAttempt.credential_id)
         .filter(

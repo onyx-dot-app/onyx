@@ -8,11 +8,11 @@ from transformers import TFDistilBertForSequenceClassification
 
 from model_server.constants import MODEL_WARM_UP_STRING
 from model_server.utils import simple_log_function_time
+from shared_configs.configs import INDEXING_ONLY
+from shared_configs.configs import INTENT_MODEL_CONTEXT_SIZE
+from shared_configs.configs import INTENT_MODEL_VERSION
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
-from shared_configs.nlp_model_configs import INDEXING_ONLY
-from shared_configs.nlp_model_configs import INTENT_MODEL_CONTEXT_SIZE
-from shared_configs.nlp_model_configs import INTENT_MODEL_VERSION
 
 
 router = APIRouter(prefix="/custom")

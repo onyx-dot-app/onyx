@@ -15,10 +15,10 @@ from danswer.chat.models import DanswerQuote
 from danswer.chat.models import DanswerQuotes
 from danswer.chat.models import LlmDoc
 from danswer.configs.chat_configs import QUOTE_ALLOWED_ERROR_PERCENT
-from danswer.indexing.models import InferenceChunk
 from danswer.prompts.constants import ANSWER_PAT
 from danswer.prompts.constants import QUOTE_PAT
 from danswer.prompts.constants import UNCERTAINTY_PAT
+from danswer.search.models import InferenceChunk
 from danswer.utils.logger import setup_logger
 from danswer.utils.text_processing import clean_model_quote
 from danswer.utils.text_processing import clean_up_code_blocks

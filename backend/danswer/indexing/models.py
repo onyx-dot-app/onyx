@@ -1,12 +1,8 @@
-from dataclasses import dataclass
-from dataclasses import fields
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
 from danswer.access.models import DocumentAccess
-from danswer.configs.constants import DocumentSource
 from danswer.connectors.models import Document
 from danswer.utils.logger import setup_logger
 
@@ -20,14 +16,12 @@ logger = setup_logger()
 Embedding = list[float]
 
 
-@dataclass
-class ChunkEmbedding:
+class ChunkEmbedding(BaseModel):
     full_embedding: Embedding
     mini_chunk_embeddings: list[Embedding]
 
 
-@dataclass
-class BaseChunk:
+class BaseChunk(BaseModel):
     chunk_id: int
     blurb: str  # The first sentence(s) of the first Section of the chunk
     content: str
@@ -37,7 +31,6 @@ class BaseChunk:
     section_continuation: bool  # True if this Chunk's start is not at the start of a Section
 
 
-@dataclass
 class DocAwareChunk(BaseChunk):
     # During indexing flow, we have access to a complete "Document"
     # During inference we only have access to the document id and do not reconstruct the Document
@@ -50,13 +43,11 @@ class DocAwareChunk(BaseChunk):
         )
 
 
-@dataclass
 class IndexChunk(DocAwareChunk):
     embeddings: ChunkEmbedding
     title_embedding: Embedding | None
 
 
-@dataclass
 class DocMetadataAwareIndexChunk(IndexChunk):
     """An `IndexChunk` that contains all necessary metadata to be indexed. This includes
     the following:
@@ -81,51 +72,13 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         document_sets: set[str],
         boost: int,
     ) -> "DocMetadataAwareIndexChunk":
+        index_chunk_data = index_chunk.dict()
         return cls(
-            **{
-                field.name: getattr(index_chunk, field.name)
-                for field in fields(index_chunk)
-            },
+            **index_chunk_data,
             access=access,
             document_sets=document_sets,
             boost=boost,
         )
-
-
-@dataclass
-class InferenceChunk(BaseChunk):
-    document_id: str
-    source_type: DocumentSource
-    semantic_identifier: str
-    boost: int
-    recency_bias: float
-    score: float | None
-    hidden: bool
-    metadata: dict[str, str | list[str]]
-    # Matched sections in the chunk. Uses Vespa syntax e.g. <hi>TEXT</hi>
-    # to specify that a set of words should be highlighted. For example:
-    # ["<hi>the</hi> <hi>answer</hi> is 42", "he couldn't find an <hi>answer</hi>"]
-    match_highlights: list[str]
-    # when the doc was last updated
-    updated_at: datetime | None
-    primary_owners: list[str] | None = None
-    secondary_owners: list[str] | None = None
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self.document_id}__{self.chunk_id}"
-
-    def __repr__(self) -> str:
-        blurb_words = self.blurb.split()
-        short_blurb = ""
-        for word in blurb_words:
-            if not short_blurb:
-                short_blurb = word
-                continue
-            if len(short_blurb) > 25:
-                break
-            short_blurb += " " + word
-        return f"Inference Chunk: {self.document_id} - {short_blurb}..."
 
 
 class EmbeddingModelDetail(BaseModel):

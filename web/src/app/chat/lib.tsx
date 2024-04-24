@@ -14,7 +14,7 @@ import {
   RetrievalType,
   StreamingError,
 } from "./interfaces";
-import { Persona } from "../admin/personas/interfaces";
+import { Persona } from "../admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 
@@ -402,7 +402,7 @@ export function buildChatUrl(
   if (chatSessionId) {
     finalSearchParams.push(`${SEARCH_PARAM_NAMES.CHAT_ID}=${chatSessionId}`);
   }
-  if (personaId) {
+  if (personaId !== null) {
     finalSearchParams.push(`${SEARCH_PARAM_NAMES.PERSONA_ID}=${personaId}`);
   }
 

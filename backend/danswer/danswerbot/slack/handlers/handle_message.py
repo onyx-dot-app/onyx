@@ -51,7 +51,7 @@ from danswer.search.models import BaseFilters
 from danswer.search.models import OptionalSearchSetting
 from danswer.search.models import RetrievalDetails
 from danswer.utils.logger import setup_logger
-from shared_configs.nlp_model_configs import ENABLE_RERANKING_ASYNC_FLOW
+from shared_configs.configs import ENABLE_RERANKING_ASYNC_FLOW
 
 logger_base = setup_logger()
 

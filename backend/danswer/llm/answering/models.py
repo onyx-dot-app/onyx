@@ -48,6 +48,9 @@ class DocumentPruningConfig(BaseModel):
     # e.g. we don't want to truncate each document to be no more
     # than one chunk long
     is_manually_selected_docs: bool = False
+    # If user specifies to include additional context chunks for each match, then different pruning
+    # is used. As many Sections as possible are included, and the last Section is truncated
+    use_sections: bool = False
 
 
 class CitationConfig(BaseModel):

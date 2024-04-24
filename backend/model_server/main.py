@@ -8,17 +8,18 @@ from fastapi import FastAPI
 from transformers import logging as transformer_logging  # type:ignore
 
 from danswer import __version__
-from danswer.configs.app_configs import MODEL_SERVER_ALLOWED_HOST
-from danswer.configs.app_configs import MODEL_SERVER_PORT
 from danswer.utils.logger import setup_logger
 from model_server.custom_models import router as custom_models_router
 from model_server.custom_models import warm_up_intent_model
 from model_server.encoders import router as encoders_router
 from model_server.encoders import warm_up_cross_encoders
-from shared_configs.nlp_model_configs import ENABLE_RERANKING_ASYNC_FLOW
-from shared_configs.nlp_model_configs import ENABLE_RERANKING_REAL_TIME_FLOW
-from shared_configs.nlp_model_configs import INDEXING_ONLY
-from shared_configs.nlp_model_configs import MIN_THREADS_ML_MODELS
+from model_server.management_endpoints import router as management_router
+from shared_configs.configs import ENABLE_RERANKING_ASYNC_FLOW
+from shared_configs.configs import ENABLE_RERANKING_REAL_TIME_FLOW
+from shared_configs.configs import INDEXING_ONLY
+from shared_configs.configs import MIN_THREADS_ML_MODELS
+from shared_configs.configs import MODEL_SERVER_ALLOWED_HOST
+from shared_configs.configs import MODEL_SERVER_PORT
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -53,6 +54,7 @@ def get_model_app() -> FastAPI:
         title="Danswer Model Server", version=__version__, lifespan=lifespan
     )
 
+    application.include_router(management_router)
     application.include_router(encoders_router)
     application.include_router(custom_models_router)
 

@@ -31,15 +31,17 @@ from danswer.llm.utils import get_default_llm_tokenizer
 
 
 def _get_stream_processor(
-    docs: list[LlmDoc], answer_style_configs: AnswerStyleConfig
+    context_docs: list[LlmDoc],
+    search_order_docs: list[LlmDoc],
+    answer_style_configs: AnswerStyleConfig,
 ) -> StreamProcessor:
     if answer_style_configs.citation_config:
         return build_citation_processor(
-            context_docs=docs,
+            context_docs=context_docs, search_order_docs=search_order_docs
         )
     if answer_style_configs.quotes_config:
         return build_quotes_processor(
-            context_docs=docs, is_json_prompt=not (QA_PROMPT_OVERRIDE == "weak")
+            context_docs=context_docs, is_json_prompt=not (QA_PROMPT_OVERRIDE == "weak")
         )
 
     raise RuntimeError("Not implemented yet")
@@ -82,8 +84,6 @@ class Answer:
             temperature=self.llm_config.temperature,
         )
         self.llm_tokenizer = get_default_llm_tokenizer()
-
-        self.process_stream_fn = _get_stream_processor(docs, answer_style_config)
 
         self._final_prompt: list[BaseMessage] | None = None
 
@@ -152,8 +152,14 @@ class Answer:
             yield from self._processed_stream
             return
 
+        process_stream_fn = _get_stream_processor(
+            context_docs=self.pruned_docs,
+            search_order_docs=self.docs,
+            answer_style_configs=self.answer_style_config,
+        )
+
         processed_stream = []
-        for processed_packet in self.process_stream_fn(self.raw_streamed_output):
+        for processed_packet in process_stream_fn(self.raw_streamed_output):
             processed_stream.append(processed_packet)
             yield processed_packet
 

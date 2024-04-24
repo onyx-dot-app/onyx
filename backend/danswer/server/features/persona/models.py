@@ -7,12 +7,12 @@ from danswer.db.models import StarterMessage
 from danswer.search.enums import RecencyBiasSetting
 from danswer.server.features.document_set.models import DocumentSet
 from danswer.server.features.prompt.models import PromptSnapshot
+from danswer.server.models import MinimalUserSnapshot
 
 
 class CreatePersonaRequest(BaseModel):
     name: str
     description: str
-    shared: bool
     num_chunks: float
     llm_relevance_filter: bool
     is_public: bool
@@ -29,8 +29,8 @@ class CreatePersonaRequest(BaseModel):
 
 class PersonaSnapshot(BaseModel):
     id: int
+    owner: MinimalUserSnapshot | None
     name: str
-    shared: bool
     is_visible: bool
     is_public: bool
     display_priority: int | None
@@ -43,6 +43,7 @@ class PersonaSnapshot(BaseModel):
     default_persona: bool
     prompts: list[PromptSnapshot]
     document_sets: list[DocumentSet]
+    users: list[UUID]
     groups: list[int]
 
     @classmethod
@@ -53,7 +54,11 @@ class PersonaSnapshot(BaseModel):
         return PersonaSnapshot(
             id=persona.id,
             name=persona.name,
-            shared=persona.user_id is None,
+            owner=(
+                MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
+                if persona.user
+                else None
+            ),
             is_visible=persona.is_visible,
             is_public=persona.is_public,
             display_priority=persona.display_priority,
@@ -69,6 +74,7 @@ class PersonaSnapshot(BaseModel):
                 DocumentSet.from_model(document_set_model)
                 for document_set_model in persona.document_sets
             ],
+            users=[user.id for user in persona.users],
             groups=[user_group.id for user_group in persona.groups],
         )
 

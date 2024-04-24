@@ -1,4 +1,4 @@
-import { DocumentSet } from "@/lib/types";
+import { DocumentSet, MinimalUserSnapshot } from "@/lib/types";
 
 export interface StarterMessage {
   name: string;
@@ -9,7 +9,6 @@ export interface StarterMessage {
 export interface Prompt {
   id: number;
   name: string;
-  shared: boolean;
   description: string;
   system_prompt: string;
   task_prompt: string;
@@ -21,7 +20,7 @@ export interface Prompt {
 export interface Persona {
   id: number;
   name: string;
-  shared: boolean;
+  owner: MinimalUserSnapshot | null;
   is_visible: boolean;
   is_public: boolean;
   display_priority: number | null;
@@ -34,5 +33,6 @@ export interface Persona {
   llm_model_version_override?: string;
   starter_messages: StarterMessage[] | null;
   default_persona: boolean;
+  users: string[];
   groups: number[];
 }

@@ -433,8 +433,8 @@ class NotionConnector(LoadConnector, PollConnector):
             )
             if len(pages) > 0:
                 yield from batch_generator(self._read_pages(pages), self.batch_size)
-            if db_res.has_more:
-                query_dict["start_cursor"] = db_res.next_cursor
+                if db_res.has_more:
+                    query_dict["start_cursor"] = db_res.next_cursor
             else:
                 break
 

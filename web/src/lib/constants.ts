@@ -22,4 +22,9 @@ export const HEADER_PADDING = "pt-[64px]";
 // TODO: consider moving this to an API call so that the api_server
 // can be the single source of truth
 export const EE_ENABLED =
-  process.env.NEXT_PUBLIC_EE_ENABLED?.toLowerCase() === "true";
+  process.env.NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES?.toLowerCase() === "true";
+
+// Enterprise-only settings
+export const CUSTOM_ANALYTICS_ENABLED = process.env.CUSTOM_ANALYTICS_SECRET_KEY
+  ? true
+  : false;

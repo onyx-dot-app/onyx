@@ -6,7 +6,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { DocumentSet, SlackBotConfig } from "@/lib/types";
 import { Text } from "@tremor/react";
 import { BackButton } from "@/components/BackButton";
-import { Persona } from "../../personas/interfaces";
+import { Persona } from "../../assistants/interfaces";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 
 async function Page({ params }: { params: { id: string } }) {

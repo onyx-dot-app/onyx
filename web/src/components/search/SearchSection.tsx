@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { SearchBar } from "./SearchBar";
 import { SearchResultsDisplay } from "./SearchResultsDisplay";
 import { SourceSelector } from "./filtering/Filters";
@@ -20,9 +20,11 @@ import { SearchHelper } from "./SearchHelper";
 import { CancellationToken, cancellable } from "@/lib/search/cancellable";
 import { useFilters, useObjectState } from "@/lib/hooks";
 import { questionValidationStreamed } from "@/lib/search/streamingQuestionValidation";
-import { Persona } from "@/app/admin/personas/interfaces";
+import { Persona } from "@/app/admin/assistants/interfaces";
 import { PersonaSelector } from "./PersonaSelector";
 import { computeAvailableFilters } from "@/lib/filters";
+import { useRouter } from "next/navigation";
+import { SettingsContext } from "../settings/SettingsProvider";
 
 const SEARCH_DEFAULT_OVERRIDES_START: SearchDefaultOverrides = {
   forceDisplayQA: false,
@@ -212,6 +214,16 @@ export const SearchSection = ({
 
     setIsFetching(false);
   };
+
+  // handle redirect if search page is disabled
+  // NOTE: this must be done here, in a client component since
+  // settings are passed in via Context and therefore aren't
+  // available in server-side components
+  const router = useRouter();
+  const settings = useContext(SettingsContext);
+  if (settings?.settings?.search_page_enabled === false) {
+    router.push("/chat");
+  }
 
   return (
     <div className="relative max-w-[2000px] xl:max-w-[1430px] mx-auto">

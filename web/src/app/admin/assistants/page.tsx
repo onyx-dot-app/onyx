@@ -24,11 +24,11 @@ export default async function Page() {
 
   return (
     <div className="mx-auto container">
-      <AdminPageTitle icon={<RobotIcon size={32} />} title="Personas" />
+      <AdminPageTitle icon={<RobotIcon size={32} />} title="Assistants" />
 
       <Text className="mb-2">
-        Personas are a way to build custom search/question-answering experiences
-        for different use cases.
+        Assistants are a way to build custom search/question-answering
+        experiences for different use cases.
       </Text>
       <Text className="mt-2">They allow you to customize:</Text>
       <div className="text-sm">
@@ -43,20 +43,20 @@ export default async function Page() {
       <div>
         <Divider />
 
-        <Title>Create a Persona</Title>
+        <Title>Create an Assistant</Title>
         <Link
-          href="/admin/personas/new"
-          className="flex py-2 px-4 mt-2 border border-border h-fit cursor-pointer hover:bg-hover text-sm w-36"
+          href="/admin/assistants/new"
+          className="flex py-2 px-4 mt-2 border border-border h-fit cursor-pointer hover:bg-hover text-sm w-40"
         >
           <div className="mx-auto flex">
             <FiPlusSquare className="my-auto mr-2" />
-            New Persona
+            New Assistant
           </div>
         </Link>
 
         <Divider />
 
-        <Title>Existing Personas</Title>
+        <Title>Existing Assistants</Title>
         <PersonasTable personas={personas} />
       </div>
     </div>

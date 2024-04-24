@@ -91,7 +91,8 @@ def insert_document_set(
     db_session: Session,
 ) -> tuple[DocumentSetDBModel, list[DocumentSet__ConnectorCredentialPair]]:
     if not document_set_creation_request.cc_pair_ids:
-        raise ValueError("Cannot create a document set with no CC pairs")
+        # It's cc-pairs in actuality but the UI displays this error
+        raise ValueError("Cannot create a document set with no Connectors")
 
     # start a transaction
     db_session.begin()
@@ -140,7 +141,8 @@ def update_document_set(
     document_set_update_request: DocumentSetUpdateRequest, db_session: Session
 ) -> tuple[DocumentSetDBModel, list[DocumentSet__ConnectorCredentialPair]]:
     if not document_set_update_request.cc_pair_ids:
-        raise ValueError("Cannot create a document set with no CC pairs")
+        # It's cc-pairs in actuality but the UI displays this error
+        raise ValueError("Cannot create a document set with no Connectors")
 
     # start a transaction
     db_session.begin()

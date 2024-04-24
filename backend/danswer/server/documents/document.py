@@ -39,7 +39,8 @@ def get_document_info(
 
     inference_chunks = document_index.id_based_retrieval(
         document_id=document_id,
-        chunk_ind=None,
+        min_chunk_ind=None,
+        max_chunk_ind=None,
         filters=filters,
     )
 
@@ -86,7 +87,8 @@ def get_chunk_info(
 
     inference_chunks = document_index.id_based_retrieval(
         document_id=document_id,
-        chunk_ind=chunk_id,
+        min_chunk_ind=chunk_id,
+        max_chunk_ind=chunk_id,
         filters=filters,
     )
 

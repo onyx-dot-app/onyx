@@ -28,7 +28,7 @@ import {
   Text,
 } from "@tremor/react";
 import { useRouter } from "next/navigation";
-import { Persona } from "../personas/interfaces";
+import { Persona } from "../assistants/interfaces";
 import { useState } from "react";
 import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
 

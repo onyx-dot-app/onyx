@@ -1,5 +1,5 @@
 import { SearchSection } from "@/components/search/SearchSection";
-import { Header } from "@/components/Header";
+import { Header } from "@/components/header/Header";
 import { Footer } from "@/components/Footer";
 import {
   AuthTypeMetadata,
@@ -13,20 +13,18 @@ import { fetchSS } from "@/lib/utilsSS";
 import { CCPairBasicInfo, DocumentSet, Tag, User } from "@/lib/types";
 import { cookies } from "next/headers";
 import { SearchType } from "@/lib/search/interfaces";
-import { Persona } from "../admin/personas/interfaces";
+import { Persona } from "../admin/assistants/interfaces";
 import {
   WelcomeModal,
   hasCompletedWelcomeFlowSS,
 } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { unstable_noStore as noStore } from "next/cache";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
-import { personaComparator } from "../admin/personas/lib";
+import { personaComparator } from "../admin/assistants/lib";
 import { FullEmbeddingModelResponse } from "../admin/models/embedding/embeddingModels";
 import { NoSourcesModal } from "@/components/initialSetup/search/NoSourcesModal";
 import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
 import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
-import { getSettingsSS } from "@/lib/settings";
-import { Settings } from "../admin/settings/interfaces";
 
 export default async function Home() {
   // Disable caching so we always get the up to date connector / document set / persona info
@@ -42,7 +40,6 @@ export default async function Home() {
     fetchSS("/persona"),
     fetchSS("/query/valid-tags"),
     fetchSS("/secondary-index/get-embedding-models"),
-    getSettingsSS(),
     fetchSS("/persona/default-model"),
     fetchSS("/eea_config/get_eea_config"),
   ];
@@ -55,7 +52,6 @@ export default async function Home() {
     | Response
     | AuthTypeMetadata
     | FullEmbeddingModelResponse
-    | Settings
     | null
   )[] = [null, null, null, null, null, null, null, null];
   try {
@@ -70,9 +66,8 @@ export default async function Home() {
   const personaResponse = results[4] as Response | null;
   const tagsResponse = results[5] as Response | null;
   const embeddingModelResponse = results[6] as Response | null;
-  const settings = results[7] as Settings | null;
-  const defaultModelResponse = results[8] as Response | null;
-  const EEAConfigResponse = results[9] as Response | null;
+  const defaultModelResponse = results[7] as Response | null;
+  const EEAConfigResponse = results[8] as Response | null;
   let disclaimerTitle = "";
   let disclaimerText = "";
   if (EEAConfigResponse?.ok) {
@@ -94,10 +89,6 @@ export default async function Home() {
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
     return redirect("/auth/waiting-on-verification");
-  }
-
-  if (settings && !settings.search_page_enabled) {
-    return redirect("/chat");
   }
 
   let ccPairs: CCPairBasicInfo[] = [];
@@ -178,7 +169,7 @@ export default async function Home() {
 
   return (
     <>
-      <Header user={user} settings={settings} />
+      <Header user={user} />
       <div className="m-3">
         <HealthCheckBanner />
       </div>

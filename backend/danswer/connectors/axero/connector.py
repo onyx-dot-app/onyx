@@ -244,7 +244,7 @@ def _translate_content_to_doc(content: dict) -> Document:
 
     doc = Document(
         id="AXERO_" + str(content["ContentID"]),
-        sections=[Section(link=content["ContentVersionURL"], text=page_text)],
+        sections=[Section(link=content["ContentURL"], text=page_text)],
         source=DocumentSource.AXERO,
         semantic_identifier=content["ContentTitle"],
         doc_updated_at=time_str_to_utc(content["DateUpdated"]),
@@ -304,7 +304,6 @@ class AxeroConnector(PollConnector):
         iterable_space_ids = self.space_ids if self.space_ids else [None]
 
         for space_id in iterable_space_ids:
-            entity_types = []
             for entity in entity_types:
                 axero_obj = _get_entities(
                     entity_type=entity,

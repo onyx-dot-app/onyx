@@ -1,4 +1,4 @@
-import { Persona } from "@/app/admin/personas/interfaces";
+import { Persona } from "@/app/admin/assistants/interfaces";
 
 export interface User {
   id: string;
@@ -7,6 +7,11 @@ export interface User {
   is_superuser: string;
   is_verified: string;
   role: "basic" | "admin";
+}
+
+export interface MinimalUserSnapshot {
+  id: string;
+  email: string;
 }
 
 export type ValidSources =

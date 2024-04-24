@@ -20,6 +20,7 @@ import requests
 from retry import retry
 
 from danswer.configs.app_configs import LOG_VESPA_TIMING_INFORMATION
+from danswer.configs.app_configs import VESPA_CONFIG_SERVER_HOST
 from danswer.configs.app_configs import VESPA_HOST
 from danswer.configs.app_configs import VESPA_PORT
 from danswer.configs.app_configs import VESPA_TENANT_PORT
@@ -62,8 +63,8 @@ from danswer.document_index.interfaces import DocumentInsertionRecord
 from danswer.document_index.interfaces import UpdateRequest
 from danswer.document_index.vespa.utils import remove_invalid_unicode_chars
 from danswer.indexing.models import DocMetadataAwareIndexChunk
-from danswer.indexing.models import InferenceChunk
 from danswer.search.models import IndexFilters
+from danswer.search.models import InferenceChunk
 from danswer.search.retrieval.search_runner import query_processing
 from danswer.search.retrieval.search_runner import remove_stop_words_and_punctuation
 from danswer.utils.batching import batch_generator
@@ -76,15 +77,20 @@ VESPA_DIM_REPLACEMENT_PAT = "VARIABLE_DIM"
 DANSWER_CHUNK_REPLACEMENT_PAT = "DANSWER_CHUNK_NAME"
 DOCUMENT_REPLACEMENT_PAT = "DOCUMENT_REPLACEMENT"
 DATE_REPLACEMENT = "DATE_REPLACEMENT"
-VESPA_CONFIG_SERVER_URL = f"http://{VESPA_HOST}:{VESPA_TENANT_PORT}"
-VESPA_APP_CONTAINER_URL = f"http://{VESPA_HOST}:{VESPA_PORT}"
+
+# config server
+VESPA_CONFIG_SERVER_URL = f"http://{VESPA_CONFIG_SERVER_HOST}:{VESPA_TENANT_PORT}"
 VESPA_APPLICATION_ENDPOINT = f"{VESPA_CONFIG_SERVER_URL}/application/v2"
+
+# main search application
+VESPA_APP_CONTAINER_URL = f"http://{VESPA_HOST}:{VESPA_PORT}"
 # danswer_chunk below is defined in vespa/app_configs/schemas/danswer_chunk.sd
 DOCUMENT_ID_ENDPOINT = (
     f"{VESPA_APP_CONTAINER_URL}/document/v1/default/{{index_name}}/docid"
 )
 SEARCH_ENDPOINT = f"{VESPA_APP_CONTAINER_URL}/search/"
-_BATCH_SIZE = 100  # Specific to Vespa
+
+_BATCH_SIZE = 128  # Specific to Vespa
 _NUM_THREADS = (
     16  # since Vespa doesn't allow batching of inserts / updates, we use threads
 )
@@ -864,10 +870,11 @@ class VespaIndex(DocumentIndex):
     def id_based_retrieval(
         self,
         document_id: str,
-        chunk_ind: int | None,
+        min_chunk_ind: int | None,
+        max_chunk_ind: int | None,
         filters: IndexFilters,
     ) -> list[InferenceChunk]:
-        if chunk_ind is None:
+        if min_chunk_ind is None and max_chunk_ind is None:
             vespa_chunk_ids = _get_vespa_chunk_ids_by_document_id(
                 document_id=document_id,
                 index_name=self.index_name,
@@ -888,14 +895,22 @@ class VespaIndex(DocumentIndex):
             inference_chunks.sort(key=lambda chunk: chunk.chunk_id)
             return inference_chunks
 
-        else:
-            filters_str = _build_vespa_filters(filters=filters, include_hidden=True)
-            yql = (
-                VespaIndex.yql_base.format(index_name=self.index_name)
-                + filters_str
-                + f"({DOCUMENT_ID} contains '{document_id}' and {CHUNK_ID} contains '{chunk_ind}')"
-            )
-        return _query_vespa({"yql": yql})
+        filters_str = _build_vespa_filters(filters=filters, include_hidden=True)
+        yql = (
+            VespaIndex.yql_base.format(index_name=self.index_name)
+            + filters_str
+            + f"({DOCUMENT_ID} contains '{document_id}'"
+        )
+
+        if min_chunk_ind is not None:
+            yql += f" and {min_chunk_ind} <= {CHUNK_ID}"
+        if max_chunk_ind is not None:
+            yql += f" and {max_chunk_ind} >= {CHUNK_ID}"
+        yql = yql + ")"
+
+        inference_chunks = _query_vespa({"yql": yql})
+        inference_chunks.sort(key=lambda chunk: chunk.chunk_id)
+        return inference_chunks
 
     def keyword_retrieval(
         self,

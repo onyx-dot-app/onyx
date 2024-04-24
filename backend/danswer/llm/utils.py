@@ -20,7 +20,6 @@ from langchain.schema.messages import HumanMessage
 from langchain.schema.messages import SystemMessage
 from tiktoken.core import Encoding
 
-from danswer.configs.app_configs import LOG_LEVEL
 from danswer.configs.constants import GEN_AI_API_KEY_STORAGE_KEY
 from danswer.configs.constants import GEN_AI_DETECTED_MODEL
 from danswer.configs.constants import MessageType
@@ -34,9 +33,10 @@ from danswer.configs.model_configs import GEN_AI_MODEL_VERSION
 from danswer.db.models import ChatMessage
 from danswer.dynamic_configs.factory import get_dynamic_config_store
 from danswer.dynamic_configs.interface import ConfigNotFoundError
-from danswer.indexing.models import InferenceChunk
 from danswer.llm.interfaces import LLM
+from danswer.search.models import InferenceChunk
 from danswer.utils.logger import setup_logger
+from shared_configs.configs import LOG_LEVEL
 
 if TYPE_CHECKING:
     from danswer.llm.answering.models import PreviousMessage

@@ -95,7 +95,7 @@ const SlackBotConfigsTable = ({
                     {slackBotConfig.persona &&
                     !isPersonaASlackBotPersona(slackBotConfig.persona) ? (
                       <Link
-                        href={`/admin/personas/${slackBotConfig.persona.id}`}
+                        href={`/admin/assistants/${slackBotConfig.persona.id}`}
                         className="text-blue-500 flex"
                       >
                         <FiArrowUpRight className="my-auto mr-1" />

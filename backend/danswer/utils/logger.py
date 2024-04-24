@@ -3,7 +3,7 @@ import os
 from collections.abc import MutableMapping
 from typing import Any
 
-from danswer.configs.app_configs import LOG_LEVEL
+from shared_configs.configs import LOG_LEVEL
 
 
 class IndexAttemptSingleton:

@@ -12,6 +12,7 @@ interface PersonaCreationRequest {
   llm_relevance_filter: boolean | null;
   llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
+  users?: string[];
   groups: number[];
 }
 
@@ -29,6 +30,7 @@ interface PersonaUpdateRequest {
   llm_relevance_filter: boolean | null;
   llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
+  users?: string[];
   groups: number[];
 }
 
@@ -55,7 +57,6 @@ function createPrompt({
     body: JSON.stringify({
       name: promptNameFromPersonaName(personaName),
       description: `Default prompt for persona ${personaName}`,
-      shared: true,
       system_prompt: systemPrompt,
       task_prompt: taskPrompt,
       include_citations: includeCitations,
@@ -84,7 +85,6 @@ function updatePrompt({
     body: JSON.stringify({
       name: promptNameFromPersonaName(personaName),
       description: `Default prompt for persona ${personaName}`,
-      shared: true,
       system_prompt: systemPrompt,
       task_prompt: taskPrompt,
       include_citations: includeCitations,
@@ -104,12 +104,12 @@ function buildPersonaAPIBody(
     llm_relevance_filter,
     is_public,
     groups,
+    users,
   } = creationRequest;
 
   return {
     name,
     description,
-    shared: true,
     num_chunks,
     llm_relevance_filter,
     llm_filter_extraction: false,
@@ -119,6 +119,7 @@ function buildPersonaAPIBody(
     document_set_ids,
     llm_model_version_override: creationRequest.llm_model_version_override,
     starter_messages: creationRequest.starter_messages,
+    users,
     groups,
   };
 }
@@ -139,7 +140,7 @@ export async function createPersona(
 
   const createPersonaResponse =
     promptId !== null
-      ? await fetch("/api/admin/persona", {
+      ? await fetch("/api/persona", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -182,7 +183,7 @@ export async function updatePersona(
 
   const updatePersonaResponse =
     promptResponse.ok && promptId
-      ? await fetch(`/api/admin/persona/${id}`, {
+      ? await fetch(`/api/persona/${id}`, {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
@@ -197,7 +198,7 @@ export async function updatePersona(
 }
 
 export function deletePersona(personaId: number) {
-  return fetch(`/api/admin/persona/${personaId}`, {
+  return fetch(`/api/persona/${personaId}`, {
     method: "DELETE",
   });
 }
