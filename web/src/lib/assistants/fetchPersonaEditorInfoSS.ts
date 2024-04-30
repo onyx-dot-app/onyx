@@ -2,6 +2,7 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { CCPairBasicInfo, DocumentSet, User } from "../types";
 import { getCurrentUserSS } from "../userSS";
 import { fetchSS } from "../utilsSS";
+import { FullLLMProvider } from "@/app/admin/models/llm/interfaces";
 
 export async function fetchAssistantEditorInfoSS(
   personaId?: number | string
@@ -10,8 +11,7 @@ export async function fetchAssistantEditorInfoSS(
       {
         ccPairs: CCPairBasicInfo[];
         documentSets: DocumentSet[];
-        llmOverrideOptions: string[];
-        defaultLLM: string;
+        llmProviders: FullLLMProvider[];
         user: User | null;
         existingPersona: Persona | null;
       },
@@ -22,8 +22,7 @@ export async function fetchAssistantEditorInfoSS(
   const tasks = [
     fetchSS("/manage/indexing-status"),
     fetchSS("/manage/document-set"),
-    fetchSS("/persona/utils/list-available-models"),
-    fetchSS("/persona/utils/default-model"),
+    fetchSS("/llm/provider"),
     // duplicate fetch, but shouldn't be too big of a deal
     // this page is not a high traffic page
     getCurrentUserSS(),
@@ -37,12 +36,10 @@ export async function fetchAssistantEditorInfoSS(
   const [
     ccPairsInfoResponse,
     documentSetsResponse,
-    llmOverridesResponse,
-    defaultLLMResponse,
+    llmProvidersResponse,
     user,
     personaResponse,
   ] = (await Promise.all(tasks)) as [
-    Response,
     Response,
     Response,
     Response,
@@ -66,21 +63,13 @@ export async function fetchAssistantEditorInfoSS(
   }
   const documentSets = (await documentSetsResponse.json()) as DocumentSet[];
 
-  if (!llmOverridesResponse.ok) {
+  if (!llmProvidersResponse.ok) {
     return [
       null,
-      `Failed to fetch LLM override options - ${await llmOverridesResponse.text()}`,
+      `Failed to fetch LLM providers - ${await llmProvidersResponse.text()}`,
     ];
   }
-  const llmOverrideOptions = (await llmOverridesResponse.json()) as string[];
-
-  if (!defaultLLMResponse.ok) {
-    return [
-      null,
-      `Failed to fetch default LLM - ${await defaultLLMResponse.text()}`,
-    ];
-  }
-  const defaultLLM = (await defaultLLMResponse.json()) as string;
+  const llmProviders = (await llmProvidersResponse.json()) as FullLLMProvider[];
 
   if (personaId && personaResponse && !personaResponse.ok) {
     return [null, `Failed to fetch Persona - ${await personaResponse.text()}`];
@@ -93,8 +82,7 @@ export async function fetchAssistantEditorInfoSS(
     {
       ccPairs,
       documentSets,
-      llmOverrideOptions,
-      defaultLLM,
+      llmProviders,
       user,
       existingPersona,
     },

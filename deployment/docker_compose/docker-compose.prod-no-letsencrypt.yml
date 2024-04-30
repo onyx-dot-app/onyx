@@ -12,6 +12,7 @@ services:
     depends_on:
       - relational_db
       - index
+      - inference_model_server
     restart: always
     env_file:
       - .env
@@ -41,6 +42,8 @@ services:
     depends_on:
       - relational_db
       - index
+      - inference_model_server
+      - indexing_model_server
     restart: always
     env_file:
       - .env

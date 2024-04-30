@@ -28,9 +28,9 @@ from danswer.llm.answering.answer import Answer
 from danswer.llm.answering.models import AnswerStyleConfig
 from danswer.llm.answering.models import CitationConfig
 from danswer.llm.answering.models import DocumentPruningConfig
-from danswer.llm.answering.models import LLMConfig
 from danswer.llm.answering.models import PromptConfig
 from danswer.llm.answering.models import QuotesConfig
+from danswer.llm.factory import get_llm_for_persona
 from danswer.llm.utils import get_default_llm_token_encode
 from danswer.one_shot_answer.models import DirectQARequest
 from danswer.one_shot_answer.models import OneShotQAResponse
@@ -212,10 +212,9 @@ def stream_answer_objects(
         docs=[llm_doc_from_inference_section(section) for section in top_sections],
         answer_style_config=answer_config,
         prompt_config=PromptConfig.from_model(prompt),
-        llm_config=LLMConfig.from_persona(chat_session.persona),
+        llm=get_llm_for_persona(persona=chat_session.persona),
         doc_relevance_list=search_pipeline.section_relevance_list,
         single_message_history=history_str,
-        timeout=timeout,
     )
     yield from answer.processed_streamed_output
 

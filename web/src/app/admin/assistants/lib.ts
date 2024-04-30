@@ -10,6 +10,7 @@ interface PersonaCreationRequest {
   include_citations: boolean;
   is_public: boolean;
   llm_relevance_filter: boolean | null;
+  llm_model_provider_override: string | null;
   llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
   users?: string[];
@@ -28,6 +29,7 @@ interface PersonaUpdateRequest {
   include_citations: boolean;
   is_public: boolean;
   llm_relevance_filter: boolean | null;
+  llm_model_provider_override: string | null;
   llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
   users?: string[];
@@ -117,6 +119,7 @@ function buildPersonaAPIBody(
     recency_bias: "base_decay",
     prompt_ids: [promptId],
     document_set_ids,
+    llm_model_provider_override: creationRequest.llm_model_provider_override,
     llm_model_version_override: creationRequest.llm_model_version_override,
     starter_messages: creationRequest.starter_messages,
     users,

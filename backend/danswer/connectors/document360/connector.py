@@ -13,6 +13,7 @@ from danswer.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
 )
 from danswer.connectors.cross_connector_utils.retry_wrapper import retry_builder
+from danswer.connectors.document360.utils import flatten_child_categories
 from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import LoadConnector
 from danswer.connectors.interfaces import PollConnector
@@ -97,13 +98,16 @@ class Document360Connector(LoadConnector, PollConnector):
                         {"id": article["id"], "category_name": category["name"]}
                     )
                 for child_category in category["child_categories"]:
-                    for article in child_category["articles"]:
-                        articles_with_category.append(
-                            {
-                                "id": article["id"],
-                                "category_name": child_category["name"],
-                            }
-                        )
+                    all_nested_categories = flatten_child_categories(child_category)
+                    for nested_category in all_nested_categories:
+                        for article in nested_category["articles"]:
+                            articles_with_category.append(
+                                {
+                                    "id": article["id"],
+                                    "category_name": nested_category["name"],
+                                }
+                            )
+
         return articles_with_category
 
     def _process_articles(
@@ -141,7 +145,9 @@ class Document360Connector(LoadConnector, PollConnector):
             doc_link = f"{DOCUMENT360_BASE_URL}/{self.portal_id}/document/v1/view/{article['id']}"
 
             html_content = article_details["html_content"]
-            article_content = parse_html_page_basic(html_content)
+            article_content = (
+                parse_html_page_basic(html_content) if html_content is not None else ""
+            )
             doc_text = (
                 f"{article_details.get('description', '')}\n{article_content}".strip()
             )

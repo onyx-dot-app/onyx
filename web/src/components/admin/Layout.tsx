@@ -155,7 +155,7 @@ export async function Layout({ children }: { children: React.ReactNode }) {
                         <div className="ml-1">LLM</div>
                       </div>
                     ),
-                    link: "/admin/keys/openai",
+                    link: "/admin/models/llm",
                   },
                   {
                     name: (

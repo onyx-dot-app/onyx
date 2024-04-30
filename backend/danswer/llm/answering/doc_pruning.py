@@ -7,9 +7,9 @@ from danswer.chat.models import (
 from danswer.configs.constants import IGNORE_FOR_QA
 from danswer.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from danswer.llm.answering.models import DocumentPruningConfig
-from danswer.llm.answering.models import LLMConfig
 from danswer.llm.answering.models import PromptConfig
 from danswer.llm.answering.prompts.citations_prompt import compute_max_document_tokens
+from danswer.llm.interfaces import LLMConfig
 from danswer.llm.utils import get_default_llm_tokenizer
 from danswer.llm.utils import tokenizer_trim_content
 from danswer.prompts.prompt_utils import build_doc_context_str

@@ -1,48 +1,90 @@
 from danswer.configs.app_configs import DISABLE_GENERATIVE_AI
 from danswer.configs.chat_configs import QA_TIMEOUT
-from danswer.configs.model_configs import GEN_AI_MODEL_PROVIDER
 from danswer.configs.model_configs import GEN_AI_TEMPERATURE
+from danswer.db.engine import get_session_context_manager
+from danswer.db.llm import fetch_default_provider
+from danswer.db.llm import fetch_provider
+from danswer.db.models import Persona
 from danswer.llm.chat_llm import DefaultMultiLLM
-from danswer.llm.custom_llm import CustomModelServer
 from danswer.llm.exceptions import GenAIDisabledException
-from danswer.llm.gpt_4_all import DanswerGPT4All
 from danswer.llm.interfaces import LLM
-from danswer.llm.utils import get_default_llm_version
-from danswer.llm.utils import get_gen_ai_api_key
+from danswer.llm.override_models import LLMOverride
+
+
+def get_llm_for_persona(
+    persona: Persona, llm_override: LLMOverride | None = None
+) -> LLM:
+    model_provider_override = llm_override.model_provider if llm_override else None
+    model_version_override = llm_override.model_version if llm_override else None
+    temperature_override = llm_override.temperature if llm_override else None
+
+    return get_default_llm(
+        gen_ai_model_provider=model_provider_override
+        or persona.llm_model_provider_override,
+        gen_ai_model_version_override=(
+            model_version_override or persona.llm_model_version_override
+        ),
+        temperature=temperature_override or GEN_AI_TEMPERATURE,
+    )
 
 
 def get_default_llm(
-    gen_ai_model_provider: str = GEN_AI_MODEL_PROVIDER,
-    api_key: str | None = None,
     timeout: int = QA_TIMEOUT,
     temperature: float = GEN_AI_TEMPERATURE,
     use_fast_llm: bool = False,
+    gen_ai_model_provider: str | None = None,
     gen_ai_model_version_override: str | None = None,
 ) -> LLM:
-    """A single place to fetch the configured LLM for Danswer
-    Also allows overriding certain LLM defaults"""
     if DISABLE_GENERATIVE_AI:
         raise GenAIDisabledException()
 
-    if gen_ai_model_version_override:
-        model_version = gen_ai_model_version_override
-    else:
-        base, fast = get_default_llm_version()
-        model_version = fast if use_fast_llm else base
-    if api_key is None:
-        api_key = get_gen_ai_api_key()
+    # TODO: pass this in
+    with get_session_context_manager() as session:
+        if gen_ai_model_provider is None:
+            llm_provider = fetch_default_provider(session)
+        else:
+            llm_provider = fetch_provider(session, gen_ai_model_provider)
 
-    if gen_ai_model_provider.lower() == "custom":
-        return CustomModelServer(api_key=api_key, timeout=timeout)
+    if not llm_provider:
+        raise ValueError("No default LLM provider found")
 
-    if gen_ai_model_provider.lower() == "gpt4all":
-        return DanswerGPT4All(
-            model_version=model_version, timeout=timeout, temperature=temperature
-        )
+    model_name = gen_ai_model_version_override or (
+        (llm_provider.fast_default_model_name or llm_provider.default_model_name)
+        if use_fast_llm
+        else llm_provider.default_model_name
+    )
+    if not model_name:
+        raise ValueError("No default model name found")
 
-    return DefaultMultiLLM(
-        model_version=model_version,
-        api_key=api_key,
+    return get_llm(
+        provider=llm_provider.name,
+        model=model_name,
+        api_key=llm_provider.api_key,
+        api_base=llm_provider.api_base,
+        api_version=llm_provider.api_version,
+        custom_config=llm_provider.custom_config,
         timeout=timeout,
         temperature=temperature,
+    )
+
+
+def get_llm(
+    provider: str,
+    model: str,
+    api_key: str | None = None,
+    api_base: str | None = None,
+    api_version: str | None = None,
+    custom_config: dict[str, str] | None = None,
+    temperature: float = GEN_AI_TEMPERATURE,
+    timeout: int = QA_TIMEOUT,
+) -> LLM:
+    return DefaultMultiLLM(
+        model_provider=provider,
+        model_name=model,
+        api_key=api_key,
+        api_base=api_base,
+        api_version=api_version,
+        timeout=timeout,
+        temperature=temperature,
+        custom_config=custom_config,
     )

@@ -31,6 +31,15 @@ import { Bubble } from "@/components/Bubble";
 import { GroupsIcon } from "@/components/icons/icons";
 import { SuccessfulPersonaUpdateRedirectType } from "./enums";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
+import { FullLLMProvider } from "../models/llm/interfaces";
+import { Option } from "@/components/Dropdown";
+
+const DEFAULT_LLM_PROVIDER_TO_DISPLAY_NAME: Record<string, string> = {
+  openai: "OpenAI",
+  azure: "Azure OpenAI",
+  anthropic: "Anthropic",
+  bedrock: "AWS Bedrock",
+};
 
 function Label({ children }: { children: string | JSX.Element }) {
   return (
@@ -46,20 +55,18 @@ export function AssistantEditor({
   existingPersona,
   ccPairs,
   documentSets,
-  llmOverrideOptions,
-  defaultLLM,
   user,
   defaultPublic,
   redirectType,
+  llmProviders,
 }: {
   existingPersona?: Persona | null;
   ccPairs: CCPairBasicInfo[];
   documentSets: DocumentSet[];
-  llmOverrideOptions: string[];
-  defaultLLM: string;
   user: User | null;
   defaultPublic: boolean;
   redirectType: SuccessfulPersonaUpdateRedirectType;
+  llmProviders: FullLLMProvider[];
 }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
@@ -98,6 +105,21 @@ export function AssistantEditor({
     }
   }, []);
 
+  const defaultLLM = llmProviders.find(
+    (llmProvider) => llmProvider.is_default_provider
+  )?.default_model_name;
+
+  const modelOptionsByProvider = new Map<string, Option<string>[]>();
+  llmProviders.forEach((llmProvider) => {
+    const providerOptions = llmProvider.model_names.map((modelName) => {
+      return {
+        name: modelName,
+        value: modelName,
+      };
+    });
+    modelOptionsByProvider.set(llmProvider.name, providerOptions);
+  });
+
   return (
     <div>
       {popup}
@@ -118,6 +140,8 @@ export function AssistantEditor({
           include_citations:
             existingPersona?.prompts[0]?.include_citations ?? true,
           llm_relevance_filter: existingPersona?.llm_relevance_filter ?? false,
+          llm_model_provider_override:
+            existingPersona?.llm_model_provider_override ?? null,
           llm_model_version_override:
             existingPersona?.llm_model_version_override ?? null,
           starter_messages: existingPersona?.starter_messages ?? [],
@@ -139,6 +163,7 @@ export function AssistantEditor({
             include_citations: Yup.boolean().required(),
             llm_relevance_filter: Yup.boolean().required(),
             llm_model_version_override: Yup.string().nullable(),
+            llm_model_provider_override: Yup.string().nullable(),
             starter_messages: Yup.array().of(
               Yup.object().shape({
                 name: Yup.string().required(),
@@ -174,6 +199,18 @@ export function AssistantEditor({
             setPopup({
               type: "error",
               message: "Cannot submit while there are errors in the form!",
+            });
+            return;
+          }
+
+          if (
+            values.llm_model_provider_override &&
+            !values.llm_model_version_override
+          ) {
+            setPopup({
+              type: "error",
+              message:
+                "Must select a model if a non-default LLM provider is chosen.",
             });
             return;
           }
@@ -428,7 +465,7 @@ export function AssistantEditor({
                 </>
               )}
 
-              {llmOverrideOptions.length > 0 && defaultLLM && (
+              {llmProviders.length > 0 && (
                 <>
                   <HidableSection
                     sectionTitle="[Advanced] Model Selection"
@@ -452,17 +489,50 @@ export function AssistantEditor({
                         .
                       </Text>
 
-                      <div className="w-96">
-                        <SelectorFormField
-                          name="llm_model_version_override"
-                          options={llmOverrideOptions.map((llmOption) => {
-                            return {
-                              name: llmOption,
-                              value: llmOption,
-                            };
-                          })}
-                          includeDefault={true}
-                        />
+                      <div className="flex mt-6">
+                        <div className="w-96">
+                          <SubLabel>LLM Provider</SubLabel>
+                          <SelectorFormField
+                            name="llm_model_provider_override"
+                            options={llmProviders.map((llmProvider) => ({
+                              name:
+                                DEFAULT_LLM_PROVIDER_TO_DISPLAY_NAME[
+                                  llmProvider.name
+                                ] || llmProvider.name,
+                              value: llmProvider.name,
+                            }))}
+                            includeDefault={true}
+                            onSelect={(selected) => {
+                              if (
+                                selected !== values.llm_model_provider_override
+                              ) {
+                                setFieldValue(
+                                  "llm_model_version_override",
+                                  null
+                                );
+                              }
+                              setFieldValue(
+                                "llm_model_provider_override",
+                                selected
+                              );
+                            }}
+                          />
+                        </div>
+
+                        {values.llm_model_provider_override && (
+                          <div className="w-96 ml-4">
+                            <SubLabel>Model</SubLabel>
+                            <SelectorFormField
+                              name="llm_model_version_override"
+                              options={
+                                modelOptionsByProvider.get(
+                                  values.llm_model_provider_override
+                                ) || []
+                              }
+                              maxHeight="max-h-72"
+                            />
+                          </div>
+                        )}
                       </div>
                     </>
                   </HidableSection>

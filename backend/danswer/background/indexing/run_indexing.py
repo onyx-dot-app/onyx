@@ -26,7 +26,7 @@ from danswer.db.document import get_documents_for_connector_credential_pair
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.index_attempt import get_index_attempt
 from danswer.db.index_attempt import mark_attempt_failed
-from danswer.db.index_attempt import mark_attempt_in_progress
+from danswer.db.index_attempt import mark_attempt_in_progress__no_commit
 from danswer.db.index_attempt import mark_attempt_succeeded
 from danswer.db.index_attempt import update_docs_indexed
 from danswer.db.models import IndexAttempt
@@ -114,16 +114,6 @@ def _run_indexing(
     # Only update cc-pair status for primary index jobs
     # Secondary index syncs at the end when swapping
     is_primary = index_attempt.embedding_model.status == IndexModelStatus.PRESENT
-
-    # Mark as started
-    mark_attempt_in_progress(index_attempt, db_session)
-    if is_primary:
-        update_connector_credential_pair(
-            db_session=db_session,
-            connector_id=index_attempt.connector.id,
-            credential_id=index_attempt.credential.id,
-            attempt_status=IndexingStatus.IN_PROGRESS,
-        )
 
     # Indexing is only done into one index at a time
     document_index = get_default_document_index(
@@ -331,6 +321,42 @@ def _run_indexing(
     )
 
 
+def _prepare_index_attempt(db_session: Session, index_attempt_id: int) -> IndexAttempt:
+    # make sure that the index attempt can't change in between checking the
+    # status and marking it as in_progress. This setting will be discarded
+    # after the next commit:
+    # https://docs.sqlalchemy.org/en/20/orm/session_transaction.html#setting-isolation-for-individual-transactions
+    db_session.connection(execution_options={"isolation_level": "SERIALIZABLE"})  # type: ignore
+
+    attempt = get_index_attempt(
+        db_session=db_session,
+        index_attempt_id=index_attempt_id,
+    )
+    if attempt is None:
+        raise RuntimeError(f"Unable to find IndexAttempt for ID '{index_attempt_id}'")
+
+    if attempt.status != IndexingStatus.NOT_STARTED:
+        raise RuntimeError(
+            f"Indexing attempt with ID '{index_attempt_id}' is not in NOT_STARTED status. "
+            f"Current status is '{attempt.status}'."
+        )
+
+    # only commit once, to make sure this all happens in a single transaction
+    mark_attempt_in_progress__no_commit(attempt)
+    is_primary = attempt.embedding_model.status == IndexModelStatus.PRESENT
+    if is_primary:
+        update_connector_credential_pair(
+            db_session=db_session,
+            connector_id=attempt.connector.id,
+            credential_id=attempt.credential.id,
+            attempt_status=IndexingStatus.IN_PROGRESS,
+        )
+    else:
+        db_session.commit()
+
+    return attempt
+
+
 def run_indexing_entrypoint(index_attempt_id: int) -> None:
     """Entrypoint for indexing run when using dask distributed.
     Wraps the actual logic in a `try` block so that we can catch any exceptions
@@ -341,13 +367,9 @@ def run_indexing_entrypoint(index_attempt_id: int) -> None:
         IndexAttemptSingleton.set_index_attempt_id(index_attempt_id)
 
         with Session(get_sqlalchemy_engine()) as db_session:
-            attempt = get_index_attempt(
-                db_session=db_session, index_attempt_id=index_attempt_id
-            )
-            if attempt is None:
-                raise RuntimeError(
-                    f"Unable to find IndexAttempt for ID '{index_attempt_id}'"
-                )
+            # make sure that it is valid to run this indexing attempt + mark it
+            # as in progress
+            attempt = _prepare_index_attempt(db_session, index_attempt_id)
 
             logger.info(
                 f"Running indexing attempt for connector: '{attempt.connector.name}', "
@@ -355,10 +377,7 @@ def run_indexing_entrypoint(index_attempt_id: int) -> None:
                 f"with credentials: '{attempt.credential_id}'"
             )
 
-            _run_indexing(
-                db_session=db_session,
-                index_attempt=attempt,
-            )
+            _run_indexing(db_session, attempt)
 
             logger.info(
                 f"Completed indexing attempt for connector: '{attempt.connector.name}', "

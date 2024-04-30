@@ -8,7 +8,7 @@ import {
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
-import { ApiKeyModal } from "@/components/openai/ApiKeyModal";
+import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import { fetchSS } from "@/lib/utilsSS";
 import { CCPairBasicInfo, DocumentSet, Tag, User } from "@/lib/types";
 import { cookies } from "next/headers";
@@ -25,6 +25,9 @@ import { FullEmbeddingModelResponse } from "../admin/models/embedding/embeddingM
 import { NoSourcesModal } from "@/components/initialSetup/search/NoSourcesModal";
 import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
 import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
+import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
+import { LLMProviderDescriptor } from "../admin/models/llm/interfaces";
+
 
 export default async function Home() {
   // Disable caching so we always get the up to date connector / document set / persona info
@@ -40,7 +43,7 @@ export default async function Home() {
     fetchSS("/persona"),
     fetchSS("/query/valid-tags"),
     fetchSS("/secondary-index/get-embedding-models"),
-    fetchSS("/persona/default-model"),
+    fetchLLMProvidersSS(),
     fetchSS("/eea_config/get_eea_config"),
   ];
 
@@ -52,6 +55,7 @@ export default async function Home() {
     | Response
     | AuthTypeMetadata
     | FullEmbeddingModelResponse
+    | LLMProviderDescriptor[]
     | null
   )[] = [null, null, null, null, null, null, null, null];
   try {
@@ -66,7 +70,7 @@ export default async function Home() {
   const personaResponse = results[4] as Response | null;
   const tagsResponse = results[5] as Response | null;
   const embeddingModelResponse = results[6] as Response | null;
-  const defaultModelResponse = results[7] as Response | null;
+  const llmProviders = (results[7] || []) as LLMProviderDescriptor[];
   const EEAConfigResponse = results[8] as Response | null;
   let disclaimerTitle = "";
   let disclaimerText = "";
@@ -120,12 +124,7 @@ export default async function Home() {
   // sort them in priority order
   personas.sort(personaComparator);
 
-  let defaultModel = "default model";
-  if (defaultModelResponse?.ok) {
-    defaultModel = await defaultModelResponse.json();
-  } else {
-    console.log(`Failed to fetch default_model - ${defaultModelResponse?.status}`);
-  }
+  const defaultModel = llmProviders[0].default_model_name || "default model";
 
   let tags: Tag[] = [];
   if (tagsResponse?.ok) {
@@ -173,10 +172,10 @@ export default async function Home() {
       <div className="m-3">
         <HealthCheckBanner />
       </div>
-      {shouldShowWelcomeModal && <WelcomeModal />}
+      {shouldShowWelcomeModal && <WelcomeModal user={user} />}
       {!shouldShowWelcomeModal &&
         !shouldDisplayNoSourcesModal &&
-        !shouldDisplaySourcesIncompleteModal && <ApiKeyModal />}
+        !shouldDisplaySourcesIncompleteModal && <ApiKeyModal user={user} />}
       {shouldDisplayNoSourcesModal && <NoSourcesModal />}
       {shouldDisplaySourcesIncompleteModal && (
         <NoCompleteSourcesModal ccPairs={ccPairs} />

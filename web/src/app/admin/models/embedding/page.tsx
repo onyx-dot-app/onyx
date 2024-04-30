@@ -1,13 +1,10 @@
 "use client";
 
-import { LoadingAnimation, ThreeDotsLoader } from "@/components/Loading";
+import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { KeyIcon, TrashIcon } from "@/components/icons/icons";
-import { ApiKeyForm } from "@/components/openai/ApiKeyForm";
-import { GEN_AI_API_KEY_URL } from "@/components/openai/constants";
-import { errorHandlingFetcher, fetcher } from "@/lib/fetcher";
-import { Button, Card, Divider, Text, Title } from "@tremor/react";
-import { FiCpu, FiPackage } from "react-icons/fi";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { Button, Card, Text, Title } from "@tremor/react";
+import { FiPackage } from "react-icons/fi";
 import useSWR, { mutate } from "swr";
 import { ModelOption, ModelSelector } from "./ModelSelector";
 import { useState } from "react";

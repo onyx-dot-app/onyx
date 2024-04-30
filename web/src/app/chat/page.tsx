@@ -20,15 +20,18 @@ import {
   WelcomeModal,
   hasCompletedWelcomeFlowSS,
 } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
-import { ApiKeyModal } from "@/components/openai/ApiKeyModal";
+import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import { cookies } from "next/headers";
 import { DOCUMENT_SIDEBAR_WIDTH_COOKIE_NAME } from "@/components/resizable/contants";
 import { personaComparator } from "../admin/assistants/lib";
-import { ChatLayout } from "./ChatPage";
+import { ChatPage } from "./ChatPage";
 import { FullEmbeddingModelResponse } from "../admin/models/embedding/embeddingModels";
 import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
 import { Settings } from "../admin/settings/interfaces";
 import { SIDEBAR_TAB_COOKIE, Tabs } from "./sessionSidebar/constants";
+import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
+import { LLMProviderDescriptor } from "../admin/models/llm/interfaces";
+import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
 
 export default async function Page({
   searchParams,
@@ -45,7 +48,8 @@ export default async function Page({
     fetchSS("/persona?include_default=true"),
     fetchSS("/chat/get-user-chat-sessions"),
     fetchSS("/query/valid-tags"),
-    fetchSS("/persona/default-model"),
+    fetchLLMProvidersSS(),
+    fetchSS("/eea_config/get_eea_config"),
   ];
 
   // catch cases where the backend is completely unreachable here
@@ -57,8 +61,9 @@ export default async function Page({
     | AuthTypeMetadata
     | FullEmbeddingModelResponse
     | Settings
+    | LLMProviderDescriptor[]
     | null
-  )[] = [null, null, null, null, null, null, null, null, null];
+  )[] = [null, null, null, null, null, null, null, null, null, null];
   try {
     results = await Promise.all(tasks);
   } catch (e) {
@@ -71,7 +76,23 @@ export default async function Page({
   const personasResponse = results[4] as Response | null;
   const chatSessionsResponse = results[5] as Response | null;
   const tagsResponse = results[6] as Response | null;
-  const defaultModelResponse = results[7] as Response | null;
+  const llmProviders = (results[7] || []) as LLMProviderDescriptor[];
+  const EEAConfigResponse = results[8] as Response | null;
+
+  let disclaimerTitle = "";
+  let disclaimerText = "";
+  if (EEAConfigResponse?.ok) {
+    const eea_config = await EEAConfigResponse.json();
+    let conf = {"disclaimer":{"disclaimer_title":"", "disclaimer_text": ""}}
+    try{
+      conf = JSON.parse(eea_config?.config)
+    }
+    catch(e){
+      console.log("error parsing eea_conf")
+    }
+    disclaimerTitle = conf?.disclaimer?.disclaimer_title || "";
+    disclaimerText = conf?.disclaimer?.disclaimer_text || "";
+  }
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
@@ -115,12 +136,7 @@ export default async function Page({
     );
   }
 
-  let defaultModel = "default model";
-  if (defaultModelResponse?.ok) {
-    defaultModel = await defaultModelResponse.json();
-  } else {
-    console.log(`Failed to fetch default_model - ${defaultModelResponse?.status}`);
-  }
+  const defaultModel = llmProviders[0].default_model_name || "default model";
 
   let personas: Persona[] = [];
   if (personasResponse?.ok) {
@@ -176,23 +192,26 @@ export default async function Page({
 
   return (
     <>
+      <UserDisclaimerModal disclaimerText={disclaimerText} disclaimerTitle={disclaimerTitle}/>
+
       <InstantSSRAutoRefresh />
 
-      {shouldShowWelcomeModal && <WelcomeModal />}
+      {shouldShowWelcomeModal && <WelcomeModal user={user} />}
       {!shouldShowWelcomeModal && !shouldDisplaySourcesIncompleteModal && (
-        <ApiKeyModal />
+        <ApiKeyModal user={user} />
       )}
       {shouldDisplaySourcesIncompleteModal && (
         <NoCompleteSourcesModal ccPairs={ccPairs} />
       )}
 
-      <ChatLayout
+      <ChatPage
         user={user}
         chatSessions={chatSessions}
         availableSources={availableSources}
         availableDocumentSets={documentSets}
         availablePersonas={personas}
         availableTags={tags}
+        llmProviders={llmProviders}
         defaultSelectedPersonaId={defaultPersonaId}
         documentSidebarInitialWidth={finalDocumentSidebarInitialWidth}
         defaultSidebarTab={defaultSidebarTab}

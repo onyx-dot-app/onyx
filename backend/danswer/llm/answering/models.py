@@ -9,15 +9,12 @@ from pydantic import root_validator
 
 from danswer.chat.models import AnswerQuestionStreamReturn
 from danswer.configs.constants import MessageType
-from danswer.configs.model_configs import GEN_AI_MODEL_PROVIDER
-from danswer.llm.override_models import LLMOverride
+from danswer.file_store.models import InMemoryChatFile
 from danswer.llm.override_models import PromptOverride
-from danswer.llm.utils import get_default_llm_version
 
 if TYPE_CHECKING:
     from danswer.db.models import ChatMessage
     from danswer.db.models import Prompt
-    from danswer.db.models import Persona
 
 
 StreamProcessor = Callable[[Iterator[str]], AnswerQuestionStreamReturn]
@@ -29,13 +26,24 @@ class PreviousMessage(BaseModel):
     message: str
     token_count: int
     message_type: MessageType
+    files: list[InMemoryChatFile]
 
     @classmethod
-    def from_chat_message(cls, chat_message: "ChatMessage") -> "PreviousMessage":
+    def from_chat_message(
+        cls, chat_message: "ChatMessage", available_files: list[InMemoryChatFile]
+    ) -> "PreviousMessage":
+        message_file_ids = (
+            [file["id"] for file in chat_message.files] if chat_message.files else []
+        )
         return cls(
             message=chat_message.message,
             token_count=chat_message.token_count,
             message_type=chat_message.message_type,
+            files=[
+                file
+                for file in available_files
+                if str(file.file_id) in message_file_ids
+            ],
         )
 
 
@@ -84,36 +92,6 @@ class AnswerStyleConfig(BaseModel):
             )
 
         return values
-
-
-class LLMConfig(BaseModel):
-    """Final representation of the LLM configuration passed into
-    the `Answer` object."""
-
-    model_provider: str
-    model_version: str
-    temperature: float
-
-    @classmethod
-    def from_persona(
-        cls, persona: "Persona", llm_override: LLMOverride | None = None
-    ) -> "LLMConfig":
-        model_provider_override = llm_override.model_provider if llm_override else None
-        model_version_override = llm_override.model_version if llm_override else None
-        temperature_override = llm_override.temperature if llm_override else None
-
-        return cls(
-            model_provider=model_provider_override or GEN_AI_MODEL_PROVIDER,
-            model_version=(
-                model_version_override
-                or persona.llm_model_version_override
-                or get_default_llm_version()[0]
-            ),
-            temperature=temperature_override or 0.0,
-        )
-
-    class Config:
-        frozen = True
 
 
 class PromptConfig(BaseModel):

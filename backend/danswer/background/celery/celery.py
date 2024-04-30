@@ -67,14 +67,15 @@ def cleanup_connector_credential_pair_task(
             connector_id=connector_id,
             credential_id=credential_id,
         )
-        if not cc_pair or not check_deletion_attempt_is_allowed(
-            connector_credential_pair=cc_pair
-        ):
+        if not cc_pair:
             raise ValueError(
-                "Cannot run deletion attempt - connector_credential_pair is not deletable. "
-                "This is likely because there is an ongoing / planned indexing attempt OR the "
-                "connector is not disabled."
+                f"Cannot run deletion attempt - connector_credential_pair with Connector ID: "
+                f"{connector_id} and Credential ID: {credential_id} does not exist."
             )
+
+        deletion_attempt_disallowed_reason = check_deletion_attempt_is_allowed(cc_pair)
+        if deletion_attempt_disallowed_reason:
+            raise ValueError(deletion_attempt_disallowed_reason)
 
         try:
             # The bulk of the work is in here, updates Postgres and Vespa

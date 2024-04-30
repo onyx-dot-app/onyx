@@ -20,6 +20,7 @@ class CreatePersonaRequest(BaseModel):
     recency_bias: RecencyBiasSetting
     prompt_ids: list[int]
     document_set_ids: list[int]
+    llm_model_provider_override: str | None = None
     llm_model_version_override: str | None = None
     starter_messages: list[StarterMessage] | None = None
     # For Private Personas, who should be able to access these
@@ -38,6 +39,7 @@ class PersonaSnapshot(BaseModel):
     num_chunks: float | None
     llm_relevance_filter: bool
     llm_filter_extraction: bool
+    llm_model_provider_override: str | None
     llm_model_version_override: str | None
     starter_messages: list[StarterMessage] | None
     default_persona: bool
@@ -66,6 +68,7 @@ class PersonaSnapshot(BaseModel):
             num_chunks=persona.num_chunks,
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
+            llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
             starter_messages=persona.starter_messages,
             default_persona=persona.default_persona,

@@ -36,13 +36,15 @@ from danswer.danswerbot.slack.utils import slack_usage_report
 from danswer.danswerbot.slack.utils import SlackRateLimiter
 from danswer.danswerbot.slack.utils import update_emote_react
 from danswer.db.engine import get_sqlalchemy_engine
+from danswer.db.models import Persona
 from danswer.db.models import SlackBotConfig
 from danswer.db.models import SlackBotResponseType
+from danswer.db.persona import fetch_persona_by_id
 from danswer.llm.answering.prompts.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
+from danswer.llm.factory import get_llm_for_persona
 from danswer.llm.utils import check_number_of_tokens
-from danswer.llm.utils import get_default_llm_version
 from danswer.llm.utils import get_max_input_tokens
 from danswer.one_shot_answer.answer_question import get_search_answer
 from danswer.one_shot_answer.models import DirectQARequest
@@ -237,32 +239,38 @@ def handle_message(
 
         max_document_tokens: int | None = None
         max_history_tokens: int | None = None
-        if len(new_message_request.messages) > 1:
-            llm_name = get_default_llm_version()[0]
-            if persona and persona.llm_model_version_override:
-                llm_name = persona.llm_model_version_override
-
-            # In cases of threads, split the available tokens between docs and thread context
-            input_tokens = get_max_input_tokens(model_name=llm_name)
-            max_history_tokens = int(input_tokens * thread_context_percent)
-
-            remaining_tokens = input_tokens - max_history_tokens
-
-            query_text = new_message_request.messages[0].message
-            if persona:
-                max_document_tokens = compute_max_document_tokens_for_persona(
-                    persona=persona,
-                    actual_user_input=query_text,
-                    max_llm_token_override=remaining_tokens,
-                )
-            else:
-                max_document_tokens = (
-                    remaining_tokens
-                    - 512  # Needs to be more than any of the QA prompts
-                    - check_number_of_tokens(query_text)
-                )
 
         with Session(get_sqlalchemy_engine()) as db_session:
+            if len(new_message_request.messages) > 1:
+                persona = cast(
+                    Persona,
+                    fetch_persona_by_id(db_session, new_message_request.persona_id),
+                )
+                llm = get_llm_for_persona(persona)
+
+                # In cases of threads, split the available tokens between docs and thread context
+                input_tokens = get_max_input_tokens(
+                    model_name=llm.config.model_name,
+                    model_provider=llm.config.model_provider,
+                )
+                max_history_tokens = int(input_tokens * thread_context_percent)
+
+                remaining_tokens = input_tokens - max_history_tokens
+
+                query_text = new_message_request.messages[0].message
+                if persona:
+                    max_document_tokens = compute_max_document_tokens_for_persona(
+                        persona=persona,
+                        actual_user_input=query_text,
+                        max_llm_token_override=remaining_tokens,
+                    )
+                else:
+                    max_document_tokens = (
+                        remaining_tokens
+                        - 512  # Needs to be more than any of the QA prompts
+                        - check_number_of_tokens(query_text)
+                    )
+
             # This also handles creating the query event in postgres
             answer = get_search_answer(
                 query_req=new_message_request,

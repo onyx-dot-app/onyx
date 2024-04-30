@@ -4,6 +4,7 @@ import {
   _WelcomeModal,
 } from "./WelcomeModal";
 import { COMPLETED_WELCOME_FLOW_COOKIE } from "./constants";
+import { User } from "@/lib/types";
 
 export function hasCompletedWelcomeFlowSS() {
   const cookieStore = cookies();
@@ -13,11 +14,11 @@ export function hasCompletedWelcomeFlowSS() {
   );
 }
 
-export function WelcomeModal() {
+export function WelcomeModal({ user }: { user: User | null }) {
   const hasCompletedWelcomeFlow = hasCompletedWelcomeFlowSS();
   if (hasCompletedWelcomeFlow) {
     return <_CompletedWelcomeFlowDummyComponent />;
   }
 
-  return <_WelcomeModal />;
+  return <_WelcomeModal user={user} />;
 }

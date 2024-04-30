@@ -20,6 +20,11 @@ export interface RetrievalDetails {
 
 type CitationMap = { [key: string]: number };
 
+export interface FileDescriptor {
+  id: string;
+  type: "image";
+}
+
 export interface ChatSession {
   id: number;
   name: string;
@@ -36,6 +41,7 @@ export interface Message {
   query?: string | null;
   documents?: DanswerDocument[] | null;
   citations?: CitationMap;
+  files: FileDescriptor[];
 }
 
 export interface BackendChatSession {
@@ -58,6 +64,7 @@ export interface BackendMessage {
   message_type: "user" | "assistant" | "system";
   time_sent: string;
   citations: CitationMap;
+  files: FileDescriptor[];
 }
 
 export interface DocumentsResponse {

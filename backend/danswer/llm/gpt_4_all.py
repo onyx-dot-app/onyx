@@ -4,11 +4,9 @@ from typing import Any
 from langchain.schema.language_model import LanguageModelInput
 
 from danswer.configs.model_configs import GEN_AI_MAX_OUTPUT_TOKENS
-from danswer.configs.model_configs import GEN_AI_MODEL_VERSION
 from danswer.configs.model_configs import GEN_AI_TEMPERATURE
 from danswer.llm.interfaces import LLM
 from danswer.llm.utils import convert_lm_input_to_basic_string
-from danswer.llm.utils import get_default_llm_version
 from danswer.utils.logger import setup_logger
 
 
@@ -38,7 +36,10 @@ except ImportError:
 
 class DanswerGPT4All(LLM):
     """Option to run an LLM locally, however this is significantly slower and
-    answers tend to be much worse"""
+    answers tend to be much worse
+
+    NOTE: currently unused, but kept for future reference / if we want to add this back.
+    """
 
     @property
     def requires_warm_up(self) -> bool:
@@ -53,14 +54,14 @@ class DanswerGPT4All(LLM):
     def __init__(
         self,
         timeout: int,
-        model_version: str | None = GEN_AI_MODEL_VERSION,
+        model_version: str,
         max_output_tokens: int = GEN_AI_MAX_OUTPUT_TOKENS,
         temperature: float = GEN_AI_TEMPERATURE,
     ):
         self.timeout = timeout
         self.max_output_tokens = max_output_tokens
         self.temperature = temperature
-        self.gpt4all_model = GPT4All(model_version or get_default_llm_version()[0])
+        self.gpt4all_model = GPT4All(model_version)
 
     def log_model_configs(self) -> None:
         logger.debug(

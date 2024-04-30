@@ -37,14 +37,12 @@ const Main = () => {
     data: credentialsData,
     isLoading: isCredentialsLoading,
     error: isCredentialsError,
-    isValidating: isCredentialsValidating,
     refreshCredentials,
   } = usePublicCredentials();
 
   if (
-    isConnectorIndexingStatusesLoading ||
-    isCredentialsLoading ||
-    isCredentialsValidating
+    (!connectorIndexingStatuses && isConnectorIndexingStatusesLoading) ||
+    (!credentialsData && isCredentialsLoading)
   ) {
     return <LoadingAnimation text="Loading" />;
   }

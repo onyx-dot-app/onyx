@@ -8,4 +8,4 @@ api_keys.py
 .env
 vespa-app.zip
 dynamic_config_storage/
-celerybeat-schedule
+celerybeat-schedule*

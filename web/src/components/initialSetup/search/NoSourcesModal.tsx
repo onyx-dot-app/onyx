@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Divider } from "@tremor/react";
+import { Button, Divider, Text } from "@tremor/react";
 import { Modal } from "../../Modal";
 import Link from "next/link";
 import { FiMessageSquare, FiShare2 } from "react-icons/fi";
@@ -21,11 +21,11 @@ export function NoSourcesModal() {
     >
       <div className="text-base">
         <div>
-          <p>
+          <Text>
             Before using Search you&apos;ll need to connect at least one source.
             Without any connected knowledge sources, there isn&apos;t anything
             to search over.
-          </p>
+          </Text>
           <Link href="/admin/add-connector">
             <Button className="mt-3" size="xs" icon={FiShare2}>
               Connect a Source!
@@ -33,11 +33,11 @@ export function NoSourcesModal() {
           </Link>
           <Divider />
           <div>
-            <p>
+            <Text>
               Or, if you&apos;re looking for a pure ChatGPT-like experience
               without any organization specific knowledge, then you can head
               over to the Chat page and start chatting with Danswer right away!
-            </p>
+            </Text>
             <Link href="/chat">
               <Button className="mt-3" size="xs" icon={FiMessageSquare}>
                 Start Chatting!

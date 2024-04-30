@@ -91,3 +91,9 @@ GEN_AI_HISTORY_CUTOFF = 3000
 # error if the total # of tokens exceeds the max input tokens.
 GEN_AI_SINGLE_USER_MESSAGE_EXPECTED_MAX_TOKENS = 512
 GEN_AI_TEMPERATURE = float(os.environ.get("GEN_AI_TEMPERATURE") or 0)
+
+# should be used if you are using a custom LLM inference provider that doesn't support
+# streaming format AND you are still using the langchain/litellm LLM class
+DISABLE_LITELLM_STREAMING = (
+    os.environ.get("DISABLE_LITELLM_STREAMING") or "false"
+).lower() == "true"

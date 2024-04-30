@@ -20,6 +20,7 @@ from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_ID
 from danswer.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
 from danswer.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
+from danswer.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.cross_connector_utils.file_utils import read_pdf_file
 from danswer.connectors.cross_connector_utils.html_utils import web_html_cleanup
@@ -49,7 +50,11 @@ def protected_url_check(url: str) -> None:
     - Fetching this is assumed to be relatively fast compared to other bottlenecks like reading
       the page or embedding the contents
     - To be extra safe, all IPs associated with the URL must be global
+    - This is to prevent misuse and not explicit attacks
     """
+    if not WEB_CONNECTOR_VALIDATE_URLS:
+        return
+
     parse = urlparse(url)
     if parse.scheme != "http" and parse.scheme != "https":
         raise ValueError("URL must be of scheme https?://")
@@ -262,6 +267,7 @@ class WebConnector(LoadConnector):
                 final_page = page.url
                 if final_page != current_url:
                     logger.info(f"Redirected to {final_page}")
+                    protected_url_check(final_page)
                     current_url = final_page
                     if current_url in visited_links:
                         logger.info("Redirected page already indexed")

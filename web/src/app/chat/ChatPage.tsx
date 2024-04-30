@@ -7,6 +7,7 @@ import {
   ChatSession,
   ChatSessionSharedStatus,
   DocumentsResponse,
+  FileDescriptor,
   Message,
   RetrievalType,
   StreamingError,
@@ -31,6 +32,7 @@ import {
   personaIncludesRetrieval,
   processRawChatHistory,
   sendMessage,
+  uploadFilesForChat,
 } from "./lib";
 import { useContext, useEffect, useRef, useState } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -57,16 +59,21 @@ import { AnswerPiecePacket, DanswerDocument } from "@/lib/search/interfaces";
 import { buildFilters } from "@/lib/search/utils";
 import { Tabs } from "./sessionSidebar/constants";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import Dropzone from "react-dropzone";
+import { LLMProviderDescriptor } from "../admin/models/llm/interfaces";
+import { checkLLMSupportsImageInput, getFinalLLM } from "@/lib/llm/utils";
+import { InputBarPreviewImage } from "./images/InputBarPreviewImage";
 
 const MAX_INPUT_HEIGHT = 200;
 
-export function ChatLayout({
+export function ChatPage({
   user,
   chatSessions,
   availableSources,
   availableDocumentSets,
   availablePersonas,
   availableTags,
+  llmProviders,
   defaultSelectedPersonaId,
   documentSidebarInitialWidth,
   defaultSidebarTab,
@@ -78,6 +85,7 @@ export function ChatLayout({
   availableDocumentSets: DocumentSet[];
   availablePersonas: Persona[];
   availableTags: Tag[];
+  llmProviders: LLMProviderDescriptor[];
   defaultSelectedPersonaId?: number; // what persona to default to
   documentSidebarInitialWidth?: number;
   defaultSidebarTab?: Tabs;
@@ -126,6 +134,9 @@ export function ChatLayout({
       filterManager.setSelectedSources([]);
       filterManager.setSelectedTags([]);
       filterManager.setTimeRange(null);
+      // remove uploaded files
+      setCurrentMessageFileIds([]);
+
       if (isStreaming) {
         setIsCancelled(true);
       }
@@ -211,6 +222,11 @@ export function ChatLayout({
   );
   const [messageHistory, setMessageHistory] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+
+  // uploaded files
+  const [currentMessageFileIds, setCurrentMessageFileIds] = useState<string[]>(
+    []
+  );
 
   // for document display
   // NOTE: -1 is a special designation that means the latest AI message
@@ -407,15 +423,21 @@ export function ChatLayout({
       messageToResendIndex !== null
         ? messageHistory.slice(0, messageToResendIndex)
         : messageHistory;
+    const currFiles = currentMessageFileIds.map((id) => ({
+      id,
+      type: "image",
+    })) as FileDescriptor[];
     setMessageHistory([
       ...currMessageHistory,
       {
         messageId: 0,
         message: currMessage,
         type: "user",
+        files: currFiles,
       },
     ]);
     setMessage("");
+    setCurrentMessageFileIds([]);
 
     setIsStreaming(true);
     let answer = "";
@@ -432,6 +454,7 @@ export function ChatLayout({
         getLastSuccessfulMessageId(currMessageHistory);
       for await (const packetBunch of sendMessage({
         message: currMessage,
+        fileIds: currentMessageFileIds,
         parentMessageId: lastSuccessfulMessageId,
         chatSessionId: currChatSessionId,
         promptId: livePersona?.prompts[0]?.id || 0,
@@ -482,6 +505,7 @@ export function ChatLayout({
             messageId: finalMessage?.parent_message || null,
             message: currMessage,
             type: "user",
+            files: currFiles,
           },
           {
             messageId: finalMessage?.message_id || null,
@@ -491,6 +515,7 @@ export function ChatLayout({
             query: finalMessage?.rephrased_query || query,
             documents: finalMessage?.context_docs?.top_documents || documents,
             citations: finalMessage?.citations || {},
+            files: finalMessage?.files || [],
           },
         ]);
         if (isCancelledRef.current) {
@@ -506,11 +531,13 @@ export function ChatLayout({
           messageId: null,
           message: currMessage,
           type: "user",
+          files: currFiles,
         },
         {
           messageId: null,
           message: errorMsg,
           type: "error",
+          files: [],
         },
       ]);
     }
@@ -573,7 +600,10 @@ export function ChatLayout({
   };
 
   const onPersonaChange = (persona: Persona | null) => {
-    if (persona) {
+    if (persona && persona.id !== livePersona.id) {
+      // remove uploaded files
+      setCurrentMessageFileIds([]);
+
       setSelectedPersona(persona);
       textareaRef.current?.focus();
       router.push(buildChatUrl(searchParams, null, persona.id));
@@ -640,222 +670,258 @@ export function ChatLayout({
           )}
 
           {documentSidebarInitialWidth !== undefined ? (
-            <>
-              <div
-                className={`w-full sm:relative h-screen ${
-                  retrievalDisabled ? "pb-[111px]" : "pb-[140px]"
-                }`}
-              >
-                <div
-                  className={`w-full h-full ${HEADER_PADDING} flex flex-col overflow-y-auto overflow-x-hidden relative`}
-                  ref={scrollableDivRef}
-                >
-                  {livePersona && (
-                    <div className="sticky top-0 left-80 z-10 w-full bg-background/90 flex">
-                      <div className="ml-2 p-1 rounded mt-2 w-fit">
-                        <ChatPersonaSelector
-                          personas={availablePersonas}
-                          selectedPersonaId={livePersona.id}
-                          defaultModel={defaultModel}
-                          onPersonaChange={onPersonaChange}
-                        />
-                      </div>
+            <Dropzone
+              onDrop={(acceptedFiles) => {
+                uploadFilesForChat(acceptedFiles).then(([fileIds, error]) => {
+                  if (error) {
+                    setPopup({
+                      type: "error",
+                      message: error,
+                    });
+                  } else {
+                    const newFileIds = [...currentMessageFileIds, ...fileIds];
+                    setCurrentMessageFileIds(newFileIds);
+                  }
+                });
+              }}
+              noClick
+              disabled={
+                !checkLLMSupportsImageInput(
+                  ...getFinalLLM(llmProviders, livePersona)
+                )
+              }
+              onDragLeave={() => console.log("buh")}
+              onDragEnter={() => console.log("floppa")}
+            >
+              {({ getRootProps }) => (
+                <>
+                  <div
+                    className={`w-full sm:relative h-screen ${
+                      retrievalDisabled ? "pb-[111px]" : "pb-[140px]"
+                    }`}
+                    {...getRootProps()}
+                  >
+                    {/* <input {...getInputProps()} /> */}
+                    <div
+                      className={`w-full h-full ${HEADER_PADDING} flex flex-col overflow-y-auto overflow-x-hidden relative`}
+                      ref={scrollableDivRef}
+                    >
+                      {livePersona && (
+                        <div className="sticky top-0 left-80 z-10 w-full bg-background/90 flex">
+                          <div className="ml-2 p-1 rounded mt-2 w-fit">
+                            <ChatPersonaSelector
+                              personas={availablePersonas}
+                              selectedPersonaId={livePersona.id}
+                              defaultModel={defaultModel}
+                              onPersonaChange={onPersonaChange}
+                            />
+                          </div>
 
-                      {chatSessionId !== null && (
-                        <div
-                          onClick={() => setSharingModalVisible(true)}
-                          className="ml-auto mr-6 my-auto border-border border p-2 rounded cursor-pointer hover:bg-hover-light"
-                        >
-                          <FiShare2 />
+                          {chatSessionId !== null && (
+                            <div
+                              onClick={() => setSharingModalVisible(true)}
+                              className="ml-auto mr-6 my-auto border-border border p-2 rounded cursor-pointer hover:bg-hover-light"
+                            >
+                              <FiShare2 />
+                            </div>
+                          )}
                         </div>
                       )}
-                    </div>
-                  )}
 
-                  {messageHistory.length === 0 &&
-                    !isFetchingChatMessages &&
-                    !isStreaming && (
-                      <ChatIntro
-                        availableSources={finalAvailableSources}
-                        availablePersonas={availablePersonas}
-                        selectedPersona={selectedPersona}
-                        defaultModel={defaultModel}
-                        handlePersonaSelect={(persona) => {
-                          setSelectedPersona(persona);
-                          textareaRef.current?.focus();
-                          router.push(
-                            buildChatUrl(searchParams, null, persona.id)
-                          );
-                        }}
-                      />
-                    )}
+                      {messageHistory.length === 0 &&
+                        !isFetchingChatMessages &&
+                        !isStreaming && (
+                          <ChatIntro
+                            availableSources={finalAvailableSources}
+                            availablePersonas={availablePersonas}
+                            selectedPersona={selectedPersona}
+                            defaultModel={defaultModel}
+                            handlePersonaSelect={(persona) => {
+                              setSelectedPersona(persona);
+                              textareaRef.current?.focus();
+                              router.push(
+                                buildChatUrl(searchParams, null, persona.id)
+                              );
+                            }}
+                          />
+                        )}
 
-                  <div
-                    className={
-                      "mt-4 pt-12 sm:pt-0 mx-8" +
-                      (hasPerformedInitialScroll ? "" : " invisible")
-                    }
-                  >
-                    {messageHistory.map((message, i) => {
-                      if (message.type === "user") {
-                        return (
-                          <div key={i}>
-                            <HumanMessage content={message.message} />
-                          </div>
-                        );
-                      } else if (message.type === "assistant") {
-                        const isShowingRetrieved =
-                          (selectedMessageForDocDisplay !== null &&
-                            selectedMessageForDocDisplay ===
-                              message.messageId) ||
-                          (selectedMessageForDocDisplay === -1 &&
-                            i === messageHistory.length - 1);
-                        const previousMessage =
-                          i !== 0 ? messageHistory[i - 1] : null;
-                        return (
-                          <div key={i}>
-                            <AIMessage
-                              messageId={message.messageId}
-                              content={message.message}
-                              query={messageHistory[i]?.query || undefined}
-                              personaName={livePersona.name}
-                              citedDocuments={getCitedDocumentsFromMessage(
-                                message
-                              )}
-                              isComplete={
-                                i !== messageHistory.length - 1 || !isStreaming
-                              }
-                              hasDocs={
-                                (message.documents &&
-                                  message.documents.length > 0) === true
-                              }
-                              handleFeedback={
-                                i === messageHistory.length - 1 && isStreaming
-                                  ? undefined
-                                  : (feedbackType) =>
-                                      setCurrentFeedback([
-                                        feedbackType,
-                                        message.messageId as number,
-                                      ])
-                              }
-                              handleSearchQueryEdit={
-                                i === messageHistory.length - 1 && !isStreaming
-                                  ? (newQuery) => {
-                                      if (!previousMessage) {
-                                        setPopup({
-                                          type: "error",
-                                          message:
-                                            "Cannot edit query of first message - please refresh the page and try again.",
-                                        });
-                                        return;
+                      <div
+                        className={
+                          "mt-4 pt-12 sm:pt-0 mx-8" +
+                          (hasPerformedInitialScroll ? "" : " invisible")
+                        }
+                      >
+                        {messageHistory.map((message, i) => {
+                          if (message.type === "user") {
+                            return (
+                              <div key={i}>
+                                <HumanMessage
+                                  content={message.message}
+                                  files={message.files}
+                                />
+                              </div>
+                            );
+                          } else if (message.type === "assistant") {
+                            const isShowingRetrieved =
+                              (selectedMessageForDocDisplay !== null &&
+                                selectedMessageForDocDisplay ===
+                                  message.messageId) ||
+                              (selectedMessageForDocDisplay === -1 &&
+                                i === messageHistory.length - 1);
+                            const previousMessage =
+                              i !== 0 ? messageHistory[i - 1] : null;
+                            return (
+                              <div key={i}>
+                                <AIMessage
+                                  messageId={message.messageId}
+                                  content={message.message}
+                                  query={messageHistory[i]?.query || undefined}
+                                  personaName={livePersona.name}
+                                  citedDocuments={getCitedDocumentsFromMessage(
+                                    message
+                                  )}
+                                  isComplete={
+                                    i !== messageHistory.length - 1 ||
+                                    !isStreaming
+                                  }
+                                  hasDocs={
+                                    (message.documents &&
+                                      message.documents.length > 0) === true
+                                  }
+                                  handleFeedback={
+                                    i === messageHistory.length - 1 &&
+                                    isStreaming
+                                      ? undefined
+                                      : (feedbackType) =>
+                                          setCurrentFeedback([
+                                            feedbackType,
+                                            message.messageId as number,
+                                          ])
+                                  }
+                                  handleSearchQueryEdit={
+                                    i === messageHistory.length - 1 &&
+                                    !isStreaming
+                                      ? (newQuery) => {
+                                          if (!previousMessage) {
+                                            setPopup({
+                                              type: "error",
+                                              message:
+                                                "Cannot edit query of first message - please refresh the page and try again.",
+                                            });
+                                            return;
+                                          }
+
+                                          if (
+                                            previousMessage.messageId === null
+                                          ) {
+                                            setPopup({
+                                              type: "error",
+                                              message:
+                                                "Cannot edit query of a pending message - please wait a few seconds and try again.",
+                                            });
+                                            return;
+                                          }
+                                          onSubmit({
+                                            messageIdToResend:
+                                              previousMessage.messageId,
+                                            queryOverride: newQuery,
+                                          });
+                                        }
+                                      : undefined
+                                  }
+                                  isCurrentlyShowingRetrieved={
+                                    isShowingRetrieved
+                                  }
+                                  handleShowRetrieved={(messageNumber) => {
+                                    if (isShowingRetrieved) {
+                                      setSelectedMessageForDocDisplay(null);
+                                    } else {
+                                      if (messageNumber !== null) {
+                                        setSelectedMessageForDocDisplay(
+                                          messageNumber
+                                        );
+                                      } else {
+                                        setSelectedMessageForDocDisplay(-1);
                                       }
-
-                                      if (previousMessage.messageId === null) {
-                                        setPopup({
-                                          type: "error",
-                                          message:
-                                            "Cannot edit query of a pending message - please wait a few seconds and try again.",
-                                        });
-                                        return;
-                                      }
+                                    }
+                                  }}
+                                  handleForceSearch={() => {
+                                    if (
+                                      previousMessage &&
+                                      previousMessage.messageId
+                                    ) {
                                       onSubmit({
                                         messageIdToResend:
                                           previousMessage.messageId,
-                                        queryOverride: newQuery,
+                                        forceSearch: true,
+                                      });
+                                    } else {
+                                      setPopup({
+                                        type: "error",
+                                        message:
+                                          "Failed to force search - please refresh the page and try again.",
                                       });
                                     }
-                                  : undefined
-                              }
-                              isCurrentlyShowingRetrieved={isShowingRetrieved}
-                              handleShowRetrieved={(messageNumber) => {
-                                if (isShowingRetrieved) {
-                                  setSelectedMessageForDocDisplay(null);
-                                } else {
-                                  if (messageNumber !== null) {
-                                    setSelectedMessageForDocDisplay(
-                                      messageNumber
-                                    );
-                                  } else {
-                                    setSelectedMessageForDocDisplay(-1);
-                                  }
-                                }
-                              }}
-                              handleForceSearch={() => {
-                                if (
-                                  previousMessage &&
-                                  previousMessage.messageId
-                                ) {
-                                  onSubmit({
-                                    messageIdToResend:
-                                      previousMessage.messageId,
-                                    forceSearch: true,
-                                  });
-                                } else {
-                                  setPopup({
-                                    type: "error",
-                                    message:
-                                      "Failed to force search - please refresh the page and try again.",
-                                  });
-                                }
-                              }}
-                              retrievalDisabled={retrievalDisabled}
-                            />
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div key={i}>
-                            <AIMessage
-                              messageId={message.messageId}
-                              personaName={livePersona.name}
-                              content={
-                                <p className="text-red-700 text-sm my-auto">
-                                  {message.message}
-                                </p>
-                              }
-                            />
-                          </div>
-                        );
-                      }
-                    })}
-
-                    {isStreaming &&
-                      messageHistory.length &&
-                      messageHistory[messageHistory.length - 1].type ===
-                        "user" && (
-                        <div key={messageHistory.length}>
-                          <AIMessage
-                            messageId={null}
-                            personaName={livePersona.name}
-                            content={
-                              <div className="text-sm my-auto">
-                                <ThreeDots
-                                  height="30"
-                                  width="50"
-                                  color="#3b82f6"
-                                  ariaLabel="grid-loading"
-                                  radius="12.5"
-                                  wrapperStyle={{}}
-                                  wrapperClass=""
-                                  visible={true}
+                                  }}
+                                  retrievalDisabled={retrievalDisabled}
                                 />
                               </div>
-                            }
-                          />
-                        </div>
-                      )}
+                            );
+                          } else {
+                            return (
+                              <div key={i}>
+                                <AIMessage
+                                  messageId={message.messageId}
+                                  personaName={livePersona.name}
+                                  content={
+                                    <p className="text-red-700 text-sm my-auto">
+                                      {message.message}
+                                    </p>
+                                  }
+                                />
+                              </div>
+                            );
+                          }
+                        })}
 
-                    {/* Some padding at the bottom so the search bar has space at the bottom to not cover the last message*/}
-                    <div className={`min-h-[30px] w-full`}></div>
+                        {isStreaming &&
+                          messageHistory.length &&
+                          messageHistory[messageHistory.length - 1].type ===
+                            "user" && (
+                            <div key={messageHistory.length}>
+                              <AIMessage
+                                messageId={null}
+                                personaName={livePersona.name}
+                                content={
+                                  <div className="text-sm my-auto">
+                                    <ThreeDots
+                                      height="30"
+                                      width="50"
+                                      color="#3b82f6"
+                                      ariaLabel="grid-loading"
+                                      radius="12.5"
+                                      wrapperStyle={{}}
+                                      wrapperClass=""
+                                      visible={true}
+                                    />
+                                  </div>
+                                }
+                              />
+                            </div>
+                          )}
 
-                    {livePersona &&
-                      livePersona.starter_messages &&
-                      livePersona.starter_messages.length > 0 &&
-                      selectedPersona &&
-                      messageHistory.length === 0 &&
-                      !isFetchingChatMessages && (
-                        <div
-                          className={`
+                        {/* Some padding at the bottom so the search bar has space at the bottom to not cover the last message*/}
+                        <div className={`min-h-[30px] w-full`}></div>
+
+                        {livePersona &&
+                          livePersona.starter_messages &&
+                          livePersona.starter_messages.length > 0 &&
+                          selectedPersona &&
+                          messageHistory.length === 0 &&
+                          !isFetchingChatMessages && (
+                            <div
+                              className={`
                             mx-auto 
                             px-4 
                             w-searchbar-xs 
@@ -868,156 +934,193 @@ export function ChatLayout({
                             mt-4 
                             md:grid-cols-2 
                             mb-6`}
-                        >
-                          {livePersona.starter_messages.map(
-                            (starterMessage, i) => (
-                              <div key={i} className="w-full">
-                                <StarterMessage
-                                  starterMessage={starterMessage}
-                                  onClick={() =>
-                                    onSubmit({
-                                      messageOverride: starterMessage.message,
-                                    })
-                                  }
-                                />
-                              </div>
-                            )
+                            >
+                              {livePersona.starter_messages.map(
+                                (starterMessage, i) => (
+                                  <div key={i} className="w-full">
+                                    <StarterMessage
+                                      starterMessage={starterMessage}
+                                      onClick={() =>
+                                        onSubmit({
+                                          messageOverride:
+                                            starterMessage.message,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                )
+                              )}
+                            </div>
                           )}
-                        </div>
-                      )}
 
-                    <div ref={endDivRef} />
-                  </div>
-                </div>
-
-                <div className="absolute bottom-0 z-10 w-full bg-background border-t border-border">
-                  <div className="w-full pb-4 pt-2">
-                    {!retrievalDisabled && (
-                      <div className="flex">
-                        <div className="w-searchbar-xs 2xl:w-searchbar-sm 3xl:w-searchbar mx-auto px-4 pt-1 flex">
-                          {selectedDocuments.length > 0 ? (
-                            <SelectedDocuments
-                              selectedDocuments={selectedDocuments}
-                            />
-                          ) : (
-                            <ChatFilters
-                              {...filterManager}
-                              existingSources={finalAvailableSources}
-                              availableDocumentSets={finalAvailableDocumentSets}
-                              availableTags={availableTags}
-                            />
-                          )}
-                        </div>
+                        <div ref={endDivRef} />
                       </div>
-                    )}
+                    </div>
 
-                    <div className="flex justify-center py-2 max-w-screen-lg mx-auto mb-2">
-                      <div className="w-full shrink relative px-4 w-searchbar-xs 2xl:w-searchbar-sm 3xl:w-searchbar mx-auto">
-                        <textarea
-                          ref={textareaRef}
-                          autoFocus
-                          className={`
-                            opacity-100
-                            w-full
-                            shrink
-                            border 
-                            border-border 
-                            rounded-lg 
-                            outline-none 
-                            placeholder-gray-400 
-                            pl-4
-                            pr-12 
-                            py-4 
-                            overflow-hidden
-                            h-14
-                            ${
-                              (textareaRef?.current?.scrollHeight || 0) >
-                              MAX_INPUT_HEIGHT
-                                ? "overflow-y-auto"
-                                : ""
-                            } 
-                            whitespace-normal 
-                            break-word
-                            overscroll-contain
-                            resize-none
-                          `}
-                          style={{ scrollbarWidth: "thin" }}
-                          role="textarea"
-                          aria-multiline
-                          placeholder="Ask me anything..."
-                          value={message}
-                          onChange={(e) => setMessage(e.target.value)}
-                          onKeyDown={(event) => {
-                            if (
-                              event.key === "Enter" &&
-                              !event.shiftKey &&
-                              message &&
-                              !isStreaming
-                            ) {
-                              onSubmit();
-                              event.preventDefault();
-                            }
-                          }}
-                          suppressContentEditableWarning={true}
-                        />
-                        <div className="absolute bottom-4 right-10">
-                          <div
-                            className={"cursor-pointer"}
-                            onClick={() => {
-                              if (!isStreaming) {
-                                if (message) {
-                                  onSubmit();
-                                }
-                              } else {
-                                setIsCancelled(true);
-                              }
-                            }}
-                          >
-                            {isStreaming ? (
-                              <FiStopCircle
-                                size={18}
-                                className={
-                                  "text-emphasis w-9 h-9 p-2 rounded-lg hover:bg-hover"
-                                }
+                    <div className="absolute bottom-0 z-10 w-full bg-background border-t border-border">
+                      <div className="w-full pb-4 pt-2">
+                        {!retrievalDisabled && (
+                          <div className="flex">
+                            <div className="w-searchbar-xs 2xl:w-searchbar-sm 3xl:w-searchbar mx-auto px-4 pt-1 flex">
+                              {selectedDocuments.length > 0 ? (
+                                <SelectedDocuments
+                                  selectedDocuments={selectedDocuments}
+                                />
+                              ) : (
+                                <ChatFilters
+                                  {...filterManager}
+                                  existingSources={finalAvailableSources}
+                                  availableDocumentSets={
+                                    finalAvailableDocumentSets
+                                  }
+                                  availableTags={availableTags}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex justify-center py-2 max-w-screen-lg mx-auto mb-2">
+                          <div className="w-full shrink relative px-4 w-searchbar-xs 2xl:w-searchbar-sm 3xl:w-searchbar mx-auto">
+                            <div
+                              className={`
+                              opacity-100
+                              w-full
+                              h-fit
+                              flex
+                              flex-col
+                              border 
+                              border-border 
+                              rounded-lg 
+                              [&:has(textarea:focus)]::ring-1
+                              [&:has(textarea:focus)]::ring-black
+                            `}
+                            >
+                              {currentMessageFileIds.length > 0 && (
+                                <div className="flex flex-wrap gap-y-2 px-1">
+                                  {currentMessageFileIds.map((fileId) => (
+                                    <div key={fileId} className="py-1">
+                                      <InputBarPreviewImage
+                                        fileId={fileId}
+                                        onDelete={() => {
+                                          setCurrentMessageFileIds(
+                                            currentMessageFileIds.filter(
+                                              (id) => id !== fileId
+                                            )
+                                          );
+                                        }}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <textarea
+                                ref={textareaRef}
+                                className={`
+                                  m-0 
+                                  w-full 
+                                  shrink
+                                  resize-none 
+                                  border-0 
+                                  bg-transparent 
+                                  ${
+                                    (textareaRef?.current?.scrollHeight || 0) >
+                                    MAX_INPUT_HEIGHT
+                                      ? "overflow-y-auto"
+                                      : ""
+                                  } 
+                                  whitespace-normal 
+                                  break-word
+                                  overscroll-contain
+                                  outline-none 
+                                  placeholder-gray-400 
+                                  overflow-hidden
+                                  resize-none
+                                  pl-4
+                                  pr-12 
+                                  py-4 
+                                  h-14`}
+                                autoFocus
+                                style={{ scrollbarWidth: "thin" }}
+                                role="textarea"
+                                aria-multiline
+                                placeholder="Ask me anything..."
+                                value={message}
+                                onChange={(e) => setMessage(e.target.value)}
+                                onKeyDown={(event) => {
+                                  if (
+                                    event.key === "Enter" &&
+                                    !event.shiftKey &&
+                                    message &&
+                                    !isStreaming
+                                  ) {
+                                    onSubmit();
+                                    event.preventDefault();
+                                  }
+                                }}
+                                suppressContentEditableWarning={true}
                               />
-                            ) : (
-                              <FiSend
-                                size={18}
-                                className={
-                                  "text-emphasis w-9 h-9 p-2 rounded-lg " +
-                                  (message ? "bg-blue-200" : "")
-                                }
-                              />
-                            )}
+                            </div>
+                            <div className="absolute bottom-2.5 right-10">
+                              <div
+                                className={"cursor-pointer"}
+                                onClick={() => {
+                                  if (!isStreaming) {
+                                    if (message) {
+                                      onSubmit();
+                                    }
+                                  } else {
+                                    setIsCancelled(true);
+                                  }
+                                }}
+                              >
+                                {isStreaming ? (
+                                  <FiStopCircle
+                                    size={18}
+                                    className={
+                                      "text-emphasis w-9 h-9 p-2 rounded-lg hover:bg-hover"
+                                    }
+                                  />
+                                ) : (
+                                  <FiSend
+                                    size={18}
+                                    className={
+                                      "text-emphasis w-9 h-9 p-2 rounded-lg " +
+                                      (message ? "bg-blue-200" : "")
+                                    }
+                                  />
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
 
-              {!retrievalDisabled ? (
-                <ResizableSection
-                  intialWidth={documentSidebarInitialWidth}
-                  minWidth={400}
-                  maxWidth={maxDocumentSidebarWidth || undefined}
-                >
-                  <DocumentSidebar
-                    selectedMessage={aiMessage}
-                    selectedDocuments={selectedDocuments}
-                    toggleDocumentSelection={toggleDocumentSelection}
-                    clearSelectedDocuments={clearSelectedDocuments}
-                    selectedDocumentTokens={selectedDocumentTokens}
-                    maxTokens={maxTokens}
-                    isLoading={isFetchingChatMessages}
-                  />
-                </ResizableSection>
-              ) : // Another option is to use a div with the width set to the initial width, so that the
-              // chat section appears in the same place as before
-              // <div style={documentSidebarInitialWidth ? {width: documentSidebarInitialWidth} : {}}></div>
-              null}
-            </>
+                  {!retrievalDisabled ? (
+                    <ResizableSection
+                      intialWidth={documentSidebarInitialWidth as number}
+                      minWidth={400}
+                      maxWidth={maxDocumentSidebarWidth || undefined}
+                    >
+                      <DocumentSidebar
+                        selectedMessage={aiMessage}
+                        selectedDocuments={selectedDocuments}
+                        toggleDocumentSelection={toggleDocumentSelection}
+                        clearSelectedDocuments={clearSelectedDocuments}
+                        selectedDocumentTokens={selectedDocumentTokens}
+                        maxTokens={maxTokens}
+                        isLoading={isFetchingChatMessages}
+                      />
+                    </ResizableSection>
+                  ) : // Another option is to use a div with the width set to the initial width, so that the
+                  // chat section appears in the same place as before
+                  // <div style={documentSidebarInitialWidth ? {width: documentSidebarInitialWidth} : {}}></div>
+                  null}
+                </>
+              )}
+            </Dropzone>
           ) : (
             <div className="mx-auto h-full flex flex-col">
               <div className="my-auto">

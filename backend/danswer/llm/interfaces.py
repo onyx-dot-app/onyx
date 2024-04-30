@@ -2,11 +2,18 @@ import abc
 from collections.abc import Iterator
 
 from langchain.schema.language_model import LanguageModelInput
+from pydantic import BaseModel
 
 from danswer.utils.logger import setup_logger
 
 
 logger = setup_logger()
+
+
+class LLMConfig(BaseModel):
+    model_provider: str
+    model_name: str
+    temperature: float
 
 
 class LLM(abc.ABC):
@@ -21,6 +28,11 @@ class LLM(abc.ABC):
     @property
     def requires_api_key(self) -> bool:
         return True
+
+    @property
+    @abc.abstractmethod
+    def config(self) -> LLMConfig:
+        raise NotImplementedError
 
     @abc.abstractmethod
     def log_model_configs(self) -> None:

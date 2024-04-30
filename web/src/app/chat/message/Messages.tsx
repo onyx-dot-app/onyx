@@ -16,6 +16,8 @@ import { ThreeDots } from "react-loader-spinner";
 import { SkippedSearch } from "./SkippedSearch";
 import remarkGfm from "remark-gfm";
 import { CopyButton } from "@/components/CopyButton";
+import { FileDescriptor } from "../interfaces";
+import { InMessageImage } from "../images/InMessageImage";
 
 export const Hoverable: React.FC<{
   children: JSX.Element;
@@ -219,8 +221,10 @@ export const AIMessage = ({
 
 export const HumanMessage = ({
   content,
+  files,
 }: {
   content: string | JSX.Element;
+  files?: FileDescriptor[];
 }) => {
   return (
     <div className="py-5 px-5 flex -mr-6 w-full">
@@ -237,6 +241,16 @@ export const HumanMessage = ({
           </div>
           <div className="mx-auto mt-1 ml-8 w-searchbar-xs 2xl:w-searchbar-sm 3xl:w-searchbar-default flex flex-wrap">
             <div className="w-message-xs 2xl:w-message-sm 3xl:w-message-default break-words">
+              {files && files.length > 0 && (
+                <div className="mt-2 mb-4">
+                  <div className="flex flex-wrap gap-2">
+                    {files.map((file) => {
+                      return <InMessageImage key={file.id} fileId={file.id} />;
+                    })}
+                  </div>
+                </div>
+              )}
+
               {typeof content === "string" ? (
                 <ReactMarkdown
                   className="prose max-w-full"

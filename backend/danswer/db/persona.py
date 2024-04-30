@@ -1,11 +1,13 @@
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from danswer.db.chat import get_prompts_by_ids
 from danswer.db.chat import upsert_persona
 from danswer.db.document_set import get_document_sets_by_ids
+from danswer.db.models import Persona
 from danswer.db.models import Persona__User
 from danswer.db.models import User
 from danswer.server.features.persona.models import CreatePersonaRequest
@@ -69,6 +71,7 @@ def create_update_persona(
             recency_bias=create_persona_request.recency_bias,
             prompts=prompts,
             document_sets=document_sets,
+            llm_model_provider_override=create_persona_request.llm_model_provider_override,
             llm_model_version_override=create_persona_request.llm_model_version_override,
             starter_messages=create_persona_request.starter_messages,
             is_public=create_persona_request.is_public,
@@ -91,3 +94,7 @@ def create_update_persona(
         logger.exception("Failed to create persona")
         raise HTTPException(status_code=400, detail=str(e))
     return PersonaSnapshot.from_model(persona)
+
+
+def fetch_persona_by_id(db_session: Session, persona_id: int) -> Persona | None:
+    return db_session.scalar(select(Persona).where(Persona.id == persona_id))

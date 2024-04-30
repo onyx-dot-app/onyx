@@ -71,7 +71,7 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
     return _ASYNC_ENGINE
 
 
-def get_session_context_manager() -> ContextManager:
+def get_session_context_manager() -> ContextManager[Session]:
     return contextlib.contextmanager(get_session)()
 
 

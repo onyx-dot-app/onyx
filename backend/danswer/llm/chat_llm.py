@@ -1,4 +1,5 @@
 import abc
+import os
 from collections.abc import Iterator
 
 import litellm  # type:ignore
@@ -7,15 +8,14 @@ from langchain.schema.language_model import LanguageModelInput
 from langchain_community.chat_models import ChatLiteLLM
 
 from danswer.configs.app_configs import LOG_ALL_MODEL_INTERACTIONS
+from danswer.configs.model_configs import DISABLE_LITELLM_STREAMING
 from danswer.configs.model_configs import GEN_AI_API_ENDPOINT
 from danswer.configs.model_configs import GEN_AI_API_VERSION
 from danswer.configs.model_configs import GEN_AI_LLM_PROVIDER_TYPE
 from danswer.configs.model_configs import GEN_AI_MAX_OUTPUT_TOKENS
-from danswer.configs.model_configs import GEN_AI_MODEL_PROVIDER
-from danswer.configs.model_configs import GEN_AI_MODEL_VERSION
 from danswer.configs.model_configs import GEN_AI_TEMPERATURE
 from danswer.llm.interfaces import LLM
-from danswer.llm.utils import get_default_llm_version
+from danswer.llm.interfaces import LLMConfig
 from danswer.llm.utils import message_generator_to_string_generator
 from danswer.llm.utils import should_be_verbose
 from danswer.utils.logger import setup_logger
@@ -68,7 +68,12 @@ class LangChainChatLLM(LLM, abc.ABC):
 
     def stream(self, prompt: LanguageModelInput) -> Iterator[str]:
         if LOG_ALL_MODEL_INTERACTIONS:
+            self.log_model_configs()
             self._log_prompt(prompt)
+
+        if DISABLE_LITELLM_STREAMING:
+            yield self.invoke(prompt)
+            return
 
         output_tokens = []
         for token in message_generator_to_string_generator(self.llm.stream(prompt)):
@@ -78,23 +83,6 @@ class LangChainChatLLM(LLM, abc.ABC):
         full_output = "".join(output_tokens)
         if LOG_ALL_MODEL_INTERACTIONS:
             logger.debug(f"Raw Model Output:\n{full_output}")
-
-
-def _get_model_str(
-    model_provider: str | None,
-    model_version: str | None,
-) -> str:
-    if model_provider and model_version:
-        return model_provider + "/" + model_version
-
-    if model_version:
-        # Litellm defaults to openai if no provider specified
-        # It's implicit so no need to specify here either
-        return model_version
-
-    # User specified something wrong, just use Danswer default
-    base, _ = get_default_llm_version()
-    return base
 
 
 class DefaultMultiLLM(LangChainChatLLM):
@@ -110,25 +98,35 @@ class DefaultMultiLLM(LangChainChatLLM):
         self,
         api_key: str | None,
         timeout: int,
-        model_provider: str = GEN_AI_MODEL_PROVIDER,
-        model_version: str | None = GEN_AI_MODEL_VERSION,
+        model_provider: str,
+        model_name: str,
         api_base: str | None = GEN_AI_API_ENDPOINT,
         api_version: str | None = GEN_AI_API_VERSION,
         custom_llm_provider: str | None = GEN_AI_LLM_PROVIDER_TYPE,
         max_output_tokens: int = GEN_AI_MAX_OUTPUT_TOKENS,
         temperature: float = GEN_AI_TEMPERATURE,
+        custom_config: dict[str, str] | None = None,
     ):
+        self._model_provider = model_provider
+        self._model_version = model_name
+        self._temperature = temperature
+
         # Litellm Langchain integration currently doesn't take in the api key param
         # Can place this in the call below once integration is in
         litellm.api_key = api_key or "dummy-key"
         litellm.api_version = api_version
 
-        model_version = model_version or get_default_llm_version()[0]
+        # NOTE: have to set these as environment variables for Litellm since
+        # not all are able to passed in but they always support them set as env
+        # variables
+        if custom_config:
+            for k, v in custom_config.items():
+                os.environ[k] = v
 
         self._llm = ChatLiteLLM(  # type: ignore
-            model=model_version
-            if custom_llm_provider
-            else _get_model_str(model_provider, model_version),
+            model=(
+                model_name if custom_llm_provider else f"{model_provider}/{model_name}"
+            ),
             api_base=api_base,
             custom_llm_provider=custom_llm_provider,
             max_tokens=max_output_tokens,
@@ -141,6 +139,14 @@ class DefaultMultiLLM(LangChainChatLLM):
             else {},
             verbose=should_be_verbose(),
             max_retries=0,  # retries are handled outside of langchain
+        )
+
+    @property
+    def config(self) -> LLMConfig:
+        return LLMConfig(
+            model_provider=self._model_provider,
+            model_name=self._model_version,
+            temperature=self._temperature,
         )
 
     @property

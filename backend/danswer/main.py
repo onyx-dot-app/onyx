@@ -33,8 +33,6 @@ from danswer.configs.app_configs import SECRET
 from danswer.configs.app_configs import WEB_DOMAIN
 from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.configs.constants import AuthType
-from danswer.configs.model_configs import GEN_AI_API_ENDPOINT
-from danswer.configs.model_configs import GEN_AI_MODEL_PROVIDER
 from danswer.db.chat import delete_old_default_personas
 from danswer.db.connector import create_initial_default_connector
 from danswer.db.connector_credential_pair import associate_default_cc_pair
@@ -48,9 +46,8 @@ from danswer.db.index_attempt import cancel_indexing_attempts_past_model
 from danswer.db.index_attempt import expire_index_attempts
 from danswer.db.swap_index import check_index_swap
 from danswer.document_index.factory import get_default_document_index
+from danswer.dynamic_configs.port_configs import port_api_key_to_postgres
 from danswer.dynamic_configs.port_configs import port_filesystem_to_postgres
-from danswer.llm.factory import get_default_llm
-from danswer.llm.utils import get_default_llm_version
 from danswer.search.retrieval.search_runner import download_nltk_data
 from danswer.search.search_nlp_models import warm_up_encoders
 from danswer.server.auth_check import check_router_auth
@@ -67,6 +64,8 @@ from danswer.server.features.prompt.api import basic_router as prompt_router
 from danswer.server.gpts.api import router as gpts_router
 from danswer.server.manage.administrative import router as admin_router
 from danswer.server.manage.get_state import router as state_router
+from danswer.server.manage.llm.api import admin_router as llm_admin_router
+from danswer.server.manage.llm.api import basic_router as llm_router
 from danswer.server.manage.secondary_index import router as secondary_index_router
 from danswer.server.manage.slack_bot import router as slack_bot_management_router
 from danswer.server.manage.users import router as user_router
@@ -158,17 +157,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     if DISABLE_GENERATIVE_AI:
         logger.info("Generative AI Q&A disabled")
-    else:
-        logger.info(f"Using LLM Provider: {GEN_AI_MODEL_PROVIDER}")
-        base, fast = get_default_llm_version()
-        logger.info(f"Using LLM Model Version: {base}")
-        if base != fast:
-            logger.info(f"Using Fast LLM Model Version: {fast}")
-        if GEN_AI_API_ENDPOINT:
-            logger.info(f"Using LLM Endpoint: {GEN_AI_API_ENDPOINT}")
-
-        # Any additional model configs logged here
-        get_default_llm().log_model_configs()
 
     if MULTILINGUAL_QUERY_EXPANSION:
         logger.info(
@@ -181,6 +169,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         logger.debug(
             "Skipping port of persistent volumes. Maybe these have already been removed?"
         )
+
+    try:
+        port_api_key_to_postgres()
+    except Exception as e:
+        logger.debug(f"Failed to port API keys. Exception: {e}. Continuing...")
 
     with Session(engine) as db_session:
         check_index_swap(db_session=db_session)
@@ -283,6 +276,8 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, gpts_router)
     include_router_with_global_prefix_prepended(application, settings_router)
     include_router_with_global_prefix_prepended(application, settings_admin_router)
+    include_router_with_global_prefix_prepended(application, llm_admin_router)
+    include_router_with_global_prefix_prepended(application, llm_router)
 
     include_router_with_global_prefix_prepended(application, eea_config_router)
 

@@ -220,6 +220,11 @@ class SavedSearchDoc(SearchDoc):
         search_doc_data["score"] = search_doc_data.get("score") or 0.0
         return cls(**search_doc_data, db_doc_id=db_doc_id)
 
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, SavedSearchDoc):
+            return NotImplemented
+        return self.score < other.score
+
 
 class RetrievalDocs(BaseModel):
     top_documents: list[SavedSearchDoc]

@@ -37,7 +37,7 @@ export function NoCompleteSourcesModal({
       title="⏳ None of your connectors have finished a full sync yet"
       onOutsideClick={() => setIsHidden(true)}
     >
-      <div className="text-base">
+      <div className="text-sm">
         <div>
           <div>
             You&apos;ve connected some sources, but none of them have finished

@@ -1,6 +1,10 @@
+import uuid
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Response
+from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -28,6 +32,8 @@ from danswer.db.feedback import create_doc_retrieval_feedback
 from danswer.db.models import User
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
+from danswer.file_store.file_store import get_default_file_store
+from danswer.file_store.utils import build_chat_file_name
 from danswer.llm.answering.prompts.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
@@ -232,7 +238,7 @@ def handle_new_chat_message(
 
     To avoid extra overhead/latency, this assumes (and checks) that previous messages on the path
     have already been set as latest"""
-    logger.info(f"Received new chat message: {chat_message_req.message}")
+    logger.debug(f"Received new chat message: {chat_message_req.message}")
 
     if (
         not chat_message_req.message
@@ -404,3 +410,50 @@ def seed_chat(
     return ChatSeedResponse(
         redirect_url=f"{WEB_DOMAIN}/chat?chatId={new_chat_session.id}"
     )
+
+
+"""File upload"""
+
+
+@router.post("/file")
+def upload_files_for_chat(
+    files: list[UploadFile],
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_user),
+) -> dict[str, list[uuid.UUID]]:
+    for file in files:
+        if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
+            raise HTTPException(
+                status_code=400,
+                detail="Only .jpg, .jpeg, .png, and .webp files are currently supported",
+            )
+
+        if file.size and file.size > 20 * 1024 * 1024:
+            raise HTTPException(
+                status_code=400,
+                detail="File size must be less than 20MB",
+            )
+
+    file_store = get_default_file_store(db_session)
+
+    file_ids = []
+    for file in files:
+        file_id = uuid.uuid4()
+        file_name = build_chat_file_name(file_id)
+        file_store.save_file(file_name=file_name, content=file.file)
+        file_ids.append(file_id)
+
+    return {"file_ids": file_ids}
+
+
+@router.get("/file/{file_id}")
+def fetch_chat_file(
+    file_id: str,
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_user),
+) -> Response:
+    file_store = get_default_file_store(db_session)
+    file_io = file_store.read_file(build_chat_file_name(file_id), mode="b")
+    # NOTE: specifying "image/jpeg" here, but it still works for pngs
+    # TODO: do this properly
+    return Response(content=file_io.read(), media_type="image/jpeg")

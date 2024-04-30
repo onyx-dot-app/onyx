@@ -75,14 +75,11 @@ def get_not_started_index_attempts(db_session: Session) -> list[IndexAttempt]:
     return list(new_attempts.all())
 
 
-def mark_attempt_in_progress(
+def mark_attempt_in_progress__no_commit(
     index_attempt: IndexAttempt,
-    db_session: Session,
 ) -> None:
     index_attempt.status = IndexingStatus.IN_PROGRESS
     index_attempt.time_started = index_attempt.time_started or func.now()  # type: ignore
-    db_session.add(index_attempt)
-    db_session.commit()
 
 
 def mark_attempt_succeeded(

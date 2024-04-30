@@ -23,7 +23,7 @@ from danswer.connectors.models import BasicExpertInfo
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.db.engine import get_sqlalchemy_engine
-from danswer.db.file_store import get_default_file_store
+from danswer.file_store.file_store import get_default_file_store
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()

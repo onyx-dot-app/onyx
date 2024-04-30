@@ -88,6 +88,7 @@ def load_personas_from_yaml(
                 llm_relevance_filter=persona.get("llm_relevance_filter"),
                 starter_messages=persona.get("starter_messages"),
                 llm_filter_extraction=persona.get("llm_filter_extraction"),
+                llm_model_provider_override=None,
                 llm_model_version_override=None,
                 recency_bias=RecencyBiasSetting(persona["recency_bias"]),
                 prompts=cast(list[PromptDBModel] | None, prompts),

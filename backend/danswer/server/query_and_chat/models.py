@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import root_validator
@@ -9,6 +10,7 @@ from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import MessageType
 from danswer.configs.constants import SearchFeedbackType
 from danswer.db.enums import ChatSessionSharedStatus
+from danswer.file_store.models import FileDescriptor
 from danswer.llm.override_models import LLMOverride
 from danswer.llm.override_models import PromptOverride
 from danswer.search.models import BaseFilters
@@ -81,6 +83,8 @@ class CreateChatMessageRequest(ChunkContext):
     parent_message_id: int | None
     # New message contents
     message: str
+    # file's that we should attach to this message
+    file_ids: list[UUID]
     # If no prompt provided, uses the largest prompt of the chat session
     # but really this should be explicitly specified, only in the simplified APIs is this inferred
     # Use prompt_id 0 to use the system default prompt which is Answer-Question
@@ -171,6 +175,7 @@ class ChatMessageDetail(BaseModel):
     time_sent: datetime
     # Dict mapping citation number to db_doc_id
     citations: dict[int, int] | None
+    files: list[FileDescriptor]
 
     def dict(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().dict(*args, **kwargs)  # type: ignore

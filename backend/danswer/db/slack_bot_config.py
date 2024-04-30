@@ -59,6 +59,7 @@ def create_slack_bot_persona(
         recency_bias=RecencyBiasSetting.AUTO,
         prompts=None,
         document_sets=document_sets,
+        llm_model_provider_override=None,
         llm_model_version_override=None,
         starter_messages=None,
         is_public=True,

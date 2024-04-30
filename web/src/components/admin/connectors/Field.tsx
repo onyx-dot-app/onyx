@@ -233,6 +233,9 @@ interface SelectorFormFieldProps {
   options: StringOrNumberOption[];
   subtext?: string | JSX.Element;
   includeDefault?: boolean;
+  direction?: "up" | "down";
+  maxHeight?: string;
+  onSelect?: (selected: string | number | null) => void;
 }
 
 export function SelectorFormField({
@@ -241,6 +244,9 @@ export function SelectorFormField({
   options,
   subtext,
   includeDefault = false,
+  direction = "down",
+  maxHeight,
+  onSelect,
 }: SelectorFormFieldProps) {
   const [field] = useField<string>(name);
   const { setFieldValue } = useFormikContext();
@@ -254,8 +260,10 @@ export function SelectorFormField({
         <DefaultDropdown
           options={options}
           selected={field.value}
-          onSelect={(selected) => setFieldValue(name, selected)}
+          onSelect={onSelect || ((selected) => setFieldValue(name, selected))}
           includeDefault={includeDefault}
+          direction={direction}
+          maxHeight={maxHeight}
         />
       </div>
 
