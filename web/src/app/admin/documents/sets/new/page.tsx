@@ -14,7 +14,7 @@ import { BackButton } from "@/components/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { useRouter } from "next/navigation";
 import { UserGroup } from "@/lib/types";
-import { EE_ENABLED } from "@/lib/constants";
+import { useState } from "react";
 
 function Main() {
   const { popup, setPopup } = usePopup();
@@ -27,11 +27,14 @@ function Main() {
   } = useConnectorCredentialIndexingStatus();
 
   // EE only
-  const { data: userGroups, isLoading: userGroupsIsLoading } = EE_ENABLED
-    ? useUserGroups()
-    : { data: undefined, isLoading: undefined };
+  const [userGroupsIsLoadingState, setUserGroupsIsLoadingState] =
+    useState(true);
+  const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
+  if (userGroupsIsLoadingState && !userGroupsIsLoading) {
+    setUserGroupsIsLoadingState(false);
+  }
 
-  if (isCCPairsLoading || userGroupsIsLoading) {
+  if (isCCPairsLoading || userGroupsIsLoadingState) {
     return <ThreeDotsLoader />;
   }
 
