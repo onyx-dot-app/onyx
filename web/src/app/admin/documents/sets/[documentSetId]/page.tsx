@@ -14,6 +14,7 @@ import { Card } from "@tremor/react";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { EE_ENABLED } from "@/lib/constants";
 
 function Main({ documentSetId }: { documentSetId: number }) {
   const router = useRouter();
@@ -32,7 +33,9 @@ function Main({ documentSetId }: { documentSetId: number }) {
   } = useConnectorCredentialIndexingStatus();
 
   // EE only
-  const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
+  const { data: userGroups, isLoading: userGroupsIsLoading } = EE_ENABLED
+    ? useUserGroups()
+    : { data: undefined, isLoading: undefined };
 
   if (isDocumentSetsLoading || isCCPairsLoading || userGroupsIsLoading) {
     return <ThreeDotsLoader />;
