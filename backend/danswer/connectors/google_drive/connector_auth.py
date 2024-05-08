@@ -91,7 +91,7 @@ def get_auth_url(credential_id: int) -> str:
     parsed_url = cast(ParseResult, urlparse(auth_url))
     params = parse_qs(parsed_url.query)
 
-    get_dynamic_config_store().store(CRED_KEY.format(credential_id), params.get("state", [None])[0])  # type: ignore
+    get_dynamic_config_store().store(CRED_KEY.format(credential_id), params.get("state", [None])[0], encrypt=True)  # type: ignore
     return str(auth_url)
 
 
@@ -140,7 +140,9 @@ def get_google_app_cred() -> GoogleAppCredentials:
 
 
 def upsert_google_app_cred(app_credentials: GoogleAppCredentials) -> None:
-    get_dynamic_config_store().store(GOOGLE_DRIVE_CRED_KEY, app_credentials.json())
+    get_dynamic_config_store().store(
+        GOOGLE_DRIVE_CRED_KEY, app_credentials.json(), encrypt=True
+    )
 
 
 def delete_google_app_cred() -> None:
@@ -154,7 +156,7 @@ def get_service_account_key() -> GoogleServiceAccountKey:
 
 def upsert_service_account_key(service_account_key: GoogleServiceAccountKey) -> None:
     get_dynamic_config_store().store(
-        GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY, service_account_key.json()
+        GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY, service_account_key.json(), encrypt=True
     )
 
 

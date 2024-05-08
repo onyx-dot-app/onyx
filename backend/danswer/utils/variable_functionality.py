@@ -24,6 +24,6 @@ global_version = DanswerVersion()
 
 @functools.lru_cache(maxsize=128)
 def fetch_versioned_implementation(module: str, attribute: str) -> Any:
-    logger.info("Fetching versioned implementation for %s.%s", module, attribute)
+    logger.debug("Fetching versioned implementation for %s.%s", module, attribute)
     module_full = f"ee.{module}" if global_version.get_is_ee_version() else module
     return getattr(importlib.import_module(module_full), attribute)

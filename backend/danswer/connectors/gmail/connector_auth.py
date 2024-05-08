@@ -91,7 +91,7 @@ def get_gmail_auth_url(credential_id: int) -> str:
     parsed_url = cast(ParseResult, urlparse(auth_url))
     params = parse_qs(parsed_url.query)
 
-    get_dynamic_config_store().store(CRED_KEY.format(credential_id), params.get("state", [None])[0])  # type: ignore
+    get_dynamic_config_store().store(CRED_KEY.format(credential_id), params.get("state", [None])[0], encrypt=True)  # type: ignore
     return str(auth_url)
 
 
@@ -108,7 +108,7 @@ def get_auth_url(credential_id: int) -> str:
     parsed_url = cast(ParseResult, urlparse(auth_url))
     params = parse_qs(parsed_url.query)
 
-    get_dynamic_config_store().store(CRED_KEY.format(credential_id), params.get("state", [None])[0])  # type: ignore
+    get_dynamic_config_store().store(CRED_KEY.format(credential_id), params.get("state", [None])[0], encrypt=True)  # type: ignore
     return str(auth_url)
 
 
@@ -157,7 +157,9 @@ def get_google_app_gmail_cred() -> GoogleAppCredentials:
 
 
 def upsert_google_app_gmail_cred(app_credentials: GoogleAppCredentials) -> None:
-    get_dynamic_config_store().store(GMAIL_CRED_KEY, app_credentials.json())
+    get_dynamic_config_store().store(
+        GMAIL_CRED_KEY, app_credentials.json(), encrypt=True
+    )
 
 
 def delete_google_app_gmail_cred() -> None:
@@ -173,13 +175,13 @@ def upsert_gmail_service_account_key(
     service_account_key: GoogleServiceAccountKey,
 ) -> None:
     get_dynamic_config_store().store(
-        GMAIL_SERVICE_ACCOUNT_KEY, service_account_key.json()
+        GMAIL_SERVICE_ACCOUNT_KEY, service_account_key.json(), encrypt=True
     )
 
 
 def upsert_service_account_key(service_account_key: GoogleServiceAccountKey) -> None:
     get_dynamic_config_store().store(
-        GMAIL_SERVICE_ACCOUNT_KEY, service_account_key.json()
+        GMAIL_SERVICE_ACCOUNT_KEY, service_account_key.json(), encrypt=True
     )
 
 

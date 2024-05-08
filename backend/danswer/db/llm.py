@@ -14,6 +14,7 @@ def upsert_llm_provider(
         select(LLMProviderModel).where(LLMProviderModel.name == llm_provider.name)
     )
     if existing_llm_provider:
+        existing_llm_provider.provider = llm_provider.provider
         existing_llm_provider.api_key = llm_provider.api_key
         existing_llm_provider.api_base = llm_provider.api_base
         existing_llm_provider.api_version = llm_provider.api_version
@@ -29,6 +30,7 @@ def upsert_llm_provider(
     # if it does not exist, create a new entry
     llm_provider_model = LLMProviderModel(
         name=llm_provider.name,
+        provider=llm_provider.provider,
         api_key=llm_provider.api_key,
         api_base=llm_provider.api_base,
         api_version=llm_provider.api_version,

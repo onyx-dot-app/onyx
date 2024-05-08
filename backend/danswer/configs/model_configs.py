@@ -1,3 +1,4 @@
+import json
 import os
 
 #####
@@ -97,3 +98,18 @@ GEN_AI_TEMPERATURE = float(os.environ.get("GEN_AI_TEMPERATURE") or 0)
 DISABLE_LITELLM_STREAMING = (
     os.environ.get("DISABLE_LITELLM_STREAMING") or "false"
 ).lower() == "true"
+
+# extra headers to pass to LiteLLM
+LITELLM_EXTRA_HEADERS = None
+_LITELLM_EXTRA_HEADERS_RAW = os.environ.get("LITELLM_EXTRA_HEADERS")
+if _LITELLM_EXTRA_HEADERS_RAW:
+    try:
+        LITELLM_EXTRA_HEADERS = json.loads(_LITELLM_EXTRA_HEADERS_RAW)
+    except Exception:
+        # need to import here to avoid circular imports
+        from danswer.utils.logger import setup_logger
+
+        logger = setup_logger()
+        logger.error(
+            "Failed to parse LITELLM_EXTRA_HEADERS, must be a valid JSON object"
+        )

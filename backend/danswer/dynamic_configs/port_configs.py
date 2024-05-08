@@ -94,6 +94,7 @@ def port_api_key_to_postgres() -> None:
 
         llm_provider_upsert = LLMProviderUpsertRequest(
             name=GEN_AI_MODEL_PROVIDER,
+            provider=GEN_AI_MODEL_PROVIDER,
             api_key=api_key,
             api_base=GEN_AI_API_ENDPOINT,
             api_version=GEN_AI_API_VERSION,

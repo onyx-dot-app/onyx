@@ -77,6 +77,7 @@ def stream_answer_objects(
     timeout: int = QA_TIMEOUT,
     bypass_acl: bool = False,
     use_citations: bool = False,
+    danswerbot_flow: bool = False,
     retrieval_metrics_callback: Callable[[RetrievalMetricsContainer], None]
     | None = None,
     rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
@@ -98,6 +99,7 @@ def stream_answer_objects(
         user_id=user_id,
         persona_id=query_req.persona_id,
         one_shot=True,
+        danswerbot_flow=danswerbot_flow,
     )
 
     llm_tokenizer = get_default_llm_token_encode()
@@ -273,6 +275,7 @@ def get_search_answer(
     enable_reflexion: bool = False,
     bypass_acl: bool = False,
     use_citations: bool = False,
+    danswerbot_flow: bool = False,
     retrieval_metrics_callback: Callable[[RetrievalMetricsContainer], None]
     | None = None,
     rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
@@ -288,6 +291,7 @@ def get_search_answer(
         db_session=db_session,
         bypass_acl=bypass_acl,
         use_citations=use_citations,
+        danswerbot_flow=danswerbot_flow,
         timeout=answer_generation_timeout,
         retrieval_metrics_callback=retrieval_metrics_callback,
         rerank_metrics_callback=rerank_metrics_callback,

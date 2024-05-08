@@ -1,6 +1,7 @@
 from danswer.configs.app_configs import DISABLE_GENERATIVE_AI
 from danswer.configs.chat_configs import QA_TIMEOUT
 from danswer.configs.model_configs import GEN_AI_TEMPERATURE
+from danswer.configs.model_configs import LITELLM_EXTRA_HEADERS
 from danswer.db.engine import get_session_context_manager
 from danswer.db.llm import fetch_default_provider
 from danswer.db.llm import fetch_provider
@@ -19,11 +20,10 @@ def get_llm_for_persona(
     temperature_override = llm_override.temperature if llm_override else None
 
     return get_default_llm(
-        gen_ai_model_provider=model_provider_override
-        or persona.llm_model_provider_override,
-        gen_ai_model_version_override=(
-            model_version_override or persona.llm_model_version_override
+        model_provider_name=(
+            model_provider_override or persona.llm_model_provider_override
         ),
+        model_version=(model_version_override or persona.llm_model_version_override),
         temperature=temperature_override or GEN_AI_TEMPERATURE,
     )
 
@@ -32,23 +32,23 @@ def get_default_llm(
     timeout: int = QA_TIMEOUT,
     temperature: float = GEN_AI_TEMPERATURE,
     use_fast_llm: bool = False,
-    gen_ai_model_provider: str | None = None,
-    gen_ai_model_version_override: str | None = None,
+    model_provider_name: str | None = None,
+    model_version: str | None = None,
 ) -> LLM:
     if DISABLE_GENERATIVE_AI:
         raise GenAIDisabledException()
 
     # TODO: pass this in
     with get_session_context_manager() as session:
-        if gen_ai_model_provider is None:
+        if model_provider_name is None:
             llm_provider = fetch_default_provider(session)
         else:
-            llm_provider = fetch_provider(session, gen_ai_model_provider)
+            llm_provider = fetch_provider(session, model_provider_name)
 
     if not llm_provider:
         raise ValueError("No default LLM provider found")
 
-    model_name = gen_ai_model_version_override or (
+    model_name = model_version or (
         (llm_provider.fast_default_model_name or llm_provider.default_model_name)
         if use_fast_llm
         else llm_provider.default_model_name
@@ -57,7 +57,7 @@ def get_default_llm(
         raise ValueError("No default model name found")
 
     return get_llm(
-        provider=llm_provider.name,
+        provider=llm_provider.provider,
         model=model_name,
         api_key=llm_provider.api_key,
         api_base=llm_provider.api_base,
@@ -87,4 +87,5 @@ def get_llm(
         timeout=timeout,
         temperature=temperature,
         custom_config=custom_config,
+        extra_headers=LITELLM_EXTRA_HEADERS,
     )

@@ -5,6 +5,8 @@ from typing import Any
 from typing import cast
 from typing import TypeVar
 
+import requests
+
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -84,3 +86,45 @@ class _RateLimitDecorator:
 
 
 rate_limit_builder = _RateLimitDecorator
+
+
+"""If you want to allow the external service to tell you when you've hit the rate limit,
+use the following instead"""
+
+R = TypeVar("R", bound=Callable[..., requests.Response])
+
+
+def wrap_request_to_handle_ratelimiting(
+    request_fn: R, default_wait_time_sec: int = 30, max_waits: int = 30
+) -> R:
+    def wrapped_request(*args: list, **kwargs: dict[str, Any]) -> requests.Response:
+        for _ in range(max_waits):
+            response = request_fn(*args, **kwargs)
+            if response.status_code == 429:
+                try:
+                    wait_time = int(
+                        response.headers.get("Retry-After", default_wait_time_sec)
+                    )
+                except ValueError:
+                    wait_time = default_wait_time_sec
+
+                time.sleep(wait_time)
+                continue
+
+            return response
+
+        raise RateLimitTriedTooManyTimesError(f"Exceeded '{max_waits}' retries")
+
+    return cast(R, wrapped_request)
+
+
+_rate_limited_get = wrap_request_to_handle_ratelimiting(requests.get)
+_rate_limited_post = wrap_request_to_handle_ratelimiting(requests.post)
+
+
+class _RateLimitedRequest:
+    get = _rate_limited_get
+    post = _rate_limited_post
+
+
+rl_requests = _RateLimitedRequest

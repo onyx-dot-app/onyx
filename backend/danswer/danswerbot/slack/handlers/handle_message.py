@@ -282,6 +282,7 @@ def handle_message(
                 enable_reflexion=reflexion,
                 bypass_acl=bypass_acl,
                 use_citations=use_citations,
+                danswerbot_flow=True,
             )
             if not answer.error_msg:
                 return answer

@@ -61,6 +61,12 @@ DISABLED_GEN_AI_MSG = (
 )
 
 
+# API Keys
+DANSWER_API_KEY_PREFIX = "API_KEY__"
+DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN = "danswerapikey.ai"
+UNNAMED_KEY_PLACEHOLDER = "Unnamed"
+
+
 class DocumentSource(str, Enum):
     # Special case, document passed in via Danswer APIs without specifying a source type
     INGESTION_API = "ingestion_api"
@@ -88,6 +94,7 @@ class DocumentSource(str, Enum):
     ZENDESK = "zendesk"
     LOOPIO = "loopio"
     SHAREPOINT = "sharepoint"
+    DISCOURSE = "discourse"
     AXERO = "axero"
 
 

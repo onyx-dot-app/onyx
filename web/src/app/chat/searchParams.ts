@@ -13,6 +13,8 @@ export const SEARCH_PARAM_NAMES = {
   SUBMIT_ON_LOAD: "submit-on-load",
   // chat title
   TITLE: "title",
+  // for seeding chats
+  SEEDED: "seeded",
 };
 
 export function shouldSubmitOnLoad(searchParams: ReadonlyURLSearchParams) {

@@ -21,7 +21,13 @@ TIME_PERIOD_HOURS_DEFAULT = 12
 
 
 def is_under_token_budget(db_session: Session) -> bool:
-    settings_json = cast(str, get_dynamic_config_store().load(TOKEN_BUDGET_SETTINGS))
+    try:
+        settings_json = cast(
+            str, get_dynamic_config_store().load(TOKEN_BUDGET_SETTINGS)
+        )
+    except Exception:
+        return True
+
     settings = json.loads(settings_json)
 
     is_enabled = settings.get(ENABLE_TOKEN_BUDGET, False)

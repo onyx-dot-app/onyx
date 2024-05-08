@@ -17,6 +17,7 @@ from danswer.llm.answering.prompts.utils import build_dummy_prompt
 from danswer.server.features.persona.models import CreatePersonaRequest
 from danswer.server.features.persona.models import PersonaSnapshot
 from danswer.server.features.persona.models import PromptTemplateResponse
+from danswer.server.models import DisplayPriorityRequest
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -42,11 +43,6 @@ def patch_persona_visibility(
         is_visible=is_visible_request.is_visible,
         db_session=db_session,
     )
-
-
-class DisplayPriorityRequest(BaseModel):
-    # maps persona id to display priority
-    display_priority_map: dict[int, int]
 
 
 @admin_router.put("/display-priority")

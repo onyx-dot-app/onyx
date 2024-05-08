@@ -28,7 +28,7 @@ class FileSystemBackedDynamicConfigStore(DynamicConfigStore):
         # at app start somehow to prevent key overlaps
         self.dir_path = Path(dir_path)
 
-    def store(self, key: str, val: JSON_ro) -> None:
+    def store(self, key: str, val: JSON_ro, encrypt: bool = False) -> None:
         file_path = self.dir_path / key
         lock = _get_file_lock(file_path)
         with lock.acquire(timeout=FILE_LOCK_TIMEOUT):
@@ -62,14 +62,21 @@ class PostgresBackedDynamicConfigStore(DynamicConfigStore):
         finally:
             session.close()
 
-    def store(self, key: str, val: JSON_ro) -> None:
+    def store(self, key: str, val: JSON_ro, encrypt: bool = False) -> None:
+        # The actual encryption/decryption is done in Postgres, we just need to choose
+        # which field to set
+        encrypted_val = val if encrypt else None
+        plain_val = val if not encrypt else None
         with self.get_session() as session:
             obj = session.query(KVStore).filter_by(key=key).first()
             if obj:
-                obj.value = val
+                obj.value = plain_val
+                obj.encrypted_value = encrypted_val
             else:
-                obj = KVStore(key=key, value=val)  # type: ignore
-                session.query(KVStore).filter_by(key=key).delete()
+                obj = KVStore(
+                    key=key, value=plain_val, encrypted_value=encrypted_val
+                )  # type: ignore
+                session.query(KVStore).filter_by(key=key).delete()  # just in case
                 session.add(obj)
             session.commit()
 
@@ -78,7 +85,13 @@ class PostgresBackedDynamicConfigStore(DynamicConfigStore):
             obj = session.query(KVStore).filter_by(key=key).first()
             if not obj:
                 raise ConfigNotFoundError
-            return cast(JSON_ro, obj.value)
+
+            if obj.value is not None:
+                return cast(JSON_ro, obj.value)
+            if obj.encrypted_value is not None:
+                return cast(JSON_ro, obj.encrypted_value)
+
+            return None
 
     def delete(self, key: str) -> None:
         with self.get_session() as session:

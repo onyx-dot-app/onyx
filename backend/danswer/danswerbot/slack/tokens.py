@@ -26,6 +26,5 @@ def save_tokens(
 ) -> None:
     dynamic_config_store = get_dynamic_config_store()
     dynamic_config_store.store(
-        key=_SLACK_BOT_TOKENS_CONFIG_KEY,
-        val=dict(tokens),
+        key=_SLACK_BOT_TOKENS_CONFIG_KEY, val=dict(tokens), encrypt=True
     )

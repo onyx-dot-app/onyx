@@ -53,6 +53,7 @@ export function CustomLLMProviderUpdateForm({
   // Define the initial values based on the provider's requirements
   const initialValues = {
     name: existingLlmProvider?.name ?? "",
+    provider: existingLlmProvider?.provider ?? "",
     api_key: existingLlmProvider?.api_key ?? "",
     api_base: existingLlmProvider?.api_base ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
@@ -71,7 +72,8 @@ export function CustomLLMProviderUpdateForm({
 
   // Setup validation schema if required
   const validationSchema = Yup.object({
-    name: Yup.string().required("Name is required"),
+    name: Yup.string().required("Display Name is required"),
+    provider: Yup.string().required("Provider Name is required"),
     api_key: Yup.string(),
     api_base: Yup.string(),
     api_version: Yup.string(),
@@ -185,6 +187,15 @@ export function CustomLLMProviderUpdateForm({
         <Form>
           <TextFormField
             name="name"
+            label="Display Name"
+            subtext="A name which you can use to identify this provider when selecting it in the UI."
+            placeholder="Display Name"
+          />
+
+          <Divider />
+
+          <TextFormField
+            name="provider"
             label="Provider Name"
             subtext={
               <>
@@ -384,7 +395,6 @@ export function CustomLLMProviderUpdateForm({
                   disabled={isTesting}
                   onClick={async () => {
                     setIsTesting(true);
-                    console.log(values.custom_config_list);
 
                     const response = await fetch("/api/admin/llm/test", {
                       method: "POST",
@@ -392,7 +402,6 @@ export function CustomLLMProviderUpdateForm({
                         "Content-Type": "application/json",
                       },
                       body: JSON.stringify({
-                        provider: values.name,
                         custom_config: customConfigProcessing(
                           values.custom_config_list
                         ),

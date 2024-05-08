@@ -27,3 +27,7 @@ class IdReturn(BaseModel):
 class MinimalUserSnapshot(BaseModel):
     id: UUID
     email: str
+
+
+class DisplayPriorityRequest(BaseModel):
+    display_priority_map: dict[int, int]

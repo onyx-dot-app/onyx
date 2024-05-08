@@ -15,7 +15,7 @@ class ConfigNotFoundError(Exception):
 
 class DynamicConfigStore:
     @abc.abstractmethod
-    def store(self, key: str, val: JSON_ro) -> None:
+    def store(self, key: str, val: JSON_ro, encrypt: bool = False) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod

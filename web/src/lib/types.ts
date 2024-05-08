@@ -39,6 +39,7 @@ export type ValidSources =
   | "loopio"
   | "sharepoint"
   | "zendesk"
+  | "discourse"
   | "axero";
 
 export type ValidInputTypes = "load_state" | "poll" | "event";
@@ -116,6 +117,11 @@ export interface JiraConfig {
 
 export interface SharepointConfig {
   sites?: string[];
+}
+
+export interface DiscourseConfig {
+  base_url: string;
+  categories?: string[];
 }
 
 export interface AxeroConfig {
@@ -335,6 +341,11 @@ export interface SharepointCredentialJson {
   aad_client_id: string;
   aad_client_secret: string;
   aad_directory_id: string;
+}
+
+export interface DiscourseCredentialJson {
+  discourse_api_key: string;
+  discourse_api_username: string;
 }
 
 export interface AxeroCredentialJson {

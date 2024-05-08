@@ -1,5 +1,7 @@
 "use client";
 
+import "./styles.css";
+
 import * as RadixPopover from "@radix-ui/react-popover";
 
 export function Popover({
@@ -7,11 +9,21 @@ export function Popover({
   onOpenChange,
   content,
   popover,
+  side,
+  align,
+  sideOffset,
+  matchWidth,
+  requiresContentPadding,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   content: JSX.Element;
   popover: JSX.Element;
+  side?: "top" | "right" | "bottom" | "left";
+  align?: "start" | "center" | "end";
+  sideOffset?: number;
+  matchWidth?: boolean;
+  requiresContentPadding?: boolean;
 }) {
   /* 
   This Popover is needed when we want to put a popup / dropdown in a component
@@ -24,14 +36,30 @@ export function Popover({
 
   return (
     <RadixPopover.Root open={open} onOpenChange={onOpenChange}>
-      <RadixPopover.Trigger>
+      <RadixPopover.Trigger style={{ width: "100%" }}>
         {/* NOTE: this weird `-mb-1.5` is needed to offset the Anchor, otherwise 
           the content will shift up by 1.5px when the Popover is open. */}
-        {open ? <div className="-mb-1.5">{content}</div> : content}
+        {open ? (
+          <div className={requiresContentPadding ? "-mb-1.5" : ""}>
+            {content}
+          </div>
+        ) : (
+          content
+        )}
       </RadixPopover.Trigger>
-      <RadixPopover.Anchor />
       <RadixPopover.Portal>
-        <RadixPopover.Content>{popover}</RadixPopover.Content>
+        <RadixPopover.Content
+          className={
+            "PopoverContent z-[100] " +
+            (matchWidth ? " PopoverContentMatchWidth" : "")
+          }
+          asChild
+          side={side}
+          align={align}
+          sideOffset={sideOffset}
+        >
+          {popover}
+        </RadixPopover.Content>
       </RadixPopover.Portal>
     </RadixPopover.Root>
   );

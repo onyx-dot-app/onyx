@@ -233,7 +233,7 @@ interface SelectorFormFieldProps {
   options: StringOrNumberOption[];
   subtext?: string | JSX.Element;
   includeDefault?: boolean;
-  direction?: "up" | "down";
+  side?: "top" | "right" | "bottom" | "left";
   maxHeight?: string;
   onSelect?: (selected: string | number | null) => void;
 }
@@ -244,7 +244,7 @@ export function SelectorFormField({
   options,
   subtext,
   includeDefault = false,
-  direction = "down",
+  side = "bottom",
   maxHeight,
   onSelect,
 }: SelectorFormFieldProps) {
@@ -262,7 +262,7 @@ export function SelectorFormField({
           selected={field.value}
           onSelect={onSelect || ((selected) => setFieldValue(name, selected))}
           includeDefault={includeDefault}
-          direction={direction}
+          side={side}
           maxHeight={maxHeight}
         />
       </div>

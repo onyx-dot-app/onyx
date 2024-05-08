@@ -27,7 +27,7 @@ def get_or_generate_uuid() -> str:
         return cast(str, kv_store.load(CUSTOMER_UUID_KEY))
     except ConfigNotFoundError:
         customer_id = str(uuid.uuid4())
-        kv_store.store(CUSTOMER_UUID_KEY, customer_id)
+        kv_store.store(CUSTOMER_UUID_KEY, customer_id, encrypt=True)
         return customer_id
 
 

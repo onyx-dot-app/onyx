@@ -408,7 +408,7 @@ def seed_chat(
         )
 
     return ChatSeedResponse(
-        redirect_url=f"{WEB_DOMAIN}/chat?chatId={new_chat_session.id}"
+        redirect_url=f"{WEB_DOMAIN}/chat?chatId={new_chat_session.id}&seeded=true"
     )
 
 

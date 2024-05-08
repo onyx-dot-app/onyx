@@ -3,6 +3,7 @@ import { BasicSelectable } from "@/components/BasicClickable";
 import { User } from "@/lib/types";
 import { Text } from "@tremor/react";
 import Link from "next/link";
+import { FaRobot } from "react-icons/fa";
 import { FiEdit } from "react-icons/fi";
 
 function AssistantDisplay({
@@ -24,7 +25,9 @@ function AssistantDisplay({
       <div className="w-full" onClick={() => onSelect(persona)}>
         <BasicSelectable selected={false} fullWidth>
           <div className="flex">
-            <div className="truncate w-48 3xl:w-56">{persona.name}</div>
+            <div className="truncate w-48 3xl:w-56 flex">
+              <FaRobot className="mr-2 my-auto" size={16} /> {persona.name}
+            </div>
           </div>
         </BasicSelectable>
       </div>
@@ -54,7 +57,7 @@ export function AssistantsTab({
   const globalAssistants = personas.filter((persona) => persona.is_public);
   const personalAssistants = personas.filter(
     (persona) =>
-      !user || (persona.users.includes(user.id) && !persona.is_public)
+      (!user || persona.users.includes(user.id)) && !persona.is_public
   );
 
   return (

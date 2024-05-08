@@ -28,7 +28,7 @@ from danswer.connectors.models import Section
 # 2. Only the HTML Articles are supported, Document360 also has a Markdown and "Block" format
 # 3. The contents are not as cleaned up as other HTML connectors
 
-DOCUMENT360_BASE_URL = "https://preview.portal.document360.io/"
+DOCUMENT360_BASE_URL = "https://portal.document360.io"
 DOCUMENT360_API_BASE_URL = "https://apihub.document360.io/v2"
 
 
@@ -142,7 +142,11 @@ class Document360Connector(LoadConnector, PollConnector):
                 if author["email_id"]
             ]
 
-            doc_link = f"{DOCUMENT360_BASE_URL}/{self.portal_id}/document/v1/view/{article['id']}"
+            doc_link = (
+                article_details["url"]
+                if article_details.get("url")
+                else f"{DOCUMENT360_BASE_URL}/{self.portal_id}/document/v1/view/{article['id']}"
+            )
 
             html_content = article_details["html_content"]
             article_content = (

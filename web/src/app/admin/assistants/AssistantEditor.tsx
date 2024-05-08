@@ -34,13 +34,6 @@ import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelec
 import { FullLLMProvider } from "../models/llm/interfaces";
 import { Option } from "@/components/Dropdown";
 
-const DEFAULT_LLM_PROVIDER_TO_DISPLAY_NAME: Record<string, string> = {
-  openai: "OpenAI",
-  azure: "Azure OpenAI",
-  anthropic: "Anthropic",
-  bedrock: "AWS Bedrock",
-};
-
 function Label({ children }: { children: string | JSX.Element }) {
   return (
     <div className="block font-medium text-base text-emphasis">{children}</div>
@@ -495,10 +488,7 @@ export function AssistantEditor({
                           <SelectorFormField
                             name="llm_model_provider_override"
                             options={llmProviders.map((llmProvider) => ({
-                              name:
-                                DEFAULT_LLM_PROVIDER_TO_DISPLAY_NAME[
-                                  llmProvider.name
-                                ] || llmProvider.name,
+                              name: llmProvider.name,
                               value: llmProvider.name,
                             }))}
                             includeDefault={true}

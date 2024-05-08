@@ -102,6 +102,7 @@ def create_chat_session(
     llm_override: LLMOverride | None = None,
     prompt_override: PromptOverride | None = None,
     one_shot: bool = False,
+    danswerbot_flow: bool = False,
 ) -> ChatSession:
     chat_session = ChatSession(
         user_id=user_id,
@@ -110,6 +111,7 @@ def create_chat_session(
         llm_override=llm_override,
         prompt_override=prompt_override,
         one_shot=one_shot,
+        danswerbot_flow=danswerbot_flow,
     )
 
     db_session.add(chat_session)

@@ -1,3 +1,10 @@
+export interface CustomConfigKey {
+  name: string;
+  description: string | null;
+  is_required: boolean;
+  is_secret: boolean;
+}
+
 export interface WellKnownLLMProviderDescriptor {
   name: string;
   display_name: string | null;
@@ -5,7 +12,7 @@ export interface WellKnownLLMProviderDescriptor {
   api_key_required: boolean;
   api_base_required: boolean;
   api_version_required: boolean;
-  custom_config_keys: string[] | null;
+  custom_config_keys: CustomConfigKey[] | null;
 
   llm_names: string[];
   default_model: string | null;
@@ -14,6 +21,7 @@ export interface WellKnownLLMProviderDescriptor {
 
 export interface LLMProvider {
   name: string;
+  provider: string;
   api_key: string | null;
   api_base: string | null;
   api_version: string | null;

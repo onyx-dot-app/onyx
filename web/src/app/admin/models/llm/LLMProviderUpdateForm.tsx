@@ -37,6 +37,7 @@ export function LLMProviderUpdateForm({
 
   // Define the initial values based on the provider's requirements
   const initialValues = {
+    name: existingLlmProvider?.name ?? "",
     api_key: existingLlmProvider?.api_key ?? "",
     api_base: existingLlmProvider?.api_base ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
@@ -50,8 +51,8 @@ export function LLMProviderUpdateForm({
     custom_config:
       existingLlmProvider?.custom_config ??
       llmProviderDescriptor.custom_config_keys?.reduce(
-        (acc, key) => {
-          acc[key] = "";
+        (acc, customConfigKey) => {
+          acc[customConfigKey.name] = "";
           return acc;
         },
         {} as { [key: string]: string }
@@ -64,6 +65,7 @@ export function LLMProviderUpdateForm({
 
   // Setup validation schema if required
   const validationSchema = Yup.object({
+    name: Yup.string().required("Display Name is required"),
     api_key: llmProviderDescriptor.api_key_required
       ? Yup.string().required("API Key is required")
       : Yup.string(),
@@ -77,8 +79,12 @@ export function LLMProviderUpdateForm({
       ? {
           custom_config: Yup.object(
             llmProviderDescriptor.custom_config_keys.reduce(
-              (acc, key) => {
-                acc[key] = Yup.string().required(`${key} is required`);
+              (acc, customConfigKey) => {
+                if (customConfigKey.is_required) {
+                  acc[customConfigKey.name] = Yup.string().required(
+                    `${customConfigKey.name} is required`
+                  );
+                }
                 return acc;
               },
               {} as { [key: string]: Yup.StringSchema }
@@ -114,7 +120,7 @@ export function LLMProviderUpdateForm({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            name: llmProviderDescriptor.name,
+            provider: llmProviderDescriptor.name,
             ...values,
             fast_default_model_name:
               values.default_fast_model_name || values.default_model_name,
@@ -180,6 +186,15 @@ export function LLMProviderUpdateForm({
     >
       {({ values }) => (
         <Form>
+          <TextFormField
+            name="name"
+            label="Display Name"
+            subtext="A name which you can use to identify this provider when selecting it in the UI."
+            placeholder="Display Name"
+          />
+
+          <Divider />
+
           {llmProviderDescriptor.api_key_required && (
             <TextFormField
               name="api_key"
@@ -205,9 +220,17 @@ export function LLMProviderUpdateForm({
             />
           )}
 
-          {llmProviderDescriptor.custom_config_keys?.map((key) => (
-            <div key={key}>
-              <TextFormField name={`custom_config.${key}`} label={key} />
+          {llmProviderDescriptor.custom_config_keys?.map((customConfigKey) => (
+            <div key={customConfigKey.name}>
+              <TextFormField
+                name={`custom_config.${customConfigKey.name}`}
+                label={
+                  customConfigKey.is_required
+                    ? customConfigKey.name
+                    : `[Optional] ${customConfigKey.name}`
+                }
+                subtext={customConfigKey.description || undefined}
+              />
             </div>
           ))}
 
@@ -222,7 +245,6 @@ export function LLMProviderUpdateForm({
                 name,
                 value: name,
               }))}
-              direction="up"
               maxHeight="max-h-56"
             />
           ) : (
@@ -246,7 +268,6 @@ export function LLMProviderUpdateForm({
                 value: name,
               }))}
               includeDefault
-              direction="up"
               maxHeight="max-h-56"
             />
           ) : (

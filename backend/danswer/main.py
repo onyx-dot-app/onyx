@@ -29,7 +29,7 @@ from danswer.configs.app_configs import DISABLE_GENERATIVE_AI
 from danswer.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from danswer.configs.app_configs import OAUTH_CLIENT_ID
 from danswer.configs.app_configs import OAUTH_CLIENT_SECRET
-from danswer.configs.app_configs import SECRET
+from danswer.configs.app_configs import USER_AUTH_SECRET
 from danswer.configs.app_configs import WEB_DOMAIN
 from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.configs.constants import AuthType
@@ -58,6 +58,7 @@ from danswer.server.documents.connector import router as connector_router
 from danswer.server.documents.credential import router as credential_router
 from danswer.server.documents.document import router as document_router
 from danswer.server.features.document_set.api import router as document_set_router
+from danswer.server.features.folder.api import router as folder_router
 from danswer.server.features.persona.api import admin_router as admin_persona_router
 from danswer.server.features.persona.api import basic_router as persona_router
 from danswer.server.features.prompt.api import basic_router as prompt_router
@@ -263,6 +264,7 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, connector_router)
     include_router_with_global_prefix_prepended(application, credential_router)
     include_router_with_global_prefix_prepended(application, cc_pair_router)
+    include_router_with_global_prefix_prepended(application, folder_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
     include_router_with_global_prefix_prepended(application, secondary_index_router)
     include_router_with_global_prefix_prepended(
@@ -324,7 +326,7 @@ def get_application() -> FastAPI:
             fastapi_users.get_oauth_router(
                 oauth_client,
                 auth_backend,
-                SECRET,
+                USER_AUTH_SECRET,
                 associate_by_email=True,
                 is_verified_by_default=True,
                 # Points the user back to the login page

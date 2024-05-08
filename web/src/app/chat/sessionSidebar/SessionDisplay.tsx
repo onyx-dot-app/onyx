@@ -156,6 +156,7 @@ export function ChatSessionDisplay({
                               />
                             </div>
                           }
+                          requiresContentPadding
                         />
                       </div>
                     </div>

@@ -321,3 +321,36 @@ def prepare_to_modify_documents(db_session: Session, document_ids: list[str]) ->
             f"Failed to acquire locks after {_NUM_LOCK_ATTEMPTS} attempts "
             f"for documents: {document_ids}"
         )
+
+
+def get_ingestion_documents(
+    db_session: Session,
+) -> list[DbDocument]:
+    # TODO add the option to filter by DocumentSource
+    stmt = select(DbDocument).where(DbDocument.from_ingestion_api.is_(True))
+    documents = db_session.execute(stmt).scalars().all()
+    return list(documents)
+
+
+def get_documents_by_cc_pair(
+    cc_pair_id: int,
+    db_session: Session,
+) -> list[DbDocument]:
+    return (
+        db_session.query(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .filter(ConnectorCredentialPair.id == cc_pair_id)
+        .all()
+    )

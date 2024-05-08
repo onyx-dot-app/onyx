@@ -51,7 +51,7 @@ function Selector({
       {label && <Label>{label}</Label>}
       {subtext && <SubLabel>{subtext}</SubLabel>}
 
-      <div className="mt-2">
+      <div className="mt-2 w-full max-w-96">
         <DefaultDropdown
           options={options}
           selected={selected}

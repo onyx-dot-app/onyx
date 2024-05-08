@@ -2,13 +2,20 @@ import litellm  # type: ignore
 from pydantic import BaseModel
 
 
+class CustomConfigKey(BaseModel):
+    name: str
+    description: str | None = None
+    is_required: bool = True
+    is_secret: bool = False
+
+
 class WellKnownLLMProviderDescriptor(BaseModel):
     name: str
     display_name: str | None = None
     api_key_required: bool
     api_base_required: bool
     api_version_required: bool
-    custom_config_keys: list[str] | None = None
+    custom_config_keys: list[CustomConfigKey] | None = None
 
     llm_names: list[str]
     default_model: str | None = None
@@ -96,9 +103,18 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_base_required=False,
             api_version_required=False,
             custom_config_keys=[
-                "AWS_ACCESS_KEY_ID",
-                "AWS_SECRET_ACCESS_KEY",
-                "AWS_REGION_NAME",
+                CustomConfigKey(name="AWS_REGION_NAME"),
+                CustomConfigKey(
+                    name="AWS_ACCESS_KEY_ID",
+                    is_required=False,
+                    description="If using AWS IAM roles, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY can be left blank.",
+                ),
+                CustomConfigKey(
+                    name="AWS_SECRET_ACCESS_KEY",
+                    is_required=False,
+                    is_secret=True,
+                    description="If using AWS IAM roles, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY can be left blank.",
+                ),
             ],
             llm_names=fetch_models_for_provider(BEDROCK_PROVIDER_NAME),
             default_model="anthropic.claude-3-sonnet-20240229-v1:0",
