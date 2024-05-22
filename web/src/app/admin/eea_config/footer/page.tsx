@@ -18,14 +18,12 @@ const Page = () => {
     GET_EEA_CONFIG_URL,
     fetcher
   );
-  let config_json = {"disclaimer":{"disclaimer_text":"", "disclaimer_title":""}};
+  let config_json = {"footer":{"footer_html":""}};
   if (data){
-    console.log(data)
     config_json = JSON.parse(data?.config);
   }
 
-  const disclaimer_text = config_json?.disclaimer?.disclaimer_text || "";
-  const disclaimer_title = config_json?.disclaimer?.disclaimer_title || "";
+  const footer_html = config_json?.footer?.footer_html || "";
   const { popup, setPopup } = usePopup();
   
   if (isLoading) {
@@ -36,20 +34,19 @@ const Page = () => {
       {popup}
       <div className="mx-auto container">
         <AdminPageTitle
-          title="Customize configurations"
+          title="Customize layout"
           icon={<FiCpu size={32} className="my-auto" />}
         />
-        <Title className="mb-2 mt-6">Customize disclaimer:</Title>
+        <Title className="mb-2 mt-6">Customize footer:</Title>
         <Text className="mb-2">
-          Disclaimer for search page (disabled if empty).
+          Footer.
         </Text>
         <div className="border rounded-md border-border p-3">
           <Formik
-            initialValues={{ disclaimer_title: disclaimer_title, disclaimer_text: disclaimer_text}}
-            onSubmit={async ({ disclaimer_title, disclaimer_text }, formikHelpers) => {
-              config_json.disclaimer = {
-                disclaimer_title: disclaimer_title,
-                disclaimer_text: disclaimer_text
+            initialValues={{ footer_html: footer_html}}
+            onSubmit={async ({ footer_html }, formikHelpers) => {
+              config_json.footer = {
+                footer_html: footer_html
               };
               const body = JSON.stringify({ config: JSON.stringify(config_json) });
               const response = await fetch(SET_EEA_CONFIG_URL, {
@@ -62,24 +59,20 @@ const Page = () => {
               console.log(response);
               if (!response?.ok) {
                 setPopup({
-                  message: `Error while updating disclaimer: ${response.status} - ${response.statusText}`,
+                  message: `Error while updating footer: ${response.status} - ${response.statusText}`,
                   type: "error",
                 });
                 return;
               } else {
-                setPopup({ message: "Disclaimer updated", type: "success" });
+                setPopup({ message: "Footer updated", type: "success" });
                 return;
               }
             }}
           >
             <Form>
               <TextFormField
-                name="disclaimer_title"
-                label="Disclaimer title:"
-              />
-              <TextFormField
-                name="disclaimer_text"
-                label="Disclaimer text:"
+                name="footer_html"
+                label="Footer:"
                 isTextArea={true}
               />
               <div className="flex">

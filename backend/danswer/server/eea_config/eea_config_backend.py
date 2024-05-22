@@ -21,18 +21,15 @@ router = APIRouter(prefix="/eea_config")
 
 @router.get("/get_eea_config")
 def get_eea_config(
-    _: User | None = Depends(current_user),
+#    _: User | None = Depends(current_user),
 ):
     try:
-        print("step1")
-        print(get_dynamic_config_store().load(EEA_CONFIG_STORAGE_KEY))
         return Config_EEA(
             config=cast(
                 str, get_dynamic_config_store().load(EEA_CONFIG_STORAGE_KEY)
             )
         )
     except ConfigNotFoundError:
-        print("step1")
         logger.info("Config Not Found")
         return Config_EEA(config='{}')
 

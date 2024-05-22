@@ -27,14 +27,19 @@ import {
   FiSettings,
   FiSlack,
 } from "react-icons/fi";
+import { fetchSS } from "@/lib/utilsSS";
 
 export async function Layout({ children }: { children: React.ReactNode }) {
-  const tasks = [getAuthTypeMetadataSS(), getCurrentUserSS()];
+  const tasks = [
+    getAuthTypeMetadataSS(),
+    getCurrentUserSS(),
+    fetchSS("/eea_config/get_eea_config"),
+  ];
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
   // will not render
-  let results: (User | AuthTypeMetadata | null)[] = [null, null];
+  let results: (User | Response | AuthTypeMetadata | null)[] = [null, null];
   try {
     results = await Promise.all(tasks);
   } catch (e) {
@@ -43,7 +48,11 @@ export async function Layout({ children }: { children: React.ReactNode }) {
 
   const authTypeMetadata = results[0] as AuthTypeMetadata | null;
   const user = results[1] as User | null;
-
+  const EEAConfigResponse = results[2] as Response | null;
+  let eea_config = {}
+  if (EEAConfigResponse?.ok) {
+    eea_config = await EEAConfigResponse.json();
+  }
   const authDisabled = authTypeMetadata?.authType === "disabled";
   const requiresVerification = authTypeMetadata?.requiresVerification;
   if (!authDisabled) {
@@ -197,16 +206,34 @@ export async function Layout({ children }: { children: React.ReactNode }) {
                 ],
               },
               {
-                name: "EEA customizations",
+                name: "Customize Layout",
                 items: [
                   {
                     name: (
                       <div className="flex">
                         <FiCpu size={18} />
-                        <div className="ml-1">Disclaimer</div>
+                        <div className="ml-1">Welcome message</div>
                       </div>
                     ),
-                    link: "/admin/eea_config/disclaimer",
+                    link: "/admin/eea_config/welcome_message",
+                  },
+                  {
+                    name: (
+                      <div className="flex">
+                        <FiCpu size={18} />
+                        <div className="ml-1">Pages</div>
+                      </div>
+                    ),
+                    link: "/admin/eea_config/pages",
+                  },
+                  {
+                    name: (
+                      <div className="flex">
+                        <FiCpu size={18} />
+                        <div className="ml-1">Footer</div>
+                      </div>
+                    ),
+                    link: "/admin/eea_config/footer",
                   },
                 ],
               },
@@ -218,7 +245,7 @@ export async function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       <div className="absolute bottom-0 z-20 w-full">
-        <Footer />
+        <Footer eea_config={eea_config}/>
       </div>
     </div>
   );

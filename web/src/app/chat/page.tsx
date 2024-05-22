@@ -81,8 +81,9 @@ export default async function Page({
 
   let disclaimerTitle = "";
   let disclaimerText = "";
+  let eea_config;
   if (EEAConfigResponse?.ok) {
-    const eea_config = await EEAConfigResponse.json();
+    eea_config = await EEAConfigResponse.json();
     let conf = {"disclaimer":{"disclaimer_title":"", "disclaimer_text": ""}}
     try{
       conf = JSON.parse(eea_config?.config)
@@ -216,6 +217,7 @@ export default async function Page({
         documentSidebarInitialWidth={finalDocumentSidebarInitialWidth}
         defaultSidebarTab={defaultSidebarTab}
         defaultModel={defaultModel}
+        eea_config={eea_config}
       />
     </>
   );

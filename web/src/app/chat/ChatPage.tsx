@@ -78,6 +78,7 @@ export function ChatPage({
   documentSidebarInitialWidth,
   defaultSidebarTab,
   defaultModel,
+  eea_config,
 }: {
   user: User | null;
   chatSessions: ChatSession[];
@@ -90,6 +91,7 @@ export function ChatPage({
   documentSidebarInitialWidth?: number;
   defaultSidebarTab?: Tabs;
   defaultModel: string;
+  eea_config: any;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1144,7 +1146,7 @@ export function ChatPage({
           )}
         </div>
       </div>
-      <Footer />
+      <Footer eea_config={eea_config}/>
     </>
   );
 }

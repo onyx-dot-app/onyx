@@ -74,8 +74,9 @@ export default async function Home() {
   const EEAConfigResponse = results[8] as Response | null;
   let disclaimerTitle = "";
   let disclaimerText = "";
+  let eea_config;
   if (EEAConfigResponse?.ok) {
-    const eea_config = await EEAConfigResponse.json();
+    eea_config = await EEAConfigResponse.json();
     let conf = {"disclaimer":{"disclaimer_title":"", "disclaimer_text": ""}}
     try{
       conf = JSON.parse(eea_config?.config)
@@ -196,7 +197,7 @@ export default async function Home() {
           />
         </div>
       </div>
-      <Footer />
+      <Footer eea_config={eea_config}/>
     </>
   );
 }
