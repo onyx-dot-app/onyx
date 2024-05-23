@@ -22,12 +22,12 @@ from danswer.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
 from danswer.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
 from danswer.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from danswer.configs.constants import DocumentSource
-from danswer.connectors.cross_connector_utils.file_utils import read_pdf_file
-from danswer.connectors.cross_connector_utils.html_utils import web_html_cleanup
 from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import LoadConnector
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
+from danswer.file_processing.extract_file_text import pdf_to_text
+from danswer.file_processing.html_utils import web_html_cleanup
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -247,9 +247,7 @@ class WebConnector(LoadConnector):
                 if current_url.split(".")[-1] == "pdf":
                     # PDF files are not checked for links
                     response = requests.get(current_url)
-                    page_text = read_pdf_file(
-                        file=io.BytesIO(response.content), file_name=current_url
-                    )
+                    page_text = pdf_to_text(file=io.BytesIO(response.content))
 
                     doc_batch.append(
                         Document(

@@ -21,9 +21,6 @@ services:
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
-    volumes:
-      - local_dynamic_storage:/home/storage
-      - file_connector_tmp_storage:/home/file_connector_storage
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
@@ -53,9 +50,6 @@ services:
       - VESPA_HOST=index
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
-    volumes:
-      - local_dynamic_storage:/home/storage
-      - file_connector_tmp_storage:/home/file_connector_storage
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
@@ -73,6 +67,8 @@ services:
       args:
         - NEXT_PUBLIC_DISABLE_STREAMING=${NEXT_PUBLIC_DISABLE_STREAMING:-false}
         - NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA=${NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA:-false}
+        - NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
+        - NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
     depends_on:
       - api_server
     restart: always
@@ -85,6 +81,8 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+
+
   relational_db:
     image: postgres:15.2-alpine
     restart: always
@@ -118,6 +116,7 @@ services:
       # Set to debug to get more fine-grained logs
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
+      # Not necessary, this is just to reduce download time during startup
       - model_cache_huggingface:/root/.cache/huggingface/
     logging:
       driver: json-file
@@ -145,6 +144,7 @@ services:
       # Set to debug to get more fine-grained logs
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
+      # Not necessary, this is just to reduce download time during startup
       - model_cache_huggingface:/root/.cache/huggingface/
     logging:
       driver: json-file
@@ -220,11 +220,6 @@ services:
 
 
 volumes:
-  # local_dynamic_storage is legacy only now
-  local_dynamic_storage:
-  # used to store files uploaded by the user temporarily while we are indexing them
-  # file_connector_tmp_storage is legacy only now
-  file_connector_tmp_storage:
   db_volume:
   vespa_volume:
   # Created by the container itself

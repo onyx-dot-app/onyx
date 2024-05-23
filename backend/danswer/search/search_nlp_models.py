@@ -196,7 +196,7 @@ def warm_up_encoders(
             embed_model.encode(texts=[warm_up_str], text_type=EmbedTextType.QUERY)
             return
         except Exception:
-            logger.info(
+            logger.exception(
                 f"Failed to run test embedding, retrying in {wait_time} seconds..."
             )
             time.sleep(wait_time)

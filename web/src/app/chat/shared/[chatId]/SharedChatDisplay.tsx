@@ -2,7 +2,11 @@
 
 import { humanReadableFormat } from "@/lib/time";
 import { BackendChatSession } from "../../interfaces";
-import { getCitedDocumentsFromMessage, processRawChatHistory } from "../../lib";
+import {
+  buildLatestMessageChain,
+  getCitedDocumentsFromMessage,
+  processRawChatHistory,
+} from "../../lib";
 import { AIMessage, HumanMessage } from "../../message/Messages";
 import { Button, Callout, Divider } from "@tremor/react";
 import { useRouter } from "next/navigation";
@@ -40,7 +44,9 @@ export function SharedChatDisplay({
     );
   }
 
-  const messages = processRawChatHistory(chatSession.messages);
+  const messages = buildLatestMessageChain(
+    processRawChatHistory(chatSession.messages)
+  );
 
   return (
     <div className="w-full overflow-hidden">

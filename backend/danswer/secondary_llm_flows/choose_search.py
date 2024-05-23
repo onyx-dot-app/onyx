@@ -3,13 +3,12 @@ from langchain.schema import HumanMessage
 from langchain.schema import SystemMessage
 
 from danswer.chat.chat_utils import combine_message_chain
-from danswer.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from danswer.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from danswer.db.models import ChatMessage
-from danswer.llm.exceptions import GenAIDisabledException
-from danswer.llm.factory import get_default_llm
+from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.interfaces import LLM
 from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
+from danswer.llm.utils import message_to_string
 from danswer.llm.utils import translate_danswer_msg_to_langchain
 from danswer.prompts.chat_prompts import AGGRESSIVE_SEARCH_TEMPLATE
 from danswer.prompts.chat_prompts import NO_SEARCH
@@ -38,7 +37,7 @@ def check_if_need_search_multi_message(
 
     prompt_msgs.append(HumanMessage(content=f"{last_query}\n\n{REQUIRE_SEARCH_HINT}"))
 
-    model_out = llm.invoke(prompt_msgs)
+    model_out = message_to_string(llm.invoke(prompt_msgs))
 
     if (NO_SEARCH.split()[0] + " ").lower() in model_out.lower():
         return False
@@ -47,10 +46,9 @@ def check_if_need_search_multi_message(
 
 
 def check_if_need_search(
-    query_message: ChatMessage,
-    history: list[ChatMessage],
-    llm: LLM | None = None,
-    disable_llm_check: bool = DISABLE_LLM_CHOOSE_SEARCH,
+    query: str,
+    history: list[PreviousMessage],
+    llm: LLM,
 ) -> bool:
     def _get_search_messages(
         question: str,
@@ -67,27 +65,14 @@ def check_if_need_search(
 
         return messages
 
-    if disable_llm_check:
-        return True
-
-    if llm is None:
-        try:
-            llm = get_default_llm()
-        except GenAIDisabledException:
-            # If Generative AI is turned off the always run Search as Danswer is being used
-            # as just a search engine
-            return True
-
     history_str = combine_message_chain(
         messages=history, token_limit=GEN_AI_HISTORY_CUTOFF
     )
 
-    prompt_msgs = _get_search_messages(
-        question=query_message.message, history_str=history_str
-    )
+    prompt_msgs = _get_search_messages(question=query, history_str=history_str)
 
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    require_search_output = llm.invoke(filled_llm_prompt)
+    require_search_output = message_to_string(llm.invoke(filled_llm_prompt))
 
     logger.debug(f"Run search prediction: {require_search_output}")
 

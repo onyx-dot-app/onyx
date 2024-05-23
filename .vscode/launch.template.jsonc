@@ -12,62 +12,6 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "API Server",
-            "type": "python",
-            "request": "launch",
-            "module": "uvicorn",
-            "cwd": "${workspaceFolder}/backend",
-            "env": {
-                "LOG_LEVEL": "DEBUG",
-                "DISABLE_AUTH": "True",
-                "TYPESENSE_API_KEY": "typesense_api_key",
-                "DYNAMIC_CONFIG_DIR_PATH": "./dynamic_config_storage"
-            },
-            "args": [
-                "danswer.main:app",
-                "--reload",
-                "--port",
-                "8080"
-            ]
-        },
-        {
-            "name": "Indexer",
-            "type": "python",
-            "request": "launch",
-            "program": "danswer/background/update.py",
-            "cwd": "${workspaceFolder}/backend",
-            "env": {
-                "LOG_LEVEL": "DEBUG",
-                "PYTHONPATH": ".",
-                "TYPESENSE_API_KEY": "typesense_api_key",
-                "DYNAMIC_CONFIG_DIR_PATH": "./dynamic_config_storage"
-            }
-        },
-        {
-            "name": "Temp File Deletion",
-            "type": "python",
-            "request": "launch",
-            "program": "danswer/background/file_deletion.py",
-            "cwd": "${workspaceFolder}/backend",
-            "env": {
-                "LOG_LEVEL": "DEBUG",
-                "PYTHONPATH": "${workspaceFolder}/backend"
-            }
-        },
-        // For the listner to access the Slack API,
-        // DANSWER_BOT_SLACK_APP_TOKEN & DANSWER_BOT_SLACK_BOT_TOKEN need to be set in .env file located in the root of the project
-        {
-            "name": "Slack Bot Listener",
-            "type": "python",
-            "request": "launch",
-            "program": "danswer/listeners/slack_listener.py",
-            "cwd": "${workspaceFolder}/backend",
-            "envFile": "${workspaceFolder}/.env",
-            "env": {
-                "LOG_LEVEL": "DEBUG"
-            }
-        },
-        {
             "name": "Web Server",
             "type": "node",
             "request": "launch",
@@ -77,6 +21,85 @@
                 "run", "dev"
             ],
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Model Server",
+            "type": "python",
+            "request": "launch",
+            "module": "uvicorn",
+            "cwd": "${workspaceFolder}/backend",
+            "env": {
+                "LOG_LEVEL": "DEBUG",
+                "PYTHONUNBUFFERED": "1"
+            },
+            "args": [
+                "model_server.main:app",
+                "--reload",
+                "--port",
+                "9000"
+            ]
+        },
+        {
+            "name": "API Server",
+            "type": "python",
+            "request": "launch",
+            "module": "uvicorn",
+            "cwd": "${workspaceFolder}/backend",
+            "env": {
+                "LOG_ALL_MODEL_INTERACTIONS": "True",
+                "LOG_LEVEL": "DEBUG",
+                "PYTHONUNBUFFERED": "1"
+            },
+            "args": [
+                "danswer.main:app",
+                "--reload",
+                "--port",
+                "8080"
+            ]
+        },
+        {
+            "name": "Indexing",
+            "type": "python",
+            "request": "launch",
+            "program": "danswer/background/update.py",
+            "cwd": "${workspaceFolder}/backend",
+            "env": {
+                "ENABLE_MINI_CHUNK": "false",
+                "LOG_LEVEL": "DEBUG",
+                "PYTHONUNBUFFERED": "1",
+                "PYTHONPATH": "."
+            }
+        },
+        // Celery and all async jobs, usually would include indexing as well but this is handled separately above for dev
+        {
+            "name": "Background Jobs",
+            "type": "python",
+            "request": "launch",
+            "program": "scripts/dev_run_background_jobs.py",
+            "cwd": "${workspaceFolder}/backend",
+            "env": {
+                "LOG_LEVEL": "DEBUG",
+                "PYTHONUNBUFFERED": "1",
+                "PYTHONPATH": "."
+            },
+            "args": [
+                "--no-indexing"
+            ]
+        },
+        // For the listner to access the Slack API,
+        // DANSWER_BOT_SLACK_APP_TOKEN & DANSWER_BOT_SLACK_BOT_TOKEN need to be set in .env file located in the root of the project
+        {
+            "name": "Slack Bot",
+            "type": "python",
+            "request": "launch",
+            "program": "danswer/danswerbot/slack/listener.py",
+            "cwd": "${workspaceFolder}/backend",
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "LOG_LEVEL": "DEBUG",
+                "PYTHONUNBUFFERED": "1",
+                "PYTHONPATH": "."
+            }
         }
     ]
 }

@@ -52,9 +52,12 @@ const Main = () => {
       {filesAreUploading && <Spinner />}
       <Text className="mb-2">
         Specify files below, click the <b>Upload</b> button, and the contents of
-        these files will be searchable via Danswer! Currently only <i>.txt</i>,{" "}
-        <i>.pdf</i> and <i>.zip</i> files (containing only <i>.txt</i> files)
-        are supported.
+        these files will be searchable via Danswer! Currently supported file
+        types include <i>.txt</i>, <i>.pdf</i>, <i>.docx</i>, <i>.pptx</i>,{" "}
+        <i>.xlsx</i>, <i>.csv</i>, <i>.md</i>, <i>.mdx</i>, <i>.conf</i>,{" "}
+        <i>.log</i>, <i>.json</i>, <i>.tsv</i>, <i>.xml</i>, <i>.yml</i>,{" "}
+        <i>.yaml</i>, <i>.eml</i>, <i>.epub</i>, and finally <i>.zip</i> files
+        (containing supported file types).
       </Text>
       <Text className="mb-3">
         <b>NOTE:</b> if the original document is accessible via a link, you can

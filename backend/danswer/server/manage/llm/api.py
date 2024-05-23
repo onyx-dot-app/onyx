@@ -15,8 +15,8 @@ from danswer.db.llm import upsert_llm_provider
 from danswer.db.models import User
 from danswer.llm.factory import get_default_llm
 from danswer.llm.factory import get_llm
-from danswer.llm.options import fetch_available_well_known_llms
-from danswer.llm.options import WellKnownLLMProviderDescriptor
+from danswer.llm.llm_provider_options import fetch_available_well_known_llms
+from danswer.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from danswer.llm.utils import test_llm
 from danswer.server.manage.llm.models import FullLLMProvider
 from danswer.server.manage.llm.models import LLMProviderDescriptor

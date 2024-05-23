@@ -1,4 +1,6 @@
+import json
 import os
+import urllib.parse
 
 from danswer.configs.constants import AuthType
 from danswer.configs.constants import DocumentIndexType
@@ -117,7 +119,10 @@ except ValueError:
 # Below are intended to match the env variables names used by the official postgres docker image
 # https://hub.docker.com/_/postgres
 POSTGRES_USER = os.environ.get("POSTGRES_USER") or "postgres"
-POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD") or "password"
+# URL-encode the password for asyncpg to avoid issues with special characters on some machines.
+POSTGRES_PASSWORD = urllib.parse.quote_plus(
+    os.environ.get("POSTGRES_PASSWORD") or "password"
+)
 POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "localhost"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
@@ -142,10 +147,6 @@ ENABLE_EXPENSIVE_EXPERT_CALLS = False
 GOOGLE_DRIVE_INCLUDE_SHARED = False
 GOOGLE_DRIVE_FOLLOW_SHORTCUTS = False
 GOOGLE_DRIVE_ONLY_ORG_PUBLIC = False
-
-FILE_CONNECTOR_TMP_STORAGE_PATH = os.environ.get(
-    "FILE_CONNECTOR_TMP_STORAGE_PATH", "/home/file_connector_storage"
-)
 
 # TODO these should be available for frontend configuration, via advanced options expandable
 WEB_CONNECTOR_IGNORED_CLASSES = os.environ.get(
@@ -232,10 +233,9 @@ DISABLE_DOCUMENT_CLEANUP = (
 #####
 # Miscellaneous
 #####
-DYNAMIC_CONFIG_STORE = (
-    os.environ.get("DYNAMIC_CONFIG_STORE") or "PostgresBackedDynamicConfigStore"
-)
-DYNAMIC_CONFIG_DIR_PATH = os.environ.get("DYNAMIC_CONFIG_DIR_PATH", "/home/storage")
+# File based Key Value store no longer used
+DYNAMIC_CONFIG_STORE = "PostgresBackedDynamicConfigStore"
+
 JOB_TIMEOUT = 60 * 60 * 6  # 6 hours default
 # used to allow the background indexing jobs to use a different embedding
 # model server than the API server
@@ -256,4 +256,10 @@ DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
 
 TOKEN_BUDGET_GLOBALLY_ENABLED = (
     os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"
+)
+
+# Defined custom query/answer conditions to validate the query and the LLM answer.
+# Format: list of strings
+CUSTOM_ANSWER_VALIDITY_CONDITIONS = json.loads(
+    os.environ.get("CUSTOM_ANSWER_VALIDITY_CONDITIONS", "[]")
 )

@@ -1,4 +1,6 @@
+import contextlib
 import time
+from collections.abc import Generator
 from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
@@ -9,15 +11,17 @@ from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.engine.util import TransactionalContext
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from danswer.configs.constants import DEFAULT_BOOST
-from danswer.db.feedback import delete_document_feedback_for_documents
+from danswer.db.feedback import delete_document_feedback_for_documents__no_commit
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import Credential
 from danswer.db.models import Document as DbDocument
 from danswer.db.models import DocumentByConnectorCredentialPair
-from danswer.db.tag import delete_document_tags_for_documents
+from danswer.db.tag import delete_document_tags_for_documents__no_commit
 from danswer.db.utils import model_to_dict
 from danswer.document_index.interfaces import DocumentMetadata
 from danswer.server.documents.models import ConnectorCredentialPairIdentifier
@@ -242,7 +246,7 @@ def upsert_documents_complete(
     )
 
 
-def delete_document_by_connector_credential_pair(
+def delete_document_by_connector_credential_pair__no_commit(
     db_session: Session,
     document_ids: list[str],
     connector_credential_pair_identifier: ConnectorCredentialPairIdentifier
@@ -263,19 +267,22 @@ def delete_document_by_connector_credential_pair(
     db_session.execute(stmt)
 
 
-def delete_documents(db_session: Session, document_ids: list[str]) -> None:
+def delete_documents__no_commit(db_session: Session, document_ids: list[str]) -> None:
     db_session.execute(delete(DbDocument).where(DbDocument.id.in_(document_ids)))
 
 
-def delete_documents_complete(db_session: Session, document_ids: list[str]) -> None:
+def delete_documents_complete__no_commit(
+    db_session: Session, document_ids: list[str]
+) -> None:
     logger.info(f"Deleting {len(document_ids)} documents from the DB")
-    delete_document_by_connector_credential_pair(db_session, document_ids)
-    delete_document_feedback_for_documents(
+    delete_document_by_connector_credential_pair__no_commit(db_session, document_ids)
+    delete_document_feedback_for_documents__no_commit(
         document_ids=document_ids, db_session=db_session
     )
-    delete_document_tags_for_documents(document_ids=document_ids, db_session=db_session)
-    delete_documents(db_session, document_ids)
-    db_session.commit()
+    delete_document_tags_for_documents__no_commit(
+        document_ids=document_ids, db_session=db_session
+    )
+    delete_documents__no_commit(db_session, document_ids)
 
 
 def acquire_document_locks(db_session: Session, document_ids: list[str]) -> bool:
@@ -288,12 +295,18 @@ def acquire_document_locks(db_session: Session, document_ids: list[str]) -> bool
     document IDs in a single call).
     """
     stmt = (
-        select(DbDocument)
+        select(DbDocument.id)
         .where(DbDocument.id.in_(document_ids))
         .with_for_update(nowait=True)
     )
     # will raise exception if any of the documents are already locked
-    db_session.execute(stmt)
+    documents = db_session.scalars(stmt).all()
+
+    # make sure we found every document
+    if len(documents) != len(set(document_ids)):
+        logger.warning("Didn't find row for all specified document IDs. Aborting.")
+        return False
+
     return True
 
 
@@ -301,20 +314,35 @@ _NUM_LOCK_ATTEMPTS = 10
 _LOCK_RETRY_DELAY = 30
 
 
-def prepare_to_modify_documents(db_session: Session, document_ids: list[str]) -> None:
+@contextlib.contextmanager
+def prepare_to_modify_documents(
+    db_session: Session, document_ids: list[str], retry_delay: int = _LOCK_RETRY_DELAY
+) -> Generator[TransactionalContext, None, None]:
     """Try and acquire locks for the documents to prevent other jobs from
     modifying them at the same time (e.g. avoid race conditions). This should be
     called ahead of any modification to Vespa. Locks should be released by the
-    caller as soon as updates are complete by finishing the transaction."""
+    caller as soon as updates are complete by finishing the transaction.
+
+    NOTE: only one commit is allowed within the context manager returned by this funtion.
+    Multiple commits will result in a sqlalchemy.exc.InvalidRequestError.
+    NOTE: this function will commit any existing transaction.
+    """
+    db_session.commit()  # ensure that we're not in a transaction
+
     lock_acquired = False
     for _ in range(_NUM_LOCK_ATTEMPTS):
         try:
-            lock_acquired = acquire_document_locks(
-                db_session=db_session, document_ids=document_ids
-            )
-        except Exception as e:
+            with db_session.begin() as transaction:
+                lock_acquired = acquire_document_locks(
+                    db_session=db_session, document_ids=document_ids
+                )
+                if lock_acquired:
+                    yield transaction
+                    break
+        except OperationalError as e:
             logger.info(f"Failed to acquire locks for documents, retrying. Error: {e}")
-            time.sleep(_LOCK_RETRY_DELAY)
+
+        time.sleep(retry_delay)
 
     if not lock_acquired:
         raise RuntimeError(

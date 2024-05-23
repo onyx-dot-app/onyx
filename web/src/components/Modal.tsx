@@ -9,6 +9,7 @@ interface ModalProps {
   width?: string;
   titleSize?: string;
   hideDividerForTitle?: boolean;
+  noPadding?: boolean;
 }
 
 export function Modal({
@@ -19,12 +20,13 @@ export function Modal({
   width,
   titleSize,
   hideDividerForTitle,
+  noPadding,
 }: ModalProps) {
   return (
     <div>
       <div
         className={`
-        fixed inset-0 bg-black bg-opacity-50  
+        fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm
         flex items-center justify-center z-50
       `}
         onClick={onOutsideClick}
@@ -32,7 +34,8 @@ export function Modal({
         <div
           className={`
           bg-background rounded shadow-lg
-          relative ${width ?? "w-1/2"} text-sm p-8
+          relative ${width ?? "w-1/2"} text-sm 
+          ${noPadding ? "" : "p-8"}
           ${className}
         `}
           onClick={(event) => event.stopPropagation()}

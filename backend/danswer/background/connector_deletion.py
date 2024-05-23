@@ -19,8 +19,8 @@ from danswer.db.connector import fetch_connector_by_id
 from danswer.db.connector_credential_pair import (
     delete_connector_credential_pair__no_commit,
 )
-from danswer.db.document import delete_document_by_connector_credential_pair
-from danswer.db.document import delete_documents_complete
+from danswer.db.document import delete_document_by_connector_credential_pair__no_commit
+from danswer.db.document import delete_documents_complete__no_commit
 from danswer.db.document import get_document_connector_cnts
 from danswer.db.document import get_documents_for_connector_credential_pair
 from danswer.db.document import prepare_to_modify_documents
@@ -54,57 +54,58 @@ def _delete_connector_credential_pair_batch(
     with Session(get_sqlalchemy_engine()) as db_session:
         # acquire lock for all documents in this batch so that indexing can't
         # override the deletion
-        prepare_to_modify_documents(db_session=db_session, document_ids=document_ids)
-
-        document_connector_cnts = get_document_connector_cnts(
+        with prepare_to_modify_documents(
             db_session=db_session, document_ids=document_ids
-        )
-
-        # figure out which docs need to be completely deleted
-        document_ids_to_delete = [
-            document_id for document_id, cnt in document_connector_cnts if cnt == 1
-        ]
-        logger.debug(f"Deleting documents: {document_ids_to_delete}")
-
-        document_index.delete(doc_ids=document_ids_to_delete)
-
-        delete_documents_complete(
-            db_session=db_session,
-            document_ids=document_ids_to_delete,
-        )
-
-        # figure out which docs need to be updated
-        document_ids_to_update = [
-            document_id for document_id, cnt in document_connector_cnts if cnt > 1
-        ]
-        access_for_documents = get_access_for_documents(
-            document_ids=document_ids_to_update,
-            db_session=db_session,
-            cc_pair_to_delete=ConnectorCredentialPairIdentifier(
-                connector_id=connector_id,
-                credential_id=credential_id,
-            ),
-        )
-        update_requests = [
-            UpdateRequest(
-                document_ids=[document_id],
-                access=access,
+        ):
+            document_connector_cnts = get_document_connector_cnts(
+                db_session=db_session, document_ids=document_ids
             )
-            for document_id, access in access_for_documents.items()
-        ]
-        logger.debug(f"Updating documents: {document_ids_to_update}")
 
-        document_index.update(update_requests=update_requests)
+            # figure out which docs need to be completely deleted
+            document_ids_to_delete = [
+                document_id for document_id, cnt in document_connector_cnts if cnt == 1
+            ]
+            logger.debug(f"Deleting documents: {document_ids_to_delete}")
 
-        delete_document_by_connector_credential_pair(
-            db_session=db_session,
-            document_ids=document_ids_to_update,
-            connector_credential_pair_identifier=ConnectorCredentialPairIdentifier(
-                connector_id=connector_id,
-                credential_id=credential_id,
-            ),
-        )
-        db_session.commit()
+            document_index.delete(doc_ids=document_ids_to_delete)
+
+            delete_documents_complete__no_commit(
+                db_session=db_session,
+                document_ids=document_ids_to_delete,
+            )
+
+            # figure out which docs need to be updated
+            document_ids_to_update = [
+                document_id for document_id, cnt in document_connector_cnts if cnt > 1
+            ]
+            access_for_documents = get_access_for_documents(
+                document_ids=document_ids_to_update,
+                db_session=db_session,
+                cc_pair_to_delete=ConnectorCredentialPairIdentifier(
+                    connector_id=connector_id,
+                    credential_id=credential_id,
+                ),
+            )
+            update_requests = [
+                UpdateRequest(
+                    document_ids=[document_id],
+                    access=access,
+                )
+                for document_id, access in access_for_documents.items()
+            ]
+            logger.debug(f"Updating documents: {document_ids_to_update}")
+
+            document_index.update(update_requests=update_requests)
+
+            delete_document_by_connector_credential_pair__no_commit(
+                db_session=db_session,
+                document_ids=document_ids_to_update,
+                connector_credential_pair_identifier=ConnectorCredentialPairIdentifier(
+                    connector_id=connector_id,
+                    credential_id=credential_id,
+                ),
+            )
+            db_session.commit()
 
 
 def cleanup_synced_entities(

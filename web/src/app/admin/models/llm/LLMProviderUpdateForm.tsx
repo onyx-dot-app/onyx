@@ -191,6 +191,7 @@ export function LLMProviderUpdateForm({
             label="Display Name"
             subtext="A name which you can use to identify this provider when selecting it in the UI."
             placeholder="Display Name"
+            disabled={existingLlmProvider ? true : false}
           />
 
           <Divider />

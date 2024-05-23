@@ -9,14 +9,14 @@ from sqlalchemy.orm import Session
 
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.constants import DocumentSource
-from danswer.connectors.cross_connector_utils.file_utils import load_files_from_zip
-from danswer.connectors.cross_connector_utils.file_utils import read_file
-from danswer.connectors.cross_connector_utils.html_utils import web_html_cleanup
 from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import LoadConnector
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.db.engine import get_sqlalchemy_engine
+from danswer.file_processing.extract_file_text import load_files_from_zip
+from danswer.file_processing.extract_file_text import read_text_file
+from danswer.file_processing.html_utils import web_html_cleanup
 from danswer.file_store.file_store import get_default_file_store
 from danswer.utils.logger import setup_logger
 
@@ -86,7 +86,7 @@ class GoogleSitesConnector(LoadConnector):
             if extension != ".html":
                 continue
 
-            file_content, _ = read_file(file_io)
+            file_content, _ = read_text_file(file_io)
             soup = BeautifulSoup(file_content, "html.parser")
 
             # get the link out of the navbar

@@ -1,0 +1,19 @@
+{{- if and .Values.persistence.api.dynamic.enabled}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "danswer-stack.fullname" . }}-api-dynamic
+  labels:
+    {{- include "danswer-stack.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- range .Values.persistence.api.dynamic.accessModes }}
+    - {{ . | quote }}
+    {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.api.dynamic.size | quote }}
+  {{- with .Values.persistence.api.dynamic.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}

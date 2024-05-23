@@ -2,9 +2,11 @@ from typing import cast
 
 from fastapi import FastAPI
 from fastapi.dependencies.models import Dependant
+from starlette.routing import BaseRoute
 
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
+from danswer.configs.app_configs import APP_API_PREFIX
 from danswer.server.danswer_api.ingestion import api_key_dep
 
 
@@ -43,18 +45,42 @@ PUBLIC_ENDPOINT_SPECS = [
 ]
 
 
-def check_router_auth(application: FastAPI) -> None:
+def is_route_in_spec_list(
+    route: BaseRoute, public_endpoint_specs: list[tuple[str, set[str]]]
+) -> bool:
+    if not hasattr(route, "path") or not hasattr(route, "methods"):
+        return False
+
+    # try adding the prefix AND not adding the prefix, since some endpoints
+    # are not prefixed (e.g. /openapi.json)
+    if (route.path, route.methods) in public_endpoint_specs:
+        return True
+
+    processed_global_prefix = f"/{APP_API_PREFIX.strip('/')}" if APP_API_PREFIX else ""
+    if not processed_global_prefix:
+        return False
+
+    for endpoint_spec in public_endpoint_specs:
+        base_path, methods = endpoint_spec
+        prefixed_path = f"{processed_global_prefix}/{base_path.strip('/')}"
+
+        if prefixed_path == route.path and route.methods == methods:
+            return True
+
+    return False
+
+
+def check_router_auth(
+    application: FastAPI,
+    public_endpoint_specs: list[tuple[str, set[str]]] = PUBLIC_ENDPOINT_SPECS,
+) -> None:
     """Ensures that all endpoints on the passed in application either
     (1) have auth enabled OR
     (2) are explicitly marked as a public endpoint
     """
     for route in application.routes:
         # explicitly marked as public
-        if (
-            hasattr(route, "path")
-            and hasattr(route, "methods")
-            and (route.path, route.methods) in PUBLIC_ENDPOINT_SPECS
-        ):
+        if is_route_in_spec_list(route, public_endpoint_specs):
             continue
 
         # check for auth

@@ -185,7 +185,7 @@ class IdRetrievalCapable(abc.ABC):
         document_id: str,
         min_chunk_ind: int | None,
         max_chunk_ind: int | None,
-        filters: IndexFilters,
+        user_access_control_list: list[str] | None = None,
     ) -> list[InferenceChunk]:
         """
         Fetch chunk(s) based on document id

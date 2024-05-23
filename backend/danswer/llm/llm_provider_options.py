@@ -11,7 +11,7 @@ class CustomConfigKey(BaseModel):
 
 class WellKnownLLMProviderDescriptor(BaseModel):
     name: str
-    display_name: str | None = None
+    display_name: str
     api_key_required: bool
     api_base_required: bool
     api_version_required: bool
@@ -25,6 +25,7 @@ class WellKnownLLMProviderDescriptor(BaseModel):
 OPENAI_PROVIDER_NAME = "openai"
 OPEN_AI_MODEL_NAMES = [
     "gpt-4",
+    "gpt-4o",
     "gpt-4-turbo",
     "gpt-4-turbo-preview",
     "gpt-4-1106-preview",

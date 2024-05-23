@@ -1,4 +1,3 @@
-from langchain.schema.messages import BaseMessage
 from langchain.schema.messages import HumanMessage
 
 from danswer.chat.models import LlmDoc
@@ -20,7 +19,7 @@ def _build_weak_llm_quotes_prompt(
     history_str: str,
     prompt: PromptConfig,
     use_language_hint: bool,
-) -> list[BaseMessage]:
+) -> HumanMessage:
     """Since Danswer supports a variety of LLMs, this less demanding prompt is provided
     as an option to use with weaker LLMs such as small version, low float precision, quantized,
     or distilled models. It only uses one context document and has very weak requirements of
@@ -36,7 +35,7 @@ def _build_weak_llm_quotes_prompt(
         task_prompt=prompt.task_prompt,
         user_query=question,
     )
-    return [HumanMessage(content=prompt_str)]
+    return HumanMessage(content=prompt_str)
 
 
 def _build_strong_llm_quotes_prompt(
@@ -45,7 +44,7 @@ def _build_strong_llm_quotes_prompt(
     history_str: str,
     prompt: PromptConfig,
     use_language_hint: bool,
-) -> list[BaseMessage]:
+) -> HumanMessage:
     context_block = ""
     if context_docs:
         context_docs_str = build_complete_context_str(context_docs)
@@ -63,7 +62,29 @@ def _build_strong_llm_quotes_prompt(
         user_query=question,
         language_hint_or_none=LANGUAGE_HINT.strip() if use_language_hint else "",
     ).strip()
-    return [HumanMessage(content=full_prompt)]
+    return HumanMessage(content=full_prompt)
+
+
+def build_quotes_user_message(
+    question: str,
+    context_docs: list[LlmDoc] | list[InferenceChunk],
+    history_str: str,
+    prompt: PromptConfig,
+    use_language_hint: bool = bool(MULTILINGUAL_QUERY_EXPANSION),
+) -> HumanMessage:
+    prompt_builder = (
+        _build_weak_llm_quotes_prompt
+        if QA_PROMPT_OVERRIDE == "weak"
+        else _build_strong_llm_quotes_prompt
+    )
+
+    return prompt_builder(
+        question=question,
+        context_docs=context_docs,
+        history_str=history_str,
+        prompt=prompt,
+        use_language_hint=use_language_hint,
+    )
 
 
 def build_quotes_prompt(
@@ -72,7 +93,7 @@ def build_quotes_prompt(
     history_str: str,
     prompt: PromptConfig,
     use_language_hint: bool = bool(MULTILINGUAL_QUERY_EXPANSION),
-) -> list[BaseMessage]:
+) -> HumanMessage:
     prompt_builder = (
         _build_weak_llm_quotes_prompt
         if QA_PROMPT_OVERRIDE == "weak"

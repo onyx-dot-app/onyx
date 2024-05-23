@@ -70,6 +70,7 @@ def create_update_persona(
             llm_filter_extraction=create_persona_request.llm_filter_extraction,
             recency_bias=create_persona_request.recency_bias,
             prompts=prompts,
+            tool_ids=create_persona_request.tool_ids,
             document_sets=document_sets,
             llm_model_provider_override=create_persona_request.llm_model_provider_override,
             llm_model_version_override=create_persona_request.llm_model_version_override,

@@ -10,19 +10,21 @@ from sqlalchemy.orm import Session
 
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.constants import DocumentSource
-from danswer.connectors.cross_connector_utils.file_utils import detect_encoding
-from danswer.connectors.cross_connector_utils.file_utils import load_files_from_zip
-from danswer.connectors.cross_connector_utils.file_utils import read_file
-from danswer.connectors.cross_connector_utils.file_utils import read_pdf_file
 from danswer.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from danswer.connectors.file.utils import check_file_ext_is_valid
-from danswer.connectors.file.utils import get_file_ext
 from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import LoadConnector
 from danswer.connectors.models import BasicExpertInfo
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.db.engine import get_sqlalchemy_engine
+from danswer.file_processing.extract_file_text import check_file_ext_is_valid
+from danswer.file_processing.extract_file_text import detect_encoding
+from danswer.file_processing.extract_file_text import extract_file_text
+from danswer.file_processing.extract_file_text import get_file_ext
+from danswer.file_processing.extract_file_text import is_text_file_extension
+from danswer.file_processing.extract_file_text import load_files_from_zip
+from danswer.file_processing.extract_file_text import pdf_to_text
+from danswer.file_processing.extract_file_text import read_text_file
 from danswer.file_store.file_store import get_default_file_store
 from danswer.utils.logger import setup_logger
 
@@ -46,7 +48,7 @@ def _read_files_and_metadata(
             file_content, ignore_dirs=True
         ):
             yield os.path.join(directory_path, file_info.filename), file, metadata
-    elif extension in [".txt", ".md", ".mdx", ".pdf"]:
+    elif check_file_ext_is_valid(extension):
         yield file_name, file_content, metadata
     else:
         logger.warning(f"Skipping file '{file_name}' with extension '{extension}'")
@@ -65,13 +67,20 @@ def _process_file(
 
     file_metadata: dict[str, Any] = {}
 
-    if extension == ".pdf":
-        file_content_raw = read_pdf_file(
-            file=file, file_name=file_name, pdf_pass=pdf_pass
-        )
-    else:
+    if is_text_file_extension(file_name):
         encoding = detect_encoding(file)
-        file_content_raw, file_metadata = read_file(file, encoding=encoding)
+        file_content_raw, file_metadata = read_text_file(file, encoding=encoding)
+
+    # Using the PDF reader function directly to pass in password cleanly
+    elif extension == ".pdf":
+        file_content_raw = pdf_to_text(file=file, pdf_pass=pdf_pass)
+
+    else:
+        file_content_raw = extract_file_text(
+            file_name=file_name,
+            file=file,
+        )
+
     all_metadata = {**metadata, **file_metadata} if metadata else file_metadata
 
     # If this is set, we will show this in the UI as the "name" of the file

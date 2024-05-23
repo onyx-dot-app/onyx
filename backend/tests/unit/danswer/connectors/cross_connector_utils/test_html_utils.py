@@ -1,7 +1,7 @@
 import pathlib
 import unittest
 
-from danswer.connectors.cross_connector_utils.html_utils import parse_html_page_basic
+from danswer.file_processing.html_utils import parse_html_page_basic
 
 
 class TestQAPostprocessing(unittest.TestCase):

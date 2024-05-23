@@ -125,8 +125,6 @@ export default async function Home() {
   // sort them in priority order
   personas.sort(personaComparator);
 
-  const defaultModel = llmProviders[0].default_model_name || "default model";
-
   let tags: Tag[] = [];
   if (tagsResponse?.ok) {
     tags = (await tagsResponse.json()).tags;
@@ -193,7 +191,6 @@ export default async function Home() {
             personas={personas}
             tags={tags}
             defaultSearchType={searchTypeDefault}
-            defaultModel={defaultModel}
           />
         </div>
       </div>

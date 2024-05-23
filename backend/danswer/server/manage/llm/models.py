@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from danswer.llm.options import fetch_models_for_provider
+from danswer.llm.llm_provider_options import fetch_models_for_provider
 
 if TYPE_CHECKING:
     from danswer.db.models import LLMProvider as LLMProviderModel
@@ -87,7 +87,7 @@ class FullLLMProvider(LLMProvider):
             is_default_provider=llm_provider_model.is_default_provider,
             model_names=(
                 llm_provider_model.model_names
-                or fetch_models_for_provider(llm_provider_model.name)
+                or fetch_models_for_provider(llm_provider_model.provider)
                 or [llm_provider_model.default_model_name]
             ),
         )

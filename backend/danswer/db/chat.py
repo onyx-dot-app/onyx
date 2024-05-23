@@ -28,6 +28,7 @@ from danswer.db.models import Prompt
 from danswer.db.models import SearchDoc
 from danswer.db.models import SearchDoc as DBSearchDoc
 from danswer.db.models import StarterMessage
+from danswer.db.models import Tool
 from danswer.db.models import User
 from danswer.db.models import User__UserGroup
 from danswer.file_store.models import FileDescriptor
@@ -508,6 +509,7 @@ def upsert_persona(
     starter_messages: list[StarterMessage] | None,
     is_public: bool,
     db_session: Session,
+    tool_ids: list[int] | None = None,
     persona_id: int | None = None,
     default_persona: bool = False,
     commit: bool = True,
@@ -518,6 +520,13 @@ def upsert_persona(
         persona = get_persona_by_name(
             persona_name=name, user=user, db_session=db_session
         )
+
+    # Fetch and attach tools by IDs
+    tools = None
+    if tool_ids is not None:
+        tools = db_session.query(Tool).filter(Tool.id.in_(tool_ids)).all()
+        if not tools and tool_ids:
+            raise ValueError("Tools not found")
 
     if persona:
         if not default_persona and persona.default_persona:
@@ -546,6 +555,9 @@ def upsert_persona(
             persona.prompts.clear()
             persona.prompts = prompts
 
+        if tools is not None:
+            persona.tools = tools
+
     else:
         persona = Persona(
             id=persona_id,
@@ -563,6 +575,7 @@ def upsert_persona(
             llm_model_provider_override=llm_model_provider_override,
             llm_model_version_override=llm_model_version_override,
             starter_messages=starter_messages,
+            tools=tools or [],
         )
         db_session.add(persona)
 

@@ -1,12 +1,25 @@
-import abc
+import json
 import os
 from collections.abc import Iterator
 from typing import Any
+from typing import cast
 
-import litellm  # type:ignore
-from langchain.chat_models.base import BaseChatModel
+import litellm  # type: ignore
 from langchain.schema.language_model import LanguageModelInput
-from langchain_community.chat_models import ChatLiteLLM
+from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessageChunk
+from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessageChunk
+from langchain_core.messages import ChatMessage
+from langchain_core.messages import ChatMessageChunk
+from langchain_core.messages import FunctionMessage
+from langchain_core.messages import FunctionMessageChunk
+from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessageChunk
+from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessageChunk
+from langchain_core.messages.tool import ToolCallChunk
+from langchain_core.messages.tool import ToolMessage
 
 from danswer.configs.app_configs import LOG_ALL_MODEL_INTERACTIONS
 from danswer.configs.model_configs import DISABLE_LITELLM_STREAMING
@@ -17,8 +30,7 @@ from danswer.configs.model_configs import GEN_AI_MAX_OUTPUT_TOKENS
 from danswer.configs.model_configs import GEN_AI_TEMPERATURE
 from danswer.llm.interfaces import LLM
 from danswer.llm.interfaces import LLMConfig
-from danswer.llm.utils import message_generator_to_string_generator
-from danswer.llm.utils import should_be_verbose
+from danswer.llm.interfaces import ToolChoiceOptions
 from danswer.utils.logger import setup_logger
 
 
@@ -30,63 +42,144 @@ litellm.drop_params = True
 litellm.telemetry = False
 
 
-class LangChainChatLLM(LLM, abc.ABC):
-    @property
-    @abc.abstractmethod
-    def llm(self) -> BaseChatModel:
-        raise NotImplementedError
+def _base_msg_to_role(msg: BaseMessage) -> str:
+    if isinstance(msg, HumanMessage) or isinstance(msg, HumanMessageChunk):
+        return "user"
+    if isinstance(msg, AIMessage) or isinstance(msg, AIMessageChunk):
+        return "assistant"
+    if isinstance(msg, SystemMessage) or isinstance(msg, SystemMessageChunk):
+        return "system"
+    if isinstance(msg, FunctionMessage) or isinstance(msg, FunctionMessageChunk):
+        return "function"
+    return "unknown"
 
-    @staticmethod
-    def _log_prompt(prompt: LanguageModelInput) -> None:
-        if isinstance(prompt, list):
-            for ind, msg in enumerate(prompt):
-                logger.debug(f"Message {ind}:\n{msg.content}")
-        if isinstance(prompt, str):
-            logger.debug(f"Prompt:\n{prompt}")
 
-    def log_model_configs(self) -> None:
-        llm_dict = {k: v for k, v in self.llm.__dict__.items() if v}
-        llm_dict.pop("client")
-        logger.info(
-            f"LLM Model Class: {self.llm.__class__.__name__}, Model Config: {llm_dict}"
+def _convert_litellm_message_to_langchain_message(
+    litellm_message: litellm.Message,
+) -> BaseMessage:
+    # Extracting the basic attributes from the litellm message
+    content = litellm_message.content
+    role = litellm_message.role
+
+    # Handling function calls and tool calls if present
+    tool_calls = (
+        cast(
+            list[litellm.utils.ChatCompletionMessageToolCall],
+            litellm_message.tool_calls,
         )
+        if hasattr(litellm_message, "tool_calls")
+        else []
+    )
 
-    def invoke(self, prompt: LanguageModelInput) -> str:
-        if LOG_ALL_MODEL_INTERACTIONS:
-            self._log_prompt(prompt)
+    # Create the appropriate langchain message based on the role
+    if role == "user":
+        return HumanMessage(content=content)
+    elif role == "assistant":
+        return AIMessage(
+            content=content,
+            tool_calls=[
+                {
+                    "name": tool_call.function.name or "",
+                    "args": json.loads(tool_call.function.arguments),
+                    "id": tool_call.id,
+                }
+                for tool_call in tool_calls
+            ],
+        )
+    elif role == "system":
+        return SystemMessage(content=content)
+    else:
+        raise ValueError(f"Unknown role type received: {role}")
 
-        model_raw = self.llm.invoke(prompt).content
-        if LOG_ALL_MODEL_INTERACTIONS:
-            logger.debug(f"Raw Model Output:\n{model_raw}")
 
-        if not isinstance(model_raw, str):
-            raise RuntimeError(
-                "Model output inconsistent with expected type, "
-                "is this related to a library upgrade?"
+def _convert_message_to_dict(message: BaseMessage) -> dict:
+    """Adapted from langchain_community.chat_models.litellm._convert_message_to_dict"""
+    if isinstance(message, ChatMessage):
+        message_dict = {"role": message.role, "content": message.content}
+    elif isinstance(message, HumanMessage):
+        message_dict = {"role": "user", "content": message.content}
+    elif isinstance(message, AIMessage):
+        message_dict = {"role": "assistant", "content": message.content}
+        if message.tool_calls:
+            message_dict["tool_calls"] = [
+                {
+                    "id": tool_call.get("id"),
+                    "function": {
+                        "name": tool_call["name"],
+                        "arguments": json.dumps(tool_call["args"]),
+                    },
+                    "type": "function",
+                    "index": 0,  # only support a single tool call atm
+                }
+                for tool_call in message.tool_calls
+            ]
+        if "function_call" in message.additional_kwargs:
+            message_dict["function_call"] = message.additional_kwargs["function_call"]
+    elif isinstance(message, SystemMessage):
+        message_dict = {"role": "system", "content": message.content}
+    elif isinstance(message, FunctionMessage):
+        message_dict = {
+            "role": "function",
+            "content": message.content,
+            "name": message.name,
+        }
+    elif isinstance(message, ToolMessage):
+        message_dict = {
+            "tool_call_id": message.tool_call_id,
+            "role": "tool",
+            "name": message.name or "",
+            "content": message.content,
+        }
+    else:
+        raise ValueError(f"Got unknown type {message}")
+    if "name" in message.additional_kwargs:
+        message_dict["name"] = message.additional_kwargs["name"]
+    return message_dict
+
+
+def _convert_delta_to_message_chunk(
+    _dict: dict[str, Any], curr_msg: BaseMessage | None
+) -> BaseMessageChunk:
+    """Adapted from langchain_community.chat_models.litellm._convert_delta_to_message_chunk"""
+    role = _dict.get("role") or (_base_msg_to_role(curr_msg) if curr_msg else None)
+    content = _dict.get("content") or ""
+    additional_kwargs = {}
+    if _dict.get("function_call"):
+        additional_kwargs.update({"function_call": dict(_dict["function_call"])})
+    tool_calls = cast(
+        list[litellm.utils.ChatCompletionDeltaToolCall] | None, _dict.get("tool_calls")
+    )
+
+    if role == "user":
+        return HumanMessageChunk(content=content)
+    elif role == "assistant":
+        if tool_calls:
+            tool_call = tool_calls[0]
+            tool_name = tool_call.function.name or (curr_msg and curr_msg.name) or ""
+
+            tool_call_chunk = ToolCallChunk(
+                name=tool_name,
+                id=tool_call.id,
+                args=tool_call.function.arguments,
+                index=0,  # only support a single tool call atm
             )
+            return AIMessageChunk(
+                content=content,
+                additional_kwargs=additional_kwargs,
+                tool_call_chunks=[tool_call_chunk],
+            )
+        return AIMessageChunk(content=content, additional_kwargs=additional_kwargs)
+    elif role == "system":
+        return SystemMessageChunk(content=content)
+    elif role == "function":
+        return FunctionMessageChunk(content=content, name=_dict["name"])
+    elif role:
+        return ChatMessageChunk(content=content, role=role)
 
-        return model_raw
-
-    def stream(self, prompt: LanguageModelInput) -> Iterator[str]:
-        if LOG_ALL_MODEL_INTERACTIONS:
-            self.log_model_configs()
-            self._log_prompt(prompt)
-
-        if DISABLE_LITELLM_STREAMING:
-            yield self.invoke(prompt)
-            return
-
-        output_tokens = []
-        for token in message_generator_to_string_generator(self.llm.stream(prompt)):
-            output_tokens.append(token)
-            yield token
-
-        full_output = "".join(output_tokens)
-        if LOG_ALL_MODEL_INTERACTIONS:
-            logger.debug(f"Raw Model Output:\n{full_output}")
+    raise ValueError(f"Unknown role: {role}")
 
 
-class DefaultMultiLLM(LangChainChatLLM):
+class DefaultMultiLLM(LLM):
     """Uses Litellm library to allow easy configuration to use a multitude of LLMs
     See https://python.langchain.com/docs/integrations/chat/litellm"""
 
@@ -109,14 +202,16 @@ class DefaultMultiLLM(LangChainChatLLM):
         custom_config: dict[str, str] | None = None,
         extra_headers: dict[str, str] | None = None,
     ):
+        self._timeout = timeout
         self._model_provider = model_provider
         self._model_version = model_name
         self._temperature = temperature
-
-        # Litellm Langchain integration currently doesn't take in the api key param
-        # Can place this in the call below once integration is in
-        litellm.api_key = api_key or "dummy-key"
-        litellm.api_version = api_version
+        self._api_key = api_key
+        self._api_base = api_base
+        self._api_version = api_version
+        self._custom_llm_provider = custom_llm_provider
+        self._max_output_tokens = max_output_tokens
+        self._custom_config = custom_config
 
         # NOTE: have to set these as environment variables for Litellm since
         # not all are able to passed in but they always support them set as env
@@ -128,25 +223,60 @@ class DefaultMultiLLM(LangChainChatLLM):
         model_kwargs = (
             DefaultMultiLLM.DEFAULT_MODEL_PARAMS if model_provider == "openai" else {}
         )
-
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
 
-        self._llm = ChatLiteLLM(  # type: ignore
-            model=(
-                model_name if custom_llm_provider else f"{model_provider}/{model_name}"
-            ),
-            api_base=api_base,
-            custom_llm_provider=custom_llm_provider,
-            max_tokens=max_output_tokens,
-            temperature=temperature,
-            request_timeout=timeout,
-            # LiteLLM and some model providers don't handle these params well
-            # only turning it on for OpenAI
-            model_kwargs=model_kwargs,
-            verbose=should_be_verbose(),
-            max_retries=0,  # retries are handled outside of langchain
-        )
+        self._model_kwargs = model_kwargs
+
+    @staticmethod
+    def _log_prompt(prompt: LanguageModelInput) -> None:
+        if isinstance(prompt, list):
+            for ind, msg in enumerate(prompt):
+                logger.debug(f"Message {ind}:\n{msg.content}")
+        if isinstance(prompt, str):
+            logger.debug(f"Prompt:\n{prompt}")
+
+    def log_model_configs(self) -> None:
+        logger.info(f"Config: {self.config}")
+
+    def _completion(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None,
+        tool_choice: ToolChoiceOptions | None,
+        stream: bool,
+    ) -> litellm.ModelResponse | litellm.CustomStreamWrapper:
+        if isinstance(prompt, list):
+            prompt = [
+                _convert_message_to_dict(msg) if isinstance(msg, BaseMessage) else msg
+                for msg in prompt
+            ]
+        elif isinstance(prompt, str):
+            prompt = [_convert_message_to_dict(HumanMessage(content=prompt))]
+
+        try:
+            return litellm.completion(
+                # model choice
+                model=f"{self.config.model_provider}/{self.config.model_name}",
+                api_key=self._api_key,
+                base_url=self._api_base,
+                api_version=self._api_version,
+                custom_llm_provider=self._custom_llm_provider,
+                # actual input
+                messages=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                # streaming choice
+                stream=stream,
+                # model params
+                temperature=self._temperature,
+                max_tokens=self._max_output_tokens,
+                timeout=self._timeout,
+                **self._model_kwargs,
+            )
+        except Exception as e:
+            # for break pointing
+            raise e
 
     @property
     def config(self) -> LLMConfig:
@@ -154,8 +284,54 @@ class DefaultMultiLLM(LangChainChatLLM):
             model_provider=self._model_provider,
             model_name=self._model_version,
             temperature=self._temperature,
+            api_key=self._api_key,
         )
 
-    @property
-    def llm(self) -> ChatLiteLLM:
-        return self._llm
+    def invoke(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+    ) -> BaseMessage:
+        if LOG_ALL_MODEL_INTERACTIONS:
+            self.log_model_configs()
+            self._log_prompt(prompt)
+
+        response = cast(
+            litellm.ModelResponse, self._completion(prompt, tools, tool_choice, False)
+        )
+        return _convert_litellm_message_to_langchain_message(
+            response.choices[0].message
+        )
+
+    def stream(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+    ) -> Iterator[BaseMessage]:
+        if LOG_ALL_MODEL_INTERACTIONS:
+            self.log_model_configs()
+            self._log_prompt(prompt)
+
+        if DISABLE_LITELLM_STREAMING:
+            yield self.invoke(prompt)
+            return
+
+        output = None
+        response = self._completion(prompt, tools, tool_choice, True)
+        for part in response:
+            if len(part["choices"]) == 0:
+                continue
+            delta = part["choices"][0]["delta"]
+            message_chunk = _convert_delta_to_message_chunk(delta, output)
+            if output is None:
+                output = message_chunk
+            else:
+                output += message_chunk
+
+            yield message_chunk
+
+        full_output = output.content if output else ""
+        if LOG_ALL_MODEL_INTERACTIONS:
+            logger.debug(f"Raw Model Output:\n{full_output}")

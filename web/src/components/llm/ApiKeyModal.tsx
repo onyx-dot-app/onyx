@@ -3,15 +3,14 @@
 import { useState, useEffect } from "react";
 import { ApiKeyForm } from "./ApiKeyForm";
 import { Modal } from "../Modal";
-import { Divider } from "@tremor/react";
-import {
-  FullLLMProvider,
-  WellKnownLLMProviderDescriptor,
-} from "@/app/admin/models/llm/interfaces";
+import { WellKnownLLMProviderDescriptor } from "@/app/admin/models/llm/interfaces";
 import { checkLlmProvider } from "../initialSetup/welcome/lib";
 import { User } from "@/lib/types";
+import { useRouter } from "next/navigation";
 
 export const ApiKeyModal = ({ user }: { user: User | null }) => {
+  const router = useRouter();
+
   const [forceHidden, setForceHidden] = useState<boolean>(false);
   const [validProviderExists, setValidProviderExists] = useState<boolean>(true);
   const [providerOptions, setProviderOptions] = useState<
@@ -63,6 +62,7 @@ export const ApiKeyModal = ({ user }: { user: User | null }) => {
 
           <ApiKeyForm
             onSuccess={() => {
+              router.refresh();
               setForceHidden(true);
             }}
             providerOptions={providerOptions}

@@ -1,6 +1,6 @@
-import { Hoverable } from "@/app/chat/message/Messages";
 import { useState } from "react";
 import { FiCheck, FiCopy } from "react-icons/fi";
+import { Hoverable } from "./Hoverable";
 
 export function CopyButton({
   content,
@@ -13,6 +13,7 @@ export function CopyButton({
 
   return (
     <Hoverable
+      icon={copyClicked ? FiCheck : FiCopy}
       onClick={() => {
         if (content) {
           navigator.clipboard.writeText(content.toString());
@@ -22,8 +23,6 @@ export function CopyButton({
         setCopyClicked(true);
         setTimeout(() => setCopyClicked(false), 3000);
       }}
-    >
-      {copyClicked ? <FiCheck /> : <FiCopy />}
-    </Hoverable>
+    />
   );
 }

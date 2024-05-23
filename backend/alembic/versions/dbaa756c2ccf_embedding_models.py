@@ -19,8 +19,8 @@ from danswer.db.models import IndexModelStatus
 # revision identifiers, used by Alembic.
 revision = "dbaa756c2ccf"
 down_revision = "7f726bad5367"
-branch_labels = None
-depends_on = None
+branch_labels: None = None
+depends_on: None = None
 
 
 def upgrade() -> None:

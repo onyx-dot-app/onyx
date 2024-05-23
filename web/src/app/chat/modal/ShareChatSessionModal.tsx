@@ -4,7 +4,6 @@ import { Button, Callout, Divider, Text } from "@tremor/react";
 import { Spinner } from "@/components/Spinner";
 import { ChatSessionSharedStatus } from "../interfaces";
 import { FiCopy, FiX } from "react-icons/fi";
-import { Hoverable } from "../message/Messages";
 import { CopyButton } from "@/components/CopyButton";
 
 function buildShareLink(chatSessionId: number) {

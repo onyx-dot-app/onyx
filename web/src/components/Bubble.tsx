@@ -1,11 +1,15 @@
+import { CustomCheckbox } from "./CustomCheckbox";
+
 export function Bubble({
   isSelected,
   onClick,
   children,
+  showCheckbox = false,
 }: {
   isSelected: boolean;
   onClick?: () => void;
   children: string | JSX.Element;
+  showCheckbox?: boolean;
 }) {
   return (
     <div
@@ -24,6 +28,11 @@ export function Bubble({
       onClick={onClick}
     >
       <div className="my-auto">{children}</div>
+      {showCheckbox && (
+        <div className="pl-2 my-auto">
+          <CustomCheckbox checked={isSelected} onChange={() => null} />
+        </div>
+      )}
     </div>
   );
 }

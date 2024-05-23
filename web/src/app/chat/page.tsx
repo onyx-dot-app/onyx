@@ -28,10 +28,11 @@ import { ChatPage } from "./ChatPage";
 import { FullEmbeddingModelResponse } from "../admin/models/embedding/embeddingModels";
 import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
 import { Settings } from "../admin/settings/interfaces";
-import { SIDEBAR_TAB_COOKIE, Tabs } from "./sessionSidebar/constants";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { LLMProviderDescriptor } from "../admin/models/llm/interfaces";
 import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
+import { Folder } from "./folders/interfaces";
+import { ChatProvider } from "@/components/context/ChatContext";
 
 export default async function Page({
   searchParams,
@@ -49,6 +50,7 @@ export default async function Page({
     fetchSS("/chat/get-user-chat-sessions"),
     fetchSS("/query/valid-tags"),
     fetchLLMProvidersSS(),
+    fetchSS("/folder"),
     fetchSS("/eea_config/get_eea_config"),
   ];
 
@@ -77,7 +79,8 @@ export default async function Page({
   const chatSessionsResponse = results[5] as Response | null;
   const tagsResponse = results[6] as Response | null;
   const llmProviders = (results[7] || []) as LLMProviderDescriptor[];
-  const EEAConfigResponse = results[8] as Response | null;
+  const foldersResponse = results[8] as Response | null; // Handle folders result
+  const EEAConfigResponse = results[9] as Response | null;
 
   let disclaimerTitle = "";
   let disclaimerText = "";
@@ -137,8 +140,6 @@ export default async function Page({
     );
   }
 
-  const defaultModel = llmProviders[0].default_model_name || "default model";
-
   let personas: Persona[] = [];
   if (personasResponse?.ok) {
     personas = await personasResponse.json();
@@ -169,10 +170,6 @@ export default async function Page({
     ? parseInt(documentSidebarCookieInitialWidth.value)
     : undefined;
 
-  const defaultSidebarTab = cookies().get(SIDEBAR_TAB_COOKIE)?.value as
-    | Tabs
-    | undefined;
-
   const hasAnyConnectors = ccPairs.length > 0;
   const shouldShowWelcomeModal =
     !hasCompletedWelcomeFlowSS() &&
@@ -191,6 +188,18 @@ export default async function Page({
     personas = personas.filter((persona) => persona.num_chunks === 0);
   }
 
+  let folders: Folder[] = [];
+  if (foldersResponse?.ok) {
+    folders = (await foldersResponse.json()).folders as Folder[];
+  } else {
+    console.log(`Failed to fetch folders - ${foldersResponse?.status}`);
+  }
+
+  const openedFoldersCookie = cookies().get("openedFolders");
+  const openedFolders = openedFoldersCookie
+    ? JSON.parse(openedFoldersCookie.value)
+    : {};
+
   return (
     <>
       <UserDisclaimerModal disclaimerText={disclaimerText} disclaimerTitle={disclaimerTitle}/>
@@ -205,20 +214,25 @@ export default async function Page({
         <NoCompleteSourcesModal ccPairs={ccPairs} />
       )}
 
-      <ChatPage
-        user={user}
-        chatSessions={chatSessions}
-        availableSources={availableSources}
-        availableDocumentSets={documentSets}
-        availablePersonas={personas}
-        availableTags={tags}
-        llmProviders={llmProviders}
-        defaultSelectedPersonaId={defaultPersonaId}
-        documentSidebarInitialWidth={finalDocumentSidebarInitialWidth}
-        defaultSidebarTab={defaultSidebarTab}
-        defaultModel={defaultModel}
-        eea_config={eea_config}
-      />
+      <ChatProvider
+        value={{
+          user,
+          chatSessions,
+          availableSources,
+          availableDocumentSets: documentSets,
+          availablePersonas: personas,
+          availableTags: tags,
+          llmProviders,
+          folders,
+          openedFolders,
+          }}
+      >
+        <ChatPage
+          defaultSelectedPersonaId={defaultPersonaId}
+          documentSidebarInitialWidth={finalDocumentSidebarInitialWidth}
+          eea_config={eea_config}
+        />
+      </ChatProvider>
     </>
   );
 }

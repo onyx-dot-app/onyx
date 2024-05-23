@@ -15,8 +15,8 @@ from danswer.configs.constants import DocumentSource
 # revision identifiers, used by Alembic.
 revision = "b156fa702355"
 down_revision = "baf71f781b9e"
-branch_labels = None
-depends_on = None
+branch_labels: None = None
+depends_on: None = None
 
 
 searchtype_enum = ENUM(

@@ -42,7 +42,7 @@ const EditRow = ({ documentSet }: { documentSet: DocumentSet }) => {
   return (
     <div className="relative flex">
       {isSyncingTooltipOpen && (
-        <div className="flex flex-nowrap absolute w-72 top-0 left-0 mt-8 border border-border bg-background px-3 py-2 rounded shadow-lg z-40">
+        <div className="flex flex-nowrap absolute w-64 top-0 left-0 mt-8 border border-border bg-background px-3 py-2 rounded shadow-lg break-words z-40">
           <InfoIcon className="mt-1 flex flex-shrink-0 mr-2" /> Cannot update
           while syncing! Wait for the sync to finish, then try again.
         </div>

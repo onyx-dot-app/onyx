@@ -117,12 +117,11 @@ def get_tags_by_value_prefix_for_source_types(
     return list(tags)
 
 
-def delete_document_tags_for_documents(
+def delete_document_tags_for_documents__no_commit(
     document_ids: list[str], db_session: Session
 ) -> None:
     stmt = delete(Document__Tag).where(Document__Tag.document_id.in_(document_ids))
     db_session.execute(stmt)
-    db_session.commit()
 
     orphan_tags_query = (
         select(Tag.id)
@@ -136,4 +135,3 @@ def delete_document_tags_for_documents(
     if orphan_tags:
         delete_orphan_tags_stmt = delete(Tag).where(Tag.id.in_(orphan_tags))
         db_session.execute(delete_orphan_tags_stmt)
-        db_session.commit()

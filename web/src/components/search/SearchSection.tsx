@@ -41,7 +41,6 @@ interface SearchSectionProps {
   ccPairs: CCPairBasicInfo[];
   documentSets: DocumentSet[];
   personas: Persona[];
-  defaultModel: string;
   tags: Tag[];
   defaultSearchType: SearchType;
 }
@@ -50,7 +49,6 @@ export const SearchSection = ({
   ccPairs,
   documentSets,
   personas,
-  defaultModel,
   tags,
   defaultSearchType,
 }: SearchSectionProps) => {
@@ -265,7 +263,6 @@ export const SearchSection = ({
           <div className="flex mb-2 w-fit">
             <PersonaSelector
               personas={personas}
-              defaultModel={defaultModel}
               selectedPersonaId={selectedPersona}
               onPersonaChange={(persona) => setSelectedPersona(persona.id)}
             />

@@ -16,13 +16,13 @@ from danswer.db.folder import rename_folder
 from danswer.db.folder import update_folder_display_priority
 from danswer.db.models import User
 from danswer.server.features.folder.models import DeleteFolderOptions
-from danswer.server.features.folder.models import FolderChatMinimalInfo
 from danswer.server.features.folder.models import FolderChatSessionRequest
 from danswer.server.features.folder.models import FolderCreationRequest
 from danswer.server.features.folder.models import FolderResponse
 from danswer.server.features.folder.models import FolderUpdateRequest
 from danswer.server.features.folder.models import GetUserFoldersResponse
 from danswer.server.models import DisplayPriorityRequest
+from danswer.server.query_and_chat.models import ChatSessionDetails
 
 router = APIRouter(prefix="/folder")
 
@@ -44,11 +44,16 @@ def get_folders(
                 folder_name=folder.name,
                 display_priority=folder.display_priority,
                 chat_sessions=[
-                    FolderChatMinimalInfo(
-                        chat_session_id=chat_session.id,
-                        chat_session_name=chat_session.description,
+                    ChatSessionDetails(
+                        id=chat_session.id,
+                        name=chat_session.description,
+                        persona_id=chat_session.persona_id,
+                        time_created=chat_session.time_created.isoformat(),
+                        shared_status=chat_session.shared_status,
+                        folder_id=folder.id,
                     )
                     for chat_session in folder.chat_sessions
+                    if not chat_session.deleted
                 ],
             )
             for folder in folders

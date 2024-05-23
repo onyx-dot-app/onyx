@@ -15,29 +15,24 @@ const MAX_PERSONAS_TO_DISPLAY = 4;
 function HelperItemDisplay({
   title,
   description,
-  model,
 }: {
   title: string;
   description: string;
-  model: string;
 }) {
   return (
     <div className="cursor-pointer hover:bg-hover-light border border-border rounded py-2 px-4">
       <div className="text-emphasis font-bold text-lg flex">{title}</div>
       <div className="text-sm">{description}</div>
-      <div className="text-sm">Using model <i>{model}</i></div>
     </div>
   );
 }
 
 function AllPersonaOptionDisplay({
   availablePersonas,
-  defaultModel,
   handlePersonaSelect,
   handleClose,
 }: {
   availablePersonas: Persona[];
-  defaultModel: string;
   handlePersonaSelect: (persona: Persona) => void;
   handleClose: () => void;
 }) {
@@ -73,7 +68,6 @@ function AllPersonaOptionDisplay({
               <HelperItemDisplay
                 title={persona.name}
                 description={persona.description}
-                model={persona.llm_model_version_override || defaultModel}
               />
             </div>
           ))}
@@ -86,13 +80,11 @@ function AllPersonaOptionDisplay({
 export function ChatIntro({
   availableSources,
   availablePersonas,
-  defaultModel,
   selectedPersona,
   handlePersonaSelect,
 }: {
   availableSources: ValidSources[];
   availablePersonas: Persona[];
-  defaultModel: string;
   selectedPersona?: Persona;
   handlePersonaSelect: (persona: Persona) => void;
 }) {
@@ -106,7 +98,6 @@ export function ChatIntro({
         <AllPersonaOptionDisplay
           handleClose={() => setIsAllPersonaOptionVisible(false)}
           availablePersonas={availablePersonas}
-          defaultModel={defaultModel}
           handlePersonaSelect={handlePersonaSelect}
         />
       )}
@@ -129,7 +120,6 @@ export function ChatIntro({
                 {selectedPersona && (
                   <>
                     <div className="mt-1">{selectedPersona.description}</div>
-                    <div>Using model <i>{selectedPersona.llm_model_version_override || defaultModel}</i></div>
                   </>
                 )}
               </div>
@@ -224,7 +214,6 @@ export function ChatIntro({
                       <HelperItemDisplay
                         title={persona.name}
                         description={persona.description}
-                        model={persona.llm_model_version_override || defaultModel}
                       />
                     </div>
                   ))}

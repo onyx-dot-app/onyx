@@ -19,7 +19,7 @@ from danswer.search.search_nlp_models import EmbeddingModel
 from danswer.utils.batching import batch_list
 from danswer.utils.logger import setup_logger
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
+from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 
 
 logger = setup_logger()
@@ -61,7 +61,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             normalize=normalize,
             # The below are globally set, this flow always uses the indexing one
             server_host=INDEXING_MODEL_SERVER_HOST,
-            server_port=MODEL_SERVER_PORT,
+            server_port=INDEXING_MODEL_SERVER_PORT,
         )
 
     def embed_chunks(

@@ -15,6 +15,7 @@ interface PersonaCreationRequest {
   starter_messages: StarterMessage[] | null;
   users?: string[];
   groups: number[];
+  tool_ids: number[]; // Added tool_ids to the interface
 }
 
 interface PersonaUpdateRequest {
@@ -34,6 +35,7 @@ interface PersonaUpdateRequest {
   starter_messages: StarterMessage[] | null;
   users?: string[];
   groups: number[];
+  tool_ids: number[]; // Added tool_ids to the interface
 }
 
 function promptNameFromPersonaName(personaName: string) {
@@ -107,6 +109,7 @@ function buildPersonaAPIBody(
     is_public,
     groups,
     users,
+    tool_ids, // Added tool_ids to the destructuring
   } = creationRequest;
 
   return {
@@ -124,6 +127,7 @@ function buildPersonaAPIBody(
     starter_messages: creationRequest.starter_messages,
     users,
     groups,
+    tool_ids, // Added tool_ids to the return object
   };
 }
 

@@ -1,14 +1,15 @@
 from collections.abc import Callable
-from typing import cast
 
 from danswer.chat.chat_utils import combine_message_chain
 from danswer.configs.chat_configs import DISABLE_LLM_QUERY_REPHRASE
 from danswer.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from danswer.db.models import ChatMessage
+from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_default_llm
 from danswer.llm.interfaces import LLM
 from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
+from danswer.llm.utils import message_to_string
 from danswer.prompts.chat_prompts import HISTORY_QUERY_REPHRASE
 from danswer.prompts.miscellaneous_prompts import LANGUAGE_REPHRASE_PROMPT
 from danswer.utils.logger import setup_logger
@@ -41,7 +42,7 @@ def llm_multilingual_query_expansion(query: str, language: str) -> str:
 
     messages = _get_rephrase_messages()
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-    model_output = llm.invoke(filled_llm_prompt)
+    model_output = message_to_string(llm.invoke(filled_llm_prompt))
     logger.debug(model_output)
 
     return model_output
@@ -87,54 +88,42 @@ def get_contextual_rephrase_messages(
 
 
 def history_based_query_rephrase(
-    query_message: ChatMessage,
-    history: list[ChatMessage],
-    llm: LLM | None = None,
+    query: str,
+    history: list[ChatMessage] | list[PreviousMessage],
+    llm: LLM,
     size_heuristic: int = 200,
     punctuation_heuristic: int = 10,
     skip_first_rephrase: bool = False,
 ) -> str:
-    user_query = cast(str, query_message.message)
-
     # Globally disabled, just use the exact user query
     if DISABLE_LLM_QUERY_REPHRASE:
-        return user_query
-
-    if not user_query:
-        raise ValueError("Can't rephrase/search an empty query")
-
-    if llm is None:
-        try:
-            llm = get_default_llm()
-        except GenAIDisabledException:
-            # If Generative AI is turned off, just return the original query
-            return user_query
+        return query
 
     # For some use cases, the first query should be untouched. Later queries must be rephrased
     # due to needing context but the first query has no context.
     if skip_first_rephrase and not history:
-        return user_query
+        return query
 
     # If it's a very large query, assume it's a copy paste which we may want to find exactly
     # or at least very closely, so don't rephrase it
-    if len(user_query) >= size_heuristic:
-        return user_query
+    if len(query) >= size_heuristic:
+        return query
 
     # If there is an unusually high number of punctuations, it's probably not natural language
     # so don't rephrase it
-    if count_punctuation(user_query) >= punctuation_heuristic:
-        return user_query
+    if count_punctuation(query) >= punctuation_heuristic:
+        return query
 
     history_str = combine_message_chain(
         messages=history, token_limit=GEN_AI_HISTORY_CUTOFF
     )
 
     prompt_msgs = get_contextual_rephrase_messages(
-        question=user_query, history_str=history_str
+        question=query, history_str=history_str
     )
 
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    rephrased_query = llm.invoke(filled_llm_prompt)
+    rephrased_query = message_to_string(llm.invoke(filled_llm_prompt))
 
     logger.debug(f"Rephrased combined query: {rephrased_query}")
 
@@ -169,7 +158,7 @@ def thread_based_query_rephrase(
     )
 
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    rephrased_query = llm.invoke(filled_llm_prompt)
+    rephrased_query = message_to_string(llm.invoke(filled_llm_prompt))
 
     logger.debug(f"Rephrased combined query: {rephrased_query}")
 

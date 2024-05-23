@@ -198,7 +198,10 @@ class GongConnector(LoadConnector, PollConnector):
                     f"Indexing Gong call from {call_time_str.split('T', 1)[0]}: {call_title}"
                 )
 
-                call_parties = call_details["parties"]
+                call_parties = cast(list[dict] | None, call_details.get("parties"))
+                if call_parties is None:
+                    logger.error(f"Couldn't get parties for Call ID: {call_id}")
+                    call_parties = []
 
                 id_to_name_map = self._parse_parties(call_parties)
 

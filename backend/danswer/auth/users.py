@@ -23,8 +23,8 @@ from fastapi_users.authentication import CookieTransport
 from fastapi_users.authentication import Strategy
 from fastapi_users.authentication.strategy.db import AccessTokenDatabase
 from fastapi_users.authentication.strategy.db import DatabaseStrategy
-from fastapi_users.db import SQLAlchemyUserDatabase
 from fastapi_users.openapi import OpenAPIResponseType
+from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy.orm import Session
 
 from danswer.auth.schemas import UserCreate

@@ -1,6 +1,6 @@
 fastapi==0.109.2
 h5py==3.9.0
-pydantic==1.10.7
+pydantic==1.10.13
 safetensors==0.4.2
 sentence-transformers==2.6.1
 tensorflow==2.15.0

@@ -9,7 +9,7 @@ export function getFinalLLM(
     (llmProvider) => llmProvider.is_default_provider
   );
 
-  let provider = defaultProvider?.name || "";
+  let provider = defaultProvider?.provider || "";
   let model = defaultProvider?.default_model_name || "";
 
   if (persona) {
@@ -21,6 +21,7 @@ export function getFinalLLM(
 }
 
 const MODELS_SUPPORTING_IMAGES = [
+  ["openai", "gpt-4o"],
   ["openai", "gpt-4-vision-preview"],
   ["openai", "gpt-4-turbo"],
   ["openai", "gpt-4-1106-vision-preview"],

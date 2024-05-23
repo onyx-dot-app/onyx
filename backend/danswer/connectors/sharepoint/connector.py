@@ -1,22 +1,16 @@
 import io
 import os
-import tempfile
 from datetime import datetime
 from datetime import timezone
 from typing import Any
 
-import docx  # type: ignore
 import msal  # type: ignore
-import openpyxl  # type: ignore
-import pptx  # type: ignore
 from office365.graph_client import GraphClient  # type: ignore
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore
 from office365.onedrive.sites.site import Site  # type: ignore
 
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.constants import DocumentSource
-from danswer.connectors.cross_connector_utils.file_utils import is_text_file_extension
-from danswer.connectors.cross_connector_utils.file_utils import read_pdf_file
 from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import LoadConnector
 from danswer.connectors.interfaces import PollConnector
@@ -25,6 +19,12 @@ from danswer.connectors.models import BasicExpertInfo
 from danswer.connectors.models import ConnectorMissingCredentialError
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
+from danswer.file_processing.extract_file_text import docx_to_text
+from danswer.file_processing.extract_file_text import file_io_to_text
+from danswer.file_processing.extract_file_text import is_text_file_extension
+from danswer.file_processing.extract_file_text import pdf_to_text
+from danswer.file_processing.extract_file_text import pptx_to_text
+from danswer.file_processing.extract_file_text import xlsx_to_text
 from danswer.utils.logger import setup_logger
 
 UNSUPPORTED_FILE_TYPE_CONTENT = ""  # idea copied from the google drive side of things
@@ -35,62 +35,28 @@ logger = setup_logger()
 
 def get_text_from_xlsx_driveitem(driveitem_object: DriveItem) -> str:
     file_content = driveitem_object.get_content().execute_query().value
-    excel_file = io.BytesIO(file_content)
-    workbook = openpyxl.load_workbook(excel_file, read_only=True)
-
-    full_text = []
-    for sheet in workbook.worksheets:
-        sheet_string = "\n".join(
-            ",".join(map(str, row))
-            for row in sheet.iter_rows(min_row=1, values_only=True)
-        )
-        full_text.append(sheet_string)
-
-    return "\n".join(full_text)
+    return xlsx_to_text(file=io.BytesIO(file_content))
 
 
 def get_text_from_docx_driveitem(driveitem_object: DriveItem) -> str:
     file_content = driveitem_object.get_content().execute_query().value
-    full_text = []
-
-    with tempfile.TemporaryDirectory() as local_path:
-        with open(os.path.join(local_path, driveitem_object.name), "wb") as local_file:
-            local_file.write(file_content)
-            doc = docx.Document(local_file.name)
-            for para in doc.paragraphs:
-                full_text.append(para.text)
-    return "\n".join(full_text)
+    return docx_to_text(file=io.BytesIO(file_content))
 
 
 def get_text_from_pdf_driveitem(driveitem_object: DriveItem) -> str:
     file_content = driveitem_object.get_content().execute_query().value
-    file_text = read_pdf_file(
-        file=io.BytesIO(file_content), file_name=driveitem_object.name
-    )
+    file_text = pdf_to_text(file=io.BytesIO(file_content))
     return file_text
 
 
 def get_text_from_txt_driveitem(driveitem_object: DriveItem) -> str:
     file_content: bytes = driveitem_object.get_content().execute_query().value
-    text_string = file_content.decode("utf-8")
-    return text_string
+    return file_io_to_text(file=io.BytesIO(file_content))
 
 
 def get_text_from_pptx_driveitem(driveitem_object: DriveItem) -> str:
     file_content = driveitem_object.get_content().execute_query().value
-    pptx_stream = io.BytesIO(file_content)
-    with tempfile.NamedTemporaryFile() as temp:
-        temp.write(pptx_stream.getvalue())
-        presentation = pptx.Presentation(temp.name)
-        extracted_text = ""
-        for slide_number, slide in enumerate(presentation.slides, start=1):
-            extracted_text += f"\nSlide {slide_number}:\n"
-
-            for shape in slide.shapes:
-                if hasattr(shape, "text"):
-                    extracted_text += shape.text + "\n"
-
-        return extracted_text
+    return pptx_to_text(file=io.BytesIO(file_content))
 
 
 class SharepointConnector(LoadConnector, PollConnector):

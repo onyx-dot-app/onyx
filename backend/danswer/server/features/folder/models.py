@@ -1,16 +1,13 @@
 from pydantic import BaseModel
 
-
-class FolderChatMinimalInfo(BaseModel):
-    chat_session_id: int
-    chat_session_name: str
+from danswer.server.query_and_chat.models import ChatSessionDetails
 
 
 class FolderResponse(BaseModel):
     folder_id: int
     folder_name: str | None
     display_priority: int
-    chat_sessions: list[FolderChatMinimalInfo]
+    chat_sessions: list[ChatSessionDetails]
 
 
 class GetUserFoldersResponse(BaseModel):

@@ -5,6 +5,7 @@ from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_default_llm
 from danswer.llm.interfaces import LLM
 from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
+from danswer.llm.utils import message_to_string
 from danswer.prompts.chat_prompts import CHAT_NAMING
 from danswer.utils.logger import setup_logger
 
@@ -39,7 +40,7 @@ def get_renamed_conversation_name(
     prompt_msgs = get_chat_rename_messages(history_str)
 
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    new_name_raw = llm.invoke(filled_llm_prompt)
+    new_name_raw = message_to_string(llm.invoke(filled_llm_prompt))
 
     new_name = new_name_raw.strip().strip(' "')
 

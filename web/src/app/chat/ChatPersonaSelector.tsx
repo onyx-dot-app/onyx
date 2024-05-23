@@ -1,47 +1,58 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { FiCheck, FiChevronDown } from "react-icons/fi";
-import { CustomDropdown } from "@/components/Dropdown";
+import { FiCheck, FiChevronDown, FiPlusSquare, FiEdit } from "react-icons/fi";
+import { CustomDropdown, DefaultDropdownElement } from "@/components/Dropdown";
+import { useRouter } from "next/navigation";
+import { Divider } from "@tremor/react";
+import Link from "next/link";
 
 function PersonaItem({
   id,
   name,
   onSelect,
   isSelected,
-  model,
+  isOwner,
 }: {
   id: number;
   name: string;
   onSelect: (personaId: number) => void;
   isSelected: boolean;
-  model?: string;
+  isOwner: boolean;
 }) {
   return (
-    <div
-      title={`Using ${model}`}
-      key={id}
-      className={`
-    flex
-    px-3 
-    text-sm 
-    py-2 
-    my-0.5
-    rounded
-    mx-1
-    select-none 
-    cursor-pointer 
-    text-emphasis
-    bg-background
-    hover:bg-hover
-  `}
-      onClick={() => {
-        onSelect(id);
-      }}
-    >
-      {name}
-      {isSelected && (
-        <div className="ml-auto mr-1">
-          <FiCheck />
-        </div>
+    <div className="flex w-full">
+      <div
+        key={id}
+        className={`
+          flex
+          flex-grow
+          px-3 
+          text-sm 
+          py-2 
+          my-0.5
+          rounded
+          mx-1
+          select-none 
+          cursor-pointer 
+          text-emphasis
+          bg-background
+          hover:bg-hover-light
+          ${isSelected ? "bg-hover text-selected-emphasis" : ""}
+        `}
+        onClick={() => {
+          onSelect(id);
+        }}
+      >
+        {name}
+        {isSelected && (
+          <div className="ml-auto mr-1 my-auto">
+            <FiCheck />
+          </div>
+        )}
+      </div>
+      {isOwner && (
+        <Link href={`/assistants/edit/${id}`} className="mx-2 my-auto">
+          <FiEdit className="hover:bg-hover p-0.5 my-auto" size={20} />
+        </Link>
       )}
     </div>
   );
@@ -50,14 +61,16 @@ function PersonaItem({
 export function ChatPersonaSelector({
   personas,
   selectedPersonaId,
-  defaultModel,
   onPersonaChange,
+  userId,
 }: {
   personas: Persona[];
   selectedPersonaId: number | null;
-  defaultModel?: string;
   onPersonaChange: (persona: Persona | null) => void;
+  userId: string | undefined;
 }) {
+  const router = useRouter();
+
   const currentlySelectedPersona = personas.find(
     (persona) => persona.id === selectedPersonaId
   );
@@ -71,22 +84,23 @@ export function ChatPersonaSelector({
             border-border 
             bg-background
             rounded-lg 
+            shadow-lg 
             flex 
             flex-col 
             w-64 
             max-h-96 
             overflow-y-auto 
-            flex
+            p-1
             overscroll-contain`}
         >
-          {personas.map((persona, ind) => {
+          {personas.map((persona) => {
             const isSelected = persona.id === selectedPersonaId;
+            const isOwner = persona.owner?.id === userId;
             return (
               <PersonaItem
                 key={persona.id}
                 id={persona.id}
                 name={persona.name}
-                model={persona.llm_model_version_override || defaultModel}
                 onSelect={(clickedPersonaId) => {
                   const clickedPersona = personas.find(
                     (persona) => persona.id === clickedPersonaId
@@ -96,14 +110,28 @@ export function ChatPersonaSelector({
                   }
                 }}
                 isSelected={isSelected}
+                isOwner={isOwner}
               />
             );
           })}
+
+          <div className="border-t border-border pt-2">
+            <DefaultDropdownElement
+              name={
+                <div className="flex items-center">
+                  <FiPlusSquare className="mr-2" />
+                  New Assistant
+                </div>
+              }
+              onSelect={() => router.push("/assistants/new")}
+              isSelected={false}
+            />
+          </div>
         </div>
       }
     >
-      <div className="select-none text-xl font-bold flex px-2 py-1.5 text-strong rounded cursor-pointer hover:bg-hover-light">
-        <div className="my-auto" title={`Using ${currentlySelectedPersona?.llm_model_version_override || defaultModel}`}>
+      <div className="select-none text-xl text-strong font-bold flex px-2 py-1.5 rounded cursor-pointer hover:bg-hover-light">
+        <div className="my-auto">
           {currentlySelectedPersona?.name || "Default"}
         </div>
         <FiChevronDown className="my-auto ml-1" />

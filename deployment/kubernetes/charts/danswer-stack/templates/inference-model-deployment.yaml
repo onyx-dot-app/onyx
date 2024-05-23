@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "danswer-stack.fullname" . }}-inference-model
+  labels:
+    {{- range .Values.inferenceCapability.deployment.labels }}
+    {{ .key }}: {{ .value }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.inferenceCapability.deployment.replicas }}
+  selector:
+    matchLabels:
+      {{- range .Values.inferenceCapability.deployment.labels }}
+      {{ .key }}: {{ .value }}
+      {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- range .Values.inferenceCapability.podLabels }}
+        {{ .key }}: {{ .value }}
+        {{- end }}
+    spec:
+      containers:
+      - name: {{ .Values.inferenceCapability.service.name }}
+        image: {{ .Values.inferenceCapability.deployment.image.repository }}:{{ .Values.inferenceCapability.deployment.image.tag }}
+        imagePullPolicy: {{ .Values.inferenceCapability.deployment.image.pullPolicy }}
+        command: {{ toYaml .Values.inferenceCapability.deployment.command | nindent 14 }}
+        ports:
+        - containerPort: {{ .Values.inferenceCapability.service.port }}
+        envFrom:
+        - configMapRef:
+            name: {{ .Values.config.envConfigMapName }}
+        volumeMounts:
+        {{- range .Values.inferenceCapability.deployment.volumeMounts }}
+        - name: {{ .name }}
+          mountPath: {{ .mountPath }}
+        {{- end }}
+      volumes:
+      {{- range .Values.inferenceCapability.deployment.volumes }}
+      - name: {{ .name }}
+        persistentVolumeClaim:
+          claimName: {{ .persistentVolumeClaim.claimName }}
+      {{- end }}

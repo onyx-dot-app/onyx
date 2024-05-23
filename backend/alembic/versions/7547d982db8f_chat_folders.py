@@ -12,8 +12,8 @@ import fastapi_users_db_sqlalchemy
 # revision identifiers, used by Alembic.
 revision = "7547d982db8f"
 down_revision = "ef7da92f7213"
-branch_labels = None
-depends_on = None
+branch_labels: None = None
+depends_on: None = None
 
 
 def upgrade() -> None:

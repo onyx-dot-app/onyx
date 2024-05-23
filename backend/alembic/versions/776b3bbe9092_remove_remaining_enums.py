@@ -15,8 +15,8 @@ from danswer.search.models import SearchType
 # revision identifiers, used by Alembic.
 revision = "776b3bbe9092"
 down_revision = "4738e4b3bae1"
-branch_labels = None
-depends_on = None
+branch_labels: None = None
+depends_on: None = None
 
 
 def upgrade() -> None:

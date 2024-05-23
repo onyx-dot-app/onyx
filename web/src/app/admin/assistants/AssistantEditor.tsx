@@ -33,6 +33,21 @@ import { SuccessfulPersonaUpdateRedirectType } from "./enums";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import { FullLLMProvider } from "../models/llm/interfaces";
 import { Option } from "@/components/Dropdown";
+import { ToolSnapshot } from "@/lib/tools/interfaces";
+
+function findSearchTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === "SearchTool");
+}
+
+function findImageGenerationTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === "ImageGenerationTool");
+}
+
+function checkLLMSupportsImageGeneration(provider: string, model: string) {
+  console.log(provider);
+  console.log(model);
+  return provider === "openai" && model === "gpt-4-turbo";
+}
 
 function Label({ children }: { children: string | JSX.Element }) {
   return (
@@ -52,6 +67,7 @@ export function AssistantEditor({
   defaultPublic,
   redirectType,
   llmProviders,
+  tools,
 }: {
   existingPersona?: Persona | null;
   ccPairs: CCPairBasicInfo[];
@@ -60,6 +76,7 @@ export function AssistantEditor({
   defaultPublic: boolean;
   redirectType: SuccessfulPersonaUpdateRedirectType;
   llmProviders: FullLLMProvider[];
+  tools: ToolSnapshot[];
 }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
@@ -98,9 +115,18 @@ export function AssistantEditor({
     }
   }, []);
 
-  const defaultLLM = llmProviders.find(
+  const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
-  )?.default_model_name;
+  );
+  const defaultProviderName = defaultProvider?.provider;
+  const defaultModelName = defaultProvider?.default_model_name;
+  const providerDisplayNameToProviderName = new Map<string, string>();
+  llmProviders.forEach((llmProvider) => {
+    providerDisplayNameToProviderName.set(
+      llmProvider.name,
+      llmProvider.provider
+    );
+  });
 
   const modelOptionsByProvider = new Map<string, Option<string>[]>();
   llmProviders.forEach((llmProvider) => {
@@ -112,6 +138,16 @@ export function AssistantEditor({
     });
     modelOptionsByProvider.set(llmProvider.name, providerOptions);
   });
+  const providerSupportingImageGenerationExists = llmProviders.some(
+    (provider) => provider.provider === "openai"
+  );
+
+  const personaCurrentToolIds =
+    existingPersona?.tools.map((tool) => tool.id) || [];
+  const searchTool = findSearchTool(tools);
+  const imageGenerationTool = providerSupportingImageGenerationExists
+    ? findImageGenerationTool(tools)
+    : undefined;
 
   return (
     <div>
@@ -123,7 +159,6 @@ export function AssistantEditor({
           description: existingPersona?.description ?? "",
           system_prompt: existingPrompt?.system_prompt ?? "",
           task_prompt: existingPrompt?.task_prompt ?? "",
-          disable_retrieval: (existingPersona?.num_chunks ?? 10) === 0,
           is_public: existingPersona?.is_public ?? defaultPublic,
           document_set_ids:
             existingPersona?.document_sets?.map(
@@ -140,6 +175,12 @@ export function AssistantEditor({
           starter_messages: existingPersona?.starter_messages ?? [],
           // EE Only
           groups: existingPersona?.groups ?? [],
+          search_tool_enabled: existingPersona
+            ? personaCurrentToolIds.includes(searchTool!.id)
+            : ccPairs.length > 0,
+          image_generation_tool_enabled: imageGenerationTool
+            ? personaCurrentToolIds.includes(imageGenerationTool.id)
+            : false,
         }}
         validationSchema={Yup.object()
           .shape({
@@ -149,10 +190,9 @@ export function AssistantEditor({
             ),
             system_prompt: Yup.string(),
             task_prompt: Yup.string(),
-            disable_retrieval: Yup.boolean().required(),
             is_public: Yup.boolean().required(),
             document_set_ids: Yup.array().of(Yup.number()),
-            num_chunks: Yup.number().max(20).nullable(),
+            num_chunks: Yup.number().nullable(),
             include_citations: Yup.boolean().required(),
             llm_relevance_filter: Yup.boolean().required(),
             llm_model_version_override: Yup.string().nullable(),
@@ -166,6 +206,8 @@ export function AssistantEditor({
             ),
             // EE Only
             groups: Yup.array().of(Yup.number()),
+            search_tool_enabled: Yup.boolean().required(),
+            image_generation_tool_enabled: Yup.boolean().required(),
           })
           .test(
             "system-prompt-or-task-prompt",
@@ -210,11 +252,30 @@ export function AssistantEditor({
 
           formikHelpers.setSubmitting(true);
 
+          const tools = [];
+          if (values.search_tool_enabled && ccPairs.length > 0) {
+            tools.push(searchTool!.id);
+          }
+          if (
+            values.image_generation_tool_enabled &&
+            imageGenerationTool &&
+            checkLLMSupportsImageGeneration(
+              providerDisplayNameToProviderName.get(
+                values.llm_model_provider_override || ""
+              ) ||
+                defaultProviderName ||
+                "",
+              values.llm_model_version_override || defaultModelName || ""
+            )
+          ) {
+            tools.push(imageGenerationTool.id);
+          }
+
           // if disable_retrieval is set, set num_chunks to 0
           // to tell the backend to not fetch any documents
-          const numChunks = values.disable_retrieval
-            ? 0
-            : values.num_chunks || 10;
+          const numChunks = values.search_tool_enabled
+            ? values.num_chunks || 10
+            : 0;
 
           // don't set groups if marked as public
           const groups = values.is_public ? [] : values.groups;
@@ -229,6 +290,7 @@ export function AssistantEditor({
               num_chunks: numChunks,
               users: user ? [user.id] : undefined,
               groups,
+              tool_ids: tools,
             });
           } else {
             [promptResponse, personaResponse] = await createPersona({
@@ -236,6 +298,7 @@ export function AssistantEditor({
               num_chunks: numChunks,
               users: user ? [user.id] : undefined,
               groups,
+              tool_ids: tools,
             });
           }
 
@@ -296,7 +359,7 @@ export function AssistantEditor({
                       triggerFinalPromptUpdate(
                         e.target.value,
                         values.task_prompt,
-                        values.disable_retrieval
+                        values.search_tool_enabled
                       );
                     }}
                     error={finalPromptError}
@@ -314,7 +377,7 @@ export function AssistantEditor({
                       triggerFinalPromptUpdate(
                         values.system_prompt,
                         e.target.value,
-                        values.disable_retrieval
+                        values.search_tool_enabled
                       );
                     }}
                     error={finalPromptError}
@@ -334,129 +397,176 @@ export function AssistantEditor({
 
               <Divider />
 
-              {ccPairs.length > 0 && (
+              <HidableSection sectionTitle="Tools">
                 <>
-                  <HidableSection
-                    sectionTitle="[Advanced] Knowledge Base"
-                    defaultHidden
-                  >
+                  {ccPairs.length > 0 && (
                     <>
                       <BooleanFormField
-                        name="disable_retrieval"
-                        label="Disable Retrieval"
-                        subtext={`
-                          If set, the Assistant will not fetch any context documents to aid in the response. 
-                          Instead, it will only use the supplied system and task prompts plus the user 
-                          query in order to generate a response`}
+                        name="search_tool_enabled"
+                        label="Search Tool"
+                        subtext={`The Search Tool allows the Assistant to search through connected knowledge to help build an answer.`}
                         onChange={(e) => {
-                          setFieldValue("disable_retrieval", e.target.checked);
-                          triggerFinalPromptUpdate(
-                            values.system_prompt,
-                            values.task_prompt,
+                          setFieldValue("num_chunks", null);
+                          setFieldValue(
+                            "search_tool_enabled",
                             e.target.checked
                           );
                         }}
                       />
 
-                      {!values.disable_retrieval && (
-                        <>
-                          <div>
-                            <SubLabel>
-                              <>
-                                Select which{" "}
-                                {!user || user.role === "admin" ? (
-                                  <Link
-                                    href="/admin/documents/sets"
-                                    className="text-blue-500"
-                                    target="_blank"
-                                  >
-                                    Document Sets
-                                  </Link>
-                                ) : (
-                                  "Document Sets"
-                                )}{" "}
-                                that this Assistant should search through. If
-                                none are specified, the Assistant will search
-                                through all available documents in order to try
-                                and respond to queries.
-                              </>
-                            </SubLabel>
-                          </div>
+                      {values.search_tool_enabled && (
+                        <div className="pl-4 border-l-2 ml-4 border-border">
+                          {ccPairs.length > 0 && (
+                            <>
+                              <Label>Document Sets</Label>
 
-                          {documentSets.length > 0 ? (
-                            <FieldArray
-                              name="document_set_ids"
-                              render={(arrayHelpers: ArrayHelpers) => (
-                                <div>
-                                  <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
-                                    {documentSets.map((documentSet) => {
-                                      const ind =
-                                        values.document_set_ids.indexOf(
-                                          documentSet.id
-                                        );
-                                      let isSelected = ind !== -1;
-                                      return (
-                                        <DocumentSetSelectable
-                                          key={documentSet.id}
-                                          documentSet={documentSet}
-                                          isSelected={isSelected}
-                                          onSelect={() => {
-                                            if (isSelected) {
-                                              arrayHelpers.remove(ind);
-                                            } else {
-                                              arrayHelpers.push(documentSet.id);
-                                            }
-                                          }}
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                </div>
+                              <div>
+                                <SubLabel>
+                                  <>
+                                    Select which{" "}
+                                    {!user || user.role === "admin" ? (
+                                      <Link
+                                        href="/admin/documents/sets"
+                                        className="text-blue-500"
+                                        target="_blank"
+                                      >
+                                        Document Sets
+                                      </Link>
+                                    ) : (
+                                      "Document Sets"
+                                    )}{" "}
+                                    that this Assistant should search through.
+                                    If none are specified, the Assistant will
+                                    search through all available documents in
+                                    order to try and respond to queries.
+                                  </>
+                                </SubLabel>
+                              </div>
+
+                              {documentSets.length > 0 ? (
+                                <FieldArray
+                                  name="document_set_ids"
+                                  render={(arrayHelpers: ArrayHelpers) => (
+                                    <div>
+                                      <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
+                                        {documentSets.map((documentSet) => {
+                                          const ind =
+                                            values.document_set_ids.indexOf(
+                                              documentSet.id
+                                            );
+                                          let isSelected = ind !== -1;
+                                          return (
+                                            <DocumentSetSelectable
+                                              key={documentSet.id}
+                                              documentSet={documentSet}
+                                              isSelected={isSelected}
+                                              onSelect={() => {
+                                                if (isSelected) {
+                                                  arrayHelpers.remove(ind);
+                                                } else {
+                                                  arrayHelpers.push(
+                                                    documentSet.id
+                                                  );
+                                                }
+                                              }}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+                                />
+                              ) : (
+                                <Italic className="text-sm">
+                                  No Document Sets available.{" "}
+                                  {user?.role !== "admin" && (
+                                    <>
+                                      If this functionality would be useful,
+                                      reach out to the administrators of Danswer
+                                      for assistance.
+                                    </>
+                                  )}
+                                </Italic>
                               )}
-                            />
-                          ) : (
-                            <Italic className="text-sm">
-                              No Document Sets available.{" "}
-                              {user?.role !== "admin" && (
-                                <>
-                                  If this functionality would be useful, reach
-                                  out to the administrators of Danswer for
-                                  assistance.
-                                </>
-                              )}
-                            </Italic>
+
+                              <>
+                                <TextFormField
+                                  name="num_chunks"
+                                  label="Number of Chunks"
+                                  placeholder="If unspecified, will use 10 chunks."
+                                  subtext={
+                                    <div>
+                                      How many chunks should we feed into the
+                                      LLM when generating the final response?
+                                      Each chunk is ~400 words long.
+                                    </div>
+                                  }
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    // Allow only integer values
+                                    if (
+                                      value === "" ||
+                                      /^[0-9]+$/.test(value)
+                                    ) {
+                                      setFieldValue("num_chunks", value);
+                                    }
+                                  }}
+                                />
+
+                                <Label>Misc</Label>
+
+                                <BooleanFormField
+                                  name="llm_relevance_filter"
+                                  label="Apply LLM Relevance Filter"
+                                  subtext={
+                                    "If enabled, the LLM will filter out chunks that are not relevant to the user query."
+                                  }
+                                />
+
+                                <BooleanFormField
+                                  name="include_citations"
+                                  label="Include Citations"
+                                  subtext={`
+                                If set, the response will include bracket citations ([1], [2], etc.) 
+                                for each document used by the LLM to help inform the response. This is 
+                                the same technique used by the default Assistants. In general, we recommend 
+                                to leave this enabled in order to increase trust in the LLM answer.`}
+                                />
+                              </>
+                            </>
                           )}
-                        </>
+                        </div>
                       )}
                     </>
-                  </HidableSection>
+                  )}
 
-                  <Divider />
-                </>
-              )}
-
-              {!values.disable_retrieval && (
-                <>
-                  <HidableSection
-                    sectionTitle="[Advanced] Response Style"
-                    defaultHidden
-                  >
-                    <>
+                  {imageGenerationTool &&
+                    checkLLMSupportsImageGeneration(
+                      providerDisplayNameToProviderName.get(
+                        values.llm_model_provider_override || ""
+                      ) ||
+                        defaultProviderName ||
+                        "",
+                      values.llm_model_version_override ||
+                        defaultModelName ||
+                        ""
+                    ) && (
                       <BooleanFormField
-                        name="include_citations"
-                        label="Include Citations"
-                        subtext={`
-                        If set, the response will include bracket citations ([1], [2], etc.) 
-                        for each document used by the LLM to help inform the response. This is 
-                        the same technique used by the default Assistants. In general, we recommend 
-                        to leave this enabled in order to increase trust in the LLM answer.`}
+                        name="image_generation_tool_enabled"
+                        label="Image Generation Tool"
+                        subtext="The Image Generation Tool allows the assistant to use DALL-E 3 to generate images. The tool will be used when the user asks the assistant to generate an image."
+                        onChange={(e) => {
+                          setFieldValue(
+                            "image_generation_tool_enabled",
+                            e.target.checked
+                          );
+                        }}
                       />
-                    </>
-                  </HidableSection>
-
-                  <Divider />
+                    )}
                 </>
-              )}
+              </HidableSection>
+
+              <Divider />
 
               {llmProviders.length > 0 && (
                 <>
@@ -467,7 +577,8 @@ export function AssistantEditor({
                     <>
                       <Text>
                         Pick which LLM to use for this Assistant. If left as
-                        Default, will use <b className="italic">{defaultLLM}</b>
+                        Default, will use{" "}
+                        <b className="italic">{defaultModelName}</b>
                         .
                         <br />
                         <br />
@@ -524,49 +635,6 @@ export function AssistantEditor({
                           </div>
                         )}
                       </div>
-                    </>
-                  </HidableSection>
-
-                  <Divider />
-                </>
-              )}
-
-              {!values.disable_retrieval && (
-                <>
-                  <HidableSection
-                    sectionTitle="[Advanced] Retrieval Customization"
-                    defaultHidden
-                  >
-                    <>
-                      <TextFormField
-                        name="num_chunks"
-                        label="Number of Chunks"
-                        subtext={
-                          <div>
-                            How many chunks should we feed into the LLM when
-                            generating the final response? Each chunk is ~400
-                            words long.
-                            <br />
-                            <br />
-                            If unspecified, will use 10 chunks.
-                          </div>
-                        }
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          // Allow only integer values
-                          if (value === "" || /^[0-9]+$/.test(value)) {
-                            setFieldValue("num_chunks", value);
-                          }
-                        }}
-                      />
-
-                      <BooleanFormField
-                        name="llm_relevance_filter"
-                        label="Apply LLM Relevance Filter"
-                        subtext={
-                          "If enabled, the LLM will filter out chunks that are not relevant to the user query."
-                        }
-                      />
                     </>
                   </HidableSection>
 

@@ -3,8 +3,8 @@ from typing import Any
 from typing import Dict
 
 from fastapi import Depends
-from fastapi_users.db import SQLAlchemyUserDatabase
 from fastapi_users.models import UP
+from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyAccessTokenDatabase
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession

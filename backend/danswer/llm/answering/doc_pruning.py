@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from typing import TypeVar
 
@@ -14,6 +15,7 @@ from danswer.llm.utils import get_default_llm_tokenizer
 from danswer.llm.utils import tokenizer_trim_content
 from danswer.prompts.prompt_utils import build_doc_context_str
 from danswer.search.models import InferenceChunk
+from danswer.tools.search.search_utils import llm_doc_to_dict
 from danswer.utils.logger import setup_logger
 
 
@@ -35,9 +37,13 @@ def _compute_limit(
     max_chunks: int | None,
     max_window_percentage: float | None,
     max_tokens: int | None,
+    tool_token_count: int,
 ) -> int:
     llm_max_document_tokens = compute_max_document_tokens(
-        prompt_config=prompt_config, llm_config=llm_config, actual_user_input=question
+        prompt_config=prompt_config,
+        llm_config=llm_config,
+        tool_token_count=tool_token_count,
+        actual_user_input=question,
     )
 
     window_percentage_based_limit = (
@@ -88,6 +94,7 @@ def _apply_pruning(
     token_limit: int,
     is_manually_selected_docs: bool,
     use_sections: bool,
+    using_tool_message: bool,
 ) -> list[LlmDoc]:
     llm_tokenizer = get_default_llm_tokenizer()
     docs = deepcopy(docs)  # don't modify in place
@@ -101,18 +108,20 @@ def _apply_pruning(
     final_doc_ind = None
     total_tokens = 0
     for ind, llm_doc in enumerate(docs):
-        doc_tokens = len(
-            llm_tokenizer.encode(
-                build_doc_context_str(
-                    semantic_identifier=llm_doc.semantic_identifier,
-                    source_type=llm_doc.source_type,
-                    content=llm_doc.content,
-                    metadata_dict=llm_doc.metadata,
-                    updated_at=llm_doc.updated_at,
-                    ind=ind,
-                )
+        doc_str = (
+            json.dumps(llm_doc_to_dict(llm_doc, ind))
+            if using_tool_message
+            else build_doc_context_str(
+                semantic_identifier=llm_doc.semantic_identifier,
+                source_type=llm_doc.source_type,
+                content=llm_doc.content,
+                metadata_dict=llm_doc.metadata,
+                updated_at=llm_doc.updated_at,
+                ind=ind,
             )
         )
+
+        doc_tokens = len(llm_tokenizer.encode(doc_str))
         # if chunks, truncate chunks that are way too long
         # this can happen if the embedding model tokenizer is different
         # than the LLM tokenizer
@@ -152,12 +161,12 @@ def _apply_pruning(
                         "LLM context window exceeded. Please de-select some documents or shorten your query."
                     )
 
-            final_doc_desired_length = tokens_per_doc[final_doc_ind] - (
-                total_tokens - token_limit
-            )
-            final_doc_content_length = (
-                final_doc_desired_length - _METADATA_TOKEN_ESTIMATE
-            )
+            amount_to_truncate = total_tokens - token_limit
+            # NOTE: need to recalculate the length here, since the previous calculation included
+            # overhead from JSON-fying the doc / the metadata
+            final_doc_content_length = len(
+                llm_tokenizer.encode(docs[final_doc_ind].content)
+            ) - (amount_to_truncate)
             # this could occur if we only have space for the title / metadata
             # not ideal, but it's the most reasonable thing to do
             # NOTE: the frontend prevents documents from being selected if
@@ -209,6 +218,7 @@ def prune_documents(
         max_chunks=document_pruning_config.max_chunks,
         max_window_percentage=document_pruning_config.max_window_percentage,
         max_tokens=document_pruning_config.max_tokens,
+        tool_token_count=document_pruning_config.tool_num_tokens,
     )
     return _apply_pruning(
         docs=docs,
@@ -216,4 +226,5 @@ def prune_documents(
         token_limit=doc_token_limit,
         is_manually_selected_docs=document_pruning_config.is_manually_selected_docs,
         use_sections=document_pruning_config.use_sections,
+        using_tool_message=document_pruning_config.using_tool_message,
     )

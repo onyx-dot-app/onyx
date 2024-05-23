@@ -7,7 +7,7 @@ export interface CustomConfigKey {
 
 export interface WellKnownLLMProviderDescriptor {
   name: string;
-  display_name: string | null;
+  display_name: string;
 
   api_key_required: boolean;
   api_base_required: boolean;
@@ -38,6 +38,7 @@ export interface FullLLMProvider extends LLMProvider {
 
 export interface LLMProviderDescriptor {
   name: string;
+  provider: string;
   model_names: string[];
   default_model_name: string;
   fast_default_model_name: string | null;

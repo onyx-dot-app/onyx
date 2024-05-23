@@ -9,6 +9,9 @@ MODEL_SERVER_PORT = int(os.environ.get("MODEL_SERVER_PORT") or "9000")
 INDEXING_MODEL_SERVER_HOST = (
     os.environ.get("INDEXING_MODEL_SERVER_HOST") or MODEL_SERVER_HOST
 )
+INDEXING_MODEL_SERVER_PORT = int(
+    os.environ.get("INDEXING_MODEL_SERVER_PORT") or MODEL_SERVER_PORT
+)
 
 # Danswer custom Deep Learning Models
 INTENT_MODEL_VERSION = "danswer/intent-model"

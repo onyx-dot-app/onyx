@@ -3,11 +3,14 @@ from collections.abc import Iterator
 
 import requests
 from langchain.schema.language_model import LanguageModelInput
+from langchain_core.messages import AIMessage
+from langchain_core.messages import BaseMessage
 from requests import Timeout
 
 from danswer.configs.model_configs import GEN_AI_API_ENDPOINT
 from danswer.configs.model_configs import GEN_AI_MAX_OUTPUT_TOKENS
 from danswer.llm.interfaces import LLM
+from danswer.llm.interfaces import ToolChoiceOptions
 from danswer.llm.utils import convert_lm_input_to_basic_string
 from danswer.utils.logger import setup_logger
 
@@ -47,7 +50,7 @@ class CustomModelServer(LLM):
         self._max_output_tokens = max_output_tokens
         self._timeout = timeout
 
-    def _execute(self, input: LanguageModelInput) -> str:
+    def _execute(self, input: LanguageModelInput) -> AIMessage:
         headers = {
             "Content-Type": "application/json",
         }
@@ -67,13 +70,24 @@ class CustomModelServer(LLM):
             raise Timeout(f"Model inference to {self._endpoint} timed out") from error
 
         response.raise_for_status()
-        return json.loads(response.content).get("generated_text", "")
+        response_content = json.loads(response.content).get("generated_text", "")
+        return AIMessage(content=response_content)
 
     def log_model_configs(self) -> None:
         logger.debug(f"Custom model at: {self._endpoint}")
 
-    def invoke(self, prompt: LanguageModelInput) -> str:
+    def invoke(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+    ) -> BaseMessage:
         return self._execute(prompt)
 
-    def stream(self, prompt: LanguageModelInput) -> Iterator[str]:
+    def stream(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+    ) -> Iterator[BaseMessage]:
         yield self._execute(prompt)

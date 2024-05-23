@@ -1,6 +1,7 @@
 import re
 from copy import copy
 from dataclasses import dataclass
+from typing import IO
 
 import bs4
 
@@ -118,7 +119,7 @@ def format_document_soup(
     return strip_excessive_newlines_and_spaces(text)
 
 
-def parse_html_page_basic(text: str) -> str:
+def parse_html_page_basic(text: str | IO[bytes]) -> str:
     soup = bs4.BeautifulSoup(text, "html.parser")
     return format_document_soup(soup)
 

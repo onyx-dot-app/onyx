@@ -67,3 +67,9 @@ DANSWER_BOT_USE_QUOTES = os.environ.get("DANSWER_BOT_USE_QUOTES", "").lower() ==
 DANSWER_BOT_MAX_QPM = int(os.environ.get("DANSWER_BOT_MAX_QPM") or 0) or None
 # Maximum time to wait when a question is queued
 DANSWER_BOT_MAX_WAIT_TIME = int(os.environ.get("DANSWER_BOT_MAX_WAIT_TIME") or 180)
+
+# Time (in minutes) after which a Slack message is sent to the user to remind him to give feedback.
+# Set to 0 to disable it (default)
+DANSWER_BOT_FEEDBACK_REMINDER = int(
+    os.environ.get("DANSWER_BOT_FEEDBACK_REMINDER") or 0
+)

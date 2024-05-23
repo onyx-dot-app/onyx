@@ -7,7 +7,6 @@ from typing import Any
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.bookstack.client import BookStackApiClient
-from danswer.connectors.cross_connector_utils.html_utils import parse_html_page_basic
 from danswer.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import LoadConnector
@@ -16,6 +15,7 @@ from danswer.connectors.interfaces import SecondsSinceUnixEpoch
 from danswer.connectors.models import ConnectorMissingCredentialError
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
+from danswer.file_processing.html_utils import parse_html_page_basic
 
 
 class BookstackConnector(LoadConnector, PollConnector):

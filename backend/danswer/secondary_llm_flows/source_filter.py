@@ -9,6 +9,7 @@ from danswer.db.engine import get_sqlalchemy_engine
 from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_default_llm
 from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
+from danswer.llm.utils import message_to_string
 from danswer.prompts.constants import SOURCES_KEY
 from danswer.prompts.filter_extration import FILE_SOURCE_WARNING
 from danswer.prompts.filter_extration import SOURCE_FILTER_PROMPT
@@ -157,7 +158,7 @@ def extract_source_filter(
 
     messages = _get_source_filter_messages(query=query, valid_sources=valid_sources)
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-    model_output = llm.invoke(filled_llm_prompt)
+    model_output = message_to_string(llm.invoke(filled_llm_prompt))
     logger.debug(model_output)
 
     return _extract_source_filters_from_llm_out(model_output)

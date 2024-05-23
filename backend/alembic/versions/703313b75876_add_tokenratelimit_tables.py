@@ -14,8 +14,8 @@ from danswer.dynamic_configs.factory import get_dynamic_config_store
 # revision identifiers, used by Alembic.
 revision = "703313b75876"
 down_revision = "fad14119fb92"
-branch_labels = None
-depends_on = None
+branch_labels: None = None
+depends_on: None = None
 
 
 def upgrade() -> None:

@@ -7,6 +7,7 @@ from danswer.db.models import StarterMessage
 from danswer.search.enums import RecencyBiasSetting
 from danswer.server.features.document_set.models import DocumentSet
 from danswer.server.features.prompt.models import PromptSnapshot
+from danswer.server.features.tool.api import ToolSnapshot
 from danswer.server.models import MinimalUserSnapshot
 
 
@@ -20,6 +21,8 @@ class CreatePersonaRequest(BaseModel):
     recency_bias: RecencyBiasSetting
     prompt_ids: list[int]
     document_set_ids: list[int]
+    # e.g. ID of SearchTool or ImageGenerationTool or <USER_DEFINED_TOOL>
+    tool_ids: list[int]
     llm_model_provider_override: str | None = None
     llm_model_version_override: str | None = None
     starter_messages: list[StarterMessage] | None = None
@@ -44,6 +47,7 @@ class PersonaSnapshot(BaseModel):
     starter_messages: list[StarterMessage] | None
     default_persona: bool
     prompts: list[PromptSnapshot]
+    tools: list[ToolSnapshot]
     document_sets: list[DocumentSet]
     users: list[UUID]
     groups: list[int]
@@ -73,6 +77,7 @@ class PersonaSnapshot(BaseModel):
             starter_messages=persona.starter_messages,
             default_persona=persona.default_persona,
             prompts=[PromptSnapshot.from_model(prompt) for prompt in persona.prompts],
+            tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
             document_sets=[
                 DocumentSet.from_model(document_set_model)
                 for document_set_model in persona.document_sets

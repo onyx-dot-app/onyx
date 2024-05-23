@@ -1,6 +1,4 @@
-import os
 from datetime import timedelta
-from pathlib import Path
 from typing import cast
 
 from celery import Celery  # type: ignore
@@ -10,16 +8,14 @@ from danswer.background.connector_deletion import delete_connector_credential_pa
 from danswer.background.task_utils import build_celery_task_wrapper
 from danswer.background.task_utils import name_cc_cleanup_task
 from danswer.background.task_utils import name_document_set_sync_task
-from danswer.configs.app_configs import FILE_CONNECTOR_TMP_STORAGE_PATH
 from danswer.configs.app_configs import JOB_TIMEOUT
-from danswer.connectors.file.utils import file_age_in_hours
 from danswer.db.connector_credential_pair import get_connector_credential_pair
 from danswer.db.deletion_attempt import check_deletion_attempt_is_allowed
 from danswer.db.document import prepare_to_modify_documents
 from danswer.db.document_set import delete_document_set
 from danswer.db.document_set import fetch_document_sets
 from danswer.db.document_set import fetch_document_sets_for_documents
-from danswer.db.document_set import fetch_documents_for_document_set
+from danswer.db.document_set import fetch_documents_for_document_set_paginated
 from danswer.db.document_set import get_document_set_by_id
 from danswer.db.document_set import mark_document_set_as_synced
 from danswer.db.engine import build_connection_string
@@ -31,7 +27,6 @@ from danswer.db.tasks import get_latest_task
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
 from danswer.document_index.interfaces import UpdateRequest
-from danswer.utils.batching import batch_generator
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -42,7 +37,7 @@ celery_backend_url = f"db+{connection_string}"
 celery_app = Celery(__name__, broker=celery_broker_url, backend=celery_backend_url)
 
 
-_SYNC_BATCH_SIZE = 1000
+_SYNC_BATCH_SIZE = 100
 
 
 #####
@@ -103,47 +98,48 @@ def sync_document_set_task(document_set_id: int) -> None:
         logger.debug(f"Syncing document sets for: {document_ids}")
 
         # Acquires a lock on the documents so that no other process can modify them
-        prepare_to_modify_documents(db_session=db_session, document_ids=document_ids)
+        with prepare_to_modify_documents(
+            db_session=db_session, document_ids=document_ids
+        ):
+            # get current state of document sets for these documents
+            document_set_map = {
+                document_id: document_sets
+                for document_id, document_sets in fetch_document_sets_for_documents(
+                    document_ids=document_ids, db_session=db_session
+                )
+            }
 
-        # get current state of document sets for these documents
-        document_set_map = {
-            document_id: document_sets
-            for document_id, document_sets in fetch_document_sets_for_documents(
-                document_ids=document_ids, db_session=db_session
+            # update Vespa
+            curr_ind_name, sec_ind_name = get_both_index_names(db_session)
+            document_index = get_default_document_index(
+                primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
             )
-        }
-
-        # update Vespa
-        curr_ind_name, sec_ind_name = get_both_index_names(db_session)
-        document_index = get_default_document_index(
-            primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
-        )
-        update_requests = [
-            UpdateRequest(
-                document_ids=[document_id],
-                document_sets=set(document_set_map.get(document_id, [])),
-            )
-            for document_id in document_ids
-        ]
-        document_index.update(update_requests=update_requests)
-
-        # Commit to release the locks
-        db_session.commit()
+            update_requests = [
+                UpdateRequest(
+                    document_ids=[document_id],
+                    document_sets=set(document_set_map.get(document_id, [])),
+                )
+                for document_id in document_ids
+            ]
+            document_index.update(update_requests=update_requests)
 
     with Session(get_sqlalchemy_engine()) as db_session:
         try:
-            documents_to_update = fetch_documents_for_document_set(
-                document_set_id=document_set_id,
-                db_session=db_session,
-                current_only=False,
-            )
-            for document_batch in batch_generator(
-                documents_to_update, _SYNC_BATCH_SIZE
-            ):
+            cursor = None
+            while True:
+                document_batch, cursor = fetch_documents_for_document_set_paginated(
+                    document_set_id=document_set_id,
+                    db_session=db_session,
+                    current_only=False,
+                    last_document_id=cursor,
+                    limit=_SYNC_BATCH_SIZE,
+                )
                 _sync_document_batch(
                     document_ids=[document.id for document in document_batch],
                     db_session=db_session,
                 )
+                if cursor is None:
+                    break
 
             # if there are no connectors, then delete the document set. Otherwise, just
             # mark it as successfully synced.
@@ -203,21 +199,6 @@ def check_for_document_sets_sync_task() -> None:
                 sync_document_set_task.apply_async(
                     kwargs=dict(document_set_id=document_set.id),
                 )
-
-
-@celery_app.task(name="clean_old_temp_files_task", soft_time_limit=JOB_TIMEOUT)
-def clean_old_temp_files_task(
-    age_threshold_in_hours: float | int = 24 * 7,  # 1 week,
-    base_path: Path | str = FILE_CONNECTOR_TMP_STORAGE_PATH,
-) -> None:
-    """Files added via the File connector need to be deleted after ingestion
-    Currently handled async of the indexing job"""
-    os.makedirs(base_path, exist_ok=True)
-    for file in os.listdir(base_path):
-        full_file_path = Path(base_path) / file
-        if file_age_in_hours(full_file_path) > age_threshold_in_hours:
-            logger.info(f"Cleaning up uploaded file: {full_file_path}")
-            os.remove(full_file_path)
 
 
 #####

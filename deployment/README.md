@@ -25,6 +25,8 @@ Docker Compose provides the easiest way to get Danswer up and running.
 
 Requirements: Docker and docker compose
 
+This section is for getting started quickly without setting up GPUs. For deployments to leverage GPU, please refer to [this](https://github.com/danswer-ai/danswer/blob/main/deployment/docker_compose/README.md) documentation.
+
 1. To run Danswer, navigate to `docker_compose` directory and run the following:
    - `docker compose -f docker-compose.dev.yml -p danswer-stack up -d --pull always --force-recreate`
       - or run: `docker compose -f docker-compose.dev.yml -p danswer-stack up -d --build --force-recreate`

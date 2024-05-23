@@ -8,6 +8,7 @@ from dateutil.parser import parse
 from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_default_llm
 from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
+from danswer.llm.utils import message_to_string
 from danswer.prompts.filter_extration import TIME_FILTER_PROMPT
 from danswer.prompts.prompt_utils import get_current_llm_day_time
 from danswer.utils.logger import setup_logger
@@ -153,7 +154,7 @@ def extract_time_filter(query: str) -> tuple[datetime | None, bool]:
 
     messages = _get_time_filter_messages(query)
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-    model_output = llm.invoke(filled_llm_prompt)
+    model_output = message_to_string(llm.invoke(filled_llm_prompt))
     logger.debug(model_output)
 
     return _extract_time_filter_from_llm_out(model_output)

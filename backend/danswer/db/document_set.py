@@ -382,9 +382,13 @@ def fetch_user_document_sets(
     )
 
 
-def fetch_documents_for_document_set(
-    document_set_id: int, db_session: Session, current_only: bool = True
-) -> Sequence[Document]:
+def fetch_documents_for_document_set_paginated(
+    document_set_id: int,
+    db_session: Session,
+    current_only: bool = True,
+    last_document_id: str | None = None,
+    limit: int = 100,
+) -> tuple[Sequence[Document], str | None]:
     stmt = (
         select(Document)
         .join(
@@ -411,14 +415,19 @@ def fetch_documents_for_document_set(
             == DocumentSet__ConnectorCredentialPair.document_set_id,
         )
         .where(DocumentSetDBModel.id == document_set_id)
+        .order_by(Document.id)
+        .limit(limit)
     )
+    if last_document_id is not None:
+        stmt = stmt.where(Document.id > last_document_id)
     if current_only:
         stmt = stmt.where(
             DocumentSet__ConnectorCredentialPair.is_current == True  # noqa: E712
         )
     stmt = stmt.distinct()
 
-    return db_session.scalars(stmt).all()
+    documents = db_session.scalars(stmt).all()
+    return documents, documents[-1].id if documents else None
 
 
 def fetch_document_sets_for_documents(

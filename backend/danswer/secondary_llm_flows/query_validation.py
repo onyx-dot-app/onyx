@@ -7,6 +7,8 @@ from danswer.configs.chat_configs import DISABLE_LLM_QUERY_ANSWERABILITY
 from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_default_llm
 from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
+from danswer.llm.utils import message_generator_to_string_generator
+from danswer.llm.utils import message_to_string
 from danswer.prompts.constants import ANSWERABLE_PAT
 from danswer.prompts.constants import THOUGHT_PAT
 from danswer.prompts.query_validation import ANSWERABLE_PROMPT
@@ -56,7 +58,7 @@ def get_query_answerability(
 
     messages = get_query_validation_messages(user_query)
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-    model_output = llm.invoke(filled_llm_prompt)
+    model_output = message_to_string(llm.invoke(filled_llm_prompt))
 
     reasoning = extract_answerability_reasoning(model_output)
     answerable = extract_answerability_bool(model_output)
@@ -86,11 +88,10 @@ def stream_query_answerability(
             ).dict()
         )
         return
-
     messages = get_query_validation_messages(user_query)
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
     try:
-        tokens = llm.stream(filled_llm_prompt)
+        tokens = message_generator_to_string_generator(llm.stream(filled_llm_prompt))
         reasoning_pat_found = False
         model_output = ""
         hold_answerable = ""

@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 from typing import cast
 
-from danswer.configs.app_configs import DYNAMIC_CONFIG_DIR_PATH
 from danswer.configs.constants import GEN_AI_API_KEY_STORAGE_KEY
 from danswer.configs.model_configs import FAST_GEN_AI_MODEL_VERSION
 from danswer.configs.model_configs import GEN_AI_API_ENDPOINT
@@ -53,7 +52,7 @@ def insert_into_postgres(store_data: dict) -> None:
     config_store.store(port_once_key, True)
 
 
-def port_filesystem_to_postgres(directory_path: str = DYNAMIC_CONFIG_DIR_PATH) -> None:
+def port_filesystem_to_postgres(directory_path: str) -> None:
     store_data = read_file_system_store(directory_path)
     insert_into_postgres(store_data)
 

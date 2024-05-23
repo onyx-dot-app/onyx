@@ -102,8 +102,17 @@ class QAResponse(SearchResponse, DanswerAnswer):
     error_msg: str | None = None
 
 
+class ImageGenerationDisplay(BaseModel):
+    file_ids: list[str]
+
+
 AnswerQuestionPossibleReturn = (
-    DanswerAnswerPiece | DanswerQuotes | CitationInfo | DanswerContexts | StreamingError
+    DanswerAnswerPiece
+    | DanswerQuotes
+    | CitationInfo
+    | DanswerContexts
+    | ImageGenerationDisplay
+    | StreamingError
 )
 
 

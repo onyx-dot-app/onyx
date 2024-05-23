@@ -1,5 +1,4 @@
 import io
-import tempfile
 from collections.abc import Iterator
 from collections.abc import Sequence
 from datetime import datetime
@@ -9,7 +8,6 @@ from itertools import chain
 from typing import Any
 from typing import cast
 
-import docx2txt  # type:ignore
 from google.auth.credentials import Credentials  # type: ignore
 from googleapiclient import discovery  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
@@ -21,7 +19,6 @@ from danswer.configs.app_configs import GOOGLE_DRIVE_ONLY_ORG_PUBLIC
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import IGNORE_FOR_QA
-from danswer.connectors.cross_connector_utils.file_utils import read_pdf_file
 from danswer.connectors.cross_connector_utils.retry_wrapper import retry_builder
 from danswer.connectors.google_drive.connector_auth import (
     get_google_drive_creds_for_authorized_user,
@@ -42,6 +39,8 @@ from danswer.connectors.interfaces import PollConnector
 from danswer.connectors.interfaces import SecondsSinceUnixEpoch
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
+from danswer.file_processing.extract_file_text import docx_to_text
+from danswer.file_processing.extract_file_text import pdf_to_text
 from danswer.utils.batching import batch_generator
 from danswer.utils.logger import setup_logger
 
@@ -321,15 +320,10 @@ def extract_text(file: dict[str, str], service: discovery.Resource) -> str:
         )
     elif mime_type == GDriveMimeType.WORD_DOC.value:
         response = service.files().get_media(fileId=file["id"]).execute()
-        word_stream = io.BytesIO(response)
-        with tempfile.NamedTemporaryFile(delete=False) as temp:
-            temp.write(word_stream.getvalue())
-            temp_path = temp.name
-        return docx2txt.process(temp_path)
+        return docx_to_text(file=io.BytesIO(response))
     elif mime_type == GDriveMimeType.PDF.value:
         response = service.files().get_media(fileId=file["id"]).execute()
-        file_contents = read_pdf_file(file=io.BytesIO(response), file_name=file["name"])
-        return file_contents
+        return pdf_to_text(file=io.BytesIO(response))
 
     return UNSUPPORTED_FILE_TYPE_CONTENT
 

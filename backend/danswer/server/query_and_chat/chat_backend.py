@@ -81,6 +81,7 @@ def get_user_chat_sessions(
                 persona_id=chat.persona_id,
                 time_created=chat.time_created.isoformat(),
                 shared_status=chat.shared_status,
+                folder_id=chat.folder_id,
             )
             for chat in chat_sessions
         ]
@@ -288,6 +289,7 @@ def create_chat_feedback(
     create_chat_message_feedback(
         is_positive=feedback.is_positive,
         feedback_text=feedback.feedback_text,
+        predefined_feedback=feedback.predefined_feedback,
         chat_message_id=feedback.chat_message_id,
         user_id=user_id,
         db_session=db_session,

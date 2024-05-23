@@ -7,6 +7,7 @@ const version = env_version || package_version;
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  swcMinify: true,
   rewrites: async () => {
     // In production, something else (nginx in the one box setup) should take
     // care of this rewrite. TODO (chris): better support setups where

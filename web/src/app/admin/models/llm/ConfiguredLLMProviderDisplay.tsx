@@ -7,6 +7,7 @@ import { useState } from "react";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { mutate } from "swr";
 import { Badge, Button } from "@tremor/react";
+import isEqual from "lodash/isEqual";
 
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
@@ -21,13 +22,17 @@ function LLMProviderUpdateModal({
   shouldMarkAsDefault?: boolean;
   setPopup?: (popup: PopupSpec) => void;
 }) {
-  const providerName =
-    llmProviderDescriptor?.display_name ||
-    llmProviderDescriptor?.name ||
-    existingLlmProvider?.name ||
-    "Custom LLM Provider";
+  const providerName = existingLlmProvider?.name
+    ? `"${existingLlmProvider.name}"`
+    : null ||
+      llmProviderDescriptor?.display_name ||
+      llmProviderDescriptor?.name ||
+      "Custom LLM Provider";
   return (
-    <Modal title={`Setup ${providerName}`} onOutsideClick={() => onClose()}>
+    <Modal
+      title={`${llmProviderDescriptor ? "Configure" : "Setup"} ${providerName}`}
+      onOutsideClick={() => onClose()}
+    >
       <div className="max-h-[70vh] overflow-y-auto px-4">
         {llmProviderDescriptor ? (
           <LLMProviderUpdateForm
@@ -63,9 +68,9 @@ function LLMProviderDisplay({
   const { popup, setPopup } = usePopup();
 
   const providerName =
+    existingLlmProvider?.name ||
     llmProviderDescriptor?.display_name ||
-    llmProviderDescriptor?.name ||
-    existingLlmProvider?.name;
+    llmProviderDescriptor?.name;
   return (
     <div>
       {popup}
@@ -165,7 +170,6 @@ export function ConfiguredLLMProviderDisplay({
           (llmProviderDescriptors) =>
             llmProviderDescriptors.name === provider.provider
         );
-        console.log(provider.model_names.length);
 
         return (
           <LLMProviderDisplay
@@ -174,7 +178,9 @@ export function ConfiguredLLMProviderDisplay({
             // then the provider is custom - don't use the default
             // provider descriptor
             llmProviderDescriptor={
-              provider.model_names.length > 0 ? null : defaultProviderDesciptor
+              isEqual(provider.model_names, defaultProviderDesciptor?.llm_names)
+                ? defaultProviderDesciptor
+                : null
             }
             existingLlmProvider={provider}
           />

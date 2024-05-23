@@ -51,9 +51,10 @@ module.exports = {
         "border-strong": "#9ca3af", // gray-400
         "hover-light": "#f3f4f6", // gray-100
         hover: "#e5e7eb", // gray-200
+        "hover-emphasis": "#d1d5db", // gray-300
         popup: "#ffffff", // white
         accent: "#6671d0",
-        "accent-hover": "#6671d0",
+        "accent-hover": "#5964c2",
         highlight: {
           text: "#fef9c3", // yellow-100
         },

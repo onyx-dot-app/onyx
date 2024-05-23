@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.inferenceCapability.pvc.name }}
+spec:
+  accessModes: 
+    {{- toYaml .Values.inferenceCapability.pvc.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.inferenceCapability.pvc.storage }}

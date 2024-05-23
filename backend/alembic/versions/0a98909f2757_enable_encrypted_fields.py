@@ -16,8 +16,8 @@ from danswer.utils.encryption import encrypt_string_to_bytes
 # revision identifiers, used by Alembic.
 revision = "0a98909f2757"
 down_revision = "570282d33c49"
-branch_labels = None
-depends_on = None
+branch_labels: None = None
+depends_on: None = None
 
 
 def upgrade() -> None:

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.indexCapability.indexingModelPVC.name }}
+spec:
+  accessModes:
+    - {{ .Values.indexCapability.indexingModelPVC.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.indexCapability.indexingModelPVC.storage | quote }}

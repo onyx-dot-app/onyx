@@ -49,8 +49,6 @@ def run_jobs(exclude_indexing: bool) -> None:
     if not exclude_indexing:
         update_env = os.environ.copy()
         update_env["PYTHONPATH"] = "."
-        update_env["DYNAMIC_CONFIG_DIR_PATH"] = "./dynamic_config_storage"
-        update_env["FILE_CONNECTOR_TMP_STORAGE_PATH"] = "./dynamic_config_storage"
         cmd_indexing = ["python", "danswer/background/update.py"]
 
         indexing_process = subprocess.Popen(

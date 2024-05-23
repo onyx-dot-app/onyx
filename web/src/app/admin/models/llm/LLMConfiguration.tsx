@@ -136,13 +136,6 @@ export function LLMConfiguration() {
     return <ThreeDotsLoader />;
   }
 
-  const wellKnownLLMProviderNames = llmProviderDescriptors.map(
-    (llmProviderDescriptor) => llmProviderDescriptor.name
-  );
-  const customLLMProviders = existingLlmProviders.filter(
-    (llmProvider) => !wellKnownLLMProviderNames.includes(llmProvider.name)
-  );
-
   return (
     <>
       <Title className="mb-2">Enabled LLM Providers</Title>

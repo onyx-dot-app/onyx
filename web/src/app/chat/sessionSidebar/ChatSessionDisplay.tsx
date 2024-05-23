@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { ChatSession } from "../interfaces";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { deleteChatSession, renameChatSession } from "../lib";
 import { DeleteChatModal } from "../modal/DeleteChatModal";
 import { BasicSelectable } from "@/components/BasicClickable";
@@ -19,16 +19,19 @@ import {
 import { DefaultDropdownElement } from "@/components/Dropdown";
 import { Popover } from "@/components/popover/Popover";
 import { ShareChatSessionModal } from "../modal/ShareChatSessionModal";
-
-interface ChatSessionDisplayProps {
-  chatSession: ChatSession;
-  isSelected: boolean;
-}
+import { CHAT_SESSION_ID_KEY, FOLDER_ID_KEY } from "@/lib/drag/constants";
 
 export function ChatSessionDisplay({
   chatSession,
   isSelected,
-}: ChatSessionDisplayProps) {
+  skipGradient,
+}: {
+  chatSession: ChatSession;
+  isSelected: boolean;
+  // needed when the parent is trying to apply some background effect
+  // if not set, the gradient will still be applied and cause weirdness
+  skipGradient?: boolean;
+}) {
   const router = useRouter();
   const [isDeletionModalVisible, setIsDeletionModalVisible] = useState(false);
   const [isRenamingChat, setIsRenamingChat] = useState(false);
@@ -36,6 +39,18 @@ export function ChatSessionDisplay({
     useState(false);
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [chatName, setChatName] = useState(chatSession.name);
+  const [delayedSkipGradient, setDelayedSkipGradient] = useState(skipGradient);
+
+  useEffect(() => {
+    if (skipGradient) {
+      setDelayedSkipGradient(true);
+    } else {
+      const timer = setTimeout(() => {
+        setDelayedSkipGradient(skipGradient);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [skipGradient]);
 
   const onRename = async () => {
     const response = await renameChatSession(chatSession.id, chatName);
@@ -78,13 +93,21 @@ export function ChatSessionDisplay({
         key={chatSession.id}
         href={`/chat?chatId=${chatSession.id}`}
         scroll={false}
+        draggable="true"
+        onDragStart={(event) => {
+          event.dataTransfer.setData(
+            CHAT_SESSION_ID_KEY,
+            chatSession.id.toString()
+          );
+          event.dataTransfer.setData(
+            FOLDER_ID_KEY,
+            chatSession.folder_id?.toString() || ""
+          );
+        }}
       >
         <BasicSelectable fullWidth selected={isSelected}>
           <>
             <div className="flex relative">
-              <div className="my-auto mr-2">
-                <FiMessageSquare size={16} />
-              </div>{" "}
               {isRenamingChat ? (
                 <input
                   value={chatName}
@@ -157,6 +180,8 @@ export function ChatSessionDisplay({
                             </div>
                           }
                           requiresContentPadding
+                          sideOffset={6}
+                          triggerMaxWidth
                         />
                       </div>
                     </div>
@@ -169,10 +194,10 @@ export function ChatSessionDisplay({
                   </div>
                 ))}
             </div>
-            {isSelected && !isRenamingChat && (
+            {isSelected && !isRenamingChat && !delayedSkipGradient && (
               <div className="absolute bottom-0 right-0 top-0 bg-gradient-to-l to-transparent from-hover w-20 from-60% rounded" />
             )}
-            {!isSelected && (
+            {!isSelected && !delayedSkipGradient && (
               <div className="absolute bottom-0 right-0 top-0 bg-gradient-to-l to-transparent from-background w-8 from-0% rounded" />
             )}
           </>

@@ -28,6 +28,10 @@ from danswer.danswerbot.slack.handlers.handle_buttons import (
 )
 from danswer.danswerbot.slack.handlers.handle_buttons import handle_slack_feedback
 from danswer.danswerbot.slack.handlers.handle_message import handle_message
+from danswer.danswerbot.slack.handlers.handle_message import (
+    remove_scheduled_feedback_reminder,
+)
+from danswer.danswerbot.slack.handlers.handle_message import schedule_feedback_reminder
 from danswer.danswerbot.slack.models import SlackMessageInfo
 from danswer.danswerbot.slack.tokens import fetch_tokens
 from danswer.danswerbot.slack.utils import ChannelIdAdapter
@@ -160,6 +164,7 @@ def process_feedback(req: SocketModeRequest, client: SocketModeClient) -> None:
     if actions := req.payload.get("actions"):
         action = cast(dict[str, Any], actions[0])
         feedback_type = cast(str, action.get("action_id"))
+        feedback_msg_reminder = cast(str, action.get("value"))
         feedback_id = cast(str, action.get("block_id"))
         channel_id = cast(str, req.payload["container"]["channel_id"])
         thread_ts = cast(str, req.payload["container"]["thread_ts"])
@@ -172,6 +177,7 @@ def process_feedback(req: SocketModeRequest, client: SocketModeClient) -> None:
     handle_slack_feedback(
         feedback_id=feedback_id,
         feedback_type=feedback_type,
+        feedback_msg_reminder=feedback_msg_reminder,
         client=client.web_client,
         user_id_to_post_confirmation=user_id,
         channel_id_to_post_confirmation=channel_id,
@@ -286,15 +292,32 @@ def process_message(
         ):
             return
 
+        follow_up = bool(
+            slack_bot_config
+            and slack_bot_config.channel_config
+            and slack_bot_config.channel_config.get("follow_up_tags") is not None
+        )
+        feedback_reminder_id = schedule_feedback_reminder(
+            details=details, client=client.web_client, include_followup=follow_up
+        )
+
         failed = handle_message(
             message_info=details,
             channel_config=slack_bot_config,
             client=client.web_client,
+            feedback_reminder_id=feedback_reminder_id,
         )
 
-        # Skipping answering due to pre-filtering is not considered a failure
-        if failed and notify_no_answer:
-            apologize_for_fail(details, client)
+        if failed:
+            if feedback_reminder_id:
+                remove_scheduled_feedback_reminder(
+                    client=client.web_client,
+                    channel=details.sender,
+                    msg_id=feedback_reminder_id,
+                )
+            # Skipping answering due to pre-filtering is not considered a failure
+            if notify_no_answer:
+                apologize_for_fail(details, client)
 
 
 def acknowledge_message(req: SocketModeRequest, client: SocketModeClient) -> None:

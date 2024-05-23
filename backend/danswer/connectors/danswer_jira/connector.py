@@ -45,21 +45,44 @@ def extract_jira_project(url: str) -> tuple[str, str]:
     return jira_base, jira_project
 
 
+def extract_text_from_content(content: dict) -> str:
+    texts = []
+    if "content" in content:
+        for block in content["content"]:
+            if "content" in block:
+                for item in block["content"]:
+                    if item["type"] == "text":
+                        texts.append(item["text"])
+    return " ".join(texts)
+
+
 def _get_comment_strs(
-    jira: Issue,
-    comment_email_blacklist: tuple[str, ...] = (),
+    jira: Issue, comment_email_blacklist: tuple[str, ...] = ()
 ) -> list[str]:
     comment_strs = []
     for comment in jira.fields.comment.comments:
-        # Can't test Jira server so can't be sure this works for everyone, wrapping in a try just
-        # in case
         try:
-            comment_strs.append(comment.body)
-            # If this fails, we just assume it's ok to keep the comment
-            if comment.author.emailAddress in comment_email_blacklist:
-                comment_strs.pop()
-        except Exception:
-            pass
+            if hasattr(comment, "body"):
+                body_text = extract_text_from_content(comment.raw["body"])
+            elif hasattr(comment, "raw"):
+                body = comment.raw.get("body", "No body content available")
+                body_text = (
+                    extract_text_from_content(body) if isinstance(body, dict) else body
+                )
+            else:
+                body_text = "No body attribute found"
+
+            if (
+                hasattr(comment, "author")
+                and comment.author.emailAddress in comment_email_blacklist
+            ):
+                continue  # Skip adding comment if author's email is in blacklist
+
+            comment_strs.append(body_text)
+        except Exception as e:
+            logger.error(f"Failed to process comment due to an error: {e}")
+            continue
+
     return comment_strs
 
 

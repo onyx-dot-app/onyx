@@ -3,6 +3,8 @@ import { CCPairBasicInfo, DocumentSet, User } from "../types";
 import { getCurrentUserSS } from "../userSS";
 import { fetchSS } from "../utilsSS";
 import { FullLLMProvider } from "@/app/admin/models/llm/interfaces";
+import { ToolSnapshot } from "../tools/interfaces";
+import { fetchToolsSS } from "../tools/fetchTools";
 
 export async function fetchAssistantEditorInfoSS(
   personaId?: number | string
@@ -14,6 +16,7 @@ export async function fetchAssistantEditorInfoSS(
         llmProviders: FullLLMProvider[];
         user: User | null;
         existingPersona: Persona | null;
+        tools: ToolSnapshot[];
       },
       null,
     ]
@@ -26,6 +29,7 @@ export async function fetchAssistantEditorInfoSS(
     // duplicate fetch, but shouldn't be too big of a deal
     // this page is not a high traffic page
     getCurrentUserSS(),
+    fetchToolsSS(),
   ];
   if (personaId) {
     tasks.push(fetchSS(`/persona/${personaId}`));
@@ -38,12 +42,14 @@ export async function fetchAssistantEditorInfoSS(
     documentSetsResponse,
     llmProvidersResponse,
     user,
+    toolsResponse,
     personaResponse,
   ] = (await Promise.all(tasks)) as [
     Response,
     Response,
     Response,
     User | null,
+    ToolSnapshot[] | null,
     Response | null,
   ];
 
@@ -62,6 +68,10 @@ export async function fetchAssistantEditorInfoSS(
     ];
   }
   const documentSets = (await documentSetsResponse.json()) as DocumentSet[];
+
+  if (!toolsResponse) {
+    return [null, `Failed to fetch tools`];
+  }
 
   if (!llmProvidersResponse.ok) {
     return [
@@ -85,6 +95,7 @@ export async function fetchAssistantEditorInfoSS(
       llmProviders,
       user,
       existingPersona,
+      tools: toolsResponse,
     },
     null,
   ];

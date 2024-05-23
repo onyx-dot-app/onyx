@@ -1,0 +1,19 @@
+{{- if and .Values.persistence.api.connector.enabled}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "danswer-stack.fullname" . }}-bg-connector
+  labels:
+    {{- include "danswer-stack.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- range .Values.persistence.background.connector.accessModes }}
+    - {{ . | quote }}
+    {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.background.connector.size | quote }}
+  {{- with .Values.persistence.background.connector.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}

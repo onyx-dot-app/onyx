@@ -67,7 +67,6 @@ export function DocumentSidebar({
       flex-col
       w-full
       h-screen
-      ${HEADER_PADDING}
       `}
       id="document-sidebar"
     >

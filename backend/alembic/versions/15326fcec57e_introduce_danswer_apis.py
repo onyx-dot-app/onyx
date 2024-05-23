@@ -13,8 +13,8 @@ from danswer.configs.constants import DocumentSource
 # revision identifiers, used by Alembic.
 revision = "15326fcec57e"
 down_revision = "77d07dffae64"
-branch_labels = None
-depends_on = None
+branch_labels: None = None
+depends_on: None = None
 
 
 def upgrade() -> None:
