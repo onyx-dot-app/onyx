@@ -170,7 +170,7 @@ const Page = () => {
     return <LoadingAnimation text="Loading" />;
   }
 
-  const pages = Object.keys(config_json?.pages) || [];
+  const pages = Object.keys(config_json?.pages || {}) || [];
   return (
     <>
     <div className="mb-8">
