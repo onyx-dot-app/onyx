@@ -125,15 +125,12 @@ class SharepointConnector(LoadConnector, PollConnector):
 
         site_object_list: list[Site] = []
 
-        sites_object = self.graph_client.sites.get().execute_query()
-
         if len(self.requested_site_list) > 0:
             for requested_site in self.requested_site_list:
-                adjusted_string = "/" + requested_site.replace(" ", "")
-                for site_object in sites_object:
-                    if site_object.web_url.endswith(adjusted_string):
-                        site_object_list.append(site_object)
+                site_object = self.graph_client.sites.get_by_url(requested_site)
+                site_object_list.append(site_object)
         else:
+            sites_object = self.graph_client.sites.get().execute_query()
             site_object_list.extend(sites_object)
 
         return site_object_list
