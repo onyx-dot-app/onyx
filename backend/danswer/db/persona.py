@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from danswer.db.chat import check_user_can_edit_persona
 from danswer.db.chat import get_prompts_by_ids
 from danswer.db.chat import upsert_persona
 from danswer.db.document_set import get_document_sets_by_ids
@@ -95,6 +96,39 @@ def create_update_persona(
         logger.exception("Failed to create persona")
         raise HTTPException(status_code=400, detail=str(e))
     return PersonaSnapshot.from_model(persona)
+
+
+def update_persona_shared_users(
+    persona_id: int,
+    user_ids: list[UUID],
+    user: User | None,
+    db_session: Session,
+) -> None:
+    """Simplified version of `create_update_persona` which only touches the
+    accessibility rather than any of the logic (e.g. prompt, connected data sources,
+    etc.)."""
+    persona = fetch_persona_by_id(db_session=db_session, persona_id=persona_id)
+    if not persona:
+        raise HTTPException(
+            status_code=404, detail=f"Persona with ID {persona_id} not found"
+        )
+
+    check_user_can_edit_persona(user=user, persona=persona)
+
+    if persona.is_public:
+        raise HTTPException(status_code=400, detail="Cannot share public persona")
+
+    versioned_make_persona_private = fetch_versioned_implementation(
+        "danswer.db.persona", "make_persona_private"
+    )
+
+    # Privatize Persona
+    versioned_make_persona_private(
+        persona_id=persona_id,
+        user_ids=user_ids,
+        group_ids=None,
+        db_session=db_session,
+    )
 
 
 def fetch_persona_by_id(db_session: Session, persona_id: int) -> Persona | None:

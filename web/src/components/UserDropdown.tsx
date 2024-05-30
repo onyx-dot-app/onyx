@@ -1,18 +1,14 @@
-import { useState, useRef, useEffect } from "react";
-import {
-  FiSearch,
-  FiMessageSquare,
-  FiTool,
-  FiLogOut,
-  FiMoreHorizontal,
-} from "react-icons/fi";
+"use client";
+
+import { useState, useRef } from "react";
+import { FiSearch, FiMessageSquare, FiTool, FiLogOut } from "react-icons/fi";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { User } from "@/lib/types";
-import { logout } from "@/lib/user";
+import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import { BasicSelectable } from "@/components/BasicClickable";
-import { DefaultDropdown } from "./Dropdown";
 import { Popover } from "./popover/Popover";
+import { FaBrain } from "react-icons/fa";
 
 export function UserDropdown({
   user,
@@ -35,6 +31,7 @@ export function UserDropdown({
   };
 
   const showAdminPanel = !user || user.role === "admin";
+  const showLogout = user && !checkUserIsNoAuthUser(user.id);
 
   return (
     <div className="relative" ref={userInfoRef}>
@@ -88,6 +85,13 @@ export function UserDropdown({
                   <FiMessageSquare className="my-auto mr-2 text-lg" />
                   Danswer Chat
                 </Link>
+                <Link
+                  href="/assistants/mine"
+                  className="flex py-3 px-4 rounded cursor-pointer hover:bg-hover-light"
+                >
+                  <FaBrain className="my-auto mr-2 text-lg" />
+                  My Assistants
+                </Link>
               </>
             )}
             {showAdminPanel && (
@@ -104,7 +108,7 @@ export function UserDropdown({
                 </Link>
               </>
             )}
-            {user && (
+            {showLogout && (
               <>
                 {(!hideChatAndSearch || showAdminPanel) && (
                   <div className="border-t border-border my-1" />

@@ -1,11 +1,10 @@
 import { Card } from "@tremor/react";
 import { HeaderWrapper } from "@/components/header/HeaderWrapper";
-import { FiChevronLeft } from "react-icons/fi";
-import Link from "next/link";
 import { AssistantEditor } from "@/app/admin/assistants/AssistantEditor";
 import { SuccessfulPersonaUpdateRedirectType } from "@/app/admin/assistants/enums";
 import { fetchAssistantEditorInfoSS } from "@/lib/assistants/fetchPersonaEditorInfoSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
+import { LargeBackButton } from "../LargeBackButton";
 
 export default async function Page() {
   const [values, error] = await fetchAssistantEditorInfoSS();
@@ -27,6 +26,7 @@ export default async function Page() {
                 {...values}
                 defaultPublic={false}
                 redirectType={SuccessfulPersonaUpdateRedirectType.CHAT}
+                shouldAddAssistantToUserPreferences={true}
               />
             </Card>
           </div>
@@ -40,12 +40,7 @@ export default async function Page() {
       <HeaderWrapper>
         <div className="h-full flex flex-col">
           <div className="flex my-auto">
-            <Link href="/chat">
-              <FiChevronLeft
-                className="mr-1 my-auto p-1 hover:bg-hover rounded cursor-pointer"
-                size={32}
-              />
-            </Link>
+            <LargeBackButton />
             <h1 className="flex text-xl text-strong font-bold my-auto">
               New Assistant
             </h1>

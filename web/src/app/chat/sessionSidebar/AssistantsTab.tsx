@@ -57,7 +57,8 @@ export function AssistantsTab({
   const globalAssistants = personas.filter((persona) => persona.is_public);
   const personalAssistants = personas.filter(
     (persona) =>
-      (!user || persona.users.includes(user.id)) && !persona.is_public
+      (!user || persona.users.some((u) => u.id === user.id)) &&
+      !persona.is_public
   );
 
   return (

@@ -108,6 +108,19 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, native_enum=False, default=UserRole.BASIC)
     )
+
+    """
+    Preferences probably should be in a separate table at some point, but for now
+    putting here for simpicity
+    """
+
+    # if specified, controls the assistants that are shown to the user + their order
+    # if not specified, all assistants are shown
+    chosen_assistants: Mapped[list[int]] = mapped_column(
+        postgresql.ARRAY(Integer), nullable=True
+    )
+
+    # relationships
     credentials: Mapped[list["Credential"]] = relationship(
         "Credential", back_populates="user", lazy="joined"
     )

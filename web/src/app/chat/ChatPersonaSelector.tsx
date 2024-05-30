@@ -2,8 +2,8 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { FiCheck, FiChevronDown, FiPlusSquare, FiEdit } from "react-icons/fi";
 import { CustomDropdown, DefaultDropdownElement } from "@/components/Dropdown";
 import { useRouter } from "next/navigation";
-import { Divider } from "@tremor/react";
 import Link from "next/link";
+import { checkUserIdOwnsAssistant } from "@/lib/assistants/checkOwnership";
 
 function PersonaItem({
   id,
@@ -95,7 +95,7 @@ export function ChatPersonaSelector({
         >
           {personas.map((persona) => {
             const isSelected = persona.id === selectedPersonaId;
-            const isOwner = persona.owner?.id === userId;
+            const isOwner = checkUserIdOwnsAssistant(userId, persona);
             return (
               <PersonaItem
                 key={persona.id}

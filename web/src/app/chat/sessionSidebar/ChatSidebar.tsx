@@ -1,6 +1,6 @@
 "use client";
 
-import { FiEdit, FiFolderPlus, FiPlusSquare } from "react-icons/fi";
+import { FiBook, FiEdit, FiFolderPlus, FiPlusSquare } from "react-icons/fi";
 import { useContext, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -15,6 +15,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 import React from "react";
+import { FaBrain } from "react-icons/fa";
 
 export const ChatSidebar = ({
   existingChats,
@@ -119,6 +120,14 @@ export const ChatSidebar = ({
             </BasicClickable>
           </div>
         </div>
+
+        <Link href="/assistants/mine" className="mt-3 mb-1 mx-3">
+          <BasicClickable fullWidth>
+            <div className="flex items-center text-default font-medium">
+              <FaBrain className="ml-1 mr-2" /> Manage Assistants
+            </div>
+          </BasicClickable>
+        </Link>
 
         <div className="border-b border-border pb-4 mx-3" />
 

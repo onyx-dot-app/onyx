@@ -17,7 +17,7 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/docs/oauth2-redirect", {"GET", "HEAD"}),
     ("/redoc", {"GET", "HEAD"}),
     # should always be callable, will just return 401 if not authenticated
-    ("/manage/me", {"GET"}),
+    ("/me", {"GET"}),
     # just returns 200 to validate that the server is up
     ("/health", {"GET"}),
     # just returns auth type, needs to be accessible before the user is logged

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import { Modal } from "../../../../components/Modal";
 import { FilterManager, LlmOverrideManager } from "@/lib/hooks";
 import { FiltersTab } from "./FiltersTab";

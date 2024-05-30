@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from functools import lru_cache
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import not_
@@ -398,6 +399,23 @@ def get_persona_by_id(
     return persona
 
 
+def check_user_can_edit_persona(user: User | None, persona: Persona) -> None:
+    # if user is None, assume that no-auth is turned on
+    if user is None:
+        return
+
+    # admins can edit everything
+    if user.role == UserRole.ADMIN:
+        return
+
+    # otherwise, make sure user owns persona
+    if persona.user_id != user.id:
+        raise HTTPException(
+            status_code=403,
+            detail=f"User not authorized to edit persona with ID {persona.id}",
+        )
+
+
 def get_prompts_by_ids(prompt_ids: list[int], db_session: Session) -> Sequence[Prompt]:
     """Unsafe, can fetch prompts from all users"""
     if not prompt_ids:
@@ -542,6 +560,8 @@ def upsert_persona(
     if persona:
         if not default_persona and persona.default_persona:
             raise ValueError("Cannot update default persona with non-default.")
+
+        check_user_can_edit_persona(user=user, persona=persona)
 
         persona.name = name
         persona.description = description

@@ -121,7 +121,7 @@ export const logoutSS = async (
 
 export const getCurrentUserSS = async (): Promise<User | null> => {
   try {
-    const response = await fetch(buildUrl("/manage/me"), {
+    const response = await fetch(buildUrl("/me"), {
       credentials: "include",
       next: { revalidate: 0 },
       headers: {
