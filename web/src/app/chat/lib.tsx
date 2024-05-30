@@ -10,6 +10,7 @@ import {
   BackendMessage,
   ChatSession,
   DocumentsResponse,
+  FileDescriptor,
   ImageGenerationDisplay,
   Message,
   RetrievalType,
@@ -49,7 +50,7 @@ export async function createChatSession(
 
 export async function* sendMessage({
   message,
-  fileIds,
+  fileDescriptors,
   parentMessageId,
   chatSessionId,
   promptId,
@@ -64,7 +65,7 @@ export async function* sendMessage({
   useExistingUserMessage,
 }: {
   message: string;
-  fileIds: string[];
+  fileDescriptors: FileDescriptor[];
   parentMessageId: number | null;
   chatSessionId: number;
   promptId: number | null | undefined;
@@ -95,7 +96,7 @@ export async function* sendMessage({
       message: message,
       prompt_id: promptId,
       search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
-      file_ids: fileIds,
+      file_descriptors: fileDescriptors,
       retrieval_options: !documentsAreSelected
         ? {
             run_search:
@@ -529,7 +530,7 @@ export function buildChatUrl(
 
 export async function uploadFilesForChat(
   files: File[]
-): Promise<[string[], string | null]> {
+): Promise<[FileDescriptor[], string | null]> {
   const formData = new FormData();
   files.forEach((file) => {
     formData.append("files", file);
@@ -544,5 +545,5 @@ export async function uploadFilesForChat(
   }
   const responseJson = await response.json();
 
-  return [responseJson.file_ids as string[], null];
+  return [responseJson.files as FileDescriptor[], null];
 }

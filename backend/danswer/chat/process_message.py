@@ -14,8 +14,10 @@ from danswer.chat.models import LLMRelevanceFilterResponse
 from danswer.chat.models import QADocsResponse
 from danswer.chat.models import StreamingError
 from danswer.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
+from danswer.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from danswer.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from danswer.configs.constants import MessageType
+from danswer.db.chat import attach_files_to_chat_message
 from danswer.db.chat import create_db_search_doc
 from danswer.db.chat import create_new_chat_message
 from danswer.db.chat import get_chat_message
@@ -133,6 +135,7 @@ def _check_should_force_search(
             and new_msg_req.retrieval_options.run_search == OptionalSearchSetting.ALWAYS
         )
         or new_msg_req.search_doc_ids
+        or DISABLE_LLM_CHOOSE_SEARCH
     ):
         args = (
             {"query": new_msg_req.query_override}
@@ -240,6 +243,7 @@ def stream_chat_message_objects(
         else:
             parent_message = root_message
 
+        user_message = None
         if not use_existing_user_message:
             # Create new message at the right place in the tree and update the parent's child pointer
             # Don't commit yet until we verify the chat message chain
@@ -250,10 +254,7 @@ def stream_chat_message_objects(
                 message=message_text,
                 token_count=len(llm_tokenizer_encode_func(message_text)),
                 message_type=MessageType.USER,
-                files=[
-                    {"id": str(file_id), "type": ChatFileType.IMAGE}
-                    for file_id in new_msg_req.file_ids
-                ],
+                files=None,  # Need to attach later for optimization to only load files once in parallel
                 db_session=db_session,
                 commit=False,
             )
@@ -283,10 +284,23 @@ def stream_chat_message_objects(
                 )
 
         # load all files needed for this chat chain in memory
-        files = load_all_chat_files(history_msgs, new_msg_req.file_ids, db_session)
+        files = load_all_chat_files(
+            history_msgs, new_msg_req.file_descriptors, db_session
+        )
         latest_query_files = [
-            file for file in files if file.file_id in new_msg_req.file_ids
+            file
+            for file in files
+            if file.file_id in [f["id"] for f in new_msg_req.file_descriptors]
         ]
+
+        if user_message:
+            attach_files_to_chat_message(
+                chat_message=user_message,
+                files=[
+                    new_file.to_file_descriptor() for new_file in latest_query_files
+                ],
+                db_session=db_session,
+            )
 
         selected_db_search_docs = None
         selected_llm_docs: list[LlmDoc] | None = None

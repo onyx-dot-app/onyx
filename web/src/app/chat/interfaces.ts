@@ -20,9 +20,18 @@ export interface RetrievalDetails {
 
 type CitationMap = { [key: string]: number };
 
+export enum ChatFileType {
+  IMAGE = "image",
+  DOCUMENT = "document",
+  PLAIN_TEXT = "plain_text",
+}
+
 export interface FileDescriptor {
   id: string;
-  type: "image";
+  type: ChatFileType;
+  name?: string | null;
+  // FE only
+  isUploading?: boolean;
 }
 
 export interface ChatSession {

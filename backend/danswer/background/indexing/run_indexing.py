@@ -160,19 +160,19 @@ def _run_indexing(
             source_type=db_connector.source,
         )
     ):
-        window_start = max(
-            window_start - timedelta(minutes=POLL_CONNECTOR_OFFSET),
-            datetime(1970, 1, 1, tzinfo=timezone.utc),
-        )
-
-        doc_batch_generator, is_listing_complete = _get_document_generator(
-            db_session=db_session,
-            attempt=index_attempt,
-            start_time=window_start,
-            end_time=window_end,
-        )
-
         try:
+            window_start = max(
+                window_start - timedelta(minutes=POLL_CONNECTOR_OFFSET),
+                datetime(1970, 1, 1, tzinfo=timezone.utc),
+            )
+
+            doc_batch_generator, is_listing_complete = _get_document_generator(
+                db_session=db_session,
+                attempt=index_attempt,
+                start_time=window_start,
+                end_time=window_end,
+            )
+
             all_connector_doc_ids: set[str] = set()
             for doc_batch in doc_batch_generator:
                 # Check if connector is disabled mid run and stop if so unless it's the secondary
@@ -263,7 +263,6 @@ def _run_indexing(
                     db_session=db_session,
                     connector_id=db_connector.id,
                     credential_id=db_credential.id,
-                    attempt_status=IndexingStatus.IN_PROGRESS,
                     net_docs=net_doc_change,
                     run_dt=run_end_dt,
                 )
@@ -294,7 +293,6 @@ def _run_indexing(
                         db_session=db_session,
                         connector_id=index_attempt.connector.id,
                         credential_id=index_attempt.credential.id,
-                        attempt_status=IndexingStatus.FAILED,
                         net_docs=net_doc_change,
                     )
                 raise e
@@ -309,7 +307,6 @@ def _run_indexing(
             db_session=db_session,
             connector_id=db_connector.id,
             credential_id=db_credential.id,
-            attempt_status=IndexingStatus.SUCCESS,
             run_dt=run_end_dt,
         )
 
@@ -343,15 +340,7 @@ def _prepare_index_attempt(db_session: Session, index_attempt_id: int) -> IndexA
 
     # only commit once, to make sure this all happens in a single transaction
     mark_attempt_in_progress__no_commit(attempt)
-    is_primary = attempt.embedding_model.status == IndexModelStatus.PRESENT
-    if is_primary:
-        update_connector_credential_pair(
-            db_session=db_session,
-            connector_id=attempt.connector.id,
-            credential_id=attempt.credential.id,
-            attempt_status=IndexingStatus.IN_PROGRESS,
-        )
-    else:
+    if attempt.embedding_model.status != IndexModelStatus.PRESENT:
         db_session.commit()
 
     return attempt

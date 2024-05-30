@@ -96,6 +96,8 @@ class DocumentSource(str, Enum):
     SHAREPOINT = "sharepoint"
     DISCOURSE = "discourse"
     AXERO = "axero"
+    MEDIAWIKI = "mediawiki"
+    WIKIPEDIA = "wikipedia"
 
 
 class DocumentIndexType(str, Enum):
@@ -130,3 +132,10 @@ class TokenRateLimitScope(str, Enum):
     USER = "user"
     USER_GROUP = "user_group"
     GLOBAL = "global"
+
+
+class FileOrigin(str, Enum):
+    CHAT_UPLOAD = "chat_upload"
+    CHAT_IMAGE_GEN = "chat_image_gen"
+    CONNECTOR = "connector"
+    OTHER = "other"

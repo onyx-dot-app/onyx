@@ -4,6 +4,7 @@ from typing import IO
 
 from sqlalchemy.orm import Session
 
+from danswer.configs.constants import FileOrigin
 from danswer.db.pg_file_store import create_populate_lobj
 from danswer.db.pg_file_store import delete_lobj_by_id
 from danswer.db.pg_file_store import delete_pgfilestore_by_file_name
@@ -18,7 +19,14 @@ class FileStore(ABC):
     """
 
     @abstractmethod
-    def save_file(self, file_name: str, content: IO) -> None:
+    def save_file(
+        self,
+        file_name: str,
+        content: IO,
+        display_name: str | None,
+        file_origin: FileOrigin,
+        file_type: str,
+    ) -> None:
         """
         Save a file to the blob store
 
@@ -26,6 +34,9 @@ class FileStore(ABC):
         - connector_name: Name of the CC-Pair (as specified by the user in the UI)
         - file_name: Name of the file to save
         - content: Contents of the file
+        - display_name: Display name of the file
+        - file_origin: Origin of the file
+        - file_type: Type of the file
         """
         raise NotImplementedError
 
@@ -55,13 +66,25 @@ class PostgresBackedFileStore(FileStore):
     def __init__(self, db_session: Session):
         self.db_session = db_session
 
-    def save_file(self, file_name: str, content: IO) -> None:
+    def save_file(
+        self,
+        file_name: str,
+        content: IO,
+        display_name: str | None,
+        file_origin: FileOrigin,
+        file_type: str,
+    ) -> None:
         try:
-            # The large objects in postgres are saved as special objects can can be listed with
+            # The large objects in postgres are saved as special objects can be listed with
             # SELECT * FROM pg_largeobject_metadata;
             obj_id = create_populate_lobj(content=content, db_session=self.db_session)
             upsert_pgfilestore(
-                file_name=file_name, lobj_oid=obj_id, db_session=self.db_session
+                file_name=file_name,
+                display_name=display_name or file_name,
+                file_origin=file_origin,
+                file_type=file_type,
+                lobj_oid=obj_id,
+                db_session=self.db_session,
             )
             self.db_session.commit()
         except Exception:

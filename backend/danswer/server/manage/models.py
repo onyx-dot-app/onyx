@@ -117,7 +117,9 @@ class SlackBotConfig(BaseModel):
         return cls(
             id=slack_bot_config_model.id,
             persona=(
-                PersonaSnapshot.from_model(slack_bot_config_model.persona)
+                PersonaSnapshot.from_model(
+                    slack_bot_config_model.persona, allow_deleted=True
+                )
                 if slack_bot_config_model.persona
                 else None
             ),

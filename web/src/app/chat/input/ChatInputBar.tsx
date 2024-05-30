@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { FiSend, FiFilter, FiPlusCircle, FiCpu } from "react-icons/fi";
 import ChatInputOption from "./ChatInputOption";
 import { FaBrain } from "react-icons/fa";
@@ -7,7 +7,10 @@ import { FilterManager, LlmOverride, LlmOverrideManager } from "@/lib/hooks";
 import { SelectedFilterDisplay } from "./SelectedFilterDisplay";
 import { useChatContext } from "@/components/context/ChatContext";
 import { getFinalLLM } from "@/lib/llm/utils";
-import { InputBarPreviewImage } from "../images/InputBarPreviewImage";
+import { FileDescriptor } from "../interfaces";
+import { InputBarPreview } from "../files/InputBarPreview";
+
+const MAX_INPUT_HEIGHT = 200;
 
 export function ChatInputBar({
   message,
@@ -19,10 +22,11 @@ export function ChatInputBar({
   filterManager,
   llmOverrideManager,
   selectedAssistant,
-  fileIds,
-  setFileIds,
+  files,
+  setFiles,
   handleFileUpload,
   setConfigModalActiveTab,
+  textAreaRef,
 }: {
   message: string;
   setMessage: (message: string) => void;
@@ -33,12 +37,23 @@ export function ChatInputBar({
   filterManager: FilterManager;
   llmOverrideManager: LlmOverrideManager;
   selectedAssistant: Persona;
-  fileIds: string[];
-  setFileIds: (fileIds: string[]) => void;
+  files: FileDescriptor[];
+  setFiles: (files: FileDescriptor[]) => void;
   handleFileUpload: (files: File[]) => void;
   setConfigModalActiveTab: (tab: string) => void;
+  textAreaRef: React.RefObject<HTMLTextAreaElement>;
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // handle re-sizing of the text area
+  useEffect(() => {
+    const textarea = textAreaRef.current;
+    if (textarea) {
+      textarea.style.height = "0px";
+      textarea.style.height = `${Math.min(
+        textarea.scrollHeight,
+        MAX_INPUT_HEIGHT
+      )}px`;
+    }
+  }, [message]);
 
   const { llmProviders } = useChatContext();
   const [_, llmName] = getFinalLLM(llmProviders, selectedAssistant);
@@ -63,60 +78,65 @@ export function ChatInputBar({
           </div>
           <div
             className="
-            opacity-100
-            w-full
-            h-fit
-            flex
-            flex-col
-            border
-            border-border
-            rounded-lg
-            bg-background
-            [&:has(textarea:focus)]::ring-1
-            [&:has(textarea:focus)]::ring-black
-          "
+              opacity-100
+              w-full
+              h-fit
+              flex
+              flex-col
+              border
+              border-border
+              rounded-lg
+              bg-background
+              [&:has(textarea:focus)]::ring-1
+              [&:has(textarea:focus)]::ring-black
+            "
           >
-            {fileIds.length > 0 && (
-              <div className="flex flex-wrap gap-y-2 px-1">
-                {fileIds.map((fileId) => (
-                  <div key={fileId} className="py-1">
-                    <InputBarPreviewImage
-                      fileId={fileId}
+            {files.length > 0 && (
+              <div className="flex flex-wrap gap-y-1 gap-x-2 px-2 pt-2">
+                {files.map((file) => (
+                  <div key={file.id}>
+                    <InputBarPreview
+                      file={file}
                       onDelete={() => {
-                        setFileIds(fileIds.filter((id) => id !== fileId));
+                        setFiles(
+                          files.filter(
+                            (fileInFilter) => fileInFilter.id !== file.id
+                          )
+                        );
                       }}
+                      isUploading={file.isUploading || false}
                     />
                   </div>
                 ))}
               </div>
             )}
             <textarea
-              ref={textareaRef}
-              className="
-              m-0
-              w-full
-              shrink
-              resize-none
-              border-0
-              bg-transparent
-              ${
-                textareaRef.current &&
-                textareaRef.current.scrollHeight > 200
-                  ? 'overflow-y-auto'
-                  : ''
-              }
-              whitespace-normal
-              break-word
-              overscroll-contain
-              outline-none
-              placeholder-gray-400
-              overflow-hidden
-              resize-none
-              pl-4
-              pr-12
-              py-4
-              h-14
-            "
+              ref={textAreaRef}
+              className={`
+                m-0
+                w-full
+                shrink
+                resize-none
+                border-0
+                bg-transparent
+                ${
+                  textAreaRef.current &&
+                  textAreaRef.current.scrollHeight > MAX_INPUT_HEIGHT
+                    ? "overflow-y-auto mt-2"
+                    : ""
+                }
+                whitespace-normal
+                break-word
+                overscroll-contain
+                outline-none
+                placeholder-gray-400
+                overflow-hidden
+                resize-none
+                pl-4
+                pr-12
+                py-4
+                h-14
+              `}
               autoFocus
               style={{ scrollbarWidth: "thin" }}
               role="textarea"

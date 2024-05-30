@@ -17,8 +17,6 @@ from danswer.configs.app_configs import DASK_JOB_CLIENT_ENABLED
 from danswer.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from danswer.configs.app_configs import NUM_INDEXING_WORKERS
 from danswer.db.connector import fetch_connectors
-from danswer.db.connector_credential_pair import mark_all_in_progress_cc_pairs_failed
-from danswer.db.connector_credential_pair import update_connector_credential_pair
 from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.embedding_model import get_secondary_db_embedding_model
 from danswer.db.engine import get_db_current_time
@@ -119,17 +117,6 @@ def _mark_run_failed(
         db_session=db_session,
         failure_reason=failure_reason,
     )
-    if (
-        index_attempt.connector_id is not None
-        and index_attempt.credential_id is not None
-        and index_attempt.embedding_model.status == IndexModelStatus.PRESENT
-    ):
-        update_connector_credential_pair(
-            db_session=db_session,
-            connector_id=index_attempt.connector_id,
-            credential_id=index_attempt.credential_id,
-            attempt_status=IndexingStatus.FAILED,
-        )
 
 
 """Main funcs"""
@@ -191,16 +178,6 @@ def create_indexing_jobs(existing_jobs: dict[int, Future | SimpleJob]) -> None:
                     create_index_attempt(
                         connector.id, credential.id, model.id, db_session
                     )
-
-                    # CC-Pair will have the status that it should for the primary index
-                    # Will be re-sync-ed once the indices are swapped
-                    if model.status == IndexModelStatus.PRESENT:
-                        update_connector_credential_pair(
-                            db_session=db_session,
-                            connector_id=connector.id,
-                            credential_id=credential.id,
-                            attempt_status=IndexingStatus.NOT_STARTED,
-                        )
 
 
 def cleanup_indexing_jobs(
@@ -390,11 +367,6 @@ def update_loop(delay: int = 10, num_workers: int = NUM_INDEXING_WORKERS) -> Non
         client_secondary = SimpleJobClient(n_workers=num_workers)
 
     existing_jobs: dict[int, Future | SimpleJob] = {}
-
-    with Session(engine) as db_session:
-        # Previous version did not always clean up cc-pairs well leaving some connectors undeleteable
-        # This ensures that bad states get cleaned up
-        mark_all_in_progress_cc_pairs_failed(db_session)
 
     while True:
         start = time.time()

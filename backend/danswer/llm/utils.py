@@ -24,8 +24,10 @@ from danswer.configs.model_configs import GEN_AI_MAX_OUTPUT_TOKENS
 from danswer.configs.model_configs import GEN_AI_MAX_TOKENS
 from danswer.configs.model_configs import GEN_AI_MODEL_PROVIDER
 from danswer.db.models import ChatMessage
+from danswer.file_store.models import ChatFileType
 from danswer.file_store.models import InMemoryChatFile
 from danswer.llm.interfaces import LLM
+from danswer.prompts.constants import CODE_BLOCK_PAT
 from danswer.search.models import InferenceChunk
 from danswer.utils.logger import setup_logger
 from shared_configs.configs import LOG_LEVEL
@@ -113,23 +115,50 @@ def translate_history_to_basemessages(
     return history_basemessages, history_token_counts
 
 
+def _build_content(
+    message: str,
+    files: list[InMemoryChatFile] | None = None,
+) -> str:
+    """Applies all non-image files."""
+    text_files = (
+        [file for file in files if file.file_type == ChatFileType.PLAIN_TEXT]
+        if files
+        else None
+    )
+    if not text_files:
+        return message
+
+    final_message_with_files = "FILES:\n\n"
+    for file in text_files:
+        file_content = file.content.decode("utf-8")
+        file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""
+        final_message_with_files += (
+            f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
+        )
+    final_message_with_files += message
+
+    return final_message_with_files
+
+
 def build_content_with_imgs(
     message: str,
     files: list[InMemoryChatFile] | None = None,
     img_urls: list[str] | None = None,
 ) -> str | list[str | dict[str, Any]]:  # matching Langchain's BaseMessage content type
-    if not files and not img_urls:
-        return message
-
     files = files or []
+    img_files = [file for file in files if file.file_type == ChatFileType.IMAGE]
     img_urls = img_urls or []
+    message_main_content = _build_content(message, files)
+
+    if not img_files and not img_urls:
+        return message_main_content
 
     return cast(
         list[str | dict[str, Any]],
         [
             {
                 "type": "text",
-                "text": message,
+                "text": message_main_content,
             },
         ]
         + [

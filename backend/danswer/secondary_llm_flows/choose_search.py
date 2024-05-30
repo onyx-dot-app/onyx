@@ -3,6 +3,7 @@ from langchain.schema import HumanMessage
 from langchain.schema import SystemMessage
 
 from danswer.chat.chat_utils import combine_message_chain
+from danswer.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from danswer.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from danswer.db.models import ChatMessage
 from danswer.llm.answering.models import PreviousMessage
@@ -26,8 +27,8 @@ def check_if_need_search_multi_message(
     history: list[ChatMessage],
     llm: LLM,
 ) -> bool:
-    # Always start with a retrieval
-    if not history:
+    # Retrieve on start or when choosing is globally disabled
+    if not history or DISABLE_LLM_CHOOSE_SEARCH:
         return True
 
     prompt_msgs: list[BaseMessage] = [SystemMessage(content=REQUIRE_SEARCH_SYSTEM_MSG)]
@@ -64,6 +65,10 @@ def check_if_need_search(
         ]
 
         return messages
+
+    # Choosing is globally disabled, use search
+    if DISABLE_LLM_CHOOSE_SEARCH:
+        return True
 
     history_str = combine_message_chain(
         messages=history, token_limit=GEN_AI_HISTORY_CUTOFF

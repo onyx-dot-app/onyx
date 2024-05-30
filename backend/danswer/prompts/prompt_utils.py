@@ -9,18 +9,49 @@ from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.configs.constants import DocumentSource
 from danswer.db.models import Prompt
 from danswer.llm.answering.models import PromptConfig
+from danswer.prompts.chat_prompts import ADDITIONAL_INFO
 from danswer.prompts.chat_prompts import CITATION_REMINDER
 from danswer.prompts.constants import CODE_BLOCK_PAT
 from danswer.prompts.direct_qa_prompts import LANGUAGE_HINT
 from danswer.search.models import InferenceChunk
 
 
-def get_current_llm_day_time() -> str:
+MOST_BASIC_PROMPT = "You are a helpful AI assistant."
+DANSWER_DATETIME_REPLACEMENT = "DANSWER_DATETIME_REPLACEMENT"
+BASIC_TIME_STR = "The current date is {datetime_info}."
+
+
+def get_current_llm_day_time(
+    include_day_of_week: bool = True, full_sentence: bool = True
+) -> str:
     current_datetime = datetime.now()
     # Format looks like: "October 16, 2023 14:30"
     formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M")
     day_of_week = current_datetime.strftime("%A")
-    return f"The current day and time is {day_of_week} {formatted_datetime}"
+    if full_sentence:
+        return f"The current day and time is {day_of_week} {formatted_datetime}"
+    if include_day_of_week:
+        return f"{day_of_week} {formatted_datetime}"
+    return f"{formatted_datetime}"
+
+
+def add_time_to_system_prompt(system_prompt: str) -> str:
+    if DANSWER_DATETIME_REPLACEMENT in system_prompt:
+        return system_prompt.replace(
+            DANSWER_DATETIME_REPLACEMENT,
+            get_current_llm_day_time(full_sentence=False, include_day_of_week=True),
+        )
+
+    if system_prompt:
+        return system_prompt + ADDITIONAL_INFO.format(
+            datetime_info=get_current_llm_day_time()
+        )
+    else:
+        return (
+            MOST_BASIC_PROMPT
+            + " "
+            + BASIC_TIME_STR.format(datetime_info=get_current_llm_day_time())
+        )
 
 
 def build_task_prompt_reminders(

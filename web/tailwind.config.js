@@ -37,32 +37,62 @@ module.exports = {
         "document-sidebar": "1000px",
       },
       colors: {
+        // background
+        background: "#f9fafb", // gray-50
+        "background-emphasis": "#f6f7f8",
+        "background-strong": "#eaecef",
+        "background-search": "#ffffff",
+        "background-custom-header": "#f3f4f6",
+        "background-inverted": "#000000",
+
+        // text or icons
         link: "#3b82f6", // blue-500
+        "link-hover": "#1d4ed8", // blue-700
         subtle: "#6b7280", // gray-500
         default: "#4b5563", // gray-600
         emphasis: "#374151", // gray-700
         strong: "#111827", // gray-900
         inverted: "#ffffff", // white
-        background: "#f9fafb", // gray-50
-        "background-emphasis": "#f6f7f8",
-        "background-strong": "#eaecef",
-        border: "#e5e7eb", // gray-200
-        "border-light": "#f3f4f6", // gray-100
-        "border-strong": "#9ca3af", // gray-400
-        "hover-light": "#f3f4f6", // gray-100
-        hover: "#e5e7eb", // gray-200
-        "hover-emphasis": "#d1d5db", // gray-300
-        popup: "#ffffff", // white
-        accent: "#6671d0",
-        "accent-hover": "#5964c2",
-        highlight: {
-          text: "#fef9c3", // yellow-100
-        },
         error: "#ef4444", // red-500
         success: "#059669", // emerald-600
         alert: "#f59e0b", // amber-600
+        accent: "#6671d0",
+
+        // borders
+        border: "#e5e7eb", // gray-200
+        "border-light": "#f3f4f6", // gray-100
+        "border-strong": "#9ca3af", // gray-400
+
+        // hover
+        "hover-light": "#f3f4f6", // gray-100
+        hover: "#e5e7eb", // gray-200
+        "hover-emphasis": "#d1d5db", // gray-300
+        "accent-hover": "#5964c2",
+
+        // keyword highlighting
+        highlight: {
+          text: "#fef9c3", // yellow-100
+        },
+
+        // scrollbar
+        scrollbar: {
+          track: "#f9fafb",
+          thumb: "#e5e7eb",
+          "thumb-hover": "#d1d5db",
+
+          dark: {
+            thumb: "#989a9c",
+            "thumb-hover": "#c7cdd2",
+          },
+        },
+
+        // bubbles in chat for each "user"
         user: "#fb7185", // yellow-400
         ai: "#60a5fa", // blue-400
+
+        // for display documents
+        document: "#ec4899", // pink-500
+
         // light mode
         tremor: {
           brand: {

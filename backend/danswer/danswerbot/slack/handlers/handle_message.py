@@ -11,8 +11,10 @@ from retry import retry
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.models.blocks import DividerBlock
+from slack_sdk.models.blocks import SectionBlock
 from sqlalchemy.orm import Session
 
+from danswer.configs.app_configs import DISABLE_GENERATIVE_AI
 from danswer.configs.danswerbot_configs import DANSWER_BOT_ANSWER_GENERATION_TIMEOUT
 from danswer.configs.danswerbot_configs import DANSWER_BOT_DISABLE_COT
 from danswer.configs.danswerbot_configs import DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER
@@ -295,7 +297,7 @@ def handle_message(
         logger=logger,
     )
     @rate_limits(client=client, channel=channel, thread_ts=message_ts_to_respond_to)
-    def _get_answer(new_message_request: DirectQARequest) -> OneShotQAResponse:
+    def _get_answer(new_message_request: DirectQARequest) -> OneShotQAResponse | None:
         action = "slack_message"
         if is_bot_msg:
             action = "slack_slash_message"
@@ -339,6 +341,9 @@ def handle_message(
                         - 512  # Needs to be more than any of the QA prompts
                         - check_number_of_tokens(query_text)
                     )
+
+            if DISABLE_GENERATIVE_AI:
+                return None
 
             # This also handles creating the query event in postgres
             answer = get_search_answer(
@@ -421,6 +426,46 @@ def handle_message(
             logger.error(f"Failed to remove Reaction due to: {e}")
 
         return True
+
+    # Edge case handling, for tracking down the Slack usage issue
+    if answer is None:
+        assert DISABLE_GENERATIVE_AI is True
+        try:
+            respond_in_thread(
+                client=client,
+                channel=channel,
+                receiver_ids=send_to,
+                text="Hello! Danswer has some results for you!",
+                blocks=[
+                    SectionBlock(
+                        text="Danswer is down for maintenance.\nWe're working hard on recharging the AI!"
+                    )
+                ],
+                thread_ts=message_ts_to_respond_to,
+                # don't unfurl, since otherwise we will have 5+ previews which makes the message very long
+                unfurl=False,
+            )
+
+            # For DM (ephemeral message), we need to create a thread via a normal message so the user can see
+            # the ephemeral message. This also will give the user a notification which ephemeral message does not.
+            if respond_team_member_list:
+                respond_in_thread(
+                    client=client,
+                    channel=channel,
+                    text=(
+                        "👋 Hi, we've just gathered and forwarded the relevant "
+                        + "information to the team. They'll get back to you shortly!"
+                    ),
+                    thread_ts=message_ts_to_respond_to,
+                )
+
+            return False
+
+        except Exception:
+            logger.exception(
+                f"Unable to process message - could not respond in slack in {num_retries} attempts"
+            )
+            return True
 
     # Got an answer at this point, can remove reaction and give results
     try:

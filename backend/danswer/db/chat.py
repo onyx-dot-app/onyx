@@ -319,6 +319,17 @@ def set_as_latest_chat_message(
     db_session.commit()
 
 
+def attach_files_to_chat_message(
+    chat_message: ChatMessage,
+    files: list[FileDescriptor],
+    db_session: Session,
+    commit: bool = True,
+) -> None:
+    chat_message.files = files
+    if commit:
+        db_session.commit()
+
+
 def get_prompt_by_id(
     prompt_id: int,
     user: User | None,
@@ -606,6 +617,21 @@ def mark_persona_as_deleted(
     persona = get_persona_by_id(persona_id=persona_id, user=user, db_session=db_session)
     persona.deleted = True
     db_session.commit()
+
+
+def mark_persona_as_not_deleted(
+    persona_id: int,
+    user: User | None,
+    db_session: Session,
+) -> None:
+    persona = get_persona_by_id(
+        persona_id=persona_id, user=user, db_session=db_session, include_deleted=True
+    )
+    if persona.deleted:
+        persona.deleted = False
+        db_session.commit()
+    else:
+        raise ValueError(f"Persona with ID {persona_id} is not deleted.")
 
 
 def mark_delete_persona_by_name(

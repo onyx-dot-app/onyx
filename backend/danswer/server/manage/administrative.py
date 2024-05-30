@@ -175,7 +175,9 @@ def create_deletion_attempt_for_connector_id(
     )
 
     # Check if the deletion attempt should be allowed
-    deletion_attempt_disallowed_reason = check_deletion_attempt_is_allowed(cc_pair)
+    deletion_attempt_disallowed_reason = check_deletion_attempt_is_allowed(
+        connector_credential_pair=cc_pair, db_session=db_session
+    )
     if deletion_attempt_disallowed_reason:
         raise HTTPException(
             status_code=400,

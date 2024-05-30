@@ -86,6 +86,7 @@ class Answer:
         message_history: list[PreviousMessage] | None = None,
         single_message_history: str | None = None,
         # newly passed in files to include as part of this question
+        # TODO THIS NEEDS TO BE HANDLED
         latest_query_files: list[InMemoryChatFile] | None = None,
         files: list[InMemoryChatFile] | None = None,
         tools: list[Tool] | None = None,

@@ -24,6 +24,7 @@ CITATION_REMINDER_TOKEN_CNT = check_number_of_tokens(CITATION_REMINDER)
 
 LANGUAGE_HINT_TOKEN_CNT = check_number_of_tokens(LANGUAGE_HINT)
 
+# If the date/time is inserted directly as a replacement in the prompt, this is a slight over count
 ADDITIONAL_INFO_TOKEN_CNT = check_number_of_tokens(
     ADDITIONAL_INFO.format(datetime_info=get_current_llm_day_time())
 )

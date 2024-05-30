@@ -25,6 +25,8 @@ import {
   SlackIcon,
   ZendeskIcon,
   ZulipIcon,
+  MediaWikiIcon,
+  WikipediaIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
@@ -164,6 +166,16 @@ const SOURCE_METADATA_MAP: SourceMap = {
   axero: {
     icon: AxeroIcon,
     displayName: "Axero",
+    category: SourceCategory.AppConnection,
+  },
+  wikipedia: {
+    icon: WikipediaIcon,
+    displayName: "Wikipedia",
+    category: SourceCategory.AppConnection,
+  },
+  mediawiki: {
+    icon: MediaWikiIcon,
+    displayName: "MediaWiki",
     category: SourceCategory.AppConnection,
   },
   requesttracker: {

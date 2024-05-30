@@ -157,6 +157,7 @@ def prefilter_requests(req: SocketModeRequest, client: SocketModeClient) -> bool
             )
             return False
 
+    logger.debug(f"Handling Slack request with Payload: '{req.payload}'")
     return True
 
 

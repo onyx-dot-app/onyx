@@ -4,7 +4,6 @@ from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import desc
 from sqlalchemy import select
-from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from danswer.db.connector import fetch_connector_by_id
@@ -96,7 +95,6 @@ def update_connector_credential_pair(
     db_session: Session,
     connector_id: int,
     credential_id: int,
-    attempt_status: IndexingStatus,
     net_docs: int | None = None,
     run_dt: datetime | None = None,
 ) -> None:
@@ -107,13 +105,9 @@ def update_connector_credential_pair(
             f"and credential id {credential_id}"
         )
         return
-    cc_pair.last_attempt_status = attempt_status
     # simply don't update last_successful_index_time if run_dt is not specified
     # at worst, this would result in re-indexing documents that were already indexed
-    if (
-        attempt_status == IndexingStatus.SUCCESS
-        or attempt_status == IndexingStatus.IN_PROGRESS
-    ) and run_dt is not None:
+    if run_dt is not None:
         cc_pair.last_successful_index_time = run_dt
     if net_docs is not None:
         cc_pair.total_docs_indexed += net_docs
@@ -130,20 +124,6 @@ def delete_connector_credential_pair__no_commit(
         ConnectorCredentialPair.credential_id == credential_id,
     )
     db_session.execute(stmt)
-
-
-def mark_all_in_progress_cc_pairs_failed(
-    db_session: Session,
-) -> None:
-    stmt = (
-        update(ConnectorCredentialPair)
-        .where(
-            ConnectorCredentialPair.last_attempt_status == IndexingStatus.IN_PROGRESS
-        )
-        .values(last_attempt_status=IndexingStatus.FAILED)
-    )
-    db_session.execute(stmt)
-    db_session.commit()
 
 
 def associate_default_cc_pair(db_session: Session) -> None:
@@ -296,13 +276,5 @@ def resync_cc_pair(
     cc_pair.last_successful_index_time = (
         last_success.time_started if last_success else None
     )
-
-    last_run = find_latest_index_attempt(
-        connector_id=cc_pair.connector_id,
-        credential_id=cc_pair.credential_id,
-        only_include_success=False,
-        db_session=db_session,
-    )
-    cc_pair.last_attempt_status = last_run.status if last_run else None
 
     db_session.commit()

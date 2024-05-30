@@ -254,9 +254,12 @@ def file_io_to_text(file: IO[Any]) -> str:
 
 
 def extract_file_text(
-    file_name: str,
+    file_name: str | None,
     file: IO[Any],
 ) -> str:
+    if not file_name:
+        return file_io_to_text(file)
+
     extension = get_file_ext(file_name)
     if not check_file_ext_is_valid(extension):
         raise RuntimeError("Unprocessable file type")

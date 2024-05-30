@@ -4,6 +4,7 @@ from typing import IO
 from psycopg2.extensions import connection
 from sqlalchemy.orm import Session
 
+from danswer.configs.constants import FileOrigin
 from danswer.db.models import PGFileStore
 from danswer.utils.logger import setup_logger
 
@@ -48,7 +49,14 @@ def delete_lobj_by_id(
 
 
 def upsert_pgfilestore(
-    file_name: str, lobj_oid: int, db_session: Session, commit: bool = False
+    file_name: str,
+    display_name: str | None,
+    file_origin: FileOrigin,
+    file_type: str,
+    lobj_oid: int,
+    db_session: Session,
+    commit: bool = False,
+    file_metadata: dict | None = None,
 ) -> PGFileStore:
     pgfilestore = db_session.query(PGFileStore).filter_by(file_name=file_name).first()
 
@@ -65,7 +73,14 @@ def upsert_pgfilestore(
 
         pgfilestore.lobj_oid = lobj_oid
     else:
-        pgfilestore = PGFileStore(file_name=file_name, lobj_oid=lobj_oid)
+        pgfilestore = PGFileStore(
+            file_name=file_name,
+            display_name=display_name,
+            file_origin=file_origin,
+            file_type=file_type,
+            file_metadata=file_metadata,
+            lobj_oid=lobj_oid,
+        )
         db_session.add(pgfilestore)
 
     if commit:

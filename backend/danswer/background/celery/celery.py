@@ -68,7 +68,9 @@ def cleanup_connector_credential_pair_task(
                 f"{connector_id} and Credential ID: {credential_id} does not exist."
             )
 
-        deletion_attempt_disallowed_reason = check_deletion_attempt_is_allowed(cc_pair)
+        deletion_attempt_disallowed_reason = check_deletion_attempt_is_allowed(
+            connector_credential_pair=cc_pair, db_session=db_session
+        )
         if deletion_attempt_disallowed_reason:
             raise ValueError(deletion_attempt_disallowed_reason)
 

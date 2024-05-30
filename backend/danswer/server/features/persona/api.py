@@ -8,6 +8,7 @@ from danswer.auth.users import current_user
 from danswer.db.chat import get_persona_by_id
 from danswer.db.chat import get_personas
 from danswer.db.chat import mark_persona_as_deleted
+from danswer.db.chat import mark_persona_as_not_deleted
 from danswer.db.chat import update_all_personas_display_priority
 from danswer.db.chat import update_persona_visibility
 from danswer.db.engine import get_session
@@ -71,6 +72,19 @@ def list_personas_admin(
             include_deleted=include_deleted,
         )
     ]
+
+
+@admin_router.patch("/{persona_id}/undelete")
+def undelete_persona(
+    persona_id: int,
+    user: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    mark_persona_as_not_deleted(
+        persona_id=persona_id,
+        user=user,
+        db_session=db_session,
+    )
 
 
 """Endpoints for all"""

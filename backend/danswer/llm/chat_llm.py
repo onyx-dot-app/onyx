@@ -232,7 +232,25 @@ class DefaultMultiLLM(LLM):
     def _log_prompt(prompt: LanguageModelInput) -> None:
         if isinstance(prompt, list):
             for ind, msg in enumerate(prompt):
-                logger.debug(f"Message {ind}:\n{msg.content}")
+                if isinstance(msg, AIMessageChunk):
+                    if msg.content:
+                        log_msg = msg.content
+                    elif msg.tool_call_chunks:
+                        log_msg = "Tool Calls: " + str(
+                            [
+                                {
+                                    key: value
+                                    for key, value in tool_call.items()
+                                    if key != "index"
+                                }
+                                for tool_call in msg.tool_call_chunks
+                            ]
+                        )
+                    else:
+                        log_msg = ""
+                    logger.debug(f"Message {ind}:\n{log_msg}")
+                else:
+                    logger.debug(f"Message {ind}:\n{msg.content}")
         if isinstance(prompt, str):
             logger.debug(f"Prompt:\n{prompt}")
 
@@ -332,6 +350,24 @@ class DefaultMultiLLM(LLM):
 
             yield message_chunk
 
-        full_output = output.content if output else ""
-        if LOG_ALL_MODEL_INTERACTIONS:
-            logger.debug(f"Raw Model Output:\n{full_output}")
+        if LOG_ALL_MODEL_INTERACTIONS and output:
+            content = output.content or ""
+            if isinstance(output, AIMessage):
+                if content:
+                    log_msg = content
+                elif output.tool_calls:
+                    log_msg = "Tool Calls: " + str(
+                        [
+                            {
+                                key: value
+                                for key, value in tool_call.items()
+                                if key != "index"
+                            }
+                            for tool_call in output.tool_calls
+                        ]
+                    )
+                else:
+                    log_msg = ""
+                logger.debug(f"Raw Model Output:\n{log_msg}")
+            else:
+                logger.debug(f"Raw Model Output:\n{content}")

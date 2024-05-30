@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Any
-from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import root_validator
@@ -85,7 +84,7 @@ class CreateChatMessageRequest(ChunkContext):
     # New message contents
     message: str
     # file's that we should attach to this message
-    file_ids: list[UUID]
+    file_descriptors: list[FileDescriptor]
     # If no prompt provided, uses the largest prompt of the chat session
     # but really this should be explicitly specified, only in the simplified APIs is this inferred
     # Use prompt_id 0 to use the system default prompt which is Answer-Question

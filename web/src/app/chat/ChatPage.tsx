@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   BackendChatSession,
   BackendMessage,
-  ChatSession,
+  ChatFileType,
   ChatSessionSharedStatus,
   DocumentsResponse,
   FileDescriptor,
@@ -15,13 +15,10 @@ import {
   ToolRunKickoff,
 } from "./interfaces";
 import { ChatSidebar } from "./sessionSidebar/ChatSidebar";
-import { DocumentSet, Tag, User, ValidSources } from "@/lib/types";
 import { Persona } from "../admin/assistants/interfaces";
-import { Header } from "@/components/header/Header";
 import { Footer } from "@/components/Footer";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
-import { Settings } from "../admin/settings/interfaces";
 import {
   buildChatUrl,
   buildLatestMessageChain,
@@ -53,26 +50,21 @@ import { DanswerInitializingLoader } from "@/components/DanswerInitializingLoade
 import { FeedbackModal } from "./modal/FeedbackModal";
 import { ShareChatSessionModal } from "./modal/ShareChatSessionModal";
 import { ChatPersonaSelector } from "./ChatPersonaSelector";
-import { HEADER_PADDING } from "@/lib/constants";
-import { FiSend, FiShare2, FiStopCircle } from "react-icons/fi";
+import { FiShare2 } from "react-icons/fi";
 import { ChatIntro } from "./ChatIntro";
 import { AIMessage, HumanMessage } from "./message/Messages";
 import { ThreeDots } from "react-loader-spinner";
 import { StarterMessage } from "./StarterMessage";
-import { SelectedDocuments } from "./modifiers/SelectedDocuments";
-import { ChatFilters } from "./modifiers/ChatFilters";
 import { AnswerPiecePacket, DanswerDocument } from "@/lib/search/interfaces";
 import { buildFilters } from "@/lib/search/utils";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
-import { LLMProviderDescriptor } from "../admin/models/llm/interfaces";
 import { checkLLMSupportsImageInput, getFinalLLM } from "@/lib/llm/utils";
-import { InputBarPreviewImage } from "./images/InputBarPreviewImage";
-import { Folder } from "./folders/interfaces";
 import { ChatInputBar } from "./input/ChatInputBar";
 import { ConfigurationModal } from "./modal/configuration/ConfigurationModal";
 import { useChatContext } from "@/components/context/ChatContext";
 import { UserDropdown } from "@/components/UserDropdown";
+import { v4 as uuidv4 } from "uuid";
 
 const MAX_INPUT_HEIGHT = 200;
 const TEMP_USER_MESSAGE_ID = -1;
@@ -134,7 +126,7 @@ export function ChatPage({
   useEffect(() => {
     urlChatSessionId.current = existingChatSessionId;
 
-    textareaRef.current?.focus();
+    textAreaRef.current?.focus();
 
     // only clear things if we're going from one chat session to another
     if (chatSessionId !== null && existingChatSessionId !== chatSessionId) {
@@ -153,7 +145,7 @@ export function ChatPage({
       });
       llmOverrideManager.setTemperature(null);
       // remove uploaded files
-      setCurrentMessageFileIds([]);
+      setCurrentMessageFiles([]);
 
       if (isStreaming) {
         setIsCancelled(true);
@@ -320,9 +312,9 @@ export function ChatPage({
   const [isStreaming, setIsStreaming] = useState(false);
 
   // uploaded files
-  const [currentMessageFileIds, setCurrentMessageFileIds] = useState<string[]>(
-    []
-  );
+  const [currentMessageFiles, setCurrentMessageFiles] = useState<
+    FileDescriptor[]
+  >([]);
 
   // for document display
   // NOTE: -1 is a special designation that means the latest AI message
@@ -426,9 +418,9 @@ export function ChatPage({
   }, [isFetchingChatMessages]);
 
   // handle re-sizing of the text area
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
-    const textarea = textareaRef.current;
+    const textarea = textAreaRef.current;
     if (textarea) {
       textarea.style.height = "0px";
       textarea.style.height = `${Math.min(
@@ -531,10 +523,6 @@ export function ChatPage({
       (currMessageHistory.length > 0
         ? currMessageHistory[currMessageHistory.length - 1]
         : null);
-    const currFiles = currentMessageFileIds.map((id) => ({
-      id,
-      type: "image",
-    })) as FileDescriptor[];
 
     // if we're resending, set the parent's child to null
     // we will use tempMessages until the regenerated message is complete
@@ -543,7 +531,7 @@ export function ChatPage({
         messageId: TEMP_USER_MESSAGE_ID,
         message: currMessage,
         type: "user",
-        files: currFiles,
+        files: currentMessageFiles,
         parentMessageId: parentMessage?.messageId || null,
       },
     ];
@@ -565,7 +553,7 @@ export function ChatPage({
       parentMessage = frozenCompleteMessageMap.get(SYSTEM_MESSAGE_ID) || null;
     }
     setMessage("");
-    setCurrentMessageFileIds([]);
+    setCurrentMessageFiles([]);
 
     setIsStreaming(true);
     let answer = "";
@@ -583,7 +571,7 @@ export function ChatPage({
         getLastSuccessfulMessageId(currMessageHistory);
       for await (const packetBunch of sendMessage({
         message: currMessage,
-        fileIds: currentMessageFileIds,
+        fileDescriptors: currentMessageFiles,
         parentMessageId: lastSuccessfulMessageId,
         chatSessionId: currChatSessionId,
         promptId: livePersona?.prompts[0]?.id || 0,
@@ -631,7 +619,7 @@ export function ChatPage({
               (fileId) => {
                 return {
                   id: fileId,
-                  type: "image",
+                  type: ChatFileType.IMAGE,
                 };
               }
             );
@@ -665,7 +653,7 @@ export function ChatPage({
             messageId: newUserMessageId,
             message: currMessage,
             type: "user",
-            files: currFiles,
+            files: currentMessageFiles,
             parentMessageId: parentMessage?.messageId || null,
             childrenMessageIds: [newAssistantMessageId],
             latestChildMessageId: newAssistantMessageId,
@@ -695,7 +683,7 @@ export function ChatPage({
             messageId: TEMP_USER_MESSAGE_ID,
             message: currMessage,
             type: "user",
-            files: currFiles,
+            files: currentMessageFiles,
             parentMessageId: null,
           },
           {
@@ -772,10 +760,10 @@ export function ChatPage({
   const onPersonaChange = (persona: Persona | null) => {
     if (persona && persona.id !== livePersona.id) {
       // remove uploaded files
-      setCurrentMessageFileIds([]);
+      setCurrentMessageFiles([]);
 
       setSelectedPersona(persona);
-      textareaRef.current?.focus();
+      textAreaRef.current?.focus();
       router.push(buildChatUrl(searchParams, null, persona.id));
     }
   };
@@ -784,7 +772,10 @@ export function ChatPage({
     const llmAcceptsImages = checkLLMSupportsImageInput(
       ...getFinalLLM(llmProviders, livePersona)
     );
-    if (!llmAcceptsImages) {
+    const imageFiles = acceptedFiles.filter((file) =>
+      file.type.startsWith("image/")
+    );
+    if (imageFiles.length > 0 && !llmAcceptsImages) {
       setPopup({
         type: "error",
         message:
@@ -793,15 +784,35 @@ export function ChatPage({
       return;
     }
 
-    uploadFilesForChat(acceptedFiles).then(([fileIds, error]) => {
+    const tempFileDescriptors = acceptedFiles.map((file) => ({
+      id: uuidv4(),
+      type: file.type.startsWith("image/")
+        ? ChatFileType.IMAGE
+        : ChatFileType.DOCUMENT,
+      isUploading: true,
+    }));
+
+    // only show loading spinner for reasonably large files
+    const totalSize = acceptedFiles.reduce((sum, file) => sum + file.size, 0);
+    if (totalSize > 50 * 1024) {
+      setCurrentMessageFiles((prev) => [...prev, ...tempFileDescriptors]);
+    }
+
+    const removeTempFiles = (prev: FileDescriptor[]) => {
+      return prev.filter(
+        (file) => !tempFileDescriptors.some((newFile) => newFile.id === file.id)
+      );
+    };
+
+    uploadFilesForChat(acceptedFiles).then(([files, error]) => {
       if (error) {
+        setCurrentMessageFiles((prev) => removeTempFiles(prev));
         setPopup({
           type: "error",
           message: error,
         });
       } else {
-        const newFileIds = [...currentMessageFileIds, ...fileIds];
-        setCurrentMessageFileIds(newFileIds);
+        setCurrentMessageFiles((prev) => [...removeTempFiles(prev), ...files]);
       }
     });
   };
@@ -886,38 +897,40 @@ export function ChatPage({
                   >
                     {/* <input {...getInputProps()} /> */}
                     <div
-                      className={`w-full h-full pt-2 flex flex-col overflow-y-auto overflow-x-hidden relative`}
+                      className={`w-full h-full flex flex-col overflow-y-auto overflow-x-hidden relative`}
                       ref={scrollableDivRef}
                     >
                       {livePersona && (
-                        <div className="sticky top-0 left-80 z-10 w-full bg-background/90 flex">
-                          <div className="ml-2 p-1 rounded w-fit">
-                            <ChatPersonaSelector
-                              personas={availablePersonas}
-                              selectedPersonaId={livePersona.id}
-                              onPersonaChange={onPersonaChange}
-                              userId={user?.id}
-                            />
-                          </div>
+                        <div className="sticky top-0 left-80 z-10 w-full bg-background flex">
+                          <div className="mt-2 flex w-full">
+                            <div className="ml-2 p-1 rounded w-fit">
+                              <ChatPersonaSelector
+                                personas={availablePersonas}
+                                selectedPersonaId={livePersona.id}
+                                onPersonaChange={onPersonaChange}
+                                userId={user?.id}
+                              />
+                            </div>
 
-                          <div className="ml-auto mr-8 flex">
-                            {chatSessionId !== null && (
-                              <div
-                                onClick={() => setSharingModalVisible(true)}
-                                className={`
-                                my-auto
-                                p-2
-                                rounded
-                                cursor-pointer
-                                hover:bg-hover-light
-                              `}
-                              >
-                                <FiShare2 size="18" />
+                            <div className="ml-auto mr-8 flex">
+                              {chatSessionId !== null && (
+                                <div
+                                  onClick={() => setSharingModalVisible(true)}
+                                  className={`
+                                    my-auto
+                                    p-2
+                                    rounded
+                                    cursor-pointer
+                                    hover:bg-hover-light
+                                  `}
+                                >
+                                  <FiShare2 size="18" />
+                                </div>
+                              )}
+
+                              <div className="ml-4 my-auto">
+                                <UserDropdown user={user} />
                               </div>
-                            )}
-
-                            <div className="ml-4 my-auto">
-                              <UserDropdown user={user} />
                             </div>
                           </div>
                         </div>
@@ -932,7 +945,7 @@ export function ChatPage({
                             selectedPersona={selectedPersona}
                             handlePersonaSelect={(persona) => {
                               setSelectedPersona(persona);
-                              textareaRef.current?.focus();
+                              textAreaRef.current?.focus();
                               router.push(
                                 buildChatUrl(searchParams, null, persona.id)
                               );
@@ -1009,103 +1022,99 @@ export function ChatPage({
                             const previousMessage =
                               i !== 0 ? messageHistory[i - 1] : null;
                             return (
-                              <div key={i}>
-                                <AIMessage
-                                  messageId={message.messageId}
-                                  content={message.message}
-                                  files={message.files}
-                                  query={messageHistory[i]?.query || undefined}
-                                  personaName={livePersona.name}
-                                  citedDocuments={getCitedDocumentsFromMessage(
-                                    message
-                                  )}
-                                  currentTool={currentTool}
-                                  isComplete={
-                                    i !== messageHistory.length - 1 ||
-                                    !isStreaming
-                                  }
-                                  hasDocs={
-                                    (message.documents &&
-                                      message.documents.length > 0) === true
-                                  }
-                                  handleFeedback={
-                                    i === messageHistory.length - 1 &&
-                                    isStreaming
-                                      ? undefined
-                                      : (feedbackType) =>
-                                          setCurrentFeedback([
-                                            feedbackType,
-                                            message.messageId as number,
-                                          ])
-                                  }
-                                  handleSearchQueryEdit={
-                                    i === messageHistory.length - 1 &&
-                                    !isStreaming
-                                      ? (newQuery) => {
-                                          if (!previousMessage) {
-                                            setPopup({
-                                              type: "error",
-                                              message:
-                                                "Cannot edit query of first message - please refresh the page and try again.",
-                                            });
-                                            return;
-                                          }
-
-                                          if (
-                                            previousMessage.messageId === null
-                                          ) {
-                                            setPopup({
-                                              type: "error",
-                                              message:
-                                                "Cannot edit query of a pending message - please wait a few seconds and try again.",
-                                            });
-                                            return;
-                                          }
-                                          onSubmit({
-                                            messageIdToResend:
-                                              previousMessage.messageId,
-                                            queryOverride: newQuery,
+                              <AIMessage
+                                key={message.messageId}
+                                messageId={message.messageId}
+                                content={message.message}
+                                files={message.files}
+                                query={messageHistory[i]?.query || undefined}
+                                personaName={livePersona.name}
+                                citedDocuments={getCitedDocumentsFromMessage(
+                                  message
+                                )}
+                                currentTool={currentTool}
+                                isComplete={
+                                  i !== messageHistory.length - 1 ||
+                                  !isStreaming
+                                }
+                                hasDocs={
+                                  (message.documents &&
+                                    message.documents.length > 0) === true
+                                }
+                                handleFeedback={
+                                  i === messageHistory.length - 1 && isStreaming
+                                    ? undefined
+                                    : (feedbackType) =>
+                                        setCurrentFeedback([
+                                          feedbackType,
+                                          message.messageId as number,
+                                        ])
+                                }
+                                handleSearchQueryEdit={
+                                  i === messageHistory.length - 1 &&
+                                  !isStreaming
+                                    ? (newQuery) => {
+                                        if (!previousMessage) {
+                                          setPopup({
+                                            type: "error",
+                                            message:
+                                              "Cannot edit query of first message - please refresh the page and try again.",
                                           });
+                                          return;
                                         }
-                                      : undefined
-                                  }
-                                  isCurrentlyShowingRetrieved={
-                                    isShowingRetrieved
-                                  }
-                                  handleShowRetrieved={(messageNumber) => {
-                                    if (isShowingRetrieved) {
-                                      setSelectedMessageForDocDisplay(null);
-                                    } else {
-                                      if (messageNumber !== null) {
-                                        setSelectedMessageForDocDisplay(
-                                          messageNumber
-                                        );
-                                      } else {
-                                        setSelectedMessageForDocDisplay(-1);
+
+                                        if (
+                                          previousMessage.messageId === null
+                                        ) {
+                                          setPopup({
+                                            type: "error",
+                                            message:
+                                              "Cannot edit query of a pending message - please wait a few seconds and try again.",
+                                          });
+                                          return;
+                                        }
+                                        onSubmit({
+                                          messageIdToResend:
+                                            previousMessage.messageId,
+                                          queryOverride: newQuery,
+                                        });
                                       }
-                                    }
-                                  }}
-                                  handleForceSearch={() => {
-                                    if (
-                                      previousMessage &&
-                                      previousMessage.messageId
-                                    ) {
-                                      onSubmit({
-                                        messageIdToResend:
-                                          previousMessage.messageId,
-                                        forceSearch: true,
-                                      });
+                                    : undefined
+                                }
+                                isCurrentlyShowingRetrieved={isShowingRetrieved}
+                                handleShowRetrieved={(messageNumber) => {
+                                  if (isShowingRetrieved) {
+                                    setSelectedMessageForDocDisplay(null);
+                                  } else {
+                                    if (messageNumber !== null) {
+                                      setSelectedMessageForDocDisplay(
+                                        messageNumber
+                                      );
                                     } else {
-                                      setPopup({
-                                        type: "error",
-                                        message:
-                                          "Failed to force search - please refresh the page and try again.",
-                                      });
+                                      setSelectedMessageForDocDisplay(-1);
                                     }
-                                  }}
-                                  retrievalDisabled={retrievalDisabled}
-                                />
-                              </div>
+                                  }
+                                }}
+                                handleForceSearch={() => {
+                                  if (
+                                    previousMessage &&
+                                    previousMessage.messageId
+                                  ) {
+                                    onSubmit({
+                                      messageIdToResend:
+                                        previousMessage.messageId,
+                                      forceSearch: true,
+                                    });
+                                  } else {
+                                    setPopup({
+                                      type: "error",
+                                      message:
+                                        "Failed to force search - please refresh the page and try again.",
+                                    });
+                                  }
+                                }}
+                                retrievalDisabled={retrievalDisabled}
+                              />
                             );
                           } else {
                             return (
@@ -1151,7 +1160,7 @@ export function ChatPage({
                           )}
 
                         {/* Some padding at the bottom so the search bar has space at the bottom to not cover the last message*/}
-                        <div className={`min-h-[30px] w-full`}></div>
+                        <div className={`min-h-[100px] w-full`}></div>
 
                         {livePersona &&
                           livePersona.starter_messages &&
@@ -1208,10 +1217,11 @@ export function ChatPage({
                           filterManager={filterManager}
                           llmOverrideManager={llmOverrideManager}
                           selectedAssistant={livePersona}
-                          fileIds={currentMessageFileIds}
-                          setFileIds={setCurrentMessageFileIds}
+                          files={currentMessageFiles}
+                          setFiles={setCurrentMessageFiles}
                           handleFileUpload={handleImageUpload}
                           setConfigModalActiveTab={setConfigModalActiveTab}
+                          textAreaRef={textAreaRef}
                         />
                       </div>
                     </div>

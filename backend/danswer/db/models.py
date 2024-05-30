@@ -35,6 +35,7 @@ from sqlalchemy.types import TypeDecorator
 from danswer.auth.schemas import UserRole
 from danswer.configs.constants import DEFAULT_BOOST
 from danswer.configs.constants import DocumentSource
+from danswer.configs.constants import FileOrigin
 from danswer.configs.constants import MessageType
 from danswer.configs.constants import SearchFeedbackType
 from danswer.configs.constants import TokenRateLimitScope
@@ -268,9 +269,6 @@ class ConnectorCredentialPair(Base):
     # Time finished, not used for calculating backend jobs which uses time started (created)
     last_successful_index_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
-    )
-    last_attempt_status: Mapped[IndexingStatus | None] = mapped_column(
-        Enum(IndexingStatus, native_enum=False)
     )
     total_docs_indexed: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -1071,8 +1069,13 @@ class KVStore(Base):
 
 class PGFileStore(Base):
     __tablename__ = "file_store"
-    file_name = mapped_column(String, primary_key=True)
-    lobj_oid = mapped_column(Integer, nullable=False)
+
+    file_name: Mapped[str] = mapped_column(String, primary_key=True)
+    display_name: Mapped[str] = mapped_column(String, nullable=True)
+    file_origin: Mapped[FileOrigin] = mapped_column(Enum(FileOrigin, native_enum=False))
+    file_type: Mapped[str] = mapped_column(String, default="text/plain")
+    file_metadata: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    lobj_oid: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 """

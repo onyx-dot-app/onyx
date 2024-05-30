@@ -193,7 +193,7 @@ class DiscourseConnector(PollConnector):
             start=start_datetime, end=end_datetime
         )
 
-        return self._yield_discourse_documents(latest_topic_ids)
+        yield from self._yield_discourse_documents(latest_topic_ids)
 
 
 if __name__ == "__main__":

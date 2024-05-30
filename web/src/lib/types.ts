@@ -40,7 +40,9 @@ export type ValidSources =
   | "sharepoint"
   | "zendesk"
   | "discourse"
-  | "axero";
+  | "axero"
+  | "wikipedia"
+  | "mediawiki";
 
 export type ValidInputTypes = "load_state" | "poll" | "event";
 export type ValidStatuses =
@@ -178,6 +180,19 @@ export interface GoogleSitesConfig {
 }
 
 export interface ZendeskConfig {}
+
+export interface MediaWikiBaseConfig {
+  connector_name: string;
+  language_code: string;
+  categories?: string[];
+  pages?: string[];
+  recurse_depth?: number;
+}
+export interface MediaWikiConfig extends MediaWikiBaseConfig {
+  hostname: string;
+}
+
+export interface WikipediaConfig extends MediaWikiBaseConfig {}
 
 export interface IndexAttemptSnapshot {
   id: number;
@@ -352,6 +367,9 @@ export interface AxeroCredentialJson {
   base_url: string;
   axero_api_token: string;
 }
+
+export interface MediaWikiCredentialJson {}
+export interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
 
 // DELETION
 

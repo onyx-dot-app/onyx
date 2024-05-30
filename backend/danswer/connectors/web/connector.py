@@ -29,6 +29,7 @@ from danswer.connectors.models import Section
 from danswer.file_processing.extract_file_text import pdf_to_text
 from danswer.file_processing.html_utils import web_html_cleanup
 from danswer.utils.logger import setup_logger
+from danswer.utils.sitemap import list_pages_for_site
 
 logger = setup_logger()
 
@@ -145,10 +146,16 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     response.raise_for_status()
 
     soup = BeautifulSoup(response.content, "html.parser")
-    return [
+    urls = [
         _ensure_absolute_url(sitemap_url, loc_tag.text)
         for loc_tag in soup.find_all("loc")
     ]
+
+    if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
+        # the given url doesn't look like a sitemap, let's try to find one
+        urls = list_pages_for_site(sitemap_url)
+
+    return urls
 
 
 def _ensure_absolute_url(source_url: str, maybe_relative_url: str) -> str:

@@ -1,3 +1,4 @@
+import io
 import uuid
 
 from fastapi import APIRouter
@@ -13,6 +14,7 @@ from danswer.auth.users import current_user
 from danswer.chat.chat_utils import create_chat_chain
 from danswer.chat.process_message import stream_chat_message
 from danswer.configs.app_configs import WEB_DOMAIN
+from danswer.configs.constants import FileOrigin
 from danswer.configs.constants import MessageType
 from danswer.db.chat import create_chat_session
 from danswer.db.chat import create_new_chat_message
@@ -32,8 +34,10 @@ from danswer.db.feedback import create_doc_retrieval_feedback
 from danswer.db.models import User
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
+from danswer.file_processing.extract_file_text import extract_file_text
 from danswer.file_store.file_store import get_default_file_store
-from danswer.file_store.utils import build_chat_file_name
+from danswer.file_store.models import ChatFileType
+from danswer.file_store.models import FileDescriptor
 from danswer.llm.answering.prompts.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
@@ -422,15 +426,51 @@ def upload_files_for_chat(
     files: list[UploadFile],
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_user),
-) -> dict[str, list[uuid.UUID]]:
-    for file in files:
-        if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
-            raise HTTPException(
-                status_code=400,
-                detail="Only .jpg, .jpeg, .png, and .webp files are currently supported",
-            )
+) -> dict[str, list[FileDescriptor]]:
+    image_content_types = {"image/jpeg", "image/png", "image/webp"}
+    text_content_types = {
+        "text/plain",
+        "text/csv",
+        "text/markdown",
+        "text/x-markdown",
+        "text/x-config",
+        "text/tab-separated-values",
+        "application/json",
+        "application/xml",
+        "application/x-yaml",
+    }
+    document_content_types = {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "message/rfc822",
+        "application/epub+zip",
+    }
 
-        if file.size and file.size > 20 * 1024 * 1024:
+    allowed_content_types = image_content_types.union(text_content_types).union(
+        document_content_types
+    )
+
+    for file in files:
+        if file.content_type not in allowed_content_types:
+            if file.content_type in image_content_types:
+                error_detail = "Unsupported image file type. Supported image types include .jpg, .jpeg, .png, .webp."
+            elif file.content_type in text_content_types:
+                error_detail = "Unsupported text file type. Supported text types include .txt, .csv, .md, .mdx, .conf, "
+                ".log, .tsv."
+            else:
+                error_detail = (
+                    "Unsupported document file type. Supported document types include .pdf, .docx, .pptx, .xlsx, "
+                    ".json, .xml, .yml, .yaml, .eml, .epub."
+                )
+            raise HTTPException(status_code=400, detail=error_detail)
+
+        if (
+            file.content_type in image_content_types
+            and file.size
+            and file.size > 20 * 1024 * 1024
+        ):
             raise HTTPException(
                 status_code=400,
                 detail="File size must be less than 20MB",
@@ -438,14 +478,50 @@ def upload_files_for_chat(
 
     file_store = get_default_file_store(db_session)
 
-    file_ids = []
+    file_info: list[tuple[str, str | None, ChatFileType]] = []
     for file in files:
-        file_id = uuid.uuid4()
-        file_name = build_chat_file_name(file_id)
-        file_store.save_file(file_name=file_name, content=file.file)
-        file_ids.append(file_id)
+        if file.content_type in image_content_types:
+            file_type = ChatFileType.IMAGE
+        elif file.content_type in document_content_types:
+            file_type = ChatFileType.DOC
+        else:
+            file_type = ChatFileType.PLAIN_TEXT
 
-    return {"file_ids": file_ids}
+        # store the raw file
+        file_id = str(uuid.uuid4())
+        file_store.save_file(
+            file_name=file_id,
+            content=file.file,
+            display_name=file.filename,
+            file_origin=FileOrigin.CHAT_UPLOAD,
+            file_type=file.content_type or file_type.value,
+        )
+
+        # if the file is a doc, extract text and store that so we don't need
+        # to re-extract it every time we send a message
+        if file_type == ChatFileType.DOC:
+            extracted_text = extract_file_text(file_name=file.filename, file=file.file)
+            text_file_id = str(uuid.uuid4())
+            file_store.save_file(
+                file_name=text_file_id,
+                content=io.BytesIO(extracted_text.encode()),
+                display_name=file.filename,
+                file_origin=FileOrigin.CHAT_UPLOAD,
+                file_type="text/plain",
+            )
+            # for DOC type, just return this for the FileDescriptor
+            # as we would always use this as the ID to attach to the
+            # message
+            file_info.append((text_file_id, file.filename, ChatFileType.PLAIN_TEXT))
+        else:
+            file_info.append((file_id, file.filename, file_type))
+
+    return {
+        "files": [
+            {"id": file_id, "type": file_type, "name": file_name}
+            for file_id, file_name, file_type in file_info
+        ]
+    }
 
 
 @router.get("/file/{file_id}")
@@ -455,7 +531,7 @@ def fetch_chat_file(
     _: User | None = Depends(current_user),
 ) -> Response:
     file_store = get_default_file_store(db_session)
-    file_io = file_store.read_file(build_chat_file_name(file_id), mode="b")
+    file_io = file_store.read_file(file_id, mode="b")
     # NOTE: specifying "image/jpeg" here, but it still works for pngs
     # TODO: do this properly
     return Response(content=file_io.read(), media_type="image/jpeg")
