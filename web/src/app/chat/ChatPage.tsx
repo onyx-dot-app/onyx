@@ -75,11 +75,11 @@ const SYSTEM_MESSAGE_ID = -3;
 export function ChatPage({
   documentSidebarInitialWidth,
   defaultSelectedPersonaId,
-  eea_config,
+  footerHtml,
 }: {
   documentSidebarInitialWidth?: number;
   defaultSelectedPersonaId?: number;
-  eea_config?: any;
+  footerHtml?: any;
 }) {
   const [configModalActiveTab, setConfigModalActiveTab] = useState<
     string | null
@@ -1254,7 +1254,7 @@ export function ChatPage({
           )}
         </div>
       </div>
-      <Footer eea_config={eea_config}/>
+      <Footer footerHtml={footerHtml}/>
     </>
   );
 }

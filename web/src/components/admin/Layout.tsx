@@ -28,12 +28,12 @@ import {
   FiSlack,
 } from "react-icons/fi";
 import { fetchSS } from "@/lib/utilsSS";
+import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 
 export async function Layout({ children }: { children: React.ReactNode }) {
   const tasks = [
     getAuthTypeMetadataSS(),
     getCurrentUserSS(),
-    fetchSS("/eea_config/get_eea_config"),
   ];
 
   // catch cases where the backend is completely unreachable here
@@ -48,11 +48,15 @@ export async function Layout({ children }: { children: React.ReactNode }) {
 
   const authTypeMetadata = results[0] as AuthTypeMetadata | null;
   const user = results[1] as User | null;
-  const EEAConfigResponse = results[2] as Response | null;
-  let eea_config = {}
-  if (EEAConfigResponse?.ok) {
-    eea_config = await EEAConfigResponse.json();
-  }
+
+  const config = await fetchEEASettings();
+  
+  const {
+    footerHtml,
+  } = config;
+  
+
+  
   const authDisabled = authTypeMetadata?.authType === "disabled";
   const requiresVerification = authTypeMetadata?.requiresVerification;
   if (!authDisabled) {
@@ -245,7 +249,7 @@ export async function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       <div className="absolute bottom-0 z-20 w-full">
-        <Footer eea_config={eea_config}/>
+        <Footer footerHtml={footerHtml}/>
       </div>
     </div>
   );

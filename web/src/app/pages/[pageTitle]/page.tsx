@@ -8,6 +8,7 @@ import { fetchSS } from "@/lib/utilsSS";
 import { User } from "@/lib/types";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { notFound } from 'next/navigation'
+import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 
 export default async function Page({
   params,
@@ -20,11 +21,9 @@ export default async function Page({
 
   const tasks = [
     getCurrentUserSS(),
-    fetchSS("/eea_config/get_eea_config"),
   ];
   let results: (
     | User
-    | Response
     | null
   )[] = [null, null, null];
   try {
@@ -32,23 +31,17 @@ export default async function Page({
   } catch (e) {
     console.log(`Some fetch failed for the main search page - ${e}`);
   }
-
+  const config = await fetchEEASettings();
+  
+  const {
+    footerHtml,
+    eea_config,
+  } = config;
+  
   const user = results[0] as User | null;
-  const EEAConfigResponse = results[1] as Response | null;
 
   let pageContent = "404";
-  let eea_config = {"config": "" };
-  if (EEAConfigResponse?.ok) {
-    eea_config = await EEAConfigResponse.json();
-    let conf;
-    try{
-      conf = JSON.parse(eea_config?.config)
-    }
-    catch(e){
-      console.log("error parsing eea_conf")
-    }
-    pageContent = conf?.pages?.[pageTitle] || "404"
-  }
+  pageContent = eea_config?.pages?.[pageTitle] || "404"
   console.log(pageContent)
   if (pageContent === "404"){
     return notFound()
@@ -62,7 +55,7 @@ export default async function Page({
       <div className="px-24 pt-10 flex flex-col items-center min-h-screen overflow-y-auto">
         <p dangerouslySetInnerHTML={{ __html: pageContent }} />
       </div> 
-      <Footer eea_config={eea_config}/>
+      <Footer footerHtml={footerHtml}/>
     </>
   );
 }

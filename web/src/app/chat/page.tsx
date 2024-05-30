@@ -27,11 +27,11 @@ export default async function Page({
   const config = await fetchEEASettings();
   
   const {
-    eea_config,
+    footerHtml,
     disclaimerTitle,
     disclaimerText
   } = config;
-
+  
   const {
     user,
     chatSessions,
@@ -79,7 +79,7 @@ export default async function Page({
         <ChatPage
           defaultSelectedPersonaId={defaultPersonaId}
           documentSidebarInitialWidth={finalDocumentSidebarInitialWidth}
-          eea_config={eea_config}
+          footerHtml={footerHtml}
         />
       </ChatProvider>
     </>

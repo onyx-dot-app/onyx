@@ -13,7 +13,7 @@ import { EmailPasswordForm } from "./EmailPasswordForm";
 import { Card, Title, Text } from "@tremor/react";
 import Link from "next/link";
 import { Footer } from "@/components/Footer";
-import { fetchSS } from "@/lib/utilsSS";
+import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 
 const Page = async ({
   searchParams,
@@ -29,18 +29,19 @@ const Page = async ({
   let currentUser: User | null = null;
   let EEAConfigResponse;
   try {
-    [authTypeMetadata, currentUser, EEAConfigResponse] = await Promise.all([
+    [authTypeMetadata, currentUser] = await Promise.all([
       getAuthTypeMetadataSS(),
       getCurrentUserSS(),
-      fetchSS("/eea_config/get_eea_config"),
     ]);
   } catch (e) {
     console.log(`Some fetch failed for the login page - ${e}`);
   }
-  let eea_config = {}
-  if (EEAConfigResponse?.ok) {
-    eea_config = await EEAConfigResponse.json();
-  }
+
+  const config = await fetchEEASettings();
+  
+  const {
+    footerHtml,
+  } = config;
 
   // simply take the user to the home page if Auth is disabled
   if (authTypeMetadata?.authType === "disabled") {
@@ -118,7 +119,7 @@ const Page = async ({
         </div>
       </div>
       <div className="absolute bottom-0 w-full">
-        <Footer eea_config={eea_config}/>
+        <Footer footerHtml={footerHtml}/>
       </div>
     </main>
   );

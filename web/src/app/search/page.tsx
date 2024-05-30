@@ -28,6 +28,7 @@ import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { LLMProviderDescriptor } from "../admin/models/llm/interfaces";
 
+import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 
 export default async function Home() {
   // Disable caching so we always get the up to date connector / document set / persona info
@@ -44,7 +45,6 @@ export default async function Home() {
     fetchSS("/query/valid-tags"),
     fetchSS("/secondary-index/get-embedding-models"),
     fetchLLMProvidersSS(),
-    fetchSS("/eea_config/get_eea_config"),
   ];
 
   // catch cases where the backend is completely unreachable here
@@ -71,22 +71,15 @@ export default async function Home() {
   const tagsResponse = results[5] as Response | null;
   const embeddingModelResponse = results[6] as Response | null;
   const llmProviders = (results[7] || []) as LLMProviderDescriptor[];
-  const EEAConfigResponse = results[8] as Response | null;
-  let disclaimerTitle = "";
-  let disclaimerText = "";
-  let eea_config;
-  if (EEAConfigResponse?.ok) {
-    eea_config = await EEAConfigResponse.json();
-    let conf = {"disclaimer":{"disclaimer_title":"", "disclaimer_text": ""}}
-    try{
-      conf = JSON.parse(eea_config?.config)
-    }
-    catch(e){
-      console.log("error parsing eea_conf")
-    }
-    disclaimerTitle = conf?.disclaimer?.disclaimer_title || "";
-    disclaimerText = conf?.disclaimer?.disclaimer_text || "";
-  }
+  
+  const config = await fetchEEASettings();
+  
+  const {
+    footerHtml,
+    disclaimerTitle,
+    disclaimerText
+  } = config;
+  
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
     return redirect("/auth/login");
@@ -194,7 +187,7 @@ export default async function Home() {
           />
         </div>
       </div>
-      <Footer eea_config={eea_config}/>
+      <Footer footerHtml={footerHtml}/>
     </>
   );
 }
