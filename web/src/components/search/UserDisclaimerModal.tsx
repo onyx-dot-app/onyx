@@ -2,37 +2,38 @@
 
 import { Button, Divider } from "@tremor/react";
 import { Modal } from "../Modal";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export function UserDisclaimerModal(props: any) {
   const { disclaimerTitle, disclaimerText } = props;
-  const [isHidden, setIsHidden] = useState(false);
+  const [show, setShow] = useState(false);
 
   if (disclaimerText == "") {
     return null;
   }
-  if (isHidden) {
-    window.justLoggedIn = false;
-    return null;
-  }
-  if (!window.justLoggedIn) {
-    return null;
-  }
-  return (
+
+  useEffect(() => {
+    if (window.justLoggedIn) {
+      setShow(true)
+      window.justLoggedIn = false;
+    }
+  }, []);
+
+  return show ? (
     <Modal
       className="max-w-4xl"
       title={disclaimerTitle}
-      onOutsideClick={() => setIsHidden(true)}
+      onOutsideClick={() => setShow(false)}
     >
       <div className="text-base">
         <div>
           <p dangerouslySetInnerHTML={{ __html: disclaimerText }} />
         </div>
         <Divider />
-        <Button className="mx-auto w-full" onClick={() => setIsHidden(true)}>
+        <Button className="mx-auto w-full" onClick={() => setShow(false)}>
           OK
         </Button>
       </div>
     </Modal>
-  );
+  ) : null;
 }
