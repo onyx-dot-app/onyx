@@ -8,10 +8,6 @@ export function UserDisclaimerModal(props: any) {
   const { disclaimerTitle, disclaimerText } = props;
   const [show, setShow] = useState(false);
 
-  if (disclaimerText == "") {
-    return null;
-  }
-
   useEffect(() => {
     if (window.justLoggedIn) {
       setShow(true)
@@ -19,7 +15,7 @@ export function UserDisclaimerModal(props: any) {
     }
   }, []);
 
-  return show ? (
+  return (show && disclaimerText != "") ? (
     <Modal
       className="max-w-4xl"
       title={disclaimerTitle}
