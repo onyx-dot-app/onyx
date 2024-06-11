@@ -4,6 +4,9 @@ metadata:
   name: {{ include "danswer-stack.fullname" . }}-webserver
   labels:
     {{- include "danswer-stack.labels" . | nindent 4 }}
+    {{- if .Values.webserver.deploymentLabels }}
+    {{- toYaml .Values.webserver.deploymentLabels | nindent 4 }}
+    {{- end }}
 spec:
   type: {{ .Values.webserver.service.type }}
   ports:
@@ -13,3 +16,6 @@ spec:
       name: http
   selector:
     {{- include "danswer-stack.selectorLabels" . | nindent 4 }}
+    {{- if .Values.webserver.deploymentLabels }}
+    {{- toYaml .Values.webserver.deploymentLabels | nindent 4 }}
+    {{- end }}

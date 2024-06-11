@@ -1,3 +1,9 @@
+# Override log format to include request latency
+log_format custom_main '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for" '
+                      'rt=$request_time';
+
 upstream api_server {
     # fail_timeout=0 means we always retry an upstream even if it failed
     # to return a good HTTP response
@@ -19,6 +25,8 @@ server {
     server_name ${DOMAIN};
 
     client_max_body_size 5G;    # Maximum upload size    
+
+    access_log /var/log/nginx/access.log custom_main;
 
     # Match both /api/* and /openapi.json in a single rule
     location ~ ^/(api|openapi.json)(/.*)?$ {
@@ -58,3 +66,4 @@ server {
         proxy_pass http://web_server;
     }
 }
+

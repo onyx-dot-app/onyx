@@ -7,7 +7,7 @@ import {
   UserGroup,
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
-import { errorHandlingFetcher, fetcher } from "./fetcher";
+import { errorHandlingFetcher } from "./fetcher";
 import { useState } from "react";
 import { DateRangePickerValue } from "@tremor/react";
 import { SourceMetadata } from "./search/interfaces";
@@ -17,7 +17,10 @@ const CREDENTIAL_URL = "/api/manage/admin/credential";
 
 export const usePublicCredentials = () => {
   const { mutate } = useSWRConfig();
-  const swrResponse = useSWR<Credential<any>[]>(CREDENTIAL_URL, fetcher);
+  const swrResponse = useSWR<Credential<any>[]>(
+    CREDENTIAL_URL,
+    errorHandlingFetcher
+  );
 
   return {
     ...swrResponse,
@@ -34,7 +37,7 @@ export const useMostReactedToDocuments = (
   limit: number
 ) => {
   const url = buildReactedDocsUrl(ascending, limit);
-  const swrResponse = useSWR<DocumentBoostStatus[]>(url, fetcher);
+  const swrResponse = useSWR<DocumentBoostStatus[]>(url, errorHandlingFetcher);
 
   return {
     ...swrResponse,
@@ -65,7 +68,7 @@ export const useConnectorCredentialIndexingStatus = (
   const { mutate } = useSWRConfig();
   const swrResponse = useSWR<ConnectorIndexingStatus<any, any>[]>(
     INDEXING_STATUS_URL,
-    fetcher,
+    errorHandlingFetcher,
     { refreshInterval: refreshInterval }
   );
 

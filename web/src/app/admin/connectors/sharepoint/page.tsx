@@ -2,7 +2,8 @@
 
 import * as Yup from "yup";
 import { TrashIcon, SharepointIcon } from "@/components/icons/icons"; // Make sure you have a Document360 icon
-import { fetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR, { useSWRConfig } from "swr";
 import { LoadingAnimation } from "@/components/Loading";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
@@ -29,16 +30,16 @@ const MainSection = () => {
   const {
     data: connectorIndexingStatuses,
     isLoading: isConnectorIndexingStatusesLoading,
-    error: isConnectorIndexingStatusesError,
+    error: connectorIndexingStatusesError,
   } = useSWR<ConnectorIndexingStatus<any, any>[]>(
     "/api/manage/admin/connector/indexing-status",
-    fetcher
+    errorHandlingFetcher
   );
 
   const {
     data: credentialsData,
     isLoading: isCredentialsLoading,
-    error: isCredentialsError,
+    error: credentialsError,
     refreshCredentials,
   } = usePublicCredentials();
 
@@ -49,12 +50,22 @@ const MainSection = () => {
     return <LoadingAnimation text="Loading" />;
   }
 
-  if (isConnectorIndexingStatusesError || !connectorIndexingStatuses) {
-    return <div>Failed to load connectors</div>;
+  if (connectorIndexingStatusesError || !connectorIndexingStatuses) {
+    return (
+      <ErrorCallout
+        errorTitle="Something went wrong :("
+        errorMsg={connectorIndexingStatusesError?.info?.detail}
+      />
+    );
   }
 
-  if (isCredentialsError || !credentialsData) {
-    return <div>Failed to load credentials</div>;
+  if (credentialsError || !credentialsData) {
+    return (
+      <ErrorCallout
+        errorTitle="Something went wrong :("
+        errorMsg={credentialsError?.info?.detail}
+      />
+    );
   }
 
   const sharepointConnectorIndexingStatuses: ConnectorIndexingStatus<
@@ -67,7 +78,7 @@ const MainSection = () => {
 
   const sharepointCredential: Credential<SharepointCredentialJson> | undefined =
     credentialsData.find(
-      (credential) => credential.credential_json?.aad_client_id
+      (credential) => credential.credential_json?.sp_client_id
     );
 
   return (
@@ -87,7 +98,7 @@ const MainSection = () => {
           <div className="flex mb-1 text-sm">
             <Text className="my-auto">Existing Azure AD Client ID: </Text>
             <Text className="ml-1 italic my-auto">
-              {sharepointCredential.credential_json.aad_client_id}
+              {sharepointCredential.credential_json.sp_client_id}
             </Text>
             <button
               className="ml-1 hover:bg-hover rounded p-1"
@@ -119,35 +130,35 @@ const MainSection = () => {
               formBody={
                 <>
                   <TextFormField
-                    name="aad_client_id"
+                    name="sp_client_id"
                     label="Application (client) ID:"
                   />
                   <TextFormField
-                    name="aad_directory_id"
+                    name="sp_directory_id"
                     label="Directory (tenant) ID:"
                   />
                   <TextFormField
-                    name="aad_client_secret"
+                    name="sp_client_secret"
                     label="Client Secret:"
                     type="password"
                   />
                 </>
               }
               validationSchema={Yup.object().shape({
-                aad_client_id: Yup.string().required(
+                sp_client_id: Yup.string().required(
                   "Please enter your Application (client) ID"
                 ),
-                aad_directory_id: Yup.string().required(
+                sp_directory_id: Yup.string().required(
                   "Please enter your Directory (tenant) ID"
                 ),
-                aad_client_secret: Yup.string().required(
+                sp_client_secret: Yup.string().required(
                   "Please enter your Client Secret"
                 ),
               })}
               initialValues={{
-                aad_client_id: "",
-                aad_directory_id: "",
-                aad_client_secret: "",
+                sp_client_id: "",
+                sp_directory_id: "",
+                sp_client_secret: "",
               }}
               onSubmit={(isSuccess) => {
                 if (isSuccess) {
@@ -175,7 +186,7 @@ const MainSection = () => {
               connectorIndexingStatuses={sharepointConnectorIndexingStatuses}
               liveCredential={sharepointCredential}
               getCredential={(credential) =>
-                credential.credential_json.aad_directory_id
+                credential.credential_json.sp_directory_id
               }
               onUpdate={() =>
                 mutate("/api/manage/admin/connector/indexing-status")
@@ -222,11 +233,28 @@ const MainSection = () => {
             formBodyBuilder={TextArrayFieldBuilder({
               name: "sites",
               label: "Sites:",
-              subtext:
-                "Specify 0 or more sites' URL to index. For example, specifying the site " +
-                "'https://danswerai.sharepoint.com/sites/support' will cause us to only index documents " +
-                "within the 'support' site. " +
-                "If no sites are specified, all sites in your organization will be indexed.",
+              subtext: (
+                <>
+                  <br />
+                  <ul>
+                    <li>
+                      • If no sites are specified, all sites in your
+                      organization will be indexed (Sites.Read.All permission
+                      required).
+                    </li>
+                    <li>
+                      • Specifying
+                      &apos;https://danswerai.sharepoint.com/sites/support&apos;
+                      for example will only index documents within this site.
+                    </li>
+                    <li>
+                      • Specifying
+                      &apos;https://danswerai.sharepoint.com/sites/support/subfolder&apos;
+                      for example will only index documents within this folder.
+                    </li>
+                  </ul>
+                </>
+              ),
             })}
             validationSchema={Yup.object().shape({
               sites: Yup.array()

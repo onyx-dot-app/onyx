@@ -14,7 +14,7 @@ import { Card } from "@tremor/react";
 //import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { fetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { LoadingAnimation } from "@/components/Loading";
@@ -33,7 +33,7 @@ export default function Page({
 }) {
   const { data, isLoading, error } = useSWR<{ config: string }>(
     GET_EEA_CONFIG_URL,
-    fetcher
+    errorHandlingFetcher
   );
   let config_json = {"pages":{}};
   if (data){

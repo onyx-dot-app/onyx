@@ -17,43 +17,6 @@ interface HeaderProps {
 }
 
 export function Header({ user }: HeaderProps) {
-  const router = useRouter();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const handleLogout = async () => {
-    const response = await logout();
-    if (!response.ok) {
-      alert("Failed to logout");
-    }
-    // disable auto-redirect immediately after logging out so the user
-    // is not immediately re-logged in
-    router.push("/auth/login?disableAutoRedirect=true");
-  };
-
-  // When dropdownOpen state changes, it attaches/removes the click listener
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node)
-      ) {
-        setDropdownOpen(false);
-      }
-    };
-
-    if (dropdownOpen) {
-      document.addEventListener("click", handleClickOutside);
-    } else {
-      document.removeEventListener("click", handleClickOutside);
-    }
-
-    // Clean up function to remove listener when component unmounts
-    return () => {
-      document.removeEventListener("click", handleClickOutside);
-    };
-  }, [dropdownOpen]);
-
   const combinedSettings = useContext(SettingsContext);
   if (!combinedSettings) {
     return null;

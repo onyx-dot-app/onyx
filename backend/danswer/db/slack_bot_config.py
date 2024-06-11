@@ -4,7 +4,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from danswer.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from danswer.db.chat import upsert_persona
 from danswer.db.constants import SLACK_BOT_PERSONA_PREFIX
 from danswer.db.document_set import get_document_sets_by_ids
 from danswer.db.models import ChannelConfig
@@ -12,6 +11,10 @@ from danswer.db.models import Persona
 from danswer.db.models import Persona__DocumentSet
 from danswer.db.models import SlackBotConfig
 from danswer.db.models import SlackBotResponseType
+from danswer.db.models import User
+from danswer.db.persona import get_default_prompt
+from danswer.db.persona import mark_persona_as_deleted
+from danswer.db.persona import upsert_persona
 from danswer.search.enums import RecencyBiasSetting
 
 
@@ -48,6 +51,7 @@ def create_slack_bot_persona(
 
     # create/update persona associated with the slack bot
     persona_name = _build_persona_name(channel_names)
+    default_prompt = get_default_prompt(db_session)
     persona = upsert_persona(
         user=None,  # Slack Bot Personas are not attached to users
         persona_id=existing_persona_id,
@@ -57,7 +61,7 @@ def create_slack_bot_persona(
         llm_relevance_filter=True,
         llm_filter_extraction=True,
         recency_bias=RecencyBiasSetting.AUTO,
-        prompts=None,
+        prompts=[default_prompt],
         document_sets=document_sets,
         llm_model_provider_override=None,
         llm_model_version_override=None,
@@ -133,6 +137,7 @@ def update_slack_bot_config(
 
 def remove_slack_bot_config(
     slack_bot_config_id: int,
+    user: User | None,
     db_session: Session,
 ) -> None:
     slack_bot_config = db_session.scalar(
@@ -156,7 +161,9 @@ def remove_slack_bot_config(
             _cleanup_relationships(
                 db_session=db_session, persona_id=existing_persona_id
             )
-            db_session.delete(existing_persona)
+            mark_persona_as_deleted(
+                persona_id=existing_persona_id, user=user, db_session=db_session
+            )
 
     db_session.delete(slack_bot_config)
     db_session.commit()

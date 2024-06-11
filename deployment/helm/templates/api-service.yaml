@@ -1,9 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "danswer-stack.fullname" . }}-api
+  # INTERNAL_URL env variable depends on this, don't change without changing INTERNAL_URL
+  name: {{ include "danswer-stack.fullname" . }}-api-service
   labels:
     {{- include "danswer-stack.labels" . | nindent 4 }}
+    {{- if .Values.api.deploymentLabels }}
+    {{- toYaml .Values.api.deploymentLabels | nindent 4 }}
+    {{- end }}
 spec:
   type: {{ .Values.api.service.type }}
   ports:
@@ -13,3 +17,6 @@ spec:
       name: api-server-port
   selector:
     {{- include "danswer-stack.selectorLabels" . | nindent 4 }}
+    {{- if .Values.api.deploymentLabels }}
+    {{- toYaml .Values.api.deploymentLabels | nindent 4 }}
+    {{- end }}

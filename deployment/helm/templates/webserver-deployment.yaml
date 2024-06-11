@@ -11,6 +11,9 @@ spec:
   selector:
     matchLabels:
       {{- include "danswer-stack.selectorLabels" . | nindent 6 }}
+      {{- if .Values.webserver.deploymentLabels }}
+      {{- toYaml .Values.webserver.deploymentLabels | nindent 6 }}
+      {{- end }}
   template:
     metadata:
       {{- with .Values.webserver.podAnnotations }}
@@ -31,7 +34,7 @@ spec:
       securityContext:
         {{- toYaml .Values.webserver.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}
+        - name: web-server
           securityContext:
             {{- toYaml .Values.webserver.securityContext | nindent 12 }}
           image: "{{ .Values.webserver.image.repository }}:{{ .Values.webserver.image.tag | default .Chart.AppVersion }}"
@@ -40,54 +43,18 @@ spec:
             - name: http
               containerPort: {{ .Values.webserver.service.port }}
               protocol: TCP
-          livenessProbe:
-            httpGet:
-              path: /
-              port: http
-          readinessProbe:
-            httpGet:
-              path: /
-              port: http
           resources:
             {{- toYaml .Values.webserver.resources | nindent 12 }}
           envFrom:
             - configMapRef:
-                name: {{ include "danswer-stack.fullname" . }}
+                name: {{ .Values.config.envConfigMapName }}
           env:
-            - name: INTERNAL_URL
-              value: {{ (list "http://" (include "danswer-stack.fullname" .) "-api:" .Values.api.service.port | join "") | quote }}
-            - name: VESPA_HOST
-              value: {{ (list (include "danswer-stack.fullname" .) "vespa" | join "-") }}
-            {{- if .Values.postgresql.enabled }}
-            - name: POSTGRES_HOST
-              value: {{ (list .Release.Name "postgresql" | join "-") }}
-            - name: POSTGRES_DB
-              value: {{ .Values.postgresql.auth.database }}
-            - name: POSTGRES_USER
-              value: {{ .Values.postgresql.auth.username }}
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ (list .Release.Name "postgresql" | join "-") }}
-                  key: password
-            {{- end }}
+            {{- include "danswer-stack.envSecrets" . | nindent 12}}
           {{- with .Values.webserver.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       {{- with .Values.webserver.volumes }}
       volumes:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.webserver.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.webserver.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.webserver.tolerations }}
-      tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

@@ -34,7 +34,7 @@ export function LlmTab({
     debouncedSetTemperature(value);
   };
 
-  const [_, defaultLlmName] = getFinalLLM(llmProviders, currentAssistant);
+  const [_, defaultLlmName] = getFinalLLM(llmProviders, currentAssistant, null);
 
   const llmOptions: { name: string; value: string }[] = [];
   const structureValue = (

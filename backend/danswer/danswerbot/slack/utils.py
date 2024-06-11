@@ -29,7 +29,12 @@ from danswer.danswerbot.slack.constants import SLACK_CHANNEL_ID
 from danswer.danswerbot.slack.tokens import fetch_tokens
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.users import get_user_by_email
+from danswer.llm.exceptions import GenAIDisabledException
+from danswer.llm.factory import get_default_llm
+from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
+from danswer.llm.utils import message_to_string
 from danswer.one_shot_answer.models import ThreadMessage
+from danswer.prompts.miscellaneous_prompts import SLACK_LANGUAGE_REPHRASE_PROMPT
 from danswer.utils.logger import setup_logger
 from danswer.utils.telemetry import optional_telemetry
 from danswer.utils.telemetry import RecordType
@@ -39,6 +44,30 @@ logger = setup_logger()
 
 
 DANSWER_BOT_APP_ID: str | None = None
+
+
+def rephrase_slack_message(msg: str) -> str:
+    def _get_rephrase_message() -> list[dict[str, str]]:
+        messages = [
+            {
+                "role": "user",
+                "content": SLACK_LANGUAGE_REPHRASE_PROMPT.format(query=msg),
+            },
+        ]
+
+        return messages
+
+    try:
+        llm = get_default_llm(use_fast_llm=False, timeout=5)
+    except GenAIDisabledException:
+        logger.warning("Unable to rephrase Slack user message, Gen AI disabled")
+        return msg
+    messages = _get_rephrase_message()
+    filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
+    model_output = message_to_string(llm.invoke(filled_llm_prompt))
+    logger.debug(model_output)
+
+    return model_output
 
 
 def update_emote_react(

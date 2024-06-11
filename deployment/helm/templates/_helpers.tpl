@@ -60,3 +60,24 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Set secret name
+*/}}
+{{- define "danswer-stack.secretName" -}}
+{{- default (default "danswer-secrets" .Values.auth.secretName) .Values.auth.existingSecret }}
+{{- end }}
+
+{{/*
+Create env vars from secrets
+*/}}
+{{- define "danswer-stack.envSecrets" -}}
+    {{- range $name, $key := .Values.auth.secretKeys }}
+- name: {{ $name | upper | replace "-" "_" | quote }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "danswer-stack.secretName" $ }}
+      key: {{ default $name $key }}
+    {{- end }}
+{{- end }}
+

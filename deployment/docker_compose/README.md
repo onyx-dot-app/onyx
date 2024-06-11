@@ -2,10 +2,10 @@
 
 # Deploying Danswer using Docker Compose
 
-For general information, please read the instructions in this [README](https://github.com/danswer-ai/danswer/blob/main/deployment/docker_compose/README.md).
+For general information, please read the instructions in this [README](https://github.com/danswer-ai/danswer/blob/main/deployment/README.md).
 
 ## Deploy in a system without GPU support
-This part is elaborated precisely in  in this [README](https://github.com/danswer-ai/danswer/blob/main/deployment/docker_compose/README.md) in section *Docker Compose*. If you have any questions, please feel free to open an issue or get in touch in slack for support.
+This part is elaborated precisely in  in this [README](https://github.com/danswer-ai/danswer/blob/main/deployment/README.md) in section *Docker Compose*. If you have any questions, please feel free to open an issue or get in touch in slack for support.
 
 ## Deploy in a system with GPU support
 Running Model servers with GPU support while indexing and querying can result in significant improvements in performance. This is highly recommended if you have access to resources. Currently, Danswer offloads embedding model and tokenizers to the GPU VRAM and the size needed depends on chosen embedding model. Default embedding models `intfloat/e5-base-v2` takes up about 1GB of VRAM and since we need this for inference and embedding pipeline, you would need roughly 2GB of VRAM.

@@ -13,9 +13,10 @@ import { LoadingAnimation } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { UsersIcon } from "@/components/icons/icons";
-import { fetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import { User } from "@/lib/types";
 import useSWR, { mutate } from "swr";
+import { ErrorCallout } from "@/components/ErrorCallout";
 
 const UsersTable = () => {
   const { popup, setPopup } = usePopup();
@@ -24,14 +25,19 @@ const UsersTable = () => {
     data: users,
     isLoading,
     error,
-  } = useSWR<User[]>("/api/manage/users", fetcher);
+  } = useSWR<User[]>("/api/manage/users", errorHandlingFetcher);
 
   if (isLoading) {
     return <LoadingAnimation text="Loading" />;
   }
 
   if (error || !users) {
-    return <div className="text-error">Error loading users</div>;
+    return (
+      <ErrorCallout
+        errorTitle="Error loading users"
+        errorMsg={error?.info?.detail}
+      />
+    );
   }
 
   return (

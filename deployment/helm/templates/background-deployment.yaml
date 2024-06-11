@@ -11,6 +11,9 @@ spec:
   selector:
     matchLabels:
       {{- include "danswer-stack.selectorLabels" . | nindent 6 }}
+      {{- if .Values.background.deploymentLabels }}
+      {{- toYaml .Values.background.deploymentLabels | nindent 6 }}
+      {{- end }}
   template:
     metadata:
       {{- with .Values.background.podAnnotations }}
@@ -31,7 +34,7 @@ spec:
       securityContext:
         {{- toYaml .Values.background.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}
+        - name: background
           securityContext:
             {{- toYaml .Values.background.securityContext | nindent 12 }}
           image: "{{ .Values.background.image.repository }}:{{ .Values.background.image.tag | default .Chart.AppVersion }}"
@@ -41,60 +44,8 @@ spec:
             {{- toYaml .Values.background.resources | nindent 12 }}
           envFrom:
             - configMapRef:
-                name: {{ include "danswer-stack.fullname" . }}
+                name: {{ .Values.config.envConfigMapName }}
           env:
-            - name: INTERNAL_URL
-              value: {{ (list "http://" (include "danswer-stack.fullname" .) "-api:" .Values.api.service.port | join "") | quote }}
-            - name: VESPA_HOST
-              value: {{ (list (include "danswer-stack.fullname" .) "vespa" | join "-") }}
-            {{- if .Values.postgresql.enabled }}
-            - name: POSTGRES_HOST
-              value: {{ (list .Release.Name "postgresql" | join "-") }}
-            - name: POSTGRES_DB
-              value: {{ .Values.postgresql.auth.database }}
-            - name: POSTGRES_USER
-              value: {{ .Values.postgresql.auth.username }}
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ (list .Release.Name "postgresql" | join "-") }}
-                  key: password
-            {{- end }}
-          volumeMounts:
-            - name: dynamic-storage
-              mountPath: /home/storage
-            - name: connector-storage
-              mountPath: /home/file_connector_storage
-          {{- if .Values.background.volumeMounts }}
-            {{- .Values.background.volumeMounts | toYaml | nindent 12}}
-          {{- end }}
-      volumes:
-        - name: dynamic-storage
-          {{- if .Values.persistence.dynamic.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ .Values.persistence.dynamic.existingClaim | default (list (include "danswer-stack.fullname" .) "dynamic" | join "-") }}
-          {{- else }}
-          emptyDir: { }
-          {{- end }}
-        - name: connector-storage
-          {{- if .Values.persistence.connector.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ .Values.persistence.connector.existingClaim | default (list (include "danswer-stack.fullname" .) "connector" | join "-") }}
-          {{- else }}
-          emptyDir: { }
-          {{- end }}
-        {{- if .Values.background.volumes }}
-          {{- .Values.background.volumes | toYaml | nindent 8}}
-        {{- end }}
-      {{- with .Values.background.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.background.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.background.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+            - name: ENABLE_MINI_CHUNK
+              value: "{{ .Values.background.enableMiniChunk }}"
+            {{- include "danswer-stack.envSecrets" . | nindent 12}}

@@ -1,6 +1,12 @@
 dependencies:
 - name: postgresql
   repository: https://charts.bitnami.com/bitnami
-  version: 14.1.0
-digest: sha256:526d286ca7143959104d8a7f9b196706efdbd89dcc37943a1b54016f224d4b4d
-generated: "2024-02-16T12:21:42.36744+01:00"
+  version: 14.3.1
+- name: vespa
+  repository: https://unoplat.github.io/vespa-helm-charts
+  version: 0.2.3
+- name: nginx
+  repository: oci://registry-1.docker.io/bitnamicharts
+  version: 15.14.0
+digest: sha256:ab17b5d2c3883055cb4a26bf530043521be5220c24f804e954bb428273d16ba8
+generated: "2024-05-24T16:55:30.598279-07:00"

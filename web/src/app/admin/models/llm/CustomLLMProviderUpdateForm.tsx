@@ -46,9 +46,6 @@ export function CustomLLMProviderUpdateForm({
 
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState<string>("");
-  const [isTestSuccessful, setTestSuccessful] = useState(
-    existingLlmProvider ? true : false
-  );
 
   // Define the initial values based on the provider's requirements
   const initialValues = {
@@ -58,17 +55,13 @@ export function CustomLLMProviderUpdateForm({
     api_base: existingLlmProvider?.api_base ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
     default_model_name: existingLlmProvider?.default_model_name ?? null,
-    default_fast_model_name:
+    fast_default_model_name:
       existingLlmProvider?.fast_default_model_name ?? null,
     model_names: existingLlmProvider?.model_names ?? [],
     custom_config_list: existingLlmProvider?.custom_config
       ? Object.entries(existingLlmProvider.custom_config)
       : [],
   };
-
-  const [validatedConfig, setValidatedConfig] = useState(
-    existingLlmProvider ? initialValues : null
-  );
 
   // Setup validation schema if required
   const validationSchema = Yup.object({
@@ -79,7 +72,7 @@ export function CustomLLMProviderUpdateForm({
     api_version: Yup.string(),
     model_names: Yup.array(Yup.string().required("Model name is required")),
     default_model_name: Yup.string().required("Model name is required"),
-    default_fast_model_name: Yup.string().nullable(),
+    fast_default_model_name: Yup.string().nullable(),
     custom_config_list: Yup.array(),
   });
 
@@ -87,19 +80,8 @@ export function CustomLLMProviderUpdateForm({
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
-      // hijack this to re-enable testing on any change
-      validate={(values) => {
-        if (!isEqual(values, validatedConfig)) {
-          setTestSuccessful(false);
-        }
-      }}
       onSubmit={async (values, { setSubmitting }) => {
         setSubmitting(true);
-
-        if (!isTestSuccessful) {
-          setSubmitting(false);
-          return;
-        }
 
         if (values.model_names.length === 0) {
           const fullErrorMsg = "At least one model name is required";
@@ -113,6 +95,29 @@ export function CustomLLMProviderUpdateForm({
           }
           setSubmitting(false);
           return;
+        }
+
+        // test the configuration
+        if (!isEqual(values, initialValues)) {
+          setIsTesting(true);
+
+          const response = await fetch("/api/admin/llm/test", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              custom_config: customConfigProcessing(values.custom_config_list),
+              ...values,
+            }),
+          });
+          setIsTesting(false);
+
+          if (!response.ok) {
+            const errorMsg = (await response.json()).detail;
+            setTestError(errorMsg);
+            return;
+          }
         }
 
         const response = await fetch(LLM_PROVIDERS_ADMIN_URL, {
@@ -362,7 +367,7 @@ export function CustomLLMProviderUpdateForm({
           />
 
           <TextFormField
-            name="default_fast_model_name"
+            name="fast_default_model_name"
             subtext={`The model to use for lighter flows like \`LLM Chunk Filter\` 
                 for this provider. If not set, will use 
                 the Default Model configured above.`}
@@ -374,55 +379,18 @@ export function CustomLLMProviderUpdateForm({
 
           <div>
             {/* NOTE: this is above the test button to make sure it's visible */}
-            {!isTestSuccessful && testError && (
-              <Text className="text-error mt-2">{testError}</Text>
-            )}
-            {isTestSuccessful && (
-              <Text className="text-success mt-2">
-                Test successful! LLM provider is ready to go.
-              </Text>
-            )}
+            {testError && <Text className="text-error mt-2">{testError}</Text>}
 
             <div className="flex w-full mt-4">
-              {isTestSuccessful ? (
-                <Button type="submit" size="xs">
-                  {existingLlmProvider ? "Update" : "Enable"}
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="xs"
-                  disabled={isTesting}
-                  onClick={async () => {
-                    setIsTesting(true);
-
-                    const response = await fetch("/api/admin/llm/test", {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({
-                        custom_config: customConfigProcessing(
-                          values.custom_config_list
-                        ),
-                        ...values,
-                      }),
-                    });
-                    setIsTesting(false);
-
-                    if (!response.ok) {
-                      const errorMsg = (await response.json()).detail;
-                      setTestError(errorMsg);
-                      return;
-                    }
-
-                    setTestSuccessful(true);
-                    setValidatedConfig(values);
-                  }}
-                >
-                  {isTesting ? <LoadingAnimation text="Testing" /> : "Test"}
-                </Button>
-              )}
+              <Button type="submit" size="xs">
+                {isTesting ? (
+                  <LoadingAnimation text="Testing" />
+                ) : existingLlmProvider ? (
+                  "Update"
+                ) : (
+                  "Enable"
+                )}
+              </Button>
               {existingLlmProvider && (
                 <Button
                   type="button"

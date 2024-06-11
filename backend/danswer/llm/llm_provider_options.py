@@ -30,9 +30,9 @@ OPEN_AI_MODEL_NAMES = [
     "gpt-4-turbo-preview",
     "gpt-4-1106-preview",
     "gpt-4-vision-preview",
-    "gpt-4-32k",
+    # "gpt-4-32k", # not EOL but still doesnt work
     "gpt-4-0613",
-    "gpt-4-32k-0613",
+    # "gpt-4-32k-0613", # not EOL but still doesnt work
     "gpt-4-0314",
     "gpt-4-32k-0314",
     "gpt-3.5-turbo",
@@ -51,8 +51,16 @@ BEDROCK_MODEL_NAMES = [model for model in litellm.bedrock_models if "/" not in m
     ::-1
 ]
 
+IGNORABLE_ANTHROPIC_MODELS = [
+    "claude-2",
+    "claude-instant-1",
+]
 ANTHROPIC_PROVIDER_NAME = "anthropic"
-ANTHROPIC_MODEL_NAMES = [model for model in litellm.anthropic_models][::-1]
+ANTHROPIC_MODEL_NAMES = [
+    model
+    for model in litellm.anthropic_models
+    if model not in IGNORABLE_ANTHROPIC_MODELS
+][::-1]
 
 AZURE_PROVIDER_NAME = "azure"
 
@@ -73,7 +81,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_base_required=False,
             api_version_required=False,
             custom_config_keys=[],
-            llm_names=fetch_models_for_provider("openai"),
+            llm_names=fetch_models_for_provider(OPENAI_PROVIDER_NAME),
             default_model="gpt-4",
             default_fast_model="gpt-3.5-turbo",
         ),

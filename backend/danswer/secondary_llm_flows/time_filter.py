@@ -5,8 +5,7 @@ from datetime import timezone
 
 from dateutil.parser import parse
 
-from danswer.llm.exceptions import GenAIDisabledException
-from danswer.llm.factory import get_default_llm
+from danswer.llm.interfaces import LLM
 from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
 from danswer.llm.utils import message_to_string
 from danswer.prompts.filter_extration import TIME_FILTER_PROMPT
@@ -41,7 +40,7 @@ def best_match_time(time_str: str) -> datetime | None:
         return None
 
 
-def extract_time_filter(query: str) -> tuple[datetime | None, bool]:
+def extract_time_filter(query: str, llm: LLM) -> tuple[datetime | None, bool]:
     """Returns a datetime if a hard time filter should be applied for the given query
     Additionally returns a bool, True if more recently updated Documents should be
     heavily favored"""
@@ -147,11 +146,6 @@ def extract_time_filter(query: str) -> tuple[datetime | None, bool]:
 
         return None, False
 
-    try:
-        llm = get_default_llm()
-    except GenAIDisabledException:
-        return None, False
-
     messages = _get_time_filter_messages(query)
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
     model_output = message_to_string(llm.invoke(filled_llm_prompt))
@@ -162,8 +156,10 @@ def extract_time_filter(query: str) -> tuple[datetime | None, bool]:
 
 if __name__ == "__main__":
     # Just for testing purposes, too tedious to unit test as it relies on an LLM
+    from danswer.llm.factory import get_default_llm
+
     while True:
         user_input = input("Query to Extract Time: ")
-        cutoff, recency_bias = extract_time_filter(user_input)
+        cutoff, recency_bias = extract_time_filter(user_input, get_default_llm())
         print(f"Time Cutoff: {cutoff}")
         print(f"Favor Recent: {recency_bias}")

@@ -214,7 +214,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
 interface TextArrayFieldBuilderProps<T extends Yup.AnyObject> {
   name: string;
   label: string;
-  subtext?: string;
+  subtext?: string | JSX.Element;
   type?: string;
 }
 

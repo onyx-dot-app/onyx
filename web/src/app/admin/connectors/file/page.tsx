@@ -4,7 +4,8 @@ import useSWR, { useSWRConfig } from "swr";
 import * as Yup from "yup";
 
 import { FileIcon } from "@/components/icons/icons";
-import { fetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { ErrorCallout } from "@/components/ErrorCallout";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { ConnectorIndexingStatus, FileConfig } from "@/lib/types";
 import { createCredential, linkCredential } from "@/lib/credential";
@@ -33,7 +34,7 @@ const Main = () => {
     isLoading: isConnectorIndexingStatusesLoading,
   } = useSWR<ConnectorIndexingStatus<any, any>[]>(
     "/api/manage/admin/connector/indexing-status",
-    fetcher
+    errorHandlingFetcher
   );
 
   if (!connectorIndexingStatuses && isConnectorIndexingStatusesLoading) {

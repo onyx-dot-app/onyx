@@ -2,7 +2,7 @@
 
 import { LoadingAnimation } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { fetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import { Text, Title, Button, Divider,Table,TableHead,TableRow,TableHeaderCell,TableBody,TableCell } from "@tremor/react";
 import { FiCpu, FiEdit } from "react-icons/fi";
 import useSWR from "swr";
@@ -152,7 +152,7 @@ const PagesTable = ({
 const Page = () => {
   const { data, isLoading, error } = useSWR<{ config: string }>(
     GET_EEA_CONFIG_URL,
-    fetcher
+    errorHandlingFetcher
   );
   const {
     refreshPagesList,

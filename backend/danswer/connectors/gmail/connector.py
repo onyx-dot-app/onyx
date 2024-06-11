@@ -3,7 +3,8 @@ from typing import Any
 from typing import cast
 from typing import Dict
 
-from google.auth.credentials import Credentials  # type: ignore
+from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
+from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
 from googleapiclient import discovery  # type: ignore
 
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
@@ -36,7 +37,7 @@ logger = setup_logger()
 class GmailConnector(LoadConnector, PollConnector):
     def __init__(self, batch_size: int = INDEX_BATCH_SIZE) -> None:
         self.batch_size = batch_size
-        self.creds: Credentials | None = None
+        self.creds: OAuthCredentials | ServiceAccountCredentials | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, str] | None:
         """Checks for two different types of credentials.
@@ -45,7 +46,7 @@ class GmailConnector(LoadConnector, PollConnector):
         (2) A credential which holds a service account key JSON file, which
         can then be used to impersonate any user in the workspace.
         """
-        creds = None
+        creds: OAuthCredentials | ServiceAccountCredentials | None = None
         new_creds_dict = None
         if DB_CREDENTIALS_DICT_TOKEN_KEY in credentials:
             access_token_json_str = cast(
@@ -74,7 +75,7 @@ class GmailConnector(LoadConnector, PollConnector):
                 str | None, credentials.get(DB_CREDENTIALS_DICT_DELEGATED_USER_KEY)
             )
             if delegated_user_email:
-                creds = creds.with_subject(delegated_user_email) if creds else None
+                creds = creds.with_subject(delegated_user_email) if creds else None  # type: ignore
 
         if creds is None:
             raise PermissionError(

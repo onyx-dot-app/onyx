@@ -30,6 +30,8 @@ spec:
         envFrom:
         - configMapRef:
             name: {{ .Values.config.envConfigMapName }}
+        env:
+          {{- include "danswer-stack.envSecrets" . | nindent 12}}
         volumeMounts:
         {{- range .Values.inferenceCapability.deployment.volumeMounts }}
         - name: {{ .name }}

@@ -3,7 +3,8 @@
 import * as Yup from "yup";
 import { GmailIcon } from "@/components/icons/icons";
 import useSWR, { useSWRConfig } from "swr";
-import { fetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
@@ -113,7 +114,7 @@ const Main = () => {
     error: isAppCredentialError,
   } = useSWR<{ client_id: string }>(
     "/api/manage/admin/connector/gmail/app-credential",
-    fetcher
+    errorHandlingFetcher
   );
   const {
     data: serviceAccountKeyData,
@@ -121,20 +122,20 @@ const Main = () => {
     error: isServiceAccountKeyError,
   } = useSWR<{ service_account_email: string }>(
     "/api/manage/admin/connector/gmail/service-account-key",
-    fetcher
+    errorHandlingFetcher
   );
   const {
     data: connectorIndexingStatuses,
     isLoading: isConnectorIndexingStatusesLoading,
-    error: isConnectorIndexingStatusesError,
+    error: connectorIndexingStatusesError,
   } = useSWR<ConnectorIndexingStatus<any, any>[]>(
     "/api/manage/admin/connector/indexing-status",
-    fetcher
+    errorHandlingFetcher
   );
   const {
     data: credentialsData,
     isLoading: isCredentialsLoading,
-    error: isCredentialsError,
+    error: credentialsError,
     refreshCredentials,
   } = usePublicCredentials();
 
@@ -153,7 +154,7 @@ const Main = () => {
     );
   }
 
-  if (isCredentialsError || !credentialsData) {
+  if (credentialsError || !credentialsData) {
     return (
       <div className="mx-auto">
         <div className="text-red-500">Failed to load credentials.</div>
@@ -161,7 +162,7 @@ const Main = () => {
     );
   }
 
-  if (isConnectorIndexingStatusesError || !connectorIndexingStatuses) {
+  if (connectorIndexingStatusesError || !connectorIndexingStatuses) {
     return (
       <div className="mx-auto">
         <div className="text-red-500">Failed to load connectors.</div>

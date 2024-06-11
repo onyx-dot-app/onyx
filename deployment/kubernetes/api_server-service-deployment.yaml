@@ -41,18 +41,17 @@ spec:
         - containerPort: 8080
         # There are some extra values since this is shared between services
         # There are no conflicts though, extra env variables are simply ignored
+        env:
+        - name: OAUTH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: danswer-secrets
+              key: google_oauth_client_id
+        - name: OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: danswer-secrets
+              key: google_oauth_client_secret
         envFrom:
         - configMapRef:
             name: env-configmap
-        volumeMounts:
-        - name: dynamic-storage
-          mountPath: /home/storage
-        - name: file-connector-storage
-          mountPath: /home/file_connector_storage
-      volumes:
-      - name: dynamic-storage
-        persistentVolumeClaim:
-          claimName: dynamic-pvc
-      - name: file-connector-storage
-        persistentVolumeClaim:
-          claimName: file-connector-pvc

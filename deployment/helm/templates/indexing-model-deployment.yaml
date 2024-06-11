@@ -34,11 +34,10 @@ spec:
         envFrom:
           - configMapRef:
               name: {{ .Values.config.envConfigMapName }}
-        {{- if .Values.indexCapability.indexingOnly }}
         env:
           - name: INDEXING_ONLY
-            value: "{{ .Values.indexCapability.indexingOnly }}"
-        {{- end }}
+            value: "{{ default "True" .Values.indexCapability.indexingOnly }}"
+          {{- include "danswer-stack.envSecrets" . | nindent 10}}
         volumeMounts:
         {{- range .Values.indexCapability.volumeMounts }}
         - name: {{ .name }}

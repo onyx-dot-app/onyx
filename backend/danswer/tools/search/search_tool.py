@@ -15,7 +15,6 @@ from danswer.llm.answering.models import DocumentPruningConfig
 from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.answering.models import PromptConfig
 from danswer.llm.interfaces import LLM
-from danswer.llm.interfaces import LLMConfig
 from danswer.search.enums import QueryFlow
 from danswer.search.enums import SearchType
 from danswer.search.models import IndexFilters
@@ -63,7 +62,7 @@ class SearchTool(Tool):
         persona: Persona,
         retrieval_options: RetrievalDetails | None,
         prompt_config: PromptConfig,
-        llm_config: LLMConfig,
+        llm: LLM,
         pruning_config: DocumentPruningConfig,
         # if specified, will not actually run a search and will instead return these
         # sections. Used when the user selects specific docs to talk to
@@ -76,7 +75,7 @@ class SearchTool(Tool):
         self.persona = persona
         self.retrieval_options = retrieval_options
         self.prompt_config = prompt_config
-        self.llm_config = llm_config
+        self.llm = llm
         self.pruning_config = pruning_config
 
         self.selected_docs = selected_docs
@@ -175,7 +174,7 @@ class SearchTool(Tool):
                 docs=self.selected_docs,
                 doc_relevance_list=None,
                 prompt_config=self.prompt_config,
-                llm_config=self.llm_config,
+                llm_config=self.llm.config,
                 question=query,
                 document_pruning_config=self.pruning_config,
             ),
@@ -191,9 +190,9 @@ class SearchTool(Tool):
         search_pipeline = SearchPipeline(
             search_request=SearchRequest(
                 query=query,
-                human_selected_filters=self.retrieval_options.filters
-                if self.retrieval_options
-                else None,
+                human_selected_filters=(
+                    self.retrieval_options.filters if self.retrieval_options else None
+                ),
                 persona=self.persona,
                 offset=self.retrieval_options.offset
                 if self.retrieval_options
@@ -204,6 +203,7 @@ class SearchTool(Tool):
                 full_doc=self.full_doc,
             ),
             user=self.user,
+            llm=self.llm,
             db_session=self.db_session,
         )
         yield ToolResponse(
@@ -233,7 +233,7 @@ class SearchTool(Tool):
                 for ind in range(len(llm_docs))
             ],
             prompt_config=self.prompt_config,
-            llm_config=self.llm_config,
+            llm_config=self.llm.config,
             question=query,
             document_pruning_config=self.pruning_config,
         )

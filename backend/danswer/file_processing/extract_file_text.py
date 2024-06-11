@@ -47,6 +47,7 @@ VALID_FILE_EXTENSIONS = PLAIN_TEXT_FILE_EXTENSIONS + [
     ".xlsx",
     ".eml",
     ".epub",
+    ".html",
 ]
 
 
@@ -256,13 +257,18 @@ def file_io_to_text(file: IO[Any]) -> str:
 def extract_file_text(
     file_name: str | None,
     file: IO[Any],
+    break_on_unprocessable: bool = True,
 ) -> str:
     if not file_name:
         return file_io_to_text(file)
 
     extension = get_file_ext(file_name)
     if not check_file_ext_is_valid(extension):
-        raise RuntimeError("Unprocessable file type")
+        if break_on_unprocessable:
+            raise RuntimeError(f"Unprocessable file type: {file_name}")
+        else:
+            logger.warning(f"Unprocessable file type: {file_name}")
+            return ""
 
     if extension == ".pdf":
         return pdf_to_text(file=file)
@@ -281,6 +287,9 @@ def extract_file_text(
 
     elif extension == ".epub":
         return epub_to_text(file)
+
+    elif extension == ".html":
+        return parse_html_page_basic(file)
 
     else:
         return file_io_to_text(file)

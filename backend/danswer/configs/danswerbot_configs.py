@@ -73,3 +73,7 @@ DANSWER_BOT_MAX_WAIT_TIME = int(os.environ.get("DANSWER_BOT_MAX_WAIT_TIME") or 1
 DANSWER_BOT_FEEDBACK_REMINDER = int(
     os.environ.get("DANSWER_BOT_FEEDBACK_REMINDER") or 0
 )
+# Set to True to rephrase the Slack users messages
+DANSWER_BOT_REPHRASE_MESSAGE = (
+    os.environ.get("DANSWER_BOT_REPHRASE_MESSAGE", "").lower() == "true"
+)

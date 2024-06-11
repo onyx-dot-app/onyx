@@ -18,7 +18,7 @@ class TestLLMRequest(BaseModel):
 
     # model level
     default_model_name: str
-    default_fast_model_name: str | None = None
+    fast_default_model_name: str | None = None
 
 
 class LLMProviderDescriptor(BaseModel):

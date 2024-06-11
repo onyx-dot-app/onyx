@@ -283,7 +283,7 @@ class DefaultMultiLLM(LLM):
                 # actual input
                 messages=prompt,
                 tools=tools,
-                tool_choice=tool_choice,
+                tool_choice=tool_choice if tools else None,
                 # streaming choice
                 stream=stream,
                 # model params

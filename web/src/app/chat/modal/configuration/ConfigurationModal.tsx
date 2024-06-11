@@ -10,6 +10,7 @@ import { FaBrain } from "react-icons/fa";
 import { AssistantsTab } from "./AssistantsTab";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { LlmTab } from "./LlmTab";
+import { LLMProviderDescriptor } from "@/app/admin/models/llm/interfaces";
 
 const TabButton = ({
   label,
@@ -48,17 +49,21 @@ export function ConfigurationModal({
   activeTab,
   setActiveTab,
   onClose,
+  availableAssistants,
   selectedAssistant,
   setSelectedAssistant,
   filterManager,
+  llmProviders,
   llmOverrideManager,
 }: {
   activeTab: string | null;
   setActiveTab: (tab: string | null) => void;
   onClose: () => void;
+  availableAssistants: Persona[];
   selectedAssistant: Persona;
   setSelectedAssistant: (assistant: Persona) => void;
   filterManager: FilterManager;
+  llmProviders: LLMProviderDescriptor[];
   llmOverrideManager: LlmOverrideManager;
 }) {
   useEffect(() => {
@@ -152,6 +157,8 @@ export function ConfigurationModal({
             {activeTab === "assistants" && (
               <div>
                 <AssistantsTab
+                  availableAssistants={availableAssistants}
+                  llmProviders={llmProviders}
                   selectedAssistant={selectedAssistant}
                   onSelect={(assistant) => {
                     setSelectedAssistant(assistant);

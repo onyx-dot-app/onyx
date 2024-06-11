@@ -31,9 +31,6 @@ export function LLMProviderUpdateForm({
 
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState<string>("");
-  const [isTestSuccessful, setTestSuccessful] = useState(
-    existingLlmProvider ? true : false
-  );
 
   // Define the initial values based on the provider's requirements
   const initialValues = {
@@ -45,7 +42,7 @@ export function LLMProviderUpdateForm({
       existingLlmProvider?.default_model_name ??
       (llmProviderDescriptor.default_model ||
         llmProviderDescriptor.llm_names[0]),
-    default_fast_model_name:
+    fast_default_model_name:
       existingLlmProvider?.fast_default_model_name ??
       (llmProviderDescriptor.default_fast_model || null),
     custom_config:
@@ -93,25 +90,37 @@ export function LLMProviderUpdateForm({
         }
       : {}),
     default_model_name: Yup.string().required("Model name is required"),
-    default_fast_model_name: Yup.string().nullable(),
+    fast_default_model_name: Yup.string().nullable(),
   });
 
   return (
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
-      // hijack this to re-enable testing on any change
-      validate={(values) => {
-        if (!isEqual(values, validatedConfig)) {
-          setTestSuccessful(false);
-        }
-      }}
       onSubmit={async (values, { setSubmitting }) => {
         setSubmitting(true);
 
-        if (!isTestSuccessful) {
-          setSubmitting(false);
-          return;
+        // test the configuration
+        if (!isEqual(values, initialValues)) {
+          setIsTesting(true);
+
+          const response = await fetch("/api/admin/llm/test", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              provider: llmProviderDescriptor.name,
+              ...values,
+            }),
+          });
+          setIsTesting(false);
+
+          if (!response.ok) {
+            const errorMsg = (await response.json()).detail;
+            setTestError(errorMsg);
+            return;
+          }
         }
 
         const response = await fetch(LLM_PROVIDERS_ADMIN_URL, {
@@ -123,7 +132,7 @@ export function LLMProviderUpdateForm({
             provider: llmProviderDescriptor.name,
             ...values,
             fast_default_model_name:
-              values.default_fast_model_name || values.default_model_name,
+              values.fast_default_model_name || values.default_model_name,
           }),
         });
 
@@ -259,7 +268,7 @@ export function LLMProviderUpdateForm({
 
           {llmProviderDescriptor.llm_names.length > 0 ? (
             <SelectorFormField
-              name="default_fast_model_name"
+              name="fast_default_model_name"
               subtext={`The model to use for lighter flows like \`LLM Chunk Filter\` 
                 for this provider. If \`Default\` is specified, will use 
                 the Default Model configured above.`}
@@ -273,7 +282,7 @@ export function LLMProviderUpdateForm({
             />
           ) : (
             <TextFormField
-              name="default_fast_model_name"
+              name="fast_default_model_name"
               subtext={`The model to use for lighter flows like \`LLM Chunk Filter\` 
                 for this provider. If \`Default\` is specified, will use 
                 the Default Model configured above.`}
@@ -286,53 +295,18 @@ export function LLMProviderUpdateForm({
 
           <div>
             {/* NOTE: this is above the test button to make sure it's visible */}
-            {!isTestSuccessful && testError && (
-              <Text className="text-error mt-2">{testError}</Text>
-            )}
-            {isTestSuccessful && (
-              <Text className="text-success mt-2">
-                Test successful! LLM provider is ready to go.
-              </Text>
-            )}
+            {testError && <Text className="text-error mt-2">{testError}</Text>}
 
             <div className="flex w-full mt-4">
-              {isTestSuccessful ? (
-                <Button type="submit" size="xs">
-                  {existingLlmProvider ? "Update" : "Enable"}
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="xs"
-                  disabled={isTesting}
-                  onClick={async () => {
-                    setIsTesting(true);
-
-                    const response = await fetch("/api/admin/llm/test", {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({
-                        provider: llmProviderDescriptor.name,
-                        ...values,
-                      }),
-                    });
-                    setIsTesting(false);
-
-                    if (!response.ok) {
-                      const errorMsg = (await response.json()).detail;
-                      setTestError(errorMsg);
-                      return;
-                    }
-
-                    setTestSuccessful(true);
-                    setValidatedConfig(values);
-                  }}
-                >
-                  {isTesting ? <LoadingAnimation text="Testing" /> : "Test"}
-                </Button>
-              )}
+              <Button type="submit" size="xs">
+                {isTesting ? (
+                  <LoadingAnimation text="Testing" />
+                ) : existingLlmProvider ? (
+                  "Update"
+                ) : (
+                  "Enable"
+                )}
+              </Button>
               {existingLlmProvider && (
                 <Button
                   type="button"

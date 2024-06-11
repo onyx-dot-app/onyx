@@ -4,8 +4,8 @@ from langchain.schema.messages import SystemMessage
 from danswer.chat.models import LlmDoc
 from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.configs.model_configs import GEN_AI_SINGLE_USER_MESSAGE_EXPECTED_MAX_TOKENS
-from danswer.db.chat import get_default_prompt
 from danswer.db.models import Persona
+from danswer.db.persona import get_default_prompt__read_only
 from danswer.file_store.utils import InMemoryChatFile
 from danswer.llm.answering.models import PromptConfig
 from danswer.llm.factory import get_llm_for_persona
@@ -96,7 +96,7 @@ def compute_max_document_tokens_for_persona(
     actual_user_input: str | None = None,
     max_llm_token_override: int | None = None,
 ) -> int:
-    prompt = persona.prompts[0] if persona.prompts else get_default_prompt()
+    prompt = persona.prompts[0] if persona.prompts else get_default_prompt__read_only()
     return compute_max_document_tokens(
         prompt_config=PromptConfig.from_model(prompt),
         llm_config=get_llm_for_persona(persona).config,

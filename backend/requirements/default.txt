@@ -33,7 +33,7 @@ llama-index==0.9.45
 Mako==1.2.4
 msal==1.26.0
 nltk==3.8.1
-Office365-REST-Python-Client==2.5.4
+Office365-REST-Python-Client==2.5.9
 oauthlib==3.2.2
 openai==1.14.3 
 openpyxl==3.1.2
@@ -70,3 +70,4 @@ zulip==0.8.2
 hubspot-api-client==8.1.0
 zenpy==2.0.41
 ultimate_sitemap_parser==0.5
+dropbox==11.36.2

@@ -56,7 +56,7 @@ export function ChatInputBar({
   }, [message]);
 
   const { llmProviders } = useChatContext();
-  const [_, llmName] = getFinalLLM(llmProviders, selectedAssistant);
+  const [_, llmName] = getFinalLLM(llmProviders, selectedAssistant, null);
 
   return (
     <div>
@@ -186,6 +186,7 @@ export function ChatInputBar({
                 onClick={() => {
                   const input = document.createElement("input");
                   input.type = "file";
+                  input.multiple = true; // Allow multiple files
                   input.onchange = (event: any) => {
                     const files = Array.from(
                       event?.target?.files || []

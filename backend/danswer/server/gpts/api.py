@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from danswer.db.engine import get_session
+from danswer.llm.factory import get_default_llm
 from danswer.search.models import SearchRequest
 from danswer.search.pipeline import SearchPipeline
 from danswer.server.danswer_api.ingestion import api_key_dep
@@ -71,6 +72,7 @@ def gpt_search(
             query=search_request.query,
         ),
         user=None,
+        llm=get_default_llm(),
         db_session=db_session,
     ).reranked_chunks
 

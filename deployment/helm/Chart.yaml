@@ -5,20 +5,31 @@ home: https://www.danswer.ai/
 sources:
   - "https://github.com/danswer-ai/danswer"
 type: application
-version: 0.1.0
-appVersion: "v0.3.42"
+version: 0.2.0
+appVersion: "latest"
 annotations:
   category: Productivity
   licenses: MIT
   images: |
     - name: webserver
-      image: docker.io/danswer/danswer-web-server:v0.3.42
+      image: docker.io/danswer/danswer-web-server:latest
     - name: background
-      image: docker.io/danswer/danswer-backend:v0.3.42
+      image: docker.io/danswer/danswer-backend:latest
     - name: vespa
       image: vespaengine/vespa:8.277.17
 dependencies:
   - name: postgresql
-    version: "14.1.0"
+    version: 14.3.1
     repository: https://charts.bitnami.com/bitnami
     condition: postgresql.enabled
+  - name: vespa 
+    version: 0.2.3
+    repository: https://unoplat.github.io/vespa-helm-charts
+    condition: vespa.enabled
+  - name: nginx
+    version: 15.14.0
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: nginx.enabled  
+    
+
+    

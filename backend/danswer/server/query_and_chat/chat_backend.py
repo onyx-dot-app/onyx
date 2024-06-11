@@ -4,6 +4,7 @@ import uuid
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Request
 from fastapi import Response
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
@@ -24,7 +25,6 @@ from danswer.db.chat import get_chat_messages_by_session
 from danswer.db.chat import get_chat_session_by_id
 from danswer.db.chat import get_chat_sessions_by_user
 from danswer.db.chat import get_or_create_root_message
-from danswer.db.chat import get_persona_by_id
 from danswer.db.chat import set_as_latest_chat_message
 from danswer.db.chat import translate_db_message_to_chat_message_detail
 from danswer.db.chat import update_chat_session
@@ -32,6 +32,7 @@ from danswer.db.engine import get_session
 from danswer.db.feedback import create_chat_message_feedback
 from danswer.db.feedback import create_doc_retrieval_feedback
 from danswer.db.models import User
+from danswer.db.persona import get_persona_by_id
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
 from danswer.file_processing.extract_file_text import extract_file_text
@@ -41,6 +42,9 @@ from danswer.file_store.models import FileDescriptor
 from danswer.llm.answering.prompts.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
+from danswer.llm.exceptions import GenAIDisabledException
+from danswer.llm.factory import get_default_llm
+from danswer.llm.headers import get_litellm_additional_request_headers
 from danswer.llm.utils import get_default_llm_tokenizer
 from danswer.secondary_llm_flows.chat_session_naming import (
     get_renamed_conversation_name,
@@ -168,6 +172,7 @@ def create_new_chat_session(
 @router.put("/rename-chat-session")
 def rename_chat_session(
     rename_req: ChatRenameRequest,
+    request: Request,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> RenameChatSessionResponse:
@@ -191,7 +196,16 @@ def rename_chat_session(
     )
     full_history = history_msgs + [final_msg]
 
-    new_name = get_renamed_conversation_name(full_history=full_history)
+    try:
+        llm = get_default_llm(
+            additional_headers=get_litellm_additional_request_headers(request.headers)
+        )
+    except GenAIDisabledException:
+        # This may be longer than what the LLM tends to produce but is the most
+        # clear thing we can do
+        return RenameChatSessionResponse(new_name=full_history[0].message)
+
+    new_name = get_renamed_conversation_name(full_history=full_history, llm=llm)
 
     update_chat_session(
         db_session=db_session,
@@ -233,6 +247,7 @@ def delete_chat_session_by_id(
 @router.post("/send-message")
 def handle_new_chat_message(
     chat_message_req: CreateChatMessageRequest,
+    request: Request,
     user: User | None = Depends(current_user),
 ) -> StreamingResponse:
     """This endpoint is both used for all the following purposes:
@@ -256,6 +271,9 @@ def handle_new_chat_message(
         new_msg_req=chat_message_req,
         user=user,
         use_existing_user_message=chat_message_req.use_existing_user_message,
+        litellm_additional_headers=get_litellm_additional_request_headers(
+            request.headers
+        ),
     )
 
     return StreamingResponse(packets, media_type="application/json")

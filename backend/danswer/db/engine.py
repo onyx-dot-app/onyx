@@ -59,7 +59,7 @@ def get_sqlalchemy_engine() -> Engine:
     global _SYNC_ENGINE
     if _SYNC_ENGINE is None:
         connection_string = build_connection_string(db_api=SYNC_DB_API)
-        _SYNC_ENGINE = create_engine(connection_string, pool_size=50, max_overflow=25, pool_pre_ping=True)
+        _SYNC_ENGINE = create_engine(connection_string, pool_size=40, max_overflow=10, pool_pre_ping=True)
     return _SYNC_ENGINE
 
 
@@ -67,7 +67,9 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
     global _ASYNC_ENGINE
     if _ASYNC_ENGINE is None:
         connection_string = build_connection_string()
-        _ASYNC_ENGINE = create_async_engine(connection_string)
+        _ASYNC_ENGINE = create_async_engine(
+            connection_string, pool_size=40, max_overflow=10
+        )
     return _ASYNC_ENGINE
 
 
@@ -88,6 +90,29 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
         get_sqlalchemy_async_engine(), expire_on_commit=False
     ) as async_session:
         yield async_session
+
+
+async def warm_up_connections(
+    sync_connections_to_warm_up: int = 10, async_connections_to_warm_up: int = 10
+) -> None:
+    sync_postgres_engine = get_sqlalchemy_engine()
+    connections = [
+        sync_postgres_engine.connect() for _ in range(sync_connections_to_warm_up)
+    ]
+    for conn in connections:
+        conn.execute(text("SELECT 1"))
+    for conn in connections:
+        conn.close()
+
+    async_postgres_engine = get_sqlalchemy_async_engine()
+    async_connections = [
+        await async_postgres_engine.connect()
+        for _ in range(async_connections_to_warm_up)
+    ]
+    for async_conn in async_connections:
+        await async_conn.execute(text("SELECT 1"))
+    for async_conn in async_connections:
+        await async_conn.close()
 
 
 SessionFactory = sessionmaker(bind=get_sqlalchemy_engine())

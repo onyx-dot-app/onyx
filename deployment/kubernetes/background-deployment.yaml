@@ -22,15 +22,3 @@ spec:
         envFrom:
         - configMapRef:
             name: env-configmap
-        volumeMounts:
-        - name: dynamic-storage
-          mountPath: /home/storage
-        - name: file-connector-storage
-          mountPath: /home/file_connector_storage
-      volumes:
-      - name: dynamic-storage
-        persistentVolumeClaim:
-          claimName: dynamic-pvc
-      - name: file-connector-storage
-        persistentVolumeClaim:
-          claimName: file-connector-pvc

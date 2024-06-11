@@ -17,6 +17,9 @@ export const SEARCH_TYPE_COOKIE_NAME = "search_type";
 
 export const HEADER_PADDING = "pt-[64px]";
 
+export const LOGOUT_DISABLED =
+  process.env.NEXT_PUBLIC_DISABLE_LOGOUT?.toLowerCase() === "true";
+
 // NOTE: since this is a `NEXT_PUBLIC_` variable, it will be set at
 // build-time
 // TODO: consider moving this to an API call so that the api_server

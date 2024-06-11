@@ -5,7 +5,7 @@ metadata:
 data:
   nginx.conf: |
     upstream api_server {
-        server {{ include "danswer-stack.fullname" . }}-api:{{ .Values.api.service.port }} fail_timeout=0;
+        server {{ include "danswer-stack.fullname" . }}-api-service:{{ .Values.api.service.port }} fail_timeout=0;
     }
 
     upstream web_server {

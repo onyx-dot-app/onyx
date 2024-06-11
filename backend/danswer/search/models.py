@@ -116,6 +116,9 @@ class RetrievalDetails(ChunkContext):
     offset: int | None = None
     limit: int | None = None
 
+    # If this is set, only the highest matching chunk (or merged chunks) is returned
+    dedupe_docs: bool = False
+
 
 class InferenceChunk(BaseChunk):
     document_id: str

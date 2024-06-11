@@ -1,5 +1,3 @@
-export const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
 class FetchError extends Error {
   status: number;
   info: any;
@@ -11,11 +9,13 @@ class FetchError extends Error {
   }
 }
 
+const DEFAULT_ERROR_MSG = "An error occurred while fetching the data.";
+
 export const errorHandlingFetcher = async (url: string) => {
   const res = await fetch(url);
   if (!res.ok) {
     const error = new FetchError(
-      "An error occurred while fetching the data.",
+      DEFAULT_ERROR_MSG,
       res.status,
       await res.json()
     );

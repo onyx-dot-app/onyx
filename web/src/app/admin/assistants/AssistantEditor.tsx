@@ -36,6 +36,7 @@ import { Option } from "@/components/Dropdown";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { checkUserIsNoAuthUser } from "@/lib/user";
 import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
+import { checkLLMSupportsImageInput } from "@/lib/llm/utils";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "SearchTool");
@@ -43,10 +44,6 @@ function findSearchTool(tools: ToolSnapshot[]) {
 
 function findImageGenerationTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "ImageGenerationTool");
-}
-
-function checkLLMSupportsImageGeneration(provider: string, model: string) {
-  return provider === "openai" && model === "gpt-4-turbo";
 }
 
 function Label({ children }: { children: string | JSX.Element }) {
@@ -261,7 +258,7 @@ export function AssistantEditor({
           if (
             values.image_generation_tool_enabled &&
             imageGenerationTool &&
-            checkLLMSupportsImageGeneration(
+            checkLLMSupportsImageInput(
               providerDisplayNameToProviderName.get(
                 values.llm_model_provider_override || ""
               ) ||
@@ -566,7 +563,7 @@ export function AssistantEditor({
                   )}
 
                   {imageGenerationTool &&
-                    checkLLMSupportsImageGeneration(
+                    checkLLMSupportsImageInput(
                       providerDisplayNameToProviderName.get(
                         values.llm_model_provider_override || ""
                       ) ||

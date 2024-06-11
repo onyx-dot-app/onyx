@@ -9,7 +9,8 @@ import {
   GearIcon,
   ArrowSquareOutIcon,
 } from "@/components/icons/icons";
-import { fetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { ErrorCallout } from "@/components/ErrorCallout";
 import {
   SelectorFormField,
   TextFormField,
@@ -33,10 +34,10 @@ export default function Web() {
   const {
     data: connectorIndexingStatuses,
     isLoading: isConnectorIndexingStatusesLoading,
-    error: isConnectorIndexingStatusesError,
+    error: connectorIndexingStatusesError,
   } = useSWR<ConnectorIndexingStatus<any, any>[]>(
     "/api/manage/admin/connector/indexing-status",
-    fetcher
+    errorHandlingFetcher
   );
 
   const webIndexingStatuses: ConnectorIndexingStatus<WebConfig, {}>[] =
@@ -125,7 +126,7 @@ export default function Web() {
       </Title>
       {isConnectorIndexingStatusesLoading ? (
         <LoadingAnimation text="Loading" />
-      ) : isConnectorIndexingStatusesError || !connectorIndexingStatuses ? (
+      ) : connectorIndexingStatusesError || !connectorIndexingStatuses ? (
         <div>Error loading indexing history</div>
       ) : webIndexingStatuses.length > 0 ? (
         <ConnectorsTable<WebConfig, {}>

@@ -7,16 +7,16 @@ from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
-from danswer.db.chat import get_persona_by_id
-from danswer.db.chat import get_personas
-from danswer.db.chat import mark_persona_as_deleted
-from danswer.db.chat import mark_persona_as_not_deleted
-from danswer.db.chat import update_all_personas_display_priority
-from danswer.db.chat import update_persona_visibility
 from danswer.db.engine import get_session
 from danswer.db.models import User
 from danswer.db.persona import create_update_persona
+from danswer.db.persona import get_persona_by_id
+from danswer.db.persona import get_personas
+from danswer.db.persona import mark_persona_as_deleted
+from danswer.db.persona import mark_persona_as_not_deleted
+from danswer.db.persona import update_all_personas_display_priority
 from danswer.db.persona import update_persona_shared_users
+from danswer.db.persona import update_persona_visibility
 from danswer.llm.answering.prompts.utils import build_dummy_prompt
 from danswer.server.features.persona.models import CreatePersonaRequest
 from danswer.server.features.persona.models import PersonaSnapshot

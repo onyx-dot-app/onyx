@@ -10,6 +10,7 @@ from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.models import User
 from danswer.document_index.factory import get_default_document_index
+from danswer.llm.interfaces import LLM
 from danswer.search.enums import QueryFlow
 from danswer.search.enums import SearchType
 from danswer.search.models import IndexFilters
@@ -54,6 +55,7 @@ class SearchPipeline:
         self,
         search_request: SearchRequest,
         user: User | None,
+        llm: LLM,
         db_session: Session,
         bypass_acl: bool = False,  # NOTE: VERY DANGEROUS, USE WITH CAUTION
         retrieval_metrics_callback: Callable[[RetrievalMetricsContainer], None]
@@ -62,6 +64,7 @@ class SearchPipeline:
     ):
         self.search_request = search_request
         self.user = user
+        self.llm = llm
         self.db_session = db_session
         self.bypass_acl = bypass_acl
         self.retrieval_metrics_callback = retrieval_metrics_callback
@@ -229,6 +232,7 @@ class SearchPipeline:
         ) = retrieval_preprocessing(
             search_request=self.search_request,
             user=self.user,
+            llm=self.llm,
             db_session=self.db_session,
             bypass_acl=self.bypass_acl,
         )

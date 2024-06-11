@@ -2,6 +2,8 @@ import React from "react";
 import { useState, ReactNode } from "react";
 import { FiCheck, FiCopy } from "react-icons/fi";
 
+const CODE_BLOCK_PADDING_TYPE = { padding: "1rem" };
+
 interface CodeBlockProps {
   className?: string | undefined;
   children?: ReactNode;
@@ -24,9 +26,11 @@ export function CodeBlock({
 
   if (!language) {
     return (
-      <code {...props} className={`text-sm ${className}`}>
-        {children}
-      </code>
+      <pre style={CODE_BLOCK_PADDING_TYPE}>
+        <code {...props} className={`text-sm ${className}`}>
+          {children}
+        </code>
+      </pre>
     );
   }
 
@@ -39,15 +43,25 @@ export function CodeBlock({
       props.node.position.start.offset,
       props.node.position.end.offset
     );
+    codeText = codeText.trim();
 
     // Remove the language declaration and trailing backticks
     const codeLines = codeText.split("\n");
-    if (codeLines.length > 1 && codeLines[0].startsWith("```")) {
+    if (
+      codeLines.length > 1 &&
+      (codeLines[0].startsWith("```") || codeLines[0].trim().startsWith("```"))
+    ) {
       codeLines.shift(); // Remove the first line with the language declaration
-      if (codeLines[codeLines.length - 1] === "```") {
+      if (
+        codeLines[codeLines.length - 1] === "```" ||
+        codeLines[codeLines.length - 1]?.trim() === "```"
+      ) {
         codeLines.pop(); // Remove the last line with the trailing backticks
       }
-      codeText = codeLines.join("\n");
+
+      // remove leading whitespace from each line for nicer copy/paste experience
+      const trimmedCodeLines = codeLines.map((line) => line.trimStart());
+      codeText = trimmedCodeLines.join("\n");
     }
   }
 

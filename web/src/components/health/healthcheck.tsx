@@ -1,10 +1,10 @@
 "use client";
 
-import { fetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
 
 export const HealthCheckBanner = () => {
-  const { error } = useSWR("/api/health", fetcher);
+  const { error } = useSWR("/api/health", errorHandlingFetcher);
   if (!error) {
     return null;
   }

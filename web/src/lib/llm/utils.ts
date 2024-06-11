@@ -1,9 +1,11 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/models/llm/interfaces";
+import { LlmOverride } from "@/lib/hooks";
 
 export function getFinalLLM(
   llmProviders: LLMProviderDescriptor[],
-  persona: Persona | null
+  persona: Persona | null,
+  llmOverride: LlmOverride | null
 ): [string, string] {
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
@@ -15,6 +17,11 @@ export function getFinalLLM(
   if (persona) {
     provider = persona.llm_model_provider_override || provider;
     model = persona.llm_model_version_override || model;
+  }
+
+  if (llmOverride) {
+    provider = llmOverride.provider || provider;
+    model = llmOverride.modelName || model;
   }
 
   return [provider, model];

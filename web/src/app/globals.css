@@ -60,3 +60,7 @@
   gap:5px;
   align-items:center;
 }
+/* Used to create alternatie to React Markdown */
+.preserve-lines {
+  white-space: pre-wrap; /* Preserves whitespace and wraps text */
+}

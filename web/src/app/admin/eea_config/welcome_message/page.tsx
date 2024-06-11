@@ -2,7 +2,7 @@
 
 import { LoadingAnimation } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { fetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import { Text, Title, Button } from "@tremor/react";
 import { FiCpu } from "react-icons/fi";
 import useSWR from "swr";
@@ -16,7 +16,7 @@ const SET_EEA_CONFIG_URL = "/api/eea_config/set_eea_config";
 const Page = () => {
   const { data, isLoading, error } = useSWR<{ config: string }>(
     GET_EEA_CONFIG_URL,
-    fetcher
+    errorHandlingFetcher
   );
   let config_json = {"disclaimer":{"disclaimer_text":"", "disclaimer_title":""}};
   if (data){

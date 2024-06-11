@@ -21,7 +21,13 @@ docker_compose_cmd() {
 # Assign appropriate Docker Compose command
 COMPOSE_CMD=$(docker_compose_cmd)
 
-domains=("$DOMAIN" "www.$DOMAIN")
+# Only add www to domain list if domain wasn't explicitly set as a subdomain
+if [[ ! $DOMAIN == www.* ]]; then
+    domains=("$DOMAIN" "www.$DOMAIN")
+else
+    domains=("$DOMAIN")
+fi
+
 rsa_key_size=4096
 data_path="../data/certbot"
 email="$EMAIL" # Adding a valid address is strongly recommended

@@ -12,7 +12,8 @@ import {
   ConnectorIndexingStatus,
 } from "@/lib/types";
 import useSWR, { useSWRConfig } from "swr";
-import { fetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
 import { adminDeleteCredential, linkCredential } from "@/lib/credential";
 import { ConnectorForm } from "@/components/admin/connectors/ConnectorForm";
@@ -29,15 +30,15 @@ const Main = () => {
   const {
     data: connectorIndexingStatuses,
     isLoading: isConnectorIndexingStatusesLoading,
-    error: isConnectorIndexingStatusesError,
+    error: connectorIndexingStatusesError,
   } = useSWR<ConnectorIndexingStatus<any, any>[]>(
     "/api/manage/admin/connector/indexing-status",
-    fetcher
+    errorHandlingFetcher
   );
   const {
     data: credentialsData,
     isLoading: isCredentialsLoading,
-    error: isCredentialsError,
+    error: credentialsError,
     refreshCredentials,
   } = usePublicCredentials();
 
@@ -48,12 +49,22 @@ const Main = () => {
     return <LoadingAnimation text="Loading" />;
   }
 
-  if (isConnectorIndexingStatusesError || !connectorIndexingStatuses) {
-    return <div>Failed to load connectors</div>;
+  if (connectorIndexingStatusesError || !connectorIndexingStatuses) {
+    return (
+      <ErrorCallout
+        errorTitle="Something went wrong :("
+        errorMsg={connectorIndexingStatusesError?.info?.detail}
+      />
+    );
   }
 
-  if (isCredentialsError || !credentialsData) {
-    return <div>Failed to load credentials</div>;
+  if (credentialsError || !credentialsData) {
+    return (
+      <ErrorCallout
+        errorTitle="Something went wrong :("
+        errorMsg={credentialsError?.info?.detail}
+      />
+    );
   }
 
   const notionConnectorIndexingStatuses: ConnectorIndexingStatus<

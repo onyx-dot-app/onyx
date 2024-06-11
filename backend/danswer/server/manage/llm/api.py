@@ -55,13 +55,13 @@ def test_llm_configuration(
     functions_with_args: list[tuple[Callable, tuple]] = [(test_llm, (llm,))]
 
     if (
-        test_llm_request.default_fast_model_name
-        and test_llm_request.default_fast_model_name
+        test_llm_request.fast_default_model_name
+        and test_llm_request.fast_default_model_name
         != test_llm_request.default_model_name
     ):
         fast_llm = get_llm(
             provider=test_llm_request.provider,
-            model=test_llm_request.default_fast_model_name,
+            model=test_llm_request.fast_default_model_name,
             api_key=test_llm_request.api_key,
             api_base=test_llm_request.api_base,
             api_version=test_llm_request.api_version,

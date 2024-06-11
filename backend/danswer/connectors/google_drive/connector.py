@@ -8,7 +8,8 @@ from itertools import chain
 from typing import Any
 from typing import cast
 
-from google.auth.credentials import Credentials  # type: ignore
+from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
+from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
 from googleapiclient import discovery  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
@@ -346,7 +347,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector):
         self.follow_shortcuts = follow_shortcuts
         self.only_org_public = only_org_public
         self.continue_on_failure = continue_on_failure
-        self.creds: Credentials | None = None
+        self.creds: OAuthCredentials | ServiceAccountCredentials | None = None
 
     @staticmethod
     def _process_folder_paths(
@@ -387,7 +388,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector):
         (2) A credential which holds a service account key JSON file, which
         can then be used to impersonate any user in the workspace.
         """
-        creds = None
+        creds: OAuthCredentials | ServiceAccountCredentials | None = None
         new_creds_dict = None
         if DB_CREDENTIALS_DICT_TOKEN_KEY in credentials:
             access_token_json_str = cast(
@@ -416,7 +417,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector):
                 str | None, credentials.get(DB_CREDENTIALS_DICT_DELEGATED_USER_KEY)
             )
             if delegated_user_email:
-                creds = creds.with_subject(delegated_user_email) if creds else None
+                creds = creds.with_subject(delegated_user_email) if creds else None  # type: ignore
 
         if creds is None:
             raise PermissionError(
