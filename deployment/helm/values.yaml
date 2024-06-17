@@ -13,7 +13,7 @@ inferenceCapability:
     port: 9000
   pvc:
     name: inference-model-pvc
-    accessModes: 
+    accessModes:
       - ReadWriteOnce
     storage: 3Gi
   deployment:
@@ -46,9 +46,9 @@ indexCapability:
     name: indexing-model-server-port
   deploymentLabels:
     app: indexing-model-server
-  podLabels: 
-    app: indexing-model-server 
-  indexingOnly: "True"  
+  podLabels:
+    app: indexing-model-server
+  indexingOnly: "True"
   podAnnotations: {}
   volumeMounts:
     - name: indexing-model-storage
@@ -58,9 +58,9 @@ indexCapability:
       persistentVolumeClaim:
         claimName: indexing-model-storage
   indexingModelPVC:
-    name: indexing-model-storage     
+    name: indexing-model-storage
     accessMode: "ReadWriteOnce"
-    storage: "3Gi" 
+    storage: "3Gi"
 
 config:
   envConfigMapName: env-configmap
@@ -79,7 +79,7 @@ serviceAccount:
 postgresql:
   primary:
     persistence:
-      size: 5Gi 
+      size: 5Gi
   enabled: true
   auth:
     existingSecret: danswer-secrets
@@ -89,7 +89,7 @@ postgresql:
 nginx:
   containerPorts:
     http: 1024
-  extraEnvVars: 
+  extraEnvVars:
     - name: DOMAIN
       value: localhost
   service:
@@ -98,7 +98,7 @@ nginx:
       danswer: 3000
     targetPort:
       http: http
-      danswer: http  
+      danswer: http
 
   existingServerBlockConfigmap: danswer-nginx-conf
 
@@ -112,7 +112,7 @@ webserver:
   deploymentLabels:
     app: web-server
   podAnnotations: {}
-  podLabels: 
+  podLabels:
     app: web-server
   podSecurityContext: {}
     # fsGroup: 2000
@@ -228,7 +228,7 @@ api:
 
   nodeSelector: {}
   tolerations: []
-  
+
 
 background:
   replicaCount: 1
@@ -296,7 +296,7 @@ vespa:
     pullPolicy: IfNotPresent
     tag: "8.277.17"
   podAnnotations: {}
-  podLabels: 
+  podLabels:
     app: vespa
     app.kubernetes.io/instance: danswer
     app.kubernetes.io/name: vespa
@@ -321,9 +321,9 @@ vespa:
     requests:
       cpu: 1500m
       memory: 4000Mi
-  #   limits:
-  #     cpu: 100m
-  #     memory: 128Mi
+    limits:
+      cpu: 1500m
+      memory: 4000Mi
 
   nodeSelector: {}
   tolerations: []

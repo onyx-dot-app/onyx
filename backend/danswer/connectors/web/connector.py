@@ -146,16 +146,21 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     response.raise_for_status()
 
     soup = BeautifulSoup(response.content, "html.parser")
-    urls = [
+    result = [
         _ensure_absolute_url(sitemap_url, loc_tag.text)
         for loc_tag in soup.find_all("loc")
     ]
 
-    if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
+    if len(result) == 0 and len(soup.find_all("urlset")) == 0:
         # the given url doesn't look like a sitemap, let's try to find one
-        urls = list_pages_for_site(sitemap_url)
+        result = list_pages_for_site(sitemap_url)
 
-    return urls
+    if not result:
+        raise ValueError(
+            f"No URLs found in sitemap {sitemap_url}. Try using the 'single' or 'recursive' scraping options instead."
+        )
+
+    return result
 
 
 def _ensure_absolute_url(source_url: str, maybe_relative_url: str) -> str:
@@ -221,6 +226,10 @@ class WebConnector(LoadConnector):
         and converts them into documents"""
         visited_links: set[str] = set()
         to_visit: list[str] = self.to_visit_list
+
+        if not to_visit:
+            raise ValueError("No URLs to visit")
+
         base_url = to_visit[0]  # For the recursive case
         doc_batch: list[Document] = []
 

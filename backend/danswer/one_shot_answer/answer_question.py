@@ -174,6 +174,7 @@ def stream_answer_objects(
         prompt_config=prompt_config,
         llm=llm,
         pruning_config=document_pruning_config,
+        bypass_acl=bypass_acl,
     )
 
     answer_config = AnswerStyleConfig(

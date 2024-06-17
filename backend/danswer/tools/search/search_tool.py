@@ -70,6 +70,7 @@ class SearchTool(Tool):
         chunks_above: int = 0,
         chunks_below: int = 0,
         full_doc: bool = False,
+        bypass_acl: bool = False,
     ) -> None:
         self.user = user
         self.persona = persona
@@ -83,6 +84,7 @@ class SearchTool(Tool):
         self.chunks_above = chunks_above
         self.chunks_below = chunks_below
         self.full_doc = full_doc
+        self.bypass_acl = bypass_acl
         self.db_session = db_session
 
     @classmethod
@@ -204,6 +206,7 @@ class SearchTool(Tool):
             ),
             user=self.user,
             llm=self.llm,
+            bypass_acl=self.bypass_acl,
             db_session=self.db_session,
         )
         yield ToolResponse(

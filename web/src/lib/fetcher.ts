@@ -1,4 +1,4 @@
-class FetchError extends Error {
+export class FetchError extends Error {
   status: number;
   info: any;
 

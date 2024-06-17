@@ -10,7 +10,8 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: ${{ matrix.platform == 'linux/amd64' && 'amd64-image-builders' || 'arm64-image-builders' }}
     strategy:
       fail-fast: false
       matrix:

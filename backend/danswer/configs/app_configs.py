@@ -188,6 +188,10 @@ GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
 
 GITHUB_CONNECTOR_BASE_URL = os.environ.get("GITHUB_CONNECTOR_BASE_URL") or None
 
+GITLAB_CONNECTOR_INCLUDE_CODE_FILES = (
+    os.environ.get("GITLAB_CONNECTOR_INCLUDE_CODE_FILES", "").lower() == "true"
+)
+
 DASK_JOB_CLIENT_ENABLED = (
     os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"
 )

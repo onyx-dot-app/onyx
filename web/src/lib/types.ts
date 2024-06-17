@@ -43,10 +43,13 @@ export type ValidSources =
   | "google_sites"
   | "loopio"
   | "dropbox"
+  | "salesforce"
   | "sharepoint"
   | "teams"
   | "zendesk"
   | "discourse"
+  | "axero"
+  | "clickup"
   | "axero"
   | "wikipedia"
   | "mediawiki";
@@ -124,6 +127,10 @@ export interface JiraConfig {
   comment_email_blacklist?: string[];
 }
 
+export interface SalesforceConfig {
+  requested_objects?: string[];
+}
+
 export interface SharepointConfig {
   sites?: string[];
 }
@@ -187,6 +194,12 @@ export interface RequestTrackerConfig {}
 export interface Document360Config {
   workspace: string;
   categories?: string[];
+}
+
+export interface ClickupConfig {
+  connector_type: "list" | "folder" | "space" | "workspace";
+  connector_ids?: string[];
+  retrieve_task_comments: boolean;
 }
 
 export interface GoogleSitesConfig {
@@ -364,6 +377,11 @@ export interface Document360CredentialJson {
   document360_api_token: string;
 }
 
+export interface ClickupCredentialJson {
+  clickup_api_token: string;
+  clickup_team_id: string;
+}
+
 export interface ZendeskCredentialJson {
   zendesk_subdomain: string;
   zendesk_email: string;
@@ -372,6 +390,12 @@ export interface ZendeskCredentialJson {
 
 export interface DropboxCredentialJson {
   dropbox_access_token: string;
+}
+
+export interface SalesforceCredentialJson {
+  sf_username: string;
+  sf_password: string;
+  sf_security_token: string;
 }
 
 export interface SharepointCredentialJson {

@@ -96,8 +96,10 @@ class DocumentSource(str, Enum):
     DROPBOX = "dropbox"
     SHAREPOINT = "sharepoint"
     TEAMS = "teams"
+    SALESFORCE = "salesforce"
     DISCOURSE = "discourse"
     AXERO = "axero"
+    CLICKUP = "clickup"
     MEDIAWIKI = "mediawiki"
     WIKIPEDIA = "wikipedia"
 
