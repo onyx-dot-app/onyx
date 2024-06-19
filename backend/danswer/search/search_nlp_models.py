@@ -20,6 +20,8 @@ from shared_configs.model_server_models import IntentResponse
 from shared_configs.model_server_models import RerankRequest
 from shared_configs.model_server_models import RerankResponse
 
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 transformer_logging.set_verbosity_error()
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -102,6 +104,7 @@ class EmbeddingModel:
         model_server_url = build_model_server_url(server_host, server_port)
         self.embed_server_endpoint = f"{model_server_url}/encoder/bi-encoder-embed"
 
+    @retry(wait=wait_exponential(), stop=stop_after_attempt(3))
     def encode(self, texts: list[str], text_type: EmbedTextType) -> list[list[float]]:
         if text_type == EmbedTextType.QUERY and self.query_prefix:
             prefixed_texts = [self.query_prefix + text for text in texts]

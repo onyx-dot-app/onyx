@@ -72,3 +72,4 @@ hubspot-api-client==8.1.0
 zenpy==2.0.41
 ultimate_sitemap_parser==0.5
 dropbox==11.36.2
+tenacity==8.4.1
