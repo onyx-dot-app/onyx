@@ -12,7 +12,8 @@ import {
   Message,
   RetrievalType,
   StreamingError,
-  ToolRunKickoff,
+  ToolCallFinalResult,
+  ToolCallMetadata,
 } from "./interfaces";
 import { ChatSidebar } from "./sessionSidebar/ChatSidebar";
 import { Persona } from "../admin/assistants/interfaces";
@@ -34,6 +35,7 @@ import {
   removeMessage,
   sendMessage,
   setMessageAsLatest,
+  updateModelOverrideForChatSession,
   updateParentChildren,
   uploadFilesForChat,
 } from "./lib";
@@ -59,7 +61,12 @@ import { AnswerPiecePacket, DanswerDocument } from "@/lib/search/interfaces";
 import { buildFilters } from "@/lib/search/utils";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
-import { checkLLMSupportsImageInput, getFinalLLM } from "@/lib/llm/utils";
+import {
+  checkLLMSupportsImageInput,
+  destructureValue,
+  getFinalLLM,
+  structureValue,
+} from "@/lib/llm/utils";
 import { ChatInputBar } from "./input/ChatInputBar";
 import { ConfigurationModal } from "./modal/configuration/ConfigurationModal";
 import { useChatContext } from "@/components/context/ChatContext";
@@ -94,6 +101,7 @@ export function ChatPage({
     folders,
     openedFolders,
   } = useChatContext();
+
   const filteredAssistants = orderAssistantsForUser(availablePersonas, user);
 
   const router = useRouter();
@@ -106,6 +114,9 @@ export function ChatPage({
   const selectedChatSession = chatSessions.find(
     (chatSession) => chatSession.id === existingChatSessionId
   );
+
+  const llmOverrideManager = useLlmOverride(selectedChatSession);
+
   const existingChatSessionPersonaId = selectedChatSession?.persona_id;
 
   // used to track whether or not the initial "submit on load" has been performed
@@ -126,25 +137,37 @@ export function ChatPage({
   // this is triggered every time the user switches which chat
   // session they are using
   useEffect(() => {
+    if (
+      chatSessionId &&
+      !urlChatSessionId.current &&
+      llmOverrideManager.llmOverride
+    ) {
+      updateModelOverrideForChatSession(
+        chatSessionId,
+        structureValue(
+          llmOverrideManager.llmOverride.name,
+          llmOverrideManager.llmOverride.provider,
+          llmOverrideManager.llmOverride.modelName
+        ) as string
+      );
+    }
     urlChatSessionId.current = existingChatSessionId;
-
     textAreaRef.current?.focus();
 
     // only clear things if we're going from one chat session to another
+
     if (chatSessionId !== null && existingChatSessionId !== chatSessionId) {
       // de-select documents
       clearSelectedDocuments();
       // reset all filters
+
       filterManager.setSelectedDocumentSets([]);
       filterManager.setSelectedSources([]);
       filterManager.setSelectedTags([]);
       filterManager.setTimeRange(null);
-      // reset LLM overrides
-      llmOverrideManager.setLlmOverride({
-        name: "",
-        provider: "",
-        modelName: "",
-      });
+
+      // reset LLM overrides (based on chat session!)
+      llmOverrideManager.updateModelOverrideForChatSession(selectedChatSession);
       llmOverrideManager.setTemperature(null);
       // remove uploaded files
       setCurrentMessageFiles([]);
@@ -179,7 +202,6 @@ export function ChatPage({
           submitOnLoadPerformed.current = true;
           await onSubmit();
         }
-
         return;
       }
 
@@ -188,6 +210,7 @@ export function ChatPage({
         `/api/chat/get-chat-session/${existingChatSessionId}`
       );
       const chatSession = (await response.json()) as BackendChatSession;
+
       setSelectedPersona(
         filteredAssistants.find(
           (persona) => persona.id === chatSession.persona_id
@@ -268,6 +291,7 @@ export function ChatPage({
         message: "",
         type: "system",
         files: [],
+        toolCalls: [],
         parentMessageId: null,
         childrenMessageIds: [firstMessageId],
         latestChildMessageId: firstMessageId,
@@ -310,7 +334,6 @@ export function ChatPage({
     return newCompleteMessageMap;
   };
   const messageHistory = buildLatestMessageChain(completeMessageMap);
-  const [currentTool, setCurrentTool] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
 
   // uploaded files
@@ -387,8 +410,6 @@ export function ChatPage({
       availableSources,
       availableDocumentSets,
     });
-
-  const llmOverrideManager = useLlmOverride();
 
   // state for cancelling streaming
   const [isCancelled, setIsCancelled] = useState(false);
@@ -538,6 +559,7 @@ export function ChatPage({
         message: currMessage,
         type: "user",
         files: currentMessageFiles,
+        toolCalls: [],
         parentMessageId: parentMessage?.messageId || null,
       },
     ];
@@ -572,6 +594,7 @@ export function ChatPage({
     let aiMessageImages: FileDescriptor[] | null = null;
     let error: string | null = null;
     let finalMessage: BackendMessage | null = null;
+    let toolCalls: ToolCallMetadata[] = [];
     try {
       const lastSuccessfulMessageId =
         getLastSuccessfulMessageId(currMessageHistory);
@@ -595,6 +618,7 @@ export function ChatPage({
           .map((document) => document.db_doc_id as number),
         queryOverride,
         forceSearch,
+
         modelProvider: llmOverrideManager.llmOverride.name || undefined,
         modelVersion:
           llmOverrideManager.llmOverride.modelName ||
@@ -630,7 +654,13 @@ export function ChatPage({
               }
             );
           } else if (Object.hasOwn(packet, "tool_name")) {
-            setCurrentTool((packet as ToolRunKickoff).tool_name);
+            toolCalls = [
+              {
+                tool_name: (packet as ToolCallMetadata).tool_name,
+                tool_args: (packet as ToolCallMetadata).tool_args,
+                tool_result: (packet as ToolCallMetadata).tool_result,
+              },
+            ];
           } else if (Object.hasOwn(packet, "error")) {
             error = (packet as StreamingError).error;
           } else if (Object.hasOwn(packet, "message_id")) {
@@ -660,6 +690,7 @@ export function ChatPage({
             message: currMessage,
             type: "user",
             files: currentMessageFiles,
+            toolCalls: [],
             parentMessageId: parentMessage?.messageId || null,
             childrenMessageIds: [newAssistantMessageId],
             latestChildMessageId: newAssistantMessageId,
@@ -673,6 +704,7 @@ export function ChatPage({
             documents: finalMessage?.context_docs?.top_documents || documents,
             citations: finalMessage?.citations || {},
             files: finalMessage?.files || aiMessageImages || [],
+            toolCalls: finalMessage?.tool_calls || toolCalls,
             parentMessageId: newUserMessageId,
           },
         ]);
@@ -690,6 +722,7 @@ export function ChatPage({
             message: currMessage,
             type: "user",
             files: currentMessageFiles,
+            toolCalls: [],
             parentMessageId: parentMessage?.messageId || SYSTEM_MESSAGE_ID,
           },
           {
@@ -697,6 +730,7 @@ export function ChatPage({
             message: errorMsg,
             type: "error",
             files: aiMessageImages || [],
+            toolCalls: [],
             parentMessageId: TEMP_USER_MESSAGE_ID,
           },
         ],
@@ -882,6 +916,7 @@ export function ChatPage({
           )}
 
           <ConfigurationModal
+            chatSessionId={chatSessionId!}
             activeTab={configModalActiveTab}
             setActiveTab={setConfigModalActiveTab}
             onClose={() => setConfigModalActiveTab(null)}
@@ -1033,7 +1068,9 @@ export function ChatPage({
                                 citedDocuments={getCitedDocumentsFromMessage(
                                   message
                                 )}
-                                currentTool={currentTool}
+                                toolCall={
+                                  message.toolCalls && message.toolCalls[0]
+                                }
                                 isComplete={
                                   i !== messageHistory.length - 1 ||
                                   !isStreaming
@@ -1201,7 +1238,6 @@ export function ChatPage({
                               )}
                             </div>
                           )}
-
                         <div ref={endDivRef} />
                       </div>
                     </div>

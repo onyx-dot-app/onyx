@@ -17,6 +17,7 @@ from danswer.search.models import ChunkContext
 from danswer.search.models import RetrievalDetails
 from danswer.search.models import SearchDoc
 from danswer.search.models import Tag
+from danswer.tools.models import ToolCallFinalResult
 
 
 class SourceTag(Tag):
@@ -29,6 +30,12 @@ class TagResponse(BaseModel):
 
 class SimpleQueryRequest(BaseModel):
     query: str
+
+
+class UpdateChatSessionThreadRequest(BaseModel):
+    # If not specified, use Danswer default persona
+    chat_session_id: int
+    new_alternate_model: str
 
 
 class ChatSessionCreationRequest(BaseModel):
@@ -141,6 +148,7 @@ class ChatSessionDetails(BaseModel):
     time_created: str
     shared_status: ChatSessionSharedStatus
     folder_id: int | None
+    current_alternate_model: str | None = None
 
 
 class ChatSessionsResponse(BaseModel):
@@ -176,6 +184,7 @@ class ChatMessageDetail(BaseModel):
     # Dict mapping citation number to db_doc_id
     citations: dict[int, int] | None
     files: list[FileDescriptor]
+    tool_calls: list[ToolCallFinalResult]
 
     def dict(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().dict(*args, **kwargs)  # type: ignore
@@ -191,6 +200,7 @@ class ChatSessionDetailResponse(BaseModel):
     messages: list[ChatMessageDetail]
     time_created: datetime
     shared_status: ChatSessionSharedStatus
+    current_alternate_model: str | None
 
 
 class QueryValidationResponse(BaseModel):

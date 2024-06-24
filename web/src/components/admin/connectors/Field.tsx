@@ -43,6 +43,10 @@ export function TextFormField({
   disabled = false,
   autoCompleteDisabled = true,
   error,
+  defaultHeight,
+  isCode = false,
+  fontSize,
+  hideError,
 }: {
   name: string;
   label: string;
@@ -54,7 +58,16 @@ export function TextFormField({
   disabled?: boolean;
   autoCompleteDisabled?: boolean;
   error?: string;
+  defaultHeight?: string;
+  isCode?: boolean;
+  fontSize?: "text-sm" | "text-base" | "text-lg";
+  hideError?: boolean;
 }) {
+  let heightString = defaultHeight || "";
+  if (isTextArea && !heightString) {
+    heightString = "h-28";
+  }
+
   return (
     <div className="mb-4">
       <Label>{label}</Label>
@@ -64,18 +77,19 @@ export function TextFormField({
         type={type}
         name={name}
         id={name}
-        className={
-          `
-        border 
-        border-border 
-        rounded 
-        w-full 
-        py-2 
-        px-3 
-        mt-1
-        ${isTextArea ? " h-28" : ""}
-      ` + (disabled ? " bg-background-strong" : " bg-background-emphasis")
-        }
+        className={`
+          border 
+          border-border 
+          rounded 
+          w-full 
+          py-2 
+          px-3 
+          mt-1
+          ${heightString}
+          ${fontSize}
+          ${disabled ? " bg-background-strong" : " bg-background-emphasis"}
+          ${isCode ? " font-mono" : ""}
+        `}
         disabled={disabled}
         placeholder={placeholder}
         autoComplete={autoCompleteDisabled ? "off" : undefined}
@@ -84,11 +98,13 @@ export function TextFormField({
       {error ? (
         <ManualErrorMessage>{error}</ManualErrorMessage>
       ) : (
-        <ErrorMessage
-          name={name}
-          component="div"
-          className="text-red-500 text-sm mt-1"
-        />
+        !hideError && (
+          <ErrorMessage
+            name={name}
+            component="div"
+            className="text-red-500 text-sm mt-1"
+          />
+        )
       )}
     </div>
   );

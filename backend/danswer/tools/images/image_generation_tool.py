@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from danswer.chat.chat_utils import combine_message_chain
 from danswer.configs.model_configs import GEN_AI_HISTORY_CUTOFF
+from danswer.dynamic_configs.interface import JSON_ro
 from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.interfaces import LLM
 from danswer.llm.utils import build_content_with_imgs
@@ -53,6 +54,8 @@ class ImageGenerationResponse(BaseModel):
 
 
 class ImageGenerationTool(Tool):
+    NAME = "run_image_generation"
+
     def __init__(
         self, api_key: str, model: str = "dall-e-3", num_imgs: int = 2
     ) -> None:
@@ -60,16 +63,14 @@ class ImageGenerationTool(Tool):
         self.model = model
         self.num_imgs = num_imgs
 
-    @classmethod
     def name(self) -> str:
-        return "run_image_generation"
+        return self.NAME
 
-    @classmethod
-    def tool_definition(cls) -> dict:
+    def tool_definition(self) -> dict:
         return {
             "type": "function",
             "function": {
-                "name": cls.name(),
+                "name": self.name(),
                 "description": "Generate an image from a prompt",
                 "parameters": {
                     "type": "object",
@@ -162,3 +163,12 @@ class ImageGenerationTool(Tool):
             id=IMAGE_GENERATION_RESPONSE_ID,
             response=results,
         )
+
+    def final_result(self, *args: ToolResponse) -> JSON_ro:
+        image_generation_responses = cast(
+            list[ImageGenerationResponse], args[0].response
+        )
+        return [
+            image_generation_response.dict()
+            for image_generation_response in image_generation_responses
+        ]

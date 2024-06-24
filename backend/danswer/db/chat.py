@@ -5,6 +5,7 @@ from sqlalchemy import nullsfirst
 from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.exc import MultipleResultsFound
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from danswer.auth.schemas import UserRole
@@ -16,6 +17,7 @@ from danswer.db.models import ChatSessionSharedStatus
 from danswer.db.models import Prompt
 from danswer.db.models import SearchDoc
 from danswer.db.models import SearchDoc as DBSearchDoc
+from danswer.db.models import ToolCall
 from danswer.db.models import User
 from danswer.file_store.models import FileDescriptor
 from danswer.llm.override_models import LLMOverride
@@ -24,6 +26,7 @@ from danswer.search.models import RetrievalDocs
 from danswer.search.models import SavedSearchDoc
 from danswer.search.models import SearchDoc as ServerSearchDoc
 from danswer.server.query_and_chat.models import ChatMessageDetail
+from danswer.tools.tool_runner import ToolCallFinalResult
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -185,6 +188,7 @@ def get_chat_messages_by_session(
     user_id: UUID | None,
     db_session: Session,
     skip_permission_check: bool = False,
+    prefetch_tool_calls: bool = False,
 ) -> list[ChatMessage]:
     if not skip_permission_check:
         get_chat_session_by_id(
@@ -192,12 +196,18 @@ def get_chat_messages_by_session(
         )
 
     stmt = (
-        select(ChatMessage).where(ChatMessage.chat_session_id == chat_session_id)
-        # Start with the root message which has no parent
+        select(ChatMessage)
+        .where(ChatMessage.chat_session_id == chat_session_id)
         .order_by(nullsfirst(ChatMessage.parent_message))
     )
 
-    result = db_session.execute(stmt).scalars().all()
+    if prefetch_tool_calls:
+        stmt = stmt.options(joinedload(ChatMessage.tool_calls))
+
+    if prefetch_tool_calls:
+        result = db_session.scalars(stmt).unique().all()
+    else:
+        result = db_session.scalars(stmt).all()
 
     return list(result)
 
@@ -251,6 +261,7 @@ def create_new_chat_message(
     reference_docs: list[DBSearchDoc] | None = None,
     # Maps the citation number [n] to the DB SearchDoc
     citations: dict[int, int] | None = None,
+    tool_calls: list[ToolCall] | None = None,
     commit: bool = True,
 ) -> ChatMessage:
     new_chat_message = ChatMessage(
@@ -264,6 +275,7 @@ def create_new_chat_message(
         message_type=message_type,
         citations=citations,
         files=files,
+        tool_calls=tool_calls if tool_calls else [],
         error=error,
     )
 
@@ -459,6 +471,14 @@ def translate_db_message_to_chat_message_detail(
         time_sent=chat_message.time_sent,
         citations=chat_message.citations,
         files=chat_message.files or [],
+        tool_calls=[
+            ToolCallFinalResult(
+                tool_name=tool_call.tool_name,
+                tool_args=tool_call.tool_arguments,
+                tool_result=tool_call.tool_result,
+            )
+            for tool_call in chat_message.tool_calls
+        ],
     )
 
     return chat_msg_detail

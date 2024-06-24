@@ -1,16 +1,18 @@
 import { LoadingAnimation } from "@/components/Loading";
 
-export function ToolRunningAnimation({
+export function ToolRunDisplay({
   toolName,
   toolLogo,
+  isRunning,
 }: {
   toolName: string;
-  toolLogo: JSX.Element;
+  toolLogo?: JSX.Element;
+  isRunning: boolean;
 }) {
   return (
-    <div className="text-sm my-auto flex">
+    <div className="text-sm text-subtle my-auto flex">
       {toolLogo}
-      <LoadingAnimation text={toolName} />
+      {isRunning ? <LoadingAnimation text={toolName} /> : toolName}
     </div>
   );
 }

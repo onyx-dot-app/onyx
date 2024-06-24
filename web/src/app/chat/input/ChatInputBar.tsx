@@ -163,6 +163,7 @@ export function ChatInputBar({
                 icon={FaBrain}
                 onClick={() => setConfigModalActiveTab("assistants")}
               />
+
               <ChatInputOption
                 name={
                   llmOverrideManager.llmOverride.modelName ||

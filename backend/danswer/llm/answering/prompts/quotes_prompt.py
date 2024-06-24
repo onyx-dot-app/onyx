@@ -9,6 +9,7 @@ from danswer.prompts.direct_qa_prompts import HISTORY_BLOCK
 from danswer.prompts.direct_qa_prompts import JSON_PROMPT
 from danswer.prompts.direct_qa_prompts import LANGUAGE_HINT
 from danswer.prompts.direct_qa_prompts import WEAK_LLM_PROMPT
+from danswer.prompts.prompt_utils import add_date_time_to_prompt
 from danswer.prompts.prompt_utils import build_complete_context_str
 from danswer.search.models import InferenceChunk
 
@@ -35,6 +36,10 @@ def _build_weak_llm_quotes_prompt(
         task_prompt=prompt.task_prompt,
         user_query=question,
     )
+
+    if prompt.datetime_aware:
+        prompt_str = add_date_time_to_prompt(prompt_str=prompt_str)
+
     return HumanMessage(content=prompt_str)
 
 
@@ -62,6 +67,10 @@ def _build_strong_llm_quotes_prompt(
         user_query=question,
         language_hint_or_none=LANGUAGE_HINT.strip() if use_language_hint else "",
     ).strip()
+
+    if prompt.datetime_aware:
+        full_prompt = add_date_time_to_prompt(prompt_str=full_prompt)
+
     return HumanMessage(content=full_prompt)
 
 

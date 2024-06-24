@@ -412,6 +412,8 @@ configMap:
   EDIT_KEYWORD_QUERY: ""
   MULTILINGUAL_QUERY_EXPANSION: ""
   QA_PROMPT_OVERRIDE: ""
+  # Internet Search Tool
+  BING_API_KEY: ""
   # Don't change the NLP models unless you know what you're doing
   DOCUMENT_ENCODER_MODEL: ""
   NORMALIZE_EMBEDDINGS: ""

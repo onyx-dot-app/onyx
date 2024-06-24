@@ -17,7 +17,7 @@ from danswer.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
 from danswer.prompts.constants import DEFAULT_IGNORE_STATEMENT
 from danswer.prompts.direct_qa_prompts import CITATIONS_PROMPT
 from danswer.prompts.direct_qa_prompts import CITATIONS_PROMPT_FOR_TOOL_CALLING
-from danswer.prompts.prompt_utils import add_time_to_system_prompt
+from danswer.prompts.prompt_utils import add_date_time_to_prompt
 from danswer.prompts.prompt_utils import build_complete_context_str
 from danswer.prompts.prompt_utils import build_task_prompt_reminders
 from danswer.prompts.token_counts import ADDITIONAL_INFO_TOKEN_CNT
@@ -121,7 +121,7 @@ def build_citations_system_message(
     if prompt_config.include_citations:
         system_prompt += REQUIRE_CITATION_STATEMENT
     if prompt_config.datetime_aware:
-        system_prompt = add_time_to_system_prompt(system_prompt=system_prompt)
+        system_prompt = add_date_time_to_prompt(prompt_str=system_prompt)
 
     return SystemMessage(content=system_prompt)
 

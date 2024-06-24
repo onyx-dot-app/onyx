@@ -79,7 +79,7 @@ const PageLink = ({
   </div>
 );
 
-interface PageSelectorProps {
+export interface PageSelectorProps {
   currentPage: number;
   totalPages: number;
   onPageChange: (newPage: number) => void;

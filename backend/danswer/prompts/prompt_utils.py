@@ -35,15 +35,15 @@ def get_current_llm_day_time(
     return f"{formatted_datetime}"
 
 
-def add_time_to_system_prompt(system_prompt: str) -> str:
-    if DANSWER_DATETIME_REPLACEMENT in system_prompt:
-        return system_prompt.replace(
+def add_date_time_to_prompt(prompt_str: str) -> str:
+    if DANSWER_DATETIME_REPLACEMENT in prompt_str:
+        return prompt_str.replace(
             DANSWER_DATETIME_REPLACEMENT,
             get_current_llm_day_time(full_sentence=False, include_day_of_week=True),
         )
 
-    if system_prompt:
-        return system_prompt + ADDITIONAL_INFO.format(
+    if prompt_str:
+        return prompt_str + ADDITIONAL_INFO.format(
             datetime_info=get_current_llm_day_time()
         )
     else:

@@ -59,6 +59,9 @@ COPY ./alembic /app/alembic
 COPY ./alembic.ini /app/alembic.ini
 COPY supervisord.conf /usr/etc/supervisord.conf
 
+# Escape hatch
+COPY ./scripts/force_delete_connector_by_id.py /app/scripts/force_delete_connector_by_id.py
+
 ENV PYTHONPATH /app
 
 # Default command which does nothing

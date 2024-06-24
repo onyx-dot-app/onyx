@@ -9,6 +9,12 @@ class UserRole(str, Enum):
     ADMIN = "admin"
 
 
+class UserStatus(str, Enum):
+    LIVE = "live"
+    INVITED = "invited"
+    DEACTIVATED = "deactivated"
+
+
 class UserRead(schemas.BaseUser[uuid.UUID]):
     role: UserRole
 

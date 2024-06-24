@@ -55,6 +55,7 @@ export function ConfigurationModal({
   filterManager,
   llmProviders,
   llmOverrideManager,
+  chatSessionId,
 }: {
   activeTab: string | null;
   setActiveTab: (tab: string | null) => void;
@@ -65,6 +66,7 @@ export function ConfigurationModal({
   filterManager: FilterManager;
   llmProviders: LLMProviderDescriptor[];
   llmOverrideManager: LlmOverrideManager;
+  chatSessionId?: number;
 }) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -149,6 +151,7 @@ export function ConfigurationModal({
 
             {activeTab === "llms" && (
               <LlmTab
+                chatSessionId={chatSessionId}
                 llmOverrideManager={llmOverrideManager}
                 currentAssistant={selectedAssistant}
               />

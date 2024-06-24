@@ -70,6 +70,7 @@ interface BaseProps<T extends Yup.AnyObject> {
     responseJson: Connector<T> | undefined
   ) => void;
   refreshFreq?: number;
+  pruneFreq?: number;
   // If specified, then we will create an empty credential and associate
   // the connector with it. If credentialId is specified, then this will be ignored
   shouldCreateEmptyCredentialForConnector?: boolean;
@@ -91,6 +92,7 @@ export function ConnectorForm<T extends Yup.AnyObject>({
   validationSchema,
   initialValues,
   refreshFreq,
+  pruneFreq,
   onSubmit,
   shouldCreateEmptyCredentialForConnector,
 }: ConnectorFormProps<T>): JSX.Element {
@@ -144,6 +146,7 @@ export function ConnectorForm<T extends Yup.AnyObject>({
             input_type: inputType,
             connector_specific_config: connectorConfig,
             refresh_freq: refreshFreq || 0,
+            prune_freq: pruneFreq ?? null,
             disabled: false,
           });
 
@@ -281,6 +284,7 @@ export function UpdateConnectorForm<T extends Yup.AnyObject>({
               input_type: existingConnector.input_type,
               connector_specific_config: values,
               refresh_freq: existingConnector.refresh_freq,
+              prune_freq: existingConnector.prune_freq,
               disabled: false,
             },
             existingConnector.id

@@ -2,26 +2,19 @@ import abc
 from collections.abc import Generator
 from typing import Any
 
-from pydantic import BaseModel
-
+from danswer.dynamic_configs.interface import JSON_ro
 from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.interfaces import LLM
-
-
-class ToolResponse(BaseModel):
-    id: str | None = None
-    response: Any
+from danswer.tools.models import ToolResponse
 
 
 class Tool(abc.ABC):
-    @classmethod
     @abc.abstractmethod
     def name(self) -> str:
         raise NotImplementedError
 
     """For LLMs which support explicit tool calling"""
 
-    @classmethod
     @abc.abstractmethod
     def tool_definition(self) -> dict:
         raise NotImplementedError
@@ -48,4 +41,12 @@ class Tool(abc.ABC):
 
     @abc.abstractmethod
     def run(self, **kwargs: Any) -> Generator[ToolResponse, None, None]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def final_result(self, *args: ToolResponse) -> JSON_ro:
+        """
+        This is the "final summary" result of the tool.
+        It is the result that will be stored in the database.
+        """
         raise NotImplementedError

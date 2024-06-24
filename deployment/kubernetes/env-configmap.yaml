@@ -37,6 +37,8 @@ data:
   # Other Services
   POSTGRES_HOST: "relational-db-service"
   VESPA_HOST: "document-index-service"
+  # Internet Search Tool
+  BING_API_KEY: ""
   # Don't change the NLP models unless you know what you're doing
   DOCUMENT_ENCODER_MODEL: ""
   NORMALIZE_EMBEDDINGS: ""

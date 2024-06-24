@@ -50,6 +50,12 @@ class PollConnector(BaseConnector):
         raise NotImplementedError
 
 
+class IdConnector(BaseConnector):
+    @abc.abstractmethod
+    def retrieve_all_source_ids(self) -> set[str]:
+        raise NotImplementedError
+
+
 # Event driven
 class EventConnector(BaseConnector):
     @abc.abstractmethod

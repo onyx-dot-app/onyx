@@ -15,11 +15,28 @@ import {
   Message,
   RetrievalType,
   StreamingError,
-  ToolRunKickoff,
+  ToolCallMetadata,
 } from "./interfaces";
 import { Persona } from "../admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
+
+export async function updateModelOverrideForChatSession(
+  chatSessionId: number,
+  newAlternateModel: string
+) {
+  const response = await fetch("/api/chat/update-chat-session-model", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      chat_session_id: chatSessionId,
+      new_alternate_model: newAlternateModel,
+    }),
+  });
+  return response;
+}
 
 export async function createChatSession(
   personaId: number,
@@ -138,7 +155,7 @@ export async function* sendMessage({
     | DocumentsResponse
     | BackendMessage
     | ImageGenerationDisplay
-    | ToolRunKickoff
+    | ToolCallMetadata
     | StreamingError
   >(sendMessageResponse);
 }
@@ -384,6 +401,7 @@ export function processRawChatHistory(
             citations: messageInfo?.citations || {},
           }
         : {}),
+      toolCalls: messageInfo.tool_calls,
       parentMessageId: messageInfo.parent_message,
       childrenMessageIds: [],
       latestChildMessageId: messageInfo.latest_child_message,

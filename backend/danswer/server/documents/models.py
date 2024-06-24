@@ -68,6 +68,7 @@ class ConnectorBase(BaseModel):
     input_type: InputType
     connector_specific_config: dict[str, Any]
     refresh_freq: int | None  # In seconds, None for one time index with no refresh
+    prune_freq: int | None
     disabled: bool
 
 
@@ -86,6 +87,7 @@ class ConnectorSnapshot(ConnectorBase):
             input_type=connector.input_type,
             connector_specific_config=connector.connector_specific_config,
             refresh_freq=connector.refresh_freq,
+            prune_freq=connector.prune_freq,
             credential_ids=[
                 association.credential.id for association in connector.credentials
             ],

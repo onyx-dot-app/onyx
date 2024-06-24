@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from danswer.chat.chat_utils import create_chat_chain
 from danswer.chat.models import CitationInfo
+from danswer.chat.models import CustomToolResponse
 from danswer.chat.models import DanswerAnswerPiece
 from danswer.chat.models import ImageGenerationDisplay
 from danswer.chat.models import LlmDoc
@@ -31,6 +32,7 @@ from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.engine import get_session_context_manager
 from danswer.db.llm import fetch_existing_llm_providers
 from danswer.db.models import SearchDoc as DbSearchDoc
+from danswer.db.models import ToolCall
 from danswer.db.models import User
 from danswer.document_index.factory import get_default_document_index
 from danswer.file_store.models import ChatFileType
@@ -54,7 +56,10 @@ from danswer.search.utils import drop_llm_indices
 from danswer.server.query_and_chat.models import ChatMessageDetail
 from danswer.server.query_and_chat.models import CreateChatMessageRequest
 from danswer.server.utils import get_json_line
-from danswer.tools.factory import get_tool_cls
+from danswer.tools.built_in_tools import get_built_in_tool_by_id
+from danswer.tools.custom.custom_tool import build_custom_tools_from_openapi_schema
+from danswer.tools.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
+from danswer.tools.custom.custom_tool import CustomToolCallSummary
 from danswer.tools.force import ForceUseTool
 from danswer.tools.images.image_generation_tool import IMAGE_GENERATION_RESPONSE_ID
 from danswer.tools.images.image_generation_tool import ImageGenerationResponse
@@ -65,6 +70,7 @@ from danswer.tools.search.search_tool import SearchTool
 from danswer.tools.search.search_tool import SECTION_RELEVANCE_LIST_ID
 from danswer.tools.tool import Tool
 from danswer.tools.tool import ToolResponse
+from danswer.tools.tool_runner import ToolCallFinalResult
 from danswer.tools.utils import compute_all_tool_tokens
 from danswer.tools.utils import explicit_tool_calling_supported
 from danswer.utils.logger import setup_logger
@@ -162,7 +168,7 @@ def _check_should_force_search(
             args = {"query": new_msg_req.message}
 
         return ForceUseTool(
-            tool_name=SearchTool.name(),
+            tool_name=SearchTool.NAME,
             args=args,
         )
     return None
@@ -176,6 +182,7 @@ ChatPacket = (
     | DanswerAnswerPiece
     | CitationInfo
     | ImageGenerationDisplay
+    | CustomToolResponse
 )
 ChatPacketStream = Iterator[ChatPacket]
 
@@ -389,60 +396,77 @@ def stream_chat_message_objects(
             ),
         )
 
-        persona_tool_classes = [
-            get_tool_cls(tool, db_session) for tool in persona.tools
-        ]
+        # find out what tools to use
+        search_tool: SearchTool | None = None
+        tool_dict: dict[int, list[Tool]] = {}  # tool_id to tool
+        for db_tool_model in persona.tools:
+            # handle in-code tools specially
+            if db_tool_model.in_code_tool_id:
+                tool_cls = get_built_in_tool_by_id(db_tool_model.id, db_session)
+                if tool_cls.__name__ == SearchTool.__name__ and not latest_query_files:
+                    search_tool = SearchTool(
+                        db_session=db_session,
+                        user=user,
+                        persona=persona,
+                        retrieval_options=retrieval_options,
+                        prompt_config=prompt_config,
+                        llm=llm,
+                        pruning_config=document_pruning_config,
+                        selected_docs=selected_llm_docs,
+                        chunks_above=new_msg_req.chunks_above,
+                        chunks_below=new_msg_req.chunks_below,
+                        full_doc=new_msg_req.full_doc,
+                    )
+                    tool_dict[db_tool_model.id] = [search_tool]
+                elif tool_cls.__name__ == ImageGenerationTool.__name__:
+                    dalle_key = None
+                    if (
+                        llm
+                        and llm.config.api_key
+                        and llm.config.model_provider == "openai"
+                    ):
+                        dalle_key = llm.config.api_key
+                    else:
+                        llm_providers = fetch_existing_llm_providers(db_session)
+                        openai_provider = next(
+                            iter(
+                                [
+                                    llm_provider
+                                    for llm_provider in llm_providers
+                                    if llm_provider.provider == "openai"
+                                ]
+                            ),
+                            None,
+                        )
+                        if not openai_provider or not openai_provider.api_key:
+                            raise ValueError(
+                                "Image generation tool requires an OpenAI API key"
+                            )
+                        dalle_key = openai_provider.api_key
+                    tool_dict[db_tool_model.id] = [
+                        ImageGenerationTool(api_key=dalle_key)
+                    ]
+
+                continue
+
+            # handle all custom tools
+            if db_tool_model.openapi_schema:
+                tool_dict[db_tool_model.id] = cast(
+                    list[Tool],
+                    build_custom_tools_from_openapi_schema(
+                        db_tool_model.openapi_schema
+                    ),
+                )
+
+        tools: list[Tool] = []
+        for tool_list in tool_dict.values():
+            tools.extend(tool_list)
 
         # factor in tool definition size when pruning
-        document_pruning_config.tool_num_tokens = compute_all_tool_tokens(
-            persona_tool_classes
-        )
+        document_pruning_config.tool_num_tokens = compute_all_tool_tokens(tools)
         document_pruning_config.using_tool_message = explicit_tool_calling_supported(
             llm.config.model_provider, llm.config.model_name
         )
-
-        # NOTE: for now, only support SearchTool and ImageGenerationTool
-        # in the future, will support arbitrary user-defined tools
-        search_tool: SearchTool | None = None
-        tools: list[Tool] = []
-        for tool_cls in persona_tool_classes:
-            if tool_cls.__name__ == SearchTool.__name__ and not latest_query_files:
-                search_tool = SearchTool(
-                    db_session=db_session,
-                    user=user,
-                    persona=persona,
-                    retrieval_options=retrieval_options,
-                    prompt_config=prompt_config,
-                    llm=llm,
-                    pruning_config=document_pruning_config,
-                    selected_docs=selected_llm_docs,
-                    chunks_above=new_msg_req.chunks_above,
-                    chunks_below=new_msg_req.chunks_below,
-                    full_doc=new_msg_req.full_doc,
-                )
-                tools.append(search_tool)
-            elif tool_cls.__name__ == ImageGenerationTool.__name__:
-                dalle_key = None
-                if llm and llm.config.api_key and llm.config.model_provider == "openai":
-                    dalle_key = llm.config.api_key
-                else:
-                    llm_providers = fetch_existing_llm_providers(db_session)
-                    openai_provider = next(
-                        iter(
-                            [
-                                llm_provider
-                                for llm_provider in llm_providers
-                                if llm_provider.provider == "openai"
-                            ]
-                        ),
-                        None,
-                    )
-                    if not openai_provider or not openai_provider.api_key:
-                        raise ValueError(
-                            "Image generation tool requires an OpenAI API key"
-                        )
-                    dalle_key = openai_provider.api_key
-                tools.append(ImageGenerationTool(api_key=dalle_key))
 
         # LLM prompt building, response capturing, etc.
         answer = Answer(
@@ -468,7 +492,9 @@ def stream_chat_message_objects(
             ],
             tools=tools,
             force_use_tool=(
-                _check_should_force_search(new_msg_req) if search_tool else None
+                _check_should_force_search(new_msg_req)
+                if search_tool and len(tools) == 1
+                else None
             ),
         )
 
@@ -476,6 +502,7 @@ def stream_chat_message_objects(
         qa_docs_response = None
         ai_message_files = None  # any files to associate with the AI message e.g. dall-e generated images
         dropped_indices = None
+        tool_result = None
         for packet in answer.processed_streamed_output:
             if isinstance(packet, ToolResponse):
                 if packet.id == SEARCH_RESPONSE_SUMMARY_ID:
@@ -521,8 +548,16 @@ def stream_chat_message_objects(
                     yield ImageGenerationDisplay(
                         file_ids=[str(file_id) for file_id in file_ids]
                     )
+                elif packet.id == CUSTOM_TOOL_RESPONSE_ID:
+                    custom_tool_response = cast(CustomToolCallSummary, packet.response)
+                    yield CustomToolResponse(
+                        response=custom_tool_response.tool_result,
+                        tool_name=custom_tool_response.tool_name,
+                    )
 
             else:
+                if isinstance(packet, ToolCallFinalResult):
+                    tool_result = packet
                 yield cast(ChatPacket, packet)
 
     except Exception as e:
@@ -551,6 +586,11 @@ def stream_chat_message_objects(
             )
 
         # Saving Gen AI answer and responding with message info
+        tool_name_to_tool_id: dict[str, int] = {}
+        for tool_id, tool_list in tool_dict.items():
+            for tool in tool_list:
+                tool_name_to_tool_id[tool.name()] = tool_id
+
         gen_ai_response_message = partial_response(
             message=answer.llm_answer,
             rephrased_query=(
@@ -561,6 +601,16 @@ def stream_chat_message_objects(
             token_count=len(llm_tokenizer_encode_func(answer.llm_answer)),
             citations=db_citations,
             error=None,
+            tool_calls=[
+                ToolCall(
+                    tool_id=tool_name_to_tool_id[tool_result.tool_name],
+                    tool_name=tool_result.tool_name,
+                    tool_arguments=tool_result.tool_args,
+                    tool_result=tool_result.tool_result,
+                )
+            ]
+            if tool_result
+            else [],
         )
         db_session.commit()  # actually save user / assistant message
 

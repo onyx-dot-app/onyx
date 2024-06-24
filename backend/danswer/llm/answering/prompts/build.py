@@ -15,7 +15,7 @@ from danswer.llm.utils import check_message_tokens
 from danswer.llm.utils import get_default_llm_tokenizer
 from danswer.llm.utils import translate_history_to_basemessages
 from danswer.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
-from danswer.prompts.prompt_utils import add_time_to_system_prompt
+from danswer.prompts.prompt_utils import add_date_time_to_prompt
 from danswer.prompts.prompt_utils import drop_messages_history_overflow
 from danswer.tools.message import ToolCallSummary
 
@@ -25,7 +25,7 @@ def default_build_system_message(
 ) -> SystemMessage | None:
     system_prompt = prompt_config.system_prompt.strip()
     if prompt_config.datetime_aware:
-        system_prompt = add_time_to_system_prompt(system_prompt=system_prompt)
+        system_prompt = add_date_time_to_prompt(prompt_str=system_prompt)
 
     if not system_prompt:
         return None

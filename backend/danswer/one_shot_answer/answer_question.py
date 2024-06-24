@@ -46,12 +46,13 @@ from danswer.secondary_llm_flows.query_expansion import thread_based_query_rephr
 from danswer.server.query_and_chat.models import ChatMessageDetail
 from danswer.server.utils import get_json_line
 from danswer.tools.force import ForceUseTool
+from danswer.tools.search.search_tool import SEARCH_DOC_CONTENT_ID
 from danswer.tools.search.search_tool import SEARCH_RESPONSE_SUMMARY_ID
 from danswer.tools.search.search_tool import SearchResponseSummary
 from danswer.tools.search.search_tool import SearchTool
 from danswer.tools.search.search_tool import SECTION_RELEVANCE_LIST_ID
 from danswer.tools.tool import ToolResponse
-from danswer.tools.tool_runner import ToolRunKickoff
+from danswer.tools.tool_runner import ToolCallKickoff
 from danswer.utils.logger import setup_logger
 from danswer.utils.timing import log_generator_function_time
 
@@ -67,7 +68,7 @@ AnswerObjectIterator = Iterator[
     | StreamingError
     | ChatMessageDetail
     | CitationInfo
-    | ToolRunKickoff
+    | ToolCallKickoff
 ]
 
 
@@ -196,6 +197,7 @@ def stream_answer_objects(
         # for now, don't use tool calling for this flow, as we haven't
         # tested quotes with tool calling too much yet
         skip_explicit_tool_calling=True,
+        return_contexts=query_req.return_contexts,
     )
     # won't be any ImageGenerationDisplay responses since that tool is never passed in
     dropped_inds: list[int] = []
@@ -245,6 +247,8 @@ def stream_answer_objects(
                     )
 
                 yield LLMRelevanceFilterResponse(relevant_chunk_indices=packet.response)
+            elif packet.id == SEARCH_DOC_CONTENT_ID:
+                yield packet.response
         else:
             yield packet
 

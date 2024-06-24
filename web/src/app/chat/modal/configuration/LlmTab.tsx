@@ -5,14 +5,18 @@ import { debounce } from "lodash";
 import { DefaultDropdown } from "@/components/Dropdown";
 import { Text } from "@tremor/react";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { getFinalLLM } from "@/lib/llm/utils";
+import { destructureValue, getFinalLLM, structureValue } from "@/lib/llm/utils";
+import { updateModelOverrideForChatSession } from "../../lib";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 export function LlmTab({
   llmOverrideManager,
   currentAssistant,
+  chatSessionId,
 }: {
   llmOverrideManager: LlmOverrideManager;
   currentAssistant: Persona;
+  chatSessionId?: number;
 }) {
   const { llmProviders } = useChatContext();
   const { llmOverride, setLlmOverride, temperature, setTemperature } =
@@ -37,21 +41,6 @@ export function LlmTab({
   const [_, defaultLlmName] = getFinalLLM(llmProviders, currentAssistant, null);
 
   const llmOptions: { name: string; value: string }[] = [];
-  const structureValue = (
-    name: string,
-    provider: string,
-    modelName: string
-  ) => {
-    return `${name}__${provider}__${modelName}`;
-  };
-  const destructureValue = (value: string): LlmOverride => {
-    const [displayName, provider, modelName] = value.split("__");
-    return {
-      name: displayName,
-      provider,
-      modelName,
-    };
-  };
   llmProviders.forEach((llmProvider) => {
     llmProvider.model_names.forEach((modelName) => {
       llmOptions.push({
@@ -76,6 +65,7 @@ export function LlmTab({
       <Text className="mb-3">
         Default Model: <i className="font-medium">{defaultLlmName}</i>.
       </Text>
+
       <div className="w-96">
         <DefaultDropdown
           options={llmOptions}
@@ -84,9 +74,12 @@ export function LlmTab({
             llmOverride.provider,
             llmOverride.modelName
           )}
-          onSelect={(value) =>
-            setLlmOverride(destructureValue(value as string))
-          }
+          onSelect={(value) => {
+            setLlmOverride(destructureValue(value as string));
+            if (chatSessionId) {
+              updateModelOverrideForChatSession(chatSessionId, value as string);
+            }
+          }}
         />
       </div>
 

@@ -61,13 +61,8 @@ def read_questions(questions_file_path: str) -> list[dict]:
     return samples
 
 
-def main(questions_file: str, output_file: str, limit: int | None = None) -> None:
-    samples = read_questions(questions_file)
-
-    if limit is not None:
-        samples = samples[:limit]
-
-    response_dicts = []
+def get_relari_outputs(samples: list[dict]) -> list[dict]:
+    relari_outputs = []
     with Session(get_sqlalchemy_engine(), expire_on_commit=False) as db_session:
         for sample in samples:
             answer = get_answer_for_question(
@@ -75,22 +70,46 @@ def main(questions_file: str, output_file: str, limit: int | None = None) -> Non
             )
             assert answer.contexts
 
-            response_dict = {
-                "question": sample["question"],
-                "retrieved_contexts": [
-                    context.content for context in answer.contexts.contexts
-                ],
-                "ground_truth_contexts": sample["ground_truth_contexts"],
-                "answer": answer.answer,
-                "ground_truths": sample["ground_truths"],
-            }
+            relari_outputs.append(
+                {
+                    "label": sample["uid"],
+                    "question": sample["question"],
+                    "answer": answer.answer,
+                    "retrieved_context": [
+                        context.content for context in answer.contexts.contexts
+                    ],
+                }
+            )
 
-            response_dicts.append(response_dict)
+    return relari_outputs
 
-    with open(output_file, "w", encoding="utf-8") as out_file:
-        for response_dict in response_dicts:
-            json_line = json.dumps(response_dict)
-            out_file.write(json_line + "\n")
+
+def write_output_file(relari_outputs: list[dict], output_file: str) -> None:
+    with open(output_file, "w", encoding="utf-8") as file:
+        for output in relari_outputs:
+            file.write(json.dumps(output) + "\n")
+
+
+def main(questions_file: str, output_file: str, limit: int | None = None) -> None:
+    samples = read_questions(questions_file)
+
+    if limit is not None:
+        samples = samples[:limit]
+
+    # Use to be in this format but has since changed
+    # response_dict = {
+    #     "question": sample["question"],
+    #     "retrieved_contexts": [
+    #         context.content for context in answer.contexts.contexts
+    #     ],
+    #     "ground_truth_contexts": sample["ground_truth_contexts"],
+    #     "answer": answer.answer,
+    #     "ground_truths": sample["ground_truths"],
+    # }
+
+    relari_outputs = get_relari_outputs(samples=samples)
+
+    write_output_file(relari_outputs, output_file)
 
 
 if __name__ == "__main__":

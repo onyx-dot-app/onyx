@@ -473,6 +473,11 @@ class GoogleDriveConnector(LoadConnector, PollConnector):
             doc_batch = []
             for file in files_batch:
                 try:
+                    # Skip files that are shortcuts
+                    if file.get("mimeType") == DRIVE_SHORTCUT_TYPE:
+                        logger.info("Ignoring Drive Shortcut Filetype")
+                        continue
+
                     if self.only_org_public:
                         if "permissions" not in file:
                             continue

@@ -4,6 +4,12 @@ export interface UserPreferences {
   chosen_assistants: number[] | null;
 }
 
+export enum UserStatus {
+  live = "live",
+  invited = "invited",
+  deactivated = "deactivated",
+}
+
 export interface User {
   id: string;
   email: string;
@@ -12,6 +18,7 @@ export interface User {
   is_verified: string;
   role: "basic" | "admin";
   preferences: UserPreferences;
+  status: UserStatus;
 }
 
 export interface MinimalUserSnapshot {
@@ -78,6 +85,7 @@ export interface ConnectorBase<T> {
   source: ValidSources;
   connector_specific_config: T;
   refresh_freq: number | null;
+  prune_freq: number | null;
   disabled: boolean;
 }
 

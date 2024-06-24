@@ -91,9 +91,10 @@ def create_or_add_document_tag_list(
             new_tags.append(new_tag)
             existing_tag_values.add(tag_value)
 
-    logger.debug(
-        f"Created new tags: {', '.join([f'{tag.tag_key}:{tag.tag_value}' for tag in new_tags])}"
-    )
+    if new_tags:
+        logger.debug(
+            f"Created new tags: {', '.join([f'{tag.tag_key}:{tag.tag_value}' for tag in new_tags])}"
+        )
 
     all_tags = existing_tags + new_tags
 

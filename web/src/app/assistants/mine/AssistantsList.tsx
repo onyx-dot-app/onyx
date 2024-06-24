@@ -295,7 +295,7 @@ export function AssistantsList({ user, assistants }: AssistantsListProps) {
             <NavigationButton>
               <div className="flex justify-center">
                 <FiSearch className="mr-2 my-auto" size={20} />
-                View Public and Shared Assistants
+                View Available Assistants
               </div>
             </NavigationButton>
           </Link>

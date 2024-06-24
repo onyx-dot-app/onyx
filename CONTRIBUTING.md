@@ -72,6 +72,10 @@ For convenience here's a command for it:
 python -m venv .venv
 source .venv/bin/activate
 ```
+
+--> Note that this virtual environment MUST NOT be set up WITHIN the danswer
+directory
+
 _For Windows, activate the virtual environment using Command Prompt:_
 ```bash
 .venv\Scripts\activate

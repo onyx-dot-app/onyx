@@ -221,13 +221,32 @@ const MainSection = () => {
             // formBody={<></>}
             formBodyBuilder={TextArrayFieldBuilder({
               name: "requested_objects",
-              label: "requested_objects:",
-              subtext:
-                "Optionally, specify the Salesforce object type you would like us to index by. For example, specifying the object " +
-                "'Lead' will cause us to generate a document based on each Lead. " +
-                "These documents would contain all the information for this Lead, including its child objects (E.g. associated contacts, companies, etc.). " +
-                "If no requested objects are specified, we will default to indexing by 'Account'." +
-                "Make sure to use the singular form of the object (E.g. Opportunity instead of Opportunities)",
+              label: "Specify Salesforce objects to organize by:",
+              subtext: (
+                <>
+                  <br />
+                  Specify the Salesforce object types you want us to index.{" "}
+                  <br />
+                  <br />
+                  Click
+                  <a
+                    href="https://docs.danswer.dev/connectors/salesforce#an_example"
+                    className="text-blue-500"
+                    rel="noopener noreferrer"
+                  >
+                    {" "}
+                    here{" "}
+                  </a>
+                  for an example of how Danswer uses the objects. <br />
+                  <br />
+                  If unsure, don&apos;t specify any objects and Danswer will
+                  default to indexing by &apos;Account&apos;.
+                  <br />
+                  <br />
+                  Hint: Use the singular form of the object name (e.g.,
+                  &apos;Opportunity&apos; instead of &apos;Opportunities&apos;).
+                </>
+              ),
             })}
             validationSchema={Yup.object().shape({
               requested_objects: Yup.array()

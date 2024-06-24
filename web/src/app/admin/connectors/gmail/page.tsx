@@ -141,9 +141,16 @@ const Main = () => {
 
   const { popup, setPopup } = usePopup();
 
+  const appCredentialSuccessfullyFetched =
+    appCredentialData ||
+    (isAppCredentialError && isAppCredentialError.status === 404);
+  const serviceAccountKeySuccessfullyFetched =
+    serviceAccountKeyData ||
+    (isServiceAccountKeyError && isServiceAccountKeyError.status === 404);
+
   if (
-    (!appCredentialData && isAppCredentialLoading) ||
-    (!serviceAccountKeyData && isServiceAccountKeyLoading) ||
+    (!appCredentialSuccessfullyFetched && isAppCredentialLoading) ||
+    (!serviceAccountKeySuccessfullyFetched && isServiceAccountKeyLoading) ||
     (!connectorIndexingStatuses && isConnectorIndexingStatusesLoading) ||
     (!credentialsData && isCredentialsLoading)
   ) {
@@ -170,7 +177,10 @@ const Main = () => {
     );
   }
 
-  if (isAppCredentialError || isServiceAccountKeyError) {
+  if (
+    !appCredentialSuccessfullyFetched ||
+    !serviceAccountKeySuccessfullyFetched
+  ) {
     return (
       <div className="mx-auto">
         <div className="text-red-500">

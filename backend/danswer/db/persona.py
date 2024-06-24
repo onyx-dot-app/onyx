@@ -537,12 +537,22 @@ def get_persona_by_id(
     user: User | None,
     db_session: Session,
     include_deleted: bool = False,
+    is_for_edit: bool = True,  # NOTE: assume true for safety
 ) -> Persona:
     stmt = select(Persona).where(Persona.id == persona_id)
 
+    or_conditions = []
+
     # if user is an admin, they should have access to all Personas
     if user is not None and user.role != UserRole.ADMIN:
-        stmt = stmt.where(or_(Persona.user_id == user.id, Persona.user_id.is_(None)))
+        or_conditions.extend([Persona.user_id == user.id, Persona.user_id.is_(None)])
+
+        # if we aren't editing, also give access to all public personas
+        if not is_for_edit:
+            or_conditions.append(Persona.is_public.is_(True))
+
+    if or_conditions:
+        stmt = stmt.where(or_(*or_conditions))
 
     if not include_deleted:
         stmt = stmt.where(Persona.deleted.is_(False))

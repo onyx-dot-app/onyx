@@ -16,6 +16,7 @@ import pptx  # type: ignore
 from pypdf import PdfReader
 from pypdf.errors import PdfStreamError
 
+from danswer.configs.constants import DANSWER_METADATA_FILENAME
 from danswer.file_processing.html_utils import parse_html_page_basic
 from danswer.utils.logger import setup_logger
 
@@ -88,7 +89,7 @@ def load_files_from_zip(
     with zipfile.ZipFile(zip_file_io, "r") as zip_file:
         zip_metadata = {}
         try:
-            metadata_file_info = zip_file.getinfo(".danswer_metadata.json")
+            metadata_file_info = zip_file.getinfo(DANSWER_METADATA_FILENAME)
             with zip_file.open(metadata_file_info, "r") as metadata_file:
                 try:
                     zip_metadata = json.load(metadata_file)
@@ -96,18 +97,19 @@ def load_files_from_zip(
                         # convert list of dicts to dict of dicts
                         zip_metadata = {d["filename"]: d for d in zip_metadata}
                 except json.JSONDecodeError:
-                    logger.warn("Unable to load .danswer_metadata.json")
+                    logger.warn(f"Unable to load {DANSWER_METADATA_FILENAME}")
         except KeyError:
-            logger.info("No .danswer_metadata.json file")
+            logger.info(f"No {DANSWER_METADATA_FILENAME} file")
 
         for file_info in zip_file.infolist():
             with zip_file.open(file_info.filename, "r") as file:
                 if ignore_dirs and file_info.is_dir():
                     continue
 
-                if ignore_macos_resource_fork_files and is_macos_resource_fork_file(
-                    file_info.filename
-                ):
+                if (
+                    ignore_macos_resource_fork_files
+                    and is_macos_resource_fork_file(file_info.filename)
+                ) or file_info.filename == DANSWER_METADATA_FILENAME:
                     continue
                 yield file_info, file, zip_metadata.get(file_info.filename, {})
 

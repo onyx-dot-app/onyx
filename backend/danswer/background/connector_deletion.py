@@ -41,7 +41,7 @@ logger = setup_logger()
 _DELETION_BATCH_SIZE = 1000
 
 
-def _delete_connector_credential_pair_batch(
+def delete_connector_credential_pair_batch(
     document_ids: list[str],
     connector_id: int,
     credential_id: int,
@@ -169,7 +169,7 @@ def delete_connector_credential_pair(
         if not documents:
             break
 
-        _delete_connector_credential_pair_batch(
+        delete_connector_credential_pair_batch(
             document_ids=[document.id for document in documents],
             connector_id=connector_id,
             credential_id=credential_id,

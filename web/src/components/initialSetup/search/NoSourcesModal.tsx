@@ -4,10 +4,14 @@ import { Button, Divider, Text } from "@tremor/react";
 import { Modal } from "../../Modal";
 import Link from "next/link";
 import { FiMessageSquare, FiShare2 } from "react-icons/fi";
-import { useState } from "react";
+import { useContext, useState } from "react";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 export function NoSourcesModal() {
-  const [isHidden, setIsHidden] = useState(false);
+  const settings = useContext(SettingsContext);
+  const [isHidden, setIsHidden] = useState(
+    !settings?.settings.search_page_enabled ?? false
+  );
 
   if (isHidden) {
     return null;

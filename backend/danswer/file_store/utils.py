@@ -24,7 +24,7 @@ def load_chat_file(
         file_id=file_descriptor["id"],
         content=file_io.read(),
         file_type=file_descriptor["type"],
-        filename=file_descriptor["name"],
+        filename=file_descriptor.get("name"),
     )
 
 

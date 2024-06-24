@@ -43,3 +43,20 @@ export function checkLLMSupportsImageInput(provider: string, model: string) {
     ([p, m]) => p === provider && m === model
   );
 }
+
+export const structureValue = (
+  name: string,
+  provider: string,
+  modelName: string
+) => {
+  return `${name}__${provider}__${modelName}`;
+};
+
+export const destructureValue = (value: string): LlmOverride => {
+  const [displayName, provider, modelName] = value.split("__");
+  return {
+    name: displayName,
+    provider,
+    modelName,
+  };
+};

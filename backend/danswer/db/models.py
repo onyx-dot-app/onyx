@@ -133,6 +133,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     prompts: Mapped[list["Prompt"]] = relationship("Prompt", back_populates="user")
     # Personas owned by this user
     personas: Mapped[list["Persona"]] = relationship("Persona", back_populates="user")
+    # Custom tools created by this user
+    custom_tools: Mapped[list["Tool"]] = relationship("Tool", back_populates="user")
 
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
@@ -330,7 +332,6 @@ class Document(Base):
     primary_owners: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True
     )
-    # Something like assignee or space owner
     secondary_owners: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True
     )
@@ -382,6 +383,7 @@ class Connector(Base):
         postgresql.JSONB()
     )
     refresh_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    prune_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -618,6 +620,26 @@ class SearchDoc(Base):
     )
 
 
+class ToolCall(Base):
+    """Represents a single tool call"""
+
+    __tablename__ = "tool_call"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # not a FK because we want to be able to delete the tool without deleting
+    # this entry
+    tool_id: Mapped[int] = mapped_column(Integer())
+    tool_name: Mapped[str] = mapped_column(String())
+    tool_arguments: Mapped[dict[str, JSON_ro]] = mapped_column(postgresql.JSONB())
+    tool_result: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
+
+    message_id: Mapped[int] = mapped_column(ForeignKey("chat_message.id"))
+
+    message: Mapped["ChatMessage"] = relationship(
+        "ChatMessage", back_populates="tool_calls"
+    )
+
+
 class ChatSession(Base):
     __tablename__ = "chat_session"
 
@@ -638,6 +660,8 @@ class ChatSession(Base):
     folder_id: Mapped[int | None] = mapped_column(
         ForeignKey("chat_folder.id"), nullable=True
     )
+
+    current_alternate_model: Mapped[str | None] = mapped_column(String, default=None)
 
     # the latest "overrides" specified by the user. These take precedence over
     # the attached persona. However, overrides specified directly in the
@@ -722,6 +746,10 @@ class ChatMessage(Base):
         "SearchDoc",
         secondary="chat_message__search_doc",
         back_populates="chat_messages",
+    )
+    tool_calls: Mapped[list["ToolCall"]] = relationship(
+        "ToolCall",
+        back_populates="message",
     )
 
 
@@ -901,9 +929,18 @@ class Tool(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     # ID of the tool in the codebase, only applies for in-code tools.
-    # tools defiend via the UI will have this as None
+    # tools defined via the UI will have this as None
     in_code_tool_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # OpenAPI scheme for the tool. Only applies to tools defined via the UI.
+    openapi_schema: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
+    # user who created / owns the tool. Will be None for built-in tools.
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+
+    user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
     # Relationship to Persona through the association table
     personas: Mapped[list["Persona"]] = relationship(
         "Persona",

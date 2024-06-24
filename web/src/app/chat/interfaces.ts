@@ -34,6 +34,18 @@ export interface FileDescriptor {
   isUploading?: boolean;
 }
 
+export interface ToolCallMetadata {
+  tool_name: string;
+  tool_args: Record<string, any>;
+  tool_result?: Record<string, any>;
+}
+
+export interface ToolCallFinalResult {
+  tool_name: string;
+  tool_args: Record<string, any>;
+  tool_result: Record<string, any>;
+}
+
 export interface ChatSession {
   id: number;
   name: string;
@@ -41,6 +53,7 @@ export interface ChatSession {
   time_created: string;
   shared_status: ChatSessionSharedStatus;
   folder_id: number | null;
+  current_alternate_model: string;
 }
 
 export interface Message {
@@ -52,6 +65,7 @@ export interface Message {
   documents?: DanswerDocument[] | null;
   citations?: CitationMap;
   files: FileDescriptor[];
+  toolCalls: ToolCallMetadata[];
   // for rebuilding the message tree
   parentMessageId: number | null;
   childrenMessageIds?: number[];
@@ -66,6 +80,7 @@ export interface BackendChatSession {
   messages: BackendMessage[];
   time_created: string;
   shared_status: ChatSessionSharedStatus;
+  current_alternate_model?: string;
 }
 
 export interface BackendMessage {
@@ -79,6 +94,7 @@ export interface BackendMessage {
   time_sent: string;
   citations: CitationMap;
   files: FileDescriptor[];
+  tool_calls: ToolCallFinalResult[];
 }
 
 export interface DocumentsResponse {
@@ -88,11 +104,6 @@ export interface DocumentsResponse {
 
 export interface ImageGenerationDisplay {
   file_ids: string[];
-}
-
-export interface ToolRunKickoff {
-  tool_name: string;
-  tool_args: Record<string, any>;
 }
 
 export interface StreamingError {

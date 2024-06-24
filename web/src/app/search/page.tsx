@@ -149,8 +149,12 @@ export default async function Home() {
     !hasCompletedWelcomeFlowSS() &&
     !hasAnyConnectors &&
     (!user || user.role === "admin");
+
   const shouldDisplayNoSourcesModal =
-    ccPairs.length === 0 && !shouldShowWelcomeModal;
+    (!user || user.role === "admin") &&
+    ccPairs.length === 0 &&
+    !shouldShowWelcomeModal;
+
   const shouldDisplaySourcesIncompleteModal =
     !ccPairs.some(
       (ccPair) => ccPair.has_successful_run && ccPair.docs_indexed > 0
@@ -165,10 +169,13 @@ export default async function Home() {
         <HealthCheckBanner />
       </div>
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
+
       {!shouldShowWelcomeModal &&
         !shouldDisplayNoSourcesModal &&
         !shouldDisplaySourcesIncompleteModal && <ApiKeyModal user={user} />}
+
       {shouldDisplayNoSourcesModal && <NoSourcesModal />}
+
       {shouldDisplaySourcesIncompleteModal && (
         <NoCompleteSourcesModal ccPairs={ccPairs} />
       )}

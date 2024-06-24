@@ -327,6 +327,7 @@ def prepare_to_modify_documents(
     Multiple commits will result in a sqlalchemy.exc.InvalidRequestError.
     NOTE: this function will commit any existing transaction.
     """
+
     db_session.commit()  # ensure that we're not in a transaction
 
     lock_acquired = False

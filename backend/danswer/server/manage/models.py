@@ -14,6 +14,8 @@ from danswer.db.models import SlackBotConfig as SlackBotConfigModel
 from danswer.db.models import SlackBotResponseType
 from danswer.indexing.models import EmbeddingModelDetail
 from danswer.server.features.persona.models import PersonaSnapshot
+from danswer.server.models import FullUserSnapshot
+from danswer.server.models import InvitedUserSnapshot
 
 if TYPE_CHECKING:
     from danswer.db.models import User as UserModel
@@ -152,3 +154,10 @@ class SlackBotConfig(BaseModel):
 class FullModelVersionResponse(BaseModel):
     current_model: EmbeddingModelDetail
     secondary_model: EmbeddingModelDetail | None
+
+
+class AllUsersResponse(BaseModel):
+    accepted: list[FullUserSnapshot]
+    invited: list[InvitedUserSnapshot]
+    accepted_pages: int
+    invited_pages: int
