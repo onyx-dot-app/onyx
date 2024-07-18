@@ -135,7 +135,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <Text>
             If the deletion of the connector is stuck, you can try to delete it again.
             <br/>
-            You can tell it's stuck, if the number of <b>Total Documents Indexed</b> is not decreasing, or it's 0 for a long time, and the connector is still not deleted.
+            You can tell it&apos;s stuck, if the number of <b>Total Documents Indexed</b> is not decreasing, or it&apos;s 0 for a long time, and the connector is still not deleted.
           </Text>
 
         </>
