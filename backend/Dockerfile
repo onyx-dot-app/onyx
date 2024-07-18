@@ -17,7 +17,7 @@ RUN echo "DANSWER_VERSION: ${DANSWER_VERSION}"
 # zip for Vespa step futher down
 # ca-certificates for HTTPS
 RUN apt-get update && \
-    apt-get install -y cmake curl zip ca-certificates libgnutls30=3.7.9-2+deb12u2 iputils-ping \
+    apt-get install -y cmake curl zip ca-certificates libgnutls30=3.7.9-2+deb12u3 iputils-ping \
     libblkid1=2.38.1-5+deb12u1 libmount1=2.38.1-5+deb12u1 libsmartcols1=2.38.1-5+deb12u1 \
     libuuid1=2.38.1-5+deb12u1 && \
     rm -rf /var/lib/apt/lists/* && \
