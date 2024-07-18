@@ -41,7 +41,7 @@ export function DeletionButton({ ccPair }: { ccPair: CCPairFullInfo }) {
           )
         }
         icon={FiTrash}
-        disabled={!ccPair.connector.disabled || isDeleting}
+        disabled={!ccPair.connector.disabled}
         tooltip={tooltip}
       >
         Schedule for Deletion

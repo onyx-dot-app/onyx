@@ -4,7 +4,7 @@ import { CCPairFullInfo } from "./types";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { CCPairStatus } from "@/components/Status";
 import { BackButton } from "@/components/BackButton";
-import { Divider, Title } from "@tremor/react";
+import { Divider, Title, Badge } from "@tremor/react";
 import { IndexingAttemptsTable } from "./IndexingAttemptsTable";
 import { Text } from "@tremor/react";
 import { ConfigDisplay } from "./ConfigDisplay";
@@ -18,6 +18,12 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { buildCCPairInfoUrl } from "./lib";
+import {
+  FiAlertTriangle,
+  FiCheckCircle,
+  FiClock,
+  FiPauseCircle,
+} from "react-icons/fi";
 
 // since the uploaded files are cleaned up after some period of time
 // re-indexing will not work for the file connector. Also, it would not
@@ -118,6 +124,22 @@ function Main({ ccPairId }: { ccPairId: number }) {
         <Text>
           Deleting the connector will also delete all associated documents.
         </Text>
+
+      <br/>
+      {isDeleting && (
+        <>
+          <Badge size="md" color="yellow" icon={FiAlertTriangle}>
+            Attention
+          </Badge>
+
+          <Text>
+            If the deletion of the connector is stuck, you can try to delete it again.
+            <br/>
+            You can tell it's stuck, if the number of <b>Total Documents Indexed</b> is not decreasing, or it's 0 for a long time, and the connector is still not deleted.
+          </Text>
+
+        </>
+      )}
 
         <div className="flex mt-16">
           <div className="mx-auto">
