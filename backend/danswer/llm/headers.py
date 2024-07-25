@@ -1,5 +1,6 @@
 from fastapi.datastructures import Headers
 
+from danswer.configs.model_configs import LITELLM_EXTRA_HEADERS
 from danswer.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 
 
@@ -20,3 +21,14 @@ def get_litellm_additional_request_headers(
                 pass_through_headers[lowercase_key] = headers[lowercase_key]
 
     return pass_through_headers
+
+
+def build_llm_extra_headers(
+    additional_headers: dict[str, str] | None = None
+) -> dict[str, str]:
+    extra_headers: dict[str, str] = {}
+    if additional_headers:
+        extra_headers.update(additional_headers)
+    if LITELLM_EXTRA_HEADERS:
+        extra_headers.update(LITELLM_EXTRA_HEADERS)
+    return extra_headers

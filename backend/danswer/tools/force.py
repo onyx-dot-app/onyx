@@ -37,4 +37,4 @@ def filter_tools_for_force_tool_use(
     if not force_use_tool:
         return tools
 
-    return [tool for tool in tools if tool.name() == force_use_tool.tool_name]
+    return [tool for tool in tools if tool.name == force_use_tool.tool_name]

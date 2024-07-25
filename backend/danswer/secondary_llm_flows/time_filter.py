@@ -156,10 +156,12 @@ def extract_time_filter(query: str, llm: LLM) -> tuple[datetime | None, bool]:
 
 if __name__ == "__main__":
     # Just for testing purposes, too tedious to unit test as it relies on an LLM
-    from danswer.llm.factory import get_default_llm
+    from danswer.llm.factory import get_default_llms, get_main_llm_from_tuple
 
     while True:
         user_input = input("Query to Extract Time: ")
-        cutoff, recency_bias = extract_time_filter(user_input, get_default_llm())
+        cutoff, recency_bias = extract_time_filter(
+            user_input, get_main_llm_from_tuple(get_default_llms())
+        )
         print(f"Time Cutoff: {cutoff}")
         print(f"Favor Recent: {recency_bias}")

@@ -276,7 +276,7 @@ const Main = () => {
 
           <div className="mb-2"></div>
 
-          <Link className="flex mb-3" href="/admin/bot/new">
+          <Link className="flex mb-3 w-fit" href="/admin/bot/new">
             <Button className="my-auto" color="green" size="xs">
               New Slack Bot Configuration
             </Button>
@@ -301,7 +301,7 @@ const Page = () => {
   return (
     <div className="container mx-auto">
       <AdminPageTitle
-        icon={<FiSlack size={32} />}
+        icon={<SlackIcon size={32} />}
         title="Slack Bot Configuration"
       />
       <InstantSSRAutoRefresh />

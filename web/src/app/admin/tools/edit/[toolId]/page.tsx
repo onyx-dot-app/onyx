@@ -6,6 +6,7 @@ import { DeleteToolButton } from "./DeleteToolButton";
 import { FiTool } from "react-icons/fi";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { BackButton } from "@/components/BackButton";
+import { ToolIcon } from "@/components/icons/icons";
 
 export default async function Page({ params }: { params: { toolId: string } }) {
   const tool = await fetchToolByIdSS(params.toolId);
@@ -46,7 +47,7 @@ export default async function Page({ params }: { params: { toolId: string } }) {
 
       <AdminPageTitle
         title="Edit Tool"
-        icon={<FiTool size={32} className="my-auto" />}
+        icon={<ToolIcon size={32} className="my-auto" />}
       />
 
       {body}

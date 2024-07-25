@@ -3,14 +3,29 @@ import { CPUIcon } from "@/components/icons/icons";
 import { SlackBotCreationForm } from "../SlackBotConfigCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { DocumentSet } from "@/lib/types";
+import { DocumentSet, StandardAnswerCategory } from "@/lib/types";
 import { BackButton } from "@/components/BackButton";
 import { Text } from "@tremor/react";
-import { Persona } from "../../assistants/interfaces";
+import {
+  FetchAssistantsResponse,
+  fetchAssistantsSS,
+} from "@/lib/assistants/fetchAssistantsSS";
 
 async function Page() {
-  const tasks = [fetchSS("/manage/document-set"), fetchSS("/persona")];
-  const [documentSetsResponse, personasResponse] = await Promise.all(tasks);
+  const tasks = [
+    fetchSS("/manage/document-set"),
+    fetchAssistantsSS(),
+    fetchSS("/manage/admin/standard-answer/category"),
+  ];
+  const [
+    documentSetsResponse,
+    [assistants, assistantsFetchError],
+    standardAnswerCategoriesResponse,
+  ] = (await Promise.all(tasks)) as [
+    Response,
+    FetchAssistantsResponse,
+    Response,
+  ];
 
   if (!documentSetsResponse.ok) {
     return (
@@ -22,15 +37,26 @@ async function Page() {
   }
   const documentSets = (await documentSetsResponse.json()) as DocumentSet[];
 
-  if (!personasResponse.ok) {
+  if (assistantsFetchError) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch personas - ${await personasResponse.text()}`}
+        errorMsg={`Failed to fetch assistants - ${assistantsFetchError}`}
       />
     );
   }
-  const personas = (await personasResponse.json()) as Persona[];
+
+  if (!standardAnswerCategoriesResponse.ok) {
+    return (
+      <ErrorCallout
+        errorTitle="Something went wrong :("
+        errorMsg={`Failed to fetch standard answer categories - ${await standardAnswerCategoriesResponse.text()}`}
+      />
+    );
+  }
+
+  const standardAnswerCategories =
+    (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
 
   return (
     <div className="container mx-auto">
@@ -45,7 +71,11 @@ async function Page() {
         DanswerBot behaves in the specified channels.
       </Text>
 
-      <SlackBotCreationForm documentSets={documentSets} personas={personas} />
+      <SlackBotCreationForm
+        documentSets={documentSets}
+        personas={assistants}
+        standardAnswerCategories={standardAnswerCategories}
+      />
     </div>
   );
 }

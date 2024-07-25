@@ -47,10 +47,6 @@ DANSWER_BOT_DISPLAY_ERROR_MSGS = os.environ.get(
 DANSWER_BOT_RESPOND_EVERY_CHANNEL = (
     os.environ.get("DANSWER_BOT_RESPOND_EVERY_CHANNEL", "").lower() == "true"
 )
-# Auto detect query options like time cutoff or heavily favor recently updated docs
-DISABLE_DANSWER_BOT_FILTER_DETECT = (
-    os.environ.get("DISABLE_DANSWER_BOT_FILTER_DETECT", "").lower() == "true"
-)
 # Add a second LLM call post Answer to verify if the Answer is valid
 # Throws out answers that don't directly or fully answer the user query
 # This is the default for all DanswerBot channels unless the channel is configured individually

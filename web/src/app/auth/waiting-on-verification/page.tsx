@@ -4,11 +4,11 @@ import {
   getCurrentUserSS,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
-import Image from "next/image";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { User } from "@/lib/types";
 import { Text } from "@tremor/react";
 import { RequestNewVerificationEmail } from "./RequestNewVerificationEmail";
+import { Logo } from "@/components/Logo";
 
 export default async function Page() {
   // catch cases where the backend is completely unreachable here
@@ -43,9 +43,7 @@ export default async function Page() {
       </div>
       <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div>
-          <div className="h-16 w-16 mx-auto">
-            <Image src="/logo.png" alt="Logo" width="1419" height="1520" />
-          </div>
+          <Logo height={64} width={64} className="mx-auto w-fit" />
 
           <div className="flex">
             <Text className="text-center font-medium text-lg mt-6 w-108">

@@ -1,23 +1,16 @@
-import json
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import cast
 
 from fastapi import APIRouter
-from fastapi import Body
 from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_admin_user
 from danswer.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
-from danswer.configs.app_configs import TOKEN_BUDGET_GLOBALLY_ENABLED
 from danswer.configs.constants import DocumentSource
-from danswer.configs.constants import ENABLE_TOKEN_BUDGET
-from danswer.configs.constants import TOKEN_BUDGET
-from danswer.configs.constants import TOKEN_BUDGET_SETTINGS
-from danswer.configs.constants import TOKEN_BUDGET_TIME_PERIOD
 from danswer.db.connector_credential_pair import get_connector_credential_pair
 from danswer.db.deletion_attempt import check_deletion_attempt_is_allowed
 from danswer.db.engine import get_session
@@ -31,7 +24,7 @@ from danswer.document_index.factory import get_default_document_index
 from danswer.dynamic_configs.factory import get_dynamic_config_store
 from danswer.dynamic_configs.interface import ConfigNotFoundError
 from danswer.file_store.file_store import get_default_file_store
-from danswer.llm.factory import get_default_llm
+from danswer.llm.factory import get_default_llms
 from danswer.llm.utils import test_llm
 from danswer.server.documents.models import ConnectorCredentialPairIdentifier
 from danswer.server.manage.models import BoostDoc
@@ -133,7 +126,7 @@ def validate_existing_genai_api_key(
         pass
 
     try:
-        llm = get_default_llm(timeout=10)
+        llm, __ = get_default_llms(timeout=10)
     except ValueError:
         raise HTTPException(status_code=404, detail="LLM not setup")
 
@@ -152,7 +145,9 @@ def create_deletion_attempt_for_connector_id(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    from danswer.background.celery.celery import cleanup_connector_credential_pair_task
+    from danswer.background.celery.celery_app import (
+        cleanup_connector_credential_pair_task,
+    )
 
     connector_id = connector_credential_pair_identifier.connector_id
     credential_id = connector_credential_pair_identifier.credential_id
@@ -193,41 +188,3 @@ def create_deletion_attempt_for_connector_id(
         file_store = get_default_file_store(db_session)
         for file_name in connector.connector_specific_config["file_locations"]:
             file_store.delete_file(file_name)
-
-
-@router.get("/admin/token-budget-settings")
-def get_token_budget_settings(_: User = Depends(current_admin_user)) -> dict:
-    if not TOKEN_BUDGET_GLOBALLY_ENABLED:
-        raise HTTPException(
-            status_code=400, detail="Token budget is not enabled in the application."
-        )
-
-    try:
-        settings_json = cast(
-            str, get_dynamic_config_store().load(TOKEN_BUDGET_SETTINGS)
-        )
-        settings = json.loads(settings_json)
-        return settings
-    except ConfigNotFoundError:
-        raise HTTPException(status_code=404, detail="Token budget settings not found.")
-
-
-@router.put("/admin/token-budget-settings")
-def update_token_budget_settings(
-    _: User = Depends(current_admin_user),
-    enable_token_budget: bool = Body(..., embed=True),
-    token_budget: int = Body(..., ge=0, embed=True),  # Ensure non-negative
-    token_budget_time_period: int = Body(..., ge=1, embed=True),  # Ensure positive
-) -> dict[str, str]:
-    # Prepare the settings as a JSON string
-    settings_json = json.dumps(
-        {
-            ENABLE_TOKEN_BUDGET: enable_token_budget,
-            TOKEN_BUDGET: token_budget,
-            TOKEN_BUDGET_TIME_PERIOD: token_budget_time_period,
-        }
-    )
-
-    # Store the settings in the dynamic config store
-    get_dynamic_config_store().store(TOKEN_BUDGET_SETTINGS, settings_json)
-    return {"message": "Token budget settings updated successfully."}

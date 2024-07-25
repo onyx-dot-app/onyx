@@ -1,10 +1,60 @@
 from sqlalchemy import delete
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from danswer.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from danswer.db.models import LLMProvider as LLMProviderModel
+from danswer.db.models import LLMProvider__UserGroup
+from danswer.db.models import User
+from danswer.db.models import User__UserGroup
+from danswer.server.manage.embedding.models import CloudEmbeddingProvider
+from danswer.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from danswer.server.manage.llm.models import FullLLMProvider
 from danswer.server.manage.llm.models import LLMProviderUpsertRequest
+
+
+def update_group_llm_provider_relationships(
+    llm_provider_id: int,
+    group_ids: list[int] | None,
+    db_session: Session,
+) -> None:
+    # Delete existing relationships
+    db_session.query(LLMProvider__UserGroup).filter(
+        LLMProvider__UserGroup.llm_provider_id == llm_provider_id
+    ).delete(synchronize_session="fetch")
+
+    # Add new relationships from given group_ids
+    if group_ids:
+        new_relationships = [
+            LLMProvider__UserGroup(
+                llm_provider_id=llm_provider_id,
+                user_group_id=group_id,
+            )
+            for group_id in group_ids
+        ]
+        db_session.add_all(new_relationships)
+        db_session.commit()
+
+
+def upsert_cloud_embedding_provider(
+    db_session: Session, provider: CloudEmbeddingProviderCreationRequest
+) -> CloudEmbeddingProvider:
+    existing_provider = (
+        db_session.query(CloudEmbeddingProviderModel)
+        .filter_by(name=provider.name)
+        .first()
+    )
+    if existing_provider:
+        for key, value in provider.dict().items():
+            setattr(existing_provider, key, value)
+    else:
+        new_provider = CloudEmbeddingProviderModel(**provider.dict())
+        db_session.add(new_provider)
+        existing_provider = new_provider
+    db_session.commit()
+    db_session.refresh(existing_provider)
+    return CloudEmbeddingProvider.from_request(existing_provider)
 
 
 def upsert_llm_provider(
@@ -13,41 +63,74 @@ def upsert_llm_provider(
     existing_llm_provider = db_session.scalar(
         select(LLMProviderModel).where(LLMProviderModel.name == llm_provider.name)
     )
-    if existing_llm_provider:
-        existing_llm_provider.provider = llm_provider.provider
-        existing_llm_provider.api_key = llm_provider.api_key
-        existing_llm_provider.api_base = llm_provider.api_base
-        existing_llm_provider.api_version = llm_provider.api_version
-        existing_llm_provider.custom_config = llm_provider.custom_config
-        existing_llm_provider.default_model_name = llm_provider.default_model_name
-        existing_llm_provider.fast_default_model_name = (
-            llm_provider.fast_default_model_name
-        )
-        existing_llm_provider.model_names = llm_provider.model_names
-        db_session.commit()
-        return FullLLMProvider.from_model(existing_llm_provider)
 
-    # if it does not exist, create a new entry
-    llm_provider_model = LLMProviderModel(
-        name=llm_provider.name,
-        provider=llm_provider.provider,
-        api_key=llm_provider.api_key,
-        api_base=llm_provider.api_base,
-        api_version=llm_provider.api_version,
-        custom_config=llm_provider.custom_config,
-        default_model_name=llm_provider.default_model_name,
-        fast_default_model_name=llm_provider.fast_default_model_name,
-        model_names=llm_provider.model_names,
-        is_default_provider=None,
+    if not existing_llm_provider:
+        existing_llm_provider = LLMProviderModel(name=llm_provider.name)
+        db_session.add(existing_llm_provider)
+
+    existing_llm_provider.provider = llm_provider.provider
+    existing_llm_provider.api_key = llm_provider.api_key
+    existing_llm_provider.api_base = llm_provider.api_base
+    existing_llm_provider.api_version = llm_provider.api_version
+    existing_llm_provider.custom_config = llm_provider.custom_config
+    existing_llm_provider.default_model_name = llm_provider.default_model_name
+    existing_llm_provider.fast_default_model_name = llm_provider.fast_default_model_name
+    existing_llm_provider.model_names = llm_provider.model_names
+    existing_llm_provider.is_public = llm_provider.is_public
+
+    if not existing_llm_provider.id:
+        # If its not already in the db, we need to generate an ID by flushing
+        db_session.flush()
+
+    # Make sure the relationship table stays up to date
+    update_group_llm_provider_relationships(
+        llm_provider_id=existing_llm_provider.id,
+        group_ids=llm_provider.groups,
+        db_session=db_session,
     )
-    db_session.add(llm_provider_model)
-    db_session.commit()
 
-    return FullLLMProvider.from_model(llm_provider_model)
+    return FullLLMProvider.from_model(existing_llm_provider)
 
 
-def fetch_existing_llm_providers(db_session: Session) -> list[LLMProviderModel]:
-    return list(db_session.scalars(select(LLMProviderModel)).all())
+def fetch_existing_embedding_providers(
+    db_session: Session,
+) -> list[CloudEmbeddingProviderModel]:
+    return list(db_session.scalars(select(CloudEmbeddingProviderModel)).all())
+
+
+def fetch_existing_llm_providers(
+    db_session: Session,
+    user: User | None = None,
+) -> list[LLMProviderModel]:
+    if not user:
+        return list(db_session.scalars(select(LLMProviderModel)).all())
+    stmt = select(LLMProviderModel).distinct()
+    user_groups_subquery = (
+        select(User__UserGroup.user_group_id)
+        .where(User__UserGroup.user_id == user.id)
+        .subquery()
+    )
+    access_conditions = or_(
+        LLMProviderModel.is_public,
+        LLMProviderModel.id.in_(  # User is part of a group that has access
+            select(LLMProvider__UserGroup.llm_provider_id).where(
+                LLMProvider__UserGroup.user_group_id.in_(user_groups_subquery)  # type: ignore
+            )
+        ),
+    )
+    stmt = stmt.where(access_conditions)
+
+    return list(db_session.scalars(stmt).all())
+
+
+def fetch_embedding_provider(
+    db_session: Session, provider_id: int
+) -> CloudEmbeddingProviderModel | None:
+    return db_session.scalar(
+        select(CloudEmbeddingProviderModel).where(
+            CloudEmbeddingProviderModel.id == provider_id
+        )
+    )
 
 
 def fetch_default_provider(db_session: Session) -> FullLLMProvider | None:
@@ -70,7 +153,24 @@ def fetch_provider(db_session: Session, provider_name: str) -> FullLLMProvider |
     return FullLLMProvider.from_model(provider_model)
 
 
+def remove_embedding_provider(
+    db_session: Session, embedding_provider_name: str
+) -> None:
+    db_session.execute(
+        delete(CloudEmbeddingProviderModel).where(
+            CloudEmbeddingProviderModel.name == embedding_provider_name
+        )
+    )
+
+
 def remove_llm_provider(db_session: Session, provider_id: int) -> None:
+    # Remove LLMProvider's dependent relationships
+    db_session.execute(
+        delete(LLMProvider__UserGroup).where(
+            LLMProvider__UserGroup.llm_provider_id == provider_id
+        )
+    )
+    # Remove LLMProvider
     db_session.execute(
         delete(LLMProviderModel).where(LLMProviderModel.id == provider_id)
     )

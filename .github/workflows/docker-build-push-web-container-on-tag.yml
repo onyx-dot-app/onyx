@@ -10,7 +10,7 @@ env:
 
 jobs:
   build:
-    runs-on:
+    runs-on: 
       group: ${{ matrix.platform == 'linux/amd64' && 'amd64-image-builders' || 'arm64-image-builders' }}
     strategy:
       fail-fast: false
@@ -34,8 +34,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |
-            type=raw,value=danswer/danswer-web-server:${{ github.ref_name }}
-            type=raw,value=danswer/danswer-web-server:latest
+            type=raw,value=${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
+            type=raw,value=${{ env.REGISTRY_IMAGE }}:latest
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

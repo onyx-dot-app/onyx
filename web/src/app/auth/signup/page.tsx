@@ -6,12 +6,13 @@ import {
   AuthTypeMetadata,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
-import Image from "next/image";
 import { EmailPasswordForm } from "../login/EmailPasswordForm";
 import { Card, Title, Text } from "@tremor/react";
 import Link from "next/link";
 import { Footer } from "@/components/Footer";
 import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
+import { Logo } from "@/components/Logo";
+import Image from "next/image";
 
 const Page = async () => {
   // catch cases where the backend is completely unreachable here

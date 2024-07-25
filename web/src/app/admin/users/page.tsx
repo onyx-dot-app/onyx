@@ -17,6 +17,7 @@ import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { HidableSection } from "@/app/admin/assistants/HidableSection";
 import BulkAdd from "@/components/admin/users/BulkAdd";
+import { UsersResponse } from "@/lib/users/interfaces";
 
 const ValidDomainsDisplay = ({ validDomains }: { validDomains: string[] }) => {
   if (!validDomains.length) {
@@ -50,13 +51,6 @@ const ValidDomainsDisplay = ({ validDomains }: { validDomains: string[] }) => {
     </div>
   );
 };
-
-interface UsersResponse {
-  accepted: User[];
-  invited: User[];
-  accepted_pages: number;
-  invited_pages: number;
-}
 
 const UsersTables = ({
   q,

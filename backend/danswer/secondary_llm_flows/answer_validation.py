@@ -1,5 +1,5 @@
 from danswer.llm.exceptions import GenAIDisabledException
-from danswer.llm.factory import get_default_llm
+from danswer.llm.factory import get_default_llms
 from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
 from danswer.llm.utils import message_to_string
 from danswer.prompts.answer_validation import ANSWER_VALIDITY_PROMPT
@@ -44,7 +44,7 @@ def get_answer_validity(
         return True  # If something is wrong, let's not toss away the answer
 
     try:
-        llm = get_default_llm()
+        llm, _ = get_default_llms()
     except GenAIDisabledException:
         return True
 

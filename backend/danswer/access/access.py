@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from danswer.access.models import DocumentAccess
+from danswer.access.utils import prefix_user
 from danswer.configs.constants import PUBLIC_DOC_PAT
 from danswer.db.document import get_acccess_info_for_documents
 from danswer.db.models import User
@@ -19,7 +20,7 @@ def _get_access_for_documents(
         cc_pair_to_delete=cc_pair_to_delete,
     )
     return {
-        document_id: DocumentAccess.build(user_ids, is_public)
+        document_id: DocumentAccess.build(user_ids, [], is_public)
         for document_id, user_ids, is_public in document_access_info
     }
 
@@ -36,12 +37,6 @@ def get_access_for_documents(
     return versioned_get_access_for_documents_fn(
         document_ids, db_session, cc_pair_to_delete
     )  # type: ignore
-
-
-def prefix_user(user_id: str) -> str:
-    """Prefixes a user ID to eliminate collision with group names.
-    This assumes that groups are prefixed with a different prefix."""
-    return f"user_id:{user_id}"
 
 
 def _get_acl_for_user(user: User | None, db_session: Session) -> set[str]:

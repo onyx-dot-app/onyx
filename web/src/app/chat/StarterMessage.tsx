@@ -14,8 +14,8 @@ export function StarterMessage({
       }
       onClick={onClick}
     >
-      <p className="font-medium text-neutral-700">{starterMessage.name}</p>
-      <p className="text-neutral-500 text-sm">{starterMessage.description}</p>
+      <p className="font-medium text-emphasis">{starterMessage.name}</p>
+      <p className="text-subtle text-sm">{starterMessage.description}</p>
     </div>
   );
 }

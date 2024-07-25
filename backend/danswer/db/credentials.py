@@ -12,6 +12,7 @@ from danswer.connectors.gmail.constants import (
 from danswer.connectors.google_drive.constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
 )
+from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import Credential
 from danswer.db.models import User
 from danswer.server.documents.models import CredentialBase
@@ -140,6 +141,18 @@ def delete_credential(
     if credential is None:
         raise ValueError(
             f"Credential by provided id {credential_id} does not exist or does not belong to user"
+        )
+
+    associated_connectors = (
+        db_session.query(ConnectorCredentialPair)
+        .filter(ConnectorCredentialPair.credential_id == credential_id)
+        .all()
+    )
+
+    if associated_connectors:
+        raise ValueError(
+            f"Cannot delete credential {credential_id} as it is still associated with {len(associated_connectors)} connector(s). "
+            "Please delete all associated connectors first."
         )
 
     db_session.delete(credential)

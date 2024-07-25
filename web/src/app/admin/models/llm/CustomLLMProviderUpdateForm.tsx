@@ -1,5 +1,6 @@
 import { LoadingAnimation } from "@/components/Loading";
 import { Button, Divider, Text } from "@tremor/react";
+import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import {
   ArrayHelpers,
   ErrorMessage,
@@ -15,11 +16,16 @@ import {
   SubLabel,
   TextArrayField,
   TextFormField,
+  BooleanFormField,
 } from "@/components/admin/connectors/Field";
 import { useState } from "react";
+import { Bubble } from "@/components/Bubble";
+import { GroupsIcon } from "@/components/icons/icons";
 import { useSWRConfig } from "swr";
+import { useUserGroups } from "@/lib/hooks";
 import { FullLLMProvider } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 
@@ -44,8 +50,15 @@ export function CustomLLMProviderUpdateForm({
 }) {
   const { mutate } = useSWRConfig();
 
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+
+  // EE only
+  const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
+
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState<string>("");
+
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   // Define the initial values based on the provider's requirements
   const initialValues = {
@@ -61,6 +74,8 @@ export function CustomLLMProviderUpdateForm({
     custom_config_list: existingLlmProvider?.custom_config
       ? Object.entries(existingLlmProvider.custom_config)
       : [],
+    is_public: existingLlmProvider?.is_public ?? true,
+    groups: existingLlmProvider?.groups ?? [],
   };
 
   // Setup validation schema if required
@@ -74,6 +89,9 @@ export function CustomLLMProviderUpdateForm({
     default_model_name: Yup.string().required("Model name is required"),
     fast_default_model_name: Yup.string().nullable(),
     custom_config_list: Yup.array(),
+    // EE Only
+    is_public: Yup.boolean().required(),
+    groups: Yup.array().of(Yup.number()),
   });
 
   return (
@@ -96,6 +114,9 @@ export function CustomLLMProviderUpdateForm({
           setSubmitting(false);
           return;
         }
+
+        // don't set groups if marked as public
+        const groups = values.is_public ? [] : values.groups;
 
         // test the configuration
         if (!isEqual(values, initialValues)) {
@@ -188,93 +209,97 @@ export function CustomLLMProviderUpdateForm({
         setSubmitting(false);
       }}
     >
-      {({ values }) => (
-        <Form>
-          <TextFormField
-            name="name"
-            label="Display Name"
-            subtext="A name which you can use to identify this provider when selecting it in the UI."
-            placeholder="Display Name"
-          />
+      {({ values, setFieldValue }) => {
+        return (
+          <Form>
+            <TextFormField
+              name="name"
+              label="Display Name"
+              subtext="A name which you can use to identify this provider when selecting it in the UI."
+              placeholder="Display Name"
+            />
 
-          <Divider />
+            <Divider />
 
-          <TextFormField
-            name="provider"
-            label="Provider Name"
-            subtext={
+            <TextFormField
+              name="provider"
+              label="Provider Name"
+              subtext={
+                <>
+                  Should be one of the providers listed at{" "}
+                  <a
+                    target="_blank"
+                    href="https://docs.litellm.ai/docs/providers"
+                    className="text-link"
+                  >
+                    https://docs.litellm.ai/docs/providers
+                  </a>
+                  .
+                </>
+              }
+              placeholder="Name of the custom provider"
+            />
+
+            <Divider />
+
+            <SubLabel>
+              Fill in the following as is needed. Refer to the LiteLLM
+              documentation for the model provider name specified above in order
+              to determine which fields are required.
+            </SubLabel>
+
+            <TextFormField
+              name="api_key"
+              label="[Optional] API Key"
+              placeholder="API Key"
+              type="password"
+            />
+
+            <TextFormField
+              name="api_base"
+              label="[Optional] API Base"
+              placeholder="API Base"
+            />
+
+            <TextFormField
+              name="api_version"
+              label="[Optional] API Version"
+              placeholder="API Version"
+            />
+
+            <Label>[Optional] Custom Configs</Label>
+            <SubLabel>
               <>
-                Should be one of the providers listed at{" "}
-                <a
-                  target="_blank"
-                  href="https://docs.litellm.ai/docs/providers"
-                  className="text-link"
-                >
-                  https://docs.litellm.ai/docs/providers
-                </a>
-                .
+                <div>
+                  Additional configurations needed by the model provider. Are
+                  passed to litellm via environment variables.
+                </div>
+
+                <div className="mt-2">
+                  For example, when configuring the Cloudflare provider, you
+                  would need to set `CLOUDFLARE_ACCOUNT_ID` as the key and your
+                  Cloudflare account ID as the value.
+                </div>
               </>
-            }
-            placeholder="Name of the custom provider"
-          />
+            </SubLabel>
 
-          <Divider />
-
-          <SubLabel>
-            Fill in the following as is needed. Refer to the LiteLLM
-            documentation for the model provider name specified above in order
-            to determine which fields are required.
-          </SubLabel>
-
-          <TextFormField
-            name="api_key"
-            label="[Optional] API Key"
-            placeholder="API Key"
-            type="password"
-          />
-
-          <TextFormField
-            name="api_base"
-            label="[Optional] API Base"
-            placeholder="API Base"
-          />
-
-          <TextFormField
-            name="api_version"
-            label="[Optional] API Version"
-            placeholder="API Version"
-          />
-
-          <Label>[Optional] Custom Configs</Label>
-          <SubLabel>
-            <>
-              <div>
-                Additional configurations needed by the model provider. Are
-                passed to litellm via environment variables.
-              </div>
-
-              <div className="mt-2">
-                For example, when configuring the Cloudflare provider, you would
-                need to set `CLOUDFLARE_ACCOUNT_ID` as the key and your
-                Cloudflare account ID as the value.
-              </div>
-            </>
-          </SubLabel>
-
-          <FieldArray
-            name="custom_config_list"
-            render={(arrayHelpers: ArrayHelpers<any[]>) => (
-              <div>
-                {values.custom_config_list.map((_, index) => {
-                  return (
-                    <div key={index} className={index === 0 ? "mt-2" : "mt-6"}>
-                      <div className="flex">
-                        <div className="w-full mr-6 border border-border p-3 rounded">
-                          <div>
-                            <Label>Key</Label>
-                            <Field
-                              name={`custom_config_list[${index}][0]`}
-                              className={`
+            <FieldArray
+              name="custom_config_list"
+              render={(arrayHelpers: ArrayHelpers<any[]>) => (
+                <div>
+                  {values.custom_config_list.map((_, index) => {
+                    return (
+                      <div
+                        key={index}
+                        className={index === 0 ? "mt-2" : "mt-6"}
+                      >
+                        <div className="flex">
+                          <div className="w-full mr-6 border border-border p-3 rounded">
+                            <div>
+                              <Label>Key</Label>
+                              <Field
+                                name={`custom_config_list[${index}][0]`}
+                                className={`
                                   border 
                                   border-border 
                                   bg-background 
@@ -284,20 +309,20 @@ export function CustomLLMProviderUpdateForm({
                                   px-3 
                                   mr-4
                                 `}
-                              autoComplete="off"
-                            />
-                            <ErrorMessage
-                              name={`custom_config_list[${index}][0]`}
-                              component="div"
-                              className="text-error text-sm mt-1"
-                            />
-                          </div>
+                                autoComplete="off"
+                              />
+                              <ErrorMessage
+                                name={`custom_config_list[${index}][0]`}
+                                component="div"
+                                className="text-error text-sm mt-1"
+                              />
+                            </div>
 
-                          <div className="mt-3">
-                            <Label>Value</Label>
-                            <Field
-                              name={`custom_config_list[${index}][1]`}
-                              className={`
+                            <div className="mt-3">
+                              <Label>Value</Label>
+                              <Field
+                                name={`custom_config_list[${index}][1]`}
+                                className={`
                                   border 
                                   border-border 
                                   bg-background 
@@ -307,121 +332,190 @@ export function CustomLLMProviderUpdateForm({
                                   px-3 
                                   mr-4
                                 `}
-                              autoComplete="off"
-                            />
-                            <ErrorMessage
-                              name={`custom_config_list[${index}][1]`}
-                              component="div"
-                              className="text-error text-sm mt-1"
+                                autoComplete="off"
+                              />
+                              <ErrorMessage
+                                name={`custom_config_list[${index}][1]`}
+                                component="div"
+                                className="text-error text-sm mt-1"
+                              />
+                            </div>
+                          </div>
+                          <div className="my-auto">
+                            <FiX
+                              className="my-auto w-10 h-10 cursor-pointer hover:bg-hover rounded p-2"
+                              onClick={() => arrayHelpers.remove(index)}
                             />
                           </div>
-                        </div>
-                        <div className="my-auto">
-                          <FiX
-                            className="my-auto w-10 h-10 cursor-pointer hover:bg-hover rounded p-2"
-                            onClick={() => arrayHelpers.remove(index)}
-                          />
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
 
-                <Button
-                  onClick={() => {
-                    arrayHelpers.push(["", ""]);
-                  }}
-                  className="mt-3"
-                  color="green"
-                  size="xs"
-                  type="button"
-                  icon={FiPlus}
-                >
-                  Add New
-                </Button>
-              </div>
-            )}
-          />
+                  <Button
+                    onClick={() => {
+                      arrayHelpers.push(["", ""]);
+                    }}
+                    className="mt-3"
+                    color="green"
+                    size="xs"
+                    type="button"
+                    icon={FiPlus}
+                  >
+                    Add New
+                  </Button>
+                </div>
+              )}
+            />
 
-          <Divider />
+            <Divider />
 
-          <TextArrayField
-            name="model_names"
-            label="Model Names"
-            values={values}
-            subtext={`List the individual models that you want to make 
+            <TextArrayField
+              name="model_names"
+              label="Model Names"
+              values={values}
+              subtext={`List the individual models that you want to make 
             available as a part of this provider. At least one must be specified. 
             As an example, for OpenAI one model might be "gpt-4".`}
-          />
+            />
 
-          <Divider />
+            <Divider />
 
-          <TextFormField
-            name="default_model_name"
-            subtext={`
+            <TextFormField
+              name="default_model_name"
+              subtext={`
               The model to use by default for this provider unless 
               otherwise specified. Must be one of the models listed 
               above.`}
-            label="Default Model"
-            placeholder="E.g. gpt-4"
-          />
+              label="Default Model"
+              placeholder="E.g. gpt-4"
+            />
 
-          <TextFormField
-            name="fast_default_model_name"
-            subtext={`The model to use for lighter flows like \`LLM Chunk Filter\` 
+            <TextFormField
+              name="fast_default_model_name"
+              subtext={`The model to use for lighter flows like \`LLM Chunk Filter\` 
                 for this provider. If not set, will use 
                 the Default Model configured above.`}
-            label="[Optional] Fast Model"
-            placeholder="E.g. gpt-4"
-          />
+              label="[Optional] Fast Model"
+              placeholder="E.g. gpt-4"
+            />
 
-          <Divider />
+            <Divider />
 
-          <div>
-            {/* NOTE: this is above the test button to make sure it's visible */}
-            {testError && <Text className="text-error mt-2">{testError}</Text>}
+            <AdvancedOptionsToggle
+              showAdvancedOptions={showAdvancedOptions}
+              setShowAdvancedOptions={setShowAdvancedOptions}
+            />
 
-            <div className="flex w-full mt-4">
-              <Button type="submit" size="xs">
-                {isTesting ? (
-                  <LoadingAnimation text="Testing" />
-                ) : existingLlmProvider ? (
-                  "Update"
-                ) : (
-                  "Enable"
+            {showAdvancedOptions && (
+              <>
+                {isPaidEnterpriseFeaturesEnabled && userGroups && (
+                  <>
+                    <BooleanFormField
+                      small
+                      noPadding
+                      alignTop
+                      name="is_public"
+                      label="Is Public?"
+                      subtext="If set, this LLM Provider will be available to all users. If not, only the specified User Groups will be able to use it."
+                    />
+
+                    {userGroups &&
+                      userGroups.length > 0 &&
+                      !values.is_public && (
+                        <div>
+                          <Text>
+                            Select which User Groups should have access to this
+                            LLM Provider.
+                          </Text>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {userGroups.map((userGroup) => {
+                              const isSelected = values.groups.includes(
+                                userGroup.id
+                              );
+                              return (
+                                <Bubble
+                                  key={userGroup.id}
+                                  isSelected={isSelected}
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      setFieldValue(
+                                        "groups",
+                                        values.groups.filter(
+                                          (id) => id !== userGroup.id
+                                        )
+                                      );
+                                    } else {
+                                      setFieldValue("groups", [
+                                        ...values.groups,
+                                        userGroup.id,
+                                      ]);
+                                    }
+                                  }}
+                                >
+                                  <div className="flex">
+                                    <GroupsIcon />
+                                    <div className="ml-1">{userGroup.name}</div>
+                                  </div>
+                                </Bubble>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                  </>
                 )}
-              </Button>
-              {existingLlmProvider && (
-                <Button
-                  type="button"
-                  color="red"
-                  className="ml-3"
-                  size="xs"
-                  icon={FiTrash}
-                  onClick={async () => {
-                    const response = await fetch(
-                      `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}`,
-                      {
-                        method: "DELETE",
-                      }
-                    );
-                    if (!response.ok) {
-                      const errorMsg = (await response.json()).detail;
-                      alert(`Failed to delete provider: ${errorMsg}`);
-                      return;
-                    }
+              </>
+            )}
 
-                    mutate(LLM_PROVIDERS_ADMIN_URL);
-                    onClose();
-                  }}
-                >
-                  Delete
-                </Button>
+            <div>
+              {/* NOTE: this is above the test button to make sure it's visible */}
+              {testError && (
+                <Text className="text-error mt-2">{testError}</Text>
               )}
+
+              <div className="flex w-full mt-4">
+                <Button type="submit" size="xs">
+                  {isTesting ? (
+                    <LoadingAnimation text="Testing" />
+                  ) : existingLlmProvider ? (
+                    "Update"
+                  ) : (
+                    "Enable"
+                  )}
+                </Button>
+                {existingLlmProvider && (
+                  <Button
+                    type="button"
+                    color="red"
+                    className="ml-3"
+                    size="xs"
+                    icon={FiTrash}
+                    onClick={async () => {
+                      const response = await fetch(
+                        `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}`,
+                        {
+                          method: "DELETE",
+                        }
+                      );
+                      if (!response.ok) {
+                        const errorMsg = (await response.json()).detail;
+                        alert(`Failed to delete provider: ${errorMsg}`);
+                        return;
+                      }
+
+                      mutate(LLM_PROVIDERS_ADMIN_URL);
+                      onClose();
+                    }}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
-        </Form>
-      )}
+          </Form>
+        );
+      }}
     </Formik>
   );
 }

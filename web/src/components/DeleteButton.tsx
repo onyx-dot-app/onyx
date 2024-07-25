@@ -4,7 +4,7 @@ export function DeleteButton({
   onClick,
   disabled,
 }: {
-  onClick?: () => void;
+  onClick?: (event: React.MouseEvent<HTMLElement>) => void | Promise<void>;
   disabled?: boolean;
 }) {
   return (

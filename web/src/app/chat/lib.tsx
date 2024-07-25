@@ -5,7 +5,14 @@ import {
 } from "@/lib/search/interfaces";
 import { handleStream } from "@/lib/search/streamingUtils";
 import { FeedbackType } from "./types";
-import { RefObject } from "react";
+import {
+  Dispatch,
+  MutableRefObject,
+  RefObject,
+  SetStateAction,
+  useEffect,
+  useRef,
+} from "react";
 import {
   BackendMessage,
   ChatSession,
@@ -65,6 +72,14 @@ export async function createChatSession(
   return chatSessionResponseJson.chat_session_id;
 }
 
+export type PacketType =
+  | ToolCallMetadata
+  | BackendMessage
+  | AnswerPiecePacket
+  | DocumentsResponse
+  | ImageGenerationDisplay
+  | StreamingError;
+
 export async function* sendMessage({
   message,
   fileDescriptors,
@@ -80,6 +95,7 @@ export async function* sendMessage({
   temperature,
   systemPromptOverride,
   useExistingUserMessage,
+  alternateAssistantId,
 }: {
   message: string;
   fileDescriptors: FileDescriptor[];
@@ -99,15 +115,18 @@ export async function* sendMessage({
   // if specified, will use the existing latest user message
   // and will ignore the specified `message`
   useExistingUserMessage?: boolean;
+  alternateAssistantId?: number;
 }) {
   const documentsAreSelected =
     selectedDocumentIds && selectedDocumentIds.length > 0;
+
   const sendMessageResponse = await fetch("/api/chat/send-message", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      alternate_assistant_id: alternateAssistantId,
       chat_session_id: chatSessionId,
       parent_message_id: parentMessageId,
       message: message,
@@ -150,14 +169,7 @@ export async function* sendMessage({
     throw Error(`Failed to send message - ${errorMsg}`);
   }
 
-  yield* handleStream<
-    | AnswerPiecePacket
-    | DocumentsResponse
-    | BackendMessage
-    | ImageGenerationDisplay
-    | ToolCallMetadata
-    | StreamingError
-  >(sendMessageResponse);
+  yield* handleStream<PacketType>(sendMessageResponse);
 }
 
 export async function nameChatSession(chatSessionId: number, message: string) {
@@ -247,24 +259,6 @@ export async function* simulateLLMResponse(input: string, delay: number = 30) {
 
     // Yielding each token
     yield token;
-  }
-}
-
-export function handleAutoScroll(
-  endRef: RefObject<any>,
-  scrollableRef: RefObject<any>,
-  buffer: number = 300
-) {
-  // Auto-scrolls if the user is within `buffer` of the bottom of the scrollableRef
-  if (endRef && endRef.current && scrollableRef && scrollableRef.current) {
-    if (
-      scrollableRef.current.scrollHeight -
-        scrollableRef.current.scrollTop -
-        buffer <=
-      scrollableRef.current.clientHeight
-    ) {
-      endRef.current.scrollIntoView({ behavior: "smooth" });
-    }
   }
 }
 
@@ -391,6 +385,9 @@ export function processRawChatHistory(
       message: messageInfo.message,
       type: messageInfo.message_type as "user" | "assistant",
       files: messageInfo.files,
+      alternateAssistantID: messageInfo.alternate_assistant_id
+        ? Number(messageInfo.alternate_assistant_id)
+        : null,
       // only include these fields if this is an assistant message so that
       // this is identical to what is computed at streaming time
       ...(messageInfo.message_type === "assistant"
@@ -506,8 +503,36 @@ export function removeMessage(
   completeMessageMap.delete(messageId);
 }
 
+export function checkAnyAssistantHasSearch(
+  messageHistory: Message[],
+  availableAssistants: Persona[],
+  livePersona: Persona
+): boolean {
+  const response =
+    messageHistory.some((message) => {
+      if (
+        message.type !== "assistant" ||
+        message.alternateAssistantID === null
+      ) {
+        return false;
+      }
+      const alternateAssistant = availableAssistants.find(
+        (assistant) => assistant.id === message.alternateAssistantID
+      );
+      return alternateAssistant
+        ? personaIncludesRetrieval(alternateAssistant)
+        : false;
+    }) || personaIncludesRetrieval(livePersona);
+
+  return response;
+}
+
 export function personaIncludesRetrieval(selectedPersona: Persona) {
-  return selectedPersona.num_chunks !== 0;
+  return selectedPersona.tools.some(
+    (tool) =>
+      tool.in_code_tool_id &&
+      ["SearchTool", "InternetSearchTool"].includes(tool.in_code_tool_id)
+  );
 }
 
 const PARAMS_TO_SKIP = [
@@ -522,11 +547,16 @@ const PARAMS_TO_SKIP = [
 export function buildChatUrl(
   existingSearchParams: ReadonlyURLSearchParams,
   chatSessionId: number | null,
-  personaId: number | null
+  personaId: number | null,
+  search?: boolean
 ) {
   const finalSearchParams: string[] = [];
   if (chatSessionId) {
-    finalSearchParams.push(`${SEARCH_PARAM_NAMES.CHAT_ID}=${chatSessionId}`);
+    finalSearchParams.push(
+      `${
+        search ? SEARCH_PARAM_NAMES.SEARCH_ID : SEARCH_PARAM_NAMES.CHAT_ID
+      }=${chatSessionId}`
+    );
   }
   if (personaId !== null) {
     finalSearchParams.push(`${SEARCH_PARAM_NAMES.PERSONA_ID}=${personaId}`);
@@ -540,10 +570,10 @@ export function buildChatUrl(
   const finalSearchParamsString = finalSearchParams.join("&");
 
   if (finalSearchParamsString) {
-    return `/chat?${finalSearchParamsString}`;
+    return `/${search ? "search" : "chat"}?${finalSearchParamsString}`;
   }
 
-  return "/chat";
+  return `/${search ? "search" : "chat"}`;
 }
 
 export async function uploadFilesForChat(
@@ -564,4 +594,93 @@ export async function uploadFilesForChat(
   const responseJson = await response.json();
 
   return [responseJson.files as FileDescriptor[], null];
+}
+
+export async function useScrollonStream({
+  isStreaming,
+  scrollableDivRef,
+  scrollDist,
+  endDivRef,
+  distance,
+  debounce,
+}: {
+  isStreaming: boolean;
+  scrollableDivRef: RefObject<HTMLDivElement>;
+  scrollDist: MutableRefObject<number>;
+  endDivRef: RefObject<HTMLDivElement>;
+  distance: number;
+  debounce: number;
+}) {
+  const preventScrollInterference = useRef<boolean>(false);
+  const preventScroll = useRef<boolean>(false);
+  const blockActionRef = useRef<boolean>(false);
+  const previousScroll = useRef<number>(0);
+
+  useEffect(() => {
+    if (isStreaming && scrollableDivRef && scrollableDivRef.current) {
+      let newHeight: number = scrollableDivRef.current?.scrollTop!;
+      const heightDifference = newHeight - previousScroll.current;
+      previousScroll.current = newHeight;
+
+      // Prevent streaming scroll
+      if (heightDifference < 0 && !preventScroll.current) {
+        scrollableDivRef.current.style.scrollBehavior = "auto";
+        scrollableDivRef.current.scrollTop = scrollableDivRef.current.scrollTop;
+        scrollableDivRef.current.style.scrollBehavior = "smooth";
+        preventScrollInterference.current = true;
+        preventScroll.current = true;
+
+        setTimeout(() => {
+          preventScrollInterference.current = false;
+        }, 2000);
+        setTimeout(() => {
+          preventScroll.current = false;
+        }, 10000);
+      }
+
+      // Ensure can scroll if scroll down
+      else if (!preventScrollInterference.current) {
+        preventScroll.current = false;
+      }
+      if (
+        scrollDist.current < distance &&
+        !blockActionRef.current &&
+        !blockActionRef.current &&
+        !preventScroll.current &&
+        endDivRef &&
+        endDivRef.current
+      ) {
+        // catch up if necessary!
+        const scrollAmount = scrollDist.current + 10000;
+        if (scrollDist.current > 140) {
+          endDivRef.current.scrollIntoView();
+        } else {
+          blockActionRef.current = true;
+
+          scrollableDivRef?.current?.scrollBy({
+            left: 0,
+            top: Math.max(0, scrollAmount),
+            behavior: "smooth",
+          });
+
+          setTimeout(() => {
+            blockActionRef.current = false;
+          }, debounce);
+        }
+      }
+    }
+  });
+
+  // scroll on end of stream if within distance
+  useEffect(() => {
+    if (scrollableDivRef?.current && !isStreaming) {
+      if (scrollDist.current < distance) {
+        scrollableDivRef?.current?.scrollBy({
+          left: 0,
+          top: Math.max(scrollDist.current + 600, 0),
+          behavior: "smooth",
+        });
+      }
+    }
+  }, [isStreaming]);
 }

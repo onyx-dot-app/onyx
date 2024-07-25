@@ -18,11 +18,12 @@ class ToolRunner:
         self._tool_responses: list[ToolResponse] | None = None
 
     def kickoff(self) -> ToolCallKickoff:
-        return ToolCallKickoff(tool_name=self.tool.name(), tool_args=self.args)
+        return ToolCallKickoff(tool_name=self.tool.name, tool_args=self.args)
 
     def tool_responses(self) -> Generator[ToolResponse, None, None]:
         if self._tool_responses is not None:
             yield from self._tool_responses
+            return
 
         tool_responses: list[ToolResponse] = []
         for tool_response in self.tool.run(**self.args):
@@ -37,7 +38,7 @@ class ToolRunner:
 
     def tool_final_result(self) -> ToolCallFinalResult:
         return ToolCallFinalResult(
-            tool_name=self.tool.name(),
+            tool_name=self.tool.name,
             tool_args=self.args,
             tool_result=self.tool.final_result(*self.tool_responses()),
         )

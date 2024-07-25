@@ -1,4 +1,4 @@
-import { ChatSidebar } from "@/app/chat/sessionSidebar/ChatSidebar";
+import { HistorySidebar } from "@/app/chat/sessionSidebar/HistorySidebar";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { UserDropdown } from "@/components/UserDropdown";
 import { ChatProvider } from "@/components/context/ChatContext";
@@ -7,6 +7,9 @@ import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 import { AssistantsGallery } from "./AssistantsGallery";
+import FixedLogo from "@/app/chat/shared_chat_search/FixedLogo";
+import GalleryWrapper from "../SidebarWrapper";
+import WrappedAssistantsGallery from "./WrappedAssistantsGallery";
 
 export default async function GalleryPage({
   searchParams,
@@ -26,12 +29,13 @@ export default async function GalleryPage({
     chatSessions,
     availableSources,
     documentSets,
-    personas,
+    assistants,
     tags,
     llmProviders,
     folders,
     openedFolders,
     shouldShowWelcomeModal,
+    toggleSidebar,
   } = data;
 
   return (
@@ -46,35 +50,21 @@ export default async function GalleryPage({
           chatSessions,
           availableSources,
           availableDocumentSets: documentSets,
-          availablePersonas: personas,
+          availableAssistants: assistants,
           availableTags: tags,
           llmProviders,
           folders,
           openedFolders,
         }}
       >
-        <div className="flex relative bg-background text-default overflow-x-hidden h-screen">
-          <ChatSidebar
-            existingChats={chatSessions}
-            currentChatSession={null}
-            folders={folders}
-            openedFolders={openedFolders}
-          />
-
-          <div
-            className={`w-full h-full flex flex-col overflow-y-auto overflow-x-hidden relative`}
-          >
-            <div className="sticky top-0 left-80 z-10 w-full bg-background flex h-fit">
-              <div className="ml-auto my-auto mt-4 mr-8">
-                <UserDropdown user={user} />
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <AssistantsGallery assistants={personas} user={user} />
-            </div>
-          </div>
-        </div>
+        <WrappedAssistantsGallery
+          initiallyToggled={toggleSidebar}
+          chatSessions={chatSessions}
+          folders={folders}
+          openedFolders={openedFolders}
+          user={user}
+          assistants={assistants}
+        />
       </ChatProvider>
     </>
   );

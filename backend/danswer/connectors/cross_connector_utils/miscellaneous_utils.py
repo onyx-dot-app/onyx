@@ -6,6 +6,7 @@ from typing import TypeVar
 
 from dateutil.parser import parse
 
+from danswer.configs.constants import IGNORE_FOR_QA
 from danswer.connectors.models import BasicExpertInfo
 from danswer.utils.text_processing import is_valid_email
 
@@ -57,3 +58,7 @@ def process_in_batches(
 ) -> Iterator[list[U]]:
     for i in range(0, len(objects), batch_size):
         yield [process_function(obj) for obj in objects[i : i + batch_size]]
+
+
+def get_metadata_keys_to_ignore() -> list[str]:
+    return [IGNORE_FOR_QA]

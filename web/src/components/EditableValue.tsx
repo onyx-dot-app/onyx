@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FiEdit } from "react-icons/fi";
+import { FiEdit2 } from "react-icons/fi";
 import { CheckmarkIcon } from "./icons/icons";
 
 export function EditableValue({
@@ -65,7 +65,7 @@ export function EditableValue({
           <div className="ml-auto my-auto">{initialValue || emptyDisplay}</div>
         </div>
         <div className="cursor-pointer ml-2 my-auto h-4">
-          <FiEdit size={16} />
+          <FiEdit2 size={16} />
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.axero.connector import AxeroConnector
+from danswer.connectors.blob.connector import BlobStorageConnector
 from danswer.connectors.bookstack.connector import BookstackConnector
 from danswer.connectors.clickup.connector import ClickupConnector
 from danswer.connectors.confluence.connector import ConfluenceConnector
@@ -90,6 +91,10 @@ def identify_connector_class(
         DocumentSource.CLICKUP: ClickupConnector,
         DocumentSource.MEDIAWIKI: MediaWikiConnector,
         DocumentSource.WIKIPEDIA: WikipediaConnector,
+        DocumentSource.S3: BlobStorageConnector,
+        DocumentSource.R2: BlobStorageConnector,
+        DocumentSource.GOOGLE_CLOUD_STORAGE: BlobStorageConnector,
+        DocumentSource.OCI_STORAGE: BlobStorageConnector,
     }
     connector_by_source = connector_map.get(source, {})
 
@@ -115,7 +120,6 @@ def identify_connector_class(
         raise ConnectorMissingException(
             f"Connector for source={source} does not accept input_type={input_type}"
         )
-
     return connector
 
 

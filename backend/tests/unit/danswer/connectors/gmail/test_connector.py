@@ -1,5 +1,4 @@
 import datetime
-from unittest.mock import MagicMock
 
 import pytest
 from pytest_mock import MockFixture
@@ -100,7 +99,7 @@ def test_fetch_mails_from_gmail_empty(mocker: MockFixture) -> None:
         "messages": []
     }
     connector = GmailConnector()
-    connector.creds = MagicMock()
+    connector.creds = mocker.Mock()
     with pytest.raises(StopIteration):
         next(connector.load_from_state())
 
@@ -178,7 +177,7 @@ def test_fetch_mails_from_gmail(mocker: MockFixture) -> None:
     }
 
     connector = GmailConnector()
-    connector.creds = MagicMock()
+    connector.creds = mocker.Mock()
     docs = next(connector.load_from_state())
     assert len(docs) == 1
     doc: Document = docs[0]

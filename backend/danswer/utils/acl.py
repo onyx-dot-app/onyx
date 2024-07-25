@@ -3,8 +3,7 @@ from threading import Thread
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from danswer.access.models import DocumentAccess
-from danswer.db.document import get_acccess_info_for_documents
+from danswer.access.access import get_access_for_documents
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.models import Document
 from danswer.document_index.document_index_utils import get_both_index_names
@@ -37,7 +36,7 @@ def set_acl_for_vespa(should_check_if_already_done: bool = False) -> None:
         # for all documents, set the `access_control_list` field appropriately
         # based on the state of Postgres
         documents = db_session.scalars(select(Document)).all()
-        document_access_info = get_acccess_info_for_documents(
+        document_access_dict = get_access_for_documents(
             db_session=db_session,
             document_ids=[document.id for document in documents],
         )
@@ -46,15 +45,16 @@ def set_acl_for_vespa(should_check_if_already_done: bool = False) -> None:
         vespa_index = get_default_document_index(
             primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
         )
+
         if not isinstance(vespa_index, VespaIndex):
             raise ValueError("This script is only for Vespa indexes")
 
         update_requests = [
             UpdateRequest(
                 document_ids=[document_id],
-                access=DocumentAccess.build(user_ids, is_public),
+                access=access,
             )
-            for document_id, user_ids, is_public in document_access_info
+            for document_id, access in document_access_dict.items()
         ]
         vespa_index.update(update_requests=update_requests)
 

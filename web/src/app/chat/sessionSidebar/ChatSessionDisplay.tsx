@@ -9,8 +9,7 @@ import { BasicSelectable } from "@/components/BasicClickable";
 import Link from "next/link";
 import {
   FiCheck,
-  FiEdit,
-  FiMessageSquare,
+  FiEdit2,
   FiMoreHorizontal,
   FiShare2,
   FiTrash,
@@ -23,11 +22,13 @@ import { CHAT_SESSION_ID_KEY, FOLDER_ID_KEY } from "@/lib/drag/constants";
 
 export function ChatSessionDisplay({
   chatSession,
+  search,
   isSelected,
   skipGradient,
 }: {
   chatSession: ChatSession;
   isSelected: boolean;
+  search?: boolean;
   // needed when the parent is trying to apply some background effect
   // if not set, the gradient will still be applied and cause weirdness
   skipGradient?: boolean;
@@ -91,7 +92,11 @@ export function ChatSessionDisplay({
       <Link
         className="flex my-1 relative"
         key={chatSession.id}
-        href={`/chat?chatId=${chatSession.id}`}
+        href={
+          search
+            ? `/search?searchId=${chatSession.id}`
+            : `/chat?chatId=${chatSession.id}`
+        }
         scroll={false}
         draggable="true"
         onDragStart={(event) => {
@@ -105,7 +110,7 @@ export function ChatSessionDisplay({
           );
         }}
       >
-        <BasicSelectable fullWidth selected={isSelected}>
+        <BasicSelectable padding="extra" fullWidth selected={isSelected}>
           <>
             <div className="flex relative">
               {isRenamingChat ? (
@@ -174,7 +179,7 @@ export function ChatSessionDisplay({
                               />
                               <DefaultDropdownElement
                                 name="Rename"
-                                icon={FiEdit}
+                                icon={FiEdit2}
                                 onSelect={() => setIsRenamingChat(true)}
                               />
                             </div>
@@ -198,7 +203,7 @@ export function ChatSessionDisplay({
               <div className="absolute bottom-0 right-0 top-0 bg-gradient-to-l to-transparent from-hover w-20 from-60% rounded" />
             )}
             {!isSelected && !delayedSkipGradient && (
-              <div className="absolute bottom-0 right-0 top-0 bg-gradient-to-l to-transparent from-background w-8 from-0% rounded" />
+              <div className="absolute bottom-0 right-0 top-0 bg-gradient-to-l to-transparent from-background-100 w-8 from-0% rounded" />
             )}
           </>
         </BasicSelectable>

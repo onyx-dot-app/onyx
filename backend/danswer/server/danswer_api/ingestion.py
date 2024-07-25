@@ -1,8 +1,5 @@
-import secrets
-
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import Header
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -17,54 +14,18 @@ from danswer.db.embedding_model import get_secondary_db_embedding_model
 from danswer.db.engine import get_session
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
-from danswer.dynamic_configs.factory import get_dynamic_config_store
-from danswer.dynamic_configs.interface import ConfigNotFoundError
 from danswer.indexing.embedder import DefaultIndexingEmbedder
 from danswer.indexing.indexing_pipeline import build_indexing_pipeline
 from danswer.server.danswer_api.models import DocMinimalInfo
 from danswer.server.danswer_api.models import IngestionDocument
 from danswer.server.danswer_api.models import IngestionResult
 from danswer.utils.logger import setup_logger
+from ee.danswer.auth.users import api_key_dep
 
 logger = setup_logger()
 
 # not using /api to avoid confusion with nginx api path routing
 router = APIRouter(prefix="/danswer-api")
-
-# Assumes this gives admin privileges, basic users should not be allowed to call any Danswer apis
-_DANSWER_API_KEY = "danswer_api_key"
-
-
-def get_danswer_api_key(key_len: int = 30, dont_regenerate: bool = False) -> str | None:
-    kv_store = get_dynamic_config_store()
-    try:
-        return str(kv_store.load(_DANSWER_API_KEY))
-    except ConfigNotFoundError:
-        if dont_regenerate:
-            return None
-
-    logger.info("Generating Danswer API Key")
-
-    api_key = "dn_" + secrets.token_urlsafe(key_len)
-    kv_store.store(_DANSWER_API_KEY, api_key, encrypt=True)
-
-    return api_key
-
-
-def delete_danswer_api_key() -> None:
-    kv_store = get_dynamic_config_store()
-    try:
-        kv_store.delete(_DANSWER_API_KEY)
-    except ConfigNotFoundError:
-        pass
-
-
-def api_key_dep(authorization: str = Header(...)) -> str:
-    saved_key = get_danswer_api_key(dont_regenerate=True)
-    token = authorization.removeprefix("Bearer ").strip()
-    if token != saved_key or not saved_key:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    return token
 
 
 @router.get("/connector-docs/{cc_pair_id}")

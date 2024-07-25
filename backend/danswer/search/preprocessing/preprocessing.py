@@ -2,7 +2,6 @@ from sqlalchemy.orm import Session
 
 from danswer.configs.chat_configs import BASE_RECENCY_DECAY
 from danswer.configs.chat_configs import DISABLE_LLM_CHUNK_FILTER
-from danswer.configs.chat_configs import DISABLE_LLM_FILTER_EXTRACTION
 from danswer.configs.chat_configs import FAVOR_RECENT_DECAY_MULTIPLIER
 from danswer.configs.chat_configs import NUM_RETURNED_HITS
 from danswer.db.models import User
@@ -36,8 +35,6 @@ def retrieval_preprocessing(
     db_session: Session,
     bypass_acl: bool = False,
     include_query_intent: bool = True,
-    enable_auto_detect_filters: bool = False,
-    disable_llm_filter_extraction: bool = DISABLE_LLM_FILTER_EXTRACTION,
     disable_llm_chunk_filter: bool = DISABLE_LLM_CHUNK_FILTER,
     base_recency_decay: float = BASE_RECENCY_DECAY,
     favor_recent_decay_multiplier: float = FAVOR_RECENT_DECAY_MULTIPLIER,
@@ -63,10 +60,7 @@ def retrieval_preprocessing(
 
     auto_detect_time_filter = True
     auto_detect_source_filter = True
-    if disable_llm_filter_extraction:
-        auto_detect_time_filter = False
-        auto_detect_source_filter = False
-    elif enable_auto_detect_filters is False:
+    if not search_request.enable_auto_detect_filters:
         logger.debug("Retrieval details disables auto detect filters")
         auto_detect_time_filter = False
         auto_detect_source_filter = False

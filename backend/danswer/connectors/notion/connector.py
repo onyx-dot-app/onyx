@@ -368,7 +368,7 @@ class NotionConnector(LoadConnector, PollConnector):
             compare_time = time.mktime(
                 time.strptime(page[filter_field], "%Y-%m-%dT%H:%M:%S.000Z")
             )
-            if compare_time <= end or compare_time > start:
+            if compare_time > start and compare_time <= end:
                 filtered_pages += [NotionPage(**page)]
         return filtered_pages
 

@@ -32,7 +32,7 @@ export function IndexAttemptStatus({
         <HoverPopup
           mainContent={<div className="cursor-pointer">{icon}</div>}
           popupContent={
-            <div className="flex flex-wrap whitespace-normal w-64">
+            <div className="w-64 p-2 break-words overflow-hidden whitespace-normal">
               {errorMsg}
             </div>
           }

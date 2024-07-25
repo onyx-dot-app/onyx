@@ -1,12 +1,15 @@
-import { BackendMessage } from "@/app/chat/interfaces";
+import {
+  BackendMessage,
+  LLMRelevanceFilterPacket,
+} from "@/app/chat/interfaces";
 import {
   AnswerPiecePacket,
   DanswerDocument,
   DocumentInfoPacket,
   ErrorMessagePacket,
-  LLMRelevanceFilterPacket,
   Quote,
   QuotesInfoPacket,
+  RelevanceChunk,
   SearchRequestArgs,
 } from "./interfaces";
 import { processRawChunkString } from "./streamingUtils";
@@ -19,6 +22,7 @@ export const searchRequestStreamed = async ({
   timeRange,
   tags,
   persona,
+  agentic,
   updateCurrentAnswer,
   updateQuotes,
   updateDocs,
@@ -26,11 +30,15 @@ export const searchRequestStreamed = async ({
   updateSuggestedFlowType,
   updateSelectedDocIndices,
   updateError,
-  updateMessageId,
+  updateMessageAndThreadId,
+  finishedSearching,
+  updateDocumentRelevance,
+  updateComments,
 }: SearchRequestArgs) => {
   let answer = "";
   let quotes: Quote[] | null = null;
   let relevantDocuments: DanswerDocument[] | null = null;
+
   try {
     const filters = buildFilters(sources, documentSets, timeRange, tags);
 
@@ -45,6 +53,7 @@ export const searchRequestStreamed = async ({
       body: JSON.stringify({
         messages: [threadMessage],
         persona_id: persona.id,
+        agentic,
         prompt_id: persona.id === 0 ? null : persona.prompts[0]?.id,
         retrieval_options: {
           run_search: "always",
@@ -52,17 +61,21 @@ export const searchRequestStreamed = async ({
           filters: filters,
           enable_auto_detect_filters: false,
         },
+        llm_doc_eval: true,
+        skip_gen_ai_answer_generation: true,
       }),
       headers: {
         "Content-Type": "application/json",
       },
     });
+
     const reader = response.body?.getReader();
     const decoder = new TextDecoder("utf-8");
 
     let previousPartialChunk: string | null = null;
     while (true) {
       const rawChunk = await reader?.read();
+
       if (!rawChunk) {
         throw new Error("Unable to process chunk");
       }
@@ -79,6 +92,7 @@ export const searchRequestStreamed = async ({
         | DocumentInfoPacket
         | LLMRelevanceFilterPacket
         | BackendMessage
+        | RelevanceChunk
       >(decoder.decode(value, { stream: true }), previousPartialChunk);
       if (!completedChunks.length && !partialChunk) {
         break;
@@ -86,6 +100,13 @@ export const searchRequestStreamed = async ({
       previousPartialChunk = partialChunk as string | null;
       completedChunks.forEach((chunk) => {
         // check for answer peice / end of answer
+
+        if (Object.hasOwn(chunk, "relevance_summaries")) {
+          const relevanceChunk = chunk as RelevanceChunk;
+          const responseTaken = relevanceChunk.relevance_summaries;
+          updateDocumentRelevance(relevanceChunk.relevance_summaries);
+        }
+
         if (Object.hasOwn(chunk, "answer_piece")) {
           const answerPiece = (chunk as AnswerPiecePacket).answer_piece;
           if (answerPiece !== null) {
@@ -150,18 +171,20 @@ export const searchRequestStreamed = async ({
           return;
         }
 
-        // check for message ID section
+        // Check for the final chunk
         if (Object.hasOwn(chunk, "message_id")) {
-          updateMessageId((chunk as BackendMessage).message_id);
-          return;
+          const backendChunk = chunk as BackendMessage;
+          updateComments(backendChunk.comments);
+          updateMessageAndThreadId(
+            backendChunk.message_id,
+            backendChunk.chat_session_id
+          );
         }
-
-        // should never reach this
-        console.log("Unknown chunk:", chunk);
       });
     }
   } catch (err) {
     console.error("Fetch error:", err);
   }
+
   return { answer, quotes, relevantDocuments };
 };

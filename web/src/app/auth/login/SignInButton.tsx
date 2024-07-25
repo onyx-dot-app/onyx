@@ -42,7 +42,7 @@ export function SignInButton({
 
   return (
     <a
-      className="mt-6 py-3 w-72 text-gray-100 bg-accent flex rounded cursor-pointer hover:bg-indigo-800"
+      className="mt-6 py-3 w-72 text-text-100 bg-accent flex rounded cursor-pointer hover:bg-indigo-800"
       href={authorizeUrl}
     >
       {button}

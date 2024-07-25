@@ -134,13 +134,19 @@ export function ShareChatSessionModal({
                 onClick={async () => {
                   setLinkGenerating(true);
 
-                  const shareLink = await generateShareLink(chatSessionId);
-                  if (!shareLink) {
-                    alert("Failed to generate share link");
-                  } else {
-                    setShareLink(shareLink);
-                    navigator.clipboard.writeText(shareLink);
-                    onShare && onShare(true);
+                  // NOTE: for "inescure" non-https setup, the `navigator.clipboard.writeText` may fail
+                  // as the browser may not allow the clipboard to be accessed.
+                  try {
+                    const shareLink = await generateShareLink(chatSessionId);
+                    if (!shareLink) {
+                      alert("Failed to generate share link");
+                    } else {
+                      setShareLink(shareLink);
+                      onShare && onShare(true);
+                      navigator.clipboard.writeText(shareLink);
+                    }
+                  } catch (e) {
+                    console.error(e);
                   }
 
                   setLinkGenerating(false);

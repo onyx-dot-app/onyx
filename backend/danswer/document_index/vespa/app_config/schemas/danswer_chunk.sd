@@ -91,6 +91,9 @@ schema DANSWER_CHUNK_NAME {
         field metadata type string {
             indexing: summary | attribute
         }
+        field metadata_suffix type string {
+            indexing: summary | attribute
+        }
         field doc_updated_at type int {
             indexing: summary | attribute
         }

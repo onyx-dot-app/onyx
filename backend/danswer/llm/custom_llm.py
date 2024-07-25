@@ -76,7 +76,7 @@ class CustomModelServer(LLM):
     def log_model_configs(self) -> None:
         logger.debug(f"Custom model at: {self._endpoint}")
 
-    def invoke(
+    def _invoke_implementation(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -84,7 +84,7 @@ class CustomModelServer(LLM):
     ) -> BaseMessage:
         return self._execute(prompt)
 
-    def stream(
+    def _stream_implementation(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,

@@ -44,7 +44,7 @@ export function HidableSection({
         </div>
       </div>
 
-      {!isHidden && <div className="mx-2 mt-2">{children}</div>}
+      {!isHidden && <div className="mx-2 gap-y-2 mt-2">{children}</div>}
     </div>
   );
 }

@@ -3,12 +3,14 @@ import { unstable_noStore as noStore } from "next/cache";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
-import { ChatPage } from "./ChatPage";
 import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
 import { ChatProvider } from "@/components/context/ChatContext";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
+import FunctionalWrapper from "./shared_chat_search/FunctionalWrapper";
+import { ChatPage } from "./ChatPage";
+import WrappedChat from "./WrappedChat";
 
 export default async function Page({
   searchParams,
@@ -38,12 +40,13 @@ export default async function Page({
     ccPairs,
     availableSources,
     documentSets,
-    personas,
+    assistants,
     tags,
     llmProviders,
     folders,
+    toggleSidebar,
     openedFolders,
-    defaultPersonaId,
+    defaultAssistantId,
     finalDocumentSidebarInitialWidth,
     shouldShowWelcomeModal,
     shouldDisplaySourcesIncompleteModal,
@@ -54,7 +57,6 @@ export default async function Page({
       <UserDisclaimerModal disclaimerText={disclaimerText} disclaimerTitle={disclaimerTitle}/>
 
       <InstantSSRAutoRefresh />
-
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
       {!shouldShowWelcomeModal && !shouldDisplaySourcesIncompleteModal && (
         <ApiKeyModal user={user} />
@@ -69,17 +71,17 @@ export default async function Page({
           chatSessions,
           availableSources,
           availableDocumentSets: documentSets,
-          availablePersonas: personas,
+          availableAssistants: assistants,
           availableTags: tags,
           llmProviders,
           folders,
           openedFolders,
           }}
       >
-        <ChatPage
-          defaultSelectedPersonaId={defaultPersonaId}
-          documentSidebarInitialWidth={finalDocumentSidebarInitialWidth}
-          footerHtml={footerHtml}
+
+        <WrappedChat
+          defaultAssistantId={defaultAssistantId}
+          initiallyToggled={toggleSidebar}
         />
       </ChatProvider>
     </>

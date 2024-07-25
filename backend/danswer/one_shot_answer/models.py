@@ -27,12 +27,19 @@ class DirectQARequest(ChunkContext):
     messages: list[ThreadMessage]
     prompt_id: int | None
     persona_id: int
+    agentic: bool | None = None
     retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
     # This is to forcibly skip (or run) the step, if None it uses the system defaults
     skip_rerank: bool | None = None
     skip_llm_chunk_filter: bool | None = None
     chain_of_thought: bool = False
     return_contexts: bool = False
+    # This is to toggle agentic evaluation:
+    # 1. Evaluates whether each response is relevant or not
+    # 2. Provides a summary of the document's relevance in the resulsts
+    llm_doc_eval: bool = False
+    # If True, skips generative an AI response to the search query
+    skip_gen_ai_answer_generation: bool = False
 
     @root_validator
     def check_chain_of_thought_and_prompt_id(

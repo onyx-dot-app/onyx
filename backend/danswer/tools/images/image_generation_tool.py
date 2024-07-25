@@ -10,6 +10,7 @@ from danswer.chat.chat_utils import combine_message_chain
 from danswer.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from danswer.dynamic_configs.interface import JSON_ro
 from danswer.llm.answering.models import PreviousMessage
+from danswer.llm.headers import build_llm_extra_headers
 from danswer.llm.interfaces import LLM
 from danswer.llm.utils import build_content_with_imgs
 from danswer.llm.utils import message_to_string
@@ -54,24 +55,46 @@ class ImageGenerationResponse(BaseModel):
 
 
 class ImageGenerationTool(Tool):
-    NAME = "run_image_generation"
+    _NAME = "run_image_generation"
+    _DESCRIPTION = "Generate an image from a prompt."
+    _DISPLAY_NAME = "Image Generation Tool"
 
     def __init__(
-        self, api_key: str, model: str = "dall-e-3", num_imgs: int = 2
+        self,
+        api_key: str,
+        api_base: str | None,
+        api_version: str | None,
+        model: str = "dall-e-3",
+        num_imgs: int = 2,
+        additional_headers: dict[str, str] | None = None,
     ) -> None:
         self.api_key = api_key
+        self.api_base = api_base
+        self.api_version = api_version
+
         self.model = model
         self.num_imgs = num_imgs
 
+        self.additional_headers = additional_headers
+
+    @property
     def name(self) -> str:
-        return self.NAME
+        return self._NAME
+
+    @property
+    def description(self) -> str:
+        return self._DESCRIPTION
+
+    @property
+    def display_name(self) -> str:
+        return self._DISPLAY_NAME
 
     def tool_definition(self) -> dict:
         return {
             "type": "function",
             "function": {
-                "name": self.name(),
-                "description": "Generate an image from a prompt",
+                "name": self.name,
+                "description": self.description,
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -141,7 +164,11 @@ class ImageGenerationTool(Tool):
             prompt=prompt,
             model=self.model,
             api_key=self.api_key,
+            # need to pass in None rather than empty str
+            api_base=self.api_base or None,
+            api_version=self.api_version or None,
             n=1,
+            extra_headers=build_llm_extra_headers(self.additional_headers),
         )
         return ImageGenerationResponse(
             revised_prompt=response.data[0]["revised_prompt"],

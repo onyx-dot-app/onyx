@@ -2,6 +2,7 @@ export interface Settings {
   chat_page_enabled: boolean;
   search_page_enabled: boolean;
   default_page: "search" | "chat";
+  maximum_chat_retention_days: number | null;
 }
 
 export interface EnterpriseSettings {

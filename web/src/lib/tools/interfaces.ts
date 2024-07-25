@@ -1,6 +1,7 @@
 export interface ToolSnapshot {
   id: number;
   name: string;
+  display_name: string;
   description: string;
 
   // only specified for Custom Tools. OpenAPI schema which represents

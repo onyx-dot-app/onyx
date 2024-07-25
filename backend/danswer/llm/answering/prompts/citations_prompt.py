@@ -8,7 +8,8 @@ from danswer.db.models import Persona
 from danswer.db.persona import get_default_prompt__read_only
 from danswer.file_store.utils import InMemoryChatFile
 from danswer.llm.answering.models import PromptConfig
-from danswer.llm.factory import get_llm_for_persona
+from danswer.llm.factory import get_llms_for_persona
+from danswer.llm.factory import get_main_llm_from_tuple
 from danswer.llm.interfaces import LLMConfig
 from danswer.llm.utils import build_content_with_imgs
 from danswer.llm.utils import check_number_of_tokens
@@ -99,7 +100,7 @@ def compute_max_document_tokens_for_persona(
     prompt = persona.prompts[0] if persona.prompts else get_default_prompt__read_only()
     return compute_max_document_tokens(
         prompt_config=PromptConfig.from_model(prompt),
-        llm_config=get_llm_for_persona(persona).config,
+        llm_config=get_main_llm_from_tuple(get_llms_for_persona(persona)).config,
         actual_user_input=actual_user_input,
         max_llm_token_override=max_llm_token_override,
     )

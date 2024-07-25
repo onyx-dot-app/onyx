@@ -2,7 +2,10 @@
 
 import * as Yup from "yup";
 import { ConfluenceIcon, TrashIcon } from "@/components/icons/icons";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import {
+  BooleanFormField,
+  TextFormField,
+} from "@/components/admin/connectors/Field";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { CredentialForm } from "@/components/admin/connectors/CredentialForm";
 import {
@@ -207,13 +210,17 @@ const Main = () => {
           <p className="text-sm mb-4">
             Specify any link to a Confluence page below and click
             &quot;Index&quot; to Index. Based on the provided link, we will
-            index the ENTIRE SPACE, not just the specified page. For example,
-            entering{" "}
+            index either the entire page and its subpages OR the entire space.
+            For example, entering{" "}
             <i>
               https://danswer.atlassian.net/wiki/spaces/Engineering/overview
             </i>{" "}
             and clicking the Index button will index the whole{" "}
-            <i>Engineering</i> Confluence space.
+            <i>Engineering</i> Confluence space, but entering
+            https://danswer.atlassian.net/wiki/spaces/Engineering/pages/164331/example+page
+            will index that page&apos;s children (and optionally, itself). Use
+            the checkbox below to determine whether or not to index the parent
+            page in addition to its children.
           </p>
 
           {confluenceConnectorIndexingStatuses.length > 0 && (
@@ -274,9 +281,8 @@ const Main = () => {
               <Divider />
             </>
           )}
-
           <Card className="mt-4">
-            <h2 className="font-bold mb-3">Add a New Space</h2>
+            <h2 className="font-bold mb-3">Add a New Space or Page</h2>
             <ConnectorForm<ConfluenceConfig>
               nameBuilder={(values) =>
                 `ConfluenceConnector-${values.wiki_page_url}`
@@ -289,15 +295,21 @@ const Main = () => {
               formBody={
                 <>
                   <TextFormField name="wiki_page_url" label="Confluence URL:" />
+                  <BooleanFormField
+                    name="index_origin"
+                    label="(For pages) Index the page itself"
+                  />
                 </>
               }
               validationSchema={Yup.object().shape({
                 wiki_page_url: Yup.string().required(
-                  "Please enter any link to your confluence e.g. https://danswer.atlassian.net/wiki/spaces/Engineering/overview"
+                  "Please enter any link to a Confluence space or Page e.g. https://danswer.atlassian.net/wiki/spaces/Engineering/overview"
                 ),
+                index_origin: Yup.boolean(),
               })}
               initialValues={{
                 wiki_page_url: "",
+                index_origin: true,
               }}
               refreshFreq={10 * 60} // 10 minutes
               credentialId={confluenceCredential.id}

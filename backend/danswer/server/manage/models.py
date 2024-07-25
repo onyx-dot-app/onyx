@@ -12,6 +12,8 @@ from danswer.db.models import AllowedAnswerFilters
 from danswer.db.models import ChannelConfig
 from danswer.db.models import SlackBotConfig as SlackBotConfigModel
 from danswer.db.models import SlackBotResponseType
+from danswer.db.models import StandardAnswer as StandardAnswerModel
+from danswer.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
 from danswer.indexing.models import EmbeddingModelDetail
 from danswer.server.features.persona.models import PersonaSnapshot
 from danswer.server.models import FullUserSnapshot
@@ -84,6 +86,57 @@ class HiddenUpdateRequest(BaseModel):
     hidden: bool
 
 
+class StandardAnswerCategoryCreationRequest(BaseModel):
+    name: str
+
+
+class StandardAnswerCategory(BaseModel):
+    id: int
+    name: str
+
+    @classmethod
+    def from_model(
+        cls, standard_answer_category: StandardAnswerCategoryModel
+    ) -> "StandardAnswerCategory":
+        return cls(
+            id=standard_answer_category.id,
+            name=standard_answer_category.name,
+        )
+
+
+class StandardAnswer(BaseModel):
+    id: int
+    keyword: str
+    answer: str
+    categories: list[StandardAnswerCategory]
+
+    @classmethod
+    def from_model(cls, standard_answer_model: StandardAnswerModel) -> "StandardAnswer":
+        return cls(
+            id=standard_answer_model.id,
+            keyword=standard_answer_model.keyword,
+            answer=standard_answer_model.answer,
+            categories=[
+                StandardAnswerCategory.from_model(standard_answer_category_model)
+                for standard_answer_category_model in standard_answer_model.categories
+            ],
+        )
+
+
+class StandardAnswerCreationRequest(BaseModel):
+    keyword: str
+    answer: str
+    categories: list[int]
+
+    @validator("categories", pre=True)
+    def validate_categories(cls, value: list[int]) -> list[int]:
+        if len(value) < 1:
+            raise ValueError(
+                "At least one category must be attached to a standard answer"
+            )
+        return value
+
+
 class SlackBotTokens(BaseModel):
     bot_token: str
     app_token: str
@@ -102,12 +155,14 @@ class SlackBotConfigCreationRequest(BaseModel):
     channel_names: list[str]
     respond_tag_only: bool = False
     respond_to_bots: bool = False
+    enable_auto_filters: bool = False
     # If no team members, assume respond in the channel to everyone
-    respond_team_member_list: list[str] = []
+    respond_member_group_list: list[str] = []
     answer_filters: list[AllowedAnswerFilters] = []
     # list of user emails
     follow_up_tags: list[str] | None = None
     response_type: SlackBotResponseType
+    standard_answer_categories: list[int] = []
 
     @validator("answer_filters", pre=True)
     def validate_filters(cls, value: list[str]) -> list[str]:
@@ -132,6 +187,8 @@ class SlackBotConfig(BaseModel):
     persona: PersonaSnapshot | None
     channel_config: ChannelConfig
     response_type: SlackBotResponseType
+    standard_answer_categories: list[StandardAnswerCategory]
+    enable_auto_filters: bool
 
     @classmethod
     def from_model(
@@ -148,6 +205,11 @@ class SlackBotConfig(BaseModel):
             ),
             channel_config=slack_bot_config_model.channel_config,
             response_type=slack_bot_config_model.response_type,
+            standard_answer_categories=[
+                StandardAnswerCategory.from_model(standard_answer_category_model)
+                for standard_answer_category_model in slack_bot_config_model.standard_answer_categories
+            ],
+            enable_auto_filters=slack_bot_config_model.enable_auto_filters,
         )
 
 

@@ -12,8 +12,8 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from danswer.auth.schemas import UserRole
+from danswer.configs.chat_configs import BING_API_KEY
 from danswer.db.constants import SLACK_BOT_PERSONA_PREFIX
-from danswer.db.document_set import get_document_sets_by_ids
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.models import DocumentSet
 from danswer.db.models import Persona
@@ -62,19 +62,6 @@ def create_update_persona(
 ) -> PersonaSnapshot:
     """Higher level function than upsert_persona, although either is valid to use."""
     # Permission to actually use these is checked later
-    document_sets = list(
-        get_document_sets_by_ids(
-            document_set_ids=create_persona_request.document_set_ids,
-            db_session=db_session,
-        )
-    )
-    prompts = list(
-        get_prompts_by_ids(
-            prompt_ids=create_persona_request.prompt_ids,
-            db_session=db_session,
-        )
-    )
-
     try:
         persona = upsert_persona(
             persona_id=persona_id,
@@ -85,9 +72,9 @@ def create_update_persona(
             llm_relevance_filter=create_persona_request.llm_relevance_filter,
             llm_filter_extraction=create_persona_request.llm_filter_extraction,
             recency_bias=create_persona_request.recency_bias,
-            prompts=prompts,
+            prompt_ids=create_persona_request.prompt_ids,
             tool_ids=create_persona_request.tool_ids,
-            document_sets=document_sets,
+            document_set_ids=create_persona_request.document_set_ids,
             llm_model_provider_override=create_persona_request.llm_model_provider_override,
             llm_model_version_override=create_persona_request.llm_model_version_override,
             starter_messages=create_persona_request.starter_messages,
@@ -330,13 +317,13 @@ def upsert_persona(
     llm_relevance_filter: bool,
     llm_filter_extraction: bool,
     recency_bias: RecencyBiasSetting,
-    prompts: list[Prompt] | None,
-    document_sets: list[DocumentSet] | None,
     llm_model_provider_override: str | None,
     llm_model_version_override: str | None,
     starter_messages: list[StarterMessage] | None,
     is_public: bool,
     db_session: Session,
+    prompt_ids: list[int] | None = None,
+    document_set_ids: list[int] | None = None,
     tool_ids: list[int] | None = None,
     persona_id: int | None = None,
     default_persona: bool = False,
@@ -355,6 +342,28 @@ def upsert_persona(
         tools = db_session.query(Tool).filter(Tool.id.in_(tool_ids)).all()
         if not tools and tool_ids:
             raise ValueError("Tools not found")
+
+    # Fetch and attach document_sets by IDs
+    document_sets = None
+    if document_set_ids is not None:
+        document_sets = (
+            db_session.query(DocumentSet)
+            .filter(DocumentSet.id.in_(document_set_ids))
+            .all()
+        )
+        if not document_sets and document_set_ids:
+            raise ValueError("document_sets not found")
+
+    # Fetch and attach prompts by IDs
+    prompts = None
+    if prompt_ids is not None:
+        prompts = db_session.query(Prompt).filter(Prompt.id.in_(prompt_ids)).all()
+        if not prompts and prompt_ids:
+            raise ValueError("prompts not found")
+
+    # ensure all specified tools are valid
+    if tools:
+        validate_persona_tools(tools)
 
     if persona:
         if not default_persona and persona.default_persona:
@@ -383,10 +392,10 @@ def upsert_persona(
 
         if prompts is not None:
             persona.prompts.clear()
-            persona.prompts = prompts
+            persona.prompts = prompts or []
 
         if tools is not None:
-            persona.tools = tools
+            persona.tools = tools or []
 
     else:
         persona = Persona(
@@ -451,6 +460,14 @@ def update_persona_visibility(
     persona = get_persona_by_id(persona_id=persona_id, user=None, db_session=db_session)
     persona.is_visible = is_visible
     db_session.commit()
+
+
+def validate_persona_tools(tools: list[Tool]) -> None:
+    for tool in tools:
+        if tool.name == "InternetSearchTool" and not BING_API_KEY:
+            raise ValueError(
+                "Bing API key not found, please contact your Danswer admin to get it added!"
+            )
 
 
 def check_user_can_edit_persona(user: User | None, persona: Persona) -> None:

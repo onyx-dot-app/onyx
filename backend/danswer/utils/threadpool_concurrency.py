@@ -87,6 +87,7 @@ def run_functions_in_parallel(
     are the result_id of the FunctionCall and the values are the results of the call.
     """
     results = {}
+
     with ThreadPoolExecutor(max_workers=len(function_calls)) as executor:
         future_to_id = {
             executor.submit(func_call.execute): func_call.result_id

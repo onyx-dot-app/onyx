@@ -5,6 +5,7 @@ from typing import IO
 from sqlalchemy.orm import Session
 
 from danswer.configs.constants import FileOrigin
+from danswer.db.models import PGFileStore
 from danswer.db.pg_file_store import create_populate_lobj
 from danswer.db.pg_file_store import delete_lobj_by_id
 from danswer.db.pg_file_store import delete_pgfilestore_by_file_name
@@ -26,6 +27,7 @@ class FileStore(ABC):
         display_name: str | None,
         file_origin: FileOrigin,
         file_type: str,
+        file_metadata: dict | None = None,
     ) -> None:
         """
         Save a file to the blob store
@@ -41,12 +43,17 @@ class FileStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def read_file(self, file_name: str, mode: str | None) -> IO:
+    def read_file(
+        self, file_name: str, mode: str | None, use_tempfile: bool = False
+    ) -> IO:
         """
         Read the content of a given file by the name
 
         Parameters:
         - file_name: Name of file to read
+        - mode: Mode to open the file (e.g. 'b' for binary)
+        - use_tempfile: Whether to use a temporary file to store the contents
+                        in order to avoid loading the entire file into memory
 
         Returns:
             Contents of the file and metadata dict
@@ -73,6 +80,7 @@ class PostgresBackedFileStore(FileStore):
         display_name: str | None,
         file_origin: FileOrigin,
         file_type: str,
+        file_metadata: dict | None = None,
     ) -> None:
         try:
             # The large objects in postgres are saved as special objects can be listed with
@@ -85,19 +93,32 @@ class PostgresBackedFileStore(FileStore):
                 file_type=file_type,
                 lobj_oid=obj_id,
                 db_session=self.db_session,
+                file_metadata=file_metadata,
             )
             self.db_session.commit()
         except Exception:
             self.db_session.rollback()
             raise
 
-    def read_file(self, file_name: str, mode: str | None = None) -> IO:
+    def read_file(
+        self, file_name: str, mode: str | None = None, use_tempfile: bool = False
+    ) -> IO:
         file_record = get_pgfilestore_by_file_name(
             file_name=file_name, db_session=self.db_session
         )
         return read_lobj(
-            lobj_oid=file_record.lobj_oid, db_session=self.db_session, mode=mode
+            lobj_oid=file_record.lobj_oid,
+            db_session=self.db_session,
+            mode=mode,
+            use_tempfile=use_tempfile,
         )
+
+    def read_file_record(self, file_name: str) -> PGFileStore:
+        file_record = get_pgfilestore_by_file_name(
+            file_name=file_name, db_session=self.db_session
+        )
+
+        return file_record
 
     def delete_file(self, file_name: str) -> None:
         try:

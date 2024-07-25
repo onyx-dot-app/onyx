@@ -86,7 +86,9 @@ def load_vespa(filename: str) -> None:
             new_doc = json.loads(line.strip())
             doc_id = new_doc["update"].split("::")[-1]
             response = requests.post(
-                DOCUMENT_ID_ENDPOINT + "/" + doc_id, headers=headers, json=new_doc
+                DOCUMENT_ID_ENDPOINT + "/" + doc_id,
+                headers=headers,
+                json=new_doc,
             )
             response.raise_for_status()
 

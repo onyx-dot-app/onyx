@@ -2,7 +2,10 @@
 
 import * as Yup from "yup";
 import { GithubIcon, TrashIcon } from "@/components/icons/icons";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import {
+  BooleanFormField,
+  TextFormField,
+} from "@/components/admin/connectors/Field";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import useSWR, { useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -150,8 +153,8 @@ const Main = () => {
       {githubConnectorIndexingStatuses.length > 0 && (
         <>
           <Text className="mb-2">
-            We pull the latest Pull Requests from each repository listed below
-            every <b>10</b> minutes.
+            We pull the latest Pull Requests and/or Issues from each repository
+            listed below every <b>10</b> minutes.
           </Text>
           <div className="mb-2">
             <ConnectorsTable<GithubConfig, GithubCredentialJson>
@@ -188,7 +191,12 @@ const Main = () => {
 
       {githubCredential ? (
         <Card className="mt-4">
-          <h2 className="font-bold mb-3">Connect to a New Repository</h2>
+          <h2 className="font-bold mb-1">Connect to a New Repository</h2>
+
+          <Text className="mb-4">
+            The Github connector can index Pull Requests and Issues.
+          </Text>
+
           <ConnectorForm<GithubConfig>
             nameBuilder={(values) =>
               `GithubConnector-${values.repo_owner}/${values.repo_name}`
@@ -202,6 +210,16 @@ const Main = () => {
               <>
                 <TextFormField name="repo_owner" label="Repository Owner:" />
                 <TextFormField name="repo_name" label="Repository Name:" />
+                <BooleanFormField
+                  name="include_prs"
+                  label="Include Pull Requests"
+                  subtext="Index pull requests from this repository"
+                />
+                <BooleanFormField
+                  name="include_issues"
+                  label="Include Issues"
+                  subtext="Index issues from this repository"
+                />
               </>
             }
             validationSchema={Yup.object().shape({
@@ -214,6 +232,15 @@ const Main = () => {
               include_prs: Yup.boolean().required(),
               include_issues: Yup.boolean().required(),
             })}
+            validate={(values) => {
+              if (values.include_prs || values.include_issues) {
+                return {} as Record<string, string>;
+              }
+              return {
+                include_issues:
+                  "Please select at least one of Pull Requests or Issues",
+              };
+            }}
             initialValues={{
               repo_owner: "",
               repo_name: "",

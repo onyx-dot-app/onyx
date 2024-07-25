@@ -160,7 +160,7 @@ export function Explorer({
     <div>
       {popup}
       <div className="justify-center py-2">
-        <div className="flex items-center w-full border-2 border-border rounded-lg px-4 py-2 focus-within:border-accent">
+        <div className="flex items-center w-full border-2 border-border rounded-lg px-4 py-2 focus-within:border-accent bg-background-search">
           <MagnifyingGlass />
           <textarea
             autoFocus

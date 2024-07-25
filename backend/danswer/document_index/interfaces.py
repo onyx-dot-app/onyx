@@ -6,7 +6,7 @@ from typing import Any
 from danswer.access.models import DocumentAccess
 from danswer.indexing.models import DocMetadataAwareIndexChunk
 from danswer.search.models import IndexFilters
-from danswer.search.models import InferenceChunk
+from danswer.search.models import InferenceChunkUncleaned
 
 
 @dataclass(frozen=True)
@@ -186,7 +186,7 @@ class IdRetrievalCapable(abc.ABC):
         min_chunk_ind: int | None,
         max_chunk_ind: int | None,
         user_access_control_list: list[str] | None = None,
-    ) -> list[InferenceChunk]:
+    ) -> list[InferenceChunkUncleaned]:
         """
         Fetch chunk(s) based on document id
 
@@ -222,7 +222,7 @@ class KeywordCapable(abc.ABC):
         time_decay_multiplier: float,
         num_to_retrieve: int,
         offset: int = 0,
-    ) -> list[InferenceChunk]:
+    ) -> list[InferenceChunkUncleaned]:
         """
         Run keyword search and return a list of chunks. Inference chunks are chunks with all of the
         information required for query time purposes. For example, some details of the document
@@ -262,7 +262,7 @@ class VectorCapable(abc.ABC):
         time_decay_multiplier: float,
         num_to_retrieve: int,
         offset: int = 0,
-    ) -> list[InferenceChunk]:
+    ) -> list[InferenceChunkUncleaned]:
         """
         Run vector/semantic search and return a list of inference chunks.
 
@@ -298,7 +298,7 @@ class HybridCapable(abc.ABC):
         num_to_retrieve: int,
         offset: int = 0,
         hybrid_alpha: float | None = None,
-    ) -> list[InferenceChunk]:
+    ) -> list[InferenceChunkUncleaned]:
         """
         Run hybrid search and return a list of inference chunks.
 
@@ -348,7 +348,7 @@ class AdminCapable(abc.ABC):
         filters: IndexFilters,
         num_to_retrieve: int,
         offset: int = 0,
-    ) -> list[InferenceChunk]:
+    ) -> list[InferenceChunkUncleaned]:
         """
         Run the special search for the admin document explorer page
 

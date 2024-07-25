@@ -79,8 +79,9 @@ class SalesforceConnector(LoadConnector, PollConnector, IdConnector):
         if self.sf_client is None:
             raise ConnectorMissingCredentialError("Salesforce")
 
-        extracted_id = f"{ID_PREFIX}{object_dict['Id']}"
-        extracted_link = f"https://{self.sf_client.sf_instance}/{extracted_id}"
+        salesforce_id = object_dict["Id"]
+        danswer_salesforce_id = f"{ID_PREFIX}{salesforce_id}"
+        extracted_link = f"https://{self.sf_client.sf_instance}/{salesforce_id}"
         extracted_doc_updated_at = time_str_to_utc(object_dict["LastModifiedDate"])
         extracted_object_text = extract_dict_text(object_dict)
         extracted_semantic_identifier = object_dict.get("Name", "Unknown Object")
@@ -91,7 +92,7 @@ class SalesforceConnector(LoadConnector, PollConnector, IdConnector):
         ]
 
         doc = Document(
-            id=extracted_id,
+            id=danswer_salesforce_id,
             sections=[Section(link=extracted_link, text=extracted_object_text)],
             source=DocumentSource.SALESFORCE,
             semantic_identifier=extracted_semantic_identifier,

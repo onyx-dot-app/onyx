@@ -1,3 +1,5 @@
+import { CheckmarkIcon } from "./icons/icons";
+
 export const CustomCheckbox = ({
   checked,
   onChange,
@@ -21,12 +23,10 @@ export const CustomCheckbox = ({
           } transition duration-300`}
         >
           {checked && (
-            <svg
-              className="absolute top-0 left-0 w-3 h-3 fill-current text-inverted"
-              viewBox="0 0 20 20"
-            >
-              <path d="M0 11l2-2 5 5L18 3l2 2L7 18z" />
-            </svg>
+            <CheckmarkIcon
+              size={12}
+              className="absolute top-0 left-0 fill-current text-inverted"
+            />
           )}
         </span>
       </span>

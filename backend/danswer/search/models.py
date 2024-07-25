@@ -4,6 +4,8 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic import validator
 
+from danswer.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
+from danswer.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from danswer.configs.chat_configs import DISABLE_LLM_CHUNK_FILTER
 from danswer.configs.chat_configs import HYBRID_ALPHA
 from danswer.configs.chat_configs import NUM_RERANKED_RESULTS
@@ -47,8 +49,8 @@ class ChunkMetric(BaseModel):
 class ChunkContext(BaseModel):
     # Additional surrounding context options, if full doc, then chunks are deduped
     # If surrounding context overlap, it is combined into one
-    chunks_above: int = 0
-    chunks_below: int = 0
+    chunks_above: int = CONTEXT_CHUNKS_ABOVE
+    chunks_below: int = CONTEXT_CHUNKS_BELOW
     full_doc: bool = False
 
     @validator("chunks_above", "chunks_below", pre=True, each_item=False)
@@ -94,7 +96,7 @@ class SearchQuery(ChunkContext):
     # Only used if not skip_rerank
     num_rerank: int | None = NUM_RERANKED_RESULTS
     # Only used if not skip_llm_chunk_filter
-    max_llm_filter_chunks: int = NUM_RERANKED_RESULTS
+    max_llm_filter_sections: int = NUM_RERANKED_RESULTS
 
     class Config:
         frozen = True
@@ -128,11 +130,14 @@ class InferenceChunk(BaseChunk):
     recency_bias: float
     score: float | None
     hidden: bool
+    is_relevant: bool | None = None
+    relevance_explanation: str | None = None
     metadata: dict[str, str | list[str]]
     # Matched sections in the chunk. Uses Vespa syntax e.g. <hi>TEXT</hi>
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "he couldn't find an <hi>answer</hi>"]
     match_highlights: list[str]
+
     # when the doc was last updated
     updated_at: datetime | None
     primary_owners: list[str] | None = None
@@ -162,19 +167,53 @@ class InferenceChunk(BaseChunk):
     def __hash__(self) -> int:
         return hash((self.document_id, self.chunk_id))
 
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, InferenceChunk):
+            return NotImplemented
+        if self.score is None:
+            if other.score is None:
+                return self.chunk_id > other.chunk_id
+            return True
+        if other.score is None:
+            return False
+        if self.score == other.score:
+            return self.chunk_id > other.chunk_id
+        return self.score < other.score
 
-class InferenceSection(InferenceChunk):
-    """Section is a combination of chunks. A section could be a single chunk, several consecutive
-    chunks or the entire document"""
+    def __gt__(self, other: Any) -> bool:
+        if not isinstance(other, InferenceChunk):
+            return NotImplemented
+        if self.score is None:
+            return False
+        if other.score is None:
+            return True
+        if self.score == other.score:
+            return self.chunk_id < other.chunk_id
+        return self.score > other.score
 
+
+class InferenceChunkUncleaned(InferenceChunk):
+    title: str | None  # Separate from Semantic Identifier though often same
+    metadata_suffix: str | None
+
+    def to_inference_chunk(self) -> InferenceChunk:
+        # Create a dict of all fields except 'title' and 'metadata_suffix'
+        # Assumes the cleaning has already been applied and just needs to translate to the right type
+        inference_chunk_data = {
+            k: v
+            for k, v in self.dict().items()
+            if k not in ["title", "metadata_suffix"]
+        }
+        return InferenceChunk(**inference_chunk_data)
+
+
+class InferenceSection(BaseModel):
+    """Section list of chunks with a combined content. A section could be a single chunk, several
+    chunks from the same document or the entire document."""
+
+    center_chunk: InferenceChunk
+    chunks: list[InferenceChunk]
     combined_content: str
-
-    @classmethod
-    def from_chunk(
-        cls, inf_chunk: InferenceChunk, content: str | None = None
-    ) -> "InferenceSection":
-        inf_chunk_data = inf_chunk.dict()
-        return cls(**inf_chunk_data, combined_content=content or inf_chunk.content)
 
 
 class SearchDoc(BaseModel):
@@ -191,6 +230,8 @@ class SearchDoc(BaseModel):
     hidden: bool
     metadata: dict[str, str | list[str]]
     score: float | None
+    is_relevant: bool | None = None
+    relevance_explanation: str | None = None
     # Matched sections in the doc. Uses Vespa syntax e.g. <hi>TEXT</hi>
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "the answer is <hi>42</hi>""]
@@ -199,6 +240,7 @@ class SearchDoc(BaseModel):
     updated_at: datetime | None
     primary_owners: list[str] | None
     secondary_owners: list[str] | None
+    is_internet: bool = False
 
     def dict(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().dict(*args, **kwargs)  # type: ignore
@@ -227,6 +269,13 @@ class SavedSearchDoc(SearchDoc):
         if not isinstance(other, SavedSearchDoc):
             return NotImplemented
         return self.score < other.score
+
+
+class SavedSearchDocWithContent(SavedSearchDoc):
+    """Used for endpoints that need to return the actual contents of the retrieved
+    section in addition to the match_highlights."""
+
+    content: str
 
 
 class RetrievalDocs(BaseModel):

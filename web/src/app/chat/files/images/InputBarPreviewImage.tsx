@@ -14,10 +14,24 @@ export function InputBarPreviewImage({ fileId }: { fileId: string }) {
         open={fullImageShowing}
         onOpenChange={(open) => setFullImageShowing(open)}
       />
-      <div>
+      <div
+        className={`
+          bg-transparent
+          border-none
+          flex
+          items-center
+          p-2
+          bg-hover
+          border
+          border-border
+          rounded-md
+          box-border
+          h-10
+      `}
+      >
         <img
           onClick={() => setFullImageShowing(true)}
-          className="h-16 w-16 object-cover rounded-lg bg-background cursor-pointer"
+          className="h-8 w-8 object-cover rounded-lg bg-background cursor-pointer"
           src={buildImgUrl(fileId)}
         />
       </div>

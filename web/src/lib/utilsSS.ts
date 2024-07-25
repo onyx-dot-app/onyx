@@ -1,5 +1,12 @@
 import { cookies } from "next/headers";
-import { INTERNAL_URL } from "./constants";
+import { HOST_URL, INTERNAL_URL } from "./constants";
+
+export function buildClientUrl(path: string) {
+  if (path.startsWith("/")) {
+    return `${HOST_URL}${path}`;
+  }
+  return `${HOST_URL}/${path}`;
+}
 
 export function buildUrl(path: string) {
   if (path.startsWith("/")) {

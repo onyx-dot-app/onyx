@@ -111,8 +111,10 @@ export function SingleUseConnectorsTable<
                   </TableCell>
                 )}
                 {specialColumns?.map(({ key, getValue }) => (
-                  <TableCell key={key}>
-                    {getValue(connectorIndexingStatus)}
+                  <TableCell className="max-w-sm" key={key}>
+                    <div className="break-words whitespace-normal">
+                      {getValue(connectorIndexingStatus)}
+                    </div>
                   </TableCell>
                 ))}
                 <TableCell>

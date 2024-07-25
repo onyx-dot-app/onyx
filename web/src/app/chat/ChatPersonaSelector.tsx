@@ -1,5 +1,5 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { FiCheck, FiChevronDown, FiPlusSquare, FiEdit } from "react-icons/fi";
+import { FiCheck, FiChevronDown, FiPlusSquare, FiEdit2 } from "react-icons/fi";
 import { CustomDropdown, DefaultDropdownElement } from "@/components/Dropdown";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -51,7 +51,7 @@ function PersonaItem({
       </div>
       {isOwner && (
         <Link href={`/assistants/edit/${id}`} className="mx-2 my-auto">
-          <FiEdit className="hover:bg-hover p-0.5 my-auto" size={20} />
+          <FiEdit2 className="hover:bg-hover p-0.5 my-auto" size={20} />
         </Link>
       )}
     </div>
@@ -130,8 +130,8 @@ export function ChatPersonaSelector({
         </div>
       }
     >
-      <div className="select-none text-xl text-strong font-bold flex px-2 py-1.5 rounded cursor-pointer hover:bg-hover-light">
-        <div className="my-auto">
+      <div className="select-none text-xl text-strong font-bold flex px-2 rounded cursor-pointer hover:bg-hover-light">
+        <div className="mt-auto">
           {currentlySelectedPersona?.name || "Default"}
         </div>
         <FiChevronDown className="my-auto ml-1" />

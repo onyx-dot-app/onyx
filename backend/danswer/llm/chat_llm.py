@@ -5,6 +5,7 @@ from typing import Any
 from typing import cast
 
 import litellm  # type: ignore
+from httpx import RemoteProtocolError
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import AIMessage
 from langchain_core.messages import AIMessageChunk
@@ -22,6 +23,7 @@ from langchain_core.messages.tool import ToolCallChunk
 from langchain_core.messages.tool import ToolMessage
 
 from danswer.configs.app_configs import LOG_ALL_MODEL_INTERACTIONS
+from danswer.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
 from danswer.configs.model_configs import DISABLE_LITELLM_STREAMING
 from danswer.configs.model_configs import GEN_AI_API_ENDPOINT
 from danswer.configs.model_configs import GEN_AI_API_VERSION
@@ -40,6 +42,8 @@ logger = setup_logger()
 # parameters like frequency and presence, just ignore them
 litellm.drop_params = True
 litellm.telemetry = False
+
+litellm.set_verbose = LOG_ALL_MODEL_INTERACTIONS
 
 
 def _base_msg_to_role(msg: BaseMessage) -> str:
@@ -228,32 +232,6 @@ class DefaultMultiLLM(LLM):
 
         self._model_kwargs = model_kwargs
 
-    @staticmethod
-    def _log_prompt(prompt: LanguageModelInput) -> None:
-        if isinstance(prompt, list):
-            for ind, msg in enumerate(prompt):
-                if isinstance(msg, AIMessageChunk):
-                    if msg.content:
-                        log_msg = msg.content
-                    elif msg.tool_call_chunks:
-                        log_msg = "Tool Calls: " + str(
-                            [
-                                {
-                                    key: value
-                                    for key, value in tool_call.items()
-                                    if key != "index"
-                                }
-                                for tool_call in msg.tool_call_chunks
-                            ]
-                        )
-                    else:
-                        log_msg = ""
-                    logger.debug(f"Message {ind}:\n{log_msg}")
-                else:
-                    logger.debug(f"Message {ind}:\n{msg.content}")
-        if isinstance(prompt, str):
-            logger.debug(f"Prompt:\n{prompt}")
-
     def log_model_configs(self) -> None:
         logger.info(f"Config: {self.config}")
 
@@ -303,17 +281,18 @@ class DefaultMultiLLM(LLM):
             model_name=self._model_version,
             temperature=self._temperature,
             api_key=self._api_key,
+            api_base=self._api_base,
+            api_version=self._api_version,
         )
 
-    def invoke(
+    def _invoke_implementation(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
     ) -> BaseMessage:
-        if LOG_ALL_MODEL_INTERACTIONS:
+        if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
-            self._log_prompt(prompt)
 
         response = cast(
             litellm.ModelResponse, self._completion(prompt, tools, tool_choice, False)
@@ -322,15 +301,14 @@ class DefaultMultiLLM(LLM):
             response.choices[0].message
         )
 
-    def stream(
+    def _stream_implementation(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
     ) -> Iterator[BaseMessage]:
-        if LOG_ALL_MODEL_INTERACTIONS:
+        if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
-            self._log_prompt(prompt)
 
         if DISABLE_LITELLM_STREAMING:
             yield self.invoke(prompt)
@@ -338,19 +316,25 @@ class DefaultMultiLLM(LLM):
 
         output = None
         response = self._completion(prompt, tools, tool_choice, True)
-        for part in response:
-            if len(part["choices"]) == 0:
-                continue
-            delta = part["choices"][0]["delta"]
-            message_chunk = _convert_delta_to_message_chunk(delta, output)
-            if output is None:
-                output = message_chunk
-            else:
-                output += message_chunk
+        try:
+            for part in response:
+                if len(part["choices"]) == 0:
+                    continue
+                delta = part["choices"][0]["delta"]
+                message_chunk = _convert_delta_to_message_chunk(delta, output)
+                if output is None:
+                    output = message_chunk
+                else:
+                    output += message_chunk
 
-            yield message_chunk
+                yield message_chunk
 
-        if LOG_ALL_MODEL_INTERACTIONS and output:
+        except RemoteProtocolError:
+            raise RuntimeError(
+                "The AI model failed partway through generation, please try again."
+            )
+
+        if LOG_DANSWER_MODEL_INTERACTIONS and output:
             content = output.content or ""
             if isinstance(output, AIMessage):
                 if content:

@@ -9,15 +9,15 @@ import {
   TableCell,
 } from "@tremor/react";
 import { CCPairStatus, IndexAttemptStatus } from "@/components/Status";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageSelector } from "@/components/PageSelector";
 import { timeAgo } from "@/lib/time";
 import { ConnectorIndexingStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { isCurrentlyDeleting } from "@/lib/documentDeletion";
-import { FiEdit } from "react-icons/fi";
+import { FiCheck, FiEdit2, FiXCircle } from "react-icons/fi";
 
 const NUM_IN_PAGE = 20;
 
@@ -68,6 +68,32 @@ function CCPairIndexingStatusDisplay({
   );
 }
 
+function ClickableTableRow({
+  url,
+  children,
+  ...props
+}: {
+  url: string;
+  children: React.ReactNode;
+  [key: string]: any; // This allows for any additional props
+}) {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.prefetch(url);
+  }, [router]);
+
+  const navigate = () => {
+    router.push(url);
+  };
+
+  return (
+    <TableRow {...props} onClick={navigate}>
+      {children}
+    </TableRow>
+  );
+}
+
 export function CCPairIndexingStatusTable({
   ccPairsIndexingStatuses,
 }: {
@@ -86,6 +112,7 @@ export function CCPairIndexingStatusTable({
           <TableRow>
             <TableHeaderCell>Connector</TableHeaderCell>
             <TableHeaderCell>Status</TableHeaderCell>
+            <TableHeaderCell>Is Public</TableHeaderCell>
             <TableHeaderCell>Last Indexed</TableHeaderCell>
             <TableHeaderCell>Docs Indexed</TableHeaderCell>
           </TableRow>
@@ -93,7 +120,8 @@ export function CCPairIndexingStatusTable({
         <TableBody>
           {ccPairsIndexingStatusesForPage.map((ccPairsIndexingStatus) => {
             return (
-              <TableRow
+              <ClickableTableRow
+                url={`/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`}
                 key={ccPairsIndexingStatus.cc_pair_id}
                 className={
                   "hover:bg-hover-light bg-background cursor-pointer relative"
@@ -101,7 +129,7 @@ export function CCPairIndexingStatusTable({
               >
                 <TableCell>
                   <div className="flex my-auto">
-                    <FiEdit className="mr-4 my-auto" />
+                    <FiEdit2 className="mr-4 my-auto" />
                     <div className="whitespace-normal break-all max-w-3xl">
                       <ConnectorTitle
                         connector={ccPairsIndexingStatus.connector}
@@ -117,17 +145,17 @@ export function CCPairIndexingStatusTable({
                   />
                 </TableCell>
                 <TableCell>
+                  {ccPairsIndexingStatus.public_doc ? (
+                    <FiCheck className="my-auto text-emerald-600" size="18" />
+                  ) : (
+                    <FiXCircle className="my-auto text-red-600" />
+                  )}
+                </TableCell>
+                <TableCell>
                   {timeAgo(ccPairsIndexingStatus?.last_success) || "-"}
                 </TableCell>
                 <TableCell>{ccPairsIndexingStatus.docs_indexed}</TableCell>
-                {/* Wrapping in <td> to avoid console warnings */}
-                <td className="w-0 p-0">
-                  <Link
-                    href={`/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`}
-                    className="absolute w-full h-full left-0"
-                  ></Link>
-                </td>
-              </TableRow>
+              </ClickableTableRow>
             );
           })}
         </TableBody>

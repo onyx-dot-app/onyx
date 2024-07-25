@@ -22,8 +22,13 @@ def name_document_set_sync_task(document_set_id: int) -> str:
     return f"sync_doc_set_{document_set_id}"
 
 
-def name_cc_prune_task(connector_id: int, credential_id: int) -> str:
-    return f"prune_connector_credential_pair_{connector_id}_{credential_id}"
+def name_cc_prune_task(
+    connector_id: int | None = None, credential_id: int | None = None
+) -> str:
+    task_name = f"prune_connector_credential_pair_{connector_id}_{credential_id}"
+    if not connector_id or not credential_id:
+        task_name = "prune_connector_credential_pair"
+    return task_name
 
 
 T = TypeVar("T", bound=Callable)

@@ -7,13 +7,15 @@ import {
   AuthTypeMetadata,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
-import Image from "next/image";
 import { SignInButton } from "./SignInButton";
 import { EmailPasswordForm } from "./EmailPasswordForm";
 import { Card, Title, Text } from "@tremor/react";
 import Link from "next/link";
 import { Footer } from "@/components/Footer";
 import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
+import { Logo } from "@/components/Logo";
+import { LoginText } from "./LoginText";
+import Image from "next/image";
 
 const Page = async ({
   searchParams,
@@ -89,7 +91,7 @@ const Page = async ({
           {authUrl && authTypeMetadata && (
             <>
               <h2 className="text-center text-xl text-strong font-bold mt-6">
-                Log In to Danswer
+                <LoginText />
               </h2>
 
               <SignInButton

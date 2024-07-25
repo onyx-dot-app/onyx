@@ -1,14 +1,13 @@
+from danswer.configs.chat_configs import LANGUAGE_HINT
 from danswer.llm.utils import check_number_of_tokens
 from danswer.prompts.chat_prompts import ADDITIONAL_INFO
 from danswer.prompts.chat_prompts import CHAT_USER_PROMPT
 from danswer.prompts.chat_prompts import CITATION_REMINDER
 from danswer.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
 from danswer.prompts.constants import DEFAULT_IGNORE_STATEMENT
-from danswer.prompts.direct_qa_prompts import LANGUAGE_HINT
 from danswer.prompts.prompt_utils import get_current_llm_day_time
 
-# tokens outside of the actual persona's "user_prompt" that make up the end
-# user message
+# tokens outside of the actual persona's "user_prompt" that make up the end user message
 CHAT_USER_PROMPT_WITH_CONTEXT_OVERHEAD_TOKEN_CNT = check_number_of_tokens(
     CHAT_USER_PROMPT.format(
         context_docs_str="",

@@ -159,11 +159,13 @@ def extract_source_filter(
 
 
 if __name__ == "__main__":
-    from danswer.llm.factory import get_default_llm
+    from danswer.llm.factory import get_default_llms, get_main_llm_from_tuple
 
     # Just for testing purposes
     with Session(get_sqlalchemy_engine()) as db_session:
         while True:
             user_input = input("Query to Extract Sources: ")
-            sources = extract_source_filter(user_input, get_default_llm(), db_session)
+            sources = extract_source_filter(
+                user_input, get_main_llm_from_tuple(get_default_llms()), db_session
+            )
             print(sources)

@@ -1,7 +1,7 @@
 import { useChatContext } from "@/components/context/ChatContext";
 import { FilterManager } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DateRangePicker,
   DateRangePickerItem,
@@ -12,22 +12,45 @@ import { getXDaysAgo } from "@/lib/dateUtils";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import { Bubble } from "@/components/Bubble";
 import { FiX } from "react-icons/fi";
+import { getValidTags } from "@/lib/tags/tagUtils";
+import debounce from "lodash/debounce";
+import { Tag } from "@/lib/types";
 
 export function FiltersTab({
   filterManager,
 }: {
   filterManager: FilterManager;
 }): JSX.Element {
-  const [filterValue, setFilterValue] = useState<string>("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
   const { availableSources, availableDocumentSets, availableTags } =
     useChatContext();
+
+  const [filterValue, setFilterValue] = useState<string>("");
+  const [filteredTags, setFilteredTags] = useState<Tag[]>(availableTags);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const allSources = listSourceMetadata();
   const availableSourceMetadata = allSources.filter((source) =>
     availableSources.includes(source.internalName)
   );
+
+  const debouncedFetchTags = useRef(
+    debounce(async (value: string) => {
+      if (value) {
+        const fetchedTags = await getValidTags(value);
+        setFilteredTags(fetchedTags);
+      } else {
+        setFilteredTags(availableTags);
+      }
+    }, 50)
+  ).current;
+
+  useEffect(() => {
+    debouncedFetchTags(filterValue);
+
+    return () => {
+      debouncedFetchTags.cancel();
+    };
+  }, [filterValue, availableTags, debouncedFetchTags]);
 
   return (
     <div className="overflow-hidden flex flex-col">
@@ -210,17 +233,15 @@ export function FiltersTab({
                 </div>
 
                 <div className="max-h-48 flex flex-col gap-y-1 overflow-y-auto">
-                  {availableTags.length > 0 ? (
-                    availableTags
+                  {filteredTags.length > 0 ? (
+                    filteredTags
                       .filter(
                         (tag) =>
                           !filterManager.selectedTags.some(
                             (selectedTag) =>
                               selectedTag.tag_key === tag.tag_key &&
                               selectedTag.tag_value === tag.tag_value
-                          ) &&
-                          (tag.tag_key.includes(filterValue) ||
-                            tag.tag_value.includes(filterValue))
+                          )
                       )
                       .slice(0, 12)
                       .map((tag) => (

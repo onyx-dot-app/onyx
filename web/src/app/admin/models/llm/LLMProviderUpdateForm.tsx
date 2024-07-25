@@ -1,4 +1,5 @@
 import { LoadingAnimation } from "@/components/Loading";
+import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { Button, Divider, Text } from "@tremor/react";
 import { Form, Formik } from "formik";
 import { FiTrash } from "react-icons/fi";
@@ -6,11 +7,16 @@ import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import {
   SelectorFormField,
   TextFormField,
+  BooleanFormField,
 } from "@/components/admin/connectors/Field";
 import { useState } from "react";
+import { Bubble } from "@/components/Bubble";
+import { GroupsIcon } from "@/components/icons/icons";
 import { useSWRConfig } from "swr";
+import { useUserGroups } from "@/lib/hooks";
 import { FullLLMProvider, WellKnownLLMProviderDescriptor } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 
@@ -29,8 +35,15 @@ export function LLMProviderUpdateForm({
 }) {
   const { mutate } = useSWRConfig();
 
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+
+  // EE only
+  const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
+
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState<string>("");
+
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   // Define the initial values based on the provider's requirements
   const initialValues = {
@@ -54,6 +67,8 @@ export function LLMProviderUpdateForm({
         },
         {} as { [key: string]: string }
       ),
+    is_public: existingLlmProvider?.is_public ?? true,
+    groups: existingLlmProvider?.groups ?? [],
   };
 
   const [validatedConfig, setValidatedConfig] = useState(
@@ -91,6 +106,9 @@ export function LLMProviderUpdateForm({
       : {}),
     default_model_name: Yup.string().required("Model name is required"),
     fast_default_model_name: Yup.string().nullable(),
+    // EE Only
+    is_public: Yup.boolean().required(),
+    groups: Yup.array().of(Yup.number()),
   });
 
   return (
@@ -193,7 +211,7 @@ export function LLMProviderUpdateForm({
         setSubmitting(false);
       }}
     >
-      {({ values }) => (
+      {({ values, setFieldValue }) => (
         <Form>
           <TextFormField
             name="name"
@@ -293,6 +311,69 @@ export function LLMProviderUpdateForm({
 
           <Divider />
 
+          <AdvancedOptionsToggle
+            showAdvancedOptions={showAdvancedOptions}
+            setShowAdvancedOptions={setShowAdvancedOptions}
+          />
+
+          {showAdvancedOptions && (
+            <>
+              {isPaidEnterpriseFeaturesEnabled && userGroups && (
+                <>
+                  <BooleanFormField
+                    small
+                    noPadding
+                    alignTop
+                    name="is_public"
+                    label="Is Public?"
+                    subtext="If set, this LLM Provider will be available to all users. If not, only the specified User Groups will be able to use it."
+                  />
+
+                  {userGroups && userGroups.length > 0 && !values.is_public && (
+                    <div>
+                      <Text>
+                        Select which User Groups should have access to this LLM
+                        Provider.
+                      </Text>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {userGroups.map((userGroup) => {
+                          const isSelected = values.groups.includes(
+                            userGroup.id
+                          );
+                          return (
+                            <Bubble
+                              key={userGroup.id}
+                              isSelected={isSelected}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setFieldValue(
+                                    "groups",
+                                    values.groups.filter(
+                                      (id) => id !== userGroup.id
+                                    )
+                                  );
+                                } else {
+                                  setFieldValue("groups", [
+                                    ...values.groups,
+                                    userGroup.id,
+                                  ]);
+                                }
+                              }}
+                            >
+                              <div className="flex">
+                                <GroupsIcon />
+                                <div className="ml-1">{userGroup.name}</div>
+                              </div>
+                            </Bubble>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
           <div>
             {/* NOTE: this is above the test button to make sure it's visible */}
             {testError && <Text className="text-error mt-2">{testError}</Text>}

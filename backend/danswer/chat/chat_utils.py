@@ -1,5 +1,4 @@
 import re
-from collections.abc import Sequence
 from typing import cast
 
 from sqlalchemy.orm import Session
@@ -9,40 +8,28 @@ from danswer.chat.models import LlmDoc
 from danswer.db.chat import get_chat_messages_by_session
 from danswer.db.models import ChatMessage
 from danswer.llm.answering.models import PreviousMessage
-from danswer.search.models import InferenceChunk
 from danswer.search.models import InferenceSection
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-def llm_doc_from_inference_section(inf_chunk: InferenceSection) -> LlmDoc:
+def llm_doc_from_inference_section(inference_section: InferenceSection) -> LlmDoc:
     return LlmDoc(
-        document_id=inf_chunk.document_id,
+        document_id=inference_section.center_chunk.document_id,
         # This one is using the combined content of all the chunks of the section
         # In default settings, this is the same as just the content of base chunk
-        content=inf_chunk.combined_content,
-        blurb=inf_chunk.blurb,
-        semantic_identifier=inf_chunk.semantic_identifier,
-        source_type=inf_chunk.source_type,
-        metadata=inf_chunk.metadata,
-        updated_at=inf_chunk.updated_at,
-        link=inf_chunk.source_links[0] if inf_chunk.source_links else None,
-        source_links=inf_chunk.source_links,
+        content=inference_section.combined_content,
+        blurb=inference_section.center_chunk.blurb,
+        semantic_identifier=inference_section.center_chunk.semantic_identifier,
+        source_type=inference_section.center_chunk.source_type,
+        metadata=inference_section.center_chunk.metadata,
+        updated_at=inference_section.center_chunk.updated_at,
+        link=inference_section.center_chunk.source_links[0]
+        if inference_section.center_chunk.source_links
+        else None,
+        source_links=inference_section.center_chunk.source_links,
     )
-
-
-def map_document_id_order(
-    chunks: Sequence[InferenceChunk | LlmDoc], one_indexed: bool = True
-) -> dict[str, int]:
-    order_mapping = {}
-    current = 1 if one_indexed else 0
-    for chunk in chunks:
-        if chunk.document_id not in order_mapping:
-            order_mapping[chunk.document_id] = current
-            current += 1
-
-    return order_mapping
 
 
 def create_chat_chain(

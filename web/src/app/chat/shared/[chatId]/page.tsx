@@ -9,6 +9,8 @@ import { redirect } from "next/navigation";
 import { BackendChatSession } from "../../interfaces";
 import { Header } from "@/components/header/Header";
 import { SharedChatDisplay } from "./SharedChatDisplay";
+import { Persona } from "@/app/admin/assistants/interfaces";
+import { fetchAssistantsSS } from "@/lib/assistants/fetchAssistantsSS";
 
 async function getSharedChat(chatId: string) {
   const response = await fetchSS(
@@ -25,12 +27,14 @@ export default async function Page({ params }: { params: { chatId: string } }) {
     getAuthTypeMetadataSS(),
     getCurrentUserSS(),
     getSharedChat(params.chatId),
+    fetchAssistantsSS(),
   ];
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
   // will not render
-  let results: (User | AuthTypeMetadata | null)[] = [null, null, null];
+  let results: (User | AuthTypeMetadata | [Persona[], string | null] | null)[] =
+    [null, null, null];
   try {
     results = await Promise.all(tasks);
   } catch (e) {
@@ -39,6 +43,7 @@ export default async function Page({ params }: { params: { chatId: string } }) {
   const authTypeMetadata = results[0] as AuthTypeMetadata | null;
   const user = results[1] as User | null;
   const chatSession = results[2] as BackendChatSession | null;
+  const [availableAssistants, _] = results[3] as [Persona[], string | null];
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
@@ -56,7 +61,10 @@ export default async function Page({ params }: { params: { chatId: string } }) {
       </div>
 
       <div className="flex relative bg-background text-default overflow-hidden pt-16 h-screen">
-        <SharedChatDisplay chatSession={chatSession} />
+        <SharedChatDisplay
+          chatSession={chatSession}
+          availableAssistants={availableAssistants}
+        />
       </div>
     </div>
   );

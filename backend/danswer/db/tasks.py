@@ -26,6 +26,23 @@ def get_latest_task(
     return latest_task
 
 
+def get_latest_task_by_type(
+    task_name: str,
+    db_session: Session,
+) -> TaskQueueState | None:
+    stmt = (
+        select(TaskQueueState)
+        .where(TaskQueueState.task_name.like(f"%{task_name}%"))
+        .order_by(desc(TaskQueueState.id))
+        .limit(1)
+    )
+
+    result = db_session.execute(stmt)
+    latest_task = result.scalars().first()
+
+    return latest_task
+
+
 def register_task(
     task_id: str,
     task_name: str,
@@ -66,7 +83,7 @@ def mark_task_finished(
     db_session.commit()
 
 
-def check_live_task_not_timed_out(
+def check_task_is_live_and_not_timed_out(
     task: TaskQueueState,
     db_session: Session,
     timeout: int = JOB_TIMEOUT,

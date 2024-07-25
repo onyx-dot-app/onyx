@@ -10,7 +10,17 @@ import {
 import * as Yup from "yup";
 import { FormBodyBuilder } from "./types";
 import { DefaultDropdown, StringOrNumberOption } from "@/components/Dropdown";
-import { FiPlus, FiX } from "react-icons/fi";
+import { FiInfo, FiPlus, FiX } from "react-icons/fi";
+import {
+  TooltipProvider,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@radix-ui/react-tooltip";
+import ReactMarkdown from "react-markdown";
+import { FaMarkdown } from "react-icons/fa";
+import { useState } from "react";
+import remarkGfm from "remark-gfm";
 
 export function SectionHeader({
   children,
@@ -20,8 +30,20 @@ export function SectionHeader({
   return <div className="mb-4 font-bold text-lg">{children}</div>;
 }
 
-export function Label({ children }: { children: string | JSX.Element }) {
-  return <div className="block font-medium text-base">{children}</div>;
+export function Label({
+  children,
+  small,
+}: {
+  children: string | JSX.Element;
+  small?: boolean;
+}) {
+  return (
+    <div
+      className={`block font-medium base ${small ? "text-sm" : "text-base"}`}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function SubLabel({ children }: { children: string | JSX.Element }) {
@@ -29,7 +51,48 @@ export function SubLabel({ children }: { children: string | JSX.Element }) {
 }
 
 export function ManualErrorMessage({ children }: { children: string }) {
-  return <div className="text-error text-sm mt-1">{children}</div>;
+  return <div className="text-error text-sm">{children}</div>;
+}
+
+export function ExplanationText({
+  text,
+  link,
+}: {
+  text: string;
+  link?: string;
+}) {
+  return link ? (
+    <a
+      className="underline cursor-pointer text-sm font-medium"
+      target="_blank"
+      href={link}
+    >
+      {text}
+    </a>
+  ) : (
+    <div className="text-sm font-semibold">{text}</div>
+  );
+}
+
+export function ToolTipDetails({
+  children,
+}: {
+  children: string | JSX.Element;
+}) {
+  return (
+    <TooltipProvider delayDuration={50}>
+      <Tooltip>
+        <TooltipTrigger>
+          <FiInfo size={12} />
+        </TooltipTrigger>
+        <TooltipContent side="top" align="center">
+          <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-inverted">
+            {children}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 export function TextFormField({
@@ -47,6 +110,10 @@ export function TextFormField({
   isCode = false,
   fontSize,
   hideError,
+  tooltip,
+  explanationText,
+  explanationLink,
+  small,
 }: {
   name: string;
   label: string;
@@ -62,6 +129,10 @@ export function TextFormField({
   isCode?: boolean;
   fontSize?: "text-sm" | "text-base" | "text-lg";
   hideError?: boolean;
+  tooltip?: string;
+  explanationText?: string;
+  explanationLink?: string;
+  small?: boolean;
 }) {
   let heightString = defaultHeight || "";
   if (isTextArea && !heightString) {
@@ -69,8 +140,25 @@ export function TextFormField({
   }
 
   return (
-    <div className="mb-4">
-      <Label>{label}</Label>
+    <div className="mb-6">
+      <div className="flex gap-x-2 items-center">
+        <Label small={small}>{label}</Label>
+
+        {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
+
+        {error ? (
+          <ManualErrorMessage>{error}</ManualErrorMessage>
+        ) : (
+          !hideError && (
+            <ErrorMessage
+              name={name}
+              component="div"
+              className="text-error my-auto text-sm"
+            />
+          )
+        )}
+      </div>
+
       {subtext && <SubLabel>{subtext}</SubLabel>}
       <Field
         as={isTextArea ? "textarea" : "input"}
@@ -78,6 +166,7 @@ export function TextFormField({
         name={name}
         id={name}
         className={`
+          ${small && "text-sm"}
           border 
           border-border 
           rounded 
@@ -95,26 +184,90 @@ export function TextFormField({
         autoComplete={autoCompleteDisabled ? "off" : undefined}
         {...(onChange ? { onChange } : {})}
       />
-      {error ? (
-        <ManualErrorMessage>{error}</ManualErrorMessage>
-      ) : (
-        !hideError && (
-          <ErrorMessage
-            name={name}
-            component="div"
-            className="text-red-500 text-sm mt-1"
-          />
-        )
+      {explanationText && (
+        <ExplanationText link={explanationLink} text={explanationText} />
       )}
     </div>
   );
 }
+
+interface MarkdownPreviewProps {
+  name: string;
+  label: string;
+  placeholder?: string;
+  error?: string;
+}
+
+export const MarkdownFormField = ({
+  name,
+  label,
+  error,
+  placeholder = "Enter your markdown here...",
+}: MarkdownPreviewProps) => {
+  const [field, _] = useField(name);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  const togglePreview = () => {
+    setIsPreviewOpen(!isPreviewOpen);
+  };
+
+  return (
+    <div className="flex flex-col space-y-4 mb-4">
+      <Label>{label}</Label>
+      <div className="border border-gray-300 rounded-md">
+        <div className="flex items-center justify-between px-4 py-2 bg-gray-100 rounded-t-md">
+          <div className="flex items-center space-x-2">
+            <FaMarkdown className="text-gray-500" />
+            <span className="text-sm font-semibold text-gray-600">
+              Markdown
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={togglePreview}
+            className="text-sm font-semibold text-gray-600 hover:text-gray-800 focus:outline-none"
+          >
+            {isPreviewOpen ? "Write" : "Preview"}
+          </button>
+        </div>
+        {isPreviewOpen ? (
+          <div className="p-4 border-t border-gray-300">
+            <ReactMarkdown className="prose" remarkPlugins={[remarkGfm]}>
+              {field.value}
+            </ReactMarkdown>
+          </div>
+        ) : (
+          <div className="pt-2 px-2">
+            <textarea
+              {...field}
+              rows={2}
+              placeholder={placeholder}
+              className={`w-full p-2 border border-border rounded-md border-gray-300`}
+            />
+          </div>
+        )}
+      </div>
+      {error ? (
+        <ManualErrorMessage>{error}</ManualErrorMessage>
+      ) : (
+        <ErrorMessage
+          name={name}
+          component="div"
+          className="text-red-500 text-sm mt-1"
+        />
+      )}
+    </div>
+  );
+};
 
 interface BooleanFormFieldProps {
   name: string;
   label: string;
   subtext?: string | JSX.Element;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  noPadding?: boolean;
+  small?: boolean;
+  alignTop?: boolean;
 }
 
 export const BooleanFormField = ({
@@ -122,6 +275,9 @@ export const BooleanFormField = ({
   label,
   subtext,
   onChange,
+  noPadding,
+  small,
+  alignTop,
 }: BooleanFormFieldProps) => {
   return (
     <div className="mb-4">
@@ -129,19 +285,20 @@ export const BooleanFormField = ({
         <Field
           name={name}
           type="checkbox"
-          className="mx-3 px-5 w-3.5 h-3.5 my-auto"
+          className={`${noPadding ? "mr-3" : "mx-3"} px-5 w-3.5 h-3.5 ${
+            alignTop ? "mt-1" : "my-auto"
+          }`}
           {...(onChange ? { onChange } : {})}
         />
         <div>
-          <Label>{label}</Label>
+          <Label small={small}>{label}</Label>
           {subtext && <SubLabel>{subtext}</SubLabel>}
         </div>
       </label>
-
       <ErrorMessage
         name={name}
         component="div"
-        className="text-red-500 text-sm mt-1"
+        className="text-error text-sm mt-1"
       />
     </div>
   );
@@ -252,6 +409,7 @@ interface SelectorFormFieldProps {
   side?: "top" | "right" | "bottom" | "left";
   maxHeight?: string;
   onSelect?: (selected: string | number | null) => void;
+  defaultValue?: string;
 }
 
 export function SelectorFormField({
@@ -263,6 +421,7 @@ export function SelectorFormField({
   side = "bottom",
   maxHeight,
   onSelect,
+  defaultValue,
 }: SelectorFormFieldProps) {
   const [field] = useField<string>(name);
   const { setFieldValue } = useFormikContext();
@@ -280,13 +439,14 @@ export function SelectorFormField({
           includeDefault={includeDefault}
           side={side}
           maxHeight={maxHeight}
+          defaultValue={defaultValue}
         />
       </div>
 
       <ErrorMessage
         name={name}
         component="div"
-        className="text-red-500 text-sm mt-1"
+        className="text-error text-sm mt-1"
       />
     </div>
   );

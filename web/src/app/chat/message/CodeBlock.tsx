@@ -25,6 +25,11 @@ export function CodeBlock({
   const [copied, setCopied] = useState(false);
 
   if (!language) {
+    // this is the case of a single "`" e.g. `hi`
+    if (typeof children === "string") {
+      return <code className={className}>{children}</code>;
+    }
+
     return (
       <pre style={CODE_BLOCK_PADDING_TYPE}>
         <code {...props} className={`text-sm ${className}`}>

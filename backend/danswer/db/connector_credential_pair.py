@@ -151,7 +151,8 @@ def add_credential_to_connector(
     connector_id: int,
     credential_id: int,
     cc_pair_name: str | None,
-    user: User,
+    is_public: bool,
+    user: User | None,
     db_session: Session,
 ) -> StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)
@@ -185,6 +186,7 @@ def add_credential_to_connector(
         connector_id=connector_id,
         credential_id=credential_id,
         name=cc_pair_name,
+        is_public=is_public,
     )
     db_session.add(association)
     db_session.commit()
@@ -199,7 +201,7 @@ def add_credential_to_connector(
 def remove_credential_from_connector(
     connector_id: int,
     credential_id: int,
-    user: User,
+    user: User | None,
     db_session: Session,
 ) -> StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)

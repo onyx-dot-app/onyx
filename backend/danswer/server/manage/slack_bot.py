@@ -34,8 +34,8 @@ def _form_channel_config(
 ) -> ChannelConfig:
     raw_channel_names = slack_bot_config_creation_request.channel_names
     respond_tag_only = slack_bot_config_creation_request.respond_tag_only
-    respond_team_member_list = (
-        slack_bot_config_creation_request.respond_team_member_list
+    respond_member_group_list = (
+        slack_bot_config_creation_request.respond_member_group_list
     )
     answer_filters = slack_bot_config_creation_request.answer_filters
     follow_up_tags = slack_bot_config_creation_request.follow_up_tags
@@ -58,7 +58,7 @@ def _form_channel_config(
             detail=str(e),
         )
 
-    if respond_tag_only and respond_team_member_list:
+    if respond_tag_only and respond_member_group_list:
         raise ValueError(
             "Cannot set DanswerBot to only respond to tags only and "
             "also respond to a predetermined set of users."
@@ -69,8 +69,8 @@ def _form_channel_config(
     }
     if respond_tag_only is not None:
         channel_config["respond_tag_only"] = respond_tag_only
-    if respond_team_member_list:
-        channel_config["respond_team_member_list"] = respond_team_member_list
+    if respond_member_group_list:
+        channel_config["respond_member_group_list"] = respond_member_group_list
     if answer_filters:
         channel_config["answer_filters"] = answer_filters
     if follow_up_tags is not None:
@@ -108,7 +108,9 @@ def create_slack_bot_config(
         persona_id=persona_id,
         channel_config=channel_config,
         response_type=slack_bot_config_creation_request.response_type,
+        standard_answer_category_ids=slack_bot_config_creation_request.standard_answer_categories,
         db_session=db_session,
+        enable_auto_filters=slack_bot_config_creation_request.enable_auto_filters,
     )
     return SlackBotConfig.from_model(slack_bot_config_model)
 
@@ -166,7 +168,9 @@ def patch_slack_bot_config(
         persona_id=persona_id,
         channel_config=channel_config,
         response_type=slack_bot_config_creation_request.response_type,
+        standard_answer_category_ids=slack_bot_config_creation_request.standard_answer_categories,
         db_session=db_session,
+        enable_auto_filters=slack_bot_config_creation_request.enable_auto_filters,
     )
     return SlackBotConfig.from_model(slack_bot_config_model)
 

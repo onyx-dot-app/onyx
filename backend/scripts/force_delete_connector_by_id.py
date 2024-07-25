@@ -14,7 +14,10 @@ sys.path.append(parent_dir)
 # flake8: noqa: E402
 
 # Now import Danswer modules
-from danswer.db.models import DocumentSet__ConnectorCredentialPair
+from danswer.db.models import (
+    DocumentSet__ConnectorCredentialPair,
+    UserGroup__ConnectorCredentialPair,
+)
 from danswer.db.connector import fetch_connector_by_id
 from danswer.db.document import get_documents_for_connector_credential_pair
 from danswer.db.index_attempt import (
@@ -44,7 +47,7 @@ logger = setup_logger()
 _DELETION_BATCH_SIZE = 1000
 
 
-def unsafe_deletion(
+def _unsafe_deletion(
     db_session: Session,
     document_index: DocumentIndex,
     cc_pair: ConnectorCredentialPair,
@@ -82,11 +85,22 @@ def unsafe_deletion(
         credential_id=credential_id,
     )
 
-    # Delete document sets + connector / credential Pairs
+    # Delete document sets
     stmt = delete(DocumentSet__ConnectorCredentialPair).where(
         DocumentSet__ConnectorCredentialPair.connector_credential_pair_id == pair_id
     )
     db_session.execute(stmt)
+
+    # delete user group associations
+    stmt = delete(UserGroup__ConnectorCredentialPair).where(
+        UserGroup__ConnectorCredentialPair.cc_pair_id == pair_id
+    )
+    db_session.execute(stmt)
+
+    # need to flush to avoid foreign key violations
+    db_session.flush()
+
+    # delete the actual connector credential pair
     stmt = delete(ConnectorCredentialPair).where(
         ConnectorCredentialPair.connector_id == connector_id,
         ConnectorCredentialPair.credential_id == credential_id,
@@ -168,7 +182,7 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
             primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
         )
 
-        files_deleted_count = unsafe_deletion(
+        files_deleted_count = _unsafe_deletion(
             db_session=db_session,
             document_index=document_index,
             cc_pair=cc_pair,

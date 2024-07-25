@@ -12,8 +12,8 @@ from danswer.llm.answering.prompts.citations_prompt import compute_max_llm_input
 from danswer.llm.interfaces import LLMConfig
 from danswer.llm.utils import build_content_with_imgs
 from danswer.llm.utils import check_message_tokens
-from danswer.llm.utils import get_default_llm_tokenizer
 from danswer.llm.utils import translate_history_to_basemessages
+from danswer.natural_language_processing.utils import get_default_llm_tokenizer
 from danswer.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
 from danswer.prompts.prompt_utils import add_date_time_to_prompt
 from danswer.prompts.prompt_utils import drop_messages_history_overflow

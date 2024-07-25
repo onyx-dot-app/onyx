@@ -5,6 +5,7 @@ from typing import cast
 from langchain_core.messages import BaseMessage
 
 from danswer.chat.models import LlmDoc
+from danswer.configs.chat_configs import LANGUAGE_HINT
 from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.configs.constants import DocumentSource
 from danswer.db.models import Prompt
@@ -12,7 +13,6 @@ from danswer.llm.answering.models import PromptConfig
 from danswer.prompts.chat_prompts import ADDITIONAL_INFO
 from danswer.prompts.chat_prompts import CITATION_REMINDER
 from danswer.prompts.constants import CODE_BLOCK_PAT
-from danswer.prompts.direct_qa_prompts import LANGUAGE_HINT
 from danswer.search.models import InferenceChunk
 
 
@@ -135,15 +135,35 @@ _PER_MESSAGE_TOKEN_BUFFER = 7
 def find_last_index(lst: list[int], max_prompt_tokens: int) -> int:
     """From the back, find the index of the last element to include
     before the list exceeds the maximum"""
+    print("===================1")
+    print("FIND LAST INDEX")
+    print (lst)
+    print("===================2")
+    print (len(lst))
+    print("===================3")
+    print (max_prompt_tokens)
+
     running_sum = 0
 
     last_ind = 0
     for i in range(len(lst) - 1, -1, -1):
+        print("===================4")
+        print (running_sum)
+        print("===================5")
+        print (last_ind)
         running_sum += lst[i] + _PER_MESSAGE_TOKEN_BUFFER
+        print("===================6")
+        print (running_sum)
         if running_sum > max_prompt_tokens:
             last_ind = i + 1
             break
+
+    print("===========================7")
+    print("here")
+    print(last_ind)
+    print(len(lst))
     if last_ind >= len(lst):
+        print("raise error")
         raise ValueError("Last message alone is too large!")
     return last_ind
 
@@ -155,8 +175,9 @@ def drop_messages_history_overflow(
     """As message history grows, messages need to be dropped starting from the furthest in the past.
     The System message should be kept if at all possible and the latest user input which is inserted in the
     prompt template must be included"""
-
+    print("XXXX1")
     final_messages: list[BaseMessage] = []
+    print("XXXX2")
     messages, token_counts = cast(
         tuple[list[BaseMessage], list[int]], zip(*messages_with_token_cnts)
     )

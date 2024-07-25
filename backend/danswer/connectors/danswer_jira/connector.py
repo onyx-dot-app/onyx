@@ -56,6 +56,16 @@ def extract_text_from_content(content: dict) -> str:
     return " ".join(texts)
 
 
+def best_effort_get_field_from_issue(jira_issue: Issue, field: str) -> Any:
+    if hasattr(jira_issue.fields, field):
+        return getattr(jira_issue.fields, field)
+
+    try:
+        return jira_issue.raw["fields"][field]
+    except Exception:
+        return None
+
+
 def _get_comment_strs(
     jira: Issue, comment_email_blacklist: tuple[str, ...] = ()
 ) -> list[str]:
@@ -117,8 +127,10 @@ def fetch_jira_issues_batch(
             continue
 
         comments = _get_comment_strs(jira, comment_email_blacklist)
-        semantic_rep = f"{jira.fields.description}\n" + "\n".join(
-            [f"Comment: {comment}" for comment in comments]
+        semantic_rep = (
+            f"{jira.fields.description}\n"
+            if jira.fields.description
+            else "" + "\n".join([f"Comment: {comment}" for comment in comments])
         )
 
         page_url = f"{jira_client.client_info()}/browse/{jira.key}"
@@ -147,14 +159,18 @@ def fetch_jira_issues_batch(
             pass
 
         metadata_dict = {}
-        if jira.fields.priority:
-            metadata_dict["priority"] = jira.fields.priority.name
-        if jira.fields.status:
-            metadata_dict["status"] = jira.fields.status.name
-        if jira.fields.resolution:
-            metadata_dict["resolution"] = jira.fields.resolution.name
-        if jira.fields.labels:
-            metadata_dict["label"] = jira.fields.labels
+        priority = best_effort_get_field_from_issue(jira, "priority")
+        if priority:
+            metadata_dict["priority"] = priority.name
+        status = best_effort_get_field_from_issue(jira, "status")
+        if status:
+            metadata_dict["status"] = status.name
+        resolution = best_effort_get_field_from_issue(jira, "resolution")
+        if resolution:
+            metadata_dict["resolution"] = resolution.name
+        labels = best_effort_get_field_from_issue(jira, "labels")
+        if labels:
+            metadata_dict["label"] = labels
 
         doc_batch.append(
             Document(

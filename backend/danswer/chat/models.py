@@ -42,9 +42,19 @@ class QADocsResponse(RetrievalDocs):
         return initial_dict
 
 
-# Second chunk of info for streaming QA
 class LLMRelevanceFilterResponse(BaseModel):
     relevant_chunk_indices: list[int]
+
+
+class RelevanceChunk(BaseModel):
+    # TODO make this document level. Also slight misnomer here as this is actually
+    # done at the section level currently rather than the chunk
+    relevant: bool | None = None
+    content: str | None = None
+
+
+class LLMRelevanceSummaryResponse(BaseModel):
+    relevance_summaries: dict[str, RelevanceChunk]
 
 
 class DanswerAnswerPiece(BaseModel):

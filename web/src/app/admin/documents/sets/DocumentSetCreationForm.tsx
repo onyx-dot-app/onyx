@@ -1,3 +1,5 @@
+"use client";
+
 import { ArrayHelpers, FieldArray, Form, Formik } from "formik";
 import * as Yup from "yup";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -9,8 +11,8 @@ import {
 } from "@/components/admin/connectors/Field";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { Button, Divider, Text } from "@tremor/react";
-import { EE_ENABLED } from "@/lib/constants";
 import { FiUsers } from "react-icons/fi";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 interface SetCreationPopupProps {
   ccPairs: ConnectorIndexingStatus<any, any>[];
@@ -27,6 +29,8 @@ export const DocumentSetCreationForm = ({
   setPopup,
   existingDocumentSet,
 }: SetCreationPopupProps) => {
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+
   const isUpdate = existingDocumentSet !== undefined;
 
   return (
@@ -167,46 +171,48 @@ export const DocumentSetCreationForm = ({
               )}
             />
 
-            {EE_ENABLED && userGroups && userGroups.length > 0 && (
-              <div>
-                <Divider />
+            {isPaidEnterpriseFeaturesEnabled &&
+              userGroups &&
+              userGroups.length > 0 && (
+                <div>
+                  <Divider />
 
-                <BooleanFormField
-                  name="is_public"
-                  label="Is Public?"
-                  subtext={
+                  <BooleanFormField
+                    name="is_public"
+                    label="Is Public?"
+                    subtext={
+                      <>
+                        If the document set is public, then it will be visible
+                        to <b>all users</b>. If it is not public, then only
+                        users in the specified groups will be able to see it.
+                      </>
+                    }
+                  />
+
+                  <Divider />
+                  <h2 className="mb-1 font-medium text-base">
+                    Groups with Access
+                  </h2>
+                  {!values.is_public ? (
                     <>
-                      If the document set is public, then it will be visible to{" "}
-                      <b>all users</b>. If it is not public, then only users in
-                      the specified groups will be able to see it.
-                    </>
-                  }
-                />
-
-                <Divider />
-                <h2 className="mb-1 font-medium text-base">
-                  Groups with Access
-                </h2>
-                {!values.is_public ? (
-                  <>
-                    <Text className="mb-3">
-                      If any groups are specified, then this Document Set will
-                      only be visible to the specified groups. If no groups are
-                      specified, then the Document Set will be visible to all
-                      users.
-                    </Text>
-                    <FieldArray
-                      name="groups"
-                      render={(arrayHelpers: ArrayHelpers) => (
-                        <div className="flex gap-2 flex-wrap">
-                          {userGroups.map((userGroup) => {
-                            const ind = values.groups.indexOf(userGroup.id);
-                            let isSelected = ind !== -1;
-                            return (
-                              <div
-                                key={userGroup.id}
-                                className={
-                                  `
+                      <Text className="mb-3">
+                        If any groups are specified, then this Document Set will
+                        only be visible to the specified groups. If no groups
+                        are specified, then the Document Set will be visible to
+                        all users.
+                      </Text>
+                      <FieldArray
+                        name="groups"
+                        render={(arrayHelpers: ArrayHelpers) => (
+                          <div className="flex gap-2 flex-wrap">
+                            {userGroups.map((userGroup) => {
+                              const ind = values.groups.indexOf(userGroup.id);
+                              let isSelected = ind !== -1;
+                              return (
+                                <div
+                                  key={userGroup.id}
+                                  className={
+                                    `
                               px-3 
                               py-1
                               rounded-lg 
@@ -215,38 +221,38 @@ export const DocumentSetCreationForm = ({
                               w-fit 
                               flex 
                               cursor-pointer ` +
-                                  (isSelected
-                                    ? " bg-background-strong"
-                                    : " hover:bg-hover")
-                                }
-                                onClick={() => {
-                                  if (isSelected) {
-                                    arrayHelpers.remove(ind);
-                                  } else {
-                                    arrayHelpers.push(userGroup.id);
+                                    (isSelected
+                                      ? " bg-background-strong"
+                                      : " hover:bg-hover")
                                   }
-                                }}
-                              >
-                                <div className="my-auto flex">
-                                  <FiUsers className="my-auto mr-2" />{" "}
-                                  {userGroup.name}
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      arrayHelpers.remove(ind);
+                                    } else {
+                                      arrayHelpers.push(userGroup.id);
+                                    }
+                                  }}
+                                >
+                                  <div className="my-auto flex">
+                                    <FiUsers className="my-auto mr-2" />{" "}
+                                    {userGroup.name}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    />
-                  </>
-                ) : (
-                  <Text>
-                    This Document Set is public, so this does not apply. If you
-                    want to control which user groups see this Document Set,
-                    mark it as non-public!
-                  </Text>
-                )}
-              </div>
-            )}
+                              );
+                            })}
+                          </div>
+                        )}
+                      />
+                    </>
+                  ) : (
+                    <Text>
+                      This Document Set is public, so this does not apply. If
+                      you want to control which user groups see this Document
+                      Set, mark it as non-public!
+                    </Text>
+                  )}
+                </div>
+              )}
             <div className="flex mt-6">
               <Button
                 type="submit"

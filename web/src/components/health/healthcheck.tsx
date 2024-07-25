@@ -21,13 +21,13 @@ export const HealthCheckBanner = () => {
         title="You have been logged out!"
       >
         <div className="flex flex-col gap-y-4">
-          <p className="text-lg ">
+          <p className="text-lg">
             You can click &quot;Log in&quot; to log back in! Apologies for the
             inconvenience.
           </p>
           <a
             href="/auth/login"
-            className="w-full mt-4 mx-auto rounded-md text-neutral-200 py-2 bg-neutral-800 text-center hover:bg-neutral-700 animtate duration-300 transition-bg  "
+            className="w-full mt-4 mx-auto rounded-md text-text-200 py-2 bg-background-900 text-center hover:bg-emphasis animtate duration-300 transition-bg"
           >
             Log in
           </a>
@@ -36,7 +36,7 @@ export const HealthCheckBanner = () => {
     );
   } else {
     return (
-      <div className="text-xs mx-auto bg-gradient-to-r from-red-900 to-red-700 p-2 rounded-sm border-hidden text-gray-300">
+      <div className="fixed top-0 left-0 z-[101] w-full text-xs mx-auto bg-gradient-to-r from-red-900 to-red-700 p-2 rounded-sm border-hidden text-text-200">
         <p className="font-bold pb-1">The backend is currently unavailable.</p>
 
         <p className="px-1">

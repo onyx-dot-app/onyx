@@ -4,6 +4,7 @@ import { CustomDropdown } from "../../Dropdown";
 interface Option {
   key: string;
   display: string | JSX.Element;
+  displayName?: string;
 }
 
 export function FilterDropdown({

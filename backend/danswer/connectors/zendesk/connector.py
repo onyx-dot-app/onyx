@@ -4,6 +4,7 @@ from zenpy import Zenpy  # type: ignore
 from zenpy.lib.api_objects.help_centre_objects import Article  # type: ignore
 
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
+from danswer.configs.app_configs import ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.cross_connector_utils.miscellaneous_utils import (
     time_str_to_utc,
@@ -81,7 +82,14 @@ class ZendeskConnector(LoadConnector, PollConnector):
         )
         doc_batch = []
         for article in articles:
-            if article.body is None or article.draft:
+            if (
+                article.body is None
+                or article.draft
+                or any(
+                    label in ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
+                    for label in article.label_names
+                )
+            ):
                 continue
 
             doc_batch.append(_article_to_document(article))

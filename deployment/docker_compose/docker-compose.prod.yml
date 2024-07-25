@@ -17,7 +17,7 @@ services:
     env_file:
       - .env
     environment:
-      - AUTH_TYPE=${AUTH_TYPE:-google_oauth}
+      - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
@@ -35,7 +35,7 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-    command: /usr/bin/supervisord
+    command: /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
     depends_on:
       - relational_db
       - index
@@ -45,7 +45,7 @@ services:
     env_file:
       - .env
     environment:
-      - AUTH_TYPE=${AUTH_TYPE:-google_oauth}
+      - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
@@ -58,7 +58,6 @@ services:
         max-size: "50m"
         max-file: "6"
 
-
   web_server:
     image: danswer/danswer-web-server:latest
     build:
@@ -70,6 +69,7 @@ services:
         - NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
         - NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
         - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
+        - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
     depends_on:
       - api_server
     restart: always
@@ -146,7 +146,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
       # Not necessary, this is just to reduce download time during startup
-      - model_cache_huggingface:/root/.cache/huggingface/
+      - indexing_huggingface_model_cache:/root/.cache/huggingface/
     logging:
       driver: json-file
       options:
@@ -193,7 +193,7 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-    # the specified script waits for the api_server to start up. 
+    # The specified script waits for the api_server to start up. 
     # Without this we've seen issues where nginx shows no error logs but 
     # does not recieve any traffic  
     # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
@@ -225,3 +225,4 @@ volumes:
   vespa_volume:
   # Created by the container itself
   model_cache_huggingface:
+  indexing_huggingface_model_cache:

@@ -70,6 +70,7 @@ def load_llm_providers(db_session: Session) -> None:
             FAST_GEN_AI_MODEL_VERSION or well_known_provider.default_fast_model
         ),
         model_names=model_names,
+        is_public=True,
     )
     llm_provider = upsert_llm_provider(db_session, llm_provider_request)
     update_default_provider(db_session, llm_provider.id)

@@ -6,7 +6,7 @@ from langchain_core.messages.tool import ToolCall
 from langchain_core.messages.tool import ToolMessage
 from pydantic import BaseModel
 
-from danswer.llm.utils import get_default_llm_tokenizer
+from danswer.natural_language_processing.utils import get_default_llm_tokenizer
 
 
 def build_tool_message(

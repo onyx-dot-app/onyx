@@ -10,38 +10,57 @@
 
   /* Hide scrollbar for IE, Edge and Firefox */
   .no-scrollbar {
-    -ms-overflow-style: none; /* IE and Edge */
-    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
   }
 }
 
+.inputscroll::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  scrollbar-width: none;
+}
+
 ::-webkit-scrollbar-track {
-  background: #f9fafb; /* Track background color */
+  background: transparent;
+  /* background: theme("colors.scrollbar.track"); */
+  /* Track background color */
 }
 
 /* Style the scrollbar handle */
 ::-webkit-scrollbar-thumb {
-  background: #e5e7eb; /* Handle color */
+  background: transparent;
+  /* background: theme("colors.scrollbar.thumb"); */
+  /* Handle color */
   border-radius: 10px;
 }
 
 /* Handle on hover */
 ::-webkit-scrollbar-thumb:hover {
-  background: #d1d5db; /* Handle color on hover */
+  background: transparent;
+  /* background: theme("colors.scrollbar.thumb-hover"); */
+  /* Handle color on hover */
 }
 
 .dark-scrollbar::-webkit-scrollbar-thumb {
-  background: #c7cdd2; /* Handle color */
+  background: transparent;
+  /* background: theme("colors.scrollbar.dark.thumb"); */
+  /* Handle color */
   border-radius: 10px;
 }
 
 .dark-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #989a9c; /* Handle color on hover */
+  background: transparent;
+  /* background: theme("colors.scrollbar.dark.thumb-hover"); */
+  /* Handle color on hover */
 }
 
 ::-webkit-scrollbar {
-  width: 8px; /* Vertical scrollbar width */
-  height: 8px; /* Horizontal scrollbar height */
+  width: 0px;
+  /* Vertical scrollbar width */
+  height: 8px;
+  /* Horizontal scrollbar height */
 }
 
 .min-h-screen {
@@ -62,5 +81,52 @@
 }
 /* Used to create alternatie to React Markdown */
 .preserve-lines {
-  white-space: pre-wrap; /* Preserves whitespace and wraps text */
+  white-space: pre-wrap;
+  /* Preserves whitespace and wraps text */
+}
+
+.loading-text {
+  display: inline-block;
+  color: #e5e5e5;
+
+  background: linear-gradient(
+    -90deg,
+    #a3a3a3 0%,
+    #000000 5%,
+    #a3a3a3 10%,
+    #a3a3a3 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmerTransition 1.5s ease-out infinite;
+}
+
+@keyframes shimmerTransition {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.collapsible {
+  max-height: 300px;
+  transition:
+    max-height 0.5s ease-in-out,
+    opacity 0.5s ease-in-out;
+  opacity: 1;
+}
+
+.collapsible-closed {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+body {
+  overscroll-behavior-y: none;
 }

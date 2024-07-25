@@ -11,9 +11,10 @@ import { errorHandlingFetcher } from "./fetcher";
 import { useState } from "react";
 import { DateRangePickerValue } from "@tremor/react";
 import { SourceMetadata } from "./search/interfaces";
-import { EE_ENABLED } from "./constants";
 import { destructureValue } from "./llm/utils";
 import { ChatSession } from "@/app/chat/interfaces";
+import { UsersResponse } from "./users/interfaces";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -119,7 +120,8 @@ export function useFilters(): FilterManager {
 
 export const useUsers = () => {
   const url = "/api/manage/users";
-  const swrResponse = useSWR<User[]>(url, errorHandlingFetcher);
+
+  const swrResponse = useSWR<UsersResponse>(url, errorHandlingFetcher);
 
   return {
     ...swrResponse,
@@ -190,8 +192,9 @@ export const useUserGroups = (): {
   refreshUserGroups: () => void;
 } => {
   const swrResponse = useSWR<UserGroup[]>(USER_GROUP_URL, errorHandlingFetcher);
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
-  if (!EE_ENABLED) {
+  if (!isPaidEnterpriseFeaturesEnabled) {
     return {
       ...{
         data: [],

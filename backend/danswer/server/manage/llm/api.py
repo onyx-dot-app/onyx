@@ -13,7 +13,7 @@ from danswer.db.llm import remove_llm_provider
 from danswer.db.llm import update_default_provider
 from danswer.db.llm import upsert_llm_provider
 from danswer.db.models import User
-from danswer.llm.factory import get_default_llm
+from danswer.llm.factory import get_default_llms
 from danswer.llm.factory import get_llm
 from danswer.llm.llm_provider_options import fetch_available_well_known_llms
 from danswer.llm.llm_provider_options import WellKnownLLMProviderDescriptor
@@ -85,8 +85,7 @@ def test_default_provider(
     _: User | None = Depends(current_admin_user),
 ) -> None:
     try:
-        llm = get_default_llm()
-        fast_llm = get_default_llm(use_fast_llm=True)
+        llm, fast_llm = get_default_llms()
     except ValueError:
         logger.exception("Failed to fetch default LLM Provider")
         raise HTTPException(status_code=400, detail="No LLM Provider setup")
@@ -148,10 +147,10 @@ def set_provider_as_default(
 
 @basic_router.get("/provider")
 def list_llm_provider_basics(
-    _: User | None = Depends(current_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderDescriptor]:
     return [
         LLMProviderDescriptor.from_model(llm_provider_model)
-        for llm_provider_model in fetch_existing_llm_providers(db_session)
+        for llm_provider_model in fetch_existing_llm_providers(db_session, user)
     ]

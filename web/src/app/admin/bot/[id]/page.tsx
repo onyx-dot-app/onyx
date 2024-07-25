@@ -3,21 +3,38 @@ import { CPUIcon } from "@/components/icons/icons";
 import { SlackBotCreationForm } from "../SlackBotConfigCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { DocumentSet, SlackBotConfig } from "@/lib/types";
+import {
+  DocumentSet,
+  SlackBotConfig,
+  StandardAnswerCategory,
+} from "@/lib/types";
 import { Text } from "@tremor/react";
 import { BackButton } from "@/components/BackButton";
-import { Persona } from "../../assistants/interfaces";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
+import {
+  FetchAssistantsResponse,
+  fetchAssistantsSS,
+} from "@/lib/assistants/fetchAssistantsSS";
 
 async function Page({ params }: { params: { id: string } }) {
   const tasks = [
     fetchSS("/manage/admin/slack-bot/config"),
     fetchSS("/manage/document-set"),
-    fetchSS("/persona"),
+    fetchAssistantsSS(),
+    fetchSS("/manage/admin/standard-answer/category"),
   ];
 
-  const [slackBotsResponse, documentSetsResponse, personasResponse] =
-    await Promise.all(tasks);
+  const [
+    slackBotsResponse,
+    documentSetsResponse,
+    [assistants, assistantsFetchError],
+    standardAnswerCategoriesResponse,
+  ] = (await Promise.all(tasks)) as [
+    Response,
+    Response,
+    FetchAssistantsResponse,
+    Response,
+  ];
 
   if (!slackBotsResponse.ok) {
     return (
@@ -51,15 +68,26 @@ async function Page({ params }: { params: { id: string } }) {
   }
   const documentSets = (await documentSetsResponse.json()) as DocumentSet[];
 
-  if (!personasResponse.ok) {
+  if (assistantsFetchError) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch personas - ${await personasResponse.text()}`}
+        errorMsg={`Failed to fetch personas - ${assistantsFetchError}`}
       />
     );
   }
-  const personas = (await personasResponse.json()) as Persona[];
+
+  if (!standardAnswerCategoriesResponse.ok) {
+    return (
+      <ErrorCallout
+        errorTitle="Something went wrong :("
+        errorMsg={`Failed to fetch standard answer categories - ${await standardAnswerCategoriesResponse.text()}`}
+      />
+    );
+  }
+
+  const standardAnswerCategories =
+    (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
 
   return (
     <div className="container mx-auto">
@@ -78,7 +106,8 @@ async function Page({ params }: { params: { id: string } }) {
 
       <SlackBotCreationForm
         documentSets={documentSets}
-        personas={personas}
+        personas={assistants}
+        standardAnswerCategories={standardAnswerCategories}
         existingSlackBotConfig={slackBotConfig}
       />
     </div>

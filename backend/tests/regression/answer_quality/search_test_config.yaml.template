@@ -1,0 +1,56 @@
+# Copy this to search_test_config.yaml and fill in the values to run the eval pipeline
+# Don't forget to also update the .env_eval file with the correct values
+
+# Directory where test results will be saved
+output_folder: "~/danswer_test_results"
+
+# Path to the zip file containing sample documents
+zipped_documents_file: "~/sampledocs.zip"
+
+# Path to the YAML file containing sample questions
+questions_file: "~/sample_questions.yaml"
+
+# Git commit SHA to use (null means use current code as is)
+commit_sha: null
+
+# Whether to remove Docker containers after the test
+clean_up_docker_containers: true
+
+# Whether to launch a web UI for the test
+launch_web_ui: false
+
+# Whether to only run Vespa and Postgres
+only_state: false
+
+# Whether to use a cloud GPU for processing
+use_cloud_gpu: false
+
+# IP address of the model server (placeholder)
+model_server_ip: "PUT_PUBLIC_CLOUD_IP_HERE"
+
+# Port of the model server (placeholder)
+model_server_port: "PUT_PUBLIC_CLOUD_PORT_HERE"
+
+# Suffix for existing test results (E.g. -1234-5678)
+# empty string means no suffix
+existing_test_suffix: ""
+
+# Limit on number of tests to run (null means no limit)
+limit: null
+
+# LLM configuration
+llm:
+  # Name of the LLM
+  name: "default_test_llm"
+  
+  # Provider of the LLM (e.g., OpenAI)
+  provider: "openai"
+  
+  # API key
+  api_key: "PUT_API_KEY_HERE"
+  
+  # Default model name to use
+  default_model_name: "gpt-4o"
+  
+  # List of model names to use for testing
+  model_names: ["gpt-4o"]

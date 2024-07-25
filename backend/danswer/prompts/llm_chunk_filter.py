@@ -4,7 +4,7 @@
 
 USEFUL_PAT = "Yes useful"
 NONUSEFUL_PAT = "Not useful"
-CHUNK_FILTER_PROMPT = f"""
+SECTION_FILTER_PROMPT = f"""
 Determine if the reference section is USEFUL for answering the user query.
 It is NOT enough for the section to be related to the query, \
 it must contain information that is USEFUL for answering the query.
@@ -27,4 +27,4 @@ Respond with EXACTLY AND ONLY: "{USEFUL_PAT}" or "{NONUSEFUL_PAT}"
 
 # Use the following for easy viewing of prompts
 if __name__ == "__main__":
-    print(CHUNK_FILTER_PROMPT)
+    print(SECTION_FILTER_PROMPT)

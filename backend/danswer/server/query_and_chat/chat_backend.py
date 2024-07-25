@@ -43,9 +43,9 @@ from danswer.llm.answering.prompts.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
 from danswer.llm.exceptions import GenAIDisabledException
-from danswer.llm.factory import get_default_llm
+from danswer.llm.factory import get_default_llms
 from danswer.llm.headers import get_litellm_additional_request_headers
-from danswer.llm.utils import get_default_llm_tokenizer
+from danswer.natural_language_processing.utils import get_default_llm_tokenizer
 from danswer.secondary_llm_flows.chat_session_naming import (
     get_renamed_conversation_name,
 )
@@ -64,6 +64,7 @@ from danswer.server.query_and_chat.models import PromptOverride
 from danswer.server.query_and_chat.models import RenameChatSessionResponse
 from danswer.server.query_and_chat.models import SearchFeedbackRequest
 from danswer.server.query_and_chat.models import UpdateChatSessionThreadRequest
+from danswer.server.query_and_chat.token_limit import check_token_rate_limits
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -223,7 +224,7 @@ def rename_chat_session(
     full_history = history_msgs + [final_msg]
 
     try:
-        llm = get_default_llm(
+        llm, _ = get_default_llms(
             additional_headers=get_litellm_additional_request_headers(request.headers)
         )
     except GenAIDisabledException:
@@ -275,6 +276,7 @@ def handle_new_chat_message(
     chat_message_req: CreateChatMessageRequest,
     request: Request,
     user: User | None = Depends(current_user),
+    _: None = Depends(check_token_rate_limits),
 ) -> StreamingResponse:
     """This endpoint is both used for all the following purposes:
     - Sending a new message in the session
@@ -301,7 +303,6 @@ def handle_new_chat_message(
             request.headers
         ),
     )
-
     return StreamingResponse(packets, media_type="application/json")
 
 
@@ -482,6 +483,7 @@ def upload_files_for_chat(
         "text/tab-separated-values",
         "application/json",
         "application/xml",
+        "text/xml",
         "application/x-yaml",
     }
     document_content_types = {

@@ -1,13 +1,13 @@
 from langchain.schema.messages import HumanMessage
 
 from danswer.chat.models import LlmDoc
+from danswer.configs.chat_configs import LANGUAGE_HINT
 from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.configs.chat_configs import QA_PROMPT_OVERRIDE
 from danswer.llm.answering.models import PromptConfig
 from danswer.prompts.direct_qa_prompts import CONTEXT_BLOCK
 from danswer.prompts.direct_qa_prompts import HISTORY_BLOCK
 from danswer.prompts.direct_qa_prompts import JSON_PROMPT
-from danswer.prompts.direct_qa_prompts import LANGUAGE_HINT
 from danswer.prompts.direct_qa_prompts import WEAK_LLM_PROMPT
 from danswer.prompts.prompt_utils import add_date_time_to_prompt
 from danswer.prompts.prompt_utils import build_complete_context_str

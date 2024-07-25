@@ -144,6 +144,23 @@ Follow Up Input: {{question}}
 Standalone question (Respond with only the short combined query):
 """.strip()
 
+INTERNET_SEARCH_QUERY_REPHRASE = f"""
+Given the following conversation and a follow up input, rephrase the follow up into a SHORT, \
+standalone query suitable for an internet search engine.
+IMPORTANT: If a specific query might limit results, keep it broad. \
+If a broad query might yield too many results, make it detailed.
+If there is a clear change in topic, ensure the query reflects the new topic accurately.
+Strip out any information that is not relevant for the internet search.
+
+{GENERAL_SEP_PAT}
+Chat History:
+{{chat_history}}
+{GENERAL_SEP_PAT}
+
+Follow Up Input: {{question}}
+Internet Search Query (Respond with a detailed and specific query):
+""".strip()
+
 
 # The below prompts are retired
 NO_SEARCH = "No Search"
@@ -188,7 +205,7 @@ Query:
 
 
 CHAT_NAMING = f"""
-Given the following conversation, provide a SHORT name for the conversation.
+Given the following conversation, provide a SHORT name for the conversation.{{language_hint_or_empty}}
 IMPORTANT: TRY NOT TO USE MORE THAN 5 WORDS, MAKE IT AS CONCISE AS POSSIBLE.
 Focus the name on the important keywords to convey the topic of the conversation.
 

@@ -1,0 +1,213 @@
+version: '3'
+services:
+  api_server:
+    image: danswer/danswer-backend:latest
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: >
+      /bin/sh -c "alembic upgrade head &&
+      echo \"Starting Danswer Api Server\" &&
+      uvicorn danswer.main:app --host 0.0.0.0 --port 8080"
+    depends_on:
+      - relational_db
+      - index
+    restart: always
+    ports:
+      - "8080"
+    env_file:
+      - .env_eval
+    environment:
+      - AUTH_TYPE=disabled
+      - POSTGRES_HOST=relational_db
+      - VESPA_HOST=index
+      - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
+      - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
+      - ENV_SEED_CONFIGURATION=${ENV_SEED_CONFIGURATION:-}
+      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=True
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+
+  background:
+    image: danswer/danswer-backend:latest
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+    depends_on:
+      - relational_db
+      - index
+    restart: always
+    env_file:
+      - .env_eval
+    environment:
+      - AUTH_TYPE=disabled
+      - POSTGRES_HOST=relational_db
+      - VESPA_HOST=index
+      - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
+      - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
+      - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
+      - ENV_SEED_CONFIGURATION=${ENV_SEED_CONFIGURATION:-}
+      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=True
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+
+  web_server:
+    image: danswer/danswer-web-server:latest
+    build:
+      context: ../../web
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_DISABLE_STREAMING=${NEXT_PUBLIC_DISABLE_STREAMING:-false}
+        - NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA=${NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA:-false}
+        - NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
+        - NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
+        - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
+
+        # Enterprise Edition only
+        - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
+        # DO NOT TURN ON unless you have EXPLICIT PERMISSION from Danswer.
+        - NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED:-false}
+    depends_on:
+      - api_server
+    restart: always
+    environment:
+      - INTERNAL_URL=http://api_server:8080
+      - WEB_DOMAIN=${WEB_DOMAIN:-}
+      - THEME_IS_DARK=${THEME_IS_DARK:-}
+
+      # Enterprise Edition only
+      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
+
+
+  inference_model_server:
+    image: danswer/danswer-model-server:latest
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.model_server
+    command: >
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+        echo 'Skipping service...';
+        exit 0;
+      else
+        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
+      fi"
+    restart: on-failure
+    environment:
+      - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - inference_model_cache_huggingface:/root/.cache/huggingface/
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+
+  indexing_model_server:
+    image: danswer/danswer-model-server:latest
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.model_server
+    command: >
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+        echo 'Skipping service...';
+        exit 0;
+      else
+        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
+      fi"
+    restart: on-failure
+    environment:
+      - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
+      - INDEXING_ONLY=True
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - index_model_cache_huggingface:/root/.cache/huggingface/
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+
+  relational_db:
+    image: postgres:15.2-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+    ports:
+      - "5432"
+    volumes:
+      - db_volume:/var/lib/postgresql/data
+
+
+  # This container name cannot have an underscore in it due to Vespa expectations of the URL
+  index:
+    image: vespaengine/vespa:8.277.17
+    restart: always
+    ports:
+      - "19071"
+      - "8081"
+    volumes:
+      - vespa_volume:/opt/vespa/var
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+
+  nginx:
+    image: nginx:1.23.4-alpine
+    restart: always
+    # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
+    # if api_server / web_server are not up 
+    depends_on:
+      - api_server
+      - web_server
+    environment:
+      - DOMAIN=localhost
+    ports: 
+      - "${NGINX_PORT:-3000}:80"  # allow for localhost:3000 usage, since that is the norm
+    volumes:
+      - ../data/nginx:/etc/nginx/conf.d
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    # The specified script waits for the api_server to start up. 
+    # Without this we've seen issues where nginx shows no error logs but 
+    # does not recieve any traffic
+    # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
+    # in order to make this work on both Unix-like systems and windows
+    command: > 
+      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
+      && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev"
+
+
+volumes:
+  db_volume:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DANSWER_POSTGRES_DATA_DIR:-./postgres_data}
+  vespa_volume:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DANSWER_VESPA_DATA_DIR:-./vespa_data}

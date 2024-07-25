@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FiCheck, FiCopy } from "react-icons/fi";
-import { Hoverable } from "./Hoverable";
+import { Hoverable, HoverableIcon } from "./Hoverable";
+import { CheckmarkIcon, CopyMessageIcon } from "./icons/icons";
 
 export function CopyButton({
   content,
@@ -12,8 +13,8 @@ export function CopyButton({
   const [copyClicked, setCopyClicked] = useState(false);
 
   return (
-    <Hoverable
-      icon={copyClicked ? FiCheck : FiCopy}
+    <HoverableIcon
+      icon={copyClicked ? <CheckmarkIcon /> : <CopyMessageIcon />}
       onClick={() => {
         if (content) {
           navigator.clipboard.writeText(content.toString());

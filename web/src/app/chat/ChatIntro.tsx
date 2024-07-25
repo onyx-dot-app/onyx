@@ -7,8 +7,7 @@ import { FiBookmark, FiCpu, FiInfo, FiX, FiZoomIn } from "react-icons/fi";
 import { HoverPopup } from "@/components/HoverPopup";
 import { Modal } from "@/components/Modal";
 import { useState } from "react";
-import { FaRobot } from "react-icons/fa";
-import { SourceMetadata } from "@/lib/search/interfaces";
+import { Logo } from "@/components/Logo";
 
 const MAX_PERSONAS_TO_DISPLAY = 4;
 
@@ -29,11 +28,9 @@ function HelperItemDisplay({
 
 export function ChatIntro({
   availableSources,
-  availablePersonas,
   selectedPersona,
 }: {
   availableSources: ValidSources[];
-  availablePersonas: Persona[];
   selectedPersona: Persona;
 }) {
   const availableSourceMetadata = getSourceMetadataForSources(availableSources);
@@ -43,10 +40,7 @@ export function ChatIntro({
         <div className="w-message-xs 2xl:w-message-sm 3xl:w-message">
           <div className="flex">
             <div className="mx-auto">
-              <div className="m-auto h-[80px] w-[80px]">
-                <Image src="/logo.png" alt="Logo" width="1419" height="1520" />
-              </div>
-              <div className="m-auto text-3xl font-bold text-strong mt-4 w-fit">
+              <div className="m-auto text-3xl font-strong font-bold text-strong w-fit">
                 {selectedPersona?.name || "How can I help you today?"}
               </div>
               {selectedPersona && (
@@ -91,12 +85,13 @@ export function ChatIntro({
                     </div>
                   </div>
                 )}
+
                 {availableSources.length > 0 && (
-                  <div className="mt-2">
+                  <div className="mt-1">
                     <p className="font-bold mb-1 mt-4 text-emphasis">
                       Connected Sources:{" "}
                     </p>
-                    <div className="flex flex-wrap gap-2">
+                    <div className={`flex flex-wrap gap-2`}>
                       {availableSourceMetadata.map((sourceMetadata) => (
                         <span
                           key={sourceMetadata.internalName}

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { DocumentSet, Tag, ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { InfoIcon, defaultTailwindCSS } from "../../icons/icons";
@@ -20,6 +20,7 @@ export interface SourceSelectorProps {
   setTimeRange: React.Dispatch<
     React.SetStateAction<DateRangePickerValue | null>
   >;
+  showDocSidebar?: boolean;
   selectedSources: SourceMetadata[];
   setSelectedSources: React.Dispatch<React.SetStateAction<SourceMetadata[]>>;
   selectedDocumentSets: string[];
@@ -43,6 +44,7 @@ export function SourceSelector({
   availableDocumentSets,
   existingSources,
   availableTags,
+  showDocSidebar,
 }: SourceSelectorProps) {
   const handleSelect = (source: SourceMetadata) => {
     setSelectedSources((prev: SourceMetadata[]) => {
@@ -67,18 +69,20 @@ export function SourceSelector({
   };
 
   return (
-    <div>
+    <div
+      className={`hidden ${
+        showDocSidebar ? "4xl:block" : "!block"
+      } duration-1000 ease-out transition-all transform origin-top-right`}
+    >
       <div className="flex mb-4 pb-2 border-b border-border text-emphasis">
         <h2 className="font-bold my-auto">Filters</h2>
         <FiFilter className="my-auto ml-2" size="16" />
       </div>
 
-      <>
-        <SectionTitle>Time Range</SectionTitle>
-        <div className="mt-2">
-          <DateRangeSelector value={timeRange} onValueChange={setTimeRange} />
-        </div>
-      </>
+      <SectionTitle>Time Range</SectionTitle>
+      <div className="mt-2">
+        <DateRangeSelector value={timeRange} onValueChange={setTimeRange} />
+      </div>
 
       {existingSources.length > 0 && (
         <div className="mt-4">
@@ -167,7 +171,7 @@ export function SourceSelector({
   );
 }
 
-function SelectedBubble({
+export function SelectedBubble({
   children,
   onClick,
 }: {

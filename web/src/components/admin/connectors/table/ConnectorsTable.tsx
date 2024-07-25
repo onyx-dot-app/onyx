@@ -1,5 +1,4 @@
 import { ConnectorIndexingStatus, Credential } from "@/lib/types";
-import { BasicTable } from "@/components/admin/connectors/BasicTable";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import { LinkBreakIcon, LinkIcon } from "@/components/icons/icons";
@@ -14,6 +13,7 @@ import {
   TableBody,
   TableCell,
 } from "@tremor/react";
+import { FiCheck, FiXCircle } from "react-icons/fi";
 
 interface StatusRowProps<ConnectorConfigType, ConnectorCredentialType> {
   connectorIndexingStatus: ConnectorIndexingStatus<
@@ -141,6 +141,10 @@ export function ConnectorsTable<ConnectorConfigType, ConnectorCredentialType>({
       header: "Status",
       key: "status",
     },
+    {
+      header: "Is Public",
+      key: "is_public",
+    },
   ];
   if (connectorIncludesCredential) {
     columns.push({
@@ -165,6 +169,7 @@ export function ConnectorsTable<ConnectorConfigType, ConnectorCredentialType>({
               <TableHeaderCell key={header}>{header}</TableHeaderCell>
             ))}
             <TableHeaderCell>Status</TableHeaderCell>
+            <TableHeaderCell>Is Public</TableHeaderCell>
             {connectorIncludesCredential && (
               <TableHeaderCell>Credential</TableHeaderCell>
             )}
@@ -216,6 +221,13 @@ export function ConnectorsTable<ConnectorConfigType, ConnectorCredentialType>({
                     setPopup={setPopup}
                     onUpdate={onUpdate}
                   />
+                </TableCell>
+                <TableCell>
+                  {connectorIndexingStatus.public_doc ? (
+                    <FiCheck className="my-auto text-success" size="18" />
+                  ) : (
+                    <FiXCircle className="my-auto text-error" />
+                  )}
                 </TableCell>
                 {connectorIncludesCredential && (
                   <TableCell>{credentialDisplay}</TableCell>

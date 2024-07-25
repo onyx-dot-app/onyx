@@ -39,8 +39,8 @@ ASYM_PASSAGE_PREFIX = os.environ.get("ASYM_PASSAGE_PREFIX", "passage: ")
 # Purely an optimization, memory limitation consideration
 BATCH_SIZE_ENCODE_CHUNKS = 8
 # For score display purposes, only way is to know the expected ranges
-CROSS_ENCODER_RANGE_MAX = 12
-CROSS_ENCODER_RANGE_MIN = -12
+CROSS_ENCODER_RANGE_MAX = 1
+CROSS_ENCODER_RANGE_MIN = 0
 
 # Unused currently, can't be used with the current default encoder model due to its output range
 SEARCH_DISTANCE_CUTOFF = 0

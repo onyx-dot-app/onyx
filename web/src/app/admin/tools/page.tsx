@@ -6,6 +6,7 @@ import { Divider, Text, Title } from "@tremor/react";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { AdminPageTitle } from "@/components/admin/Title";
+import { ToolIcon } from "@/components/icons/icons";
 
 export default async function Page() {
   const toolResponse = await fetchSS("/tool");
@@ -24,7 +25,7 @@ export default async function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        icon={<FiTool size={32} className="my-auto" />}
+        icon={<ToolIcon size={32} className="my-auto" />}
         title="Tools"
       />
 

@@ -2,7 +2,7 @@ from collections.abc import Callable
 from collections.abc import Generator
 
 from danswer.configs.constants import MessageType
-from danswer.llm.utils import get_default_llm_token_encode
+from danswer.natural_language_processing.utils import get_default_llm_token_encode
 from danswer.one_shot_answer.models import ThreadMessage
 from danswer.utils.logger import setup_logger
 

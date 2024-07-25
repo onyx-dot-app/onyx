@@ -41,12 +41,6 @@ Hint: Make the answer as DETAILED as possible and respond in JSON format! \
 Quotes MUST be EXACT substrings from provided documents!
 """.strip()
 
-
-LANGUAGE_HINT = """
-IMPORTANT: Respond in the same language as my query!
-"""
-
-
 CONTEXT_BLOCK = f"""
 REFERENCE DOCUMENTS:
 {GENERAL_SEP_PAT}

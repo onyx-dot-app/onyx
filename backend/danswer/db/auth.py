@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from collections.abc import Callable
 from typing import Any
 from typing import Dict
 
@@ -16,6 +17,20 @@ from danswer.db.engine import get_sqlalchemy_async_engine
 from danswer.db.models import AccessToken
 from danswer.db.models import OAuthAccount
 from danswer.db.models import User
+from danswer.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
+
+
+def get_default_admin_user_emails() -> list[str]:
+    """Returns a list of emails who should default to Admin role.
+    Only used in the EE version. For MIT, just return empty list."""
+    get_default_admin_user_emails_fn: Callable[
+        [], list[str]
+    ] = fetch_versioned_implementation_with_fallback(
+        "danswer.auth.users", "get_default_admin_user_emails_", lambda: []
+    )
+    return get_default_admin_user_emails_fn()
 
 
 async def get_user_count() -> int:
@@ -32,7 +47,7 @@ async def get_user_count() -> int:
 class SQLAlchemyUserAdminDB(SQLAlchemyUserDatabase):
     async def create(self, create_dict: Dict[str, Any]) -> UP:
         user_count = await get_user_count()
-        if user_count == 0:
+        if user_count == 0 or create_dict["email"] in get_default_admin_user_emails():
             create_dict["role"] = UserRole.ADMIN
         else:
             create_dict["role"] = UserRole.BASIC

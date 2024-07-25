@@ -33,8 +33,10 @@ from danswer.db.models import IndexAttempt
 from danswer.db.models import IndexingStatus
 from danswer.db.models import IndexModelStatus
 from danswer.db.swap_index import check_index_swap
-from danswer.search.search_nlp_models import warm_up_encoders
+from danswer.natural_language_processing.search_nlp_models import warm_up_encoders
 from danswer.utils.logger import setup_logger
+from danswer.utils.variable_functionality import global_version
+from danswer.utils.variable_functionality import set_is_ee_based_on_env_variable
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import LOG_LEVEL
 from shared_configs.configs import MODEL_SERVER_PORT
@@ -307,10 +309,18 @@ def kickoff_indexing_jobs(
 
         if use_secondary_index:
             run = secondary_client.submit(
-                run_indexing_entrypoint, attempt.id, pure=False
+                run_indexing_entrypoint,
+                attempt.id,
+                global_version.get_is_ee_version(),
+                pure=False,
             )
         else:
-            run = client.submit(run_indexing_entrypoint, attempt.id, pure=False)
+            run = client.submit(
+                run_indexing_entrypoint,
+                attempt.id,
+                global_version.get_is_ee_version(),
+                pure=False,
+            )
 
         if run:
             secondary_str = "(secondary index) " if use_secondary_index else ""
@@ -333,13 +343,15 @@ def update_loop(delay: int = 10, num_workers: int = NUM_INDEXING_WORKERS) -> Non
 
     # So that the first time users aren't surprised by really slow speed of first
     # batch of documents indexed
-    logger.info("Running a first inference to warm up embedding model")
-    warm_up_encoders(
-        model_name=db_embedding_model.model_name,
-        normalize=db_embedding_model.normalize,
-        model_server_host=INDEXING_MODEL_SERVER_HOST,
-        model_server_port=MODEL_SERVER_PORT,
-    )
+
+    if db_embedding_model.cloud_provider_id is None:
+        logger.info("Running a first inference to warm up embedding model")
+        warm_up_encoders(
+            model_name=db_embedding_model.model_name,
+            normalize=db_embedding_model.normalize,
+            model_server_host=INDEXING_MODEL_SERVER_HOST,
+            model_server_port=MODEL_SERVER_PORT,
+        )
 
     client_primary: Client | SimpleJobClient
     client_secondary: Client | SimpleJobClient
@@ -398,6 +410,8 @@ def update_loop(delay: int = 10, num_workers: int = NUM_INDEXING_WORKERS) -> Non
 
 
 def update__main() -> None:
+    set_is_ee_based_on_env_variable()
+
     logger.info("Starting Indexing Loop")
     update_loop()
 

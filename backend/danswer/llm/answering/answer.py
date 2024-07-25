@@ -31,9 +31,11 @@ from danswer.llm.answering.stream_processing.citation_processing import (
 from danswer.llm.answering.stream_processing.quotes_processing import (
     build_quotes_processor,
 )
+from danswer.llm.answering.stream_processing.utils import DocumentIdOrderMapping
+from danswer.llm.answering.stream_processing.utils import map_document_id_order
 from danswer.llm.interfaces import LLM
-from danswer.llm.utils import get_default_llm_tokenizer
 from danswer.llm.utils import message_generator_to_string_generator
+from danswer.natural_language_processing.utils import get_default_llm_tokenizer
 from danswer.tools.custom.custom_tool_prompt_builder import (
     build_user_message_for_custom_tool_for_non_tool_calling_llm,
 )
@@ -43,6 +45,7 @@ from danswer.tools.images.image_generation_tool import IMAGE_GENERATION_RESPONSE
 from danswer.tools.images.image_generation_tool import ImageGenerationResponse
 from danswer.tools.images.image_generation_tool import ImageGenerationTool
 from danswer.tools.images.prompt import build_image_generation_user_prompt
+from danswer.tools.internet_search.internet_search_tool import InternetSearchTool
 from danswer.tools.message import build_tool_message
 from danswer.tools.message import ToolCallSummary
 from danswer.tools.search.search_tool import FINAL_CONTEXT_DOCUMENTS
@@ -58,17 +61,22 @@ from danswer.tools.tool_runner import (
 from danswer.tools.tool_runner import ToolCallFinalResult
 from danswer.tools.tool_runner import ToolCallKickoff
 from danswer.tools.tool_runner import ToolRunner
+from danswer.tools.tool_selection import select_single_tool_for_non_tool_calling_llm
 from danswer.tools.utils import explicit_tool_calling_supported
+from danswer.utils.logger import setup_logger
+
+
+logger = setup_logger()
 
 
 def _get_answer_stream_processor(
     context_docs: list[LlmDoc],
-    search_order_docs: list[LlmDoc],
+    doc_id_to_rank_map: DocumentIdOrderMapping,
     answer_style_configs: AnswerStyleConfig,
 ) -> StreamProcessor:
     if answer_style_configs.citation_config:
         return build_citation_processor(
-            context_docs=context_docs, search_order_docs=search_order_docs
+            context_docs=context_docs, doc_id_to_rank_map=doc_id_to_rank_map
         )
     if answer_style_configs.quotes_config:
         return build_quotes_processor(
@@ -79,6 +87,9 @@ def _get_answer_stream_processor(
 
 
 AnswerStream = Iterator[AnswerQuestionPossibleReturn | ToolCallKickoff | ToolResponse]
+
+
+logger = setup_logger()
 
 
 class Answer:
@@ -104,6 +115,7 @@ class Answer:
         skip_explicit_tool_calling: bool = False,
         # Returns the full document sections text from the search tool
         return_contexts: bool = False,
+        skip_gen_ai_answer_generation: bool = False,
     ) -> None:
         if single_message_history and message_history:
             raise ValueError(
@@ -132,11 +144,12 @@ class Answer:
         self._final_prompt: list[BaseMessage] | None = None
 
         self._streamed_output: list[str] | None = None
-        self._processed_stream: list[
-            AnswerQuestionPossibleReturn | ToolResponse | ToolCallKickoff
-        ] | None = None
+        self._processed_stream: (
+            list[AnswerQuestionPossibleReturn | ToolResponse | ToolCallKickoff] | None
+        ) = None
 
         self._return_contexts = return_contexts
+        self.skip_gen_ai_answer_generation = skip_gen_ai_answer_generation
 
     def _update_prompt_builder_for_search_tool(
         self, prompt_builder: AnswerPromptBuilder, final_context_documents: list[LlmDoc]
@@ -228,7 +241,7 @@ class Answer:
         tool_call_requests = tool_call_chunk.tool_calls
         for tool_call_request in tool_call_requests:
             tool = [
-                tool for tool in self.tools if tool.name() == tool_call_request["name"]
+                tool for tool in self.tools if tool.name == tool_call_request["name"]
             ][0]
             tool_args = (
                 self.force_use_tool.args
@@ -247,15 +260,14 @@ class Answer:
                 ),
             )
 
-            if tool.name() == SearchTool.NAME:
+            if tool.name in {SearchTool._NAME, InternetSearchTool._NAME}:
                 self._update_prompt_builder_for_search_tool(prompt_builder, [])
-            elif tool.name() == ImageGenerationTool.NAME:
+            elif tool.name == ImageGenerationTool._NAME:
                 prompt_builder.update_user_prompt(
                     build_image_generation_user_prompt(
                         query=self.question,
                     )
                 )
-
             yield tool_runner.tool_final_result()
 
             prompt = prompt_builder.build(tool_call_summary=tool_call_summary)
@@ -281,7 +293,7 @@ class Answer:
                     [
                         tool
                         for tool in self.tools
-                        if tool.name() == self.force_use_tool.tool_name
+                        if tool.name == self.force_use_tool.tool_name
                     ]
                 ),
                 None,
@@ -301,21 +313,39 @@ class Answer:
             )
 
             if tool_args is None:
-                raise RuntimeError(f"Tool '{tool.name()}' did not return args")
+                raise RuntimeError(f"Tool '{tool.name}' did not return args")
 
             chosen_tool_and_args = (tool, tool_args)
         else:
-            all_tool_args = check_which_tools_should_run_for_non_tool_calling_llm(
+            tool_options = check_which_tools_should_run_for_non_tool_calling_llm(
                 tools=self.tools,
                 query=self.question,
                 history=self.message_history,
                 llm=self.llm,
             )
-            for ind, args in enumerate(all_tool_args):
-                if args is not None:
-                    chosen_tool_and_args = (self.tools[ind], args)
-                    # for now, just pick the first tool selected
-                    break
+
+            available_tools_and_args = [
+                (self.tools[ind], args)
+                for ind, args in enumerate(tool_options)
+                if args is not None
+            ]
+
+            logger.info(
+                f"Selecting single tool from tools: {[(tool.name, args) for tool, args in available_tools_and_args]}"
+            )
+
+            chosen_tool_and_args = (
+                select_single_tool_for_non_tool_calling_llm(
+                    tools_and_args=available_tools_and_args,
+                    history=self.message_history,
+                    query=self.question,
+                    llm=self.llm,
+                )
+                if available_tools_and_args
+                else None
+            )
+
+            logger.info(f"Chosen tool: {chosen_tool_and_args}")
 
         if not chosen_tool_and_args:
             prompt_builder.update_system_prompt(
@@ -336,7 +366,7 @@ class Answer:
         tool_runner = ToolRunner(tool, tool_args)
         yield tool_runner.kickoff()
 
-        if tool.name() == SearchTool.NAME:
+        if tool.name in {SearchTool._NAME, InternetSearchTool._NAME}:
             final_context_documents = None
             for response in tool_runner.tool_responses():
                 if response.id == FINAL_CONTEXT_DOCUMENTS:
@@ -344,12 +374,14 @@ class Answer:
                 yield response
 
             if final_context_documents is None:
-                raise RuntimeError("SearchTool did not return final context documents")
+                raise RuntimeError(
+                    f"{tool.name} did not return final context documents"
+                )
 
             self._update_prompt_builder_for_search_tool(
                 prompt_builder, final_context_documents
             )
-        elif tool.name() == ImageGenerationTool.NAME:
+        elif tool.name == ImageGenerationTool._NAME:
             img_urls = []
             for response in tool_runner.tool_responses():
                 if response.id == IMAGE_GENERATION_RESPONSE_ID:
@@ -371,13 +403,14 @@ class Answer:
                 HumanMessage(
                     content=build_user_message_for_custom_tool_for_non_tool_calling_llm(
                         self.question,
-                        tool.name(),
+                        tool.name,
                         *tool_runner.tool_responses(),
                     )
                 )
             )
+        final = tool_runner.tool_final_result()
 
-        yield tool_runner.tool_final_result()
+        yield final
 
         prompt = prompt_builder.build()
         yield from message_generator_to_string_generator(self.llm.stream(prompt=prompt))
@@ -417,6 +450,10 @@ class Answer:
                     yield message
                 elif isinstance(message, ToolResponse):
                     if message.id == SEARCH_RESPONSE_SUMMARY_ID:
+                        # We don't need to run section merging in this flow, this variable is only used
+                        # below to specify the ordering of the documents for the purpose of matching
+                        # citations to the right search documents. The deduplication logic is more lightweight
+                        # there and we don't need to do it twice
                         search_results = [
                             llm_doc_from_inference_section(section)
                             for section in cast(
@@ -436,20 +473,23 @@ class Answer:
                     # assumes all tool responses will come first, then the final answer
                     break
 
-            process_answer_stream_fn = _get_answer_stream_processor(
-                context_docs=final_context_docs or [],
-                # if doc selection is enabled, then search_results will be None,
-                # so we need to use the final_context_docs
-                search_order_docs=search_results or final_context_docs or [],
-                answer_style_configs=self.answer_style_config,
-            )
+            if not self.skip_gen_ai_answer_generation:
+                process_answer_stream_fn = _get_answer_stream_processor(
+                    context_docs=final_context_docs or [],
+                    # if doc selection is enabled, then search_results will be None,
+                    # so we need to use the final_context_docs
+                    doc_id_to_rank_map=map_document_id_order(
+                        search_results or final_context_docs or []
+                    ),
+                    answer_style_configs=self.answer_style_config,
+                )
 
-            def _stream() -> Iterator[str]:
-                if message:
-                    yield cast(str, message)
-                yield from cast(Iterator[str], stream)
+                def _stream() -> Iterator[str]:
+                    if message:
+                        yield cast(str, message)
+                    yield from cast(Iterator[str], stream)
 
-            yield from process_answer_stream_fn(_stream())
+                yield from process_answer_stream_fn(_stream())
 
         processed_stream = []
         for processed_packet in _process_stream(output_generator):

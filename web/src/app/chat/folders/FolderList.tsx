@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Folder } from "./interfaces";
 import { ChatSessionDisplay } from "../sessionSidebar/ChatSessionDisplay"; // Ensure this is correctly imported
 import {
   FiChevronDown,
   FiChevronRight,
   FiFolder,
-  FiEdit,
+  FiEdit2,
   FiCheck,
   FiX,
   FiTrash, // Import the trash icon
@@ -22,6 +22,9 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
 import { CHAT_SESSION_ID_KEY } from "@/lib/drag/constants";
 import Cookies from "js-cookie";
+import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
+import { Tooltip } from "@/components/tooltip/Tooltip";
+import { Popover } from "@/components/popover/Popover";
 
 const FolderItem = ({
   folder,
@@ -54,6 +57,8 @@ const FolderItem = ({
       if (newIsExpanded) {
         openedFolders[folder.folder_id] = true;
       } else {
+        setShowDeleteConfirm(false);
+
         delete openedFolders[folder.folder_id];
       }
       Cookies.set("openedFolders", JSON.stringify(openedFolders));
@@ -87,17 +92,46 @@ const FolderItem = ({
     }
   };
 
-  const deleteFolderHandler = async (
-    event: React.MouseEvent<HTMLDivElement>
-  ) => {
-    event.stopPropagation(); // Prevent the event from bubbling up to the toggle expansion
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
+  const deleteConfirmRef = useRef<HTMLDivElement>(null);
+
+  const handleDeleteClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
     try {
       await deleteFolder(folder.folder_id);
-      router.refresh(); // Refresh values to update the sidebar
+      router.refresh();
     } catch (error) {
       setPopup({ message: "Failed to delete folder", type: "error" });
+    } finally {
+      setShowDeleteConfirm(false);
     }
   };
+
+  const cancelDelete = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setShowDeleteConfirm(false);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        deleteConfirmRef.current &&
+        !deleteConfirmRef.current.contains(event.target as Node)
+      ) {
+        setShowDeleteConfirm(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -134,13 +168,38 @@ const FolderItem = ({
         isDragOver ? "bg-hover" : ""
       }`}
     >
+      {showDeleteConfirm && (
+        <div
+          ref={deleteConfirmRef}
+          className="absolute max-w-xs border z-[100] border-neutral-300 top-0 right-0 w-[250px] -bo-0 top-2 mt-4 p-2 bg-background-100 rounded shadow-lg z-10"
+        >
+          <p className="text-sm mb-2">
+            Are you sure you want to delete <i>{folder.folder_name}</i>? All the
+            content inside this folder will also be deleted
+          </p>
+          <div className="flex justify-end">
+            <button
+              onClick={confirmDelete}
+              className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs mr-2"
+            >
+              Yes
+            </button>
+            <button
+              onClick={cancelDelete}
+              className="bg-gray-300 hover:bg-gray-200 px-2 py-1 rounded text-xs"
+            >
+              No
+            </button>
+          </div>
+        </div>
+      )}
       <BasicSelectable fullWidth selected={false}>
         <div
           onMouseEnter={() => setIsHovering(true)}
           onMouseLeave={() => setIsHovering(false)}
         >
           <div onClick={toggleFolderExpansion} className="cursor-pointer">
-            <div className="text-sm text-medium flex items-center justify-start w-full">
+            <div className="text-sm text-text-600 flex items-center justify-start w-full">
               <div className="mr-2">
                 {isExpanded ? (
                   <FiChevronDown size={16} />
@@ -170,16 +229,26 @@ const FolderItem = ({
                     onClick={handleEditFolderName}
                     className="hover:bg-black/10 p-1 -m-1 rounded"
                   >
-                    <FiEdit size={16} />
+                    <FiEdit2 size={16} />
                   </div>
-                  <div
+                  <div className="relative">
+                    <div
+                      onClick={handleDeleteClick}
+                      className="hover:bg-black/10 p-1 -m-1 rounded ml-2"
+                    >
+                      <FiTrash size={16} />
+                    </div>
+                  </div>
+
+                  {/* <div
                     onClick={deleteFolderHandler}
                     className="hover:bg-black/10 p-1 -m-1 rounded ml-2"
                   >
                     <FiTrash size={16} />
-                  </div>
+                  </div> */}
                 </div>
               )}
+
               {isEditing && (
                 <div className="flex ml-auto my-auto">
                   <div
@@ -223,7 +292,7 @@ export const FolderList = ({
 }: {
   folders: Folder[];
   currentChatId?: number;
-  openedFolders: { [key: number]: boolean };
+  openedFolders?: { [key: number]: boolean };
 }) => {
   if (folders.length === 0) {
     return null;
@@ -236,7 +305,9 @@ export const FolderList = ({
           key={folder.folder_id}
           folder={folder}
           currentChatId={currentChatId}
-          isInitiallyExpanded={openedFolders[folder.folder_id] || false}
+          isInitiallyExpanded={
+            openedFolders ? openedFolders[folder.folder_id] || false : false
+          }
         />
       ))}
     </div>

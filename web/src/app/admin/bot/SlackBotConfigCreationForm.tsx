@@ -3,7 +3,11 @@
 import { ArrayHelpers, FieldArray, Form, Formik } from "formik";
 import * as Yup from "yup";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { DocumentSet, SlackBotConfig } from "@/lib/types";
+import {
+  DocumentSet,
+  SlackBotConfig,
+  StandardAnswerCategory,
+} from "@/lib/types";
 import {
   BooleanFormField,
   SectionHeader,
@@ -31,20 +35,22 @@ import { useRouter } from "next/navigation";
 import { Persona } from "../assistants/interfaces";
 import { useState } from "react";
 import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
+import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 
 export const SlackBotCreationForm = ({
   documentSets,
   personas,
+  standardAnswerCategories,
   existingSlackBotConfig,
 }: {
   documentSets: DocumentSet[];
   personas: Persona[];
+  standardAnswerCategories: StandardAnswerCategory[];
   existingSlackBotConfig?: SlackBotConfig;
 }) => {
   const isUpdate = existingSlackBotConfig !== undefined;
   const { popup, setPopup } = usePopup();
   const router = useRouter();
-
   const existingSlackBotUsesPersona = existingSlackBotConfig?.persona
     ? !isPersonaASlackBotPersona(existingSlackBotConfig.persona)
     : false;
@@ -71,9 +77,11 @@ export const SlackBotCreationForm = ({
               existingSlackBotConfig?.channel_config?.respond_tag_only || false,
             respond_to_bots:
               existingSlackBotConfig?.channel_config?.respond_to_bots || false,
-            respond_team_member_list:
+            enable_auto_filters:
+              existingSlackBotConfig?.enable_auto_filters || false,
+            respond_member_group_list:
               existingSlackBotConfig?.channel_config
-                ?.respond_team_member_list || ([] as string[]),
+                ?.respond_member_group_list ?? [],
             still_need_help_enabled:
               existingSlackBotConfig?.channel_config?.follow_up_tags !==
               undefined,
@@ -91,6 +99,9 @@ export const SlackBotCreationForm = ({
                 ? existingSlackBotConfig.persona.id
                 : null,
             response_type: existingSlackBotConfig?.response_type || "citations",
+            standard_answer_categories: existingSlackBotConfig
+              ? existingSlackBotConfig.standard_answer_categories
+              : [],
           }}
           validationSchema={Yup.object().shape({
             channel_names: Yup.array().of(Yup.string()),
@@ -101,11 +112,13 @@ export const SlackBotCreationForm = ({
             questionmark_prefilter_enabled: Yup.boolean().required(),
             respond_tag_only: Yup.boolean().required(),
             respond_to_bots: Yup.boolean().required(),
-            respond_team_member_list: Yup.array().of(Yup.string()).required(),
+            enable_auto_filters: Yup.boolean().required(),
+            respond_member_group_list: Yup.array().of(Yup.string()).required(),
             still_need_help_enabled: Yup.boolean().required(),
             follow_up_tags: Yup.array().of(Yup.string()),
             document_sets: Yup.array().of(Yup.number()),
             persona_id: Yup.number().nullable(),
+            standard_answer_categories: Yup.array(),
           })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
@@ -116,10 +129,11 @@ export const SlackBotCreationForm = ({
               channel_names: values.channel_names.filter(
                 (channelName) => channelName !== ""
               ),
-              respond_team_member_list: values.respond_team_member_list.filter(
-                (teamMemberEmail) => teamMemberEmail !== ""
-              ),
+              respond_member_group_list: values.respond_member_group_list,
               usePersona: usingPersonas,
+              standard_answer_categories: values.standard_answer_categories.map(
+                (category) => category.id
+              ),
             };
             if (!cleanedValues.still_need_help_enabled) {
               cleanedValues.follow_up_tags = undefined;
@@ -128,7 +142,6 @@ export const SlackBotCreationForm = ({
                 cleanedValues.follow_up_tags = [];
               }
             }
-
             let response;
             if (isUpdate) {
               response = await updateSlackBotConfig(
@@ -153,7 +166,7 @@ export const SlackBotCreationForm = ({
             }
           }}
         >
-          {({ isSubmitting, values }) => (
+          {({ isSubmitting, values, setFieldValue }) => (
             <Form>
               <div className="px-6 pb-6">
                 <SectionHeader>The Basics</SectionHeader>
@@ -226,15 +239,20 @@ export const SlackBotCreationForm = ({
                   label="Responds to Bot messages"
                   subtext="If not set, DanswerBot will always ignore messages from Bots"
                 />
+                <BooleanFormField
+                  name="enable_auto_filters"
+                  label="Enable LLM Autofiltering"
+                  subtext="If set, the LLM will generate source and time filters based on the user's query"
+                />
                 <TextArrayField
-                  name="respond_team_member_list"
-                  label="Team Members Emails"
+                  name="respond_member_group_list"
+                  label="Team Member Emails Or Slack Group Names/Handles"
                   subtext={`If specified, DanswerBot responses will only be 
-                  visible to members in this list. This is
+                  visible to the members or groups in this list. This is
                   useful if you want DanswerBot to operate in an
                   "assistant" mode, where it helps the team members find
                   answers, but let's them build on top of DanswerBot's response / throw 
-                  out the occasional incorrect answer.`}
+                  out the occasional incorrect answer. Group names and handles are case sensitive.`}
                   values={values}
                 />
                 <Divider />
@@ -380,6 +398,45 @@ export const SlackBotCreationForm = ({
                     </TabPanel>
                   </TabPanels>
                 </TabGroup>
+
+                <Divider />
+
+                <div>
+                  <SectionHeader>
+                    [Optional] Standard Answer Categories
+                  </SectionHeader>
+                  <div className="w-4/12">
+                    <MultiSelectDropdown
+                      name="standard_answer_categories"
+                      label=""
+                      onChange={(selected_options) => {
+                        const selected_categories = selected_options.map(
+                          (option) => {
+                            return {
+                              id: Number(option.value),
+                              name: option.label,
+                            };
+                          }
+                        );
+                        setFieldValue(
+                          "standard_answer_categories",
+                          selected_categories
+                        );
+                      }}
+                      creatable={false}
+                      options={standardAnswerCategories.map((category) => ({
+                        label: category.name,
+                        value: category.id.toString(),
+                      }))}
+                      initialSelectedOptions={values.standard_answer_categories.map(
+                        (category) => ({
+                          label: category.name,
+                          value: category.id.toString(),
+                        })
+                      )}
+                    />
+                  </div>
+                </div>
 
                 <Divider />
 

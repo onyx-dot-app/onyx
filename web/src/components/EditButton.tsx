@@ -1,6 +1,6 @@
 "use client";
 
-import { FiEdit } from "react-icons/fi";
+import { FiEdit2 } from "react-icons/fi";
 
 export function EditButton({ onClick }: { onClick: () => void }) {
   return (
@@ -18,7 +18,7 @@ export function EditButton({ onClick }: { onClick: () => void }) {
         text-sm`}
       onClick={onClick}
     >
-      <FiEdit className="mr-1 my-auto" />
+      <FiEdit2 className="mr-1 my-auto" />
       Edit
     </div>
   );

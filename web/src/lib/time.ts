@@ -75,3 +75,21 @@ export function humanReadableFormat(dateString: string): string {
   // Format the date and return it
   return formatter.format(date);
 }
+
+export function humanReadableFormatWithTime(datetimeString: string): string {
+  // Create a Date object from the dateString
+  const date = new Date(datetimeString);
+
+  // Use Intl.DateTimeFormat to format the date
+  // Specify the locale as 'en-US' and options for month, day, and year
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    month: "long", // full month name
+    day: "numeric", // numeric day
+    year: "numeric", // numeric year
+    hour: "numeric",
+    minute: "numeric",
+  });
+
+  // Format the date and return it
+  return formatter.format(date);
+}

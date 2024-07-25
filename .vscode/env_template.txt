@@ -4,15 +4,18 @@
 
 # For local dev, often user Authentication is not needed
 AUTH_TYPE=disabled
-# This passes top N results to LLM an additional time for reranking prior to answer generation, quite token heavy so we disable it for dev generally
-DISABLE_LLM_CHUNK_FILTER=True
 
 
 # Always keep these on for Dev
 # Logs all model prompts to stdout
-LOG_ALL_MODEL_INTERACTIONS=True
+LOG_DANSWER_MODEL_INTERACTIONS=True
 # More verbose logging
 LOG_LEVEL=debug
+
+
+# This passes top N results to LLM an additional time for reranking prior to answer generation
+# This step is quite heavy on token usage so we disable it for dev generally
+DISABLE_LLM_CHUNK_FILTER=True
 
 
 # Useful if you want to toggle auth on/off (google_oauth/OIDC specifically)
@@ -20,10 +23,6 @@ OAUTH_CLIENT_ID=<REPLACE THIS>
 OAUTH_CLIENT_SECRET=<REPLACE THIS>
 # Generally not useful for dev, we don't generally want to set up an SMTP server for dev
 REQUIRE_EMAIL_VERIFICATION=False
-
-
-# Toggles on/off the EE Features
-NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES=False
 
 
 # Set these so if you wipe the DB, you don't end up having to go through the UI every time
@@ -41,3 +40,13 @@ FAST_GEN_AI_MODEL_VERSION=gpt-3.5-turbo
 # Python stuff
 PYTHONPATH=./backend
 PYTHONUNBUFFERED=1
+
+
+# Internet Search 
+BING_API_KEY=<REPLACE THIS>
+
+
+# Enable the full set of Danswer Enterprise Edition features
+# NOTE: DO NOT ENABLE THIS UNLESS YOU HAVE A PAID ENTERPRISE LICENSE (or if you are using this for local testing/development)
+ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=False
+

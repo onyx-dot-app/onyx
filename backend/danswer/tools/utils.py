@@ -2,11 +2,17 @@ import json
 
 from tiktoken import Encoding
 
-from danswer.llm.utils import get_default_llm_tokenizer
+from danswer.natural_language_processing.utils import get_default_llm_tokenizer
 from danswer.tools.tool import Tool
 
 
-OPEN_AI_TOOL_CALLING_MODELS = {"gpt-3.5-turbo", "gpt-4-turbo", "gpt-4"}
+OPEN_AI_TOOL_CALLING_MODELS = {
+    "gpt-3.5-turbo",
+    "gpt-4-turbo",
+    "gpt-4",
+    "gpt-4o",
+    "gpt-4o-mini",
+}
 
 
 def explicit_tool_calling_supported(model_provider: str, model_name: str) -> bool:

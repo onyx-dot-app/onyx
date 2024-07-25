@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 from typing import cast
 
@@ -8,6 +9,7 @@ from slack_sdk.socket_mode import SocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from sqlalchemy.orm import Session
 
+from danswer.configs.constants import MessageType
 from danswer.configs.constants import SearchFeedbackType
 from danswer.configs.danswerbot_configs import DANSWER_FOLLOWUP_EMOJI
 from danswer.connectors.slack.utils import make_slack_api_rate_limited
@@ -21,12 +23,17 @@ from danswer.danswerbot.slack.constants import VIEW_DOC_FEEDBACK_ID
 from danswer.danswerbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
 )
+from danswer.danswerbot.slack.handlers.handle_regular_answer import (
+    handle_regular_answer,
+)
+from danswer.danswerbot.slack.models import SlackMessageInfo
 from danswer.danswerbot.slack.utils import build_feedback_id
 from danswer.danswerbot.slack.utils import decompose_action_id
-from danswer.danswerbot.slack.utils import fetch_groupids_from_names
-from danswer.danswerbot.slack.utils import fetch_userids_from_emails
+from danswer.danswerbot.slack.utils import fetch_group_ids_from_names
+from danswer.danswerbot.slack.utils import fetch_user_ids_from_emails
 from danswer.danswerbot.slack.utils import get_channel_name_from_id
 from danswer.danswerbot.slack.utils import get_feedback_visibility
+from danswer.danswerbot.slack.utils import read_slack_thread
 from danswer.danswerbot.slack.utils import respond_in_thread
 from danswer.danswerbot.slack.utils import update_emote_react
 from danswer.db.engine import get_sqlalchemy_engine
@@ -36,7 +43,7 @@ from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
 from danswer.utils.logger import setup_logger
 
-logger_base = setup_logger()
+logger = setup_logger()
 
 
 def handle_doc_feedback_button(
@@ -44,7 +51,7 @@ def handle_doc_feedback_button(
     client: SocketModeClient,
 ) -> None:
     if not (actions := req.payload.get("actions")):
-        logger_base.error("Missing actions. Unable to build the source feedback view")
+        logger.error("Missing actions. Unable to build the source feedback view")
         return
 
     # Extracts the feedback_id coming from the 'source feedback' button
@@ -70,6 +77,66 @@ def handle_doc_feedback_button(
     client.web_client.views_open(
         trigger_id=req.payload["trigger_id"], view=data.to_dict()
     )
+
+
+def handle_generate_answer_button(
+    req: SocketModeRequest,
+    client: SocketModeClient,
+) -> None:
+    channel_id = req.payload["channel"]["id"]
+    channel_name = req.payload["channel"]["name"]
+    message_ts = req.payload["message"]["ts"]
+    thread_ts = req.payload["container"]["thread_ts"]
+    user_id = req.payload["user"]["id"]
+
+    if not thread_ts:
+        raise ValueError("Missing thread_ts in the payload")
+
+    thread_messages = read_slack_thread(
+        channel=channel_id, thread=thread_ts, client=client.web_client
+    )
+    # remove all assistant messages till we get to the last user message
+    # we want the new answer to be generated off of the last "question" in
+    # the thread
+    for i in range(len(thread_messages) - 1, -1, -1):
+        if thread_messages[i].role == MessageType.USER:
+            break
+        if thread_messages[i].role == MessageType.ASSISTANT:
+            thread_messages.pop(i)
+
+    # tell the user that we're working on it
+    # Send an ephemeral message to the user that we're generating the answer
+    respond_in_thread(
+        client=client.web_client,
+        channel=channel_id,
+        receiver_ids=[user_id],
+        text="I'm working on generating a full answer for you. This may take a moment...",
+        thread_ts=thread_ts,
+    )
+
+    with Session(get_sqlalchemy_engine()) as db_session:
+        slack_bot_config = get_slack_bot_config_for_channel(
+            channel_name=channel_name, db_session=db_session
+        )
+
+        handle_regular_answer(
+            message_info=SlackMessageInfo(
+                thread_messages=thread_messages,
+                channel_to_respond=channel_id,
+                msg_to_respond=cast(str, message_ts or thread_ts),
+                thread_to_respond=cast(str, thread_ts or message_ts),
+                sender=user_id or None,
+                bypass_filters=True,
+                is_bot_msg=False,
+                is_bot_dm=False,
+            ),
+            slack_bot_config=slack_bot_config,
+            receiver_ids=None,
+            client=client.web_client,
+            channel=channel_id,
+            logger=cast(logging.Logger, logger),
+            feedback_reminder_id=None,
+        )
 
 
 def handle_slack_feedback(
@@ -129,7 +196,7 @@ def handle_slack_feedback(
                 feedback=feedback,
             )
         else:
-            logger_base.error(f"Feedback type '{feedback_type}' not supported")
+            logger.error(f"Feedback type '{feedback_type}' not supported")
 
     if get_feedback_visibility() == FeedbackVisibility.PRIVATE or feedback_type not in [
         LIKE_BLOCK_ACTION_ID,
@@ -193,11 +260,11 @@ def handle_followup_button(
             tag_names = slack_bot_config.channel_config.get("follow_up_tags")
             remaining = None
             if tag_names:
-                tag_ids, remaining = fetch_userids_from_emails(
+                tag_ids, remaining = fetch_user_ids_from_emails(
                     tag_names, client.web_client
                 )
             if remaining:
-                group_ids, _ = fetch_groupids_from_names(remaining, client.web_client)
+                group_ids, _ = fetch_group_ids_from_names(remaining, client.web_client)
 
     blocks = build_follow_up_resolved_blocks(tag_ids=tag_ids, group_ids=group_ids)
 
@@ -272,7 +339,7 @@ def handle_followup_resolved_button(
         )
 
         if not response.get("ok"):
-            logger_base.error("Unable to delete message for resolved")
+            logger.error("Unable to delete message for resolved")
 
     if immediate:
         msg_text = f"{clicker_name} has marked this question as resolved!"

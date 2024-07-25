@@ -46,6 +46,7 @@ from danswer.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from danswer.configs.constants import DANSWER_API_KEY_PREFIX
 from danswer.configs.constants import UNNAMED_KEY_PLACEHOLDER
 from danswer.db.auth import get_access_token_db
+from danswer.db.auth import get_default_admin_user_emails
 from danswer.db.auth import get_user_count
 from danswer.db.auth import get_user_db
 from danswer.db.engine import get_session
@@ -54,7 +55,9 @@ from danswer.db.models import User
 from danswer.utils.logger import setup_logger
 from danswer.utils.telemetry import optional_telemetry
 from danswer.utils.telemetry import RecordType
-from danswer.utils.variable_functionality import fetch_versioned_implementation
+from danswer.utils.variable_functionality import (
+    fetch_versioned_implementation,
+)
 
 
 logger = setup_logger()
@@ -149,7 +152,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         verify_email_domain(user_create.email)
         if hasattr(user_create, "role"):
             user_count = await get_user_count()
-            if user_count == 0:
+            if user_count == 0 or user_create.email in get_default_admin_user_emails():
                 user_create.role = UserRole.ADMIN
             else:
                 user_create.role = UserRole.BASIC
