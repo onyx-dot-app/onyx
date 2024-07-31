@@ -362,10 +362,6 @@ const Main = () => {
 export default function Page() {
   return (
     <div className="mx-auto container">
-      <div className="mb-4">
-        <HealthCheckBanner />
-      </div>
-
       <AdminPageTitle icon={<JiraIcon size={32} />} title="Jira" />
 
       <Main />

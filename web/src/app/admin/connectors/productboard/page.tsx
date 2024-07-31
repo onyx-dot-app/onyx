@@ -239,10 +239,6 @@ const Main = () => {
 export default function Page() {
   return (
     <div className="mx-auto container">
-      <div className="mb-4">
-        <HealthCheckBanner />
-      </div>
-
       <AdminPageTitle
         icon={<ProductboardIcon size={32} />}
         title="Productboard"

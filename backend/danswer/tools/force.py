@@ -1,13 +1,15 @@
 from typing import Any
 
-from langchain_core.messages import AIMessage
-from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 
 from danswer.tools.tool import Tool
 
 
 class ForceUseTool(BaseModel):
+    # Could be not a forced usage of the tool but still have args, in which case
+    # if the tool is called, then those args are applied instead of what the LLM
+    # wanted to call it with
+    force_use: bool
     tool_name: str
     args: dict[str, Any] | None = None
 
@@ -16,25 +18,10 @@ class ForceUseTool(BaseModel):
         return {"type": "function", "function": {"name": self.tool_name}}
 
 
-def modify_message_chain_for_force_use_tool(
-    messages: list[BaseMessage], force_use_tool: ForceUseTool | None = None
-) -> list[BaseMessage]:
-    """NOTE: modifies `messages` in place."""
-    if not force_use_tool:
-        return messages
-
-    for message in messages:
-        if isinstance(message, AIMessage) and message.tool_calls:
-            for tool_call in message.tool_calls:
-                tool_call["args"] = force_use_tool.args or {}
-
-    return messages
-
-
 def filter_tools_for_force_tool_use(
-    tools: list[Tool], force_use_tool: ForceUseTool | None = None
+    tools: list[Tool], force_use_tool: ForceUseTool
 ) -> list[Tool]:
-    if not force_use_tool:
+    if not force_use_tool.force_use:
         return tools
 
     return [tool for tool in tools if tool.name == force_use_tool.tool_name]

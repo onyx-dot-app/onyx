@@ -96,6 +96,8 @@ def upsert_ingestion_doc(
         normalize=db_embedding_model.normalize,
         query_prefix=db_embedding_model.query_prefix,
         passage_prefix=db_embedding_model.passage_prefix,
+        api_key=db_embedding_model.api_key,
+        provider_type=db_embedding_model.provider_type,
     )
 
     indexing_pipeline = build_indexing_pipeline(
@@ -132,6 +134,8 @@ def upsert_ingestion_doc(
             normalize=sec_db_embedding_model.normalize,
             query_prefix=sec_db_embedding_model.query_prefix,
             passage_prefix=sec_db_embedding_model.passage_prefix,
+            api_key=sec_db_embedding_model.api_key,
+            provider_type=sec_db_embedding_model.provider_type,
         )
 
         sec_ind_pipeline = build_indexing_pipeline(

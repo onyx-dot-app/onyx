@@ -36,8 +36,7 @@ export function ModelSelectionConfirmationModal({
             at least 16GB of RAM to Danswer during this process.
           </Text>
 
-          {/* TODO Change this back- ensure functional */}
-          {!isCustom && (
+          {isCustom && (
             <Callout title="IMPORTANT" color="yellow" className="mt-4">
               We&apos;ve detected that this is a custom-specified embedding
               model. Since we have to download the model files before verifying

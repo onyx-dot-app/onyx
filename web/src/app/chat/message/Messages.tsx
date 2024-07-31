@@ -58,7 +58,6 @@ import { ValidSources } from "@/lib/types";
 import { Tooltip } from "@/components/tooltip/Tooltip";
 import { useMouseTracking } from "./hooks";
 import { InternetSearchIcon } from "@/components/InternetSearchIcon";
-import { getTitleFromDocument } from "@/lib/sources";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -445,7 +444,8 @@ export const AIMessage = ({
                                   >
                                     <Citation link={doc.link} index={ind + 1} />
                                     <p className="shrink truncate ellipsis break-all ">
-                                      {getTitleFromDocument(doc)}
+                                      {doc.semantic_identifier ||
+                                        doc.document_id}
                                     </p>
                                     <div className="ml-auto flex-none">
                                       {doc.is_internet ? (

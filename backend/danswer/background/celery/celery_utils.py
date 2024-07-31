@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from danswer.background.task_utils import name_cc_cleanup_task
 from danswer.background.task_utils import name_cc_prune_task
 from danswer.background.task_utils import name_document_set_sync_task
+from danswer.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING
 from danswer.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
-from danswer.configs.app_configs import PREVENT_SIMULTANEOUS_PRUNING
 from danswer.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
 )
@@ -80,7 +80,7 @@ def should_prune_cc_pair(
             return True
         return False
 
-    if PREVENT_SIMULTANEOUS_PRUNING:
+    if not ALLOW_SIMULTANEOUS_PRUNING:
         pruning_type_task_name = name_cc_prune_task()
         last_pruning_type_task = get_latest_task_by_type(
             pruning_type_task_name, db_session
@@ -89,11 +89,9 @@ def should_prune_cc_pair(
         if last_pruning_type_task and check_task_is_live_and_not_timed_out(
             last_pruning_type_task, db_session
         ):
-            logger.info("Another Connector is already pruning. Skipping.")
             return False
 
     if check_task_is_live_and_not_timed_out(last_pruning_task, db_session):
-        logger.info(f"Connector '{connector.name}' is already pruning. Skipping.")
         return False
 
     if not last_pruning_task.start_time:

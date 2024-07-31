@@ -114,7 +114,9 @@ class DocumentBase(BaseModel):
     title: str | None = None
     from_ingestion_api: bool = False
 
-    def get_title_for_document_index(self) -> str | None:
+    def get_title_for_document_index(
+        self,
+    ) -> str | None:
         # If title is explicitly empty, return a None here for embedding purposes
         if self.title == "":
             return None
@@ -123,8 +125,6 @@ class DocumentBase(BaseModel):
         for char in replace_chars:
             title = title.replace(char, " ")
         title = title.strip()
-        # Title could be quite long here as there is no truncation done
-        # just prior to embedding, it could be truncated
         return title
 
     def get_metadata_str_attributes(self) -> list[str] | None:

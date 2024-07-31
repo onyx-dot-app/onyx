@@ -31,8 +31,8 @@ def test_chunk_document() -> None:
 
     chunks = chunk_document(document)
     assert len(chunks) == 5
-    assert all(semantic_identifier in chunk.content for chunk in chunks)
     assert short_section_1 in chunks[0].content
     assert short_section_3 in chunks[-1].content
     assert short_section_4 in chunks[-1].content
-    assert "tag1" in chunks[0].content
+    assert "tag1" in chunks[0].metadata_suffix_keyword
+    assert "tag2" in chunks[0].metadata_suffix_semantic

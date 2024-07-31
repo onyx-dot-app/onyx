@@ -124,6 +124,19 @@ def index_doc_batch(
     """Takes different pieces of the indexing pipeline and applies it to a batch of documents
     Note that the documents should already be batched at this point so that it does not inflate the
     memory requirements"""
+    # Skip documents that have neither title nor content
+    documents_to_process = []
+    for document in documents:
+        if not document.title and not any(
+            section.text.strip() for section in document.sections
+        ):
+            logger.warning(
+                f"Skipping document with ID {document.id} as it has neither title nor content"
+            )
+        else:
+            documents_to_process.append(document)
+    documents = documents_to_process
+
     document_ids = [document.id for document in documents]
     db_docs = get_documents_by_ids(
         document_ids=document_ids,

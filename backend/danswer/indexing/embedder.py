@@ -73,7 +73,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         enable_mini_chunk: bool = ENABLE_MINI_CHUNK,
     ) -> list[IndexChunk]:
         # Cache the Title embeddings to only have to do it once
-        title_embed_dict: dict[str, list[float]] = {}
+        title_embed_dict: dict[str, list[float] | None] = {}
         embedded_chunks: list[IndexChunk] = []
 
         # Create Mini Chunks for more precise matching of details
@@ -81,9 +81,12 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         chunk_texts: list[str] = []
         chunk_mini_chunks_count = {}
         for chunk_ind, chunk in enumerate(chunks):
-            chunk_texts.append(chunk.content)
+            # The whole chunk including the prefix/suffix is included in the overall vector representation
+            chunk_texts.append(
+                f"{chunk.title_prefix}{chunk.content}{chunk.metadata_suffix_semantic}"
+            )
             mini_chunk_texts = (
-                split_chunk_text_into_mini_chunks(chunk.content_summary)
+                split_chunk_text_into_mini_chunks(chunk.content)
                 if enable_mini_chunk
                 else []
             )
@@ -168,4 +171,6 @@ def get_embedding_model_from_db_embedding_model(
         normalize=db_embedding_model.normalize,
         query_prefix=db_embedding_model.query_prefix,
         passage_prefix=db_embedding_model.passage_prefix,
+        provider_type=db_embedding_model.provider_type,
+        api_key=db_embedding_model.api_key,
     )

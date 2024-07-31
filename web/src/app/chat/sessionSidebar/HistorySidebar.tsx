@@ -25,7 +25,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 import React from "react";
-import { Logo } from "@/components/Logo";
+import { Logo } from "@/components/EEA_Logo";
 import { HeaderTitle } from "@/components/header/Header";
 import { TbLayoutSidebarRightExpand } from "react-icons/tb";
 import {
@@ -38,6 +38,7 @@ import {
 import { PagesTab } from "./PagesTab";
 import { Tooltip } from "@/components/tooltip/Tooltip";
 import KeyboardSymbol from "@/lib/browserUtilities";
+import Image from "next/image";
 
 interface HistorySidebarProps {
   page: "search" | "chat" | "assistants";
@@ -99,22 +100,28 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             h-screen
             transition-transform`}
         >
-          <div className="ml-4 mr-3 flex flex gap-x-1 items-center mt-2 my-auto text-text-700 text-xl">
-            <div className="mr-1 my-auto h-6 w-6">
-              <Logo height={24} width={24} />
+          <div className="max-w-full ml-3 mr-3 mt-2 flex flex gap-x-1 items-center my-auto text-text-700 text-xl">
+            <div className="mr-1 mb-auto h-6 w-6 invisible">
+              <Logo />
             </div>
 
             <div className="invisible">
               {enterpriseSettings && enterpriseSettings.application_name ? (
-                <HeaderTitle>{enterpriseSettings.application_name}</HeaderTitle>
+                <div>
+                  <HeaderTitle>
+                    {enterpriseSettings.application_name}
+                  </HeaderTitle>
+                  {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
+                    <p className="text-xs text-subtle">Powered by Danswer</p>
+                  )}
+                </div>
               ) : (
-                <HeaderTitle>Danswer</HeaderTitle>
+                <HeaderTitle>GPT Lab</HeaderTitle>
               )}
             </div>
-
             {toggleSidebar && (
               <Tooltip delayDuration={1000} content={`${commandSymbol}E show`}>
-                <button className="ml-auto" onClick={toggleSidebar}>
+                <button className="mb-auto ml-auto" onClick={toggleSidebar}>
                   {!toggled ? <RightToLineIcon /> : <LefToLineIcon />}
                 </button>
               </Tooltip>

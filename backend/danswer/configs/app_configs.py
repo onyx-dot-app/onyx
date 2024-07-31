@@ -214,8 +214,8 @@ EXPERIMENTAL_CHECKPOINTING_ENABLED = (
 
 DEFAULT_PRUNING_FREQ = 60 * 60 * 24  # Once a day
 
-PREVENT_SIMULTANEOUS_PRUNING = (
-    os.environ.get("PREVENT_SIMULTANEOUS_PRUNING", "").lower() == "true"
+ALLOW_SIMULTANEOUS_PRUNING = (
+    os.environ.get("ALLOW_SIMULTANEOUS_PRUNING", "").lower() == "true"
 )
 
 # This is the maxiumum rate at which documents are queried for a pruning job. 0 disables the limitation.

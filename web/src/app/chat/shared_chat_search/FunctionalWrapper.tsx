@@ -10,12 +10,11 @@ const ToggleSwitch = () => {
   const commandSymbol = KeyboardSymbol();
   const pathname = usePathname();
   const router = useRouter();
+
   const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("activeTab") || "chat";
-    }
-    return "chat";
+    return pathname == "/search" ? "search" : "chat";
   });
+
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   useEffect(() => {

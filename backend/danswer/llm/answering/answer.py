@@ -99,6 +99,7 @@ class Answer:
         answer_style_config: AnswerStyleConfig,
         llm: LLM,
         prompt_config: PromptConfig,
+        force_use_tool: ForceUseTool,
         # must be the same length as `docs`. If None, all docs are considered "relevant"
         message_history: list[PreviousMessage] | None = None,
         single_message_history: str | None = None,
@@ -107,10 +108,8 @@ class Answer:
         latest_query_files: list[InMemoryChatFile] | None = None,
         files: list[InMemoryChatFile] | None = None,
         tools: list[Tool] | None = None,
-        # if specified, tells the LLM to always this tool
         # NOTE: for native tool-calling, this is only supported by OpenAI atm,
         #       but we only support them anyways
-        force_use_tool: ForceUseTool | None = None,
         # if set to True, then never use the LLMs provided tool-calling functonality
         skip_explicit_tool_calling: bool = False,
         # Returns the full document sections text from the search tool
@@ -129,6 +128,7 @@ class Answer:
 
         self.tools = tools or []
         self.force_use_tool = force_use_tool
+
         self.skip_explicit_tool_calling = skip_explicit_tool_calling
 
         self.message_history = message_history or []
@@ -187,7 +187,7 @@ class Answer:
         prompt_builder = AnswerPromptBuilder(self.message_history, self.llm.config)
 
         tool_call_chunk: AIMessageChunk | None = None
-        if self.force_use_tool and self.force_use_tool.args is not None:
+        if self.force_use_tool.force_use and self.force_use_tool.args is not None:
             # if we are forcing a tool WITH args specified, we don't need to check which tools to run
             # / need to generate the args
             tool_call_chunk = AIMessageChunk(
@@ -221,7 +221,7 @@ class Answer:
             for message in self.llm.stream(
                 prompt=prompt,
                 tools=final_tool_definitions if final_tool_definitions else None,
-                tool_choice="required" if self.force_use_tool else None,
+                tool_choice="required" if self.force_use_tool.force_use else None,
             ):
                 if isinstance(message, AIMessageChunk) and (
                     message.tool_call_chunks or message.tool_calls
@@ -240,12 +240,26 @@ class Answer:
         # if we have a tool call, we need to call the tool
         tool_call_requests = tool_call_chunk.tool_calls
         for tool_call_request in tool_call_requests:
-            tool = [
+            known_tools_by_name = [
                 tool for tool in self.tools if tool.name == tool_call_request["name"]
-            ][0]
+            ]
+
+            if not known_tools_by_name:
+                logger.error(
+                    "Tool call requested with unknown name field. \n"
+                    f"self.tools: {self.tools}"
+                    f"tool_call_request: {tool_call_request}"
+                )
+                if self.tools:
+                    tool = self.tools[0]
+                else:
+                    continue
+            else:
+                tool = known_tools_by_name[0]
             tool_args = (
                 self.force_use_tool.args
-                if self.force_use_tool and self.force_use_tool.args
+                if self.force_use_tool.tool_name == tool.name
+                and self.force_use_tool.args
                 else tool_call_request["args"]
             )
 
@@ -286,7 +300,7 @@ class Answer:
         prompt_builder = AnswerPromptBuilder(self.message_history, self.llm.config)
         chosen_tool_and_args: tuple[Tool, dict] | None = None
 
-        if self.force_use_tool:
+        if self.force_use_tool.force_use:
             # if we are forcing a tool, we don't need to check which tools to run
             tool = next(
                 iter(
@@ -303,7 +317,7 @@ class Answer:
 
             tool_args = (
                 self.force_use_tool.args
-                if self.force_use_tool.args
+                if self.force_use_tool.args is not None
                 else tool.get_args_for_non_tool_calling_llm(
                     query=self.question,
                     history=self.message_history,

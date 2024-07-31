@@ -271,6 +271,8 @@ def kickoff_indexing_jobs(
     # Don't include jobs waiting in the Dask queue that just haven't started running
     # Also (rarely) don't include for jobs that started but haven't updated the indexing tables yet
     with Session(engine) as db_session:
+        # get_not_started_index_attempts orders its returned results from oldest to newest
+        # we must process attempts in a FIFO manner to prevent connector starvation
         new_indexing_attempts = [
             (attempt, attempt.embedding_model)
             for attempt in get_not_started_index_attempts(db_session)

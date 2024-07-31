@@ -250,9 +250,7 @@ const Main = () => {
 export default function Page() {
   return (
     <div className="mx-auto container">
-      <div className="mb-4">
-        <HealthCheckBanner />
-      </div>
+      {" "}
       <div className="border-solid border-gray-600 border-b mb-4 pb-2 flex">
         <LoopioIcon size={32} />
         <h1 className="text-3xl font-bold pl-2">Loopio</h1>

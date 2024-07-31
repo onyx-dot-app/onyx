@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 from typing import TYPE_CHECKING
 
@@ -14,13 +15,15 @@ from danswer.db.models import SlackBotConfig as SlackBotConfigModel
 from danswer.db.models import SlackBotResponseType
 from danswer.db.models import StandardAnswer as StandardAnswerModel
 from danswer.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
+from danswer.db.models import User
 from danswer.indexing.models import EmbeddingModelDetail
 from danswer.server.features.persona.models import PersonaSnapshot
 from danswer.server.models import FullUserSnapshot
 from danswer.server.models import InvitedUserSnapshot
 
+
 if TYPE_CHECKING:
-    from danswer.db.models import User as UserModel
+    pass
 
 
 class VersionResponse(BaseModel):
@@ -46,9 +49,17 @@ class UserInfo(BaseModel):
     is_verified: bool
     role: UserRole
     preferences: UserPreferences
+    oidc_expiry: datetime | None = None
+    current_token_created_at: datetime | None = None
+    current_token_expiry_length: int | None = None
 
     @classmethod
-    def from_model(cls, user: "UserModel") -> "UserInfo":
+    def from_model(
+        cls,
+        user: User,
+        current_token_created_at: datetime | None = None,
+        expiry_length: int | None = None,
+    ) -> "UserInfo":
         return cls(
             id=str(user.id),
             email=user.email,
@@ -57,6 +68,9 @@ class UserInfo(BaseModel):
             is_verified=user.is_verified,
             role=user.role,
             preferences=(UserPreferences(chosen_assistants=user.chosen_assistants)),
+            oidc_expiry=user.oidc_expiry,
+            current_token_created_at=current_token_created_at,
+            current_token_expiry_length=expiry_length,
         )
 
 
@@ -151,7 +165,9 @@ class SlackBotConfigCreationRequest(BaseModel):
     # by an optional `PersonaSnapshot` object. Keeping it like this
     # for now for simplicity / speed of development
     document_sets: list[int] | None
-    persona_id: int | None  # NOTE: only one of `document_sets` / `persona_id` should be set
+    persona_id: (
+        int | None
+    )  # NOTE: only one of `document_sets` / `persona_id` should be set
     channel_names: list[str]
     respond_tag_only: bool = False
     respond_to_bots: bool = False

@@ -1,3 +1,5 @@
+import { User } from "./types";
+
 const conditionallyAddPlural = (noun: string, cnt: number) => {
   if (cnt > 1) {
     return `${noun}s`;
@@ -89,7 +91,53 @@ export function humanReadableFormatWithTime(datetimeString: string): string {
     hour: "numeric",
     minute: "numeric",
   });
-
   // Format the date and return it
   return formatter.format(date);
+}
+
+export function getSecondsUntilExpiration(
+  userInfo: User | null
+): number | null {
+  if (!userInfo) {
+    return null;
+  }
+  const { oidc_expiry, current_token_created_at, current_token_expiry_length } =
+    userInfo;
+
+  const now = new Date();
+
+  let secondsUntilTokenExpiration: number | null = null;
+  let secondsUntilOIDCExpiration: number | null = null;
+
+  if (current_token_created_at && current_token_expiry_length !== undefined) {
+    const createdAt = new Date(current_token_created_at);
+    const expiresAt = new Date(
+      createdAt.getTime() + current_token_expiry_length * 1000
+    );
+    secondsUntilTokenExpiration = Math.floor(
+      (expiresAt.getTime() - now.getTime()) / 1000
+    );
+  }
+
+  if (oidc_expiry) {
+    const expiresAtFromOIDC = new Date(oidc_expiry);
+    secondsUntilOIDCExpiration = Math.floor(
+      (expiresAtFromOIDC.getTime() - now.getTime()) / 1000
+    );
+  }
+
+  if (
+    secondsUntilTokenExpiration === null &&
+    secondsUntilOIDCExpiration === null
+  ) {
+    return null;
+  }
+
+  return Math.max(
+    0,
+    Math.min(
+      secondsUntilTokenExpiration ?? Infinity,
+      secondsUntilOIDCExpiration ?? Infinity
+    )
+  );
 }

@@ -19,7 +19,7 @@ function BackToDanswerButton() {
     <div className="absolute bottom-4 w-full flex border-t border-border pt-4">
       <div className="mx-auto">
         <Button onClick={() => router.push("/chat")}>
-          Back to Danswer Chat
+          Back to GPT Lab Chat
         </Button>
       </div>
     </div>
@@ -79,6 +79,7 @@ export function SharedChatDisplay({
                     <HumanMessage
                       key={message.messageId}
                       content={message.message}
+                      files={message.files}
                     />
                   );
                 } else {

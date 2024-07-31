@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-Embedding = list[float]
+Embedding = list[float] | None
 
 
 class ChunkEmbedding(BaseModel):
@@ -36,15 +36,13 @@ class DocAwareChunk(BaseChunk):
     # During inference we only have access to the document id and do not reconstruct the Document
     source_document: Document
 
-    # The Vespa documents require a separate highlight field. Since it is stored as a duplicate anyway,
-    # it's easier to just store a not prefixed/suffixed string for the highlighting
-    # Also during the chunking, this non-prefixed/suffixed string is used for mini-chunks
-    content_summary: str
+    title_prefix: str
 
     # During indexing we also (optionally) build a metadata string from the metadata dict
     # This is also indexed so that we can strip it out after indexing, this way it supports
     # multiple iterations of metadata representation for backwards compatibility
-    metadata_suffix: str
+    metadata_suffix_semantic: str
+    metadata_suffix_keyword: str
 
     def to_short_descriptor(self) -> str:
         """Used when logging the identity of a chunk"""

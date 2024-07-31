@@ -262,10 +262,6 @@ const MainSection = () => {
 export default function Page() {
   return (
     <div className="mx-auto container">
-      <div className="mb-4">
-        <HealthCheckBanner />
-      </div>
-
       <AdminPageTitle
         icon={<Document360Icon size={32} />}
         title="Document360"

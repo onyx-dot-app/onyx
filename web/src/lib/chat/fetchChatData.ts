@@ -26,6 +26,7 @@ import {
 } from "@/components/resizable/constants";
 import { hasCompletedWelcomeFlowSS } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { fetchAssistantsSS } from "../assistants/fetchAssistantsSS";
+import { NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN } from "../constants";
 
 interface FetchChatDataResult {
   user: User | null;
@@ -161,7 +162,7 @@ export async function fetchChatData(searchParams: {
 
   const toggleSidebar = sidebarToggled
     ? sidebarToggled.value.toLocaleLowerCase() == "true" || false
-    : false;
+    : NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN;
 
   const finalDocumentSidebarInitialWidth = documentSidebarCookieInitialWidth
     ? parseInt(documentSidebarCookieInitialWidth.value)
@@ -177,7 +178,8 @@ export async function fetchChatData(searchParams: {
     !shouldShowWelcomeModal &&
     !ccPairs.some(
       (ccPair) => ccPair.has_successful_run && ccPair.docs_indexed > 0
-    );
+    ) &&
+    (!user || user.role == "admin");
 
   // if no connectors are setup, only show personas that are pure
   // passthrough and don't do any retrieval

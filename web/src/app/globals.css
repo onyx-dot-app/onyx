@@ -75,6 +75,11 @@
   height: calc(100vh - 66px);
 }
 
+.h-16-auto {
+  min-height:4rem;
+  height:auto;
+}
+
 .title-with-info {
   gap:5px;
   align-items:center;

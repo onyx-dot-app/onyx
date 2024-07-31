@@ -19,6 +19,9 @@ export interface User {
   role: "basic" | "admin";
   preferences: UserPreferences;
   status: UserStatus;
+  current_token_created_at?: Date;
+  current_token_expiry_length?: number;
+  oidc_expiry?: Date;
 }
 
 export interface MinimalUserSnapshot {

@@ -9,7 +9,7 @@ This Python script automates the process of running search quality tests for a b
 - Manages environment variables
 - Switches to specified Git branch
 - Uploads test documents
-- Runs search quality tests using Relari
+- Runs search quality tests
 - Cleans up Docker containers (optional)
 
 ## Usage
@@ -29,9 +29,17 @@ export PYTHONPATH=$PYTHONPATH:$PWD/backend
 ```
 cd backend/tests/regression/answer_quality
 ```
-7. Run the script:
+7. To launch the evaluation environment, run the launch_eval_env.py script (this step can be skipped if you are running the env outside of docker, just leave "environment_name" blank):
 ```
-python run_eval_pipeline.py
+python launch_eval_env.py
+```
+8. Run the file_uploader.py script to upload the zip files located at the path "zipped_documents_file"
+```
+python file_uploader.py
+```
+9. Run the run_qa.py script to ask questions from the jsonl located at the path "questions_file". This will hit the "query/answer-with-quote" API endpoint.
+```
+python run_qa.py
 ```
 
 Note: All data will be saved even after the containers are shut down. There are instructions below to re-launching docker containers using this data.
@@ -61,6 +69,11 @@ Edit `search_test_config.yaml` to set:
     - Set this to true to automatically delete all docker containers, networks and volumes after the test
 - launch_web_ui
     - Set this to true if you want to use the UI during/after the testing process
+- only_state
+    - Whether to only run Vespa and Postgres
+- only_retrieve_docs
+    - Set true to only retrieve documents, not LLM response
+    - This is to save on API costs
 - use_cloud_gpu
     - Set to true or false depending on if you want to use the remote gpu
     - Only need to set this if use_cloud_gpu is true
@@ -70,12 +83,10 @@ Edit `search_test_config.yaml` to set:
 - model_server_port
     - This is the port of the remote model server
     - Only need to set this if use_cloud_gpu is true
-- existing_test_suffix (THIS IS NOT A SUFFIX ANYMORE, TODO UPDATE THE DOCS HERE)
+- environment_name 
     - Use this if you would like to relaunch a previous test instance
-    - Input the suffix of the test you'd like to re-launch 
-    - (E.g. to use the data from folder "test-1234-5678" put "-1234-5678")
-    - No new files will automatically be uploaded
-    - Leave empty to run a new test
+    - Input the env_name of the test you'd like to re-launch 
+    - Leave empty to launch referencing local default network locations
 - limit
     - Max number of questions you'd like to ask against the dataset
     - Set to null for no limit
@@ -85,7 +96,7 @@ Edit `search_test_config.yaml` to set:
 
 ## Relaunching From Existing Data
 
-To launch an existing set of containers that has already completed indexing, set the existing_test_suffix variable. This will launch the docker containers mounted on the volumes of the indicated suffix and will not automatically index any documents or run any QA.
+To launch an existing set of containers that has already completed indexing, set the environment_name variable. This will launch the docker containers mounted on the volumes of the indicated env_name and will not automatically index any documents or run any QA.
 
 Once these containers are launched you can run file_uploader.py or run_qa.py (assuming you have run the steps in the Usage section above). 
 - file_uploader.py will upload and index additional zipped files located at the zipped_documents_file path. 

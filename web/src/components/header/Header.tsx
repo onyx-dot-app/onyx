@@ -7,11 +7,15 @@ import { FiMessageSquare, FiSearch } from "react-icons/fi";
 import { HeaderWrapper } from "./HeaderWrapper";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { UserDropdown } from "../UserDropdown";
-import { Logo } from "../Logo";
+import { Logo } from "../EEA_Logo";
 import { NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED } from "@/lib/constants";
 
 export function HeaderTitle({ children }: { children: JSX.Element | string }) {
-  return <h1 className="flex text-2xl text-strong font-bold">{children}</h1>;
+  return (
+    <h1 className="flex text-2xl text-strong leading-none font-bold">
+      {children}
+    </h1>
+  );
 }
 
 interface HeaderProps {
@@ -36,8 +40,8 @@ export function Header({ user, page }: HeaderProps) {
             settings && settings.default_page === "chat" ? "/chat" : "/search"
           }
         >
-          <div className="flex my-auto">
-            <div className="mr-1 my-auto">
+          <div className="max-w-[200px] flex my-auto">
+            <div className="mr-1 mb-auto">
               <Logo />
             </div>
             <div className="my-auto">
@@ -47,13 +51,11 @@ export function Header({ user, page }: HeaderProps) {
                     {enterpriseSettings.application_name}
                   </HeaderTitle>
                   {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
-                    <p className="text-xs text-subtle -mt-1.5">
-                      Powered by Danswer
-                    </p>
+                    <p className="text-xs text-subtle">Powered by Danswer</p>
                   )}
                 </div>
               ) : (
-                <HeaderTitle>Danswer</HeaderTitle>
+                <HeaderTitle>GPT Lab</HeaderTitle>
               )}
             </div>
           </div>

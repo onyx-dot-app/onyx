@@ -301,9 +301,3 @@ function stripTrailingSlash(str: string) {
   }
   return str;
 }
-
-export const getTitleFromDocument = (document: DanswerDocument) => {
-  return stripTrailingSlash(document.document_id).split("/")[
-    stripTrailingSlash(document.document_id).split("/").length - 1
-  ];
-};

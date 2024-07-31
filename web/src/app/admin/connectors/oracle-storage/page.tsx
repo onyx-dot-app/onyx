@@ -259,9 +259,7 @@ const OCIMain = () => {
 export default function Page() {
   return (
     <div className="mx-auto container">
-      <div className="mb-4">
-        <HealthCheckBanner />
-      </div>
+      {" "}
       <AdminPageTitle
         icon={<OCIStorageIcon size={32} />}
         title="Oracle Cloud Infrastructure"

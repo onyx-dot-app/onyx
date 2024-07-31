@@ -13,14 +13,11 @@ questions_file: "~/sample_questions.yaml"
 # Git commit SHA to use (null means use current code as is)
 commit_sha: null
 
-# Whether to remove Docker containers after the test
-clean_up_docker_containers: true
-
 # Whether to launch a web UI for the test
 launch_web_ui: false
 
-# Whether to only run Vespa and Postgres
-only_state: false
+# Only retrieve documents, not LLM response
+only_retrieve_docs: false
 
 # Whether to use a cloud GPU for processing
 use_cloud_gpu: false
@@ -31,9 +28,8 @@ model_server_ip: "PUT_PUBLIC_CLOUD_IP_HERE"
 # Port of the model server (placeholder)
 model_server_port: "PUT_PUBLIC_CLOUD_PORT_HERE"
 
-# Suffix for existing test results (E.g. -1234-5678)
-# empty string means no suffix
-existing_test_suffix: ""
+# Name for existing testing env (empty string uses default ports)
+environment_name: ""
 
 # Limit on number of tests to run (null means no limit)
 limit: null

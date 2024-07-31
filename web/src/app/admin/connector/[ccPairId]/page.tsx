@@ -158,10 +158,6 @@ export default function Page({ params }: { params: { ccPairId: string } }) {
 
   return (
     <div className="mx-auto container">
-      <div className="mb-4">
-        <HealthCheckBanner />
-      </div>
-
       <Main ccPairId={ccPairId} />
     </div>
   );

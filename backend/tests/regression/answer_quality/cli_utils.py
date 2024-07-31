@@ -67,20 +67,20 @@ def switch_to_commit(commit_sha: str) -> None:
     print("Repository updated successfully.")
 
 
-def get_docker_container_env_vars(suffix: str) -> dict:
+def get_docker_container_env_vars(env_name: str) -> dict:
     """
     Retrieves environment variables from "background" and "api_server" Docker containers.
     """
-    print(f"Getting environment variables for containers with suffix: {suffix}")
+    print(f"Getting environment variables for containers with env_name: {env_name}")
 
     combined_env_vars = {}
     for container_type in ["background", "api_server"]:
         container_name = _run_command(
-            f"docker ps -a --format '{{{{.Names}}}}' | awk '/{container_type}/ && /{suffix}/'"
+            f"docker ps -a --format '{{{{.Names}}}}' | awk '/{container_type}/ && /{env_name}/'"
         )[0].strip()
         if not container_name:
             raise RuntimeError(
-                f"No {container_type} container found with suffix: {suffix}"
+                f"No {container_type} container found with env_name: {env_name}"
             )
 
         env_vars_json = _run_command(
@@ -95,9 +95,9 @@ def get_docker_container_env_vars(suffix: str) -> dict:
     return combined_env_vars
 
 
-def manage_data_directories(suffix: str, base_path: str, use_cloud_gpu: bool) -> None:
+def manage_data_directories(env_name: str, base_path: str, use_cloud_gpu: bool) -> None:
     # Use the user's home directory as the base path
-    target_path = os.path.join(os.path.expanduser(base_path), suffix)
+    target_path = os.path.join(os.path.expanduser(base_path), env_name)
     directories = {
         "DANSWER_POSTGRES_DATA_DIR": os.path.join(target_path, "postgres/"),
         "DANSWER_VESPA_DATA_DIR": os.path.join(target_path, "vespa/"),
@@ -144,12 +144,12 @@ def _is_port_in_use(port: int) -> bool:
 
 
 def start_docker_compose(
-    run_suffix: str, launch_web_ui: bool, use_cloud_gpu: bool, only_state: bool = False
+    env_name: str, launch_web_ui: bool, use_cloud_gpu: bool, only_state: bool = False
 ) -> None:
     print("Starting Docker Compose...")
     os.chdir(os.path.dirname(__file__))
     os.chdir("../../../../deployment/docker_compose/")
-    command = f"docker compose -f docker-compose.search-testing.yml -p danswer-stack-{run_suffix} up -d"
+    command = f"docker compose -f docker-compose.search-testing.yml -p danswer-stack-{env_name} up -d"
     command += " --build"
     command += " --force-recreate"
 
@@ -175,17 +175,17 @@ def start_docker_compose(
     print("Containers have been launched")
 
 
-def cleanup_docker(run_suffix: str) -> None:
+def cleanup_docker(env_name: str) -> None:
     print(
-        f"Deleting Docker containers, volumes, and networks for project suffix: {run_suffix}"
+        f"Deleting Docker containers, volumes, and networks for project env_name: {env_name}"
     )
 
     stdout, _ = _run_command("docker ps -a --format '{{json .}}'")
 
     containers = [json.loads(line) for line in stdout.splitlines()]
-    if not run_suffix:
-        run_suffix = datetime.now().strftime("-%Y")
-    project_name = f"danswer-stack{run_suffix}"
+    if not env_name:
+        env_name = datetime.now().strftime("-%Y")
+    project_name = f"danswer-stack{env_name}"
     containers_to_delete = [
         c for c in containers if c["Names"].startswith(project_name)
     ]
@@ -221,23 +221,23 @@ def cleanup_docker(run_suffix: str) -> None:
 
     networks = stdout.splitlines()
 
-    networks_to_delete = [n for n in networks if run_suffix in n]
+    networks_to_delete = [n for n in networks if env_name in n]
 
     if not networks_to_delete:
-        print(f"No networks found containing suffix: {run_suffix}")
+        print(f"No networks found containing env_name: {env_name}")
     else:
         network_names = " ".join(networks_to_delete)
         _run_command(f"docker network rm {network_names}")
 
         print(
-            f"Successfully deleted {len(networks_to_delete)} networks containing suffix: {run_suffix}"
+            f"Successfully deleted {len(networks_to_delete)} networks containing env_name: {env_name}"
         )
 
 
 @retry(tries=5, delay=5, backoff=2)
-def get_api_server_host_port(suffix: str) -> str:
+def get_api_server_host_port(env_name: str) -> str:
     """
-    This pulls all containers with the provided suffix
+    This pulls all containers with the provided env_name
     It then grabs the JSON specific container with a name containing "api_server"
     It then grabs the port info from the JSON and strips out the relevent data
     """
@@ -248,16 +248,16 @@ def get_api_server_host_port(suffix: str) -> str:
     server_jsons = []
 
     for container in containers:
-        if container_name in container["Names"] and suffix in container["Names"]:
+        if container_name in container["Names"] and env_name in container["Names"]:
             server_jsons.append(container)
 
     if not server_jsons:
         raise RuntimeError(
-            f"No container found containing: {container_name} and {suffix}"
+            f"No container found containing: {container_name} and {env_name}"
         )
     elif len(server_jsons) > 1:
         raise RuntimeError(
-            f"Too many containers matching {container_name} found, please indicate a suffix"
+            f"Too many containers matching {container_name} found, please indicate a env_name"
         )
     server_json = server_jsons[0]
 
@@ -278,67 +278,37 @@ def get_api_server_host_port(suffix: str) -> str:
         raise RuntimeError(f"Too many ports matching {client_port} found")
     if not matching_ports:
         raise RuntimeError(
-            f"No port found containing: {client_port} for container: {container_name} and suffix: {suffix}"
+            f"No port found containing: {client_port} for container: {container_name} and env_name: {env_name}"
         )
     return matching_ports[0]
 
 
-# Added function to check Vespa container health status
-def is_vespa_container_healthy(suffix: str) -> bool:
-    print(f"Checking health status of Vespa container for suffix: {suffix}")
-
-    # Find the Vespa container
-    stdout, _ = _run_command(
-        f"docker ps -a --format '{{{{.Names}}}}' | awk /vespa/ && /{suffix}/"
-    )
-    container_name = stdout.strip()
-
-    if not container_name:
-        print(f"No Vespa container found with suffix: {suffix}")
-        return False
-
-    # Get the health status
-    stdout, _ = _run_command(
-        f"docker inspect --format='{{{{.State.Health.Status}}}}' {container_name}"
-    )
-    health_status = stdout.strip()
-
-    is_healthy = health_status.lower() == "healthy"
-    print(f"Vespa container '{container_name}' health status: {health_status}")
-
-    return is_healthy
-
-
 # Added function to restart Vespa container
-def restart_vespa_container(suffix: str) -> None:
-    print(f"Restarting Vespa container for suffix: {suffix}")
+def restart_vespa_container(env_name: str) -> None:
+    print(f"Restarting Vespa container for env_name: {env_name}")
 
     # Find the Vespa container
     stdout, _ = _run_command(
-        f"docker ps -a --format '{{{{.Names}}}}' | awk /vespa/ && /{suffix}/"
+        f"docker ps -a --format '{{{{.Names}}}}' | awk '/index-1/ && /{env_name}/'"
     )
     container_name = stdout.strip()
 
     if not container_name:
-        raise RuntimeError(f"No Vespa container found with suffix: {suffix}")
+        raise RuntimeError(f"No Vespa container found with env_name: {env_name}")
 
     # Restart the container
     _run_command(f"docker restart {container_name}")
 
     print(f"Vespa container '{container_name}' has begun restarting")
 
-    time_to_wait = 5
-    while not is_vespa_container_healthy(suffix):
-        print(f"Waiting {time_to_wait} seconds for vespa container to restart")
-        time.sleep(5)
-
+    time.sleep(30)
     print(f"Vespa container '{container_name}' has been restarted")
 
 
 if __name__ == "__main__":
     """
-    Running this just cleans up the docker environment for the container indicated by existing_test_suffix
-    If no existing_test_suffix is indicated, will just clean up all danswer docker containers/volumes/networks
+    Running this just cleans up the docker environment for the container indicated by environment_name
+    If no environment_name is indicated, will just clean up all danswer docker containers/volumes/networks
     Note: vespa/postgres mounts are not deleted
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -348,4 +318,4 @@ if __name__ == "__main__":
 
     if not isinstance(config, dict):
         raise TypeError("config must be a dictionary")
-    cleanup_docker(config["existing_test_suffix"])
+    cleanup_docker(config["environment_name"])

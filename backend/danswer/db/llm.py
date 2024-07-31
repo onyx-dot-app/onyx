@@ -14,7 +14,7 @@ from danswer.server.manage.llm.models import FullLLMProvider
 from danswer.server.manage.llm.models import LLMProviderUpsertRequest
 
 
-def update_group_llm_provider_relationships(
+def update_group_llm_provider_relationships__no_commit(
     llm_provider_id: int,
     group_ids: list[int] | None,
     db_session: Session,
@@ -34,7 +34,6 @@ def update_group_llm_provider_relationships(
             for group_id in group_ids
         ]
         db_session.add_all(new_relationships)
-        db_session.commit()
 
 
 def upsert_cloud_embedding_provider(
@@ -83,11 +82,13 @@ def upsert_llm_provider(
         db_session.flush()
 
     # Make sure the relationship table stays up to date
-    update_group_llm_provider_relationships(
+    update_group_llm_provider_relationships__no_commit(
         llm_provider_id=existing_llm_provider.id,
         group_ids=llm_provider.groups,
         db_session=db_session,
     )
+
+    db_session.commit()
 
     return FullLLMProvider.from_model(existing_llm_provider)
 

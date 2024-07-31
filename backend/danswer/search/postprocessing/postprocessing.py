@@ -4,7 +4,7 @@ from typing import cast
 
 import numpy
 
-from danswer.configs.constants import MAX_CHUNK_TITLE_LEN
+from danswer.configs.app_configs import BLURB_SIZE
 from danswer.configs.constants import RETURN_SEPARATOR
 from danswer.configs.model_configs import CROSS_ENCODER_RANGE_MAX
 from danswer.configs.model_configs import CROSS_ENCODER_RANGE_MIN
@@ -60,8 +60,14 @@ def cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk
         if chunk.content.startswith(chunk.title):
             return chunk.content[len(chunk.title) :].lstrip()
 
-        if chunk.content.startswith(chunk.title[:MAX_CHUNK_TITLE_LEN]):
-            return chunk.content[MAX_CHUNK_TITLE_LEN:].lstrip()
+        # BLURB SIZE is by token instead of char but each token is at least 1 char
+        # If this prefix matches the content, it's assumed the title was prepended
+        if chunk.content.startswith(chunk.title[:BLURB_SIZE]):
+            return (
+                chunk.content.split(RETURN_SEPARATOR, 1)[-1]
+                if RETURN_SEPARATOR in chunk.content
+                else chunk.content
+            )
 
         return chunk.content
 

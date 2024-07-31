@@ -64,7 +64,7 @@ class DiscourseConnector(PollConnector):
         self.permissions: DiscoursePerms | None = None
         self.active_categories: set | None = None
 
-    @rate_limit_builder(max_calls=100, period=60)
+    @rate_limit_builder(max_calls=50, period=60)
     def _make_request(self, endpoint: str, params: dict | None = None) -> Response:
         if not self.permissions:
             raise ConnectorMissingCredentialError("Discourse")

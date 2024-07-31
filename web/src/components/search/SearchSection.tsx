@@ -33,6 +33,7 @@ import { SIDEBAR_TOGGLED_COOKIE_NAME } from "../resizable/constants";
 import { AGENTIC_SEARCH_TYPE_COOKIE_NAME } from "@/lib/constants";
 import Cookies from "js-cookie";
 import FixedLogo from "@/app/chat/shared_chat_search/FixedLogo";
+import { Footer } from "@/components/Footer";
 
 export type searchState =
   | "input"
@@ -64,6 +65,7 @@ interface SearchSectionProps {
   user: User | null;
   toggledSidebar: boolean;
   agenticSearchEnabled: boolean;
+  footerHtml?: any;
 }
 
 export const SearchSection = ({
@@ -78,6 +80,7 @@ export const SearchSection = ({
   querySessions,
   toggledSidebar,
   defaultSearchType,
+  footerHtml,
 }: SearchSectionProps) => {
   // Search Bar
   const [query, setQuery] = useState<string>("");
@@ -478,7 +481,7 @@ export const SearchSection = ({
 
   return (
     <>
-      <div className="flex relative w-full pr-[8px] h-full text-default overflow-x-hidden">
+      <div className="flex relative w-full pr-[8px] h-full text-default overflow-x-hidden ">
         <div
           ref={sidebarElementRef}
           className={`
@@ -605,6 +608,7 @@ export const SearchSection = ({
         </div>
       </div>
       <FixedLogo />
+      <Footer footerHtml={footerHtml}/>
     </>
   );
 };

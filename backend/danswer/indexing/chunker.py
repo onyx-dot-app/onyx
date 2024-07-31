@@ -6,7 +6,6 @@ from danswer.configs.app_configs import BLURB_SIZE
 from danswer.configs.app_configs import MINI_CHUNK_SIZE
 from danswer.configs.app_configs import SKIP_METADATA_IN_CHUNK
 from danswer.configs.constants import DocumentSource
-from danswer.configs.constants import MAX_CHUNK_TITLE_LEN
 from danswer.configs.constants import RETURN_SEPARATOR
 from danswer.configs.constants import SECTION_SEPARATOR
 from danswer.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
@@ -20,7 +19,7 @@ from danswer.utils.logger import setup_logger
 from danswer.utils.text_processing import shared_precompare_cleanup
 
 if TYPE_CHECKING:
-    from transformers import AutoTokenizer  # type:ignore
+    from llama_index.text_splitter import SentenceSplitter  # type:ignore
 
 
 # Not supporting overlaps, we need a clean combination of chunks and it is unclear if overlaps
@@ -28,6 +27,8 @@ if TYPE_CHECKING:
 CHUNK_OVERLAP = 0
 # Fairly arbitrary numbers but the general concept is we don't want the title/metadata to
 # overwhelm the actual contents of the chunk
+# For example in a rare case, this could be 128 tokens for the 512 chunk and title prefix
+# could be another 128 tokens leaving 256 for the actual contents
 MAX_METADATA_PERCENTAGE = 0.25
 CHUNK_MIN_CONTENT = 256
 
@@ -36,14 +37,7 @@ logger = setup_logger()
 ChunkFunc = Callable[[Document], list[DocAwareChunk]]
 
 
-def extract_blurb(text: str, blurb_size: int) -> str:
-    from llama_index.text_splitter import SentenceSplitter
-
-    token_count_func = get_default_tokenizer().tokenize
-    blurb_splitter = SentenceSplitter(
-        tokenizer=token_count_func, chunk_size=blurb_size, chunk_overlap=0
-    )
-
+def extract_blurb(text: str, blurb_splitter: "SentenceSplitter") -> str:
     return blurb_splitter.split_text(text)[0]
 
 
@@ -52,33 +46,25 @@ def chunk_large_section(
     section_link_text: str,
     document: Document,
     start_chunk_id: int,
-    tokenizer: "AutoTokenizer",
-    chunk_size: int = DOC_EMBEDDING_CONTEXT_SIZE,
-    chunk_overlap: int = CHUNK_OVERLAP,
-    blurb_size: int = BLURB_SIZE,
+    blurb: str,
+    chunk_splitter: "SentenceSplitter",
     title_prefix: str = "",
-    metadata_suffix: str = "",
+    metadata_suffix_semantic: str = "",
+    metadata_suffix_keyword: str = "",
 ) -> list[DocAwareChunk]:
-    from llama_index.text_splitter import SentenceSplitter
-
-    blurb = extract_blurb(section_text, blurb_size)
-
-    sentence_aware_splitter = SentenceSplitter(
-        tokenizer=tokenizer.tokenize, chunk_size=chunk_size, chunk_overlap=chunk_overlap
-    )
-
-    split_texts = sentence_aware_splitter.split_text(section_text)
+    split_texts = chunk_splitter.split_text(section_text)
 
     chunks = [
         DocAwareChunk(
             source_document=document,
             chunk_id=start_chunk_id + chunk_ind,
             blurb=blurb,
-            content=f"{title_prefix}{chunk_str}{metadata_suffix}",
-            content_summary=chunk_str,
+            content=chunk_str,
             source_links={0: section_link_text},
             section_continuation=(chunk_ind != 0),
-            metadata_suffix=metadata_suffix,
+            title_prefix=title_prefix,
+            metadata_suffix_semantic=metadata_suffix_semantic,
+            metadata_suffix_keyword=metadata_suffix_keyword,
         )
         for chunk_ind, chunk_str in enumerate(split_texts)
     ]
@@ -86,42 +72,87 @@ def chunk_large_section(
 
 
 def _get_metadata_suffix_for_document_index(
-    metadata: dict[str, str | list[str]]
-) -> str:
+    metadata: dict[str, str | list[str]], include_separator: bool = False
+) -> tuple[str, str]:
+    """
+    Returns the metadata as a natural language string representation with all of the keys and values for the vector embedding
+    and a string of all of the values for the keyword search
+
+    For example, if we have the following metadata:
+    {
+        "author": "John Doe",
+        "space": "Engineering"
+    }
+    The vector embedding string should include the relation between the key and value wheres as for keyword we only want John Doe
+    and Engineering. The keys are repeat and much more noisy.
+    """
     if not metadata:
-        return ""
+        return "", ""
+
     metadata_str = "Metadata:\n"
+    metadata_values = []
     for key, value in metadata.items():
         if key in get_metadata_keys_to_ignore():
             continue
 
         value_str = ", ".join(value) if isinstance(value, list) else value
+
+        if isinstance(value, list):
+            metadata_values.extend(value)
+        else:
+            metadata_values.append(value)
+
         metadata_str += f"\t{key} - {value_str}\n"
-    return metadata_str.strip()
+
+    metadata_semantic = metadata_str.strip()
+    metadata_keyword = " ".join(metadata_values)
+
+    if include_separator:
+        return RETURN_SEPARATOR + metadata_semantic, RETURN_SEPARATOR + metadata_keyword
+    return metadata_semantic, metadata_keyword
 
 
 def chunk_document(
     document: Document,
     chunk_tok_size: int = DOC_EMBEDDING_CONTEXT_SIZE,
     subsection_overlap: int = CHUNK_OVERLAP,
-    blurb_size: int = BLURB_SIZE,
+    blurb_size: int = BLURB_SIZE,  # Used for both title and content
     include_metadata: bool = not SKIP_METADATA_IN_CHUNK,
 ) -> list[DocAwareChunk]:
+    from llama_index.text_splitter import SentenceSplitter
+
     tokenizer = get_default_tokenizer()
 
-    title = document.get_title_for_document_index()
-    title_prefix = f"{title[:MAX_CHUNK_TITLE_LEN]}{RETURN_SEPARATOR}" if title else ""
+    blurb_splitter = SentenceSplitter(
+        tokenizer=tokenizer.tokenize, chunk_size=blurb_size, chunk_overlap=0
+    )
+
+    chunk_splitter = SentenceSplitter(
+        tokenizer=tokenizer.tokenize,
+        chunk_size=chunk_tok_size,
+        chunk_overlap=subsection_overlap,
+    )
+
+    title = extract_blurb(document.get_title_for_document_index() or "", blurb_splitter)
+    title_prefix = title + RETURN_SEPARATOR if title else ""
     title_tokens = len(tokenizer.tokenize(title_prefix))
 
-    metadata_suffix = ""
+    metadata_suffix_semantic = ""
+    metadata_suffix_keyword = ""
     metadata_tokens = 0
     if include_metadata:
-        metadata = _get_metadata_suffix_for_document_index(document.metadata)
-        metadata_suffix = RETURN_SEPARATOR + metadata if metadata else ""
-        metadata_tokens = len(tokenizer.tokenize(metadata_suffix))
+        (
+            metadata_suffix_semantic,
+            metadata_suffix_keyword,
+        ) = _get_metadata_suffix_for_document_index(
+            document.metadata, include_separator=True
+        )
+        metadata_tokens = len(tokenizer.tokenize(metadata_suffix_semantic))
 
     if metadata_tokens >= chunk_tok_size * MAX_METADATA_PERCENTAGE:
-        metadata_suffix = ""
+        # Note: we can keep the keyword suffix even if the semantic suffix is too long to fit in the model
+        # context, there is no limit for the keyword component
+        metadata_suffix_semantic = ""
         metadata_tokens = 0
 
     content_token_limit = chunk_tok_size - title_tokens - metadata_tokens
@@ -130,7 +161,7 @@ def chunk_document(
     if content_token_limit <= CHUNK_MIN_CONTENT:
         content_token_limit = chunk_tok_size
         title_prefix = ""
-        metadata_suffix = ""
+        metadata_suffix_semantic = ""
 
     chunks: list[DocAwareChunk] = []
     link_offsets: dict[int, str] = {}
@@ -151,12 +182,13 @@ def chunk_document(
                     DocAwareChunk(
                         source_document=document,
                         chunk_id=len(chunks),
-                        blurb=extract_blurb(chunk_text, blurb_size),
-                        content=f"{title_prefix}{chunk_text}{metadata_suffix}",
-                        content_summary=chunk_text,
+                        blurb=extract_blurb(chunk_text, blurb_splitter),
+                        content=chunk_text,
                         source_links=link_offsets,
                         section_continuation=False,
-                        metadata_suffix=metadata_suffix,
+                        title_prefix=title_prefix,
+                        metadata_suffix_semantic=metadata_suffix_semantic,
+                        metadata_suffix_keyword=metadata_suffix_keyword,
                     )
                 )
                 link_offsets = {}
@@ -167,12 +199,11 @@ def chunk_document(
                 section_link_text=section_link_text,
                 document=document,
                 start_chunk_id=len(chunks),
-                tokenizer=tokenizer,
-                chunk_size=content_token_limit,
-                chunk_overlap=subsection_overlap,
-                blurb_size=blurb_size,
+                chunk_splitter=chunk_splitter,
+                blurb=extract_blurb(section_text, blurb_splitter),
                 title_prefix=title_prefix,
-                metadata_suffix=metadata_suffix,
+                metadata_suffix_semantic=metadata_suffix_semantic,
+                metadata_suffix_keyword=metadata_suffix_keyword,
             )
             chunks.extend(large_section_chunks)
             continue
@@ -193,12 +224,13 @@ def chunk_document(
                 DocAwareChunk(
                     source_document=document,
                     chunk_id=len(chunks),
-                    blurb=extract_blurb(chunk_text, blurb_size),
-                    content=f"{title_prefix}{chunk_text}{metadata_suffix}",
-                    content_summary=chunk_text,
+                    blurb=extract_blurb(chunk_text, blurb_splitter),
+                    content=chunk_text,
                     source_links=link_offsets,
                     section_continuation=False,
-                    metadata_suffix=metadata_suffix,
+                    title_prefix=title_prefix,
+                    metadata_suffix_semantic=metadata_suffix_semantic,
+                    metadata_suffix_keyword=metadata_suffix_keyword,
                 )
             )
             link_offsets = {0: section_link_text}
@@ -211,12 +243,13 @@ def chunk_document(
             DocAwareChunk(
                 source_document=document,
                 chunk_id=len(chunks),
-                blurb=extract_blurb(chunk_text, blurb_size),
-                content=f"{title_prefix}{chunk_text}{metadata_suffix}",
-                content_summary=chunk_text,
+                blurb=extract_blurb(chunk_text, blurb_splitter),
+                content=chunk_text,
                 source_links=link_offsets,
                 section_continuation=False,
-                metadata_suffix=metadata_suffix,
+                title_prefix=title_prefix,
+                metadata_suffix_semantic=metadata_suffix_semantic,
+                metadata_suffix_keyword=metadata_suffix_keyword,
             )
         )
     return chunks

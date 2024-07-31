@@ -436,7 +436,7 @@ export function AssistantEditor({
                 <div className="mb-6">
                   <div className="flex gap-x-2 items-center">
                     <div className="block font-medium text-base">
-                      LLM Provider{" "}
+                      LLM Override{" "}
                     </div>
                     <TooltipProvider delayDuration={50}>
                       <Tooltip>
@@ -452,6 +452,10 @@ export function AssistantEditor({
                       </Tooltip>
                     </TooltipProvider>
                   </div>
+                  <p className="my-1 text-text-600">
+                    You assistant will use your system default (currently{" "}
+                    {defaultModelName}) unless otherwise specified below.
+                  </p>
                   <div className="mb-2 flex items-starts">
                     <div className="w-96">
                       <SelectorFormField

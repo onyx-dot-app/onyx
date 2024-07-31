@@ -11,6 +11,8 @@ import { Header } from "@/components/header/Header";
 import { SharedChatDisplay } from "./SharedChatDisplay";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { fetchAssistantsSS } from "@/lib/assistants/fetchAssistantsSS";
+import { Footer } from "@/components/Footer";
+import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 
 async function getSharedChat(chatId: string) {
   const response = await fetchSS(
@@ -54,6 +56,10 @@ export default async function Page({ params }: { params: { chatId: string } }) {
     return redirect("/auth/waiting-on-verification");
   }
 
+  const config = await fetchEEASettings();
+  const {
+    footerHtml,
+  } = config;
   return (
     <div>
       <div className="absolute top-0 z-40 w-full">
@@ -66,6 +72,7 @@ export default async function Page({ params }: { params: { chatId: string } }) {
           availableAssistants={availableAssistants}
         />
       </div>
+      <Footer footerHtml={footerHtml}/>
     </div>
   );
 }

@@ -90,7 +90,7 @@ class CreateChatMessageRequest(ChunkContext):
     parent_message_id: int | None
     # New message contents
     message: str
-    # file's that we should attach to this message
+    # Files that we should attach to this message
     file_descriptors: list[FileDescriptor]
     # If no prompt provided, uses the largest prompt of the chat session
     # but really this should be explicitly specified, only in the simplified APIs is this inferred

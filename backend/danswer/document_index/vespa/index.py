@@ -331,12 +331,18 @@ def _index_vespa_chunk(
     document = chunk.source_document
     # No minichunk documents in vespa, minichunk vectors are stored in the chunk itself
     vespa_chunk_id = str(get_uuid_from_chunk(chunk))
-
     embeddings = chunk.embeddings
+
+    if chunk.embeddings.full_embedding is None:
+        embeddings.full_embedding = chunk.title_embedding
     embeddings_name_vector_map = {"full_chunk": embeddings.full_embedding}
+
     if embeddings.mini_chunk_embeddings:
         for ind, m_c_embed in enumerate(embeddings.mini_chunk_embeddings):
-            embeddings_name_vector_map[f"mini_chunk_{ind}"] = m_c_embed
+            if m_c_embed is None:
+                embeddings_name_vector_map[f"mini_chunk_{ind}"] = chunk.title_embedding
+            else:
+                embeddings_name_vector_map[f"mini_chunk_{ind}"] = m_c_embed
 
     title = document.get_title_for_document_index()
 
@@ -346,11 +352,15 @@ def _index_vespa_chunk(
         BLURB: remove_invalid_unicode_chars(chunk.blurb),
         TITLE: remove_invalid_unicode_chars(title) if title else None,
         SKIP_TITLE_EMBEDDING: not title,
-        CONTENT: remove_invalid_unicode_chars(chunk.content),
+        # For the BM25 index, the keyword suffix is used, the vector is already generated with the more
+        # natural language representation of the metadata section
+        CONTENT: remove_invalid_unicode_chars(
+            f"{chunk.title_prefix}{chunk.content}{chunk.metadata_suffix_keyword}"
+        ),
         # This duplication of `content` is needed for keyword highlighting
         # Note that it's not exactly the same as the actual content
         # which contains the title prefix and metadata suffix
-        CONTENT_SUMMARY: remove_invalid_unicode_chars(chunk.content_summary),
+        CONTENT_SUMMARY: remove_invalid_unicode_chars(chunk.content),
         SOURCE_TYPE: str(document.source.value),
         SOURCE_LINKS: json.dumps(chunk.source_links),
         SEMANTIC_IDENTIFIER: remove_invalid_unicode_chars(document.semantic_identifier),
@@ -358,7 +368,7 @@ def _index_vespa_chunk(
         METADATA: json.dumps(document.metadata),
         # Save as a list for efficient extraction as an Attribute
         METADATA_LIST: chunk.source_document.get_metadata_str_attributes(),
-        METADATA_SUFFIX: chunk.metadata_suffix,
+        METADATA_SUFFIX: chunk.metadata_suffix_keyword,
         EMBEDDINGS: embeddings_name_vector_map,
         TITLE_EMBEDDING: chunk.title_embedding,
         BOOST: chunk.boost,

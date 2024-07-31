@@ -1,5 +1,6 @@
 import string
 from collections.abc import Callable
+from typing import cast
 
 import nltk  # type:ignore
 from nltk.corpus import stopwords  # type:ignore
@@ -143,7 +144,9 @@ def doc_index_retrieval(
         if query.search_type == SearchType.SEMANTIC:
             top_chunks = document_index.semantic_retrieval(
                 query=query.query,
-                query_embedding=query_embedding,
+                query_embedding=cast(
+                    list[float], query_embedding
+                ),  # query embeddings should always have vector representations
                 filters=query.filters,
                 time_decay_multiplier=query.recency_bias_multiplier,
                 num_to_retrieve=query.num_hits,
@@ -152,7 +155,9 @@ def doc_index_retrieval(
         elif query.search_type == SearchType.HYBRID:
             top_chunks = document_index.hybrid_retrieval(
                 query=query.query,
-                query_embedding=query_embedding,
+                query_embedding=cast(
+                    list[float], query_embedding
+                ),  # query embeddings should always have vector representations
                 filters=query.filters,
                 time_decay_multiplier=query.recency_bias_multiplier,
                 num_to_retrieve=query.num_hits,

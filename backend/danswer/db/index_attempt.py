@@ -65,9 +65,12 @@ def get_inprogress_index_attempts(
 
 def get_not_started_index_attempts(db_session: Session) -> list[IndexAttempt]:
     """This eagerly loads the connector and credential so that the db_session can be expired
-    before running long-living indexing jobs, which causes increasing memory usage"""
+    before running long-living indexing jobs, which causes increasing memory usage.
+
+    Results are ordered by time_created (oldest to newest)."""
     stmt = select(IndexAttempt)
     stmt = stmt.where(IndexAttempt.status == IndexingStatus.NOT_STARTED)
+    stmt = stmt.order_by(IndexAttempt.time_created)
     stmt = stmt.options(
         joinedload(IndexAttempt.connector), joinedload(IndexAttempt.credential)
     )
@@ -75,11 +78,13 @@ def get_not_started_index_attempts(db_session: Session) -> list[IndexAttempt]:
     return list(new_attempts.all())
 
 
-def mark_attempt_in_progress__no_commit(
+def mark_attempt_in_progress(
     index_attempt: IndexAttempt,
+    db_session: Session,
 ) -> None:
     index_attempt.status = IndexingStatus.IN_PROGRESS
     index_attempt.time_started = index_attempt.time_started or func.now()  # type: ignore
+    db_session.commit()
 
 
 def mark_attempt_succeeded(

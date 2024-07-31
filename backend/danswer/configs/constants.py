@@ -44,7 +44,6 @@ QUERY_EVENT_ID = "query_event_id"
 LLM_CHUNKS = "llm_chunks"
 
 # For chunking/processing chunks
-MAX_CHUNK_TITLE_LEN = 1000
 RETURN_SEPARATOR = "\n\r\n"
 SECTION_SEPARATOR = "\n\n"
 # For combining attributes, doesn't have to be unique/perfect to work

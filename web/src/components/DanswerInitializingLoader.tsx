@@ -1,5 +1,5 @@
 import { Bold } from "@tremor/react";
-import { Logo } from "./Logo";
+import { Logo } from "./EEA_Logo";
 import { useContext } from "react";
 import { SettingsContext } from "./settings/SettingsProvider";
 
@@ -11,7 +11,7 @@ export function DanswerInitializingLoader() {
       <Logo height={96} width={96} className="mx-auto mb-3" />
       <Bold>
         Initializing{" "}
-        {settings?.enterpriseSettings?.application_name ?? "Danswer"}
+        {settings?.enterpriseSettings?.application_name ?? "GPT Lab"}
       </Bold>
     </div>
   );

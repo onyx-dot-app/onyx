@@ -74,6 +74,7 @@ import FunctionalHeader from "@/components/chat_search/Header";
 import { useSidebarVisibility } from "@/components/chat_search/hooks";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 import FixedLogo from "./shared_chat_search/FixedLogo";
+import { getSecondsUntilExpiration } from "@/lib/time";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -1115,10 +1116,11 @@ export function ChatPage({
     setDocumentSelection((documentSelection) => !documentSelection);
     setShowDocSidebar(false);
   };
+  const secondsUntilExpiration = getSecondsUntilExpiration(user);
 
   return (
     <>
-      <HealthCheckBanner />
+      <HealthCheckBanner secondsUntilExpiration={secondsUntilExpiration} />
       <InstantSSRAutoRefresh />
 
 
@@ -1193,7 +1195,7 @@ export function ChatPage({
             />
           )}
 
-          <div className="flex h-[calc(100dvh)] flex-col w-full">
+          <div className="flex h-screen flex-col w-full">
             {liveAssistant && (
               <FunctionalHeader
                 page="chat"
@@ -1207,6 +1209,23 @@ export function ChatPage({
                 currentChatSession={selectedChatSession}
               />
             )}
+            <div className="w-full flex">
+              <div
+                style={{ transition: "width 0.30s ease-out" }}
+                className={`
+                  flex-none 
+                  overflow-y-hidden 
+                  bg-background-100 
+                  transition-all 
+                  bg-opacity-80
+                  duration-300 
+                  ease-in-out
+                  h-full
+                  ${toggledSidebar || showDocSidebar ? "w-[300px]" : "w-[0px]"}
+                  `}
+              />
+              <ChatBanner />
+            </div>
             {documentSidebarInitialWidth !== undefined ? (
               <Dropzone onDrop={handleImageUpload} noClick>
                 {({ getRootProps }) => (
@@ -1235,8 +1254,7 @@ export function ChatPage({
                         ref={scrollableDivRef}
                       >
                         {/* ChatBanner is a custom banner that displays a admin-specified message at 
-                      the top of the chat page. Only used in the EE version of the app. */}
-                        <ChatBanner />
+                      the top of the chat page. Oly used in the EE version of the app. */}
 
                         {messageHistory.length === 0 &&
                           !isFetchingChatMessages &&

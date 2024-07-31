@@ -244,9 +244,7 @@ const GCSMain = () => {
 export default function Page() {
   return (
     <div className="mx-auto container">
-      <div className="mb-4">
-        <HealthCheckBanner />
-      </div>
+      {" "}
       <AdminPageTitle
         icon={<GoogleStorageIcon size={32} />}
         title="Google Cloud Storage"

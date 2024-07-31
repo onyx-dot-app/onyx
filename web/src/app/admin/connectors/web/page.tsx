@@ -48,10 +48,6 @@ export default function Web() {
 
   return (
     <div className="mx-auto container">
-      <div className="mb-4">
-        <HealthCheckBanner />
-      </div>
-
       <AdminPageTitle icon={<GlobeIcon size={32} />} title="Web" />
 
       <Title className="mb-2 mt-6 ml-auto mr-auto">

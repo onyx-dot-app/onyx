@@ -94,7 +94,7 @@ def history_based_query_rephrase(
     llm: LLM,
     size_heuristic: int = 200,
     punctuation_heuristic: int = 10,
-    skip_first_rephrase: bool = False,
+    skip_first_rephrase: bool = True,
     prompt_template: str = HISTORY_QUERY_REPHRASE,
 ) -> str:
     # Globally disabled, just use the exact user query

@@ -2,45 +2,31 @@ import requests
 from retry import retry
 
 from danswer.configs.constants import DocumentSource
+from danswer.configs.constants import MessageType
 from danswer.connectors.models import InputType
 from danswer.db.enums import IndexingStatus
+from danswer.one_shot_answer.models import DirectQARequest
+from danswer.one_shot_answer.models import ThreadMessage
 from danswer.search.models import IndexFilters
 from danswer.search.models import OptionalSearchSetting
 from danswer.search.models import RetrievalDetails
 from danswer.server.documents.models import ConnectorBase
-from danswer.server.query_and_chat.models import ChatSessionCreationRequest
-from ee.danswer.server.query_and_chat.models import BasicCreateChatMessageRequest
 from tests.regression.answer_quality.cli_utils import get_api_server_host_port
 
 GENERAL_HEADERS = {"Content-Type": "application/json"}
 
 
-def _api_url_builder(run_suffix: str, api_path: str) -> str:
-    return f"http://localhost:{get_api_server_host_port(run_suffix)}" + api_path
-
-
-def _create_new_chat_session(run_suffix: str) -> int:
-    create_chat_request = ChatSessionCreationRequest(
-        persona_id=0,
-        description=None,
-    )
-    body = create_chat_request.dict()
-
-    create_chat_url = _api_url_builder(run_suffix, "/chat/create-chat-session/")
-
-    response_json = requests.post(
-        create_chat_url, headers=GENERAL_HEADERS, json=body
-    ).json()
-    chat_session_id = response_json.get("chat_session_id")
-
-    if isinstance(chat_session_id, int):
-        return chat_session_id
+def _api_url_builder(env_name: str, api_path: str) -> str:
+    if env_name:
+        return f"http://localhost:{get_api_server_host_port(env_name)}" + api_path
     else:
-        raise RuntimeError(response_json)
+        return "http://localhost:8080" + api_path
 
 
-@retry(tries=10, delay=10)
-def get_answer_from_query(query: str, run_suffix: str) -> tuple[list[str], str]:
+@retry(tries=5, delay=5)
+def get_answer_from_query(
+    query: str, only_retrieve_docs: bool, env_name: str
+) -> tuple[list[str], str]:
     filters = IndexFilters(
         source_type=None,
         document_set=None,
@@ -48,42 +34,47 @@ def get_answer_from_query(query: str, run_suffix: str) -> tuple[list[str], str]:
         tags=None,
         access_control_list=None,
     )
-    retrieval_options = RetrievalDetails(
-        run_search=OptionalSearchSetting.ALWAYS,
-        real_time=True,
-        filters=filters,
-        enable_auto_detect_filters=False,
+
+    messages = [ThreadMessage(message=query, sender=None, role=MessageType.USER)]
+
+    new_message_request = DirectQARequest(
+        messages=messages,
+        prompt_id=0,
+        persona_id=0,
+        retrieval_options=RetrievalDetails(
+            run_search=OptionalSearchSetting.ALWAYS,
+            real_time=True,
+            filters=filters,
+            enable_auto_detect_filters=False,
+        ),
+        chain_of_thought=False,
+        return_contexts=True,
+        skip_gen_ai_answer_generation=only_retrieve_docs,
     )
 
-    chat_session_id = _create_new_chat_session(run_suffix)
-
-    url = _api_url_builder(run_suffix, "/chat/send-message-simple-api/")
-
-    new_message_request = BasicCreateChatMessageRequest(
-        chat_session_id=chat_session_id,
-        message=query,
-        retrieval_options=retrieval_options,
-        query_override=query,
-    )
+    url = _api_url_builder(env_name, "/query/answer-with-quote/")
+    headers = {
+        "Content-Type": "application/json",
+    }
 
     body = new_message_request.dict()
     body["user"] = None
     try:
-        response_json = requests.post(url, headers=GENERAL_HEADERS, json=body).json()
-        simple_search_docs = response_json.get("simple_search_docs", [])
-        answer = response_json.get("answer", "")
+        response_json = requests.post(url, headers=headers, json=body).json()
+        context_data_list = response_json.get("contexts", {}).get("contexts", [])
+        answer = response_json.get("answer", "") or ""
     except Exception as e:
         print("Failed to answer the questions:")
         print(f"\t {str(e)}")
-        print("trying again")
+        print("Try restarting vespa container and trying agian")
         raise e
 
-    return simple_search_docs, answer
+    return context_data_list, answer
 
 
 @retry(tries=10, delay=10)
-def check_if_query_ready(run_suffix: str) -> bool:
-    url = _api_url_builder(run_suffix, "/manage/admin/connector/indexing-status/")
+def check_indexing_status(env_name: str) -> tuple[int, bool]:
+    url = _api_url_builder(env_name, "/manage/admin/connector/indexing-status/")
     try:
         indexing_status_dict = requests.get(url, headers=GENERAL_HEADERS).json()
     except Exception as e:
@@ -98,20 +89,21 @@ def check_if_query_ready(run_suffix: str) -> bool:
         status = index_attempt["last_status"]
         if status == IndexingStatus.IN_PROGRESS or status == IndexingStatus.NOT_STARTED:
             ongoing_index_attempts = True
+        elif status == IndexingStatus.SUCCESS:
+            doc_count += 16
         doc_count += index_attempt["docs_indexed"]
+        doc_count -= 16
 
-    if not doc_count:
-        print("No docs indexed, waiting for indexing to start")
-    elif ongoing_index_attempts:
-        print(
-            f"{doc_count} docs indexed but waiting for ongoing indexing jobs to finish..."
-        )
-
-    return doc_count > 0 and not ongoing_index_attempts
+    # all the +16 and -16 are to account for the fact that the indexing status
+    # is only updated every 16 documents and will tells us how many are
+    # chunked, not indexed. probably need to fix this. in the future!
+    if doc_count:
+        doc_count += 16
+    return doc_count, ongoing_index_attempts
 
 
-def run_cc_once(run_suffix: str, connector_id: int, credential_id: int) -> None:
-    url = _api_url_builder(run_suffix, "/manage/admin/connector/run-once/")
+def run_cc_once(env_name: str, connector_id: int, credential_id: int) -> None:
+    url = _api_url_builder(env_name, "/manage/admin/connector/run-once/")
     body = {
         "connector_id": connector_id,
         "credential_ids": [credential_id],
@@ -126,9 +118,9 @@ def run_cc_once(run_suffix: str, connector_id: int, credential_id: int) -> None:
         print("Failed text:", response.text)
 
 
-def create_cc_pair(run_suffix: str, connector_id: int, credential_id: int) -> None:
+def create_cc_pair(env_name: str, connector_id: int, credential_id: int) -> None:
     url = _api_url_builder(
-        run_suffix, f"/manage/connector/{connector_id}/credential/{credential_id}"
+        env_name, f"/manage/connector/{connector_id}/credential/{credential_id}"
     )
 
     body = {"name": "zip_folder_contents", "is_public": True}
@@ -141,8 +133,8 @@ def create_cc_pair(run_suffix: str, connector_id: int, credential_id: int) -> No
         print("Failed text:", response.text)
 
 
-def _get_existing_connector_names(run_suffix: str) -> list[str]:
-    url = _api_url_builder(run_suffix, "/manage/connector")
+def _get_existing_connector_names(env_name: str) -> list[str]:
+    url = _api_url_builder(env_name, "/manage/connector")
 
     body = {
         "credential_json": {},
@@ -156,10 +148,10 @@ def _get_existing_connector_names(run_suffix: str) -> list[str]:
         raise RuntimeError(response.__dict__)
 
 
-def create_connector(run_suffix: str, file_paths: list[str]) -> int:
-    url = _api_url_builder(run_suffix, "/manage/admin/connector")
+def create_connector(env_name: str, file_paths: list[str]) -> int:
+    url = _api_url_builder(env_name, "/manage/admin/connector")
     connector_name = base_connector_name = "search_eval_connector"
-    existing_connector_names = _get_existing_connector_names(run_suffix)
+    existing_connector_names = _get_existing_connector_names(env_name)
 
     count = 1
     while connector_name in existing_connector_names:
@@ -186,8 +178,8 @@ def create_connector(run_suffix: str, file_paths: list[str]) -> int:
         raise RuntimeError(response.__dict__)
 
 
-def create_credential(run_suffix: str) -> int:
-    url = _api_url_builder(run_suffix, "/manage/credential")
+def create_credential(env_name: str) -> int:
+    url = _api_url_builder(env_name, "/manage/credential")
     body = {
         "credential_json": {},
         "admin_public": True,
@@ -201,12 +193,12 @@ def create_credential(run_suffix: str) -> int:
 
 
 @retry(tries=10, delay=2, backoff=2)
-def upload_file(run_suffix: str, zip_file_path: str) -> list[str]:
+def upload_file(env_name: str, zip_file_path: str) -> list[str]:
     files = [
         ("files", open(zip_file_path, "rb")),
     ]
 
-    api_path = _api_url_builder(run_suffix, "/manage/admin/connector/file/upload")
+    api_path = _api_url_builder(env_name, "/manage/admin/connector/file/upload")
     try:
         response = requests.post(api_path, files=files)
         response.raise_for_status()  # Raises an HTTPError for bad responses

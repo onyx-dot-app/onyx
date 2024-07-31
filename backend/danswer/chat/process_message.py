@@ -187,37 +187,46 @@ def _handle_internet_search_tool_response_summary(
     )
 
 
-def _check_should_force_search(
-    new_msg_req: CreateChatMessageRequest,
-) -> ForceUseTool | None:
-    # If files are already provided, don't run the search tool
+def _get_force_search_settings(
+    new_msg_req: CreateChatMessageRequest, tools: list[Tool]
+) -> ForceUseTool:
+    internet_search_available = any(
+        isinstance(tool, InternetSearchTool) for tool in tools
+    )
+    search_tool_available = any(isinstance(tool, SearchTool) for tool in tools)
+
+    if not internet_search_available and not search_tool_available:
+        # Does not matter much which tool is set here as force is false and neither tool is available
+        return ForceUseTool(force_use=False, tool_name=SearchTool._NAME)
+
+    tool_name = SearchTool._NAME if search_tool_available else InternetSearchTool._NAME
+    # Currently, the internet search tool does not support query override
+    args = (
+        {"query": new_msg_req.query_override}
+        if new_msg_req.query_override and tool_name == SearchTool._NAME
+        else None
+    )
+
     if new_msg_req.file_descriptors:
-        return None
+        # If user has uploaded files they're using, don't run any of the search tools
+        return ForceUseTool(force_use=False, tool_name=tool_name)
 
-    if (
-        new_msg_req.query_override
-        or (
+    should_force_search = any(
+        [
             new_msg_req.retrieval_options
-            and new_msg_req.retrieval_options.run_search == OptionalSearchSetting.ALWAYS
-        )
-        or new_msg_req.search_doc_ids
-        or DISABLE_LLM_CHOOSE_SEARCH
-    ):
-        args = (
-            {"query": new_msg_req.query_override}
-            if new_msg_req.query_override
-            else None
-        )
-        # if we are using selected docs, just put something here so the Tool doesn't need
-        # to build its own args via an LLM call
-        if new_msg_req.search_doc_ids:
-            args = {"query": new_msg_req.message}
+            and new_msg_req.retrieval_options.run_search
+            == OptionalSearchSetting.ALWAYS,
+            new_msg_req.search_doc_ids,
+            DISABLE_LLM_CHOOSE_SEARCH,
+        ]
+    )
 
-        return ForceUseTool(
-            tool_name=SearchTool._NAME,
-            args=args,
-        )
-    return None
+    if should_force_search:
+        # If we are using selected docs, just put something here so the Tool doesn't need to build its own args via an LLM call
+        args = {"query": new_msg_req.message} if new_msg_req.search_doc_ids else args
+        return ForceUseTool(force_use=True, tool_name=tool_name, args=args)
+
+    return ForceUseTool(force_use=False, tool_name=tool_name, args=args)
 
 
 ChatPacket = (
@@ -253,7 +262,6 @@ def stream_chat_message_objects(
     2. [conditional] LLM selected chunk indices if LLM chunk filtering is turned on
     3. [always] A set of streamed LLM tokens or an error anywhere along the line if something fails
     4. [always] Details on the final AI response message that is created
-
     """
     try:
         user_id = user.id if user is not None else None
@@ -360,6 +368,14 @@ def stream_chat_message_objects(
                     "`stream_chat_message_objects` with `is_regenerate=True` "
                     "when the last message is not a user message."
                 )
+
+        # Disable Query Rephrasing for the first message
+        # This leads to a better first response since the LLM rephrasing the question
+        # leads to worst search quality
+        if not history_msgs:
+            new_msg_req.query_override = (
+                new_msg_req.query_override or new_msg_req.message
+            )
 
         # load all files needed for this chat chain in memory
         files = load_all_chat_files(
@@ -576,11 +592,7 @@ def stream_chat_message_objects(
                 PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
             ],
             tools=tools,
-            force_use_tool=(
-                _check_should_force_search(new_msg_req)
-                if search_tool and len(tools) == 1
-                else None
-            ),
+            force_use_tool=_get_force_search_settings(new_msg_req, tools),
         )
 
         reference_db_search_docs = None

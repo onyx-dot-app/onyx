@@ -149,6 +149,7 @@ function Main() {
       }
     );
     if (response.ok) {
+      setShowTentativeOpenProvider(null);
       setShowTentativeModel(null);
       mutate("/api/secondary-index/get-secondary-embedding-model");
       if (!connectors || !connectors.length) {
@@ -274,6 +275,7 @@ function Main() {
           onClose={() => setAlreadySelectedModel(null)}
         />
       )}
+
       {showTentativeOpenProvider && (
         <ModelSelectionConfirmationModal
           selectedModel={showTentativeOpenProvider}

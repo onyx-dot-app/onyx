@@ -15,6 +15,7 @@ from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
 from requests_oauthlib import OAuth2Session  # type:ignore
+from urllib3.exceptions import MaxRetryError
 
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_ID
@@ -83,6 +84,13 @@ def check_internet_connection(url: str) -> None:
     try:
         response = requests.get(url, timeout=3)
         response.raise_for_status()
+    except requests.exceptions.SSLError as e:
+        cause = (
+            e.args[0].reason
+            if isinstance(e.args, tuple) and isinstance(e.args[0], MaxRetryError)
+            else e.args
+        )
+        raise Exception(f"SSL error {str(cause)}")
     except (requests.RequestException, ValueError):
         raise Exception(f"Unable to reach {url} - check your internet connection")
 

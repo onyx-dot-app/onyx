@@ -82,6 +82,7 @@ export default async function Page({
         <WrappedChat
           defaultAssistantId={defaultAssistantId}
           initiallyToggled={toggleSidebar}
+          footerHtml={footerHtml}
         />
       </ChatProvider>
     </>

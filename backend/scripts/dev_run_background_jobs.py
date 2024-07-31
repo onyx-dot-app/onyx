@@ -21,18 +21,17 @@ def run_jobs(exclude_indexing: bool) -> None:
     cmd_worker = [
         "celery",
         "-A",
-        "ee.danswer.background.celery",
+        "ee.danswer.background.celery.celery_app",
         "worker",
         "--pool=threads",
-        "--autoscale=3,10",
+        "--concurrency=16",
         "--loglevel=INFO",
-        "--concurrency=1",
     ]
 
     cmd_beat = [
         "celery",
         "-A",
-        "ee.danswer.background.celery",
+        "ee.danswer.background.celery.celery_app",
         "beat",
         "--loglevel=INFO",
     ]
@@ -74,7 +73,7 @@ def run_jobs(exclude_indexing: bool) -> None:
     try:
         update_env = os.environ.copy()
         update_env["PYTHONPATH"] = "."
-        cmd_perm_sync = ["python", "ee.danswer/background/permission_sync.py"]
+        cmd_perm_sync = ["python", "ee/danswer/background/permission_sync.py"]
 
         indexing_process = subprocess.Popen(
             cmd_perm_sync,

@@ -50,10 +50,6 @@ export default function GoogleSites() {
       {popup}
       {filesAreUploading && <Spinner />}
       <div className="mx-auto container">
-        <div className="mb-4">
-          <HealthCheckBanner />
-        </div>
-
         <AdminPageTitle
           icon={<GoogleSitesIcon size={32} />}
           title="Google Sites"

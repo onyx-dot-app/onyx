@@ -59,6 +59,8 @@ import {
   FiTool,
 } from "react-icons/fi";
 import { UserDropdown } from "../UserDropdown";
+import { HealthCheckBanner } from "../health/healthcheck";
+import { getSecondsUntilExpiration } from "@/lib/time";
 
 export async function Layout({ children }: { children: React.ReactNode }) {
   const tasks = [
@@ -101,10 +103,13 @@ export async function Layout({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const secondsUntilExpiration = getSecondsUntilExpiration(user);
+
   return (
     <div className="h-screen overflow-y-hidden">
+      <HealthCheckBanner secondsUntilExpiration={secondsUntilExpiration} />
       <div className="flex h-full">
-        <div className="w-64 z-20 bg-background-100 pt-4 pb-8 h-full border-r border-border miniscroll overflow-auto">
+        <div className="w-64 z-20 bg-background-100 pt-3 pb-8 h-full border-r border-border miniscroll overflow-auto">
           <AdminSidebar
             collections={[
               {

@@ -31,7 +31,10 @@ export function Logo({
   }
 
   return (
-    <div style={{ height, width }} className={`relative ${className}`}>
+    <div
+      style={{ height, width }}
+      className={`flex-none relative ${className}`}
+    >
       {/* TODO: figure out how to use Next Image here */}
       <img
         src="/api/enterprise-settings/logo"

@@ -250,10 +250,6 @@ const Main = () => {
 export default function Page() {
   return (
     <div className="container mx-auto">
-      <div className="mb-4">
-        <HealthCheckBanner />
-      </div>
-
       <AdminPageTitle
         icon={<GitlabIcon size={32} />}
         title="Gitlab MRs + Issues"
