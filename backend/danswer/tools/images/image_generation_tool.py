@@ -156,7 +156,9 @@ class ImageGenerationTool(Tool):
                     for image_generation in image_generations
                 ]
             ),
-            img_urls=[image_generation.url for image_generation in image_generations],
+            # NOTE: we can't pass in the image URLs here, since OpenAI doesn't allow
+            # Tool messages to contain images
+            # img_urls=[image_generation.url for image_generation in image_generations],
         )
 
     def _generate_image(self, prompt: str) -> ImageGenerationResponse:

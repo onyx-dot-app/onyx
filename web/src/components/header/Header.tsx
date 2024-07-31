@@ -3,24 +3,26 @@
 import { User } from "@/lib/types";
 import Link from "next/link";
 import React, { useContext } from "react";
-import { FiMessageSquare, FiSearch } from "react-icons/fi";
 import { HeaderWrapper } from "./HeaderWrapper";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { UserDropdown } from "../UserDropdown";
 import { Logo } from "../EEA_Logo";
 import { NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED } from "@/lib/constants";
+import { pageType } from "@/app/chat/sessionSidebar/types";
 
 export function HeaderTitle({ children }: { children: JSX.Element | string }) {
+  const isString = typeof children === "string";
+  const textSize = isString && children.length > 10 ? "text-xl" : "text-2xl";
+
   return (
-    <h1 className="flex text-2xl text-strong leading-none font-bold">
+    <h1 className={`flex ${textSize} text-strong leading-none font-bold`}>
       {children}
     </h1>
   );
 }
-
 interface HeaderProps {
   user: User | null;
-  page?: "search" | "chat" | "assistants";
+  page?: pageType;
 }
 
 export function Header({ user, page }: HeaderProps) {

@@ -55,7 +55,7 @@ export function EmphasizedClickable({
     px-3 
     w-fit 
     bg-hover
-    border-1 border-neutral-300 border bg-neutral-100 
+    border-1 border-border-medium border bg-background-100 
     text-sm
     rounded-lg
     hover:bg-background-125

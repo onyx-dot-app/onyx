@@ -13,17 +13,17 @@ export function AdminPageTitle({
   includeDivider?: boolean;
 }) {
   return (
-    <div>
+    <div className="w-full">
       <div className="mb-4">
         <HealthCheckBanner />
       </div>
-      <div className="flex">
+      <div className="w-full flex">
         <h1 className="text-3xl text-text-800 font-bold flex gap-x-2">
           {icon} {title}
         </h1>
         {farRightElement && <div className="ml-auto">{farRightElement}</div>}
       </div>
-      {includeDivider && <Divider />}
+      {includeDivider ? <Divider /> : <div className="mb-6" />}
     </div>
   );
 }

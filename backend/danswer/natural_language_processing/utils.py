@@ -1,24 +1,14 @@
-import gc
 import os
-from collections.abc import Callable
+from abc import ABC
+from abc import abstractmethod
 from copy import copy
-from typing import Any
-from typing import Optional
-from typing import TYPE_CHECKING
 
-import tiktoken
-from tiktoken.core import Encoding
 from transformers import logging as transformer_logging  # type:ignore
 
 from danswer.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from danswer.configs.model_configs import DOCUMENT_ENCODER_MODEL
 from danswer.search.models import InferenceChunk
 from danswer.utils.logger import setup_logger
-
-
-if TYPE_CHECKING:
-    from transformers import AutoTokenizer  # type: ignore
-
 
 logger = setup_logger()
 transformer_logging.set_verbosity_error()
@@ -27,58 +17,95 @@ os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
 
 
-_TOKENIZER: tuple[Optional["AutoTokenizer"], str | None] = (None, None)
-_LLM_TOKENIZER: Any = None
-_LLM_TOKENIZER_ENCODE: Callable[[str], Any] | None = None
+class BaseTokenizer(ABC):
+    @abstractmethod
+    def encode(self, string: str) -> list[int]:
+        pass
+
+    @abstractmethod
+    def tokenize(self, string: str) -> list[str]:
+        pass
+
+    @abstractmethod
+    def decode(self, tokens: list[int]) -> str:
+        pass
 
 
-# NOTE: If no model_name is specified, it may not be using the "correct" tokenizer
-# for cases where this is more important, be sure to refresh with the actual model name
-# One case where it is not particularly important is in the document chunking flow,
-# they're basically all using the sentencepiece tokenizer and whether it's cased or
-# uncased does not really matter, they'll all generally end up with the same chunk lengths.
-def get_default_tokenizer(model_name: str = DOCUMENT_ENCODER_MODEL) -> "AutoTokenizer":
-    # NOTE: doing a local import here to avoid reduce memory usage caused by
-    # processes importing this file despite not using any of this
-    from transformers import AutoTokenizer  # type: ignore
+class TiktokenTokenizer(BaseTokenizer):
+    def __init__(self, encoding_name: str = "cl100k_base"):
+        import tiktoken
 
-    global _TOKENIZER
-    if _TOKENIZER[0] is None or _TOKENIZER[1] != model_name:
-        if _TOKENIZER[0] is not None:
-            del _TOKENIZER
-            gc.collect()
+        self.encoder = tiktoken.get_encoding(encoding_name)
 
-        _TOKENIZER = (AutoTokenizer.from_pretrained(model_name), model_name)
+    def encode(self, string: str) -> list[int]:
+        # this returns no special tokens
+        return self.encoder.encode_ordinary(string)
 
-        if hasattr(_TOKENIZER[0], "is_fast") and _TOKENIZER[0].is_fast:
-            os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    def tokenize(self, string: str) -> list[str]:
+        return [self.encoder.decode([token]) for token in self.encode(string)]
 
-    return _TOKENIZER[0]
+    def decode(self, tokens: list[int]) -> str:
+        return self.encoder.decode(tokens)
 
 
-def get_default_llm_tokenizer() -> Encoding:
-    """Currently only supports the OpenAI default tokenizer: tiktoken"""
-    global _LLM_TOKENIZER
-    if _LLM_TOKENIZER is None:
-        _LLM_TOKENIZER = tiktoken.get_encoding("cl100k_base")
-    return _LLM_TOKENIZER
+class HuggingFaceTokenizer(BaseTokenizer):
+    def __init__(self, model_name: str):
+        from tokenizers import Tokenizer  # type: ignore
+
+        self.encoder = Tokenizer.from_pretrained(model_name)
+
+    def encode(self, string: str) -> list[int]:
+        # this returns no special tokens
+        return self.encoder.encode(string, add_special_tokens=False).ids
+
+    def tokenize(self, string: str) -> list[str]:
+        return self.encoder.encode(string, add_special_tokens=False).tokens
+
+    def decode(self, tokens: list[int]) -> str:
+        return self.encoder.decode(tokens)
 
 
-def get_default_llm_token_encode() -> Callable[[str], Any]:
-    global _LLM_TOKENIZER_ENCODE
-    if _LLM_TOKENIZER_ENCODE is None:
-        tokenizer = get_default_llm_tokenizer()
-        if isinstance(tokenizer, Encoding):
-            return tokenizer.encode  # type: ignore
+_TOKENIZER_CACHE: dict[str, BaseTokenizer] = {}
 
-        # Currently only supports OpenAI encoder
-        raise ValueError("Invalid Encoder selected")
 
-    return _LLM_TOKENIZER_ENCODE
+def _get_cached_tokenizer(
+    model_name: str | None = None, provider_type: str | None = None
+) -> BaseTokenizer:
+    global _TOKENIZER_CACHE
+
+    if provider_type:
+        if not _TOKENIZER_CACHE.get(provider_type):
+            if provider_type.lower() == "openai":
+                _TOKENIZER_CACHE[provider_type] = TiktokenTokenizer()
+            elif provider_type.lower() == "cohere":
+                _TOKENIZER_CACHE[provider_type] = HuggingFaceTokenizer(
+                    "Cohere/command-nightly"
+                )
+            else:
+                _TOKENIZER_CACHE[
+                    provider_type
+                ] = TiktokenTokenizer()  # Default to OpenAI tokenizer
+        return _TOKENIZER_CACHE[provider_type]
+
+    if model_name:
+        if not _TOKENIZER_CACHE.get(model_name):
+            _TOKENIZER_CACHE[model_name] = HuggingFaceTokenizer(model_name)
+        return _TOKENIZER_CACHE[model_name]
+
+    raise ValueError("Need to provide a model_name or provider_type")
+
+
+def get_tokenizer(model_name: str | None, provider_type: str | None) -> BaseTokenizer:
+    if provider_type is None and model_name is None:
+        model_name = DOCUMENT_ENCODER_MODEL
+    return _get_cached_tokenizer(
+        model_name=model_name,
+        provider_type=provider_type,
+    )
 
 
 def tokenizer_trim_content(
-    content: str, desired_length: int, tokenizer: Encoding
+    content: str, desired_length: int, tokenizer: BaseTokenizer
 ) -> str:
     tokens = tokenizer.encode(content)
     if len(tokens) > desired_length:
@@ -87,9 +114,10 @@ def tokenizer_trim_content(
 
 
 def tokenizer_trim_chunks(
-    chunks: list[InferenceChunk], max_chunk_toks: int = DOC_EMBEDDING_CONTEXT_SIZE
+    chunks: list[InferenceChunk],
+    tokenizer: BaseTokenizer,
+    max_chunk_toks: int = DOC_EMBEDDING_CONTEXT_SIZE,
 ) -> list[InferenceChunk]:
-    tokenizer = get_default_llm_tokenizer()
     new_chunks = copy(chunks)
     for ind, chunk in enumerate(new_chunks):
         new_content = tokenizer_trim_content(chunk.content, max_chunk_toks, tokenizer)

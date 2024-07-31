@@ -174,7 +174,7 @@ export function PersonasTable({ personas }: { personas: Persona[] }) {
                 </div>
               </div>,
             ],
-            staticModifiers: [[1, "lg:w-[300px] xl:w-[400px] 2xl:w-[550px]"]],
+            staticModifiers: [[1, "lg:w-[250px] xl:w-[400px] 2xl:w-[550px]"]],
           };
         })}
         setRows={updatePersonaOrder}

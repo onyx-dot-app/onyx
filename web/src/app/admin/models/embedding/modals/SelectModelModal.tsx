@@ -14,8 +14,8 @@ export function SelectModelModal({
 }) {
   return (
     <Modal
-      title={`Elevate Your Game with ${model.model_name}`}
       onOutsideClick={onCancel}
+      title={`Elevate Your Game with ${model.model_name}`}
     >
       <div className="mb-4">
         <Text className="text-lg mb-2">
@@ -23,10 +23,7 @@ export function SelectModelModal({
           <br />
           Are you sure?
         </Text>
-        <div className="flex mt-8 justify-between">
-          <Button color="gray" onClick={onCancel}>
-            Exit
-          </Button>
+        <div className="flex mt-8 justify-end">
           <Button color="green" onClick={onConfirm}>
             Continue
           </Button>

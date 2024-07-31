@@ -9,7 +9,7 @@ from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.engine import get_session
 from danswer.db.models import User
 from danswer.document_index.factory import get_default_document_index
-from danswer.natural_language_processing.utils import get_default_llm_token_encode
+from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.prompts.prompt_utils import build_doc_context_str
 from danswer.search.preprocessing.access_filters import build_access_filters_for_user
 from danswer.server.documents.models import ChunkInfo
@@ -50,7 +50,10 @@ def get_document_info(
 
     # get actual document context used for LLM
     first_chunk = inference_chunks[0]
-    tokenizer_encode = get_default_llm_token_encode()
+    tokenizer_encode = get_tokenizer(
+        provider_type=embedding_model.provider_type,
+        model_name=embedding_model.model_name,
+    ).encode
     full_context_str = build_doc_context_str(
         semantic_identifier=first_chunk.semantic_identifier,
         source_type=first_chunk.source_type,
@@ -92,7 +95,10 @@ def get_chunk_info(
 
     chunk_content = inference_chunks[0].content
 
-    tokenizer_encode = get_default_llm_token_encode()
+    tokenizer_encode = get_tokenizer(
+        provider_type=embedding_model.provider_type,
+        model_name=embedding_model.model_name,
+    ).encode
 
     return ChunkInfo(
         content=chunk_content, num_tokens=len(tokenizer_encode(chunk_content))

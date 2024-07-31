@@ -8,12 +8,17 @@ import {
   SelectorFormField,
   TextFormField,
   BooleanFormField,
+  MultiSelectField,
 } from "@/components/admin/connectors/Field";
 import { useState } from "react";
 import { Bubble } from "@/components/Bubble";
 import { GroupsIcon } from "@/components/icons/icons";
 import { useSWRConfig } from "swr";
-import { useUserGroups } from "@/lib/hooks";
+import {
+  defaultModelsByProvider,
+  getDisplayNameForModel,
+  useUserGroups,
+} from "@/lib/hooks";
 import { FullLLMProvider, WellKnownLLMProviderDescriptor } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -69,11 +74,11 @@ export function LLMProviderUpdateForm({
       ),
     is_public: existingLlmProvider?.is_public ?? true,
     groups: existingLlmProvider?.groups ?? [],
+    display_model_names:
+      existingLlmProvider?.display_model_names ||
+      defaultModelsByProvider[llmProviderDescriptor.name] ||
+      [],
   };
-
-  const [validatedConfig, setValidatedConfig] = useState(
-    existingLlmProvider ? initialValues : null
-  );
 
   // Setup validation schema if required
   const validationSchema = Yup.object({
@@ -109,6 +114,7 @@ export function LLMProviderUpdateForm({
     // EE Only
     is_public: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
+    display_model_names: Yup.array().of(Yup.string()),
   });
 
   return (
@@ -270,7 +276,7 @@ export function LLMProviderUpdateForm({
               subtext="The model to use by default for this provider unless otherwise specified."
               label="Default Model"
               options={llmProviderDescriptor.llm_names.map((name) => ({
-                name,
+                name: getDisplayNameForModel(name),
                 value: name,
               }))}
               maxHeight="max-h-56"
@@ -292,7 +298,7 @@ export function LLMProviderUpdateForm({
                 the Default Model configured above.`}
               label="[Optional] Fast Model"
               options={llmProviderDescriptor.llm_names.map((name) => ({
-                name,
+                name: getDisplayNameForModel(name),
                 value: name,
               }))}
               includeDefault
@@ -311,13 +317,33 @@ export function LLMProviderUpdateForm({
 
           <Divider />
 
-          <AdvancedOptionsToggle
-            showAdvancedOptions={showAdvancedOptions}
-            setShowAdvancedOptions={setShowAdvancedOptions}
-          />
+          {llmProviderDescriptor.name != "azure" && (
+            <AdvancedOptionsToggle
+              showAdvancedOptions={showAdvancedOptions}
+              setShowAdvancedOptions={setShowAdvancedOptions}
+            />
+          )}
 
           {showAdvancedOptions && (
             <>
+              {llmProviderDescriptor.llm_names.length > 0 && (
+                <div className="w-full">
+                  <MultiSelectField
+                    selectedInitially={values.display_model_names}
+                    name="display_model_names"
+                    label="Display Models"
+                    subtext="Select the models to make available to users. Unselected models will not be available."
+                    options={llmProviderDescriptor.llm_names.map((name) => ({
+                      value: name,
+                      label: getDisplayNameForModel(name),
+                    }))}
+                    onChange={(selected) =>
+                      setFieldValue("display_model_names", selected)
+                    }
+                  />
+                </div>
+              )}
+
               {isPaidEnterpriseFeaturesEnabled && userGroups && (
                 <>
                   <BooleanFormField

@@ -7,6 +7,7 @@ from danswer.access.models import DocumentAccess
 from danswer.indexing.models import DocMetadataAwareIndexChunk
 from danswer.search.models import IndexFilters
 from danswer.search.models import InferenceChunkUncleaned
+from shared_configs.model_server_models import Embedding
 
 
 @dataclass(frozen=True)
@@ -257,7 +258,7 @@ class VectorCapable(abc.ABC):
     def semantic_retrieval(
         self,
         query: str,  # Needed for matching purposes
-        query_embedding: list[float],
+        query_embedding: Embedding,
         filters: IndexFilters,
         time_decay_multiplier: float,
         num_to_retrieve: int,
@@ -292,7 +293,7 @@ class HybridCapable(abc.ABC):
     def hybrid_retrieval(
         self,
         query: str,
-        query_embedding: list[float],
+        query_embedding: Embedding,
         filters: IndexFilters,
         time_decay_multiplier: float,
         num_to_retrieve: int,

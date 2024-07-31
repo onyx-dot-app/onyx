@@ -16,6 +16,7 @@ from danswer.configs.constants import MessageType
 from danswer.file_store.models import InMemoryChatFile
 from danswer.llm.override_models import PromptOverride
 from danswer.llm.utils import build_content_with_imgs
+from danswer.tools.models import ToolCallFinalResult
 
 if TYPE_CHECKING:
     from danswer.db.models import ChatMessage
@@ -32,6 +33,7 @@ class PreviousMessage(BaseModel):
     token_count: int
     message_type: MessageType
     files: list[InMemoryChatFile]
+    tool_calls: list[ToolCallFinalResult]
 
     @classmethod
     def from_chat_message(
@@ -48,6 +50,14 @@ class PreviousMessage(BaseModel):
                 file
                 for file in available_files
                 if str(file.file_id) in message_file_ids
+            ],
+            tool_calls=[
+                ToolCallFinalResult(
+                    tool_name=tool_call.tool_name,
+                    tool_args=tool_call.tool_arguments,
+                    tool_result=tool_call.tool_result,
+                )
+                for tool_call in chat_message.tool_calls
             ],
         )
 

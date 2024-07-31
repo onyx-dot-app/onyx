@@ -12,13 +12,14 @@ import { LOGOUT_DISABLED } from "@/lib/constants";
 import { Settings } from "@/app/admin/settings/interfaces";
 import { SettingsContext } from "./settings/SettingsProvider";
 import { LightSettingsIcon } from "./icons/icons";
+import { pageType } from "@/app/chat/sessionSidebar/types";
 
 export function UserDropdown({
   user,
   page,
 }: {
   user: User | null;
-  page?: "search" | "chat" | "assistants";
+  page?: pageType;
 }) {
   const [userInfoVisible, setUserInfoVisible] = useState(false);
   const userInfoRef = useRef<HTMLDivElement>(null);
@@ -53,7 +54,7 @@ export function UserDropdown({
             onClick={() => setUserInfoVisible(!userInfoVisible)}
             className="flex cursor-pointer"
           >
-            <div className="my-auto bg-background-strong ring-2 ring-transparent group-hover:ring-background-300/50 transition-ring duration-150 rounded-lg inline-block flex-none px-2 text-base font-normal">
+            <div className="my-auto bg-background-strong ring-2 ring-transparent group-hover:ring-background-300/50 transition-ring duration-150 rounded-lg inline-block flex-none px-2 text-base ">
               {user && user.email ? user.email[0].toUpperCase() : "A"}
             </div>
           </div>
@@ -61,8 +62,8 @@ export function UserDropdown({
         popover={
           <div
             className={`
-              p-2
-              min-w-[200px]
+                p-2
+                min-w-[200px]
                 text-strong 
                 text-sm
                 border 
@@ -83,9 +84,10 @@ export function UserDropdown({
               <>
                 <Link
                   href="/admin/indexing/status"
-                  className="flex py-3 px-4 cursor-pointer rounded hover:bg-hover-light"
+                  className="flex py-3 px-4 cursor-pointer !
+                   rounded hover:bg-hover-light"
                 >
-                  <LightSettingsIcon className="h-5 w-5 text-text-200est0 my-auto mr-2" />
+                  <LightSettingsIcon className="h-5 w-5 my-auto mr-2" />
                   Admin Panel
                 </Link>
               </>

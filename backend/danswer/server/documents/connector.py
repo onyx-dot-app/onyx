@@ -51,6 +51,8 @@ from danswer.db.connector import fetch_connector_by_id
 from danswer.db.connector import fetch_connectors
 from danswer.db.connector import get_connector_credential_ids
 from danswer.db.connector import update_connector
+from danswer.db.connector_credential_pair import add_credential_to_connector
+from danswer.db.connector_credential_pair import get_connector_credential_pair
 from danswer.db.connector_credential_pair import get_connector_credential_pairs
 from danswer.db.credentials import create_credential
 from danswer.db.credentials import delete_gmail_service_account_credentials
@@ -64,6 +66,7 @@ from danswer.db.index_attempt import cancel_indexing_attempts_for_connector
 from danswer.db.index_attempt import cancel_indexing_attempts_past_model
 from danswer.db.index_attempt import create_index_attempt
 from danswer.db.index_attempt import get_index_attempts_for_cc_pair
+from danswer.db.index_attempt import get_latest_finished_index_attempt_for_cc_pair
 from danswer.db.index_attempt import get_latest_index_attempts
 from danswer.db.models import User
 from danswer.dynamic_configs.interface import ConfigNotFoundError
@@ -74,6 +77,7 @@ from danswer.server.documents.models import ConnectorBase
 from danswer.server.documents.models import ConnectorCredentialPairIdentifier
 from danswer.server.documents.models import ConnectorIndexingStatus
 from danswer.server.documents.models import ConnectorSnapshot
+from danswer.server.documents.models import CredentialBase
 from danswer.server.documents.models import CredentialSnapshot
 from danswer.server.documents.models import FileUploadResponse
 from danswer.server.documents.models import GDriveCallback
@@ -263,7 +267,8 @@ def upsert_service_account_credential(
     `Credential` table."""
     try:
         credential_base = build_service_account_creds(
-            delegated_user_email=service_account_credential_request.google_drive_delegated_user
+            DocumentSource.GOOGLE_DRIVE,
+            delegated_user_email=service_account_credential_request.google_drive_delegated_user,
         )
     except ConfigNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -288,7 +293,8 @@ def upsert_gmail_service_account_credential(
     `Credential` table."""
     try:
         credential_base = build_service_account_creds(
-            delegated_user_email=service_account_credential_request.gmail_delegated_user
+            DocumentSource.GMAIL,
+            delegated_user_email=service_account_credential_request.gmail_delegated_user,
         )
     except ConfigNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -386,8 +392,12 @@ def get_connector_indexing_status(
         secondary_index=secondary_index,
         db_session=db_session,
     )
+
     cc_pair_to_latest_index_attempt = {
-        (index_attempt.connector_id, index_attempt.credential_id): index_attempt
+        (
+            index_attempt.connector_credential_pair.connector_id,
+            index_attempt.connector_credential_pair.credential_id,
+        ): index_attempt
         for index_attempt in latest_index_attempts
     }
 
@@ -410,6 +420,11 @@ def get_connector_indexing_status(
         latest_index_attempt = cc_pair_to_latest_index_attempt.get(
             (connector.id, credential.id)
         )
+
+        latest_finished_attempt = get_latest_finished_index_attempt_for_cc_pair(
+            connector_credential_pair_id=cc_pair.id, db_session=db_session
+        )
+
         indexing_statuses.append(
             ConnectorIndexingStatus(
                 cc_pair_id=cc_pair.id,
@@ -418,6 +433,9 @@ def get_connector_indexing_status(
                 credential=CredentialSnapshot.from_credential_db_model(credential),
                 public_doc=cc_pair.is_public,
                 owner=credential.user.email if credential.user else "",
+                last_finished_status=latest_finished_attempt.status
+                if latest_finished_attempt
+                else None,
                 last_status=latest_index_attempt.status
                 if latest_index_attempt
                 else None,
@@ -480,6 +498,35 @@ def create_connector_from_model(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/admin/connector-with-mock-credential")
+def create_connector_with_mock_credential(
+    connector_data: ConnectorBase,
+    user: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> StatusResponse:
+    try:
+        _validate_connector_allowed(connector_data.source)
+        connector_response = create_connector(connector_data, db_session)
+        mock_credential = CredentialBase(
+            credential_json={}, admin_public=True, source=connector_data.source
+        )
+        credential = create_credential(
+            mock_credential, user=user, db_session=db_session
+        )
+        response = add_credential_to_connector(
+            connector_id=cast(int, connector_response.id),  # will aways be an int
+            credential_id=credential.id,
+            is_public=True,
+            user=user,
+            db_session=db_session,
+            cc_pair_name=connector_data.name,
+        )
+        return response
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.patch("/admin/connector/{connector_id}")
 def update_connector_from_model(
     connector_id: int,
@@ -515,6 +562,7 @@ def update_connector_from_model(
         credential_ids=[
             association.credential.id for association in updated_connector.credentials
         ],
+        indexing_start=updated_connector.indexing_start,
         time_created=updated_connector.time_created,
         time_updated=updated_connector.time_updated,
         disabled=updated_connector.disabled,
@@ -542,6 +590,7 @@ def connector_run_once(
 ) -> StatusResponse[list[int]]:
     connector_id = run_info.connector_id
     specified_credential_ids = run_info.credential_ids
+
     try:
         possible_credential_ids = get_connector_credential_ids(
             run_info.connector_id, db_session
@@ -585,16 +634,21 @@ def connector_run_once(
 
     embedding_model = get_current_db_embedding_model(db_session)
 
+    connector_credential_pairs = [
+        get_connector_credential_pair(run_info.connector_id, credential_id, db_session)
+        for credential_id in credential_ids
+        if credential_id not in skipped_credentials
+    ]
+
     index_attempt_ids = [
         create_index_attempt(
-            connector_id=run_info.connector_id,
-            credential_id=credential_id,
+            connector_credential_pair_id=connector_credential_pair.id,
             embedding_model_id=embedding_model.id,
             from_beginning=run_info.from_beginning,
             db_session=db_session,
         )
-        for credential_id in credential_ids
-        if credential_id not in skipped_credentials
+        for connector_credential_pair in connector_credential_pairs
+        if connector_credential_pair is not None
     ]
 
     if not index_attempt_ids:
@@ -724,6 +778,7 @@ def get_connector_by_id(
         id=connector.id,
         name=connector.name,
         source=connector.source,
+        indexing_start=connector.indexing_start,
         input_type=connector.input_type,
         connector_specific_config=connector.connector_specific_config,
         refresh_freq=connector.refresh_freq,

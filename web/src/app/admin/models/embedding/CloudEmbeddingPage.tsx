@@ -80,7 +80,7 @@ export default function CloudEmbeddingPage({
             key={ind}
             className="p-4 border border-border rounded-lg shadow-md bg-hover-light w-96 flex flex-col"
           >
-            <div className="font-bold text-neutral-900 text-lg items-center py-1 gap-x-2 flex">
+            <div className="font-bold text-text-900 text-lg items-center py-1 gap-x-2 flex">
               {provider.icon({ size: 40 })}
               <p className="my-auto">{provider.name}</p>
               <button
@@ -95,7 +95,7 @@ export default function CloudEmbeddingPage({
                       <FiInfo className="cusror-pointer" size={20} />
                     }
                     popupContent={
-                      <div className="text-sm text-neutral-800 w-52 flex">
+                      <div className="text-sm text-text-800 w-52 flex">
                         <div className="flex mx-auto">
                           <div className="my-auto">{provider.description}</div>
                         </div>
@@ -115,7 +115,7 @@ export default function CloudEmbeddingPage({
                 return (
                   <div
                     key={index}
-                    className={`p-3 my-2 border-2 border-neutral-300 border-opacity-40 rounded-md rounded cursor-pointer  
+                    className={`p-3 my-2 border-2 border-border-medium border-opacity-40 rounded-md rounded cursor-pointer  
                     ${
                       !provider.configured
                         ? "opacity-80 hover:opacity-100"

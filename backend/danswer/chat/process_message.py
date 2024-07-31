@@ -51,7 +51,7 @@ from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_llms_for_persona
 from danswer.llm.factory import get_main_llm_from_tuple
 from danswer.llm.interfaces import LLMConfig
-from danswer.natural_language_processing.utils import get_default_llm_tokenizer
+from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.search.enums import OptionalSearchSetting
 from danswer.search.enums import QueryFlow
 from danswer.search.enums import SearchType
@@ -282,7 +282,10 @@ def stream_chat_message_objects(
         # use alternate persona if alternative assistant id is passed in
         if alternate_assistant_id is not None:
             persona = get_persona_by_id(
-                alternate_assistant_id, user=user, db_session=db_session
+                alternate_assistant_id,
+                user=user,
+                db_session=db_session,
+                is_for_edit=False,
             )
         else:
             persona = chat_session.persona
@@ -305,7 +308,13 @@ def stream_chat_message_objects(
         except GenAIDisabledException:
             raise RuntimeError("LLM is disabled. Can't use chat flow without LLM.")
 
-        llm_tokenizer = get_default_llm_tokenizer()
+        llm_provider = llm.config.model_provider
+        llm_model_name = llm.config.model_name
+
+        llm_tokenizer = get_tokenizer(
+            model_name=llm_model_name,
+            provider_type=llm_provider,
+        )
         llm_tokenizer_encode_func = cast(
             Callable[[str], list[int]], llm_tokenizer.encode
         )
@@ -560,9 +569,11 @@ def stream_chat_message_objects(
             tools.extend(tool_list)
 
         # factor in tool definition size when pruning
-        document_pruning_config.tool_num_tokens = compute_all_tool_tokens(tools)
+        document_pruning_config.tool_num_tokens = compute_all_tool_tokens(
+            tools, llm_tokenizer
+        )
         document_pruning_config.using_tool_message = explicit_tool_calling_supported(
-            llm.config.model_provider, llm.config.model_name
+            llm_provider, llm_model_name
         )
 
         # LLM prompt building, response capturing, etc.

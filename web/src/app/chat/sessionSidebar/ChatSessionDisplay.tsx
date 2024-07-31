@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { ChatSession } from "../interfaces";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import { deleteChatSession, renameChatSession } from "../lib";
 import { DeleteChatModal } from "../modal/DeleteChatModal";
 import { BasicSelectable } from "@/components/BasicClickable";
@@ -19,12 +19,14 @@ import { DefaultDropdownElement } from "@/components/Dropdown";
 import { Popover } from "@/components/popover/Popover";
 import { ShareChatSessionModal } from "../modal/ShareChatSessionModal";
 import { CHAT_SESSION_ID_KEY, FOLDER_ID_KEY } from "@/lib/drag/constants";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 export function ChatSessionDisplay({
   chatSession,
   search,
   isSelected,
   skipGradient,
+  closeSidebar,
 }: {
   chatSession: ChatSession;
   isSelected: boolean;
@@ -32,6 +34,7 @@ export function ChatSessionDisplay({
   // needed when the parent is trying to apply some background effect
   // if not set, the gradient will still be applied and cause weirdness
   skipGradient?: boolean;
+  closeSidebar?: () => void;
 }) {
   const router = useRouter();
   const [isDeletionModalVisible, setIsDeletionModalVisible] = useState(false);
@@ -62,6 +65,7 @@ export function ChatSessionDisplay({
       alert("Failed to rename chat session");
     }
   };
+  const settings = useContext(SettingsContext);
 
   return (
     <>
@@ -90,8 +94,13 @@ export function ChatSessionDisplay({
         />
       )}
       <Link
-        className="flex my-1 relative"
+        className="flex my-1 group relative"
         key={chatSession.id}
+        onClick={() => {
+          if (settings?.isMobile && closeSidebar) {
+            closeSidebar();
+          }
+        }}
         href={
           search
             ? `/search?searchId=${chatSession.id}`
@@ -126,10 +135,15 @@ export function ChatSessionDisplay({
                   className="-my-px px-1 mr-2 w-full rounded"
                 />
               ) : (
-                <p className="break-all overflow-hidden whitespace-nowrap mr-3 text-emphasis">
+                <p className="break-all overflow-hidden whitespace-nowrap w-full mr-3 relative">
                   {chatName || `Chat ${chatSession.id}`}
+                  <span
+                    className={`absolute right-0 top-0 h-full w-8 bg-gradient-to-r from-transparent 
+                    ${isSelected ? "to-background-200" : " to-background-100 group-hover:to-background-200"} `}
+                  />
                 </p>
               )}
+
               {isSelected &&
                 (isRenamingChat ? (
                   <div className="ml-auto my-auto flex">
@@ -199,12 +213,6 @@ export function ChatSessionDisplay({
                   </div>
                 ))}
             </div>
-            {isSelected && !isRenamingChat && !delayedSkipGradient && (
-              <div className="absolute bottom-0 right-0 top-0 bg-gradient-to-l to-transparent from-hover w-20 from-60% rounded" />
-            )}
-            {!isSelected && !delayedSkipGradient && (
-              <div className="absolute bottom-0 right-0 top-0 bg-gradient-to-l to-transparent from-background-100 w-8 from-0% rounded" />
-            )}
           </>
         </BasicSelectable>
       </Link>

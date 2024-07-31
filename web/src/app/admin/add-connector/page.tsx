@@ -1,3 +1,4 @@
+"use client";
 import { SourceIcon } from "@/components/SourceIcon";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ConnectorIcon } from "@/components/icons/icons";
@@ -5,8 +6,15 @@ import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
 import { Title, Text } from "@tremor/react";
 import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-function SourceTile({ sourceMetadata }: { sourceMetadata: SourceMetadata }) {
+function SourceTile({
+  sourceMetadata,
+  preSelect,
+}: {
+  sourceMetadata: SourceMetadata;
+  preSelect?: boolean;
+}) {
   return (
     <Link
       className={`flex 
@@ -17,9 +25,9 @@ function SourceTile({ sourceMetadata }: { sourceMetadata: SourceMetadata }) {
         rounded-lg 
         w-40 
         cursor-pointer
-        bg-hover-light
         shadow-md
         hover:bg-hover
+        ${preSelect ? "bg-hover subtle-pulse" : "bg-hover-light"}
       `}
       href={sourceMetadata.adminUrl}
     >
@@ -30,16 +38,58 @@ function SourceTile({ sourceMetadata }: { sourceMetadata: SourceMetadata }) {
     </Link>
   );
 }
-
 export default function Page() {
-  const sources = listSourceMetadata();
+  const sources = useMemo(() => listSourceMetadata(), []);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  const importedKnowledgeSources = sources.filter(
-    (source) => source.category === SourceCategory.ImportedKnowledge
-  );
-  const appConnectionSources = sources.filter(
-    (source) => source.category === SourceCategory.AppConnection
-  );
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, []);
+  const filterSources = (sources: SourceMetadata[]) => {
+    if (!searchTerm) return sources;
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return sources.filter(
+      (source) =>
+        source.displayName.toLowerCase().includes(lowerSearchTerm) ||
+        source.category.toLowerCase().includes(lowerSearchTerm)
+    );
+  };
+
+  const categorizedSources = useMemo(() => {
+    const filtered = filterSources(sources);
+    return Object.values(SourceCategory).reduce(
+      (acc, category) => {
+        acc[category] = sources.filter(
+          (source) =>
+            source.category === category &&
+            (filtered.includes(source) ||
+              category.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
+        return acc;
+      },
+      {} as Record<SourceCategory, SourceMetadata[]>
+    );
+  }, [sources, searchTerm]);
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      const filteredCategories = Object.entries(categorizedSources).filter(
+        ([_, sources]) => sources.length > 0
+      );
+      if (
+        filteredCategories.length > 0 &&
+        filteredCategories[0][1].length > 0
+      ) {
+        const firstSource = filteredCategories[0][1][0];
+        if (firstSource) {
+          window.open(firstSource.adminUrl, "_self");
+        }
+      }
+    }
+  };
 
   return (
     <div className="mx-auto container">
@@ -48,43 +98,58 @@ export default function Page() {
         title="Add Connector"
       />
 
-      <Text>
-        Connect Danswer to your organization&apos;s knowledge sources.
-        We&apos;ll automatically sync your data into Danswer, so you can find
-        exactly what you&apos;re looking for in one place.
-      </Text>
+      <input
+        type="text"
+        ref={searchInputRef}
+        placeholder="Search connectors..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        onKeyDown={handleKeyPress}
+        className="flex mt-2 max-w-sm h-9 w-full rounded-md border-2 border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      />
 
-      <div className="flex mt-8">
-        <Title>Import Knowledge</Title>
-      </div>
-      <Text>
-        Connect to pieces of knowledge that live outside your apps. Upload
-        files, scrape websites, or connect to your organization&apos;s Google
-        Site.
-      </Text>
-      <div className="flex flex-wrap gap-4 p-4">
-        {importedKnowledgeSources.map((source) => {
-          return (
-            <SourceTile key={source.internalName} sourceMetadata={source} />
-          );
-        })}
-      </div>
-
-      <div className="flex mt-8">
-        <Title>Setup Auto-Syncing from Apps</Title>
-      </div>
-      <Text>
-        Setup auto-syncing from your organization&apos;s most used apps and
-        services. Unless otherwise specified during the connector setup, we will
-        pull in the latest updates from the source every 10 minutes.
-      </Text>
-      <div className="flex flex-wrap gap-4 p-4">
-        {appConnectionSources.map((source) => {
-          return (
-            <SourceTile key={source.internalName} sourceMetadata={source} />
-          );
-        })}
-      </div>
+      {Object.entries(categorizedSources)
+        .filter(([_, sources]) => sources.length > 0)
+        .map(([category, sources], categoryInd) => (
+          <div key={category} className="mb-8">
+            <div className="flex mt-8">
+              <Title>{category}</Title>
+            </div>
+            <Text>{getCategoryDescription(category as SourceCategory)}</Text>
+            <div className="flex flex-wrap gap-4 p-4">
+              {sources.map((source, sourceInd) => (
+                <SourceTile
+                  preSelect={
+                    searchTerm.length > 0 && categoryInd == 0 && sourceInd == 0
+                  }
+                  key={source.internalName}
+                  sourceMetadata={source}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
     </div>
   );
+}
+
+function getCategoryDescription(category: SourceCategory): string {
+  switch (category) {
+    case SourceCategory.Messaging:
+      return "Integrate with messaging and communication platforms.";
+    case SourceCategory.ProjectManagement:
+      return "Link to project management and task tracking tools.";
+    case SourceCategory.CustomerSupport:
+      return "Connect to customer support and helpdesk systems.";
+    case SourceCategory.CodeRepository:
+      return "Integrate with code repositories and version control systems.";
+    case SourceCategory.Storage:
+      return "Connect to cloud storage and file hosting services.";
+    case SourceCategory.Wiki:
+      return "Link to wiki and knowledge base platforms.";
+    case SourceCategory.Other:
+      return "Connect to other miscellaneous knowledge sources.";
+    default:
+      return "Connect to various knowledge sources.";
+  }
 }

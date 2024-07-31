@@ -23,7 +23,7 @@ import { useFilters, useObjectState } from "@/lib/hooks";
 import { questionValidationStreamed } from "@/lib/search/streamingQuestionValidation";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { computeAvailableFilters } from "@/lib/filters";
-import { useRouter, useSearchParams } from "next/navigation";
+import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { HistorySidebar } from "@/app/chat/sessionSidebar/HistorySidebar";
 import { ChatSession, SearchSession } from "@/app/chat/interfaces";
@@ -342,7 +342,6 @@ export const SearchSection = ({
     if ((overrideMessage || query) == "") {
       return;
     }
-    setSearchResponse;
     setAgenticResults(agentic!);
     resetInput();
     setContentEnriched(false);
@@ -459,6 +458,12 @@ export const SearchSection = ({
     };
   }, [router]);
 
+  useEffect(() => {
+    if (settings?.isMobile) {
+      router.push("/chat");
+    }
+  }, [settings?.isMobile, router]);
+
   const handleTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
     if (e.propertyName === "opacity" && !firstSearch) {
       const target = e.target as HTMLDivElement;
@@ -477,6 +482,7 @@ export const SearchSection = ({
     sidebarElementRef,
     showDocSidebar,
     setShowDocSidebar,
+    mobile: settings?.isMobile,
   });
 
   return (
@@ -486,11 +492,9 @@ export const SearchSection = ({
           ref={sidebarElementRef}
           className={`
             flex-none 
-            fixed -8
+            fixed
             left-0 
-            z-20
-            overflow-y-hidden 
-            sidebar 
+            z-30
             bg-background-100 
             h-screen
             transition-all 
@@ -499,7 +503,7 @@ export const SearchSection = ({
             ease-in-out
             ${
               showDocSidebar || toggledSidebar
-                ? "opacity-100 w-[300px] translate-x-0"
+                ? "opacity-100 w-[250px] translate-x-0"
                 : "opacity-0 w-[200px] pointer-events-none -translate-x-10"
             }
           `}
@@ -517,7 +521,7 @@ export const SearchSection = ({
 
         <div className="absolute left-0 w-full top-0">
           <FunctionalHeader
-            showSidebar={showDocSidebar}
+            toggleSidebar={toggleSidebar}
             page="search"
             user={user}
           />
@@ -525,82 +529,109 @@ export const SearchSection = ({
             <div
               style={{ transition: "width 0.30s ease-out" }}
               className={`
-                    flex-none
-                    overflow-y-hidden
-                    bg-background-100
-                    h-full
-                    transition-all
-                    bg-opacity-80
-                    duration-300 
-                    ease-in-out
-                    ${toggledSidebar ? "w-[300px]" : "w-[0px]"}
-                  `}
+                  flex-none
+                  overflow-y-hidden
+                  bg-background-100
+                  h-full
+                  transition-all
+                  bg-opacity-80
+                  duration-300 
+                  ease-in-out
+                  ${toggledSidebar ? "w-[250px]" : "w-[0px]"}
+                `}
             />
 
             {
-              <div className="px-24 w-full pt-10 relative max-w-[2000px] xl:max-w-[1430px] mx-auto">
-                <div className="absolute z-10 top-12 left-0 hidden 2xl:block w-52 3xl:w-64">
-                  {(ccPairs.length > 0 || documentSets.length > 0) && (
-                    <SourceSelector
-                      {...filterManager}
-                      showDocSidebar={showDocSidebar || toggledSidebar}
-                      availableDocumentSets={finalAvailableDocumentSets}
-                      existingSources={finalAvailableSources}
-                      availableTags={tags}
-                    />
-                  )}
+              <div className="desktop:px-24 w-full pt-10 relative max-w-[2000px] xl:max-w-[1430px] mx-auto">
+                <div className="absolute z-10 mobile:px-4 mobile:max-w-searchbar-max mobile:w-[90%] top-12 desktop:left-0  hidden 2xl:block mobile:left-1/2 mobile:transform mobile:-translate-x-1/2 desktop:w-52 3xl:w-64">
+                  {!settings?.isMobile &&
+                    (ccPairs.length > 0 || documentSets.length > 0) && (
+                      <SourceSelector
+                        {...filterManager}
+                        showDocSidebar={showDocSidebar || toggledSidebar}
+                        availableDocumentSets={finalAvailableDocumentSets}
+                        existingSources={finalAvailableSources}
+                        availableTags={tags}
+                      />
+                    )}
                 </div>
                 <div className="absolute left-0 hidden 2xl:block w-52 3xl:w-64"></div>
                 <div className="max-w-searchbar-max w-[90%] mx-auto">
+                  {settings?.isMobile && (
+                    <div className="mt-6">
+                      {!(agenticResults && isFetching) || disabledAgentic ? (
+                        <SearchResultsDisplay
+                          disabledAgentic={disabledAgentic}
+                          contentEnriched={contentEnriched}
+                          comments={comments}
+                          sweep={sweep}
+                          agenticResults={agenticResults && !disabledAgentic}
+                          performSweep={performSweep}
+                          searchResponse={searchResponse}
+                          isFetching={isFetching}
+                          defaultOverrides={defaultOverrides}
+                        />
+                      ) : (
+                        <></>
+                      )}
+                    </div>
+                  )}
                   <div
-                    className={`transition-all duration-500 ease-in-out overflow-hidden 
+                    className={`mobile:fixed mobile:left-1/2 mobile:transform mobile:-translate-x-1/2 mobile:max-w-search-bar-max mobile:w-[90%] mobile:z-100 mobile:bottom-12`}
+                  >
+                    <div
+                      className={`transition-all duration-500 ease-in-out overflow-hidden 
                       ${
                         firstSearch
                           ? "opacity-100 max-h-[500px]"
                           : "opacity-0 max-h-0"
                       }`}
-                    onTransitionEnd={handleTransitionEnd}
-                  >
-                    <div className="mt-48 mb-8 flex justify-center items-center">
-                      <div className="w-message-xs 2xl:w-message-sm 3xl:w-message">
-                        <div className="flex">
-                          <div className="text-3xl font-bold font-strong text-strong mx-auto">
-                            Unlock Knowledge
+                      onTransitionEnd={handleTransitionEnd}
+                    >
+                      <div className="mt-48 mb-8 flex justify-center items-center">
+                        <div className="w-message-xs 2xl:w-message-sm 3xl:w-message">
+                          <div className="flex">
+                            <div className="text-3xl font-bold font-strong text-strong mx-auto">
+                              Unlock Knowledge
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
+                    <FullSearchBar
+                      toggleAgentic={
+                        disabledAgentic ? undefined : toggleAgentic
+                      }
+                      agentic={agentic}
+                      searchState={searchState}
+                      query={query}
+                      setQuery={setQuery}
+                      onSearch={async (agentic?: boolean) => {
+                        setDefaultOverrides(SEARCH_DEFAULT_OVERRIDES_START);
+                        await onSearch({ agentic, offset: 0 });
+                      }}
+                    />
                   </div>
 
-                  <FullSearchBar
-                    toggleAgentic={disabledAgentic ? undefined : toggleAgentic}
-                    agentic={agentic}
-                    searchState={searchState}
-                    query={query}
-                    setQuery={setQuery}
-                    onSearch={async (agentic?: boolean) => {
-                      setDefaultOverrides(SEARCH_DEFAULT_OVERRIDES_START);
-                      await onSearch({ agentic, offset: 0 });
-                    }}
-                  />
-
-                  <div className="mt-6">
-                    {!(agenticResults && isFetching) || disabledAgentic ? (
-                      <SearchResultsDisplay
-                        disabledAgentic={disabledAgentic}
-                        contentEnriched={contentEnriched}
-                        comments={comments}
-                        sweep={sweep}
-                        agenticResults={agenticResults && !disabledAgentic}
-                        performSweep={performSweep}
-                        searchResponse={searchResponse}
-                        isFetching={isFetching}
-                        defaultOverrides={defaultOverrides}
-                      />
-                    ) : (
-                      <></>
-                    )}
-                  </div>
+                  {!settings?.isMobile && (
+                    <div className="mt-6">
+                      {!(agenticResults && isFetching) || disabledAgentic ? (
+                        <SearchResultsDisplay
+                          disabledAgentic={disabledAgentic}
+                          contentEnriched={contentEnriched}
+                          comments={comments}
+                          sweep={sweep}
+                          agenticResults={agenticResults && !disabledAgentic}
+                          performSweep={performSweep}
+                          searchResponse={searchResponse}
+                          isFetching={isFetching}
+                          defaultOverrides={defaultOverrides}
+                        />
+                      ) : (
+                        <></>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             }

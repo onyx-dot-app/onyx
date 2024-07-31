@@ -15,8 +15,9 @@ import { HorizontalFilters } from "@/components/search/filtering/Filters";
 import { useFilters } from "@/lib/hooks";
 import { buildFilters } from "@/lib/search/utils";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
-import { Connector, DocumentSet } from "@/lib/types";
+import { DocumentSet } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
+import { Connector } from "@/lib/connectors/connectors";
 
 const DocumentDisplay = ({
   document,

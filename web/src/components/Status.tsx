@@ -6,6 +6,7 @@ import {
   FiAlertTriangle,
   FiCheckCircle,
   FiClock,
+  FiMinus,
   FiPauseCircle,
 } from "react-icons/fi";
 import { HoverPopup } from "./HoverPopup";
@@ -15,7 +16,7 @@ export function IndexAttemptStatus({
   errorMsg,
   size = "md",
 }: {
-  status: ValidStatuses;
+  status: ValidStatuses | null;
   errorMsg?: string | null;
   size?: "xs" | "sm" | "md" | "lg";
 }) {
@@ -57,6 +58,12 @@ export function IndexAttemptStatus({
     badge = (
       <Badge size={size} color="fuchsia" icon={FiClock}>
         Scheduled
+      </Badge>
+    );
+  } else {
+    badge = (
+      <Badge size={size} color="gray" icon={FiMinus}>
+        None
       </Badge>
     );
   }

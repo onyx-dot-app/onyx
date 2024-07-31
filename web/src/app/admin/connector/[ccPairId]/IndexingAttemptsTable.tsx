@@ -74,6 +74,7 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
             </div>
           </Modal>
         )}
+
       <Table>
         <TableHead>
           <TableRow>

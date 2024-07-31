@@ -1,6 +1,5 @@
 import { SubLabel } from "@/components/admin/connectors/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { Text } from "@tremor/react";
 import { useEffect, useState } from "react";
 import Dropzone from "react-dropzone";
 

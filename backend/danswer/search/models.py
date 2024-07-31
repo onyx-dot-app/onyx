@@ -126,6 +126,7 @@ class InferenceChunk(BaseChunk):
     document_id: str
     source_type: DocumentSource
     semantic_identifier: str
+    title: str | None  # Separate from Semantic Identifier though often same
     boost: int
     recency_bias: float
     score: float | None
@@ -193,16 +194,16 @@ class InferenceChunk(BaseChunk):
 
 
 class InferenceChunkUncleaned(InferenceChunk):
-    title: str | None  # Separate from Semantic Identifier though often same
     metadata_suffix: str | None
 
     def to_inference_chunk(self) -> InferenceChunk:
-        # Create a dict of all fields except 'title' and 'metadata_suffix'
+        # Create a dict of all fields except 'metadata_suffix'
         # Assumes the cleaning has already been applied and just needs to translate to the right type
         inference_chunk_data = {
             k: v
             for k, v in self.dict().items()
-            if k not in ["title", "metadata_suffix"]
+            if k
+            not in ["metadata_suffix"]  # May be other fields to throw out in the future
         }
         return InferenceChunk(**inference_chunk_data)
 

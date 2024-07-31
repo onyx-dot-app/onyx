@@ -6,9 +6,9 @@ import { useState } from "react";
 import { FiPlus, FiX } from "react-icons/fi";
 import { updateUserGroup } from "./lib";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { Connector, ConnectorIndexingStatus, UserGroup } from "@/lib/types";
+import { ConnectorIndexingStatus, UserGroup } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
-
+import { Connector } from "@/lib/connectors/connectors";
 interface AddConnectorFormProps {
   ccPairs: ConnectorIndexingStatus<any, any>[];
   userGroup: UserGroup;

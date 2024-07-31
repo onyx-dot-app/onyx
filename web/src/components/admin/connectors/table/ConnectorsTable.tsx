@@ -1,4 +1,5 @@
-import { ConnectorIndexingStatus, Credential } from "@/lib/types";
+import { ConnectorIndexingStatus } from "@/lib/types";
+
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import { LinkBreakIcon, LinkIcon } from "@/components/icons/icons";
@@ -14,6 +15,7 @@ import {
   TableCell,
 } from "@tremor/react";
 import { FiCheck, FiXCircle } from "react-icons/fi";
+import { Credential } from "@/lib/connectors/credentials";
 
 interface StatusRowProps<ConnectorConfigType, ConnectorCredentialType> {
   connectorIndexingStatus: ConnectorIndexingStatus<

@@ -1,4 +1,4 @@
-import React, { KeyboardEvent, ChangeEvent } from "react";
+import React, { KeyboardEvent, ChangeEvent, useContext } from "react";
 import { searchState } from "./SearchSection";
 
 import { MagnifyingGlass } from "@phosphor-icons/react";
@@ -17,6 +17,7 @@ import { SendIcon } from "../icons/icons";
 import { Divider } from "@tremor/react";
 import { CustomTooltip } from "../tooltip/CustomTooltip";
 import KeyboardSymbol from "@/lib/browserUtilities";
+import { SettingsContext } from "../settings/SettingsProvider";
 
 export const AnimatedToggle = ({
   isOn,
@@ -139,6 +140,8 @@ export const FullSearchBar = ({
     }
   };
 
+  const settings = useContext(SettingsContext);
+
   return (
     <div
       className="
@@ -198,13 +201,17 @@ export const FullSearchBar = ({
 
         {searchState == "reading" && (
           <div key={"Reading"} className="mr-auto relative inline-block">
-            <span className="loading-text">Reading Documents...</span>
+            <span className="loading-text">
+              Reading{settings?.isMobile ? "" : " Documents"}...
+            </span>
           </div>
         )}
 
         {searchState == "analyzing" && (
           <div key={"Generating"} className="mr-auto relative inline-block">
-            <span className="loading-text">Generating Analysis...</span>
+            <span className="loading-text">
+              Generating{settings?.isMobile ? "" : " Analysis"}...
+            </span>
           </div>
         )}
 

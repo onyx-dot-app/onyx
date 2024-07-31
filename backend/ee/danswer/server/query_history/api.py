@@ -12,7 +12,6 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-import danswer.db.models as db_models
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import get_display_email
 from danswer.chat.chat_utils import create_chat_chain
@@ -22,8 +21,8 @@ from danswer.db.chat import get_chat_session_by_id
 from danswer.db.engine import get_session
 from danswer.db.models import ChatMessage
 from danswer.db.models import ChatSession
+from danswer.db.models import User
 from ee.danswer.db.query_history import fetch_chat_sessions_eagerly_by_time
-
 
 router = APIRouter()
 
@@ -303,7 +302,7 @@ def get_chat_session_history(
     feedback_type: QAFeedbackType | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
-    _: db_models.User | None = Depends(current_admin_user),
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[ChatSessionMinimal]:
     return fetch_and_process_chat_session_history_minimal(
@@ -320,7 +319,7 @@ def get_chat_session_history(
 @router.get("/admin/chat-session-history/{chat_session_id}")
 def get_chat_session_admin(
     chat_session_id: int,
-    _: db_models.User | None = Depends(current_admin_user),
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionSnapshot:
     try:
@@ -349,7 +348,7 @@ def get_chat_session_admin(
 
 @router.get("/admin/query-history-csv")
 def get_query_history_as_csv(
-    _: db_models.User | None = Depends(current_admin_user),
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     complete_chat_session_history = fetch_and_process_chat_session_history(

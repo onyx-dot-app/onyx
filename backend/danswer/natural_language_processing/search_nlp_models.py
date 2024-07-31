@@ -5,13 +5,15 @@ from httpx import HTTPError
 
 from danswer.configs.model_configs import BATCH_SIZE_ENCODE_CHUNKS
 from danswer.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
-from danswer.natural_language_processing.utils import get_default_tokenizer
+from danswer.db.models import EmbeddingModel as DBEmbeddingModel
+from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.natural_language_processing.utils import tokenizer_trim_content
 from danswer.utils.batching import batch_list
 from danswer.utils.logger import setup_logger
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.enums import EmbedTextType
+from shared_configs.model_server_models import Embedding
 from shared_configs.model_server_models import EmbedRequest
 from shared_configs.model_server_models import EmbedResponse
 from shared_configs.model_server_models import IntentRequest
@@ -75,10 +77,9 @@ class EmbeddingModel:
         texts: list[str],
         text_type: EmbedTextType,
         batch_size: int = BATCH_SIZE_ENCODE_CHUNKS,
-    ) -> list[list[float] | None]:
-        if not texts:
-            logger.warning("No texts to be embedded")
-            return []
+    ) -> list[Embedding]:
+        if not texts or not all(texts):
+            raise ValueError(f"Empty or missing text for embedding: {texts}")
 
         if self.retrim_content:
             # This is applied during indexing as a catchall for overly long titles (or other uncapped fields)
@@ -88,7 +89,10 @@ class EmbeddingModel:
                 tokenizer_trim_content(
                     content=text,
                     desired_length=self.max_seq_length,
-                    tokenizer=get_default_tokenizer(),
+                    tokenizer=get_tokenizer(
+                        model_name=self.model_name,
+                        provider_type=self.provider_type,
+                    ),
                 )
                 for text in texts
             ]
@@ -115,14 +119,17 @@ class EmbeddingModel:
                 raise HTTPError(f"HTTP error occurred: {error_detail}") from e
             except requests.RequestException as e:
                 raise HTTPError(f"Request failed: {str(e)}") from e
-            EmbedResponse(**response.json()).embeddings
 
             return EmbedResponse(**response.json()).embeddings
 
         # Batching for local embedding
         text_batches = batch_list(texts, batch_size)
-        embeddings: list[list[float] | None] = []
+        embeddings: list[Embedding] = []
+        logger.debug(
+            f"Encoding {len(texts)} texts in {len(text_batches)} batches for local model"
+        )
         for idx, text_batch in enumerate(text_batches, start=1):
+            logger.debug(f"Encoding batch {idx} of {len(text_batches)}")
             embed_request = EmbedRequest(
                 model_name=self.model_name,
                 texts=text_batch,
@@ -195,29 +202,34 @@ class IntentModel:
 
 
 def warm_up_encoders(
-    model_name: str,
-    normalize: bool,
+    embedding_model: DBEmbeddingModel,
     model_server_host: str = MODEL_SERVER_HOST,
     model_server_port: int = MODEL_SERVER_PORT,
 ) -> None:
+    model_name = embedding_model.model_name
+    normalize = embedding_model.normalize
+    provider_type = embedding_model.provider_type
     warm_up_str = (
         "Danswer is amazing! Check out our easy deployment guide at "
         "https://docs.danswer.dev/quickstart"
     )
 
     # May not be the exact same tokenizer used for the indexing flow
-    get_default_tokenizer(model_name=model_name)(warm_up_str)
+    logger.info(f"Warming up encoder model: {model_name}")
+    get_tokenizer(model_name=model_name, provider_type=provider_type).encode(
+        warm_up_str
+    )
 
     embed_model = EmbeddingModel(
         model_name=model_name,
         normalize=normalize,
+        provider_type=provider_type,
         # Not a big deal if prefix is incorrect
         query_prefix=None,
         passage_prefix=None,
         server_host=model_server_host,
         server_port=model_server_port,
         api_key=None,
-        provider_type=None,
     )
 
     # First time downloading the models it may take even longer, but just in case,

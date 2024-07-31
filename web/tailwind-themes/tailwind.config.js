@@ -23,6 +23,10 @@ module.exports = {
       },
 
       keyframes: {
+        "subtle-pulse": {
+          "0%, 100%": { opacity: 0.9 },
+          "50%": { opacity: 0.5 },
+        },
         pulse: {
           "0%, 100%": { opacity: 0.9 },
           "50%": { opacity: 0.4 },
@@ -30,7 +34,7 @@ module.exports = {
       },
       animation: {
         "fade-in-up": "fadeInUp 0.5s ease-out",
-
+        "subtle-pulse": "subtle-pulse 2s ease-in-out infinite",
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
       },
 
@@ -41,6 +45,8 @@ module.exports = {
         "2xl": "1420px",
         "3xl": "1700px",
         "4xl": "2000px",
+        mobile: { max: "767px" },
+        desktop: "768px",
       },
       fontFamily: {
         sans: ["var(--font-inter)"],
@@ -64,6 +70,7 @@ module.exports = {
         // background
 
         "background-search": "#ffffff", // white
+        input: "#f5f5f5",
 
         background: "#fafafa", // 50
         "background-100": "#f5f5f5", // neutral-100
@@ -110,6 +117,7 @@ module.exports = {
         "border-light": "#f3f4f6", // gray-100
         "border-medium": "#d1d5db", // gray-300
         "border-strong": "#9ca3af", // gray-400
+        "border-dark": "#525252", // neutral-600
 
         // hover
         "hover-light": "#f3f4f6", // gray-100

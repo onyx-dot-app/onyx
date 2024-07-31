@@ -37,7 +37,7 @@ export function ChatIntro({
   return (
     <>
       <div className="flex justify-center items-center h-full">
-        <div className="w-message-xs 2xl:w-message-sm 3xl:w-message">
+        <div className="mobile:w-[90%] mobile:px-4 w-message-xs 2xl:w-message-sm 3xl:w-message">
           <div className="flex">
             <div className="mx-auto">
               <div className="m-auto text-3xl font-strong font-bold text-strong w-fit">

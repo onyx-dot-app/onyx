@@ -37,9 +37,13 @@ logger = setup_logger()
 def translate_danswer_msg_to_langchain(
     msg: Union[ChatMessage, "PreviousMessage"],
 ) -> BaseMessage:
+    files: list[InMemoryChatFile] = []
+
     # If the message is a `ChatMessage`, it doesn't have the downloaded files
-    # attached. Just ignore them for now
-    files = [] if isinstance(msg, ChatMessage) else msg.files
+    # attached. Just ignore them for now. Also, OpenAI doesn't allow files to
+    # be attached to AI messages, so we must remove them
+    if not isinstance(msg, ChatMessage) and msg.message_type != MessageType.ASSISTANT:
+        files = msg.files
     content = build_content_with_imgs(msg.message, files)
 
     if msg.message_type == MessageType.SYSTEM:

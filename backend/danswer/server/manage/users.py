@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from datetime import timezone
 
 from fastapi import APIRouter
 from fastapi import Body
@@ -294,6 +295,12 @@ def verify_user_logged_in(
 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="User Not Authenticated"
+        )
+
+    if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. User's OIDC token has expired.",
         )
 
     token_created_at = get_current_token_creation(user, db_session)

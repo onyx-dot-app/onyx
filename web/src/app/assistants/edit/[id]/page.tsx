@@ -29,7 +29,6 @@ export default async function Page({ params }: { params: { id: string } }) {
                 redirectType={SuccessfulPersonaUpdateRedirectType.CHAT}
               />
             </Card>
-
             <Title className="mt-12">Delete Assistant</Title>
             <Text>
               Click the button below to permanently delete this assistant.
@@ -58,7 +57,6 @@ export default async function Page({ params }: { params: { id: string } }) {
           </div>
         </div>
       </HeaderWrapper>
-
       {body}
     </div>
   );

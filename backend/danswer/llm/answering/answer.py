@@ -35,7 +35,7 @@ from danswer.llm.answering.stream_processing.utils import DocumentIdOrderMapping
 from danswer.llm.answering.stream_processing.utils import map_document_id_order
 from danswer.llm.interfaces import LLM
 from danswer.llm.utils import message_generator_to_string_generator
-from danswer.natural_language_processing.utils import get_default_llm_tokenizer
+from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.tools.custom.custom_tool_prompt_builder import (
     build_user_message_for_custom_tool_for_non_tool_calling_llm,
 )
@@ -139,7 +139,10 @@ class Answer:
         self.prompt_config = prompt_config
 
         self.llm = llm
-        self.llm_tokenizer = get_default_llm_tokenizer()
+        self.llm_tokenizer = get_tokenizer(
+            provider_type=llm.config.model_provider,
+            model_name=llm.config.model_name,
+        )
 
         self._final_prompt: list[BaseMessage] | None = None
 

@@ -1,5 +1,4 @@
 from functools import partial
-from itertools import chain
 from typing import Protocol
 
 from sqlalchemy.orm import Session
@@ -125,10 +124,15 @@ def index_doc_batch(
     Note that the documents should already be batched at this point so that it does not inflate the
     memory requirements"""
     # Skip documents that have neither title nor content
+    # If the document doesn't have either, then there is no useful information in it
+    # This is again verified later in the pipeline after chunking but at that point there should
+    # already be no documents that are empty.
     documents_to_process = []
     for document in documents:
-        if not document.title and not any(
-            section.text.strip() for section in document.sections
+        if (
+            not document.title
+            or not document.title.strip()
+            and not any(section.text.strip() for section in document.sections)
         ):
             logger.warning(
                 f"Skipping document with ID {document.id} as it has neither title nor content"
@@ -162,14 +166,17 @@ def index_doc_batch(
     )
 
     logger.debug("Starting chunking")
-
     # The first chunk additionally contains the Title of the Document
-    chunks: list[DocAwareChunk] = list(
-        chain(*[chunker.chunk(document=document) for document in updatable_docs])
-    )
+    chunks: list[DocAwareChunk] = [
+        chunk
+        for document in updatable_docs
+        for chunk in chunker.chunk(document=document, embedder=embedder)
+    ]
 
     logger.debug("Starting embedding")
-    chunks_with_embeddings = embedder.embed_chunks(chunks=chunks)
+    chunks_with_embeddings = embedder.embed_chunks(
+        chunks=chunks,
+    )
 
     # Acquires a lock on the documents so that no other process can modify them
     # NOTE: don't need to acquire till here, since this is when the actual race condition
@@ -204,7 +211,7 @@ def index_doc_batch(
         ]
 
         logger.debug(
-            f"Indexing the following chunks: {[chunk.to_short_descriptor() for chunk in chunks]}"
+            f"Indexing the following chunks: {[chunk.to_short_descriptor() for chunk in access_aware_chunks]}"
         )
         # A document will not be spread across different batches, so all the
         # documents with chunks in this set, are fully represented by the chunks
@@ -228,7 +235,7 @@ def index_doc_batch(
         )
 
     return len([r for r in insertion_records if r.already_existed is False]), len(
-        chunks
+        access_aware_chunks
     )
 
 

@@ -6,6 +6,7 @@ from sqlalchemy import desc
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from danswer.configs.constants import DocumentSource
 from danswer.db.connector import fetch_connector_by_id
 from danswer.db.credentials import fetch_credential_by_id
 from danswer.db.models import ConnectorCredentialPair
@@ -42,6 +43,17 @@ def get_connector_credential_pair(
     return result.scalar_one_or_none()
 
 
+def get_connector_credential_source_from_id(
+    cc_pair_id: int,
+    db_session: Session,
+) -> DocumentSource | None:
+    stmt = select(ConnectorCredentialPair)
+    stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
+    result = db_session.execute(stmt)
+    cc_pair = result.scalar_one_or_none()
+    return cc_pair.connector.source if cc_pair else None
+
+
 def get_connector_credential_pair_from_id(
     cc_pair_id: int,
     db_session: Session,
@@ -75,17 +87,23 @@ def get_last_successful_attempt_time(
     # For Secondary Index we don't keep track of the latest success, so have to calculate it live
     attempt = (
         db_session.query(IndexAttempt)
+        .join(
+            ConnectorCredentialPair,
+            IndexAttempt.connector_credential_pair_id == ConnectorCredentialPair.id,
+        )
         .filter(
-            IndexAttempt.connector_id == connector_id,
-            IndexAttempt.credential_id == credential_id,
+            ConnectorCredentialPair.connector_id == connector_id,
+            ConnectorCredentialPair.credential_id == credential_id,
             IndexAttempt.embedding_model_id == embedding_model.id,
             IndexAttempt.status == IndexingStatus.SUCCESS,
         )
         .order_by(IndexAttempt.time_started.desc())
         .first()
     )
-
     if not attempt or not attempt.time_started:
+        connector = fetch_connector_by_id(connector_id, db_session)
+        if connector and connector.indexing_start:
+            return connector.indexing_start.timestamp()
         return 0.0
 
     return attempt.time_started.timestamp()
@@ -241,6 +259,12 @@ def remove_credential_from_connector(
     )
 
 
+def fetch_connector_credential_pairs(
+    db_session: Session,
+) -> list[ConnectorCredentialPair]:
+    return db_session.query(ConnectorCredentialPair).all()
+
+
 def resync_cc_pair(
     cc_pair: ConnectorCredentialPair,
     db_session: Session,
@@ -253,10 +277,14 @@ def resync_cc_pair(
     ) -> IndexAttempt | None:
         query = (
             db_session.query(IndexAttempt)
+            .join(
+                ConnectorCredentialPair,
+                IndexAttempt.connector_credential_pair_id == ConnectorCredentialPair.id,
+            )
             .join(EmbeddingModel, IndexAttempt.embedding_model_id == EmbeddingModel.id)
             .filter(
-                IndexAttempt.connector_id == connector_id,
-                IndexAttempt.credential_id == credential_id,
+                ConnectorCredentialPair.connector_id == connector_id,
+                ConnectorCredentialPair.credential_id == credential_id,
                 EmbeddingModel.status == IndexModelStatus.PRESENT,
             )
         )

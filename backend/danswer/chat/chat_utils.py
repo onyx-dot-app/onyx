@@ -35,6 +35,7 @@ def llm_doc_from_inference_section(inference_section: InferenceSection) -> LlmDo
 def create_chat_chain(
     chat_session_id: int,
     db_session: Session,
+    prefetch_tool_calls: bool = True,
 ) -> tuple[ChatMessage, list[ChatMessage]]:
     """Build the linear chain of messages without including the root message"""
     mainline_messages: list[ChatMessage] = []
@@ -43,6 +44,7 @@ def create_chat_chain(
         user_id=None,
         db_session=db_session,
         skip_permission_check=True,
+        prefetch_tool_calls=prefetch_tool_calls,
     )
     id_to_msg = {msg.id: msg for msg in all_chat_messages}
 

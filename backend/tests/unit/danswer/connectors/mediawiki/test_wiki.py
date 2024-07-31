@@ -115,27 +115,20 @@ def test_mediawiki_connector_recurse_depth() -> None:
     hostname = "wikipedia.org"
     categories: list[str] = []
     pages = ["Test Page"]
-    connector_name = "Test Connector"
 
     # Recurse depth less than -1 raises ValueError
     with pytest.raises(ValueError):
         recurse_depth = -2
-        wiki.MediaWikiConnector(
-            hostname, categories, pages, recurse_depth, connector_name
-        )
+        wiki.MediaWikiConnector(hostname, categories, pages, recurse_depth)
 
     # Recurse depth of -1 gets parsed as `True`
     recurse_depth = -1
-    connector = wiki.MediaWikiConnector(
-        hostname, categories, pages, recurse_depth, connector_name
-    )
+    connector = wiki.MediaWikiConnector(hostname, categories, pages, recurse_depth)
     assert connector.recurse_depth is True
 
     # Recurse depth of 0 or greater gets parsed as an integer
     recurse_depth = 0
-    connector = wiki.MediaWikiConnector(
-        hostname, categories, pages, recurse_depth, connector_name
-    )
+    connector = wiki.MediaWikiConnector(hostname, categories, pages, recurse_depth)
     assert connector.recurse_depth == recurse_depth
 
 

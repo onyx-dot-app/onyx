@@ -24,11 +24,12 @@ export default function WrappedAssistantsGallery({
 }) {
   return (
     <SidebarWrapper
+      page="chat"
       initiallyToggled={initiallyToggled}
       chatSessions={chatSessions}
       folders={folders}
       openedFolders={openedFolders}
-      headerProps={{ user, page: "" }}
+      headerProps={{ user, page: "chat" }}
       contentProps={{
         assistants: assistants,
         user: user,

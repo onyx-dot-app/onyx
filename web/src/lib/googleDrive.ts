@@ -1,4 +1,4 @@
-import { Credential } from "@/lib/types";
+import { Credential } from "./connectors/credentials";
 
 export const setupGoogleDriveOAuth = async ({
   isAdmin,
@@ -13,8 +13,10 @@ export const setupGoogleDriveOAuth = async ({
     body: JSON.stringify({
       admin_public: isAdmin,
       credential_json: {},
+      source: "google_drive",
     }),
   });
+
   if (!credentialCreationResponse.ok) {
     return [
       null,
@@ -33,6 +35,7 @@ export const setupGoogleDriveOAuth = async ({
       `Failed to create credential - ${authorizationUrlResponse.status}`,
     ];
   }
+
   const authorizationUrlJson = (await authorizationUrlResponse.json()) as {
     auth_url: string;
   };

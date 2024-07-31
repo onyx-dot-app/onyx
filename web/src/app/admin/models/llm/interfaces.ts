@@ -32,6 +32,7 @@ export interface LLMProvider {
   fast_default_model_name: string | null;
   is_public: boolean;
   groups: number[];
+  display_model_names: string[] | null;
 }
 
 export interface FullLLMProvider extends LLMProvider {
@@ -50,4 +51,5 @@ export interface LLMProviderDescriptor {
   is_default_provider: boolean | null;
   is_public: boolean;
   groups: number[];
+  display_model_names: string[] | null;
 }

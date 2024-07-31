@@ -471,8 +471,7 @@ if __name__ == "__main__":
                         embedding_model = get_current_db_embedding_model(db_session)
                         if embedding_model.cloud_provider_id is None:
                             warm_up_encoders(
-                                model_name=embedding_model.model_name,
-                                normalize=embedding_model.normalize,
+                                embedding_model=embedding_model,
                                 model_server_host=MODEL_SERVER_HOST,
                                 model_server_port=MODEL_SERVER_PORT,
                             )

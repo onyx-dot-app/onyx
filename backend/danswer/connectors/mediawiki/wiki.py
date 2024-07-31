@@ -86,7 +86,6 @@ class MediaWikiConnector(LoadConnector, PollConnector):
         categories: The categories to include in the index.
         pages: The pages to include in the index.
         recurse_depth: The depth to recurse into categories. -1 means unbounded recursion.
-        connector_name: The name of the connector.
         language_code: The language code of the wiki.
         batch_size: The batch size for loading documents.
 
@@ -104,7 +103,6 @@ class MediaWikiConnector(LoadConnector, PollConnector):
         categories: list[str],
         pages: list[str],
         recurse_depth: int,
-        connector_name: str,
         language_code: str = "en",
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
@@ -118,10 +116,8 @@ class MediaWikiConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
 
         # short names can only have ascii letters and digits
-        self.connector_name = connector_name
-        connector_name = "".join(ch for ch in connector_name if ch.isalnum())
 
-        self.family = family_class_dispatch(hostname, connector_name)()
+        self.family = family_class_dispatch(hostname, "Wikipedia Connector")()
         self.site = pywikibot.Site(fam=self.family, code=language_code)
         self.categories = [
             pywikibot.Category(self.site, f"Category:{category.replace(' ', '_')}")
@@ -210,7 +206,6 @@ class MediaWikiConnector(LoadConnector, PollConnector):
 if __name__ == "__main__":
     HOSTNAME = "fallout.fandom.com"
     test_connector = MediaWikiConnector(
-        connector_name="Fallout",
         hostname=HOSTNAME,
         categories=["Fallout:_New_Vegas_factions"],
         pages=["Fallout: New Vegas"],

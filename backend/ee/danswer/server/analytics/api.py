@@ -6,9 +6,9 @@ from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-import danswer.db.models as db_models
 from danswer.auth.users import current_admin_user
 from danswer.db.engine import get_session
+from danswer.db.models import User
 from ee.danswer.db.analytics import fetch_danswerbot_analytics
 from ee.danswer.db.analytics import fetch_per_user_query_analytics
 from ee.danswer.db.analytics import fetch_query_analytics
@@ -27,7 +27,7 @@ class QueryAnalyticsResponse(BaseModel):
 def get_query_analytics(
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    _: db_models.User | None = Depends(current_admin_user),
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[QueryAnalyticsResponse]:
     daily_query_usage_info = fetch_query_analytics(
@@ -58,7 +58,7 @@ class UserAnalyticsResponse(BaseModel):
 def get_user_analytics(
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    _: db_models.User | None = Depends(current_admin_user),
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserAnalyticsResponse]:
     daily_query_usage_info_per_user = fetch_per_user_query_analytics(
@@ -92,7 +92,7 @@ class DanswerbotAnalyticsResponse(BaseModel):
 def get_danswerbot_analytics(
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    _: db_models.User | None = Depends(current_admin_user),
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[DanswerbotAnalyticsResponse]:
     daily_danswerbot_info = fetch_danswerbot_analytics(

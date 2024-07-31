@@ -6,4 +6,5 @@
 
 .PopoverContent[data-side="top"] {
   transform: translateY(var(--radix-popover-trigger-height) px);
+  font-family: sans-serif;
 }

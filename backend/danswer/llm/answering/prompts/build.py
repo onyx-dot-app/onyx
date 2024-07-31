@@ -13,7 +13,7 @@ from danswer.llm.interfaces import LLMConfig
 from danswer.llm.utils import build_content_with_imgs
 from danswer.llm.utils import check_message_tokens
 from danswer.llm.utils import translate_history_to_basemessages
-from danswer.natural_language_processing.utils import get_default_llm_tokenizer
+from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
 from danswer.prompts.prompt_utils import add_date_time_to_prompt
 from danswer.prompts.prompt_utils import drop_messages_history_overflow
@@ -66,7 +66,10 @@ class AnswerPromptBuilder:
         self.system_message_and_token_cnt: tuple[SystemMessage, int] | None = None
         self.user_message_and_token_cnt: tuple[HumanMessage, int] | None = None
 
-        llm_tokenizer = get_default_llm_tokenizer()
+        llm_tokenizer = get_tokenizer(
+            provider_type=llm_config.model_provider,
+            model_name=llm_config.model_name,
+        )
         self.llm_tokenizer_encode_func = cast(
             Callable[[str], list[int]], llm_tokenizer.encode
         )

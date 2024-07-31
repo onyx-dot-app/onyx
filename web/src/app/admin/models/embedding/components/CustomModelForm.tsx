@@ -5,7 +5,7 @@ import {
 import { Button } from "@tremor/react";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { EmbeddingModelDescriptor, HostedEmbeddingModel } from "./types";
+import { HostedEmbeddingModel } from "./types";
 
 export function CustomModelForm({
   onSubmit,

@@ -15,7 +15,6 @@ class WikipediaConnector(wiki.MediaWikiConnector):
         categories: list[str],
         pages: list[str],
         recurse_depth: int,
-        connector_name: str,
         language_code: str = "en",
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
@@ -24,7 +23,6 @@ class WikipediaConnector(wiki.MediaWikiConnector):
             categories=categories,
             pages=pages,
             recurse_depth=recurse_depth,
-            connector_name=connector_name,
             language_code=language_code,
             batch_size=batch_size,
         )

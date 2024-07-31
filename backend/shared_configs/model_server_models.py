@@ -2,6 +2,8 @@ from pydantic import BaseModel
 
 from shared_configs.enums import EmbedTextType
 
+Embedding = list[float]
+
 
 class EmbedRequest(BaseModel):
     texts: list[str]
@@ -17,7 +19,7 @@ class EmbedRequest(BaseModel):
 
 
 class EmbedResponse(BaseModel):
-    embeddings: list[list[float] | None]
+    embeddings: list[Embedding]
 
 
 class RerankRequest(BaseModel):

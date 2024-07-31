@@ -248,6 +248,9 @@ DISABLE_INDEX_UPDATE_ON_SWAP = (
 # fairly large amount of memory in order to increase substantially, since
 # each worker loads the embedding models into memory.
 NUM_INDEXING_WORKERS = int(os.environ.get("NUM_INDEXING_WORKERS") or 1)
+NUM_SECONDARY_INDEXING_WORKERS = int(
+    os.environ.get("NUM_SECONDARY_INDEXING_WORKERS") or NUM_INDEXING_WORKERS
+)
 # More accurate results at the expense of indexing speed and index size (stores additional 4 MINI_CHUNK vectors)
 ENABLE_MINI_CHUNK = os.environ.get("ENABLE_MINI_CHUNK", "").lower() == "true"
 # Finer grained chunking for more detail retention

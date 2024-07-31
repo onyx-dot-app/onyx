@@ -34,10 +34,17 @@ class DirectQARequest(ChunkContext):
     skip_llm_chunk_filter: bool | None = None
     chain_of_thought: bool = False
     return_contexts: bool = False
+
+    # allows the caller to specify the exact search query they want to use
+    # can be used if the message sent to the LLM / query should not be the same
+    # will also disable Thread-based Rewording if specified
+    query_override: str | None = None
+
     # This is to toggle agentic evaluation:
     # 1. Evaluates whether each response is relevant or not
     # 2. Provides a summary of the document's relevance in the resulsts
     llm_doc_eval: bool = False
+
     # If True, skips generative an AI response to the search query
     skip_gen_ai_answer_generation: bool = False
 

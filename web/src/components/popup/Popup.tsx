@@ -1,4 +1,12 @@
-import React, { useState, useRef, useEffect, ReactNode } from "react";
+"use client";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  ReactNode,
+  useContext,
+} from "react";
+import { SettingsContext } from "../settings/SettingsProvider";
 
 interface PopupProps {
   children: JSX.Element;
@@ -6,15 +14,21 @@ interface PopupProps {
     close: () => void,
     ref?: React.RefObject<HTMLDivElement>
   ) => ReactNode;
-  position?: "top" | "bottom" | "left" | "right";
+  position?: "top" | "bottom" | "left" | "right" | "top-right";
   removePadding?: boolean;
+  tab?: boolean;
+  flexPriority?: "shrink" | "stiff" | "second";
+  mobilePosition?: "top" | "bottom" | "left" | "right" | "top-right";
 }
 
 const Popup: React.FC<PopupProps> = ({
   children,
   content,
+  tab,
   removePadding,
   position = "top",
+  flexPriority,
+  mobilePosition,
 }) => {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -49,6 +63,8 @@ const Popup: React.FC<PopupProps> = ({
     };
   }, []);
 
+  const settings = useContext(SettingsContext);
+
   const getPopupStyle = (): React.CSSProperties => {
     if (!triggerRef.current) return {};
 
@@ -58,7 +74,11 @@ const Popup: React.FC<PopupProps> = ({
       zIndex: 10,
     };
 
-    switch (position) {
+    const currentPosition = settings?.isMobile
+      ? mobilePosition || position
+      : position;
+
+    switch (currentPosition) {
       case "bottom":
         popupStyle.top = `${triggerRect.height + 5}px`;
         popupStyle.left = "50%";
@@ -74,9 +94,14 @@ const Popup: React.FC<PopupProps> = ({
         popupStyle.left = `${triggerRect.width + 5}px`;
         popupStyle.transform = "translateY(-50%)";
         break;
+      case "top-right":
+        popupStyle.bottom = `${triggerRect.height + 5}px`;
+        popupStyle.right = "0";
+        popupStyle.right = "auto";
+        break;
       default: // top
         popupStyle.bottom = `${triggerRect.height + 5}px`;
-        popupStyle.left = `${triggerRect.width + 100}px`;
+        popupStyle.left = "50%";
         popupStyle.transform = "translateX(-50%)";
     }
 
@@ -84,7 +109,19 @@ const Popup: React.FC<PopupProps> = ({
   };
 
   return (
-    <div className="relative inline-block">
+    <div
+      className={`relative inline-block
+      ${
+        flexPriority === "shrink" &&
+        "flex-shrink-100 flex-grow-0 flex-basis-auto min-w-[30px] whitespace-nowrap "
+      }
+      ${
+        flexPriority === "second" &&
+        "flex-shrink flex-basis-0 min-w-[30px] whitespace-nowrap "
+      }
+      ${flexPriority === "stiff" && "flex-none whitespace-nowrap "}
+`}
+    >
       <div ref={triggerRef} onClick={togglePopup} className="cursor-pointer">
         {children}
       </div>
@@ -92,9 +129,9 @@ const Popup: React.FC<PopupProps> = ({
       {isOpen && (
         <div
           ref={popupRef}
-          className={`absolute bg-white border border-gray-200 rounded-lg shadow-lg ${
+          className={`absolute bg-white border border-gray-200  rounded-lg shadow-lg ${
             !removePadding && "p-4"
-          } min-w-[400px]`}
+          } ${!settings?.isMobile ? (tab ? "w-[400px] " : "min-w-[400px]") : "w-[250px]"}`}
           style={getPopupStyle()}
         >
           {content(closePopup, contentRef)}

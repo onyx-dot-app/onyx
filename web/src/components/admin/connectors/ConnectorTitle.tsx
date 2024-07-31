@@ -1,4 +1,3 @@
-import { getSourceMetadata } from "@/lib/sources";
 import {
   ConfluenceConfig,
   Connector,
@@ -8,7 +7,9 @@ import {
   JiraConfig,
   SlackConfig,
   ZulipConfig,
-} from "@/lib/types";
+} from "@/lib/connectors/connectors";
+import { getSourceMetadata } from "@/lib/sources";
+
 import Link from "next/link";
 
 interface ConnectorTitleProps {

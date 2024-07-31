@@ -17,7 +17,7 @@ export function Bubble({
     <div
       className={
         `
-      px-3 
+      px-1.5
       py-1
       rounded-lg 
       border

@@ -14,7 +14,7 @@ from danswer.llm.answering.models import DocumentPruningConfig
 from danswer.llm.answering.models import PromptConfig
 from danswer.llm.answering.prompts.citations_prompt import compute_max_document_tokens
 from danswer.llm.interfaces import LLMConfig
-from danswer.natural_language_processing.utils import get_default_llm_tokenizer
+from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.natural_language_processing.utils import tokenizer_trim_content
 from danswer.prompts.prompt_utils import build_doc_context_str
 from danswer.search.models import InferenceChunk
@@ -135,8 +135,12 @@ def _apply_pruning(
     is_manually_selected_docs: bool,
     use_sections: bool,
     using_tool_message: bool,
+    llm_config: LLMConfig,
 ) -> list[InferenceSection]:
-    llm_tokenizer = get_default_llm_tokenizer()
+    llm_tokenizer = get_tokenizer(
+        provider_type=llm_config.model_provider,
+        model_name=llm_config.model_name,
+    )
     sections = deepcopy(sections)  # don't modify in place
 
     # re-order docs with all the "relevant" docs at the front
@@ -165,14 +169,15 @@ def _apply_pruning(
             )
         )
 
-        section_tokens = len(llm_tokenizer.encode(section_str))
+        section_token_count = len(llm_tokenizer.encode(section_str))
         # if not using sections (specifically, using Sections where each section maps exactly to the one center chunk),
         # truncate chunks that are way too long. This can happen if the embedding model tokenizer is different
         # than the LLM tokenizer
         if (
             not is_manually_selected_docs
             and not use_sections
-            and section_tokens > DOC_EMBEDDING_CONTEXT_SIZE + _METADATA_TOKEN_ESTIMATE
+            and section_token_count
+            > DOC_EMBEDDING_CONTEXT_SIZE + _METADATA_TOKEN_ESTIMATE
         ):
             logger.warning(
                 "Found more tokens in Section than expected, "
@@ -183,9 +188,9 @@ def _apply_pruning(
                 desired_length=DOC_EMBEDDING_CONTEXT_SIZE,
                 tokenizer=llm_tokenizer,
             )
-            section_tokens = DOC_EMBEDDING_CONTEXT_SIZE
+            section_token_count = DOC_EMBEDDING_CONTEXT_SIZE
 
-        total_tokens += section_tokens
+        total_tokens += section_token_count
         if total_tokens > token_limit:
             final_section_ind = ind
             break
@@ -273,6 +278,7 @@ def prune_sections(
         is_manually_selected_docs=document_pruning_config.is_manually_selected_docs,
         use_sections=document_pruning_config.use_sections,  # Now default True
         using_tool_message=document_pruning_config.using_tool_message,
+        llm_config=llm_config,
     )
 
 

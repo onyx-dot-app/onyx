@@ -13,6 +13,7 @@ import {
   FiSearch,
   FiX,
   FiShare2,
+  FiImage,
 } from "react-icons/fi";
 import Link from "next/link";
 import { orderAssistantsForUser } from "@/lib/assistants/orderAssistants";
@@ -33,7 +34,8 @@ import { AssistantSharingModal } from "./AssistantSharingModal";
 import { AssistantSharedStatusDisplay } from "../AssistantSharedStatus";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { ToolsDisplay } from "../ToolsDisplay";
+import { AssistantTools, ToolsDisplay } from "../ToolsDisplay";
+import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 
 function AssistantListItem({
   assistant,
@@ -73,181 +75,188 @@ function AssistantListItem({
         show={showSharingModal}
       />
       <div
-        className="
-          bg-background-emphasis
+        className="flex bg-background-emphasis
           rounded-lg
           shadow-md
           p-4
-          mb-4
+          mb-4 flex-col"
+      >
+        <div
+          className="
+          
           flex
           justify-between
           items-center
         "
-      >
-        <div className="w-3/4">
-          <div className="flex items-center">
-            <AssistantIcon assistant={assistant} />
-            <h2 className="text-xl font-semibold mb-2 my-auto ml-2">
-              {assistant.name}
-            </h2>
-          </div>
-          {assistant.tools.length > 0 && (
-            <ToolsDisplay tools={assistant.tools} />
-          )}
-          <div className="text-sm mt-2">{assistant.description}</div>
-          <div className="mt-2">
-            <AssistantSharedStatusDisplay assistant={assistant} user={user} />
-          </div>
-        </div>
-        {isOwnedByUser && (
-          <div className="ml-auto flex items-center">
-            {!assistant.is_public && (
-              <div
-                className="mr-4 rounded p-2 cursor-pointer hover:bg-hover"
-                onClick={() => setShowSharingModal(true)}
-              >
-                <FiShare2 size={16} />
-              </div>
-            )}
-            <Link
-              href={`/assistants/edit/${assistant.id}`}
-              className="mr-4 rounded p-2 cursor-pointer hover:bg-hover"
-            >
-              <FiEdit2 size={16} />
-            </Link>
-          </div>
-        )}
-        <DefaultPopover
-          content={
-            <div className="hover:bg-hover rounded p-2 cursor-pointer">
-              <FiMoreHorizontal size={16} />
-            </div>
-          }
-          side="bottom"
-          align="start"
-          sideOffset={5}
         >
-          {[
-            ...(!isFirst
-              ? [
-                  <div
-                    key="move-up"
-                    className="flex items-center gap-x-2"
-                    onClick={async () => {
-                      const success = await moveAssistantUp(
-                        assistant.id,
-                        currentChosenAssistants || allAssistantIds
-                      );
-                      if (success) {
-                        setPopup({
-                          message: `"${assistant.name}" has been moved up.`,
-                          type: "success",
-                        });
-                        router.refresh();
-                      } else {
-                        setPopup({
-                          message: `"${assistant.name}" could not be moved up.`,
-                          type: "error",
-                        });
-                      }
-                    }}
-                  >
-                    <FiArrowUp /> Move Up
-                  </div>,
-                ]
-              : []),
-            ...(!isLast
-              ? [
-                  <div
-                    key="move-down"
-                    className="flex items-center gap-x-2"
-                    onClick={async () => {
-                      const success = await moveAssistantDown(
-                        assistant.id,
-                        currentChosenAssistants || allAssistantIds
-                      );
-                      if (success) {
-                        setPopup({
-                          message: `"${assistant.name}" has been moved down.`,
-                          type: "success",
-                        });
-                        router.refresh();
-                      } else {
-                        setPopup({
-                          message: `"${assistant.name}" could not be moved down.`,
-                          type: "error",
-                        });
-                      }
-                    }}
-                  >
-                    <FiArrowDown /> Move Down
-                  </div>,
-                ]
-              : []),
-            isVisible ? (
-              <div
-                key="remove"
-                className="flex items-center gap-x-2"
-                onClick={async () => {
-                  if (
-                    currentChosenAssistants &&
-                    currentChosenAssistants.length === 1
-                  ) {
-                    setPopup({
-                      message: `Cannot remove "${assistant.name}" - you must have at least one assistant.`,
-                      type: "error",
-                    });
-                    return;
-                  }
+          <div className="w-3/4">
+            <div className="flex items-center">
+              <AssistantIcon assistant={assistant} />
+              <h2 className="text-xl font-semibold my-auto ml-2">
+                {assistant.name}
+              </h2>
+            </div>
 
-                  const success = await removeAssistantFromList(
-                    assistant.id,
-                    currentChosenAssistants || allAssistantIds
-                  );
-                  if (success) {
-                    setPopup({
-                      message: `"${assistant.name}" has been removed from your list.`,
-                      type: "success",
-                    });
-                    router.refresh();
-                  } else {
-                    setPopup({
-                      message: `"${assistant.name}" could not be removed from your list.`,
-                      type: "error",
-                    });
-                  }
-                }}
+            <div className="text-sm mt-2">{assistant.description}</div>
+            <div className="mt-2 flex items-center gap-x-3">
+              <AssistantSharedStatusDisplay assistant={assistant} user={user} />
+              {assistant.tools.length != 0 && (
+                <AssistantTools list assistant={assistant} />
+              )}
+            </div>
+          </div>
+
+          {isOwnedByUser && (
+            <div className="ml-auto flex items-center">
+              {!assistant.is_public && (
+                <div
+                  className="mr-4 rounded p-2 cursor-pointer hover:bg-hover"
+                  onClick={() => setShowSharingModal(true)}
+                >
+                  <FiShare2 size={16} />
+                </div>
+              )}
+              <Link
+                href={`/assistants/edit/${assistant.id}`}
+                className="mr-4 rounded p-2 cursor-pointer hover:bg-hover"
               >
-                <FiX /> {isOwnedByUser ? "Hide" : "Remove"}
+                <FiEdit2 size={16} />
+              </Link>
+            </div>
+          )}
+
+          <DefaultPopover
+            content={
+              <div className="hover:bg-hover rounded p-2 cursor-pointer">
+                <FiMoreHorizontal size={16} />
               </div>
-            ) : (
-              <div
-                key="add"
-                className="flex items-center gap-x-2"
-                onClick={async () => {
-                  const success = await addAssistantToList(
-                    assistant.id,
-                    currentChosenAssistants || allAssistantIds
-                  );
-                  if (success) {
-                    setPopup({
-                      message: `"${assistant.name}" has been added to your list.`,
-                      type: "success",
-                    });
-                    router.refresh();
-                  } else {
-                    setPopup({
-                      message: `"${assistant.name}" could not be added to your list.`,
-                      type: "error",
-                    });
-                  }
-                }}
-              >
-                <FiPlus /> Add
-              </div>
-            ),
-          ]}
-        </DefaultPopover>
+            }
+            side="bottom"
+            align="start"
+            sideOffset={5}
+          >
+            {[
+              ...(!isFirst
+                ? [
+                    <div
+                      key="move-up"
+                      className="flex items-center gap-x-2"
+                      onClick={async () => {
+                        const success = await moveAssistantUp(
+                          assistant.id,
+                          currentChosenAssistants || allAssistantIds
+                        );
+                        if (success) {
+                          setPopup({
+                            message: `"${assistant.name}" has been moved up.`,
+                            type: "success",
+                          });
+                          router.refresh();
+                        } else {
+                          setPopup({
+                            message: `"${assistant.name}" could not be moved up.`,
+                            type: "error",
+                          });
+                        }
+                      }}
+                    >
+                      <FiArrowUp /> Move Up
+                    </div>,
+                  ]
+                : []),
+              ...(!isLast
+                ? [
+                    <div
+                      key="move-down"
+                      className="flex items-center gap-x-2"
+                      onClick={async () => {
+                        const success = await moveAssistantDown(
+                          assistant.id,
+                          currentChosenAssistants || allAssistantIds
+                        );
+                        if (success) {
+                          setPopup({
+                            message: `"${assistant.name}" has been moved down.`,
+                            type: "success",
+                          });
+                          router.refresh();
+                        } else {
+                          setPopup({
+                            message: `"${assistant.name}" could not be moved down.`,
+                            type: "error",
+                          });
+                        }
+                      }}
+                    >
+                      <FiArrowDown /> Move Down
+                    </div>,
+                  ]
+                : []),
+              isVisible ? (
+                <div
+                  key="remove"
+                  className="flex items-center gap-x-2"
+                  onClick={async () => {
+                    if (
+                      currentChosenAssistants &&
+                      currentChosenAssistants.length === 1
+                    ) {
+                      setPopup({
+                        message: `Cannot remove "${assistant.name}" - you must have at least one assistant.`,
+                        type: "error",
+                      });
+                      return;
+                    }
+
+                    const success = await removeAssistantFromList(
+                      assistant.id,
+                      currentChosenAssistants || allAssistantIds
+                    );
+                    if (success) {
+                      setPopup({
+                        message: `"${assistant.name}" has been removed from your list.`,
+                        type: "success",
+                      });
+                      router.refresh();
+                    } else {
+                      setPopup({
+                        message: `"${assistant.name}" could not be removed from your list.`,
+                        type: "error",
+                      });
+                    }
+                  }}
+                >
+                  <FiX /> {isOwnedByUser ? "Hide" : "Remove"}
+                </div>
+              ) : (
+                <div
+                  key="add"
+                  className="flex items-center gap-x-2"
+                  onClick={async () => {
+                    const success = await addAssistantToList(
+                      assistant.id,
+                      currentChosenAssistants || allAssistantIds
+                    );
+                    if (success) {
+                      setPopup({
+                        message: `"${assistant.name}" has been added to your list.`,
+                        type: "success",
+                      });
+                      router.refresh();
+                    } else {
+                      setPopup({
+                        message: `"${assistant.name}" could not be added to your list.`,
+                        type: "error",
+                      });
+                    }
+                  }}
+                >
+                  <FiPlus /> Add
+                </div>
+              ),
+            ]}
+          </DefaultPopover>
+        </div>
       </div>
     </>
   );
@@ -278,7 +287,7 @@ export function AssistantsList({ user, assistants }: AssistantsListProps) {
   return (
     <>
       {popup}
-      <div className="mx-auto w-searchbar-xs 2xl:w-searchbar-sm 3xl:w-searchbar">
+      <div className="mx-auto mobile:w-[90%] desktop:w-searchbar-xs 2xl:w-searchbar-sm 3xl:w-searchbar">
         <AssistantsPageTitle>My Assistants</AssistantsPageTitle>
 
         <div className="grid grid-cols-2 gap-4 mt-3">

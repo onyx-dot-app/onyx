@@ -4,9 +4,8 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { Button, Text, Title } from "@tremor/react";
-import { FiPackage } from "react-icons/fi";
 import useSWR, { mutate } from "swr";
-import { ModelOption, ModelPreview } from "./components/ModelSelector";
+import { ModelPreview } from "./components/ModelSelector";
 import { useState } from "react";
 import { ReindexingProgressTable } from "./components/ReindexingProgressTable";
 import { Modal } from "@/components/Modal";
@@ -20,7 +19,8 @@ import {
   EmbeddingModelDescriptor,
 } from "./components/types";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { Connector, ConnectorIndexingStatus } from "@/lib/types";
+import { ConnectorIndexingStatus } from "@/lib/types";
+import { Connector } from "@/lib/connectors/connectors";
 import Link from "next/link";
 import OpenEmbeddingPage from "./OpenEmbeddingPage";
 import CloudEmbeddingPage from "./CloudEmbeddingPage";
@@ -372,7 +372,7 @@ function Main() {
               onClick={() => setOpenToggle(true)}
               className={` mx-2 p-2 font-bold  ${
                 openToggle
-                  ? "rounded bg-neutral-900 text-neutral-100 underline"
+                  ? "rounded bg-background-900 text-text-100 underline"
                   : "hover:underline"
               }`}
             >
@@ -383,7 +383,7 @@ function Main() {
                 onClick={() => setOpenToggle(false)}
                 className={`mx-2 p-2 font-bold  ${
                   !openToggle
-                    ? "rounded bg-neutral-900   text-neutral-100 underline"
+                    ? "rounded bg-background-900 text-text-100 underline"
                     : " hover:underline"
                 }`}
               >

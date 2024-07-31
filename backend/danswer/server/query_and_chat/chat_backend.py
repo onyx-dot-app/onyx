@@ -44,8 +44,9 @@ from danswer.llm.answering.prompts.citations_prompt import (
 )
 from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_default_llms
+from danswer.llm.factory import get_llms_for_persona
 from danswer.llm.headers import get_litellm_additional_request_headers
-from danswer.natural_language_processing.utils import get_default_llm_tokenizer
+from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.secondary_llm_flows.chat_session_naming import (
     get_renamed_conversation_name,
 )
@@ -442,6 +443,14 @@ def seed_chat(
         root_message = get_or_create_root_message(
             chat_session_id=new_chat_session.id, db_session=db_session
         )
+        llm, fast_llm = get_llms_for_persona(persona=new_chat_session.persona)
+
+        tokenizer = get_tokenizer(
+            model_name=llm.config.model_name,
+            provider_type=llm.config.model_provider,
+        )
+        token_count = len(tokenizer.encode(chat_seed_request.message))
+
         create_new_chat_message(
             chat_session_id=new_chat_session.id,
             parent_message=root_message,
@@ -452,9 +461,7 @@ def seed_chat(
                 else None
             ),
             message=chat_seed_request.message,
-            token_count=len(
-                get_default_llm_tokenizer().encode(chat_seed_request.message)
-            ),
+            token_count=token_count,
             message_type=MessageType.USER,
             db_session=db_session,
         )

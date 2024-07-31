@@ -11,6 +11,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore
 from sqlalchemy.orm import Session
 
 from danswer.configs.app_configs import WEB_DOMAIN
+from danswer.configs.constants import DocumentSource
 from danswer.connectors.google_drive.constants import CRED_KEY
 from danswer.connectors.google_drive.constants import (
     DB_CREDENTIALS_DICT_DELEGATED_USER_KEY,
@@ -118,6 +119,7 @@ def update_credential_access_tokens(
 
 
 def build_service_account_creds(
+    source: DocumentSource,
     delegated_user_email: str | None = None,
 ) -> CredentialBase:
     service_account_key = get_service_account_key()
@@ -131,6 +133,7 @@ def build_service_account_creds(
     return CredentialBase(
         credential_json=credential_dict,
         admin_public=True,
+        source=DocumentSource.GOOGLE_DRIVE,
     )
 
 

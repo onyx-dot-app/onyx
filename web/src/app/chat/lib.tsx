@@ -610,6 +610,7 @@ export async function useScrollonStream({
   endDivRef: RefObject<HTMLDivElement>;
   distance: number;
   debounce: number;
+  mobile?: boolean;
 }) {
   const preventScrollInterference = useRef<boolean>(false);
   const preventScroll = useRef<boolean>(false);

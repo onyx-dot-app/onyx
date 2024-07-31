@@ -1,8 +1,12 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { FiPlusCircle, FiPlus, FiInfo, FiX } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { FilterManager, LlmOverrideManager } from "@/lib/hooks";
+import {
+  FilterManager,
+  getDisplayNameForModel,
+  LlmOverrideManager,
+} from "@/lib/hooks";
 import { SelectedFilterDisplay } from "./SelectedFilterDisplay";
 import { useChatContext } from "@/components/context/ChatContext";
 import { getFinalLLM } from "@/lib/llm/utils";
@@ -25,6 +29,7 @@ import { DanswerDocument } from "@/lib/search/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { Tooltip } from "@/components/tooltip/Tooltip";
 import { Hoverable } from "@/components/Hoverable";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 const MAX_INPUT_HEIGHT = 200;
 
 export function ChatInputBar({
@@ -99,6 +104,7 @@ export function ChatInputBar({
       }
     }
   };
+  const settings = useContext(SettingsContext);
 
   const { llmProviders } = useChatContext();
   const [_, llmName] = getFinalLLM(llmProviders, selectedAssistant, null);
@@ -209,9 +215,8 @@ export function ChatInputBar({
           className="
             w-[90%]
             shrink
-            bg-background
             relative
-            px-4
+            desktop:px-4
             max-w-searchbar-max
             mx-auto
           "
@@ -280,7 +285,7 @@ export function ChatInputBar({
                   ref={interactionsRef}
                   className="bg-background-200 p-2 rounded-t-lg items-center flex w-full"
                 >
-                  <AssistantIcon assistant={alternativeAssistant} border />
+                  <AssistantIcon assistant={alternativeAssistant} />
                   <p className="ml-3 text-strong my-auto">
                     {alternativeAssistant.name}
                   </p>
@@ -386,7 +391,7 @@ export function ChatInputBar({
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
-              placeholder="Send a message or @ to tag an assistant..."
+              placeholder={`Send a message ${!settings?.isMobile ? "or @ to tag an assistant..." : ""}`}
               value={message}
               onKeyDown={(event) => {
                 if (
@@ -416,7 +421,9 @@ export function ChatInputBar({
                     }}
                   />
                 )}
+                flexPriority="shrink"
                 position="top"
+                mobilePosition="top-right"
               >
                 <ChatInputOption
                   flexPriority="shrink"
@@ -428,8 +435,16 @@ export function ChatInputBar({
               </Popup>
 
               <Popup
+                tab
                 content={(close, ref) => (
                   <LlmTab
+                    currentLlm={
+                      llmOverrideManager.llmOverride.modelName ||
+                      (selectedAssistant
+                        ? selectedAssistant.llm_model_version_override ||
+                          llmName
+                        : llmName)
+                    }
                     close={close}
                     ref={ref}
                     llmOverrideManager={llmOverrideManager}
@@ -438,14 +453,20 @@ export function ChatInputBar({
                   />
                 )}
                 position="top"
+                // flexPriority="second"
               >
                 <ChatInputOption
                   flexPriority="second"
                   name={
-                    llmOverrideManager.llmOverride.modelName ||
-                    (selectedAssistant
-                      ? selectedAssistant.llm_model_version_override || llmName
-                      : llmName)
+                    settings?.isMobile
+                      ? undefined
+                      : getDisplayNameForModel(
+                          llmOverrideManager.llmOverride.modelName ||
+                            (selectedAssistant
+                              ? selectedAssistant.llm_model_version_override ||
+                                llmName
+                              : llmName)
+                        )
                   }
                   Icon={CpuIconSkeleton}
                 />
@@ -471,7 +492,7 @@ export function ChatInputBar({
                 }}
               />
             </div>
-            <div className="absolute bottom-2.5 right-10">
+            <div className="absolute bottom-2.5 mobile:right-4 desktop:right-10">
               <div
                 className="cursor-pointer"
                 onClick={() => {

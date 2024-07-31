@@ -13,7 +13,7 @@ import {
   FiGlobe,
 } from "react-icons/fi";
 import { FeedbackType } from "../types";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   DanswerDocument,
@@ -58,6 +58,7 @@ import { ValidSources } from "@/lib/types";
 import { Tooltip } from "@/components/tooltip/Tooltip";
 import { useMouseTracking } from "./hooks";
 import { InternetSearchIcon } from "@/components/InternetSearchIcon";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -162,6 +163,7 @@ export const AIMessage = ({
 
   const { isHovering, trackedElementRef, hoverElementRef } = useMouseTracking();
 
+  const settings = useContext(SettingsContext);
   // this is needed to give Prism a chance to load
   if (!isReady) {
     return <div />;
@@ -226,7 +228,7 @@ export const AIMessage = ({
   return (
     <div ref={trackedElementRef} className={"py-5 px-2 lg:px-5 relative flex "}>
       <div className="mx-auto w-[90%] max-w-message-max">
-        <div className="xl:ml-8">
+        <div className=" mobile:ml-4 xl:ml-8">
           <div className="flex">
             <AssistantIcon
               size="small"
@@ -430,7 +432,8 @@ export const AIMessage = ({
                       <div className="mt-2 -mx-8 w-full mb-4 flex relative">
                         <div className="w-full">
                           <div className="px-8 flex gap-x-2">
-                            {filteredDocs.length > 0 &&
+                            {!settings?.isMobile &&
+                              filteredDocs.length > 0 &&
                               filteredDocs.slice(0, 2).map((doc, ind) => (
                                 <div
                                   key={doc.document_id}
@@ -530,10 +533,10 @@ export const AIMessage = ({
                       <div
                         ref={hoverElementRef}
                         className={`
-                        absolute -bottom-2
-                        invisible ${isHovering && "!visible"}
-                        opacity-0 ${isHovering && "!opacity-100"}
-                        translate-y-2 ${isHovering && "!translate-y-0"}
+                        absolute -bottom-4
+                        invisible ${(isHovering || settings?.isMobile) && "!visible"}
+                        opacity-0 ${(isHovering || settings?.isMobile) && "!opacity-100"}
+                        translate-y-2 ${(isHovering || settings?.isMobile) && "!translate-y-0"}
                         transition-transform duration-300 ease-in-out 
                         flex md:flex-row gap-x-0.5 bg-background-125/40 p-1.5 rounded-lg
                         `}

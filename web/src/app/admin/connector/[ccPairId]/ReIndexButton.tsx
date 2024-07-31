@@ -3,7 +3,6 @@
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { runConnector } from "@/lib/connector";
 import { Button, Divider, Text } from "@tremor/react";
-import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { buildCCPairInfoUrl } from "./lib";
 import { useState } from "react";
@@ -95,11 +94,13 @@ export function ReIndexButton({
   connectorId,
   credentialId,
   isDisabled,
+  isDeleting,
 }: {
   ccPairId: number;
   connectorId: number;
   credentialId: number;
   isDisabled: boolean;
+  isDeleting: boolean;
 }) {
   const { popup, setPopup } = usePopup();
   const [reIndexPopupVisible, setReIndexPopupVisible] = useState(false);
@@ -123,14 +124,16 @@ export function ReIndexButton({
         onClick={() => {
           setReIndexPopupVisible(true);
         }}
-        disabled={isDisabled}
+        disabled={isDisabled || isDeleting}
         tooltip={
-          isDisabled
-            ? "Connector must be active in order to run indexing"
-            : undefined
+          isDeleting
+            ? "Cannot index while connector is deleting"
+            : isDisabled
+              ? "Connector must be re-enabled before indexing"
+              : undefined
         }
       >
-        Run Indexing
+        Index
       </Button>
     </>
   );

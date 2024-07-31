@@ -16,7 +16,7 @@ export function InMessageImage({ fileId }: { fileId: string }) {
       />
 
       <img
-        className="object-cover object-center overflow-hidden rounded-lg w-full h-full max-w-64 max-h-64 transition-opacity duration-300 opacity-100"
+        className="object-cover object-center overflow-hidden rounded-lg w-full h-full max-w-96 max-h-96 transition-opacity duration-300 opacity-100"
         onClick={() => setFullImageShowing(true)}
         src={buildImgUrl(fileId)}
         loading="lazy"

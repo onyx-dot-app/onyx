@@ -9,6 +9,7 @@ from sqlalchemy import not_
 from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy import update
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from danswer.auth.schemas import UserRole
@@ -24,6 +25,7 @@ from danswer.db.models import StarterMessage
 from danswer.db.models import Tool
 from danswer.db.models import User
 from danswer.db.models import User__UserGroup
+from danswer.db.models import UserGroup
 from danswer.search.enums import RecencyBiasSetting
 from danswer.server.features.persona.models import CreatePersonaRequest
 from danswer.server.features.persona.models import PersonaSnapshot
@@ -80,6 +82,9 @@ def create_update_persona(
             starter_messages=create_persona_request.starter_messages,
             is_public=create_persona_request.is_public,
             db_session=db_session,
+            icon_color=create_persona_request.icon_color,
+            icon_shape=create_persona_request.icon_shape,
+            uploaded_image_id=create_persona_request.uploaded_image_id,
         )
 
         versioned_make_persona_private = fetch_versioned_implementation(
@@ -328,6 +333,9 @@ def upsert_persona(
     persona_id: int | None = None,
     default_persona: bool = False,
     commit: bool = True,
+    icon_color: str | None = None,
+    icon_shape: int | None = None,
+    uploaded_image_id: str | None = None,
 ) -> Persona:
     if persona_id is not None:
         persona = db_session.query(Persona).filter_by(id=persona_id).first()
@@ -383,6 +391,9 @@ def upsert_persona(
         persona.starter_messages = starter_messages
         persona.deleted = False  # Un-delete if previously deleted
         persona.is_public = is_public
+        persona.icon_color = icon_color
+        persona.icon_shape = icon_shape
+        persona.uploaded_image_id = uploaded_image_id
 
         # Do not delete any associations manually added unless
         # a new updated list is provided
@@ -415,6 +426,9 @@ def upsert_persona(
             llm_model_version_override=llm_model_version_override,
             starter_messages=starter_messages,
             tools=tools or [],
+            icon_shape=icon_shape,
+            icon_color=icon_color,
+            uploaded_image_id=uploaded_image_id,
         )
         db_session.add(persona)
 
@@ -548,6 +562,8 @@ def get_default_prompt__read_only() -> Prompt:
         return _get_default_prompt(db_session)
 
 
+# TODO: since this gets called with every chat message, could it be more efficient to pregenerate
+# a direct mapping indicating whether a user has access to a specific persona?
 def get_persona_by_id(
     persona_id: int,
     # if user is `None` assume the user is an admin or auth is disabled
@@ -556,16 +572,38 @@ def get_persona_by_id(
     include_deleted: bool = False,
     is_for_edit: bool = True,  # NOTE: assume true for safety
 ) -> Persona:
-    stmt = select(Persona).where(Persona.id == persona_id)
+    stmt = (
+        select(Persona)
+        .options(selectinload(Persona.users), selectinload(Persona.groups))
+        .where(Persona.id == persona_id)
+    )
 
     or_conditions = []
 
     # if user is an admin, they should have access to all Personas
+    # and will skip the following clause
     if user is not None and user.role != UserRole.ADMIN:
-        or_conditions.extend([Persona.user_id == user.id, Persona.user_id.is_(None)])
+        # the user is not an admin
+        isPersonaUnowned = Persona.user_id.is_(
+            None
+        )  # allow access if persona user id is None
+        isUserCreator = (
+            Persona.user_id == user.id
+        )  # allow access if user created the persona
+        or_conditions.extend([isPersonaUnowned, isUserCreator])
 
-        # if we aren't editing, also give access to all public personas
+        # if we aren't editing, also give access if:
+        # 1. the user is authorized for this persona
+        # 2. the user is in an authorized group for this persona
+        # 3. if the persona is public
         if not is_for_edit:
+            isSharedWithUser = Persona.users.any(
+                id=user.id
+            )  # allow access if user is in allowed users
+            isSharedWithGroup = Persona.groups.any(
+                UserGroup.users.any(id=user.id)
+            )  # allow access if user is in any allowed group
+            or_conditions.extend([isSharedWithUser, isSharedWithGroup])
             or_conditions.append(Persona.is_public.is_(True))
 
     if or_conditions:

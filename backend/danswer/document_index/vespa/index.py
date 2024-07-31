@@ -69,6 +69,7 @@ from danswer.search.retrieval.search_runner import query_processing
 from danswer.search.retrieval.search_runner import remove_stop_words_and_punctuation
 from danswer.utils.batching import batch_generator
 from danswer.utils.logger import setup_logger
+from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
 
@@ -329,20 +330,16 @@ def _index_vespa_chunk(
         "Content-Type": "application/json",
     }
     document = chunk.source_document
+
     # No minichunk documents in vespa, minichunk vectors are stored in the chunk itself
     vespa_chunk_id = str(get_uuid_from_chunk(chunk))
     embeddings = chunk.embeddings
 
-    if chunk.embeddings.full_embedding is None:
-        embeddings.full_embedding = chunk.title_embedding
     embeddings_name_vector_map = {"full_chunk": embeddings.full_embedding}
 
     if embeddings.mini_chunk_embeddings:
         for ind, m_c_embed in enumerate(embeddings.mini_chunk_embeddings):
-            if m_c_embed is None:
-                embeddings_name_vector_map[f"mini_chunk_{ind}"] = chunk.title_embedding
-            else:
-                embeddings_name_vector_map[f"mini_chunk_{ind}"] = m_c_embed
+            embeddings_name_vector_map[f"mini_chunk_{ind}"] = m_c_embed
 
     title = document.get_title_for_document_index()
 
@@ -1035,7 +1032,7 @@ class VespaIndex(DocumentIndex):
     def semantic_retrieval(
         self,
         query: str,
-        query_embedding: list[float],
+        query_embedding: Embedding,
         filters: IndexFilters,
         time_decay_multiplier: float,
         num_to_retrieve: int = NUM_RETURNED_HITS,
@@ -1077,7 +1074,7 @@ class VespaIndex(DocumentIndex):
     def hybrid_retrieval(
         self,
         query: str,
-        query_embedding: list[float],
+        query_embedding: Embedding,
         filters: IndexFilters,
         time_decay_multiplier: float,
         num_to_retrieve: int,

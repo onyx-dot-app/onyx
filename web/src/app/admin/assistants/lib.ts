@@ -15,7 +15,10 @@ interface PersonaCreationRequest {
   starter_messages: StarterMessage[] | null;
   users?: string[];
   groups: number[];
-  tool_ids: number[]; // Added tool_ids to the interface
+  tool_ids: number[];
+  icon_color: string | null;
+  icon_shape: number | null;
+  uploaded_image: File | null;
 }
 
 interface PersonaUpdateRequest {
@@ -35,7 +38,10 @@ interface PersonaUpdateRequest {
   starter_messages: StarterMessage[] | null;
   users?: string[];
   groups: number[];
-  tool_ids: number[]; // Added tool_ids to the interface
+  tool_ids: number[];
+  icon_color: string | null;
+  icon_shape: number | null;
+  uploaded_image: File | null;
 }
 
 function promptNameFromPersonaName(personaName: string) {
@@ -98,7 +104,8 @@ function updatePrompt({
 
 function buildPersonaAPIBody(
   creationRequest: PersonaCreationRequest | PersonaUpdateRequest,
-  promptId: number
+  promptId: number,
+  uploaded_image_id: string | null
 ) {
   const {
     name,
@@ -109,7 +116,9 @@ function buildPersonaAPIBody(
     is_public,
     groups,
     users,
-    tool_ids, // Added tool_ids to the destructuring
+    tool_ids,
+    icon_color,
+    icon_shape,
   } = creationRequest;
 
   return {
@@ -127,8 +136,28 @@ function buildPersonaAPIBody(
     starter_messages: creationRequest.starter_messages,
     users,
     groups,
-    tool_ids, // Added tool_ids to the return object
+    tool_ids,
+    icon_color,
+    icon_shape,
+    uploaded_image_id,
   };
+}
+
+export async function uploadFile(file: File): Promise<string | null> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch("/api/admin/persona/upload-image", {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    console.error("Failed to upload file");
+    return null;
+  }
+
+  const responseJson = await response.json();
+  return responseJson.file_id;
 }
 
 export async function createPersona(
@@ -145,6 +174,14 @@ export async function createPersona(
     ? (await createPromptResponse.json()).id
     : null;
 
+  let fileId = null;
+  if (personaCreationRequest.uploaded_image) {
+    fileId = await uploadFile(personaCreationRequest.uploaded_image);
+    if (!fileId) {
+      return [createPromptResponse, null];
+    }
+  }
+
   const createPersonaResponse =
     promptId !== null
       ? await fetch("/api/persona", {
@@ -153,7 +190,7 @@ export async function createPersona(
             "Content-Type": "application/json",
           },
           body: JSON.stringify(
-            buildPersonaAPIBody(personaCreationRequest, promptId)
+            buildPersonaAPIBody(personaCreationRequest, promptId, fileId)
           ),
         })
       : null;
@@ -188,6 +225,14 @@ export async function updatePersona(
     promptId = promptResponse.ok ? (await promptResponse.json()).id : null;
   }
 
+  let fileId = null;
+  if (personaUpdateRequest.uploaded_image) {
+    fileId = await uploadFile(personaUpdateRequest.uploaded_image);
+    if (!fileId) {
+      return [promptResponse, null];
+    }
+  }
+
   const updatePersonaResponse =
     promptResponse.ok && promptId
       ? await fetch(`/api/persona/${id}`, {
@@ -196,7 +241,7 @@ export async function updatePersona(
             "Content-Type": "application/json",
           },
           body: JSON.stringify(
-            buildPersonaAPIBody(personaUpdateRequest, promptId)
+            buildPersonaAPIBody(personaUpdateRequest, promptId, fileId)
           ),
         })
       : null;

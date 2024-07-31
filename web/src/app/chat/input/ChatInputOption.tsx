@@ -5,7 +5,7 @@ import { Popover } from "../../../components/popover/Popover";
 import { IconProps } from "@/components/icons/icons";
 
 interface ChatInputOptionProps {
-  name: string;
+  name?: string;
   Icon: ({ size, className }: IconProps) => JSX.Element;
   onClick?: () => void;
   size?: number;
@@ -61,7 +61,7 @@ export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
         rounded-md
         ${
           flexPriority === "shrink" &&
-          "flex-shrink-[10000] flex-grow-0 flex-basis-auto min-w-[30px] whitespace-nowrap overflow-hidden"
+          "flex-shrink-100 flex-grow-0 flex-basis-auto min-w-[30px] whitespace-nowrap overflow-hidden"
         }
         ${
           flexPriority === "second" &&
@@ -76,7 +76,7 @@ export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
       onClick={onClick}
     >
       <Icon size={size} className="flex-none" />
-      <span className="text-sm break-all line-clamp-1">{name}</span>
+      {name && <span className="text-sm break-all line-clamp-1">{name}</span>}
       {isTooltipVisible && tooltipContent && (
         <div
           className="absolute z-10 p-2 text-sm text-white bg-black rounded shadow-lg"

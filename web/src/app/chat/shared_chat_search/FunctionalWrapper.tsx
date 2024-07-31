@@ -10,6 +10,7 @@ const ToggleSwitch = () => {
   const commandSymbol = KeyboardSymbol();
   const pathname = usePathname();
   const router = useRouter();
+  const settings = useContext(SettingsContext);
 
   const [activeTab, setActiveTab] = useState(() => {
     return pathname == "/search" ? "search" : "chat";
@@ -27,13 +28,17 @@ const ToggleSwitch = () => {
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     localStorage.setItem("activeTab", tab);
-    router.push(tab === "search" ? "/search" : "/chat");
+    if (settings?.isMobile) {
+      window.location.href = tab;
+    } else {
+      router.push(tab === "search" ? "/search" : "/chat");
+    }
   };
 
   return (
-    <div className="bg-gray-100 flex rounded-full p-1">
+    <div className="bg-gray-100 mobile:mt-8 flex rounded-full p-1">
       <div
-        className={`absolute top-1 bottom-1  ${
+        className={`absolute mobile:mt-8 top-1 bottom-1 ${
           activeTab === "chat" ? "w-[45%]" : "w-[50%]"
         } bg-white rounded-full shadow ${
           isInitialLoad ? "" : "transition-transform duration-300 ease-in-out"
@@ -54,7 +59,7 @@ const ToggleSwitch = () => {
         </p>
       </button>
       <button
-        className={`px-4 py-2 rounded-full text-sm font-medium transition-colors duration-300 ease-in-out flex  items-center relative z-10 ${
+        className={`px-4 py-2 rounded-full text-sm font-medium transition-colors duration-300 ease-in-out flex items-center relative z-10 ${
           activeTab === "chat"
             ? "text-gray-800"
             : "text-gray-500 hover:text-gray-700"
@@ -116,19 +121,23 @@ export default function FunctionalWrapper({
 
   const [toggledSidebar, setToggledSidebar] = useState(initiallyToggled);
 
-  const toggle = () => {
-    setToggledSidebar((toggledSidebar) => !toggledSidebar);
+  const toggle = (value?: boolean) => {
+    if (value !== undefined) {
+      setToggledSidebar(value);
+    } else {
+      setToggledSidebar((prevState) => !prevState);
+    }
   };
 
   return (
     <>
       {(!settings ||
         (settings.search_page_enabled && settings.chat_page_enabled)) && (
-        <div className="z-[40] flex fixed top-4 left-1/2 transform -translate-x-1/2">
+        <div className="mobile:hidden z-30 flex fixed top-4 left-1/2 transform -translate-x-1/2">
           <div
             style={{ transition: "width 0.30s ease-out" }}
-            className={`flex-none overflow-y-hidden bg-background-100 transition-all bg-opacity-80duration-300 ease-in-out h-full
-                        ${toggledSidebar ? "w-[300px] " : "w-[0px]"}`}
+            className={`flex-none overflow-y-hidden bg-background-100 transition-all bg-opacity-80 duration-300 ease-in-out h-full
+                        ${toggledSidebar ? "w-[250px] " : "w-[0px]"}`}
           />
           <div className="relative">
             <ToggleSwitch />
@@ -136,7 +145,7 @@ export default function FunctionalWrapper({
         </div>
       )}
 
-      <div className="absolute left-0 top-0 w-full h-full">
+      <div className="overscroll-y-contain overflow-y-scroll overscroll-contain left-0 top-0 w-full h-svh">
         {content(toggledSidebar, toggle)}
       </div>
     </>

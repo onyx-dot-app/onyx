@@ -200,7 +200,6 @@ export default async function Home() {
 
   return (
     <>
-      <Header user={user} />
       <HealthCheckBanner secondsUntilExpiration={secondsUntilExpiration} />
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
 

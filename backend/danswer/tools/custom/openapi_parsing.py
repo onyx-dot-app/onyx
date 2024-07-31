@@ -1,7 +1,7 @@
 from typing import Any
 from typing import cast
 
-from openai import BaseModel
+from pydantic import BaseModel
 
 REQUEST_BODY = "requestBody"
 

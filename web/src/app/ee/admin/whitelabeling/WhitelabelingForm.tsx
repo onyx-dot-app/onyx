@@ -77,7 +77,6 @@ export function WhitelabelingForm() {
                 body: formData,
               }
             );
-            console.log(response);
             if (!response.ok) {
               const errorMsg = (await response.json()).detail;
               alert(`Failed to upload logo. ${errorMsg}`);

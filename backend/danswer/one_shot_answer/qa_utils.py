@@ -1,8 +1,7 @@
-from collections.abc import Callable
 from collections.abc import Generator
 
 from danswer.configs.constants import MessageType
-from danswer.natural_language_processing.utils import get_default_llm_token_encode
+from danswer.natural_language_processing.utils import BaseTokenizer
 from danswer.one_shot_answer.models import ThreadMessage
 from danswer.utils.logger import setup_logger
 
@@ -18,7 +17,7 @@ def simulate_streaming_response(model_out: str) -> Generator[str, None, None]:
 def combine_message_thread(
     messages: list[ThreadMessage],
     max_tokens: int | None,
-    llm_tokenizer: Callable | None = None,
+    llm_tokenizer: BaseTokenizer,
 ) -> str:
     """Used to create a single combined message context from threads"""
     if not messages:
@@ -26,8 +25,6 @@ def combine_message_thread(
 
     message_strs: list[str] = []
     total_token_count = 0
-    if llm_tokenizer is None:
-        llm_tokenizer = get_default_llm_token_encode()
 
     for message in reversed(messages):
         if message.role == MessageType.USER:
@@ -42,7 +39,7 @@ def combine_message_thread(
             role_str = message.role.value.upper()
 
         msg_str = f"{role_str}:\n{message.message}"
-        message_token_count = len(llm_tokenizer(msg_str))
+        message_token_count = len(llm_tokenizer.encode(msg_str))
 
         if (
             max_tokens is not None

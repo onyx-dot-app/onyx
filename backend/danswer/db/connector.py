@@ -11,6 +11,7 @@ from danswer.configs.app_configs import DEFAULT_PRUNING_FREQ
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.models import InputType
 from danswer.db.models import Connector
+from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import IndexAttempt
 from danswer.server.documents.models import ConnectorBase
 from danswer.server.documents.models import ObjectCreationIdResponse
@@ -85,6 +86,7 @@ def create_connector(
         input_type=connector_data.input_type,
         connector_specific_config=connector_data.connector_specific_config,
         refresh_freq=connector_data.refresh_freq,
+        indexing_start=connector_data.indexing_start,
         prune_freq=connector_data.prune_freq
         if connector_data.prune_freq is not None
         else DEFAULT_PRUNING_FREQ,
@@ -191,7 +193,8 @@ def fetch_latest_index_attempt_by_connector(
     for connector in connectors:
         latest_index_attempt = (
             db_session.query(IndexAttempt)
-            .filter(IndexAttempt.connector_id == connector.id)
+            .join(ConnectorCredentialPair)
+            .filter(ConnectorCredentialPair.connector_id == connector.id)
             .order_by(IndexAttempt.time_updated.desc())
             .first()
         )
@@ -207,13 +210,11 @@ def fetch_latest_index_attempts_by_status(
 ) -> list[IndexAttempt]:
     subquery = (
         db_session.query(
-            IndexAttempt.connector_id,
-            IndexAttempt.credential_id,
+            IndexAttempt.connector_credential_pair_id,
             IndexAttempt.status,
             func.max(IndexAttempt.time_updated).label("time_updated"),
         )
-        .group_by(IndexAttempt.connector_id)
-        .group_by(IndexAttempt.credential_id)
+        .group_by(IndexAttempt.connector_credential_pair_id)
         .group_by(IndexAttempt.status)
         .subquery()
     )
@@ -223,12 +224,13 @@ def fetch_latest_index_attempts_by_status(
     query = db_session.query(IndexAttempt).join(
         alias,
         and_(
-            IndexAttempt.connector_id == alias.connector_id,
-            IndexAttempt.credential_id == alias.credential_id,
+            IndexAttempt.connector_credential_pair_id
+            == alias.connector_credential_pair_id,
             IndexAttempt.status == alias.status,
             IndexAttempt.time_updated == alias.time_updated,
         ),
     )
+
     return cast(list[IndexAttempt], query.all())
 
 

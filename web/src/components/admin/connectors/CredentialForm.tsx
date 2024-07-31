@@ -1,20 +1,29 @@
 import React, { useState } from "react";
-import { Formik, Form } from "formik";
+import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import { Popup } from "./Popup";
-import { CredentialBase } from "@/lib/types";
+import { ValidSources } from "@/lib/types";
+
 import { createCredential } from "@/lib/credential";
 import { Button } from "@tremor/react";
+import { CredentialBase, Credential } from "@/lib/connectors/credentials";
 
 export async function submitCredential<T>(
   credential: CredentialBase<T>
-): Promise<{ message: string; isSuccess: boolean }> {
+): Promise<{
+  credential?: Credential<any>;
+  message: string;
+  isSuccess: boolean;
+}> {
   let isSuccess = false;
   try {
     const response = await createCredential(credential);
+
     if (response.ok) {
+      const parsed_response = await response.json();
+      const credential = parsed_response.credential;
       isSuccess = true;
-      return { message: "Success!", isSuccess: true };
+      return { credential, message: "Success!", isSuccess: true };
     } else {
       const errorData = await response.json();
       return { message: `Error: ${errorData.detail}`, isSuccess: false };
@@ -29,12 +38,14 @@ interface Props<YupObjectType extends Yup.AnyObject> {
   validationSchema: Yup.ObjectSchema<YupObjectType>;
   initialValues: YupObjectType;
   onSubmit: (isSuccess: boolean) => void;
+  source: ValidSources;
 }
 
 export function CredentialForm<T extends Yup.AnyObject>({
   formBody,
   validationSchema,
   initialValues,
+  source,
   onSubmit,
 }: Props<T>): JSX.Element {
   const [popup, setPopup] = useState<{
@@ -53,6 +64,7 @@ export function CredentialForm<T extends Yup.AnyObject>({
           submitCredential<T>({
             credential_json: values,
             admin_public: true,
+            source: source,
           }).then(({ message, isSuccess }) => {
             setPopup({ message, type: isSuccess ? "success" : "error" });
             formikHelpers.setSubmitting(false);
@@ -67,15 +79,19 @@ export function CredentialForm<T extends Yup.AnyObject>({
           <Form>
             {formBody}
             <div className="flex">
-              <Button
+              <button
                 type="submit"
-                size="xs"
                 color="green"
                 disabled={isSubmitting}
-                className="mx-auto w-64"
+                className="mx-auto w-64 inline-flex items-center 
+                justify-center whitespace-nowrap rounded-md text-sm 
+                font-medium transition-colors  bg-background-200 text-primary-foreground
+                focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring 
+                disabled:pointer-events-none disabled:opacity-50 
+                shadow hover:bg-primary/90 h-9 px-4 py-2"
               >
                 Update
-              </Button>
+              </button>
             </div>
           </Form>
         )}

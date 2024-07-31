@@ -34,7 +34,7 @@ from danswer.llm.answering.models import PromptConfig
 from danswer.llm.answering.models import QuotesConfig
 from danswer.llm.factory import get_llms_for_persona
 from danswer.llm.factory import get_main_llm_from_tuple
-from danswer.natural_language_processing.utils import get_default_llm_token_encode
+from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.one_shot_answer.models import DirectQARequest
 from danswer.one_shot_answer.models import OneShotQAResponse
 from danswer.one_shot_answer.models import QueryRephrase
@@ -117,8 +117,12 @@ def stream_answer_objects(
         one_shot=True,
         danswerbot_flow=danswerbot_flow,
     )
+    llm, fast_llm = get_llms_for_persona(persona=chat_session.persona)
 
-    llm_tokenizer = get_default_llm_token_encode()
+    llm_tokenizer = get_tokenizer(
+        model_name=llm.config.model_name,
+        provider_type=llm.config.model_provider,
+    )
 
     # Create a chat session which will just store the root message, the query, and the AI response
     root_message = get_or_create_root_message(
@@ -126,10 +130,12 @@ def stream_answer_objects(
     )
 
     history_str = combine_message_thread(
-        messages=history, max_tokens=max_history_tokens
+        messages=history,
+        max_tokens=max_history_tokens,
+        llm_tokenizer=llm_tokenizer,
     )
 
-    rephrased_query = thread_based_query_rephrase(
+    rephrased_query = query_req.query_override or thread_based_query_rephrase(
         user_query=query_msg.message,
         history_str=history_str,
     )
@@ -158,13 +164,12 @@ def stream_answer_objects(
         parent_message=root_message,
         prompt_id=query_req.prompt_id,
         message=query_msg.message,
-        token_count=len(llm_tokenizer(query_msg.message)),
+        token_count=len(llm_tokenizer.encode(query_msg.message)),
         message_type=MessageType.USER,
         db_session=db_session,
         commit=True,
     )
 
-    llm, fast_llm = get_llms_for_persona(persona=chat_session.persona)
     prompt_config = PromptConfig.from_model(prompt)
     document_pruning_config = DocumentPruningConfig(
         max_chunks=int(
@@ -292,7 +297,7 @@ def stream_answer_objects(
         parent_message=new_user_message,
         prompt_id=query_req.prompt_id,
         message=answer.llm_answer,
-        token_count=len(llm_tokenizer(answer.llm_answer)),
+        token_count=len(llm_tokenizer.encode(answer.llm_answer)),
         message_type=MessageType.ASSISTANT,
         error=None,
         reference_docs=reference_db_search_docs,

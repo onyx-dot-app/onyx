@@ -1,3 +1,5 @@
+"use client";
+
 import {
   DanswerDocument,
   DocumentRelevance,
@@ -5,7 +7,7 @@ import {
   SearchDanswerDocument,
 } from "@/lib/search/interfaces";
 import { DocumentFeedbackBlock } from "./DocumentFeedbackBlock";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { PopupSpec } from "../admin/connectors/Popup";
 import { DocumentUpdatedAtBadge } from "./DocumentUpdatedAtBadge";
 import { SourceIcon } from "../SourceIcon";
@@ -15,6 +17,7 @@ import { BookIcon, CheckmarkIcon, LightBulbIcon, XIcon } from "../icons/icons";
 import { FaStar } from "react-icons/fa";
 import { FiTag } from "react-icons/fi";
 import { DISABLE_AGENTIC_SEARCH } from "@/lib/constants";
+import { SettingsContext } from "../settings/SettingsProvider";
 
 export const buildDocumentSummaryDisplay = (
   matchHighlights: string[],
@@ -178,11 +181,12 @@ export const DocumentDisplay = ({
   const [alternativeToggled, setAlternativeToggled] = useState(false);
   const relevance_explanation =
     document.relevance_explanation ?? additional_relevance?.content;
+  const settings = useContext(SettingsContext);
 
   return (
     <div
       key={document.semantic_identifier}
-      className={`text-sm border-b border-border transition-all duration-500 
+      className={`text-sm mobile:ml-4 border-b border-border transition-all duration-500 
         ${hide ? "transform translate-x-full opacity-0" : ""} 
         ${!hide ? "pt-3" : "border-transparent"} relative`}
       onMouseEnter={() => setIsHovered(true)}
@@ -234,7 +238,7 @@ export const DocumentDisplay = ({
 
             {(contentEnriched || additional_relevance) &&
               relevance_explanation &&
-              (isHovered || alternativeToggled) && (
+              (isHovered || alternativeToggled || settings?.isMobile) && (
                 <button
                   onClick={() =>
                     setAlternativeToggled(
@@ -242,7 +246,9 @@ export const DocumentDisplay = ({
                     )
                   }
                 >
-                  <LightBulbIcon className="text-blue-400 h-4 w-4 cursor-pointer" />
+                  <LightBulbIcon
+                    className={`${settings?.isMobile && alternativeToggled ? "text-green-600" : "text-blue-600"} h-4 w-4 cursor-pointer`}
+                  />
                 </button>
               )}
           </div>
@@ -286,7 +292,7 @@ export const AgenticDocumentDisplay = ({
   return (
     <div
       key={document.semantic_identifier}
-      className={`text-sm border-b border-border transition-all duration-500
+      className={`text-sm mobile:ml-4 border-b border-border transition-all duration-500
       ${!hide ? "transform translate-x-full opacity-0" : ""} 
       ${hide ? "py-3" : "border-transparent"} relative`}
       onMouseEnter={() => setIsHovered(true)}

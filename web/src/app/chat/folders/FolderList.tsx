@@ -171,7 +171,7 @@ const FolderItem = ({
       {showDeleteConfirm && (
         <div
           ref={deleteConfirmRef}
-          className="absolute max-w-xs border z-[100] border-neutral-300 top-0 right-0 w-[250px] -bo-0 top-2 mt-4 p-2 bg-background-100 rounded shadow-lg z-10"
+          className="absolute max-w-xs border z-[100] border-border-medium top-0 right-0 w-[250px] -bo-0 top-2 mt-4 p-2 bg-background-100 rounded shadow-lg z-10"
         >
           <p className="text-sm mb-2">
             Are you sure you want to delete <i>{folder.folder_name}</i>? All the

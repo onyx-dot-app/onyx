@@ -4,9 +4,9 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-import danswer.db.models as db_models
 from danswer.auth.users import current_admin_user
 from danswer.db.engine import get_session
+from danswer.db.models import User
 from ee.danswer.db.user_group import fetch_user_groups
 from ee.danswer.db.user_group import insert_user_group
 from ee.danswer.db.user_group import prepare_user_group_for_deletion
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/manage")
 
 @router.get("/admin/user-group")
 def list_user_groups(
-    _: db_models.User = Depends(current_admin_user),
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
     user_groups = fetch_user_groups(db_session, only_current=False)
@@ -30,7 +30,7 @@ def list_user_groups(
 @router.post("/admin/user-group")
 def create_user_group(
     user_group: UserGroupCreate,
-    _: db_models.User = Depends(current_admin_user),
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
@@ -48,7 +48,7 @@ def create_user_group(
 def patch_user_group(
     user_group_id: int,
     user_group: UserGroupUpdate,
-    _: db_models.User = Depends(current_admin_user),
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
@@ -62,7 +62,7 @@ def patch_user_group(
 @router.delete("/admin/user-group/{user_group_id}")
 def delete_user_group(
     user_group_id: int,
-    _: db_models.User = Depends(current_admin_user),
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:

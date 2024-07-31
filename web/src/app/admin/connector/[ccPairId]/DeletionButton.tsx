@@ -44,7 +44,7 @@ export function DeletionButton({ ccPair }: { ccPair: CCPairFullInfo }) {
         disabled={!ccPair.connector.disabled}
         tooltip={tooltip}
       >
-        Schedule for Deletion
+        Delete
       </Button>
     </div>
   );

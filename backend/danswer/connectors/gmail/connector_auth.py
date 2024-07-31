@@ -11,6 +11,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore
 from sqlalchemy.orm import Session
 
 from danswer.configs.app_configs import WEB_DOMAIN
+from danswer.configs.constants import DocumentSource
 from danswer.connectors.gmail.constants import CRED_KEY
 from danswer.connectors.gmail.constants import (
     DB_CREDENTIALS_DICT_DELEGATED_USER_KEY,
@@ -146,6 +147,7 @@ def build_service_account_creds(
         credential_dict[DB_CREDENTIALS_DICT_DELEGATED_USER_KEY] = delegated_user_email
 
     return CredentialBase(
+        source=DocumentSource.GMAIL,
         credential_json=credential_dict,
         admin_public=True,
     )

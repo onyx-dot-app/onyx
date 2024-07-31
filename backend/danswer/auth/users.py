@@ -52,6 +52,7 @@ from danswer.db.auth import get_default_admin_user_emails
 from danswer.db.auth import get_user_count
 from danswer.db.auth import get_user_db
 from danswer.db.engine import get_session
+from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.models import AccessToken
 from danswer.db.models import User
 from danswer.db.users import get_user_by_email
@@ -101,12 +102,10 @@ def verify_email_is_invited(email: str) -> None:
         raise PermissionError("User not on allowed user whitelist")
 
 
-def verify_email_in_whitelist(
-    email: str,
-    db_session: Session = Depends(get_session),
-) -> None:
-    if not get_user_by_email(email, db_session):
-        verify_email_is_invited(email)
+def verify_email_in_whitelist(email: str) -> None:
+    with Session(get_sqlalchemy_engine()) as db_session:
+        if not get_user_by_email(email, db_session):
+            verify_email_is_invited(email)
 
 
 def verify_email_domain(email: str) -> None:
@@ -347,6 +346,12 @@ async def double_check_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied. User is not verified.",
+        )
+
+    if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. User's OIDC token has expired.",
         )
 
     return user

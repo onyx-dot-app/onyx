@@ -1,8 +1,10 @@
 import abc
 from collections.abc import Callable
+from typing import Optional
 from typing import TYPE_CHECKING
 
 from danswer.configs.app_configs import BLURB_SIZE
+from danswer.configs.app_configs import ENABLE_MINI_CHUNK
 from danswer.configs.app_configs import MINI_CHUNK_SIZE
 from danswer.configs.app_configs import SKIP_METADATA_IN_CHUNK
 from danswer.configs.constants import DocumentSource
@@ -13,8 +15,9 @@ from danswer.connectors.cross_connector_utils.miscellaneous_utils import (
     get_metadata_keys_to_ignore,
 )
 from danswer.connectors.models import Document
+from danswer.indexing.embedder import IndexingEmbedder
 from danswer.indexing.models import DocAwareChunk
-from danswer.natural_language_processing.search_nlp_models import get_default_tokenizer
+from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.utils.logger import setup_logger
 from danswer.utils.text_processing import shared_precompare_cleanup
 
@@ -48,9 +51,10 @@ def chunk_large_section(
     start_chunk_id: int,
     blurb: str,
     chunk_splitter: "SentenceSplitter",
-    title_prefix: str = "",
-    metadata_suffix_semantic: str = "",
-    metadata_suffix_keyword: str = "",
+    mini_chunk_splitter: Optional["SentenceSplitter"],
+    title_prefix: str,
+    metadata_suffix_semantic: str,
+    metadata_suffix_keyword: str,
 ) -> list[DocAwareChunk]:
     split_texts = chunk_splitter.split_text(section_text)
 
@@ -59,14 +63,17 @@ def chunk_large_section(
             source_document=document,
             chunk_id=start_chunk_id + chunk_ind,
             blurb=blurb,
-            content=chunk_str,
+            content=chunk_text,
             source_links={0: section_link_text},
             section_continuation=(chunk_ind != 0),
             title_prefix=title_prefix,
             metadata_suffix_semantic=metadata_suffix_semantic,
             metadata_suffix_keyword=metadata_suffix_keyword,
+            mini_chunk_texts=mini_chunk_splitter.split_text(chunk_text)
+            if mini_chunk_splitter and chunk_text.strip()
+            else None,
         )
-        for chunk_ind, chunk_str in enumerate(split_texts)
+        for chunk_ind, chunk_text in enumerate(split_texts)
     ]
     return chunks
 
@@ -114,14 +121,20 @@ def _get_metadata_suffix_for_document_index(
 
 def chunk_document(
     document: Document,
+    embedder: IndexingEmbedder,
     chunk_tok_size: int = DOC_EMBEDDING_CONTEXT_SIZE,
     subsection_overlap: int = CHUNK_OVERLAP,
     blurb_size: int = BLURB_SIZE,  # Used for both title and content
     include_metadata: bool = not SKIP_METADATA_IN_CHUNK,
+    mini_chunk_size: int = MINI_CHUNK_SIZE,
+    enable_mini_chunk: bool = ENABLE_MINI_CHUNK,
 ) -> list[DocAwareChunk]:
     from llama_index.text_splitter import SentenceSplitter
 
-    tokenizer = get_default_tokenizer()
+    tokenizer = get_tokenizer(
+        model_name=embedder.model_name,
+        provider_type=embedder.provider_type,
+    )
 
     blurb_splitter = SentenceSplitter(
         tokenizer=tokenizer.tokenize, chunk_size=blurb_size, chunk_overlap=0
@@ -131,6 +144,12 @@ def chunk_document(
         tokenizer=tokenizer.tokenize,
         chunk_size=chunk_tok_size,
         chunk_overlap=subsection_overlap,
+    )
+
+    mini_chunk_splitter = SentenceSplitter(
+        tokenizer=tokenizer.tokenize,
+        chunk_size=mini_chunk_size,
+        chunk_overlap=0,
     )
 
     title = extract_blurb(document.get_title_for_document_index() or "", blurb_splitter)
@@ -189,6 +208,9 @@ def chunk_document(
                         title_prefix=title_prefix,
                         metadata_suffix_semantic=metadata_suffix_semantic,
                         metadata_suffix_keyword=metadata_suffix_keyword,
+                        mini_chunk_texts=mini_chunk_splitter.split_text(chunk_text)
+                        if enable_mini_chunk and chunk_text.strip()
+                        else None,
                     )
                 )
                 link_offsets = {}
@@ -200,6 +222,9 @@ def chunk_document(
                 document=document,
                 start_chunk_id=len(chunks),
                 chunk_splitter=chunk_splitter,
+                mini_chunk_splitter=mini_chunk_splitter
+                if enable_mini_chunk and chunk_text.strip()
+                else None,
                 blurb=extract_blurb(section_text, blurb_splitter),
                 title_prefix=title_prefix,
                 metadata_suffix_semantic=metadata_suffix_semantic,
@@ -231,14 +256,17 @@ def chunk_document(
                     title_prefix=title_prefix,
                     metadata_suffix_semantic=metadata_suffix_semantic,
                     metadata_suffix_keyword=metadata_suffix_keyword,
+                    mini_chunk_texts=mini_chunk_splitter.split_text(chunk_text)
+                    if enable_mini_chunk and chunk_text.strip()
+                    else None,
                 )
             )
             link_offsets = {0: section_link_text}
             chunk_text = section_text
 
-    # Once we hit the end, if we're still in the process of building a chunk, add what we have
-    # NOTE: if it's just whitespace, ignore it.
-    if chunk_text.strip():
+    # Once we hit the end, if we're still in the process of building a chunk, add what we have. If there is only whitespace left
+    # then don't include it. If there are no chunks at all from the doc, we can just create a single chunk with the title.
+    if chunk_text.strip() or not chunks:
         chunks.append(
             DocAwareChunk(
                 source_document=document,
@@ -250,36 +278,33 @@ def chunk_document(
                 title_prefix=title_prefix,
                 metadata_suffix_semantic=metadata_suffix_semantic,
                 metadata_suffix_keyword=metadata_suffix_keyword,
+                mini_chunk_texts=mini_chunk_splitter.split_text(chunk_text)
+                if enable_mini_chunk and chunk_text.strip()
+                else None,
             )
         )
+
+    # If the chunk does not have any useable content, it will not be indexed
     return chunks
-
-
-def split_chunk_text_into_mini_chunks(
-    chunk_text: str, mini_chunk_size: int = MINI_CHUNK_SIZE
-) -> list[str]:
-    """The minichunks won't all have the title prefix or metadata suffix
-    It could be a significant percentage of every minichunk so better to not include it
-    """
-    from llama_index.text_splitter import SentenceSplitter
-
-    token_count_func = get_default_tokenizer().tokenize
-    sentence_aware_splitter = SentenceSplitter(
-        tokenizer=token_count_func, chunk_size=mini_chunk_size, chunk_overlap=0
-    )
-
-    return sentence_aware_splitter.split_text(chunk_text)
 
 
 class Chunker:
     @abc.abstractmethod
-    def chunk(self, document: Document) -> list[DocAwareChunk]:
+    def chunk(
+        self,
+        document: Document,
+        embedder: IndexingEmbedder,
+    ) -> list[DocAwareChunk]:
         raise NotImplementedError
 
 
 class DefaultChunker(Chunker):
-    def chunk(self, document: Document) -> list[DocAwareChunk]:
+    def chunk(
+        self,
+        document: Document,
+        embedder: IndexingEmbedder,
+    ) -> list[DocAwareChunk]:
         # Specifically for reproducing an issue with gmail
         if document.source == DocumentSource.GMAIL:
             logger.debug(f"Chunking {document.semantic_identifier}")
-        return chunk_document(document)
+        return chunk_document(document, embedder=embedder)

@@ -6,7 +6,7 @@ from langchain_core.messages.tool import ToolCall
 from langchain_core.messages.tool import ToolMessage
 from pydantic import BaseModel
 
-from danswer.natural_language_processing.utils import get_default_llm_tokenizer
+from danswer.natural_language_processing.utils import BaseTokenizer
 
 
 def build_tool_message(
@@ -24,9 +24,9 @@ class ToolCallSummary(BaseModel):
     tool_call_result: ToolMessage
 
 
-def tool_call_tokens(tool_call_summary: ToolCallSummary) -> int:
-    llm_tokenizer = get_default_llm_tokenizer()
-
+def tool_call_tokens(
+    tool_call_summary: ToolCallSummary, llm_tokenizer: BaseTokenizer
+) -> int:
     request_tokens = len(
         llm_tokenizer.encode(
             json.dumps(tool_call_summary.tool_call_request.tool_calls[0]["args"])

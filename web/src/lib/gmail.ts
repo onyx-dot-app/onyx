@@ -1,4 +1,4 @@
-import { Credential } from "@/lib/types";
+import { Credential } from "./connectors/credentials";
 
 export const setupGmailOAuth = async ({
   isAdmin,
@@ -13,6 +13,7 @@ export const setupGmailOAuth = async ({
     body: JSON.stringify({
       admin_public: isAdmin,
       credential_json: {},
+      source: "gmail",
     }),
   });
   if (!credentialCreationResponse.ok) {

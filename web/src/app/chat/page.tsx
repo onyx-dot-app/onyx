@@ -61,10 +61,6 @@ export default async function Page({
       {!shouldShowWelcomeModal && !shouldDisplaySourcesIncompleteModal && (
         <ApiKeyModal user={user} />
       )}
-      {shouldDisplaySourcesIncompleteModal && (
-        <NoCompleteSourcesModal ccPairs={ccPairs} />
-      )}
-
       <ChatProvider
         value={{
           user,

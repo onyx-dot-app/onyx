@@ -103,6 +103,7 @@ def port_api_key_to_postgres() -> None:
             default_model_name=default_model_name,
             fast_default_model_name=default_fast_model_name,
             model_names=None,
+            display_model_names=[],
             is_public=True,
         )
         llm_provider = upsert_llm_provider(db_session, llm_provider_upsert)

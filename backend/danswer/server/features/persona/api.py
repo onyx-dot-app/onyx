@@ -1,12 +1,15 @@
+import uuid
 from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
+from danswer.configs.constants import FileOrigin
 from danswer.db.engine import get_session
 from danswer.db.models import User
 from danswer.db.persona import create_update_persona
@@ -17,12 +20,15 @@ from danswer.db.persona import mark_persona_as_not_deleted
 from danswer.db.persona import update_all_personas_display_priority
 from danswer.db.persona import update_persona_shared_users
 from danswer.db.persona import update_persona_visibility
+from danswer.file_store.file_store import get_default_file_store
+from danswer.file_store.models import ChatFileType
 from danswer.llm.answering.prompts.utils import build_dummy_prompt
 from danswer.server.features.persona.models import CreatePersonaRequest
 from danswer.server.features.persona.models import PersonaSnapshot
 from danswer.server.features.persona.models import PromptTemplateResponse
 from danswer.server.models import DisplayPriorityRequest
 from danswer.utils.logger import setup_logger
+
 
 logger = setup_logger()
 
@@ -88,6 +94,26 @@ def undelete_persona(
         user=user,
         db_session=db_session,
     )
+
+
+# used for assistnat profile pictures
+@admin_router.post("/upload-image")
+def upload_file(
+    file: UploadFile,
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_user),
+) -> dict[str, str]:
+    file_store = get_default_file_store(db_session)
+    file_type = ChatFileType.IMAGE
+    file_id = str(uuid.uuid4())
+    file_store.save_file(
+        file_name=file_id,
+        content=file.file,
+        display_name=file.filename,
+        file_origin=FileOrigin.CHAT_UPLOAD,
+        file_type=file.content_type or file_type.value,
+    )
+    return {"file_id": file_id}
 
 
 """Endpoints for all"""

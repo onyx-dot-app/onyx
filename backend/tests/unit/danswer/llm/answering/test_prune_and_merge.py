@@ -24,6 +24,7 @@ def create_inference_chunk(
         chunk_id=chunk_id,
         document_id=document_id,
         semantic_identifier=f"{document_id}_{chunk_id}",
+        title="whatever",
         blurb=f"{document_id}_{chunk_id}",
         content=content,
         source_links={0: "fake_link"},

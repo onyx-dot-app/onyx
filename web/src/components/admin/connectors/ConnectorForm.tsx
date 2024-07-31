@@ -4,12 +4,7 @@ import React, { useState } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Popup, usePopup } from "./Popup";
-import {
-  Connector,
-  ConnectorBase,
-  ValidInputTypes,
-  ValidSources,
-} from "@/lib/types";
+import { ValidInputTypes, ValidSources } from "@/lib/types";
 import { deleteConnectorIfExistsAndIsUnlinked } from "@/lib/connector";
 import { FormBodyBuilder, RequireAtLeastOne } from "./types";
 import { BooleanFormField, TextFormField } from "./Field";
@@ -18,33 +13,58 @@ import { useSWRConfig } from "swr";
 import { Button, Divider } from "@tremor/react";
 import IsPublicField from "./IsPublicField";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { Connector, ConnectorBase } from "@/lib/connectors/connectors";
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 
 export async function submitConnector<T>(
   connector: ConnectorBase<T>,
-  connectorId?: number
+  connectorId?: number,
+  fake_credential?: boolean
 ): Promise<{ message: string; isSuccess: boolean; response?: Connector<T> }> {
   const isUpdate = connectorId !== undefined;
+  if (!connector.connector_specific_config) {
+    connector.connector_specific_config = {} as T;
+  }
 
   try {
-    const response = await fetch(
-      BASE_CONNECTOR_URL + (isUpdate ? `/${connectorId}` : ""),
-      {
-        method: isUpdate ? "PATCH" : "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(connector),
+    if (fake_credential) {
+      const response = await fetch(
+        "/api/manage/admin/connector-with-mock-credential",
+        {
+          method: isUpdate ? "PATCH" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(connector),
+        }
+      );
+      if (response.ok) {
+        const responseJson = await response.json();
+        return { message: "Success!", isSuccess: true, response: responseJson };
+      } else {
+        const errorData = await response.json();
+        return { message: `Error: ${errorData.detail}`, isSuccess: false };
       }
-    );
-
-    if (response.ok) {
-      const responseJson = await response.json();
-      return { message: "Success!", isSuccess: true, response: responseJson };
     } else {
-      const errorData = await response.json();
-      return { message: `Error: ${errorData.detail}`, isSuccess: false };
+      const response = await fetch(
+        BASE_CONNECTOR_URL + (isUpdate ? `/${connectorId}` : ""),
+        {
+          method: isUpdate ? "PATCH" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(connector),
+        }
+      );
+
+      if (response.ok) {
+        const responseJson = await response.json();
+        return { message: "Success!", isSuccess: true, response: responseJson };
+      } else {
+        const errorData = await response.json();
+        return { message: `Error: ${errorData.detail}`, isSuccess: false };
+      }
     }
   } catch (error) {
     return { message: `Error: ${error}`, isSuccess: false };
@@ -74,6 +94,7 @@ interface BaseProps<T extends Yup.AnyObject> {
   ) => void;
   refreshFreq?: number;
   pruneFreq?: number;
+  indexingStart?: Date;
   // If specified, then we will create an empty credential and associate
   // the connector with it. If credentialId is specified, then this will be ignored
   shouldCreateEmptyCredentialForConnector?: boolean;
@@ -97,6 +118,7 @@ export function ConnectorForm<T extends Yup.AnyObject>({
   initialValues,
   refreshFreq,
   pruneFreq,
+  indexingStart,
   onSubmit,
   shouldCreateEmptyCredentialForConnector,
 }: ConnectorFormProps<T>): JSX.Element {
@@ -163,6 +185,7 @@ export function ConnectorForm<T extends Yup.AnyObject>({
             });
             return;
           }
+
           const { message, isSuccess, response } = await submitConnector<T>({
             name: connectorName,
             source,
@@ -171,6 +194,7 @@ export function ConnectorForm<T extends Yup.AnyObject>({
             refresh_freq: refreshFreq || 0,
             prune_freq: pruneFreq ?? null,
             disabled: false,
+            indexing_start: indexingStart || null,
           });
 
           if (!isSuccess || !response) {
@@ -188,7 +212,9 @@ export function ConnectorForm<T extends Yup.AnyObject>({
             const createCredentialResponse = await createCredential({
               credential_json: {},
               admin_public: true,
+              source: source,
             });
+
             if (!createCredentialResponse.ok) {
               const errorMsg = await createCredentialResponse.text();
               setPopup({
@@ -241,7 +267,7 @@ export function ConnectorForm<T extends Yup.AnyObject>({
                 name="cc_pair_name"
                 label="Connector Name"
                 autoCompleteDisabled={true}
-                subtext={`A descriptive name for the connector. This will just be used to identify the connector in the Admin UI.`}
+                subtext={`A descriptive name for the connector. This will be used to identify the connector in the Admin UI.`}
               />
             )}
             {formBody && formBody}
@@ -317,6 +343,7 @@ export function UpdateConnectorForm<T extends Yup.AnyObject>({
               refresh_freq: existingConnector.refresh_freq,
               prune_freq: existingConnector.prune_freq,
               disabled: false,
+              indexing_start: existingConnector.indexing_start,
             },
             existingConnector.id
           );
