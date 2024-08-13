@@ -59,6 +59,14 @@ DISABLED_GEN_AI_MSG = (
     "You can still use Danswer as a search engine."
 )
 
+# Postgres connection constants for application_name
+POSTGRES_WEB_APP_NAME = "web"
+POSTGRES_INDEXER_APP_NAME = "indexer"
+POSTGRES_CELERY_APP_NAME = "celery"
+POSTGRES_CELERY_BEAT_APP_NAME = "celery_beat"
+POSTGRES_CELERY_WORKER_APP_NAME = "celery_worker"
+POSTGRES_PERMISSIONS_APP_NAME = "permissions"
+POSTGRES_UNKNOWN_APP_NAME = "unknown"
 
 # API Keys
 DANSWER_API_KEY_PREFIX = "API_KEY__"

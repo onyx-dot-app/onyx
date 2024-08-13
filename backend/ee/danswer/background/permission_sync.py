@@ -14,7 +14,9 @@ from danswer.background.indexing.job_client import SimpleJobClient
 from danswer.configs.app_configs import CLEANUP_INDEXING_JOBS_TIMEOUT
 from danswer.configs.app_configs import DASK_JOB_CLIENT_ENABLED
 from danswer.configs.constants import DocumentSource
+from danswer.configs.constants import POSTGRES_PERMISSIONS_APP_NAME
 from danswer.db.engine import get_sqlalchemy_engine
+from danswer.db.engine import init_sqlalchemy_engine
 from danswer.db.models import PermissionSyncStatus
 from danswer.utils.logger import setup_logger
 from ee.danswer.configs.app_configs import NUM_PERMISSION_WORKERS
@@ -214,6 +216,7 @@ def permission_loop(delay: int = 60, num_workers: int = NUM_PERMISSION_WORKERS) 
 
 def update__main() -> None:
     logger.info("Starting Permission Syncing Loop")
+    init_sqlalchemy_engine(POSTGRES_PERMISSIONS_APP_NAME)
     permission_loop()
 
 

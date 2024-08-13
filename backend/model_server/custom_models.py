@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from transformers import AutoTokenizer  # type: ignore
 from transformers import TFDistilBertForSequenceClassification
 
+from danswer.utils.logger import setup_logger
 from model_server.constants import MODEL_WARM_UP_STRING
 from model_server.utils import simple_log_function_time
 from shared_configs.configs import INDEXING_ONLY
@@ -14,6 +15,7 @@ from shared_configs.configs import INTENT_MODEL_VERSION
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
 
+logger = setup_logger()
 
 router = APIRouter(prefix="/custom")
 
@@ -23,7 +25,7 @@ _INTENT_MODEL: Optional[TFDistilBertForSequenceClassification] = None
 
 def get_intent_model_tokenizer(
     model_name: str = INTENT_MODEL_VERSION,
-) -> "AutoTokenizer":
+) -> AutoTokenizer:
     global _INTENT_TOKENIZER
     if _INTENT_TOKENIZER is None:
         _INTENT_TOKENIZER = AutoTokenizer.from_pretrained(model_name)
@@ -44,6 +46,7 @@ def get_local_intent_model(
 
 
 def warm_up_intent_model() -> None:
+    logger.info(f"Warming up Intent Model: {INTENT_MODEL_VERSION}")
     intent_tokenizer = get_intent_model_tokenizer()
     inputs = intent_tokenizer(
         MODEL_WARM_UP_STRING, return_tensors="tf", truncation=True, padding=True

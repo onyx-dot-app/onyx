@@ -8,7 +8,7 @@ from typing import cast
 from filelock import FileLock
 from sqlalchemy.orm import Session
 
-from danswer.db.engine import SessionFactory
+from danswer.db.engine import get_session_factory
 from danswer.db.models import KVStore
 from danswer.dynamic_configs.interface import ConfigNotFoundError
 from danswer.dynamic_configs.interface import DynamicConfigStore
@@ -56,7 +56,8 @@ class FileSystemBackedDynamicConfigStore(DynamicConfigStore):
 class PostgresBackedDynamicConfigStore(DynamicConfigStore):
     @contextmanager
     def get_session(self) -> Iterator[Session]:
-        session: Session = SessionFactory()
+        factory = get_session_factory()
+        session: Session = factory()
         try:
             yield session
         finally:

@@ -1,3 +1,4 @@
+import json
 from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Any
@@ -223,6 +224,13 @@ def check_message_tokens(
             total_tokens += check_number_of_tokens(part["text"], encode_fn)
         elif part["type"] == "image_url":
             total_tokens += _IMG_TOKENS
+
+    if isinstance(message, AIMessage) and message.tool_calls:
+        for tool_call in message.tool_calls:
+            total_tokens += check_number_of_tokens(
+                json.dumps(tool_call["args"]), encode_fn
+            )
+            total_tokens += check_number_of_tokens(tool_call["name"], encode_fn)
 
     return total_tokens
 

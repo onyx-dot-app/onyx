@@ -236,6 +236,12 @@ def search_postprocessing(
 ) -> Iterator[list[InferenceSection] | list[int]]:
     post_processing_tasks: list[FunctionCall] = []
 
+    if not retrieved_sections:
+        # Avoids trying to rerank an empty list which throws an error
+        yield []
+        yield []
+        return
+
     rerank_task_id = None
     sections_yielded = False
     if should_rerank(search_query):

@@ -280,9 +280,13 @@ class Answer:
             if tool.name in {SearchTool._NAME, InternetSearchTool._NAME}:
                 self._update_prompt_builder_for_search_tool(prompt_builder, [])
             elif tool.name == ImageGenerationTool._NAME:
+                img_urls = [
+                    img_generation_result["url"]
+                    for img_generation_result in tool_runner.tool_final_result().tool_result
+                ]
                 prompt_builder.update_user_prompt(
                     build_image_generation_user_prompt(
-                        query=self.question,
+                        query=self.question, img_urls=img_urls
                     )
                 )
             yield tool_runner.tool_final_result()

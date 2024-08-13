@@ -197,7 +197,7 @@ def _run_indexing(
                 )
 
                 new_docs, total_batch_chunks = indexing_pipeline(
-                    documents=doc_batch,
+                    document_batch=doc_batch,
                     index_attempt_metadata=IndexAttemptMetadata(
                         connector_id=db_connector.id,
                         credential_id=db_credential.id,

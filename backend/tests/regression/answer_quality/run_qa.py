@@ -111,15 +111,14 @@ def _initialize_files(config: dict) -> tuple[str, list[dict]]:
 
 
 def _process_question(question_data: dict, config: dict, question_number: int) -> dict:
-    print(f"On question number {question_number}")
-
     query = question_data["question"]
-    print(f"query: {query}")
     context_data_list, answer = get_answer_from_query(
         query=query,
         only_retrieve_docs=config["only_retrieve_docs"],
         env_name=config["env_name"],
     )
+    print(f"On question number {question_number}")
+    print(f"query: {query}")
 
     if not context_data_list:
         print("No answer or context found")

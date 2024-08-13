@@ -265,8 +265,8 @@ function Main() {
   return (
     <div className="h-screen">
       <Text>
-        Embedding models are used to generate embeddings for your documents,
-        which then power Danswer&apos;s search.
+        These deep learning models are used to generate vector representations
+        of your documents, which then power Danswer&apos;s search.
       </Text>
 
       {alreadySelectedModel && (
@@ -359,12 +359,12 @@ function Main() {
         <>
           <Title className="mt-8">Switch your Embedding Model</Title>
           <Text className="mb-4">
-            If the current model is not working for you, you can update your
-            model choice below. Note that this will require a complete
-            re-indexing of all your documents across every connected source. We
-            will take care of this in the background, but depending on the size
-            of your corpus, this could take hours, day, or even weeks. You can
-            monitor the progress of the re-indexing on this page.
+            Note that updating the backing model will require a complete
+            re-indexing of all documents across every connected source. This is
+            taken care of in the background so that the system can continue to
+            be used, but depending on the size of the corpus, this could take
+            hours or days. You can monitor the progress of the re-indexing on
+            this page while the models are being switched.
           </Text>
 
           <div className="mt-8 text-sm mr-auto mb-12 divide-x-2 flex">

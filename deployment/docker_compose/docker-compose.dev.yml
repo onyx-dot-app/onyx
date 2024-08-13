@@ -290,6 +290,7 @@ services:
 
   relational_db:
     image: postgres:15.2-alpine
+    command: -c 'max_connections=150'
     restart: always
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}

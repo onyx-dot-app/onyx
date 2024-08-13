@@ -1,3 +1,4 @@
+einops==0.8.0
 fastapi==0.109.2
 h5py==3.9.0
 pydantic==1.10.13

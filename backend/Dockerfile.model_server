@@ -18,14 +18,17 @@ RUN apt-get remove -y --allow-remove-essential perl-base && \
     apt-get autoremove -y
 
 # Pre-downloading models for setups with limited egress
-RUN python -c "from transformers import AutoModel, AutoTokenizer, TFDistilBertForSequenceClassification; \
+RUN python -c "from transformers import AutoTokenizer; \
+AutoTokenizer.from_pretrained('danswer/intent-model', cache_folder='/root/.cache/temp_huggingface/hub/'); \
+AutoTokenizer.from_pretrained('mixedbread-ai/mxbai-rerank-xsmall-v1', cache_folder='/root/.cache/temp_huggingface/hub/'); \
+from transformers import TFDistilBertForSequenceClassification; \
+TFDistilBertForSequenceClassification.from_pretrained('danswer/intent-model', cache_dir='/root/.cache/temp_huggingface/hub/'); \
 from huggingface_hub import snapshot_download; \
-AutoTokenizer.from_pretrained('danswer/intent-model'); \
-AutoTokenizer.from_pretrained('intfloat/e5-base-v2'); \
-AutoTokenizer.from_pretrained('mixedbread-ai/mxbai-rerank-xsmall-v1'); \
-snapshot_download('danswer/intent-model'); \
-snapshot_download('intfloat/e5-base-v2'); \
-snapshot_download('mixedbread-ai/mxbai-rerank-xsmall-v1')"
+snapshot_download('danswer/intent-model', cache_dir='/root/.cache/temp_huggingface/hub/'); \
+snapshot_download('nomic-ai/nomic-embed-text-v1', cache_dir='/root/.cache/temp_huggingface/hub/'); \
+snapshot_download('mixedbread-ai/mxbai-rerank-xsmall-v1', cache_dir='/root/.cache/temp_huggingface/hub/'); \
+from sentence_transformers import SentenceTransformer; \
+SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True, cache_folder='/root/.cache/temp_huggingface/hub/');"
 
 WORKDIR /app
 

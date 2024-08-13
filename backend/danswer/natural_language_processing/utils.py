@@ -32,10 +32,18 @@ class BaseTokenizer(ABC):
 
 
 class TiktokenTokenizer(BaseTokenizer):
-    def __init__(self, encoding_name: str = "cl100k_base"):
-        import tiktoken
+    _instances: dict[str, "TiktokenTokenizer"] = {}
 
-        self.encoder = tiktoken.get_encoding(encoding_name)
+    def __new__(cls, encoding_name: str = "cl100k_base") -> "TiktokenTokenizer":
+        if encoding_name not in cls._instances:
+            cls._instances[encoding_name] = super(TiktokenTokenizer, cls).__new__(cls)
+        return cls._instances[encoding_name]
+
+    def __init__(self, encoding_name: str = "cl100k_base"):
+        if not hasattr(self, "encoder"):
+            import tiktoken
+
+            self.encoder = tiktoken.get_encoding(encoding_name)
 
     def encode(self, string: str) -> list[int]:
         # this returns no special tokens
@@ -68,40 +76,53 @@ class HuggingFaceTokenizer(BaseTokenizer):
 _TOKENIZER_CACHE: dict[str, BaseTokenizer] = {}
 
 
-def _get_cached_tokenizer(
-    model_name: str | None = None, provider_type: str | None = None
-) -> BaseTokenizer:
+def _check_tokenizer_cache(tokenizer_name: str) -> BaseTokenizer:
     global _TOKENIZER_CACHE
 
-    if provider_type:
-        if not _TOKENIZER_CACHE.get(provider_type):
-            if provider_type.lower() == "openai":
-                _TOKENIZER_CACHE[provider_type] = TiktokenTokenizer()
-            elif provider_type.lower() == "cohere":
-                _TOKENIZER_CACHE[provider_type] = HuggingFaceTokenizer(
-                    "Cohere/command-nightly"
+    if tokenizer_name not in _TOKENIZER_CACHE:
+        if tokenizer_name == "openai":
+            _TOKENIZER_CACHE[tokenizer_name] = TiktokenTokenizer("cl100k_base")
+            return _TOKENIZER_CACHE[tokenizer_name]
+        try:
+            logger.debug(f"Initializing HuggingFaceTokenizer for: {tokenizer_name}")
+            _TOKENIZER_CACHE[tokenizer_name] = HuggingFaceTokenizer(tokenizer_name)
+        except Exception as primary_error:
+            logger.error(
+                f"Error initializing HuggingFaceTokenizer for {tokenizer_name}: {primary_error}"
+            )
+            logger.warning(
+                f"Falling back to default embedding model: {DOCUMENT_ENCODER_MODEL}"
+            )
+
+            try:
+                # Cache this tokenizer name to the default so we don't have to try to load it again
+                # and fail again
+                _TOKENIZER_CACHE[tokenizer_name] = HuggingFaceTokenizer(
+                    DOCUMENT_ENCODER_MODEL
                 )
-            else:
-                _TOKENIZER_CACHE[
-                    provider_type
-                ] = TiktokenTokenizer()  # Default to OpenAI tokenizer
-        return _TOKENIZER_CACHE[provider_type]
+            except Exception as fallback_error:
+                logger.error(
+                    f"Error initializing fallback HuggingFaceTokenizer: {fallback_error}"
+                )
+                raise ValueError(
+                    f"Failed to initialize tokenizer for {tokenizer_name} and fallback model"
+                ) from fallback_error
 
-    if model_name:
-        if not _TOKENIZER_CACHE.get(model_name):
-            _TOKENIZER_CACHE[model_name] = HuggingFaceTokenizer(model_name)
-        return _TOKENIZER_CACHE[model_name]
-
-    raise ValueError("Need to provide a model_name or provider_type")
+    return _TOKENIZER_CACHE[tokenizer_name]
 
 
 def get_tokenizer(model_name: str | None, provider_type: str | None) -> BaseTokenizer:
-    if provider_type is None and model_name is None:
-        model_name = DOCUMENT_ENCODER_MODEL
-    return _get_cached_tokenizer(
-        model_name=model_name,
-        provider_type=provider_type,
-    )
+    if provider_type:
+        if provider_type.lower() == "openai":
+            # Used across ada and text-embedding-3 models
+            return _check_tokenizer_cache("openai")
+        # If we are given a cloud provider_type that isn't OpenAI, we default to trying to use the model_name
+        # this means we are approximating the token count which may leave some performance on the table
+
+    if not model_name:
+        raise ValueError("Need to provide a model_name or provider_type")
+
+    return _check_tokenizer_cache(model_name)
 
 
 def tokenizer_trim_content(

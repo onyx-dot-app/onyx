@@ -492,6 +492,7 @@ export function AssistantEditor({
                   label="Description"
                   placeholder="e.g. 'Use this Assistant to help draft professional emails'"
                 />
+
                 <TextFormField
                   tooltip="Gives your assistant a prime directive"
                   name="system_prompt"
@@ -899,14 +900,14 @@ export function AssistantEditor({
                                         <Field
                                           name={`starter_messages[${index}].message`}
                                           className={`
-                                        border 
-                                        border-border 
-                                        bg-background 
-                                        rounded 
-                                        w-full 
-                                        py-2 
-                                        px-3 
-                                        mr-4
+                                          border 
+                                          border-border 
+                                          bg-background 
+                                          rounded 
+                                          w-full 
+                                          py-2 
+                                          px-3 
+                                          mr-4
                                       `}
                                           as="textarea"
                                           autoComplete="off"

@@ -114,12 +114,10 @@ export function TextFormField({
   explanationText,
   explanationLink,
   small,
-  value,
   noPadding,
   removeLabel,
 }: {
   name: string;
-  value?: string;
   removeLabel?: boolean;
   label: string;
   subtext?: string | JSX.Element;
@@ -170,7 +168,6 @@ export function TextFormField({
         type={type}
         name={name}
         id={name}
-        value={value}
         className={`
           ${small && "text-sm"}
           border 

@@ -114,8 +114,24 @@ class AnswerPromptBuilder:
         final_messages_with_tokens.append(self.user_message_and_token_cnt)
 
         if tool_call_summary:
-            final_messages_with_tokens.append((tool_call_summary.tool_call_request, 0))
-            final_messages_with_tokens.append((tool_call_summary.tool_call_result, 0))
+            final_messages_with_tokens.append(
+                (
+                    tool_call_summary.tool_call_request,
+                    check_message_tokens(
+                        tool_call_summary.tool_call_request,
+                        self.llm_tokenizer_encode_func,
+                    ),
+                )
+            )
+            final_messages_with_tokens.append(
+                (
+                    tool_call_summary.tool_call_result,
+                    check_message_tokens(
+                        tool_call_summary.tool_call_result,
+                        self.llm_tokenizer_encode_func,
+                    ),
+                )
+            )
 
         return drop_messages_history_overflow(
             final_messages_with_tokens, self.max_tokens

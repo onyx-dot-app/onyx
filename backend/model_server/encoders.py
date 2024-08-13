@@ -199,7 +199,14 @@ def get_embedding_model(
 
     if model_name not in _GLOBAL_MODELS_DICT:
         logger.info(f"Loading {model_name}")
-        model = SentenceTransformer(model_name)
+        # Some model architectures that aren't built into the Transformers or Sentence
+        # Transformer need to be downloaded to be loaded locally. This does not mean
+        # data is sent to remote servers for inference, however the remote code can
+        # be fairly arbitrary so only use trusted models
+        model = SentenceTransformer(
+            model_name_or_path=model_name,
+            trust_remote_code=True,
+        )
         model.max_seq_length = max_context_length
         _GLOBAL_MODELS_DICT[model_name] = model
     elif max_context_length != _GLOBAL_MODELS_DICT[model_name].max_seq_length:

@@ -184,6 +184,7 @@ def create_credential(env_name: str) -> int:
     body = {
         "credential_json": {},
         "admin_public": True,
+        "source": DocumentSource.FILE,
     }
     response = requests.post(url, headers=GENERAL_HEADERS, json=body)
     if response.status_code == 200:

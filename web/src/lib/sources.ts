@@ -272,11 +272,13 @@ const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Storage,
     docs: "https://docs.danswer.dev/connectors/google_storage",
   },
-  // not_applicable: {
-  //   icon: null,
-  //   displayName: "Not Applicable",
-  //   category: SourceCategory.Other
-  // }
+  // currently used for the Internet Search tool docs, which is why
+  // a globe is used
+  not_applicable: {
+    icon: GlobeIcon,
+    displayName: "Not Applicable",
+    category: SourceCategory.Other,
+  },
 } as SourceMap;
 
 function fillSourceMetadata(

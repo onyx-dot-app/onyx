@@ -143,6 +143,7 @@ services:
 
   relational_db:
     image: postgres:15.2-alpine
+    command: -c 'max_connections=150'
     restart: always
     # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
     env_file:

@@ -33,7 +33,9 @@ logger = setup_logger()
 
 class IndexingPipelineProtocol(Protocol):
     def __call__(
-        self, documents: list[Document], index_attempt_metadata: IndexAttemptMetadata
+        self,
+        document_batch: list[Document],
+        index_attempt_metadata: IndexAttemptMetadata,
     ) -> tuple[int, int]:
         ...
 
@@ -115,7 +117,7 @@ def index_doc_batch(
     chunker: Chunker,
     embedder: IndexingEmbedder,
     document_index: DocumentIndex,
-    documents: list[Document],
+    document_batch: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
     ignore_time_skip: bool = False,
@@ -123,23 +125,31 @@ def index_doc_batch(
     """Takes different pieces of the indexing pipeline and applies it to a batch of documents
     Note that the documents should already be batched at this point so that it does not inflate the
     memory requirements"""
-    # Skip documents that have neither title nor content
-    # If the document doesn't have either, then there is no useful information in it
-    # This is again verified later in the pipeline after chunking but at that point there should
-    # already be no documents that are empty.
-    documents_to_process = []
-    for document in documents:
+    documents = []
+    for document in document_batch:
+        empty_contents = not any(section.text.strip() for section in document.sections)
         if (
-            not document.title
-            or not document.title.strip()
-            and not any(section.text.strip() for section in document.sections)
+            (not document.title or not document.title.strip())
+            and not document.semantic_identifier.strip()
+            and empty_contents
         ):
+            # Skip documents that have neither title nor content
+            # If the document doesn't have either, then there is no useful information in it
+            # This is again verified later in the pipeline after chunking but at that point there should
+            # already be no documents that are empty.
             logger.warning(
-                f"Skipping document with ID {document.id} as it has neither title nor content"
+                f"Skipping document with ID {document.id} as it has neither title nor content."
+            )
+        elif (
+            document.title is not None and not document.title.strip() and empty_contents
+        ):
+            # The title is explicitly empty ("" and not None) and the document is empty
+            # so when building the chunk text representation, it will be empty and unuseable
+            logger.warning(
+                f"Skipping document with ID {document.id} as the chunks will be empty."
             )
         else:
-            documents_to_process.append(document)
-    documents = documents_to_process
+            documents.append(document)
 
     document_ids = [document.id for document in documents]
     db_docs = get_documents_by_ids(
@@ -155,6 +165,11 @@ def index_doc_batch(
         if not ignore_time_skip
         else documents
     )
+
+    # No docs to update either because the batch is empty or every doc was already indexed
+    if not updatable_docs:
+        return 0, 0
+
     updatable_ids = [doc.id for doc in updatable_docs]
 
     # Create records in the source of truth about these documents,
@@ -174,8 +189,12 @@ def index_doc_batch(
     ]
 
     logger.debug("Starting embedding")
-    chunks_with_embeddings = embedder.embed_chunks(
-        chunks=chunks,
+    chunks_with_embeddings = (
+        embedder.embed_chunks(
+            chunks=chunks,
+        )
+        if chunks
+        else []
     )
 
     # Acquires a lock on the documents so that no other process can modify them

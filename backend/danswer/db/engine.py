@@ -18,6 +18,7 @@ from danswer.configs.app_configs import POSTGRES_HOST
 from danswer.configs.app_configs import POSTGRES_PASSWORD
 from danswer.configs.app_configs import POSTGRES_PORT
 from danswer.configs.app_configs import POSTGRES_USER
+from danswer.configs.constants import POSTGRES_UNKNOWN_APP_NAME
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -25,11 +26,17 @@ logger = setup_logger()
 SYNC_DB_API = "psycopg2"
 ASYNC_DB_API = "asyncpg"
 
+POSTGRES_APP_NAME = (
+    POSTGRES_UNKNOWN_APP_NAME  # helps to diagnose open connections in postgres
+)
+
 # global so we don't create more than one engine per process
 # outside of being best practice, this is needed so we can properly pool
 # connections and not create a new pool on every request
 _SYNC_ENGINE: Engine | None = None
 _ASYNC_ENGINE: AsyncEngine | None = None
+
+SessionFactory: sessionmaker[Session] | None = None
 
 
 def get_db_current_time(db_session: Session) -> datetime:
@@ -51,14 +58,25 @@ def build_connection_string(
     host: str = POSTGRES_HOST,
     port: str = POSTGRES_PORT,
     db: str = POSTGRES_DB,
+    app_name: str | None = None,
 ) -> str:
+    if app_name:
+        return f"postgresql+{db_api}://{user}:{password}@{host}:{port}/{db}?application_name={app_name}"
+
     return f"postgresql+{db_api}://{user}:{password}@{host}:{port}/{db}"
+
+
+def init_sqlalchemy_engine(app_name: str) -> None:
+    global POSTGRES_APP_NAME
+    POSTGRES_APP_NAME = app_name
 
 
 def get_sqlalchemy_engine() -> Engine:
     global _SYNC_ENGINE
     if _SYNC_ENGINE is None:
-        connection_string = build_connection_string(db_api=SYNC_DB_API)
+        connection_string = build_connection_string(
+            db_api=SYNC_DB_API, app_name=POSTGRES_APP_NAME + "_sync"
+        )
         _SYNC_ENGINE = create_engine(connection_string, pool_size=40, max_overflow=10, pool_pre_ping=True)
     return _SYNC_ENGINE
 
@@ -66,9 +84,16 @@ def get_sqlalchemy_engine() -> Engine:
 def get_sqlalchemy_async_engine() -> AsyncEngine:
     global _ASYNC_ENGINE
     if _ASYNC_ENGINE is None:
+        # underlying asyncpg cannot accept application_name directly in the connection string
+        # https://github.com/MagicStack/asyncpg/issues/798
         connection_string = build_connection_string()
         _ASYNC_ENGINE = create_async_engine(
-            connection_string, pool_size=40, max_overflow=10
+            connection_string,
+            connect_args={
+                "server_settings": {"application_name": POSTGRES_APP_NAME + "_async"}
+            },
+            pool_size=40,
+            max_overflow=10,
         )
     return _ASYNC_ENGINE
 
@@ -115,4 +140,8 @@ async def warm_up_connections(
         await async_conn.close()
 
 
-SessionFactory = sessionmaker(bind=get_sqlalchemy_engine())
+def get_session_factory() -> sessionmaker[Session]:
+    global SessionFactory
+    if SessionFactory is None:
+        SessionFactory = sessionmaker(bind=get_sqlalchemy_engine())
+    return SessionFactory

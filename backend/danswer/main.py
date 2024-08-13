@@ -34,6 +34,7 @@ from danswer.configs.app_configs import USER_AUTH_SECRET
 from danswer.configs.app_configs import WEB_DOMAIN
 from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.configs.constants import AuthType
+from danswer.configs.constants import POSTGRES_WEB_APP_NAME
 from danswer.db.connector import create_initial_default_connector
 from danswer.db.connector_credential_pair import associate_default_cc_pair
 from danswer.db.connector_credential_pair import get_connector_credential_pairs
@@ -42,6 +43,7 @@ from danswer.db.credentials import create_initial_public_credential
 from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.embedding_model import get_secondary_db_embedding_model
 from danswer.db.engine import get_sqlalchemy_engine
+from danswer.db.engine import init_sqlalchemy_engine
 from danswer.db.engine import warm_up_connections
 from danswer.db.index_attempt import cancel_indexing_attempts_past_model
 from danswer.db.index_attempt import expire_index_attempts
@@ -156,6 +158,7 @@ def include_router_with_global_prefix_prepended(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
+    init_sqlalchemy_engine(POSTGRES_WEB_APP_NAME)
     engine = get_sqlalchemy_engine()
 
     verify_auth = fetch_versioned_implementation(

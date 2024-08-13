@@ -1,15 +1,13 @@
 "use client";
 
 import { useState, useRef, useContext } from "react";
-import { FiSearch, FiMessageSquare, FiTool, FiLogOut } from "react-icons/fi";
+import { FiLogOut } from "react-icons/fi";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { User } from "@/lib/types";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
-import { BasicSelectable } from "@/components/BasicClickable";
 import { Popover } from "./popover/Popover";
 import { LOGOUT_DISABLED } from "@/lib/constants";
-import { Settings } from "@/app/admin/settings/interfaces";
 import { SettingsContext } from "./settings/SettingsProvider";
 import { LightSettingsIcon } from "./icons/icons";
 import { pageType } from "@/app/chat/sessionSidebar/types";
@@ -54,7 +52,22 @@ export function UserDropdown({
             onClick={() => setUserInfoVisible(!userInfoVisible)}
             className="flex cursor-pointer"
           >
-            <div className="my-auto bg-background-strong ring-2 ring-transparent group-hover:ring-background-300/50 transition-ring duration-150 rounded-lg inline-block flex-none px-2 text-base ">
+            <div
+              className="
+                my-auto
+                bg-background-strong
+                ring-2
+                ring-transparent
+                group-hover:ring-background-300/50
+                transition-ring
+                duration-150
+                rounded-lg
+                inline-block
+                flex-none
+                px-2
+                text-base
+              "
+            >
               {user && user.email ? user.email[0].toUpperCase() : "A"}
             </div>
           </div>
