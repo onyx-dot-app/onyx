@@ -35,18 +35,22 @@ def upgrade() -> None:
     op.execute(
         """
         UPDATE index_attempt ia
-        SET connector_credential_pair_id =
-            CASE
-                WHEN ia.credential_id IS NULL THEN
-                    (SELECT id FROM connector_credential_pair
-                     WHERE connector_id = ia.connector_id
-                     LIMIT 1)
-                ELSE
-                    (SELECT id FROM connector_credential_pair
-                     WHERE connector_id = ia.connector_id
-                     AND credential_id = ia.credential_id)
-            END
-        WHERE ia.connector_id IS NOT NULL
+        SET connector_credential_pair_id = (
+            SELECT id FROM connector_credential_pair ccp
+            WHERE
+                (ia.connector_id IS NULL OR ccp.connector_id = ia.connector_id)
+                AND (ia.credential_id IS NULL OR ccp.credential_id = ia.credential_id)
+            LIMIT 1
+        )
+        WHERE ia.connector_id IS NOT NULL OR ia.credential_id IS NOT NULL
+        """
+    )
+
+    # For good measure
+    op.execute(
+        """
+        DELETE FROM index_attempt
+        WHERE connector_credential_pair_id IS NULL
         """
     )
 

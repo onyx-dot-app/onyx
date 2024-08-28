@@ -187,11 +187,6 @@ class DefaultMultiLLM(LLM):
     """Uses Litellm library to allow easy configuration to use a multitude of LLMs
     See https://python.langchain.com/docs/integrations/chat/litellm"""
 
-    DEFAULT_MODEL_PARAMS: dict[str, Any] = {
-        "frequency_penalty": 0,
-        "presence_penalty": 0,
-    }
-
     def __init__(
         self,
         api_key: str | None,
@@ -224,16 +219,14 @@ class DefaultMultiLLM(LLM):
             for k, v in custom_config.items():
                 os.environ[k] = v
 
-        model_kwargs = (
-            DefaultMultiLLM.DEFAULT_MODEL_PARAMS if model_provider == "openai" else {}
-        )
+        model_kwargs: dict[str, Any] = {}
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
 
         self._model_kwargs = model_kwargs
 
     def log_model_configs(self) -> None:
-        logger.info(f"Config: {self.config}")
+        logger.debug(f"Config: {self.config}")
 
     def _completion(
         self,

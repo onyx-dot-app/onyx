@@ -65,17 +65,12 @@ const QuoteDisplay = ({ quoteInfo }: { quoteInfo: Quote }) => {
 
 interface QuotesSectionProps {
   quotes: Quote[] | null;
-  isAnswerable: boolean | null;
   isFetching: boolean;
 }
 
 const QuotesHeader = ({ quotes, isFetching }: QuotesSectionProps) => {
   if ((!quotes || quotes.length === 0) && isFetching) {
     return <>Extracting quotes...</>;
-  }
-
-  if (!quotes || quotes.length === 0) {
-    return <>No quotes found</>;
   }
 
   return <>Quotes</>;
@@ -85,16 +80,6 @@ const QuotesBody = ({ quotes, isFetching }: QuotesSectionProps) => {
   if (!quotes && isFetching) {
     // height of quotes section to avoid extra "jumps" from the quotes loading
     return <div className="h-[42px]"></div>;
-  }
-
-  if (!isFetching && (!quotes || !quotes.length)) {
-    return (
-      <div className="flex">
-        <div className="text-error text-sm my-auto">
-          Did not find any exact quotes to support the above answer.
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -110,11 +95,7 @@ export const QuotesSection = (props: QuotesSectionProps) => {
   let status: StatusOptions = "in-progress";
   if (!props.isFetching) {
     if (props.quotes && props.quotes.length > 0) {
-      if (props.isAnswerable === false) {
-        status = "warning";
-      } else {
-        status = "success";
-      }
+      status = "success";
     } else {
       status = "failed";
     }
@@ -124,7 +105,9 @@ export const QuotesSection = (props: QuotesSectionProps) => {
     <ResponseSection
       status={status}
       header={
-        <div className="ml-2 text-emphasis">{<QuotesHeader {...props} />}</div>
+        <div className="ml-2 text-emphasis font-bold">
+          {<QuotesHeader {...props} />}
+        </div>
       }
       body={<QuotesBody {...props} />}
       desiredOpenStatus={true}

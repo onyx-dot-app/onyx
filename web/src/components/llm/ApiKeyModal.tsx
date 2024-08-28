@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { ApiKeyForm } from "./ApiKeyForm";
 import { Modal } from "../Modal";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/models/llm/interfaces";
+import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { checkLlmProvider } from "../initialSetup/welcome/lib";
 import { User } from "@/lib/types";
 import { useRouter } from "next/navigation";

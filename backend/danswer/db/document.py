@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import and_
 from sqlalchemy import delete
+from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import select
@@ -16,6 +17,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from danswer.configs.constants import DEFAULT_BOOST
+from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.feedback import delete_document_feedback_for_documents__no_commit
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import Credential
@@ -28,6 +30,12 @@ from danswer.server.documents.models import ConnectorCredentialPairIdentifier
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def check_docs_exist(db_session: Session) -> bool:
+    stmt = select(exists(DbDocument))
+    result = db_session.execute(stmt)
+    return result.scalar() or False
 
 
 def get_documents_for_connector_credential_pair(
@@ -103,36 +111,19 @@ def get_document_cnts_for_cc_pairs(
 def get_acccess_info_for_documents(
     db_session: Session,
     document_ids: list[str],
-    cc_pair_to_delete: ConnectorCredentialPairIdentifier | None = None,
 ) -> Sequence[tuple[str, list[UUID | None], bool]]:
     """Gets back all relevant access info for the given documents. This includes
     the user_ids for cc pairs that the document is associated with + whether any
     of the associated cc pairs are intending to make the document globally public.
-
-    If `cc_pair_to_delete` is specified, gets the above access info as if that
-    pair had been deleted. This is needed since we want to delete from the Vespa
-    before deleting from Postgres to ensure that the state of Postgres never "loses"
-    documents that still exist in Vespa.
     """
-    stmt = select(
-        DocumentByConnectorCredentialPair.id,
-        func.array_agg(Credential.user_id).label("user_ids"),
-        func.bool_or(ConnectorCredentialPair.is_public).label("public_doc"),
-    ).where(DocumentByConnectorCredentialPair.id.in_(document_ids))
-
-    # pretend that the specified cc pair doesn't exist
-    if cc_pair_to_delete:
-        stmt = stmt.where(
-            and_(
-                DocumentByConnectorCredentialPair.connector_id
-                != cc_pair_to_delete.connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                != cc_pair_to_delete.credential_id,
-            )
-        )
-
     stmt = (
-        stmt.join(
+        select(
+            DocumentByConnectorCredentialPair.id,
+            func.array_agg(Credential.user_id).label("user_ids"),
+            func.bool_or(ConnectorCredentialPair.is_public).label("public_doc"),
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .join(
             Credential,
             DocumentByConnectorCredentialPair.credential_id == Credential.id,
         )
@@ -145,6 +136,9 @@ def get_acccess_info_for_documents(
                 == ConnectorCredentialPair.credential_id,
             ),
         )
+        # don't include CC pairs that are being deleted
+        # NOTE: CC pairs can never go from DELETING to any other state -> it's safe to ignore them
+        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
         .group_by(DocumentByConnectorCredentialPair.id)
     )
     return db_session.execute(stmt).all()  # type: ignore
@@ -311,7 +305,7 @@ def acquire_document_locks(db_session: Session, document_ids: list[str]) -> bool
 
 
 _NUM_LOCK_ATTEMPTS = 10
-_LOCK_RETRY_DELAY = 30
+_LOCK_RETRY_DELAY = 10
 
 
 @contextlib.contextmanager
@@ -323,7 +317,7 @@ def prepare_to_modify_documents(
     called ahead of any modification to Vespa. Locks should be released by the
     caller as soon as updates are complete by finishing the transaction.
 
-    NOTE: only one commit is allowed within the context manager returned by this funtion.
+    NOTE: only one commit is allowed within the context manager returned by this function.
     Multiple commits will result in a sqlalchemy.exc.InvalidRequestError.
     NOTE: this function will commit any existing transaction.
     """
@@ -341,7 +335,9 @@ def prepare_to_modify_documents(
                     yield transaction
                     break
         except OperationalError as e:
-            logger.info(f"Failed to acquire locks for documents, retrying. Error: {e}")
+            logger.warning(
+                f"Failed to acquire locks for documents, retrying. Error: {e}"
+            )
 
         time.sleep(retry_delay)
 

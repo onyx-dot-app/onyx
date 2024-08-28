@@ -1,12 +1,18 @@
 from sqlalchemy.orm import Session
 
 from danswer.configs.chat_configs import BASE_RECENCY_DECAY
-from danswer.configs.chat_configs import DISABLE_LLM_CHUNK_FILTER
+from danswer.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
+from danswer.configs.chat_configs import CONTEXT_CHUNKS_BELOW
+from danswer.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
 from danswer.configs.chat_configs import FAVOR_RECENT_DECAY_MULTIPLIER
+from danswer.configs.chat_configs import HYBRID_ALPHA
+from danswer.configs.chat_configs import HYBRID_ALPHA_KEYWORD
+from danswer.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
 from danswer.configs.chat_configs import NUM_RETURNED_HITS
 from danswer.db.models import User
 from danswer.llm.interfaces import LLM
-from danswer.search.enums import QueryFlow
+from danswer.natural_language_processing.search_nlp_models import QueryAnalysisModel
+from danswer.search.enums import LLMEvaluationType
 from danswer.search.enums import RecencyBiasSetting
 from danswer.search.models import BaseFilters
 from danswer.search.models import IndexFilters
@@ -14,17 +20,22 @@ from danswer.search.models import SearchQuery
 from danswer.search.models import SearchRequest
 from danswer.search.models import SearchType
 from danswer.search.preprocessing.access_filters import build_access_filters_for_user
-from danswer.search.preprocessing.danswer_helper import query_intent
+from danswer.search.retrieval.search_runner import remove_stop_words_and_punctuation
+from danswer.search.search_settings import get_search_settings
 from danswer.secondary_llm_flows.source_filter import extract_source_filter
 from danswer.secondary_llm_flows.time_filter import extract_time_filter
 from danswer.utils.logger import setup_logger
 from danswer.utils.threadpool_concurrency import FunctionCall
 from danswer.utils.threadpool_concurrency import run_functions_in_parallel
 from danswer.utils.timing import log_function_time
-from shared_configs.configs import ENABLE_RERANKING_REAL_TIME_FLOW
 
 
 logger = setup_logger()
+
+
+def query_analysis(query: str) -> tuple[bool, list[str]]:
+    analysis_model = QueryAnalysisModel()
+    return analysis_model.predict(query)
 
 
 @log_function_time(print_only=True)
@@ -34,11 +45,10 @@ def retrieval_preprocessing(
     llm: LLM,
     db_session: Session,
     bypass_acl: bool = False,
-    include_query_intent: bool = True,
-    disable_llm_chunk_filter: bool = DISABLE_LLM_CHUNK_FILTER,
+    skip_query_analysis: bool = False,
     base_recency_decay: float = BASE_RECENCY_DECAY,
     favor_recent_decay_multiplier: float = FAVOR_RECENT_DECAY_MULTIPLIER,
-) -> tuple[SearchQuery, SearchType | None, QueryFlow | None]:
+) -> SearchQuery:
     """Logic is as follows:
     Any global disables apply first
     Then any filters or settings as part of the query are used
@@ -68,6 +78,8 @@ def retrieval_preprocessing(
         logger.debug("Persona disables auto detect filters")
         auto_detect_time_filter = False
         auto_detect_source_filter = False
+    else:
+        logger.debug("Auto detect filters enabled")
 
     if (
         time_filter is not None
@@ -95,10 +107,8 @@ def retrieval_preprocessing(
         else None
     )
 
-    # NOTE: this isn't really part of building the retrieval request, but is done here
-    # so it can be simply done in parallel with the filters without multi-level multithreading
-    run_query_intent = (
-        FunctionCall(query_intent, (query,), {}) if include_query_intent else None
+    run_query_analysis = (
+        None if skip_query_analysis else FunctionCall(query_analysis, (query,), {})
     )
 
     functions_to_run = [
@@ -106,7 +116,7 @@ def retrieval_preprocessing(
         for filter_fn in [
             run_time_filters,
             run_source_filters,
-            run_query_intent,
+            run_query_analysis,
         ]
         if filter_fn
     ]
@@ -120,10 +130,21 @@ def retrieval_preprocessing(
     predicted_source_filters = (
         parallel_results[run_source_filters.result_id] if run_source_filters else None
     )
-    predicted_search_type, predicted_flow = (
-        parallel_results[run_query_intent.result_id]
-        if run_query_intent
+
+    # The extracted keywords right now are not very reliable, not using for now
+    # Can maybe use for highlighting
+    is_keyword, extracted_keywords = (
+        parallel_results[run_query_analysis.result_id]
+        if run_query_analysis
         else (None, None)
+    )
+
+    all_query_terms = query.split()
+    processed_keywords = (
+        remove_stop_words_and_punctuation(all_query_terms)
+        # If the user is using a different language, don't edit the query or remove english stopwords
+        if not search_request.multilingual_expansion
+        else all_query_terms
     )
 
     user_acl_filters = (
@@ -137,22 +158,33 @@ def retrieval_preprocessing(
         access_control_list=user_acl_filters,
     )
 
-    llm_chunk_filter = False
-    if search_request.skip_llm_chunk_filter is not None:
-        llm_chunk_filter = not search_request.skip_llm_chunk_filter
-    elif persona:
-        llm_chunk_filter = persona.llm_relevance_filter
+    llm_evaluation_type = LLMEvaluationType.BASIC
+    if search_request.evaluation_type is not LLMEvaluationType.UNSPECIFIED:
+        llm_evaluation_type = search_request.evaluation_type
 
-    if disable_llm_chunk_filter:
-        if llm_chunk_filter:
+    elif persona:
+        llm_evaluation_type = (
+            LLMEvaluationType.BASIC
+            if persona.llm_relevance_filter
+            else LLMEvaluationType.SKIP
+        )
+
+    if DISABLE_LLM_DOC_RELEVANCE:
+        if llm_evaluation_type:
             logger.info(
                 "LLM chunk filtering would have run but has been globally disabled"
             )
-        llm_chunk_filter = False
+        llm_evaluation_type = LLMEvaluationType.SKIP
 
-    skip_rerank = search_request.skip_rerank
-    if skip_rerank is None:
-        skip_rerank = not ENABLE_RERANKING_REAL_TIME_FLOW
+    rerank_settings = search_request.rerank_settings
+    # If not explicitly specified by the query, use the current settings
+    if rerank_settings is None:
+        saved_search_settings = get_search_settings()
+        if not saved_search_settings:
+            rerank_settings = None
+        # For non-streaming flows, the rerank settings are applied at the search_request level
+        elif not saved_search_settings.disable_rerank_for_streaming:
+            rerank_settings = saved_search_settings.to_reranking_detail()
 
     # Decays at 1 / (1 + (multiplier * num years))
     if persona and persona.recency_bias == RecencyBiasSetting.NO_DECAY:
@@ -167,20 +199,42 @@ def retrieval_preprocessing(
         else:
             recency_bias_multiplier = base_recency_decay
 
-    return (
-        SearchQuery(
-            query=query,
-            search_type=persona.search_type if persona else SearchType.HYBRID,
-            filters=final_filters,
-            recency_bias_multiplier=recency_bias_multiplier,
-            num_hits=limit if limit is not None else NUM_RETURNED_HITS,
-            offset=offset or 0,
-            skip_rerank=skip_rerank,
-            skip_llm_chunk_filter=not llm_chunk_filter,
-            chunks_above=search_request.chunks_above,
-            chunks_below=search_request.chunks_below,
-            full_doc=search_request.full_doc,
-        ),
-        predicted_search_type,
-        predicted_flow,
+    hybrid_alpha = HYBRID_ALPHA_KEYWORD if is_keyword else HYBRID_ALPHA
+    if search_request.hybrid_alpha:
+        hybrid_alpha = search_request.hybrid_alpha
+
+    # Search request overrides anything else as it's explicitly set by the request
+    # If not explicitly specified, use the persona settings if they exist
+    # Otherwise, use the global defaults
+    chunks_above = (
+        search_request.chunks_above
+        if search_request.chunks_above is not None
+        else (persona.chunks_above if persona else CONTEXT_CHUNKS_ABOVE)
+    )
+    chunks_below = (
+        search_request.chunks_below
+        if search_request.chunks_below is not None
+        else (persona.chunks_below if persona else CONTEXT_CHUNKS_BELOW)
+    )
+
+    return SearchQuery(
+        query=query,
+        processed_keywords=processed_keywords,
+        search_type=SearchType.KEYWORD if is_keyword else SearchType.SEMANTIC,
+        evaluation_type=llm_evaluation_type,
+        filters=final_filters,
+        hybrid_alpha=hybrid_alpha,
+        recency_bias_multiplier=recency_bias_multiplier,
+        num_hits=limit if limit is not None else NUM_RETURNED_HITS,
+        offset=offset or 0,
+        rerank_settings=rerank_settings,
+        # Should match the LLM filtering to the same as the reranked, it's understood as this is the number of results
+        # the user wants to do heavier processing on, so do the same for the LLM if reranking is on
+        # if no reranking settings are set, then use the global default
+        max_llm_filter_sections=rerank_settings.num_rerank
+        if rerank_settings
+        else NUM_POSTPROCESSED_RESULTS,
+        chunks_above=chunks_above,
+        chunks_below=chunks_below,
+        full_doc=search_request.full_doc,
     )

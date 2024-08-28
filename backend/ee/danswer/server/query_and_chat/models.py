@@ -1,8 +1,12 @@
 from pydantic import BaseModel
+from pydantic import Field
 
 from danswer.configs.constants import DocumentSource
+from danswer.one_shot_answer.models import ThreadMessage
+from danswer.search.enums import LLMEvaluationType
 from danswer.search.enums import SearchType
 from danswer.search.models import ChunkContext
+from danswer.search.models import RerankingDetails
 from danswer.search.models import RetrievalDetails
 from danswer.server.manage.models import StandardAnswer
 
@@ -21,9 +25,9 @@ class DocumentSearchRequest(ChunkContext):
     search_type: SearchType
     retrieval_options: RetrievalDetails
     recency_bias_multiplier: float = 1.0
-    # This is to forcibly skip (or run) the step, if None it uses the system defaults
-    skip_rerank: bool | None = None
-    skip_llm_chunk_filter: bool | None = None
+    evaluation_type: LLMEvaluationType
+    # None to use system defaults for reranking
+    rerank_settings: RerankingDetails | None = None
 
 
 class BasicCreateChatMessageRequest(ChunkContext):
@@ -43,6 +47,16 @@ class BasicCreateChatMessageRequest(ChunkContext):
     search_doc_ids: list[int] | None = None
 
 
+class BasicCreateChatMessageWithHistoryRequest(ChunkContext):
+    # Last element is the new query. All previous elements are historical context
+    messages: list[ThreadMessage]
+    prompt_id: int | None
+    persona_id: int
+    retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
+    query_override: str | None = None
+    skip_rerank: bool | None = None
+
+
 class SimpleDoc(BaseModel):
     id: str
     semantic_identifier: str
@@ -50,6 +64,7 @@ class SimpleDoc(BaseModel):
     blurb: str
     match_highlights: list[str]
     source_type: DocumentSource
+    metadata: dict | None
 
 
 class ChatBasicResponse(BaseModel):
@@ -59,3 +74,4 @@ class ChatBasicResponse(BaseModel):
     simple_search_docs: list[SimpleDoc] | None = None
     error_msg: str | None = None
     message_id: int | None = None
+    llm_chunks_indices: list[int] | None = None

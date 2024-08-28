@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from danswer.db.engine import get_session
+from danswer.db.models import User
 from danswer.llm.factory import get_default_llms
 from danswer.search.models import SearchRequest
 from danswer.search.pipeline import SearchPipeline
@@ -64,7 +65,7 @@ class GptSearchResponse(BaseModel):
 @router.post("/gpt-document-search")
 def gpt_search(
     search_request: GptSearchRequest,
-    _: str | None = Depends(api_key_dep),
+    _: User | None = Depends(api_key_dep),
     db_session: Session = Depends(get_session),
 ) -> GptSearchResponse:
     llm, fast_llm = get_default_llms()

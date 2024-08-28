@@ -7,9 +7,11 @@ import { Row } from "./interfaces";
 export function DraggableRow({
   row,
   forceDragging,
+  isAdmin = true,
 }: {
   row: Row;
   forceDragging?: boolean;
+  isAdmin?: boolean;
 }) {
   const {
     attributes,
@@ -33,11 +35,13 @@ export function DraggableRow({
       className={isDragging ? "invisible" : "bg-background"}
     >
       <TableCell>
-        <DragHandle
-          isDragging={isDragging || forceDragging}
-          {...attributes}
-          {...listeners}
-        />
+        {isAdmin && (
+          <DragHandle
+            isDragging={isDragging || forceDragging}
+            {...attributes}
+            {...listeners}
+          />
+        )}
       </TableCell>
       {row.cells.map((column, ind) => (
         <TableCell key={ind}>{column}</TableCell>

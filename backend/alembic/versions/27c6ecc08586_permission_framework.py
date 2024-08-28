@@ -160,12 +160,28 @@ def downgrade() -> None:
             nullable=False,
         ),
     )
-    op.drop_constraint(
-        "fk_index_attempt_credential_id", "index_attempt", type_="foreignkey"
-    )
-    op.drop_constraint(
-        "fk_index_attempt_connector_id", "index_attempt", type_="foreignkey"
-    )
+
+    # Check if the constraint exists before dropping
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    constraints = inspector.get_foreign_keys("index_attempt")
+
+    if any(
+        constraint["name"] == "fk_index_attempt_credential_id"
+        for constraint in constraints
+    ):
+        op.drop_constraint(
+            "fk_index_attempt_credential_id", "index_attempt", type_="foreignkey"
+        )
+
+    if any(
+        constraint["name"] == "fk_index_attempt_connector_id"
+        for constraint in constraints
+    ):
+        op.drop_constraint(
+            "fk_index_attempt_connector_id", "index_attempt", type_="foreignkey"
+        )
+
     op.drop_column("index_attempt", "credential_id")
     op.drop_column("index_attempt", "connector_id")
     op.drop_table("connector_credential_pair")

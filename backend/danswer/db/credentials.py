@@ -1,5 +1,6 @@
 from typing import Any
 
+from sqlalchemy import exists
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
@@ -17,8 +18,10 @@ from danswer.connectors.google_drive.constants import (
 )
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import Credential
+from danswer.db.models import Credential__UserGroup
 from danswer.db.models import DocumentByConnectorCredentialPair
 from danswer.db.models import User
+from danswer.db.models import User__UserGroup
 from danswer.server.documents.models import CredentialBase
 from danswer.server.documents.models import CredentialDataUpdateRequest
 from danswer.utils.logger import setup_logger
@@ -26,42 +29,122 @@ from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# The credentials for these sources are not real so
+# permissions are not enforced for them
+CREDENTIAL_PERMISSIONS_TO_IGNORE = {
+    DocumentSource.FILE,
+    DocumentSource.WEB,
+    DocumentSource.NOT_APPLICABLE,
+    DocumentSource.GOOGLE_SITES,
+    DocumentSource.WIKIPEDIA,
+    DocumentSource.MEDIAWIKI,
+}
 
-def _attach_user_filters(
-    stmt: Select[tuple[Credential]],
+
+def _add_user_filters(
+    stmt: Select,
     user: User | None,
     assume_admin: bool = False,  # Used with API key
+    get_editable: bool = True,
 ) -> Select:
     """Attaches filters to the statement to ensure that the user can only
     access the appropriate credentials"""
-    if user:
-        if user.role == UserRole.ADMIN:
+    if not user:
+        if assume_admin:
+            # apply admin filters minus the user_id check
             stmt = stmt.where(
                 or_(
-                    Credential.user_id == user.id,
                     Credential.user_id.is_(None),
                     Credential.admin_public == True,  # noqa: E712
+                    Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE),
                 )
             )
-        else:
-            stmt = stmt.where(Credential.user_id == user.id)
-    elif assume_admin:
-        stmt = stmt.where(
+        return stmt
+
+    if user.role == UserRole.ADMIN:
+        # Admins can access all credentials that are public or owned by them
+        # or are not associated with any user
+        return stmt.where(
             or_(
+                Credential.user_id == user.id,
                 Credential.user_id.is_(None),
                 Credential.admin_public == True,  # noqa: E712
+                Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE),
             )
         )
+    if user.role == UserRole.BASIC:
+        # Basic users can only access credentials that are owned by them
+        return stmt.where(Credential.user_id == user.id)
 
-    return stmt
+    """
+    THIS PART IS FOR CURATORS AND GLOBAL CURATORS
+    Here we select cc_pairs by relation:
+    User -> User__UserGroup -> Credential__UserGroup -> Credential
+    """
+    stmt = stmt.outerjoin(Credential__UserGroup).outerjoin(
+        User__UserGroup,
+        User__UserGroup.user_group_id == Credential__UserGroup.user_group_id,
+    )
+    """
+    Filter Credentials by:
+    - if the user is in the user_group that owns the Credential
+    - if the user is not a global_curator, they must also have a curator relationship
+    to the user_group
+    - if editing is being done, we also filter out Credentials that are owned by groups
+    that the user isn't a curator for
+    - if we are not editing, we show all Credentials in the groups the user is a curator
+    for (as well as public Credentials)
+    - if we are not editing, we return all Credentials directly connected to the user
+    """
+    where_clause = User__UserGroup.user_id == user.id
+    if user.role == UserRole.CURATOR:
+        where_clause &= User__UserGroup.is_curator == True  # noqa: E712
+    if get_editable:
+        user_groups = select(User__UserGroup.user_group_id).where(
+            User__UserGroup.user_id == user.id
+        )
+        if user.role == UserRole.CURATOR:
+            user_groups = user_groups.where(
+                User__UserGroup.is_curator == True  # noqa: E712
+            )
+        where_clause &= (
+            ~exists()
+            .where(Credential__UserGroup.credential_id == Credential.id)
+            .where(~Credential__UserGroup.user_group_id.in_(user_groups))
+            .correlate(Credential)
+        )
+    else:
+        where_clause |= Credential.curator_public == True  # noqa: E712
+        where_clause |= Credential.user_id == user.id  # noqa: E712
+
+    where_clause |= Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE)
+
+    return stmt.where(where_clause)
+
+
+def _relate_credential_to_user_groups__no_commit(
+    db_session: Session,
+    credential_id: int,
+    user_group_ids: list[int],
+) -> None:
+    credential_user_groups = []
+    for group_id in user_group_ids:
+        credential_user_groups.append(
+            Credential__UserGroup(
+                credential_id=credential_id,
+                user_group_id=group_id,
+            )
+        )
+    db_session.add_all(credential_user_groups)
 
 
 def fetch_credentials(
     db_session: Session,
     user: User | None = None,
+    get_editable: bool = True,
 ) -> list[Credential]:
     stmt = select(Credential)
-    stmt = _attach_user_filters(stmt, user)
+    stmt = _add_user_filters(stmt, user, get_editable=get_editable)
     results = db_session.scalars(stmt)
     return list(results.all())
 
@@ -72,8 +155,9 @@ def fetch_credential_by_id(
     db_session: Session,
     assume_admin: bool = False,
 ) -> Credential | None:
-    stmt = select(Credential).where(Credential.id == credential_id)
-    stmt = _attach_user_filters(stmt, user, assume_admin=assume_admin)
+    stmt = select(Credential).distinct()
+    stmt = stmt.where(Credential.id == credential_id)
+    stmt = _add_user_filters(stmt, user, assume_admin=assume_admin)
     result = db_session.execute(stmt)
     credential = result.scalar_one_or_none()
     return credential
@@ -83,9 +167,10 @@ def fetch_credentials_by_source(
     db_session: Session,
     user: User | None,
     document_source: DocumentSource | None = None,
+    get_editable: bool = True,
 ) -> list[Credential]:
     base_query = select(Credential).where(Credential.source == document_source)
-    base_query = _attach_user_filters(base_query, user)
+    base_query = _add_user_filters(base_query, user, get_editable=get_editable)
     credentials = db_session.execute(base_query).scalars().all()
     return list(credentials)
 
@@ -153,11 +238,29 @@ def create_credential(
         admin_public=credential_data.admin_public,
         source=credential_data.source,
         name=credential_data.name,
+        curator_public=credential_data.curator_public,
     )
     db_session.add(credential)
+    db_session.flush()  # This ensures the credential gets an ID
+
+    _relate_credential_to_user_groups__no_commit(
+        db_session=db_session,
+        credential_id=credential.id,
+        user_group_ids=credential_data.groups,
+    )
+
     db_session.commit()
 
     return credential
+
+
+def _cleanup_credential__user_group_relationships__no_commit(
+    db_session: Session, credential_id: int
+) -> None:
+    """NOTE: does not commit the transaction."""
+    db_session.query(Credential__UserGroup).filter(
+        Credential__UserGroup.credential_id == credential_id
+    ).delete(synchronize_session=False)
 
 
 def alter_credential(
@@ -166,12 +269,12 @@ def alter_credential(
     user: User,
     db_session: Session,
 ) -> Credential | None:
+    # TODO: add user group relationship update
     credential = fetch_credential_by_id(credential_id, user, db_session)
 
     if credential is None:
         return None
 
-    credential.name = credential_data.name
     credential.name = credential_data.name
 
     # Update only the keys present in credential_data.credential_json
@@ -179,7 +282,6 @@ def alter_credential(
         credential.credential_json[key] = value
 
     credential.user_id = user.id if user is not None else None
-
     db_session.commit()
     return credential
 
@@ -273,10 +375,11 @@ def delete_credential(
             )
 
     if force:
-        logger.info(f"Force deleting credential {credential_id}")
+        logger.warning(f"Force deleting credential {credential_id}")
     else:
-        logger.info(f"Deleting credential {credential_id}")
+        logger.notice(f"Deleting credential {credential_id}")
 
+    _cleanup_credential__user_group_relationships__no_commit(db_session, credential_id)
     db_session.delete(credential)
     db_session.commit()
 

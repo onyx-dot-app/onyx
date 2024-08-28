@@ -6,6 +6,7 @@ import React, {
   createContext,
   useContext,
 } from "react";
+import { createPortal } from "react-dom";
 
 // Create a context for the tooltip group
 const TooltipGroupContext = createContext<{
@@ -40,11 +41,13 @@ export const CustomTooltip = ({
   light,
   citation,
   line,
+  medium,
   wrap,
   showTick = false,
   delay = 500,
   position = "bottom",
 }: {
+  medium?: boolean;
   content: string | ReactNode;
   children: JSX.Element;
   large?: boolean;
@@ -52,13 +55,14 @@ export const CustomTooltip = ({
   light?: boolean;
   showTick?: boolean;
   delay?: number;
-
   wrap?: boolean;
   citation?: boolean;
   position?: "top" | "bottom";
 }) => {
   const [isVisible, setIsVisible] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const triggerRef = useRef<HTMLSpanElement>(null);
   const { groupHovered, setGroupHovered, hoverCountRef } =
     useContext(TooltipGroupContext);
 
@@ -69,6 +73,7 @@ export const CustomTooltip = ({
     timeoutRef.current = setTimeout(() => {
       setIsVisible(true);
       setGroupHovered(true);
+      updateTooltipPosition();
     }, showDelay);
   };
 
@@ -85,6 +90,16 @@ export const CustomTooltip = ({
     }, 100);
   };
 
+  const updateTooltipPosition = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setTooltipPosition({
+        top: position === "top" ? rect.top - 10 : rect.bottom + 10,
+        left: rect.left + rect.width / 2,
+      });
+    }
+  };
+
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {
@@ -94,47 +109,60 @@ export const CustomTooltip = ({
   }, []);
 
   return (
-    <span className="relative inline-block">
+    <>
       <span
-        className="h-full leading-none"
+        ref={triggerRef}
+        className="relative inline-block"
         onMouseEnter={showTooltip}
         onMouseLeave={hideTooltip}
       >
         {children}
       </span>
-      {isVisible && (
-        <div
-          className={`absolute z-[1000] ${citation ? "max-w-[350px]" : "w-40"} ${large ? "w-96" : line && "max-w-64 w-auto"} 
-              left-1/2 transform -translate-x-1/2 ${position === "top" ? "bottom-full mb-2" : "mt-2"} text-sm 
-              ${
-                light
-                  ? "text-gray-800 bg-background-200"
-                  : "text-white bg-background-800"
-              } 
-              rounded-lg shadow-lg`}
-        >
-          {showTick && (
-            <div
-              className={`absolute w-3 h-3 -top-1.5 ${position === "top" ? "bottom-1.5" : "-top-1.5"} left-1/2 transform -translate-x-1/2 rotate-45 
-                  ${light ? "bg-background-200" : "bg-background-800"}`}
-            />
-          )}
+      {isVisible &&
+        createPortal(
           <div
-            className={`flex-wrap ${wrap && "w-full"} relative ${line ? "" : "flex"} p-2`}
-            style={
-              line || wrap
-                ? {
-                    whiteSpace: wrap ? "normal" : "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }
-                : {}
-            }
+            className={`fixed z-[1000] ${citation ? "max-w-[350px]" : "w-40"} ${
+              large ? (medium ? "w-88" : "w-96") : line && "max-w-64 w-auto"
+            } 
+            transform -translate-x-1/2 text-sm 
+            ${
+              light
+                ? "text-gray-800 bg-background-200"
+                : "text-white bg-background-800"
+            } 
+            rounded-lg shadow-lg`}
+            style={{
+              top: `${tooltipPosition.top}px`,
+              left: `${tooltipPosition.left}px`,
+            }}
           >
-            {content}
-          </div>
-        </div>
-      )}
-    </span>
+            {showTick && (
+              <div
+                className={`absolute w-3 h-3 ${
+                  position === "top" ? "bottom-1.5" : "-top-1.5"
+                } left-1/2 transform -translate-x-1/2 rotate-45 
+                ${light ? "bg-background-200" : "bg-background-800"}`}
+              />
+            )}
+            <div
+              className={`flex-wrap ${wrap && "w-full"} relative ${
+                line ? "" : "flex"
+              } p-2`}
+              style={
+                line || wrap
+                  ? {
+                      whiteSpace: wrap ? "normal" : "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }
+                  : {}
+              }
+            >
+              {content}
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 };

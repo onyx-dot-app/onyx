@@ -28,5 +28,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # This wasn't really required by the code either, no good reason to make it unique again
-    pass
+    op.create_unique_constraint(
+        "connector_credential_pair__name__key", "connector_credential_pair", ["name"]
+    )
+    op.alter_column(
+        "connector_credential_pair", "name", existing_type=sa.String(), nullable=True
+    )

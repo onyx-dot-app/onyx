@@ -1,7 +1,7 @@
 from typing import cast
 
-from fastapi import HTTPException
 from sqlalchemy import and_
+from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
@@ -21,19 +21,24 @@ from danswer.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def check_connectors_exist(db_session: Session) -> bool:
+    # Connector 0 is created on server startup as a default for ingestion
+    # it will always exist and we don't need to count it for this
+    stmt = select(exists(Connector).where(Connector.id > 0))
+    result = db_session.execute(stmt)
+    return result.scalar() or False
+
+
 def fetch_connectors(
     db_session: Session,
     sources: list[DocumentSource] | None = None,
     input_types: list[InputType] | None = None,
-    disabled_status: bool | None = None,
 ) -> list[Connector]:
     stmt = select(Connector)
     if sources is not None:
         stmt = stmt.where(Connector.source.in_(sources))
     if input_types is not None:
         stmt = stmt.where(Connector.input_type.in_(input_types))
-    if disabled_status is not None:
-        stmt = stmt.where(Connector.disabled == disabled_status)
     results = db_session.scalars(stmt)
     return list(results.all())
 
@@ -70,8 +75,8 @@ def fetch_ingestion_connector_by_name(
 
 
 def create_connector(
-    connector_data: ConnectorBase,
     db_session: Session,
+    connector_data: ConnectorBase,
 ) -> ObjectCreationIdResponse:
     if connector_by_name_source_exists(
         connector_data.name, connector_data.source, db_session
@@ -87,10 +92,7 @@ def create_connector(
         connector_specific_config=connector_data.connector_specific_config,
         refresh_freq=connector_data.refresh_freq,
         indexing_start=connector_data.indexing_start,
-        prune_freq=connector_data.prune_freq
-        if connector_data.prune_freq is not None
-        else DEFAULT_PRUNING_FREQ,
-        disabled=connector_data.disabled,
+        prune_freq=connector_data.prune_freq,
     )
     db_session.add(connector)
     db_session.commit()
@@ -124,33 +126,18 @@ def update_connector(
         if connector_data.prune_freq is not None
         else DEFAULT_PRUNING_FREQ
     )
-    connector.disabled = connector_data.disabled
 
     db_session.commit()
     return connector
 
 
-def disable_connector(
-    connector_id: int,
-    db_session: Session,
-) -> StatusResponse[int]:
-    connector = fetch_connector_by_id(connector_id, db_session)
-    if connector is None:
-        raise HTTPException(status_code=404, detail="Connector does not exist")
-
-    connector.disabled = True
-    db_session.commit()
-    return StatusResponse(
-        success=True, message="Connector deleted successfully", data=connector_id
-    )
-
-
 def delete_connector(
-    connector_id: int,
     db_session: Session,
+    connector_id: int,
 ) -> StatusResponse[int]:
-    """Currently unused due to foreign key restriction from IndexAttempt
-    Use disable_connector instead"""
+    """Only used in special cases (e.g. a connector is in a bad state and we need to delete it).
+    Be VERY careful using this, as it could lead to a bad state if not used correctly.
+    """
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
         return StatusResponse(
@@ -181,11 +168,9 @@ def fetch_latest_index_attempt_by_connector(
     latest_index_attempts: list[IndexAttempt] = []
 
     if source:
-        connectors = fetch_connectors(
-            db_session, sources=[source], disabled_status=False
-        )
+        connectors = fetch_connectors(db_session, sources=[source])
     else:
-        connectors = fetch_connectors(db_session, disabled_status=False)
+        connectors = fetch_connectors(db_session)
 
     if not connectors:
         return []
@@ -249,20 +234,29 @@ def fetch_unique_document_sources(db_session: Session) -> list[DocumentSource]:
 def create_initial_default_connector(db_session: Session) -> None:
     default_connector_id = 0
     default_connector = fetch_connector_by_id(default_connector_id, db_session)
-
     if default_connector is not None:
         if (
             default_connector.source != DocumentSource.INGESTION_API
             or default_connector.input_type != InputType.LOAD_STATE
             or default_connector.refresh_freq is not None
-            or default_connector.disabled
+            or default_connector.name != "Ingestion API"
+            or default_connector.connector_specific_config != {}
+            or default_connector.prune_freq is not None
         ):
-            raise ValueError(
-                "DB is not in a valid initial state. "
-                "Default connector does not have expected values."
+            logger.warning(
+                "Default connector does not have expected values. Updating to proper state."
             )
+            # Ensure default connector has correct valuesg
+            default_connector.source = DocumentSource.INGESTION_API
+            default_connector.input_type = InputType.LOAD_STATE
+            default_connector.refresh_freq = None
+            default_connector.name = "Ingestion API"
+            default_connector.connector_specific_config = {}
+            default_connector.prune_freq = None
+            db_session.commit()
         return
 
+    # Create a new default connector if it doesn't exist
     connector = Connector(
         id=default_connector_id,
         name="Ingestion API",

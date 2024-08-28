@@ -32,6 +32,7 @@ OPEN_AI_MODEL_NAMES = [
     "gpt-4-1106-preview",
     "gpt-4-vision-preview",
     "gpt-4-0613",
+    "gpt-4o-2024-08-06",
     "gpt-4-0314",
     "gpt-4-32k-0314",
     "gpt-3.5-turbo",

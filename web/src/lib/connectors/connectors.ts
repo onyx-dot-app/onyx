@@ -218,9 +218,13 @@ export const connectorConfigs: Record<ValidSources, ConnectionConfiguration> = {
   },
   confluence: {
     description: "Configure Confluence connector",
-    subtext: `Specify any link to a Confluence page below and click "Index" to Index. Based on the provided link, we will index either the entire page and its subpages OR the entire space. For example, entering https://danswer.atlassian.net/wiki/spaces/Engineering/overview and clicking the Index button will index the whole Engineering Confluence space, but entering https://danswer.atlassian.net/wiki/spaces/Engineering/pages/164331/example+page will index that page's children (and optionally, itself). Use the checkbox below to determine whether or not to index the parent page in addition to its children.
+    subtext: `Specify any link to a Confluence page below and click "Index" to Index. If the provided link is for an entire space, we will index the entire space. However, if you want to index a specific page, you can do so by entering the page's URL. 
+    
+For example, entering https://danswer.atlassian.net/wiki/spaces/Engineering/overview and clicking the Index button will index the whole Engineering Confluence space, but entering https://danswer.atlassian.net/wiki/spaces/Engineering/pages/164331/example+page will index that page (and optionally the page's children). 
 
-We pull the latest pages and comments from each space listed below every 10 minutes`,
+Selecting the "Index Recursively" checkbox will index the single page's children in addition to itself.
+
+We pull the latest pages and comments from each space every 10 minutes`,
     values: [
       {
         type: "text",
@@ -232,10 +236,11 @@ We pull the latest pages and comments from each space listed below every 10 minu
       },
       {
         type: "checkbox",
-        query: "(For pages) Index the page itself",
-        label: "(For pages) Index the page itself",
-        name: "index_origin",
-        optional: true,
+        query: "Should index pages recursively?",
+        label:
+          "Index Recursively (if this is set and the Wiki Page URL leads to a page, we will index the page and all of its children instead of just the page)",
+        name: "index_recursively",
+        optional: false,
       },
     ],
   },
@@ -769,7 +774,8 @@ export interface ConnectorBase<T> {
   refresh_freq: number | null;
   prune_freq: number | null;
   indexing_start: Date | null;
-  disabled: boolean;
+  is_public?: boolean;
+  groups?: number[];
 }
 
 export interface Connector<T> extends ConnectorBase<T> {
@@ -811,7 +817,7 @@ export interface BookstackConfig {}
 
 export interface ConfluenceConfig {
   wiki_page_url: string;
-  index_origin?: boolean;
+  index_recursively?: boolean;
 }
 
 export interface JiraConfig {

@@ -10,7 +10,7 @@ import { FiCheckCircle, FiMessageSquare, FiShare2 } from "react-icons/fi";
 import { useEffect, useState } from "react";
 import { BackButton } from "@/components/BackButton";
 import { ApiKeyForm } from "@/components/llm/ApiKeyForm";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/models/llm/interfaces";
+import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { checkLlmProvider } from "./lib";
 import { User } from "@/lib/types";
 

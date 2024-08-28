@@ -1,16 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/Modal";
 import { Button, Text, Badge } from "@tremor/react";
 import { ValidSources } from "@/lib/types";
-import { FaCreativeCommons } from "react-icons/fa";
 import {
   EditIcon,
   NewChatIcon,
-  NewIconTest,
   SwapIcon,
   TrashIcon,
 } from "@/components/icons/icons";
-import { getSourceDisplayName } from "@/lib/sources";
 import {
   ConfluenceCredentialJson,
   Credential,
@@ -19,12 +16,14 @@ import { Connector } from "@/lib/connectors/connectors";
 
 const CredentialSelectionTable = ({
   credentials,
+  editableCredentials,
   onEditCredential,
   onSelectCredential,
   currentCredentialId,
   onDeleteCredential,
 }: {
   credentials: Credential<any>[];
+  editableCredentials: Credential<any>[];
   onSelectCredential: (credential: Credential<any> | null) => void;
   currentCredentialId?: number;
   onDeleteCredential: (credential: Credential<any>) => void;
@@ -34,13 +33,23 @@ const CredentialSelectionTable = ({
     number | null
   >(null);
 
+  const allCredentials = React.useMemo(() => {
+    const credMap = new Map(editableCredentials.map((cred) => [cred.id, cred]));
+    credentials.forEach((cred) => {
+      if (!credMap.has(cred.id)) {
+        credMap.set(cred.id, cred);
+      }
+    });
+    return Array.from(credMap.values());
+  }, [credentials, editableCredentials]);
+
   const handleSelectCredential = (credentialId: number) => {
     const newSelectedId =
       selectedCredentialId === credentialId ? null : credentialId;
     setSelectedCredentialId(newSelectedId);
 
     const selectedCredential =
-      credentials.find((cred) => cred.id === newSelectedId) || null;
+      allCredentials.find((cred) => cred.id === newSelectedId) || null;
     onSelectCredential(selectedCredential);
   };
 
@@ -60,12 +69,15 @@ const CredentialSelectionTable = ({
           </tr>
         </thead>
 
-        {credentials.length > 0 && (
+        {allCredentials.length > 0 && (
           <tbody>
-            {credentials.map((credential, ind) => {
+            {allCredentials.map((credential, ind) => {
               const selected = currentCredentialId
                 ? credential.id == (selectedCredentialId || currentCredentialId)
                 : false;
+              const editable = editableCredentials.some(
+                (editableCredential) => editableCredential.id === credential.id
+              );
               return (
                 <tr key={credential.id} className="border-b hover:bg-gray-50">
                   <td className="min-w-[60px] p-2">
@@ -92,7 +104,7 @@ const CredentialSelectionTable = ({
                   </td>
                   <td className="pt-3 flex gap-x-2 content-center mt-auto">
                     <button
-                      disabled={selected}
+                      disabled={selected || !editable}
                       onClick={async () => {
                         onDeleteCredential(credential);
                       }}
@@ -102,6 +114,7 @@ const CredentialSelectionTable = ({
                     </button>
                     {onEditCredential && (
                       <button
+                        disabled={!editable}
                         onClick={() => onEditCredential(credential)}
                         className="cursor-pointer my-auto"
                       >
@@ -116,7 +129,7 @@ const CredentialSelectionTable = ({
         )}
       </table>
 
-      {credentials.length == 0 && (
+      {allCredentials.length == 0 && (
         <p className="mt-4"> No credentials exist for this connector!</p>
       )}
     </div>
@@ -128,6 +141,7 @@ export default function ModifyCredential({
   showIfEmpty,
   attachedConnector,
   credentials,
+  editableCredentials,
   source,
   defaultedCredential,
 
@@ -143,6 +157,7 @@ export default function ModifyCredential({
   attachedConnector?: Connector<any>;
   defaultedCredential?: Credential<any>;
   credentials: Credential<any>[];
+  editableCredentials: Credential<any>[];
   source: ValidSources;
 
   onSwitch?: (newCredential: Credential<any>) => void;
@@ -157,7 +172,7 @@ export default function ModifyCredential({
   const [confirmDeletionCredential, setConfirmDeletionCredential] =
     useState<null | Credential<any>>(null);
 
-  if (!credentials) {
+  if (!credentials || !editableCredentials) {
     return <></>;
   }
 
@@ -215,6 +230,7 @@ export default function ModifyCredential({
             defaultedCredential ? defaultedCredential.id : undefined
           }
           credentials={credentials}
+          editableCredentials={editableCredentials}
           onSelectCredential={(credential: Credential<any> | null) => {
             if (credential && onSwitch) {
               onSwitch(credential);

@@ -102,6 +102,7 @@ export function AssistantsGallery({
                   my-auto
                   ml-2
                   text-strong
+                  line-clamp-2
                 "
                 >
                   {assistant.name}

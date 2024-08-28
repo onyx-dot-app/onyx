@@ -4,13 +4,6 @@ search/models.py imports from db/models.py."""
 from enum import Enum
 
 
-class OptionalSearchSetting(str, Enum):
-    ALWAYS = "always"
-    NEVER = "never"
-    # Determine whether to run search based on history and latest query
-    AUTO = "auto"
-
-
 class RecencyBiasSetting(str, Enum):
     FAVOR_RECENT = "favor_recent"  # 2x decay rate
     BASE_DECAY = "base_decay"
@@ -19,10 +12,23 @@ class RecencyBiasSetting(str, Enum):
     AUTO = "auto"
 
 
+class OptionalSearchSetting(str, Enum):
+    ALWAYS = "always"
+    NEVER = "never"
+    # Determine whether to run search based on history and latest query
+    AUTO = "auto"
+
+
 class SearchType(str, Enum):
     KEYWORD = "keyword"
     SEMANTIC = "semantic"
-    HYBRID = "hybrid"
+
+
+class LLMEvaluationType(str, Enum):
+    AGENTIC = "agentic"  # applies agentic evaluation
+    BASIC = "basic"  # applies boolean evaluation
+    SKIP = "skip"  # skips evaluation
+    UNSPECIFIED = "unspecified"  # reverts to default
 
 
 class QueryFlow(str, Enum):

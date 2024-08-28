@@ -15,12 +15,12 @@ interface AdvancedFormPageProps {
 const AdvancedFormPage = forwardRef<FormikProps<any>, AdvancedFormPageProps>(
   (
     {
+      setIndexingStart,
+      indexingStart,
       setRefreshFreq,
+      currentRefreshFreq,
       setPruneFreq,
       currentPruneFreq,
-      currentRefreshFreq,
-      indexingStart,
-      setIndexingStart,
     },
     ref
   ) => {
@@ -50,35 +50,36 @@ const AdvancedFormPage = forwardRef<FormikProps<any>, AdvancedFormPageProps>(
             <Form className="space-y-6">
               <div key="prune_freq">
                 <EditingValue
-                  description="Checking all documents against the source to see if any no longer exist. Documents are deleted based on this. Note: To do this, we must check every document with the source so careful turning up the frequency of this (in minutes). This defaults to 1 day."
-                  optional
-                  currentValue={
-                    values.pruneFreq === 0 ? undefined : values.pruneFreq
-                  }
+                  showNever
+                  description={`
+                    Checks all documents against the source to delete those that no longer exist.
+                    Note: This process checks every document, so be cautious when increasing frequency.
+                    Default is 30 days.
+                    Enter 0 to disable pruning for this connector.
+                  `}
+                  currentValue={values.pruneFreq}
                   onChangeNumber={(value: number) => {
                     setPruneFreq(value);
                     setFieldValue("pruneFreq", value);
                   }}
                   setFieldValue={setFieldValue}
                   type="number"
-                  label="Prune Frequency"
+                  label="Prune Frequency (days)"
                   name="pruneFreq"
                 />
               </div>
               <div key="refresh_freq">
                 <EditingValue
-                  description="This is how frequently we pull new documents from the source (in minutes)"
-                  optional
-                  currentValue={
-                    values.refreshFreq === 0 ? undefined : values.refreshFreq
-                  }
+                  showNever
+                  description="This is how frequently we pull new documents from the source (in minutes). If you input 0, we will never pull new documents for this connector."
+                  currentValue={values.refreshFreq}
                   onChangeNumber={(value: number) => {
                     setRefreshFreq(value);
                     setFieldValue("refreshFreq", value);
                   }}
                   setFieldValue={setFieldValue}
                   type="number"
-                  label="Refresh Frequency"
+                  label="Refresh Frequency (minutes)"
                   name="refreshFreq"
                 />
               </div>

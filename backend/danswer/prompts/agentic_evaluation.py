@@ -28,7 +28,8 @@ True or False
 """
 
 AGENTIC_SEARCH_USER_PROMPT = """
-Document:
+
+Document Title: {title}{optional_metadata}
 ```
 {content}
 ```

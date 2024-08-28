@@ -1,5 +1,3 @@
-import { LoadingAnimation } from "@/components/Loading";
-
 export function ToolRunDisplay({
   toolName,
   toolLogo,
@@ -12,7 +10,12 @@ export function ToolRunDisplay({
   return (
     <div className="text-sm text-subtle my-auto flex">
       {toolLogo}
-      {isRunning ? <LoadingAnimation text={toolName} /> : toolName}
+      <div
+        className={`${isRunning && "loading-text"} 
+        !text-sm !line-clamp-1 !break-all !px-0.5`}
+      >
+        {toolName}
+      </div>
     </div>
   );
 }

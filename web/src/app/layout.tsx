@@ -1,12 +1,26 @@
 import "./globals.css";
 
-import { getCombinedSettings } from "@/components/settings/lib";
-import { CUSTOM_ANALYTICS_ENABLED } from "@/lib/constants";
+import {
+  fetchEnterpriseSettingsSS,
+  fetchSettingsSS,
+  SettingsError,
+} from "@/components/settings/lib";
+import {
+  CUSTOM_ANALYTICS_ENABLED,
+  SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
+} from "@/lib/constants";
 import { SettingsProvider } from "@/components/settings/SettingsProvider";
 import { Metadata } from "next";
 import { buildClientUrl } from "@/lib/utilsSS";
 import { Inter } from "next/font/google";
 import Head from "next/head";
+import { EnterpriseSettings } from "./admin/settings/interfaces";
+import { redirect } from "next/navigation";
+import { Button, Card } from "@tremor/react";
+import LogoType from "@/components/header/LogoType";
+import { HeaderTitle } from "@/components/header/HeaderTitle";
+import { Logo } from "@/components/Logo";
+import { UserProvider } from "@/components/user/UserProvider";
 
 
 declare global {
@@ -22,15 +36,18 @@ const inter = Inter({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const dynamicSettings = await getCombinedSettings({ forceRetrieval: true });
-  const logoLocation =
-    dynamicSettings.enterpriseSettings &&
-    dynamicSettings.enterpriseSettings?.use_custom_logo
-      ? "/api/enterprise-settings/logo"
-      : buildClientUrl("/danswer.ico");
+  let logoLocation = buildClientUrl("/danswer.ico");
+  let enterpriseSettings: EnterpriseSettings | null = null;
+  if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
+    enterpriseSettings = await (await fetchEnterpriseSettingsSS()).json();
+    logoLocation =
+      enterpriseSettings && enterpriseSettings.use_custom_logo
+        ? "/api/enterprise-settings/logo"
+        : buildClientUrl("/danswer.ico");
+  }
 
   return {
-    title: dynamicSettings.enterpriseSettings?.application_name ?? "Danswer",
+    title: enterpriseSettings?.application_name ?? "Danswer",
     description: "Question answering for your documents",
     icons: {
       icon: logoLocation,
@@ -45,7 +62,35 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const combinedSettings = await getCombinedSettings({});
+  const combinedSettings = await fetchSettingsSS();
+  if (!combinedSettings) {
+    // Just display a simple full page error if fetching fails.
+
+    return (
+      <html lang="en" className={`${inter.variable} font-sans`}>
+        <Head>
+          <title>Settings Unavailable | Danswer</title>
+        </Head>
+        <body className="bg-background text-default">
+          <div className="flex flex-col items-center justify-center min-h-screen">
+            <div className="mb-2 flex items-center max-w-[175px]">
+              <HeaderTitle>Danswer</HeaderTitle>
+              <Logo height={40} width={40} />
+            </div>
+
+            <Card className="p-8 max-w-md">
+              <h1 className="text-2xl font-bold mb-4 text-error">Error</h1>
+              <p className="text-text-500">
+                Your Danswer instance was not configured properly and your
+                settings could not be loaded. Please contact your admin to fix
+                this error.
+              </p>
+            </Card>
+          </div>
+        </body>
+      </html>
+    );
+  }
 
   return (
     <html lang="en">
@@ -74,9 +119,11 @@ export default async function RootLayout({
             process.env.THEME_IS_DARK?.toLowerCase() === "true" ? "dark" : ""
           }`}
         >
-          <SettingsProvider settings={combinedSettings}>
-            {children}
-          </SettingsProvider>
+          <UserProvider>
+            <SettingsProvider settings={combinedSettings}>
+              {children}
+            </SettingsProvider>
+          </UserProvider>
         </div>
       </body>
     </html>

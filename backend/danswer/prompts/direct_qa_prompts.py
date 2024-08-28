@@ -7,7 +7,6 @@ from danswer.prompts.constants import FINAL_QUERY_PAT
 from danswer.prompts.constants import GENERAL_SEP_PAT
 from danswer.prompts.constants import QUESTION_PAT
 from danswer.prompts.constants import THOUGHT_PAT
-from danswer.prompts.constants import UNCERTAINTY_PAT
 
 
 ONE_SHOT_SYSTEM_PROMPT = """
@@ -64,9 +63,6 @@ EMPTY_SAMPLE_JSON = {
         "HINT, quotes are not shown to the user!",
     ],
 }
-
-
-ANSWER_NOT_FOUND_RESPONSE = f'{{"answer": "{UNCERTAINTY_PAT}", "quotes": []}}'
 
 
 # Default json prompt which can reference multiple docs and provide answer + quotes

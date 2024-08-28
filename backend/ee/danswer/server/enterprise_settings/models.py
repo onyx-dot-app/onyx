@@ -8,8 +8,10 @@ class EnterpriseSettings(BaseModel):
 
     application_name: str | None = None
     use_custom_logo: bool = False
+    use_custom_logotype: bool = False
 
     # custom Chat components
+    custom_lower_disclaimer_content: str | None = None
     custom_header_content: str | None = None
     custom_popup_header: str | None = None
     custom_popup_content: str | None = None

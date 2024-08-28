@@ -92,6 +92,16 @@ class DocumentPruningConfig(BaseModel):
     using_tool_message: bool = False
 
 
+class ContextualPruningConfig(DocumentPruningConfig):
+    num_chunk_multiple: int
+
+    @classmethod
+    def from_doc_pruning_config(
+        cls, num_chunk_multiple: int, doc_pruning_config: DocumentPruningConfig
+    ) -> "ContextualPruningConfig":
+        return cls(num_chunk_multiple=num_chunk_multiple, **doc_pruning_config.dict())
+
+
 class CitationConfig(BaseModel):
     all_docs_useful: bool = False
 

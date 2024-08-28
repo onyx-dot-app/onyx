@@ -4,6 +4,7 @@ import { generateRandomIconShape, createSVG } from "@/lib/assistantIconUtils";
 
 import { CCPairBasicInfo, DocumentSet, User } from "@/lib/types";
 import { Button, Divider, Italic, Text } from "@tremor/react";
+import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import {
   ArrayHelpers,
   ErrorMessage,
@@ -11,6 +12,7 @@ import {
   FieldArray,
   Form,
   Formik,
+  FormikProps,
 } from "formik";
 
 import {
@@ -21,14 +23,12 @@ import {
 } from "@/components/admin/connectors/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { getDisplayNameForModel } from "@/lib/hooks";
-import { Bubble } from "@/components/Bubble";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import { Option } from "@/components/Dropdown";
-import { GroupsIcon, PaintingIcon, SwapIcon } from "@/components/icons/icons";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
 import { useUserGroups } from "@/lib/hooks";
-import { checkLLMSupportsImageInput } from "@/lib/llm/utils";
+import { checkLLMSupportsImageInput, destructureValue } from "@/lib/llm/utils";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { checkUserIsNoAuthUser } from "@/lib/user";
 import {
@@ -42,13 +42,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FiInfo, FiPlus, FiX } from "react-icons/fi";
 import * as Yup from "yup";
-import { FullLLMProvider } from "../models/llm/interfaces";
+import { FullLLMProvider } from "../configuration/llm/interfaces";
 import CollapsibleSection from "./CollapsibleSection";
 import { SuccessfulPersonaUpdateRedirectType } from "./enums";
 import { Persona, StarterMessage } from "./interfaces";
 import { buildFinalPrompt, createPersona, updatePersona } from "./lib";
 import { IconImageSelection } from "@/components/assistants/AssistantIconCreation";
-import { FaSwatchbook } from "react-icons/fa";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "SearchTool");
@@ -100,6 +99,14 @@ export function AssistantEditor({
     "#6FFFFF",
   ];
 
+  // state to persist across formik reformatting
+  const [defautIconColor, _setDeafultIconColor] = useState(
+    colorOptions[Math.floor(Math.random() * colorOptions.length)]
+  );
+  const [defaultIconShape, _setDeafultIconShape] = useState(
+    generateRandomIconShape().encodedGrid
+  );
+
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
   // EE only
@@ -107,6 +114,7 @@ export function AssistantEditor({
 
   const [finalPrompt, setFinalPrompt] = useState<string | null>("");
   const [finalPromptError, setFinalPromptError] = useState<string>("");
+  const [removePersonaImage, setRemovePersonaImage] = useState(false);
 
   const triggerFinalPromptUpdate = async (
     systemPrompt: string,
@@ -207,8 +215,8 @@ export function AssistantEditor({
       existingPersona?.llm_model_version_override ?? null,
     starter_messages: existingPersona?.starter_messages ?? [],
     enabled_tools_map: enabledToolsMap,
-    icon_color: existingPersona?.icon_color ?? "#FF6FBF",
-    icon_shape: existingPersona?.icon_shape ?? 123242312,
+    icon_color: existingPersona?.icon_color ?? defautIconColor,
+    icon_shape: existingPersona?.icon_shape ?? defaultIconShape,
     uploaded_image: null,
 
     //   search_tool_enabled: existingPersona
@@ -220,6 +228,12 @@ export function AssistantEditor({
     // EE Only
     groups: existingPersona?.groups ?? [],
   };
+
+  const [existingPersonaImageId, setExistingPersonaImageId] = useState<
+    string | null
+  >(existingPersona?.uploaded_image_id || null);
+
+  const [isRequestSuccessful, setIsRequestSuccessful] = useState(false);
 
   return (
     <div>
@@ -345,6 +359,7 @@ export function AssistantEditor({
                 user && !checkUserIsNoAuthUser(user.id) ? [user.id] : undefined,
               groups,
               tool_ids: enabledTools,
+              remove_image: removePersonaImage,
             });
           } else {
             [promptResponse, personaResponse] = await createPersona({
@@ -402,10 +417,16 @@ export function AssistantEditor({
                 ? `/admin/assistants?u=${Date.now()}`
                 : `/chat?assistantId=${assistantId}`
             );
+            setIsRequestSuccessful(true);
           }
         }}
       >
-        {({ isSubmitting, values, setFieldValue }) => {
+        {({
+          isSubmitting,
+          values,
+          setFieldValue,
+          ...formikProps
+        }: FormikProps<any>) => {
           function toggleToolInValues(toolId: number) {
             const updatedEnabledToolsMap = {
               ...values.enabled_tools_map,
@@ -427,7 +448,6 @@ export function AssistantEditor({
                   name="name"
                   tooltip="Used to identify the Assistant in the UI."
                   label="Name"
-                  disabled={isUpdate}
                   placeholder="e.g. 'Email Assistant'"
                 />
                 <div className="mb-6 ">
@@ -482,7 +502,9 @@ export function AssistantEditor({
 
                   <IconImageSelection
                     setFieldValue={setFieldValue}
-                    existingPersona={existingPersona!}
+                    existingPersonaImageId={existingPersonaImageId!}
+                    setExistingPersonaImageId={setExistingPersonaImageId}
+                    setRemovePersonaImage={setRemovePersonaImage}
                   />
                 </div>
 
@@ -531,13 +553,15 @@ export function AssistantEditor({
                     </TooltipProvider>
                   </div>
                   <p className="my-1 text-text-600">
-                    You assistant will use your system default (currently{" "}
-                    {defaultModelName}) unless otherwise specified below.
+                    Your assistant will use the user&apos;s set default unless
+                    otherwise specified below.
+                    {user?.preferences.default_model &&
+                      `  Your current (user-specific) default model is ${getDisplayNameForModel(destructureValue(user?.preferences?.default_model!).modelName)}`}
                   </p>
                   <div className="mb-2 flex items-starts">
                     <div className="w-96">
                       <SelectorFormField
-                        defaultValue={`Default (${defaultModelName})`}
+                        defaultValue={`User default`}
                         name="llm_model_provider_override"
                         options={llmProviders.map((llmProvider) => ({
                           name: llmProvider.name,
@@ -595,40 +619,95 @@ export function AssistantEditor({
                     </div>
                   </div>
 
-                  <div className="mt-2 ml-1">
-                    {imageGenerationTool &&
-                      checkLLMSupportsImageInput(
-                        providerDisplayNameToProviderName.get(
-                          values.llm_model_provider_override || ""
-                        ) ||
-                          defaultProviderName ||
-                          "",
-                        values.llm_model_version_override ||
-                          defaultModelName ||
-                          ""
-                      ) && (
-                        <BooleanFormField
-                          noPadding
-                          name={`enabled_tools_map.${imageGenerationTool.id}`}
-                          label="Image Generation Tool"
-                          onChange={() => {
-                            toggleToolInValues(imageGenerationTool.id);
-                          }}
-                        />
-                      )}
+                  <div className="mt-2 flex flex-col  ml-1">
+                    {imageGenerationTool && (
+                      <TooltipProvider delayDuration={50}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div
+                              className={`w-fit ${
+                                !checkLLMSupportsImageInput(
+                                  providerDisplayNameToProviderName.get(
+                                    values.llm_model_provider_override || ""
+                                  ) || "",
+                                  values.llm_model_version_override || ""
+                                )
+                                  ? "opacity-50 cursor-not-allowed"
+                                  : ""
+                              }`}
+                            >
+                              <BooleanFormField
+                                noPadding
+                                name={`enabled_tools_map.${imageGenerationTool.id}`}
+                                label="Image Generation Tool"
+                                onChange={() => {
+                                  toggleToolInValues(imageGenerationTool.id);
+                                }}
+                                disabled={
+                                  !checkLLMSupportsImageInput(
+                                    providerDisplayNameToProviderName.get(
+                                      values.llm_model_provider_override || ""
+                                    ) || "",
+                                    values.llm_model_version_override || ""
+                                  )
+                                }
+                              />
+                            </div>
+                          </TooltipTrigger>
+                          {!checkLLMSupportsImageInput(
+                            providerDisplayNameToProviderName.get(
+                              values.llm_model_provider_override || ""
+                            ) || "",
+                            values.llm_model_version_override || ""
+                          ) && (
+                            <TooltipContent side="top" align="center">
+                              <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
+                                To use Image Generation, select GPT-4o as the
+                                default model for this Assistant.
+                              </p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+
+                    {searchTool && (
+                      <TooltipProvider delayDuration={50}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div
+                              className={`w-fit ${
+                                ccPairs.length === 0
+                                  ? "opacity-50 cursor-not-allowed"
+                                  : ""
+                              }`}
+                            >
+                              <BooleanFormField
+                                name={`enabled_tools_map.${searchTool.id}`}
+                                label="Search Tool"
+                                noPadding
+                                onChange={() => {
+                                  setFieldValue("num_chunks", null);
+                                  toggleToolInValues(searchTool.id);
+                                }}
+                                disabled={ccPairs.length === 0}
+                              />
+                            </div>
+                          </TooltipTrigger>
+                          {ccPairs.length === 0 && (
+                            <TooltipContent side="top" align="center">
+                              <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
+                                To use the Search Tool, you need to have at
+                                least one Connector-Credential pair configured.
+                              </p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
 
                     {ccPairs.length > 0 && searchTool && (
                       <>
-                        <BooleanFormField
-                          name={`enabled_tools_map.${searchTool.id}`}
-                          label="Search Tool"
-                          noPadding
-                          onChange={() => {
-                            setFieldValue("num_chunks", null);
-                            toggleToolInValues(searchTool.id);
-                          }}
-                        />
-
                         {searchToolEnabled() && (
                           <CollapsibleSection prompt="Configure Search">
                             <div>
@@ -821,24 +900,28 @@ export function AssistantEditor({
                         <div>
                           {values.starter_messages &&
                             values.starter_messages.length > 0 &&
-                            values.starter_messages.map((_, index) => {
-                              return (
-                                <div
-                                  key={index}
-                                  className={index === 0 ? "mt-2" : "mt-6"}
-                                >
-                                  <div className="flex">
-                                    <div className="w-full mr-6 border border-border p-3 rounded">
-                                      <div>
-                                        <Label small>Name</Label>
-                                        <SubLabel>
-                                          Shows up as the &quot;title&quot; for
-                                          this Starter Message. For example,
-                                          &quot;Write an email&quot;.
-                                        </SubLabel>
-                                        <Field
-                                          name={`starter_messages[${index}].name`}
-                                          className={`
+                            values.starter_messages.map(
+                              (
+                                starterMessage: StarterMessage,
+                                index: number
+                              ) => {
+                                return (
+                                  <div
+                                    key={index}
+                                    className={index === 0 ? "mt-2" : "mt-6"}
+                                  >
+                                    <div className="flex">
+                                      <div className="w-full mr-6 border border-border p-3 rounded">
+                                        <div>
+                                          <Label small>Name</Label>
+                                          <SubLabel>
+                                            Shows up as the &quot;title&quot;
+                                            for this Starter Message. For
+                                            example, &quot;Write an email&quot;.
+                                          </SubLabel>
+                                          <Field
+                                            name={`starter_messages[${index}].name`}
+                                            className={`
                                         border 
                                         border-border 
                                         bg-background 
@@ -848,27 +931,27 @@ export function AssistantEditor({
                                         px-3 
                                         mr-4
                                       `}
-                                          autoComplete="off"
-                                        />
-                                        <ErrorMessage
-                                          name={`starter_messages[${index}].name`}
-                                          component="div"
-                                          className="text-error text-sm mt-1"
-                                        />
-                                      </div>
+                                            autoComplete="off"
+                                          />
+                                          <ErrorMessage
+                                            name={`starter_messages[${index}].name`}
+                                            component="div"
+                                            className="text-error text-sm mt-1"
+                                          />
+                                        </div>
 
-                                      <div className="mt-3">
-                                        <Label small>Description</Label>
-                                        <SubLabel>
-                                          A description which tells the user
-                                          what they might want to use this
-                                          Starter Message for. For example
-                                          &quot;to a client about a new
-                                          feature&quot;
-                                        </SubLabel>
-                                        <Field
-                                          name={`starter_messages.${index}.description`}
-                                          className={`
+                                        <div className="mt-3">
+                                          <Label small>Description</Label>
+                                          <SubLabel>
+                                            A description which tells the user
+                                            what they might want to use this
+                                            Starter Message for. For example
+                                            &quot;to a client about a new
+                                            feature&quot;
+                                          </SubLabel>
+                                          <Field
+                                            name={`starter_messages.${index}.description`}
+                                            className={`
                                         border 
                                         border-border 
                                         bg-background 
@@ -878,28 +961,28 @@ export function AssistantEditor({
                                         px-3 
                                         mr-4
                                       `}
-                                          autoComplete="off"
-                                        />
-                                        <ErrorMessage
-                                          name={`starter_messages[${index}].description`}
-                                          component="div"
-                                          className="text-error text-sm mt-1"
-                                        />
-                                      </div>
+                                            autoComplete="off"
+                                          />
+                                          <ErrorMessage
+                                            name={`starter_messages[${index}].description`}
+                                            component="div"
+                                            className="text-error text-sm mt-1"
+                                          />
+                                        </div>
 
-                                      <div className="mt-3">
-                                        <Label small>Message</Label>
-                                        <SubLabel>
-                                          The actual message to be sent as the
-                                          initial user message if a user selects
-                                          this starter prompt. For example,
-                                          &quot;Write me an email to a client
-                                          about a new billing feature we just
-                                          released.&quot;
-                                        </SubLabel>
-                                        <Field
-                                          name={`starter_messages[${index}].message`}
-                                          className={`
+                                        <div className="mt-3">
+                                          <Label small>Message</Label>
+                                          <SubLabel>
+                                            The actual message to be sent as the
+                                            initial user message if a user
+                                            selects this starter prompt. For
+                                            example, &quot;Write me an email to
+                                            a client about a new billing feature
+                                            we just released.&quot;
+                                          </SubLabel>
+                                          <Field
+                                            name={`starter_messages[${index}].message`}
+                                            className={`
                                           border 
                                           border-border 
                                           bg-background 
@@ -909,28 +992,29 @@ export function AssistantEditor({
                                           px-3 
                                           mr-4
                                       `}
-                                          as="textarea"
-                                          autoComplete="off"
-                                        />
-                                        <ErrorMessage
-                                          name={`starter_messages[${index}].message`}
-                                          component="div"
-                                          className="text-error text-sm mt-1"
+                                            as="textarea"
+                                            autoComplete="off"
+                                          />
+                                          <ErrorMessage
+                                            name={`starter_messages[${index}].message`}
+                                            component="div"
+                                            className="text-error text-sm mt-1"
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="my-auto">
+                                        <FiX
+                                          className="my-auto w-10 h-10 cursor-pointer hover:bg-hover rounded p-2"
+                                          onClick={() =>
+                                            arrayHelpers.remove(index)
+                                          }
                                         />
                                       </div>
                                     </div>
-                                    <div className="my-auto">
-                                      <FiX
-                                        className="my-auto w-10 h-10 cursor-pointer hover:bg-hover rounded p-2"
-                                        onClick={() =>
-                                          arrayHelpers.remove(index)
-                                        }
-                                      />
-                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              }
+                            )}
 
                           <Button
                             onClick={() => {
@@ -955,65 +1039,17 @@ export function AssistantEditor({
 
                   {isPaidEnterpriseFeaturesEnabled &&
                     userGroups &&
-                    (!user || user.role === "admin") && (
-                      <>
-                        <Divider />
-
-                        <BooleanFormField
-                          small
-                          noPadding
-                          alignTop
-                          name="is_public"
-                          label="Is Public?"
-                          subtext="If set, this Assistant will be available to all users. If not, only the specified User Groups will be able to access it."
-                        />
-
-                        {userGroups &&
-                          userGroups.length > 0 &&
-                          !values.is_public && (
-                            <div>
-                              <Text>
-                                Select which User Groups should have access to
-                                this Assistant.
-                              </Text>
-                              <div className="flex flex-wrap gap-2 mt-2">
-                                {userGroups.map((userGroup) => {
-                                  const isSelected = values.groups.includes(
-                                    userGroup.id
-                                  );
-                                  return (
-                                    <Bubble
-                                      key={userGroup.id}
-                                      isSelected={isSelected}
-                                      onClick={() => {
-                                        if (isSelected) {
-                                          setFieldValue(
-                                            "groups",
-                                            values.groups.filter(
-                                              (id) => id !== userGroup.id
-                                            )
-                                          );
-                                        } else {
-                                          setFieldValue("groups", [
-                                            ...values.groups,
-                                            userGroup.id,
-                                          ]);
-                                        }
-                                      }}
-                                    >
-                                      <div className="flex">
-                                        <GroupsIcon />
-                                        <div className="ml-1">
-                                          {userGroup.name}
-                                        </div>
-                                      </div>
-                                    </Bubble>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                      </>
+                    userGroups.length > 0 && (
+                      <IsPublicGroupSelector
+                        formikProps={{
+                          values,
+                          isSubmitting,
+                          setFieldValue,
+                          ...formikProps,
+                        }}
+                        objectName="assistant"
+                        enforceGroupSelection={false}
+                      />
                     )}
 
                   <div className="flex">
@@ -1022,7 +1058,7 @@ export function AssistantEditor({
                       color="green"
                       size="md"
                       type="submit"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isRequestSuccessful}
                     >
                       {isUpdate ? "Update!" : "Create!"}
                     </Button>

@@ -1,12 +1,12 @@
 "use client";
 
-import { CCPairFullInfo } from "./types";
+import { CCPairFullInfo, ConnectorCredentialPairStatus } from "./types";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { CCPairStatus } from "@/components/Status";
 import { BackButton } from "@/components/BackButton";
-import { Divider, Title, Badge, Text } from "@tremor/react";
+import { Divider, Title, Badge, Text, Button } from "@tremor/react";
 import { IndexingAttemptsTable } from "./IndexingAttemptsTable";
-import { ConfigDisplay } from "./ConfigDisplay";
+import { AdvancedConfigDisplay, ConfigDisplay } from "./ConfigDisplay";
 import { ModifyStatusButtonCluster } from "./ModifyStatusButtonCluster";
 import { DeletionButton } from "./DeletionButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -22,8 +22,11 @@ import {
   FiAlertTriangle,
 } from "react-icons/fi";
 import { SourceIcon } from "@/components/SourceIcon";
-import { connectorConfigs } from "@/lib/connectors/connectors";
 import { credentialTemplates } from "@/lib/connectors/credentials";
+import { useEffect, useRef, useState } from "react";
+import { CheckmarkIcon, EditIcon, XIcon } from "@/components/icons/icons";
+import { usePopup } from "@/components/admin/connectors/Popup";
+import { updateConnectorCredentialPairName } from "@/lib/connector";
 
 // since the uploaded files are cleaned up after some period of time
 // re-indexing will not work for the file connector. Also, it would not
@@ -41,6 +44,43 @@ function Main({ ccPairId }: { ccPairId: number }) {
     { refreshInterval: 5000 } // 5 seconds
   );
 
+  const [editableName, setEditableName] = useState(ccPair?.name || "");
+  const [isEditing, setIsEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { popup, setPopup } = usePopup();
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isEditing]);
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditableName(e.target.value);
+  };
+
+  const handleUpdateName = async () => {
+    try {
+      const response = await updateConnectorCredentialPairName(
+        ccPair?.id!,
+        editableName
+      );
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      mutate(buildCCPairInfoUrl(ccPairId));
+      setIsEditing(false);
+      setPopup({
+        message: "Connector name updated successfully",
+        type: "success",
+      });
+    } catch (error) {
+      setPopup({
+        message: `Failed to update connector name`,
+        type: "error",
+      });
+    }
+  };
+
   if (isLoading) {
     return <ThreeDotsLoader />;
   }
@@ -55,7 +95,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   }
 
   const lastIndexAttempt = ccPair.index_attempts[0];
-  const isDeleting = isCurrentlyDeleting(ccPair.latest_deletion_attempt);
+  const isDeleting = ccPair.status === ConnectorCredentialPairStatus.DELETING;
 
   // figure out if we need to artificially deflate the number of docs indexed.
   // This is required since the total number of docs indexed by a CC Pair is
@@ -71,61 +111,123 @@ function Main({ ccPairId }: { ccPairId: number }) {
     mutate(buildCCPairInfoUrl(ccPairId));
   };
 
-  const deleting =
-    ccPair.latest_deletion_attempt?.status == "PENDING" ||
-    ccPair.latest_deletion_attempt?.status == "STARTED";
+  const startEditing = () => {
+    setEditableName(ccPair.name);
+    setIsEditing(true);
+  };
 
+  const resetEditing = () => {
+    setIsEditing(false);
+    setEditableName(ccPair.name);
+  };
+
+  const {
+    prune_freq: pruneFreq,
+    refresh_freq: refreshFreq,
+    indexing_start: indexingStart,
+  } = ccPair.connector;
   return (
     <>
+      {popup}
       <BackButton />
       <div className="pb-1 flex mt-1">
         <div className="mr-2 my-auto ">
           <SourceIcon iconSize={24} sourceType={ccPair.connector.source} />
         </div>
-        <h1 className="text-3xl text-emphasis font-bold">{ccPair.name} </h1>
 
-        <div className="ml-auto flex gap-x-2">
-          {!CONNECTOR_TYPES_THAT_CANT_REINDEX.includes(
-            ccPair.connector.source
-          ) && (
-            <ReIndexButton
-              ccPairId={ccPair.id}
-              connectorId={ccPair.connector.id}
-              credentialId={ccPair.credential.id}
-              isDisabled={ccPair.connector.disabled}
-              isDeleting={isDeleting}
+        {ccPair.is_editable_for_current_user && isEditing ? (
+          <div className="flex items-center">
+            <input
+              ref={inputRef}
+              type="text"
+              value={editableName}
+              onChange={handleNameChange}
+              className="text-3xl w-full ring ring-1 ring-neutral-800 text-emphasis font-bold"
             />
-          )}
-          {!deleting && <ModifyStatusButtonCluster ccPair={ccPair} />}
-        </div>
+            <Button onClick={handleUpdateName} className="ml-2">
+              <CheckmarkIcon className="text-neutral-200" />
+            </Button>
+            <Button onClick={() => resetEditing()} className="ml-2">
+              <XIcon className="text-neutral-200" />
+            </Button>
+          </div>
+        ) : (
+          <h1
+            onClick={() =>
+              ccPair.is_editable_for_current_user && startEditing()
+            }
+            className={`group flex ${ccPair.is_editable_for_current_user ? "cursor-pointer" : ""} text-3xl text-emphasis gap-x-2 items-center font-bold`}
+          >
+            {ccPair.name}
+            {ccPair.is_editable_for_current_user && (
+              <EditIcon className="group-hover:visible invisible" />
+            )}
+          </h1>
+        )}
+
+        {ccPair.is_editable_for_current_user && (
+          <div className="ml-auto flex gap-x-2">
+            {!CONNECTOR_TYPES_THAT_CANT_REINDEX.includes(
+              ccPair.connector.source
+            ) && (
+              <ReIndexButton
+                ccPairId={ccPair.id}
+                connectorId={ccPair.connector.id}
+                credentialId={ccPair.credential.id}
+                isDisabled={
+                  ccPair.status === ConnectorCredentialPairStatus.PAUSED
+                }
+                isDeleting={isDeleting}
+              />
+            )}
+            {!isDeleting && <ModifyStatusButtonCluster ccPair={ccPair} />}
+          </div>
+        )}
       </div>
       <CCPairStatus
         status={lastIndexAttempt?.status || "not_started"}
-        disabled={ccPair.connector.disabled}
+        disabled={ccPair.status === ConnectorCredentialPairStatus.PAUSED}
         isDeleting={isDeleting}
       />
       <div className="text-sm mt-1">
         Total Documents Indexed:{" "}
         <b className="text-emphasis">{totalDocsIndexed}</b>
       </div>
-      {credentialTemplates[ccPair.connector.source] && (
-        <>
-          <Divider />
-
-          <Title className="mb-2">Credentials</Title>
-
-          <CredentialSection
-            ccPair={ccPair}
-            sourceType={ccPair.connector.source}
-            refresh={() => refresh()}
-          />
-        </>
+      {!ccPair.is_editable_for_current_user && (
+        <div className="text-sm mt-2 text-neutral-500 italic">
+          {ccPair.is_public
+            ? "Public connectors are not editable by curators."
+            : "This connector belongs to groups where you don't have curator permissions, so it's not editable."}
+        </div>
       )}
+      {credentialTemplates[ccPair.connector.source] &&
+        ccPair.is_editable_for_current_user && (
+          <>
+            <Divider />
+
+            <Title className="mb-2">Credentials</Title>
+
+            <CredentialSection
+              ccPair={ccPair}
+              sourceType={ccPair.connector.source}
+              refresh={() => refresh()}
+            />
+          </>
+        )}
       <Divider />
       <ConfigDisplay
         connectorSpecificConfig={ccPair.connector.connector_specific_config}
         sourceType={ccPair.connector.source}
       />
+
+      {(pruneFreq || indexingStart || refreshFreq) && (
+        <AdvancedConfigDisplay
+          pruneFreq={pruneFreq}
+          indexingStart={indexingStart}
+          refreshFreq={refreshFreq}
+        />
+      )}
+
       {/* NOTE: no divider / title here for `ConfigDisplay` since it is optional and we need
         to render these conditionally.*/}
       <div className="mt-6">
@@ -160,7 +262,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
         <div className="flex mt-16">
           <div className="mx-auto">
-            <DeletionButton ccPair={ccPair} />
+            {ccPair.is_editable_for_current_user && (
+              <DeletionButton ccPair={ccPair} />
+            )}
           </div>
         </div>
       </div>

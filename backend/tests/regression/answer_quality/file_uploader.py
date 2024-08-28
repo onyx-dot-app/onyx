@@ -52,6 +52,7 @@ def upload_test_files(zip_file_path: str, env_name: str) -> None:
 
 
 def manage_file_upload(zip_file_path: str, env_name: str) -> None:
+    start_time = time.time()
     unzipped_file_paths = unzip_and_get_file_paths(zip_file_path)
     total_file_count = len(unzipped_file_paths)
     problem_file_list: list[str] = []
@@ -84,15 +85,17 @@ def manage_file_upload(zip_file_path: str, env_name: str) -> None:
 
         time.sleep(10)
 
-    problem_file_csv_path = os.path.join(current_dir, "problem_files.csv")
-    with open(problem_file_csv_path, "w", newline="") as csvfile:
-        csvwriter = csv.writer(csvfile)
-        csvwriter.writerow(["Problematic File Paths"])
-        for problem_file in problem_file_list:
-            csvwriter.writerow([problem_file])
+    if problem_file_list:
+        problem_file_csv_path = os.path.join(current_dir, "problem_files.csv")
+        with open(problem_file_csv_path, "w", newline="") as csvfile:
+            csvwriter = csv.writer(csvfile)
+            csvwriter.writerow(["Problematic File Paths"])
+            for problem_file in problem_file_list:
+                csvwriter.writerow([problem_file])
 
     for file in unzipped_file_paths:
         os.unlink(file)
+    print(f"Total time taken: {(time.time() - start_time)/60} minutes")
 
 
 if __name__ == "__main__":

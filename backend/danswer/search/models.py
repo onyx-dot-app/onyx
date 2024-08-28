@@ -4,23 +4,47 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic import validator
 
-from danswer.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
-from danswer.configs.chat_configs import CONTEXT_CHUNKS_BELOW
-from danswer.configs.chat_configs import DISABLE_LLM_CHUNK_FILTER
-from danswer.configs.chat_configs import HYBRID_ALPHA
-from danswer.configs.chat_configs import NUM_RERANKED_RESULTS
 from danswer.configs.chat_configs import NUM_RETURNED_HITS
 from danswer.configs.constants import DocumentSource
 from danswer.db.models import Persona
 from danswer.indexing.models import BaseChunk
+from danswer.search.enums import LLMEvaluationType
 from danswer.search.enums import OptionalSearchSetting
 from danswer.search.enums import SearchType
-from shared_configs.configs import ENABLE_RERANKING_REAL_TIME_FLOW
+from shared_configs.enums import RerankerProvider
 
 
 MAX_METRICS_CONTENT = (
     200  # Just need enough characters to identify where in the doc the chunk is
 )
+
+
+class RerankingDetails(BaseModel):
+    # If model is None (or num_rerank is 0), then reranking is turned off
+    rerank_model_name: str | None
+    provider_type: RerankerProvider | None
+    api_key: str | None
+
+    num_rerank: int
+
+
+class SavedSearchSettings(RerankingDetails):
+    # Empty for no additional expansion
+    multilingual_expansion: list[str]
+    # Encompasses both mini and large chunks
+    multipass_indexing: bool
+
+    # For faster flows where the results should start immediately
+    # this more time intensive step can be skipped
+    disable_rerank_for_streaming: bool
+
+    def to_reranking_detail(self) -> RerankingDetails:
+        return RerankingDetails(
+            rerank_model_name=self.rerank_model_name,
+            provider_type=self.provider_type,
+            api_key=self.api_key,
+            num_rerank=self.num_rerank,
+        )
 
 
 class Tag(BaseModel):
@@ -47,24 +71,23 @@ class ChunkMetric(BaseModel):
 
 
 class ChunkContext(BaseModel):
-    # Additional surrounding context options, if full doc, then chunks are deduped
-    # If surrounding context overlap, it is combined into one
-    chunks_above: int = CONTEXT_CHUNKS_ABOVE
-    chunks_below: int = CONTEXT_CHUNKS_BELOW
+    # If not specified (None), picked up from Persona settings if there is space
+    # if specified (even if 0), it always uses the specified number of chunks above and below
+    chunks_above: int | None = None
+    chunks_below: int | None = None
     full_doc: bool = False
 
     @validator("chunks_above", "chunks_below", pre=True, each_item=False)
     def check_non_negative(cls, value: int, field: Any) -> int:
-        if value < 0:
+        if value is not None and value < 0:
             raise ValueError(f"{field.name} must be non-negative")
         return value
 
 
 class SearchRequest(ChunkContext):
-    """Input to the SearchPipeline."""
-
     query: str
-    search_type: SearchType = SearchType.HYBRID
+
+    search_type: SearchType = SearchType.SEMANTIC
 
     human_selected_filters: BaseFilters | None = None
     enable_auto_detect_filters: bool | None = None
@@ -74,29 +97,37 @@ class SearchRequest(ChunkContext):
     offset: int | None = None
     limit: int | None = None
 
+    multilingual_expansion: list[str] | None = None
     recency_bias_multiplier: float = 1.0
-    hybrid_alpha: float = HYBRID_ALPHA
-    # This is to forcibly skip (or run) the step, if None it uses the system defaults
-    skip_rerank: bool | None = None
-    skip_llm_chunk_filter: bool | None = None
+    hybrid_alpha: float | None = None
+    rerank_settings: RerankingDetails | None = None
+    evaluation_type: LLMEvaluationType = LLMEvaluationType.UNSPECIFIED
 
     class Config:
         arbitrary_types_allowed = True
 
 
 class SearchQuery(ChunkContext):
+    "Processed Request that is directly passed to the SearchPipeline"
     query: str
+    processed_keywords: list[str]
+    search_type: SearchType
+    evaluation_type: LLMEvaluationType
     filters: IndexFilters
+
+    # by this point, the chunks_above and chunks_below must be set
+    chunks_above: int
+    chunks_below: int
+
+    rerank_settings: RerankingDetails | None
+    hybrid_alpha: float
     recency_bias_multiplier: float
+
+    # Only used if LLM evaluation type is not skip, None to use default settings
+    max_llm_filter_sections: int
+
     num_hits: int = NUM_RETURNED_HITS
     offset: int = 0
-    search_type: SearchType = SearchType.HYBRID
-    skip_rerank: bool = not ENABLE_RERANKING_REAL_TIME_FLOW
-    skip_llm_chunk_filter: bool = DISABLE_LLM_CHUNK_FILTER
-    # Only used if not skip_rerank
-    num_rerank: int | None = NUM_RERANKED_RESULTS
-    # Only used if not skip_llm_chunk_filter
-    max_llm_filter_sections: int = NUM_RERANKED_RESULTS
 
     class Config:
         frozen = True
@@ -143,6 +174,7 @@ class InferenceChunk(BaseChunk):
     updated_at: datetime | None
     primary_owners: list[str] | None = None
     secondary_owners: list[str] | None = None
+    large_chunk_reference_ids: list[int] = []
 
     @property
     def unique_id(self) -> str:

@@ -16,6 +16,25 @@ class DocumentInsertionRecord:
     already_existed: bool
 
 
+@dataclass(frozen=True)
+class VespaChunkRequest:
+    document_id: str
+    min_chunk_ind: int | None = None
+    max_chunk_ind: int | None = None
+
+    @property
+    def is_capped(self) -> bool:
+        # If the max chunk index is not None, then the chunk request is capped
+        # If the min chunk index is None, we can assume the min is 0
+        return self.max_chunk_ind is not None
+
+    @property
+    def range(self) -> int | None:
+        if self.max_chunk_ind is not None:
+            return (self.max_chunk_ind - (self.min_chunk_ind or 0)) + 1
+        return None
+
+
 @dataclass
 class DocumentMetadata:
     """
@@ -183,10 +202,9 @@ class IdRetrievalCapable(abc.ABC):
     @abc.abstractmethod
     def id_based_retrieval(
         self,
-        document_id: str,
-        min_chunk_ind: int | None,
-        max_chunk_ind: int | None,
-        user_access_control_list: list[str] | None = None,
+        chunk_requests: list[VespaChunkRequest],
+        filters: IndexFilters,
+        batch_retrieval: bool = False,
     ) -> list[InferenceChunkUncleaned]:
         """
         Fetch chunk(s) based on document id
@@ -197,89 +215,13 @@ class IdRetrievalCapable(abc.ABC):
         or extended section will have duplicate segments.
 
         Parameters:
-        - document_id: document id for which to retrieve the chunk(s)
-        - min_chunk_ind: if None then fetch from the start of doc
-        - max_chunk_ind:
-        - filters: standard filters object, in this case only the access filter is applied as a
-                permission check
+        - chunk_requests: requests containing the document id and the chunk range to retrieve
+        - filters: Filters to apply to retrieval
+        - batch_retrieval: If True, perform a batch retrieval
 
         Returns:
             list of chunks for the document id or the specific chunk by the specified chunk index
             and document id
-        """
-        raise NotImplementedError
-
-
-class KeywordCapable(abc.ABC):
-    """
-    Class must implement the keyword search functionality
-    """
-
-    @abc.abstractmethod
-    def keyword_retrieval(
-        self,
-        query: str,
-        filters: IndexFilters,
-        time_decay_multiplier: float,
-        num_to_retrieve: int,
-        offset: int = 0,
-    ) -> list[InferenceChunkUncleaned]:
-        """
-        Run keyword search and return a list of chunks. Inference chunks are chunks with all of the
-        information required for query time purposes. For example, some details of the document
-        required at indexing time are no longer needed past this point. At the same time, the
-        matching keywords need to be highlighted.
-
-        NOTE: the query passed in here is the unprocessed plain text query. Preprocessing is
-        expected to be handled by this function as it may depend on the index implementation.
-        Things like query expansion, synonym injection, stop word removal, lemmatization, etc. are
-        done here.
-
-        Parameters:
-        - query: unmodified user query
-        - filters: standard filter object
-        - time_decay_multiplier: how much to decay the document scores as they age. Some queries
-                based on the persona settings, will have this be a 2x or 3x of the default
-        - num_to_retrieve: number of highest matching chunks to return
-        - offset: number of highest matching chunks to skip (kind of like pagination)
-
-        Returns:
-            best matching chunks based on keyword matching (should be BM25 algorithm ideally)
-        """
-        raise NotImplementedError
-
-
-class VectorCapable(abc.ABC):
-    """
-    Class must implement the vector/semantic search functionality
-    """
-
-    @abc.abstractmethod
-    def semantic_retrieval(
-        self,
-        query: str,  # Needed for matching purposes
-        query_embedding: Embedding,
-        filters: IndexFilters,
-        time_decay_multiplier: float,
-        num_to_retrieve: int,
-        offset: int = 0,
-    ) -> list[InferenceChunkUncleaned]:
-        """
-        Run vector/semantic search and return a list of inference chunks.
-
-        Parameters:
-        - query: unmodified user query. This is needed for getting the matching highlighted
-                keywords
-        - query_embedding: vector representation of the query, must be of the correct
-                dimensionality for the primary index
-        - filters: standard filter object
-        - time_decay_multiplier: how much to decay the document scores as they age. Some queries
-                based on the persona settings, will have this be a 2x or 3x of the default
-        - num_to_retrieve: number of highest matching chunks to return
-        - offset: number of highest matching chunks to skip (kind of like pagination)
-
-        Returns:
-            best matching chunks based on vector similarity
         """
         raise NotImplementedError
 
@@ -294,11 +236,12 @@ class HybridCapable(abc.ABC):
         self,
         query: str,
         query_embedding: Embedding,
+        final_keywords: list[str] | None,
         filters: IndexFilters,
+        hybrid_alpha: float,
         time_decay_multiplier: float,
         num_to_retrieve: int,
         offset: int = 0,
-        hybrid_alpha: float | None = None,
     ) -> list[InferenceChunkUncleaned]:
         """
         Run hybrid search and return a list of inference chunks.
@@ -313,15 +256,16 @@ class HybridCapable(abc.ABC):
                 keywords
         - query_embedding: vector representation of the query, must be of the correct
                 dimensionality for the primary index
+        - final_keywords: Final keywords to be used from the query, defaults to query if not set
         - filters: standard filter object
-        - time_decay_multiplier: how much to decay the document scores as they age. Some queries
-                based on the persona settings, will have this be a 2x or 3x of the default
-        - num_to_retrieve: number of highest matching chunks to return
-        - offset: number of highest matching chunks to skip (kind of like pagination)
         - hybrid_alpha: weighting between the keyword and vector search results. It is important
                 that the two scores are normalized to the same range so that a meaningful
                 comparison can be made. 1 for 100% weighting on vector score, 0 for 100% weighting
                 on keyword score.
+        - time_decay_multiplier: how much to decay the document scores as they age. Some queries
+                based on the persona settings, will have this be a 2x or 3x of the default
+        - num_to_retrieve: number of highest matching chunks to return
+        - offset: number of highest matching chunks to skip (kind of like pagination)
 
         Returns:
             best matching chunks based on weighted sum of keyword and vector/semantic search scores
@@ -387,7 +331,7 @@ class BaseIndex(
     """
 
 
-class DocumentIndex(KeywordCapable, VectorCapable, HybridCapable, BaseIndex, abc.ABC):
+class DocumentIndex(HybridCapable, BaseIndex, abc.ABC):
     """
     A valid document index that can plug into all Danswer flows must implement all of these
     functionalities, though "technically" it does not need to be keyword or vector capable as

@@ -1,9 +1,23 @@
 import React, { useState } from "react";
 import { DocumentSet, Tag, ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { InfoIcon, defaultTailwindCSS } from "../../icons/icons";
+import {
+  GearIcon,
+  InfoIcon,
+  MinusIcon,
+  PlusCircleIcon,
+  PlusIcon,
+  defaultTailwindCSS,
+} from "../../icons/icons";
 import { HoverPopup } from "../../HoverPopup";
-import { FiBook, FiBookmark, FiFilter, FiMap, FiX } from "react-icons/fi";
+import {
+  FiBook,
+  FiBookmark,
+  FiFilter,
+  FiMap,
+  FiTag,
+  FiX,
+} from "react-icons/fi";
 import { DateRangeSelector } from "../DateRangeSelector";
 import { DateRangePickerValue } from "@tremor/react";
 import { FilterDropdown } from "./FilterDropdown";
@@ -68,13 +82,26 @@ export function SourceSelector({
     });
   };
 
+  let allSourcesSelected = selectedSources.length > 0;
+
+  const toggleAllSources = () => {
+    if (allSourcesSelected) {
+      setSelectedSources([]);
+    } else {
+      const allSources = listSourceMetadata().filter((source) =>
+        existingSources.includes(source.internalName)
+      );
+      setSelectedSources(allSources);
+    }
+  };
+
   return (
     <div
       className={`hidden ${
         showDocSidebar ? "4xl:block" : "!block"
-      } duration-1000 ease-out transition-all transform origin-top-right`}
+      } duration-1000 flex  ease-out transition-all transform origin-top-right`}
     >
-      <div className="flex mb-4 pb-2 border-b border-border text-emphasis">
+      <div className=" mb-4 pb-2 flex border-b border-border text-emphasis">
         <h2 className="font-bold my-auto">Filters</h2>
         <FiFilter className="my-auto ml-2" size="16" />
       </div>
@@ -86,7 +113,17 @@ export function SourceSelector({
 
       {existingSources.length > 0 && (
         <div className="mt-4">
-          <SectionTitle>Sources</SectionTitle>
+          <div className="flex w-full gap-x-2 items-center">
+            <div className="font-bold text-xs  mt-2 flex items-center gap-x-2">
+              <p>Sources</p>
+              <input
+                type="checkbox"
+                checked={allSourcesSelected}
+                onChange={toggleAllSources}
+                className="my-auto form-checkbox h-3 w-3 text-primary border-background-900 rounded"
+              />
+            </div>
+          </div>
           <div className="px-1">
             {listSourceMetadata()
               .filter((source) => existingSources.includes(source.internalName))
@@ -320,6 +357,162 @@ export function HorizontalFilters({
               </SelectedBubble>
             ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+export function HorizontalSourceSelector({
+  timeRange,
+  setTimeRange,
+  selectedSources,
+  setSelectedSources,
+  selectedDocumentSets,
+  setSelectedDocumentSets,
+  selectedTags,
+  setSelectedTags,
+  availableDocumentSets,
+  existingSources,
+  availableTags,
+}: SourceSelectorProps) {
+  const handleSourceSelect = (source: SourceMetadata) => {
+    setSelectedSources((prev: SourceMetadata[]) => {
+      if (prev.map((s) => s.internalName).includes(source.internalName)) {
+        return prev.filter((s) => s.internalName !== source.internalName);
+      } else {
+        return [...prev, source];
+      }
+    });
+  };
+
+  const handleDocumentSetSelect = (documentSetName: string) => {
+    setSelectedDocumentSets((prev: string[]) => {
+      if (prev.includes(documentSetName)) {
+        return prev.filter((s) => s !== documentSetName);
+      } else {
+        return [...prev, documentSetName];
+      }
+    });
+  };
+
+  const handleTagSelect = (tag: Tag) => {
+    setSelectedTags((prev: Tag[]) => {
+      if (
+        prev.some(
+          (t) => t.tag_key === tag.tag_key && t.tag_value === tag.tag_value
+        )
+      ) {
+        return prev.filter(
+          (t) => !(t.tag_key === tag.tag_key && t.tag_value === tag.tag_value)
+        );
+      } else {
+        return [...prev, tag];
+      }
+    });
+  };
+
+  const resetSources = () => {
+    setSelectedSources([]);
+  };
+  const resetDocuments = () => {
+    setSelectedDocumentSets([]);
+  };
+
+  const resetTags = () => {
+    setSelectedTags([]);
+  };
+
+  return (
+    <div className="flex flex-col space-y-4">
+      <div className="flex space-x-2">
+        <div className="w-24">
+          <DateRangeSelector
+            isHorizontal
+            value={timeRange}
+            onValueChange={setTimeRange}
+          />
+        </div>
+
+        {existingSources.length > 0 && (
+          <FilterDropdown
+            options={listSourceMetadata()
+              .filter((source) => existingSources.includes(source.internalName))
+              .map((source) => ({
+                key: source.internalName,
+                display: (
+                  <>
+                    <SourceIcon
+                      sourceType={source.internalName}
+                      iconSize={16}
+                    />
+                    <span className="ml-2 text-sm">{source.displayName}</span>
+                  </>
+                ),
+              }))}
+            selected={selectedSources.map((source) => source.internalName)}
+            handleSelect={(option) =>
+              handleSourceSelect(
+                listSourceMetadata().find((s) => s.internalName === option.key)!
+              )
+            }
+            icon={<FiMap size={16} />}
+            defaultDisplay="Sources"
+            width="w-fit ellipsis truncate"
+            resetValues={resetSources}
+            dropdownWidth="w-40"
+            optionClassName="truncate w-full break-all ellipsis"
+          />
+        )}
+
+        {availableDocumentSets.length > 0 && (
+          <FilterDropdown
+            options={availableDocumentSets.map((documentSet) => ({
+              key: documentSet.name,
+              display: <>{documentSet.name}</>,
+            }))}
+            selected={selectedDocumentSets}
+            handleSelect={(option) => handleDocumentSetSelect(option.key)}
+            icon={<FiBook size={16} />}
+            defaultDisplay="Sets"
+            resetValues={resetDocuments}
+            width="w-fit max-w-24 ellipsis truncate"
+            dropdownWidth="max-w-36 w-fit"
+            optionClassName="truncate break-all ellipsis"
+          />
+        )}
+
+        {availableTags.length > 0 && (
+          <FilterDropdown
+            options={availableTags.map((tag) => ({
+              key: `${tag.tag_key}=${tag.tag_value}`,
+              display: (
+                <span className="text-sm">
+                  {tag.tag_key}
+                  <b>=</b>
+                  {tag.tag_value}
+                </span>
+              ),
+            }))}
+            selected={selectedTags.map(
+              (tag) => `${tag.tag_key}=${tag.tag_value}`
+            )}
+            handleSelect={(option) => {
+              const [tag_key, tag_value] = option.key.split("=");
+              const selectedTag = availableTags.find(
+                (tag) => tag.tag_key === tag_key && tag.tag_value === tag_value
+              );
+              if (selectedTag) {
+                handleTagSelect(selectedTag);
+              }
+            }}
+            icon={<FiTag size={16} />}
+            defaultDisplay="Tags"
+            resetValues={resetTags}
+            width="w-fit max-w-24 ellipsis truncate"
+            dropdownWidth="max-w-80 w-fit"
+            optionClassName="truncate break-all ellipsis"
+          />
+        )}
       </div>
     </div>
   );

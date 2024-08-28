@@ -145,12 +145,14 @@ interface DriveJsonUploadSectionProps {
   setPopup: (popupSpec: PopupSpec | null) => void;
   appCredentialData?: { client_id: string };
   serviceAccountCredentialData?: { service_account_email: string };
+  isAdmin: boolean;
 }
 
 export const GmailJsonUploadSection = ({
   setPopup,
   appCredentialData,
   serviceAccountCredentialData,
+  isAdmin,
 }: DriveJsonUploadSectionProps) => {
   const { mutate } = useSWRConfig();
 
@@ -163,36 +165,48 @@ export const GmailJsonUploadSection = ({
             {serviceAccountCredentialData.service_account_email}
           </p>
         </div>
-        <div className="mt-4 mb-1">
-          If you want to update these credentials, delete the existing
-          credentials through the button below, and then upload a new
-          credentials JSON.
-        </div>
-        <Button
-          onClick={async () => {
-            const response = await fetch(
-              "/api/manage/admin/connector/gmail/service-account-key",
-              {
-                method: "DELETE",
-              }
-            );
-            if (response.ok) {
-              mutate("/api/manage/admin/connector/gmail/service-account-key");
-              setPopup({
-                message: "Successfully deleted service account key",
-                type: "success",
-              });
-            } else {
-              const errorMsg = await response.text();
-              setPopup({
-                message: `Failed to delete service account key - ${errorMsg}`,
-                type: "error",
-              });
-            }
-          }}
-        >
-          Delete
-        </Button>
+        {isAdmin ? (
+          <>
+            <div className="mt-4 mb-1">
+              If you want to update these credentials, delete the existing
+              credentials through the button below, and then upload a new
+              credentials JSON.
+            </div>
+            <Button
+              onClick={async () => {
+                const response = await fetch(
+                  "/api/manage/admin/connector/gmail/service-account-key",
+                  {
+                    method: "DELETE",
+                  }
+                );
+                if (response.ok) {
+                  mutate(
+                    "/api/manage/admin/connector/gmail/service-account-key"
+                  );
+                  setPopup({
+                    message: "Successfully deleted service account key",
+                    type: "success",
+                  });
+                } else {
+                  const errorMsg = await response.text();
+                  setPopup({
+                    message: `Failed to delete service account key - ${errorMsg}`,
+                    type: "error",
+                  });
+                }
+              }}
+            >
+              Delete
+            </Button>
+          </>
+        ) : (
+          <>
+            <div className="mt-4 mb-1">
+              To change these credentials, please contact an administrator.
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -234,6 +248,17 @@ export const GmailJsonUploadSection = ({
         >
           Delete
         </Button>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="mt-2">
+        <p className="text-sm mb-2">
+          Curators are unable to set up the Gmail credentials. To add a Gmail
+          connector, please contact an administrator.
+        </p>
       </div>
     );
   }

@@ -7,7 +7,8 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: 
+      group: amd64-image-builders
 
     steps:
     - name: Checkout code

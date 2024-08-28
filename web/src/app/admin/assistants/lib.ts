@@ -18,6 +18,7 @@ interface PersonaCreationRequest {
   tool_ids: number[];
   icon_color: string | null;
   icon_shape: number | null;
+  remove_image?: boolean;
   uploaded_image: File | null;
 }
 
@@ -41,6 +42,7 @@ interface PersonaUpdateRequest {
   tool_ids: number[];
   icon_color: string | null;
   icon_shape: number | null;
+  remove_image: boolean;
   uploaded_image: File | null;
 }
 
@@ -119,6 +121,7 @@ function buildPersonaAPIBody(
     tool_ids,
     icon_color,
     icon_shape,
+    remove_image,
   } = creationRequest;
 
   return {
@@ -140,6 +143,7 @@ function buildPersonaAPIBody(
     icon_color,
     icon_shape,
     uploaded_image_id,
+    remove_image,
   };
 }
 

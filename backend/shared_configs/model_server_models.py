@@ -1,6 +1,8 @@
 from pydantic import BaseModel
 
+from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
+from shared_configs.enums import RerankerProvider
 
 Embedding = list[float]
 
@@ -12,7 +14,7 @@ class EmbedRequest(BaseModel):
     max_context_length: int
     normalize_embeddings: bool
     api_key: str | None
-    provider_type: str | None
+    provider_type: EmbeddingProvider | None
     text_type: EmbedTextType
     manual_query_prefix: str | None
     manual_passage_prefix: str | None
@@ -25,15 +27,23 @@ class EmbedResponse(BaseModel):
 class RerankRequest(BaseModel):
     query: str
     documents: list[str]
+    model_name: str
+    provider_type: RerankerProvider | None
+    api_key: str | None
 
 
 class RerankResponse(BaseModel):
-    scores: list[list[float] | None]
+    scores: list[float]
 
 
 class IntentRequest(BaseModel):
     query: str
+    # Sequence classification threshold
+    semantic_percent_threshold: float
+    # Token classification threshold
+    keyword_percent_threshold: float
 
 
 class IntentResponse(BaseModel):
-    class_probs: list[float]
+    is_keyword: bool
+    keywords: list[str]

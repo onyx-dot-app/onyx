@@ -174,7 +174,11 @@ export function Explorer({
               setQuery(event.target.value);
             }}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !(event.nativeEvent as any).isComposing
+              ) {
                 onSearch(query);
                 event.preventDefault();
               }

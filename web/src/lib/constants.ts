@@ -33,6 +33,8 @@ export const LOGOUT_DISABLED =
 export const NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN =
   process.env.NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN?.toLowerCase() === "true";
 
+export const TOGGLED_CONNECTORS_COOKIE_NAME = "toggled_connectors";
+
 /* Enterprise-only settings */
 
 // NOTE: this should ONLY be used on the server-side. If used client side,
@@ -50,5 +52,5 @@ export const CUSTOM_ANALYTICS_ENABLED = process.env.CUSTOM_ANALYTICS_SECRET_KEY
   ? true
   : false;
 
-export const DISABLE_AGENTIC_SEARCH =
-  process.env.DISABLE_AGENTIC_SEARCH?.toLowerCase() === "true";
+export const DISABLE_LLM_DOC_RELEVANCE =
+  process.env.DISABLE_LLM_DOC_RELEVANCE?.toLowerCase() === "true";

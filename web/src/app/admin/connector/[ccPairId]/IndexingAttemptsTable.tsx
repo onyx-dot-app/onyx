@@ -18,7 +18,9 @@ import { PageSelector } from "@/components/PageSelector";
 import { localizeAndPrettify } from "@/lib/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { Modal } from "@/components/Modal";
-import { CheckmarkIcon, CopyIcon } from "@/components/icons/icons";
+import { CheckmarkIcon, CopyIcon, SearchIcon } from "@/components/icons/icons";
+import Link from "next/link";
+import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 
 const NUM_IN_PAGE = 8;
 
@@ -36,43 +38,10 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
     <>
       {indexAttemptToDisplayTraceFor &&
         indexAttemptToDisplayTraceFor.full_exception_trace && (
-          <Modal
-            width="w-4/6"
-            className="h-5/6 overflow-y-hidden flex flex-col"
-            title="Full Exception Trace"
+          <ExceptionTraceModal
             onOutsideClick={() => setIndexAttemptTracePopupId(null)}
-          >
-            <div className="overflow-y-auto mb-6">
-              <div className="mb-6">
-                {!copyClicked ? (
-                  <div
-                    onClick={() => {
-                      navigator.clipboard.writeText(
-                        indexAttemptToDisplayTraceFor.full_exception_trace!
-                      );
-                      setCopyClicked(true);
-                      setTimeout(() => setCopyClicked(false), 2000);
-                    }}
-                    className="flex w-fit cursor-pointer hover:bg-hover-light p-2 border-border border rounded"
-                  >
-                    Copy full trace
-                    <CopyIcon className="ml-2 my-auto" />
-                  </div>
-                ) : (
-                  <div className="flex w-fit hover:bg-hover-light p-2 border-border border rounded cursor-default">
-                    Copied to clipboard
-                    <CheckmarkIcon
-                      className="my-auto ml-2 flex flex-shrink-0 text-success"
-                      size={16}
-                    />
-                  </div>
-                )}
-              </div>
-              <div className="whitespace-pre-wrap">
-                {indexAttemptToDisplayTraceFor.full_exception_trace}
-              </div>
-            </div>
-          </Modal>
+            exceptionTrace={indexAttemptToDisplayTraceFor.full_exception_trace!}
+          />
         )}
 
       <Table>
@@ -82,7 +51,7 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
             <TableHeaderCell>Status</TableHeaderCell>
             <TableHeaderCell>New Doc Cnt</TableHeaderCell>
             <TableHeaderCell>Total Doc Cnt</TableHeaderCell>
-            <TableHeaderCell>Error Msg</TableHeaderCell>
+            <TableHeaderCell>Error Message</TableHeaderCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -125,9 +94,31 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
                   <TableCell>{indexAttempt.total_docs_indexed}</TableCell>
                   <TableCell>
                     <div>
-                      <Text className="flex flex-wrap whitespace-normal">
-                        {indexAttempt.error_msg || "-"}
-                      </Text>
+                      {indexAttempt.error_count > 0 && (
+                        <Link
+                          className="cursor-pointer my-auto"
+                          href={`/admin/indexing/${indexAttempt.id}`}
+                        >
+                          <Text className="flex flex-wrap text-link whitespace-normal">
+                            <SearchIcon />
+                            &nbsp;View Errors
+                          </Text>
+                        </Link>
+                      )}
+
+                      {indexAttempt.status === "success" && (
+                        <Text className="flex flex-wrap whitespace-normal">
+                          {"-"}
+                        </Text>
+                      )}
+
+                      {indexAttempt.status === "failed" &&
+                        indexAttempt.error_msg && (
+                          <Text className="flex flex-wrap whitespace-normal">
+                            {indexAttempt.error_msg}
+                          </Text>
+                        )}
+
                       {indexAttempt.full_exception_trace && (
                         <div
                           onClick={() => {

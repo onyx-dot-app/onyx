@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PopupSpec } from "../admin/connectors/Popup";
 import { ThumbsDownIcon, ThumbsUpIcon } from "../icons/icons";
+import { CustomTooltip } from "../tooltip/CustomTooltip";
 
 type Feedback = "like" | "dislike";
 
@@ -55,15 +56,9 @@ const QAFeedback = ({
       className={"cursor-pointer " + paddingY}
     >
       {feedbackType === "like" ? (
-        <ThumbsUpIcon
-          size={size}
-          className="my-auto flex flex-shrink-0 text-gray-500"
-        />
+        <ThumbsUpIcon className="my-auto flex flex-shrink-0 text-gray-500" />
       ) : (
-        <ThumbsDownIcon
-          size={size}
-          className="my-auto flex flex-shrink-0 text-gray-500"
-        />
+        <ThumbsDownIcon className="my-auto flex flex-shrink-0 text-gray-500" />
       )}
     </div>
   );
@@ -80,17 +75,22 @@ export const QAFeedbackBlock = ({
 }: QAFeedbackBlockProps) => {
   return (
     <div className="flex">
-      <QAFeedback
-        messageId={messageId}
-        setPopup={setPopup}
-        feedbackType="like"
-      />
-      <div className="ml-2">
+      <CustomTooltip line position="top" content="Like Search Response">
         <QAFeedback
           messageId={messageId}
           setPopup={setPopup}
-          feedbackType="dislike"
+          feedbackType="like"
         />
+      </CustomTooltip>
+
+      <div className="ml-2">
+        <CustomTooltip line position="top" content="Dislike Search Response">
+          <QAFeedback
+            messageId={messageId}
+            setPopup={setPopup}
+            feedbackType="dislike"
+          />
+        </CustomTooltip>
       </div>
     </div>
   );

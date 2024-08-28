@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import TypeVar
 
+from danswer.chat.models import SectionRelevancePiece
 from danswer.db.models import SearchDoc as DBSearchDoc
 from danswer.search.models import InferenceChunk
 from danswer.search.models import InferenceSection
@@ -13,6 +14,14 @@ T = TypeVar(
     "T",
     InferenceSection,
     InferenceChunk,
+    SearchDoc,
+    SavedSearchDoc,
+    SavedSearchDocWithContent,
+)
+
+TSection = TypeVar(
+    "TSection",
+    InferenceSection,
     SearchDoc,
     SavedSearchDoc,
     SavedSearchDocWithContent,
@@ -35,6 +44,35 @@ def dedupe_documents(items: list[T]) -> tuple[list[T], list[int]]:
         else:
             dropped_indices.append(index)
     return deduped_items, dropped_indices
+
+
+def relevant_sections_to_indices(
+    relevance_sections: list[SectionRelevancePiece] | None, items: list[TSection]
+) -> list[int]:
+    if not relevance_sections:
+        return []
+
+    relevant_set = {
+        (chunk.document_id, chunk.chunk_id)
+        for chunk in relevance_sections
+        if chunk.relevant
+    }
+
+    return [
+        index
+        for index, item in enumerate(items)
+        if (
+            (
+                isinstance(item, InferenceSection)
+                and (item.center_chunk.document_id, item.center_chunk.chunk_id)
+                in relevant_set
+            )
+            or (
+                not isinstance(item, (InferenceSection))
+                and (item.document_id, item.chunk_ind) in relevant_set
+            )
+        )
+    ]
 
 
 def drop_llm_indices(

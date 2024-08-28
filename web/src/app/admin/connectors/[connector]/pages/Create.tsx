@@ -1,7 +1,9 @@
-import React, { Dispatch, SetStateAction, useEffect } from "react";
+import React, { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { Formik, Form, Field, FieldArray } from "formik";
 import * as Yup from "yup";
 import { FaPlus } from "react-icons/fa";
+import { useUserGroups } from "@/lib/hooks";
+import { UserGroup, User, UserRole } from "@/lib/types";
 import { EditingValue } from "@/components/credentials/EditingValue";
 import { Divider } from "@tremor/react";
 import CredentialSubText from "@/components/credentials/CredentialFields";
@@ -9,6 +11,11 @@ import { TrashIcon } from "@/components/icons/icons";
 import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import { ConnectionConfiguration } from "@/lib/connectors/connectors";
 import { useFormContext } from "@/components/context/FormContext";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { Text } from "@tremor/react";
+
+import { FiUsers } from "react-icons/fi";
+import { useUser } from "@/components/user/UserProvider";
 
 export interface DynamicConnectionFormProps {
   config: ConnectionConfiguration;
@@ -20,6 +27,8 @@ export interface DynamicConnectionFormProps {
   setName: Dispatch<SetStateAction<string>>;
   updateValues: (field: string, value: any) => void;
   isPublic: boolean;
+  groups: number[];
+  setGroups: Dispatch<SetStateAction<number[]>>;
   onFormStatusChange: (isValid: boolean) => void; // New prop
 }
 
@@ -32,11 +41,24 @@ const DynamicConnectionForm: React.FC<DynamicConnectionFormProps> = ({
   setSelectedFiles,
   isPublic,
   setIsPublic,
+  groups,
+  setGroups,
   initialName,
   onFormStatusChange,
 }) => {
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const { setAllowAdvanced } = useFormContext();
+  const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
+
+  const { isLoadingUser, isAdmin, user } = useUser();
+
+  if (isLoadingUser) {
+    return <></>;
+  }
+
   const initialValues = {
     name: initialName || "",
+    groups: [], // Initialize groups as an empty array
     ...(defaultValues ||
       config.values.reduce(
         (acc, field, ind) => {
@@ -54,7 +76,7 @@ const DynamicConnectionForm: React.FC<DynamicConnectionFormProps> = ({
         {} as Record<string, any>
       )),
   };
-  const { setAllowAdvanced } = useFormContext();
+
   const validationSchema = Yup.object().shape({
     name: Yup.string().required("Connector Name is required"),
     ...config.values.reduce(
@@ -246,10 +268,21 @@ const DynamicConnectionForm: React.FC<DynamicConnectionFormProps> = ({
                               {field.description}
                             </CredentialSubText>
                           )}
+
                           <Field
+                            onChange={(
+                              e: React.ChangeEvent<HTMLSelectElement>
+                            ) =>
+                              updateValue(setFieldValue)(
+                                field.name,
+                                e.target.value
+                              )
+                            }
                             as="select"
+                            value={values[field.name]}
                             name={field.name}
-                            className="w-full p-2 border bg-input border-border-medium rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            className="w-full p-2 border bg-input border-border-medium rounded-md bg-black 
+                              focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                           >
                             <option value="">Select an option</option>
                             {field.options?.map((option) => (
@@ -274,20 +307,128 @@ const DynamicConnectionForm: React.FC<DynamicConnectionFormProps> = ({
                   );
                 }
               })}
+              {isPaidEnterpriseFeaturesEnabled && (
+                <>
+                  <Divider />
+                  {isAdmin && (
+                    <EditingValue
+                      description={`If set, then documents indexed by this connector will be visible to all users. If turned off, then only users who explicitly have been given access to the documents (e.g. through a User Group) will have access`}
+                      optional
+                      setFieldValue={(field: string, value: boolean) => {
+                        setIsPublic(value);
+                        if (value) {
+                          setGroups([]); // Clear groups when setting to public
+                        }
+                      }}
+                      type={"checkbox"}
+                      label={"Documents are Public?"}
+                      name={"public"}
+                      currentValue={isPublic}
+                    />
+                  )}
 
-              <Divider />
+                  {userGroups ? (
+                    <>
+                      {!isPublic &&
+                      ((isAdmin && userGroups.length > 0) ||
+                        (!isAdmin && userGroups.length > 1)) ? (
+                        <div>
+                          <div className="flex gap-x-2 items-center">
+                            <div className="block font-medium text-base">
+                              Assign group access for this Connector
+                            </div>
+                          </div>
+                          <Text className="mb-3">
+                            {isAdmin ? (
+                              <>
+                                This Connector will be visible/accessible by the
+                                groups selected below
+                              </>
+                            ) : (
+                              <>
+                                Curators must select one or more groups to give
+                                access to this Connector
+                              </>
+                            )}
+                          </Text>
+                          <FieldArray
+                            name="groups"
+                            render={() => (
+                              <div className="flex gap-2 flex-wrap">
+                                {!userGroupsIsLoading &&
+                                  userGroups.map((userGroup: UserGroup) => {
+                                    const isSelected =
+                                      groups?.includes(userGroup.id) ||
+                                      (!isAdmin && userGroups.length === 1);
 
-              <EditingValue
-                description={`If set, then documents indexed by this connector will be visible to all users. If turned off, then only users who explicitly have been given access to the documents (e.g. through a User Group) will have access`}
-                optional
-                setFieldValue={(field: string, value: boolean) =>
-                  setIsPublic(value)
-                }
-                type={"checkbox"}
-                label={"Documents are Public?"}
-                name={"public"}
-                currentValue={isPublic}
-              />
+                                    // Auto-select the only group for non-admin users
+                                    if (
+                                      !isAdmin &&
+                                      userGroups.length === 1 &&
+                                      groups.length === 0
+                                    ) {
+                                      setGroups([userGroup.id]);
+                                    }
+
+                                    return (
+                                      <div
+                                        key={userGroup.id}
+                                        className={`
+                                            px-3 
+                                            py-1
+                                            rounded-lg 
+                                            border
+                                            border-border 
+                                            w-fit 
+                                            flex 
+                                            cursor-pointer 
+                                            ${isSelected ? "bg-background-strong" : "hover:bg-hover"}
+                                          `}
+                                        onClick={() => {
+                                          if (setGroups) {
+                                            if (
+                                              isSelected &&
+                                              (isAdmin || userGroups.length > 1)
+                                            ) {
+                                              setGroups(
+                                                groups?.filter(
+                                                  (id) => id !== userGroup.id
+                                                ) || []
+                                              );
+                                            } else if (!isSelected) {
+                                              setGroups([
+                                                ...(groups || []),
+                                                userGroup.id,
+                                              ]);
+                                            }
+                                          }
+                                        }}
+                                      >
+                                        <div className="my-auto flex">
+                                          <FiUsers className="my-auto mr-2" />{" "}
+                                          {userGroup.name}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+                            )}
+                          />
+                        </div>
+                      ) : userGroups && userGroups.length > 0 ? (
+                        <Text className="mb-3">
+                          These documents will be assigned to group:{" "}
+                          <b>{userGroups[0].name}</b>.
+                        </Text>
+                      ) : (
+                        <></>
+                      )}
+                    </>
+                  ) : (
+                    <></>
+                  )}
+                </>
+              )}
             </Form>
           );
         }}

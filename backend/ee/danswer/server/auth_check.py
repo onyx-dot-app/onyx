@@ -8,6 +8,7 @@ EE_PUBLIC_ENDPOINT_SPECS = PUBLIC_ENDPOINT_SPECS + [
     # needs to be accessible prior to user login
     ("/enterprise-settings", {"GET"}),
     ("/enterprise-settings/logo", {"GET"}),
+    ("/enterprise-settings/logotype", {"GET"}),
     ("/enterprise-settings/custom-analytics-script", {"GET"}),
     # oidc
     ("/auth/oidc/authorize", {"GET"}),

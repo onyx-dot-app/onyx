@@ -11,9 +11,6 @@ import { SignInButton } from "./SignInButton";
 import { EmailPasswordForm } from "./EmailPasswordForm";
 import { Card, Title, Text } from "@tremor/react";
 import Link from "next/link";
-import { Footer } from "@/components/Footer";
-import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
-import { Logo } from "@/components/Logo";
 import { LoginText } from "./LoginText";
 import Image from "next/image";
 import { getSecondsUntilExpiration } from "@/lib/time";
@@ -40,12 +37,7 @@ const Page = async ({
     console.log(`Some fetch failed for the login page - ${e}`);
   }
 
-  const config = await fetchEEASettings();
   
-  const {
-    footerHtml,
-  } = config;
-
   // simply take the user to the home page if Auth is disabled
   if (authTypeMetadata?.authType === "disabled") {
     return redirect("/");
@@ -84,7 +76,7 @@ const Page = async ({
       <div className="absolute top-10x w-full">
         <HealthCheckBanner />
       </div>
-      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div>
           <div className="h-16 w-[92px] mx-auto">
             <Image
@@ -125,9 +117,6 @@ const Page = async ({
             </Card>
           )}
         </div>
-      </div>
-      <div className="absolute bottom-0 w-full">
-        <Footer footerHtml={footerHtml}/>
       </div>
     </main>
   );

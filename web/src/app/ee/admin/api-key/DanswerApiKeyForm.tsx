@@ -1,10 +1,15 @@
 import { Form, Formik } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import {
+  BooleanFormField,
+  TextFormField,
+} from "@/components/admin/connectors/Field";
 import { createApiKey, updateApiKey } from "./lib";
 import { Modal } from "@/components/Modal";
 import { XIcon } from "@/components/icons/icons";
 import { Button, Divider, Text } from "@tremor/react";
+import { UserRole } from "@/lib/types";
+import { APIKey } from "./types";
 
 interface DanswerApiKeyFormProps {
   onClose: () => void;
@@ -42,14 +47,27 @@ export const DanswerApiKeyForm = ({
         <Formik
           initialValues={{
             name: apiKey?.api_key_name || "",
+            is_admin: apiKey?.api_key_role === "admin",
           }}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
+
+            // Map the boolean to a UserRole string
+            const role: UserRole = values.is_admin
+              ? UserRole.ADMIN
+              : UserRole.BASIC;
+
+            // Prepare the payload with the UserRole
+            const payload = {
+              ...values,
+              role, // Assign the role directly as a UserRole type
+            };
+
             let response;
             if (isUpdate) {
-              response = await updateApiKey(apiKey.api_key_id, values);
+              response = await updateApiKey(apiKey.api_key_id, payload);
             } else {
-              response = await createApiKey(values);
+              response = await createApiKey(payload);
             }
             formikHelpers.setSubmitting(false);
             if (response.ok) {
@@ -86,6 +104,15 @@ export const DanswerApiKeyForm = ({
                 name="name"
                 label="Name (optional):"
                 autoCompleteDisabled={true}
+              />
+
+              <BooleanFormField
+                small
+                noPadding
+                alignTop
+                name="is_admin"
+                label="Is Admin?"
+                subtext="If set, this API key will have access to admin level server API's."
               />
 
               <div className="flex">

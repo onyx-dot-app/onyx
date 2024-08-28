@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from danswer.dynamic_configs.interface import JSON_ro
 from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.interfaces import LLM
+from danswer.tools.custom.base_tool_types import ToolResultType
 from danswer.tools.custom.custom_tool_prompts import (
     SHOULD_USE_CUSTOM_TOOL_SYSTEM_PROMPT,
 )
@@ -34,7 +35,7 @@ CUSTOM_TOOL_RESPONSE_ID = "custom_tool_response"
 
 class CustomToolCallSummary(BaseModel):
     tool_name: str
-    tool_result: dict
+    tool_result: ToolResultType
 
 
 class CustomTool(Tool):

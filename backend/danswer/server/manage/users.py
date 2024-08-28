@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 from datetime import timezone
 
+from email_validator import validate_email
 from fastapi import APIRouter
 from fastapi import Body
 from fastapi import Depends
@@ -21,6 +22,7 @@ from danswer.auth.noauth_user import set_no_auth_user_preferences
 from danswer.auth.schemas import UserRole
 from danswer.auth.schemas import UserStatus
 from danswer.auth.users import current_admin_user
+from danswer.auth.users import current_curator_or_admin_user
 from danswer.auth.users import current_user
 from danswer.auth.users import optional_user
 from danswer.configs.app_configs import AUTH_TYPE
@@ -37,11 +39,13 @@ from danswer.server.manage.models import AllUsersResponse
 from danswer.server.manage.models import UserByEmail
 from danswer.server.manage.models import UserInfo
 from danswer.server.manage.models import UserRoleResponse
+from danswer.server.manage.models import UserRoleUpdateRequest
 from danswer.server.models import FullUserSnapshot
 from danswer.server.models import InvitedUserSnapshot
 from danswer.server.models import MinimalUserSnapshot
 from danswer.utils.logger import setup_logger
 from ee.danswer.db.api_key import is_api_key_email_address
+from ee.danswer.db.user_group import remove_curator_status__no_commit
 
 logger = setup_logger()
 
@@ -51,42 +55,38 @@ router = APIRouter()
 USERS_PAGE_SIZE = 10
 
 
-@router.patch("/manage/promote-user-to-admin")
-def promote_admin(
-    user_email: UserByEmail,
-    _: User = Depends(current_admin_user),
+@router.patch("/manage/set-user-role")
+def set_user_role(
+    user_role_update_request: UserRoleUpdateRequest,
+    current_user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_to_promote = get_user_by_email(
-        email=user_email.user_email, db_session=db_session
+    user_to_update = get_user_by_email(
+        email=user_role_update_request.user_email, db_session=db_session
     )
-    if not user_to_promote:
+    if not user_to_update:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user_to_promote.role = UserRole.ADMIN
-    db_session.add(user_to_promote)
-    db_session.commit()
-
-
-@router.patch("/manage/demote-admin-to-basic")
-async def demote_admin(
-    user_email: UserByEmail,
-    user: User = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),
-) -> None:
-    user_to_demote = get_user_by_email(
-        email=user_email.user_email, db_session=db_session
-    )
-    if not user_to_demote:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if user_to_demote.id == user.id:
+    if user_role_update_request.new_role == UserRole.CURATOR:
         raise HTTPException(
-            status_code=400, detail="Cannot demote yourself from admin role!"
+            status_code=400,
+            detail="Curator role must be set via the User Group Menu",
         )
 
-    user_to_demote.role = UserRole.BASIC
-    db_session.add(user_to_demote)
+    if user_to_update.role == user_role_update_request.new_role:
+        return
+
+    if current_user.id == user_to_update.id:
+        raise HTTPException(
+            status_code=400,
+            detail="An admin cannot demote themselves from admin role!",
+        )
+
+    if user_to_update.role == UserRole.CURATOR:
+        remove_curator_status__no_commit(db_session, user_to_update)
+
+    user_to_update.role = user_role_update_request.new_role.value
+
     db_session.commit()
 
 
@@ -95,7 +95,7 @@ def list_all_users(
     q: str | None = None,
     accepted_page: int | None = None,
     invited_page: int | None = None,
-    _: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> AllUsersResponse:
     if not q:
@@ -103,7 +103,7 @@ def list_all_users(
 
     users = [
         user
-        for user in list_users(db_session, q=q)
+        for user in list_users(db_session, email_filter_string=q, user=user)
         if not is_api_key_email_address(user.email)
     ]
     accepted_emails = {user.email for user in users}
@@ -159,12 +159,18 @@ def bulk_invite_users(
     emails: list[str] = Body(..., embed=True),
     current_user: User | None = Depends(current_admin_user),
 ) -> int:
+    """emails are string validated. If any email fails validation, no emails are
+    invited and an exception is raised."""
     if current_user is None:
         raise HTTPException(
             status_code=400, detail="Auth is disabled, cannot invite users"
         )
 
-    all_emails = list(set(emails) | set(get_invited_users()))
+    normalized_emails = []
+    for email in emails:
+        email_info = validate_email(email)  # can raise EmailNotValidError
+        normalized_emails.append(email_info.normalized)  # type: ignore
+    all_emails = list(set(normalized_emails) | set(get_invited_users()))
     return write_invited_users(all_emails)
 
 
@@ -314,6 +320,34 @@ def verify_user_logged_in(
 
 
 """APIs to adjust user preferences"""
+
+
+class ChosenDefaultModelRequest(BaseModel):
+    default_model: str | None
+
+
+@router.patch("/user/default-model")
+def update_user_default_model(
+    request: ChosenDefaultModelRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_dynamic_config_store()
+            no_auth_user = fetch_no_auth_user(store)
+            no_auth_user.preferences.default_model = request.default_model
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    db_session.execute(
+        update(User)
+        .where(User.id == user.id)  # type: ignore
+        .values(default_model=request.default_model)
+    )
+    db_session.commit()
 
 
 class ChosenAssistantsRequest(BaseModel):

@@ -29,14 +29,16 @@ def log_function_time(
             start_time = time.time()
             user = kwargs.get("user")
             result = func(*args, **kwargs)
-            elapsed_time_str = str(time.time() - start_time)
+            elapsed_time = time.time() - start_time
+            elapsed_time_str = f"{elapsed_time:.3f}"
             log_name = func_name or func.__name__
             args_str = f" args={args} kwargs={kwargs}" if include_args else ""
             final_log = f"{log_name}{args_str} took {elapsed_time_str} seconds"
             if debug_only:
                 logger.debug(final_log)
             else:
-                logger.info(final_log)
+                # These are generally more important logs so the level is a bit higher
+                logger.notice(final_log)
 
             if not print_only:
                 optional_telemetry(

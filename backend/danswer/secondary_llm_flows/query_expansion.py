@@ -50,11 +50,10 @@ def llm_multilingual_query_expansion(query: str, language: str) -> str:
 
 def multilingual_query_expansion(
     query: str,
-    expansion_languages: str,
+    expansion_languages: list[str],
     use_threads: bool = True,
 ) -> list[str]:
-    languages = expansion_languages.split(",")
-    languages = [language.strip() for language in languages]
+    languages = [language.strip() for language in expansion_languages]
     if use_threads:
         functions_with_args: list[tuple[Callable, tuple]] = [
             (llm_multilingual_query_expansion, (query, language))

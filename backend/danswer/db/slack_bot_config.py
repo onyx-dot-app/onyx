@@ -40,6 +40,7 @@ def create_slack_bot_persona(
     document_set_ids: list[int],
     existing_persona_id: int | None = None,
     num_chunks: float = MAX_CHUNKS_FED_TO_CHAT,
+    enable_auto_filters: bool = False,
 ) -> Persona:
     """NOTE: does not commit changes"""
 
@@ -53,7 +54,7 @@ def create_slack_bot_persona(
         description="",
         num_chunks=num_chunks,
         llm_relevance_filter=True,
-        llm_filter_extraction=False,
+        llm_filter_extraction=enable_auto_filters,
         recency_bias=RecencyBiasSetting.AUTO,
         prompt_ids=[default_prompt.id],
         document_set_ids=document_set_ids,

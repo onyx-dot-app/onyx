@@ -6,6 +6,15 @@ class IndexingStatus(str, PyEnum):
     IN_PROGRESS = "in_progress"
     SUCCESS = "success"
     FAILED = "failed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+
+    def is_terminal(self) -> bool:
+        terminal_states = {
+            IndexingStatus.SUCCESS,
+            IndexingStatus.COMPLETED_WITH_ERRORS,
+            IndexingStatus.FAILED,
+        }
+        return self in terminal_states
 
 
 # these may differ in the future, which is why we're okay with this duplication
@@ -33,3 +42,12 @@ class IndexModelStatus(str, PyEnum):
 class ChatSessionSharedStatus(str, PyEnum):
     PUBLIC = "public"
     PRIVATE = "private"
+
+
+class ConnectorCredentialPairStatus(str, PyEnum):
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    DELETING = "DELETING"
+
+    def is_active(self) -> bool:
+        return self == ConnectorCredentialPairStatus.ACTIVE

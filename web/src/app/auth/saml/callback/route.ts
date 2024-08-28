@@ -14,6 +14,16 @@ export const POST = async (request: NextRequest) => {
   const response = await fetch(url.toString(), {
     method: "POST",
     body: await request.formData(),
+    headers: {
+      "X-Forwarded-Host":
+        request.headers.get("X-Forwarded-Host") ||
+        request.headers.get("host") ||
+        "",
+      "X-Forwarded-Port":
+        request.headers.get("X-Forwarded-Port") ||
+        new URL(request.url).port ||
+        "",
+    },
   });
   const setCookieHeader = response.headers.get("set-cookie");
 

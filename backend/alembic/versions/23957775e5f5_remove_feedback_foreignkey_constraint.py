@@ -79,7 +79,7 @@ def downgrade() -> None:
     )
     op.create_foreign_key(
         "document_retrieval_feedback__chat_message_fk",
-        "document_retrieval",
+        "document_retrieval_feedback",
         "chat_message",
         ["chat_message_id"],
         ["id"],

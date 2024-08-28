@@ -215,7 +215,7 @@ def permission_loop(delay: int = 60, num_workers: int = NUM_PERMISSION_WORKERS) 
 
 
 def update__main() -> None:
-    logger.info("Starting Permission Syncing Loop")
+    logger.notice("Starting Permission Syncing Loop")
     init_sqlalchemy_engine(POSTGRES_PERMISSIONS_APP_NAME)
     permission_loop()
 

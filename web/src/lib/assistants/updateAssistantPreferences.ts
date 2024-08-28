@@ -1,4 +1,4 @@
-async function updateUserAssistantList(
+export async function updateUserAssistantList(
   chosenAssistants: number[]
 ): Promise<boolean> {
   const response = await fetch("/api/user/assistant-list", {

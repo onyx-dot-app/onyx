@@ -1,5 +1,6 @@
 from collections.abc import Callable
 
+from danswer.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
 from danswer.llm.interfaces import LLM
 from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
 from danswer.llm.utils import message_to_string
@@ -11,17 +12,33 @@ from danswer.utils.threadpool_concurrency import run_functions_tuples_in_paralle
 logger = setup_logger()
 
 
-def llm_eval_section(query: str, section_content: str, llm: LLM) -> bool:
+def llm_eval_section(
+    query: str,
+    section_content: str,
+    llm: LLM,
+    title: str,
+    metadata: dict[str, str | list[str]],
+) -> bool:
+    def _get_metadata_str(metadata: dict[str, str | list[str]]) -> str:
+        metadata_str = "\nMetadata:\n"
+        for key, value in metadata.items():
+            value_str = ", ".join(value) if isinstance(value, list) else value
+            metadata_str += f"{key} - {value_str}\n"
+        return metadata_str
+
     def _get_usefulness_messages() -> list[dict[str, str]]:
+        metadata_str = _get_metadata_str(metadata) if metadata else ""
         messages = [
             {
                 "role": "user",
                 "content": SECTION_FILTER_PROMPT.format(
-                    chunk_text=section_content, user_query=query
+                    title=title.replace("\n", " "),
+                    chunk_text=section_content,
+                    user_query=query,
+                    optional_metadata=metadata_str,
                 ),
             },
         ]
-
         return messages
 
     def _extract_usefulness(model_output: str) -> bool:
@@ -33,9 +50,6 @@ def llm_eval_section(query: str, section_content: str, llm: LLM) -> bool:
 
     messages = _get_usefulness_messages()
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-    # When running in a batch, it takes as long as the longest thread
-    # And when running a large batch, one may fail and take the whole timeout
-    # instead cap it to 5 seconds
     model_output = message_to_string(llm.invoke(filled_llm_prompt))
     logger.debug(model_output)
 
@@ -43,12 +57,25 @@ def llm_eval_section(query: str, section_content: str, llm: LLM) -> bool:
 
 
 def llm_batch_eval_sections(
-    query: str, section_contents: list[str], llm: LLM, use_threads: bool = True
+    query: str,
+    section_contents: list[str],
+    llm: LLM,
+    titles: list[str],
+    metadata_list: list[dict[str, str | list[str]]],
+    use_threads: bool = True,
 ) -> list[bool]:
+    if DISABLE_LLM_DOC_RELEVANCE:
+        raise RuntimeError(
+            "LLM Doc Relevance is globally disabled, "
+            "this should have been caught upstream."
+        )
+
     if use_threads:
         functions_with_args: list[tuple[Callable, tuple]] = [
-            (llm_eval_section, (query, section_content, llm))
-            for section_content in section_contents
+            (llm_eval_section, (query, section_content, llm, title, metadata))
+            for section_content, title, metadata in zip(
+                section_contents, titles, metadata_list
+            )
         ]
 
         logger.debug(
@@ -63,6 +90,8 @@ def llm_batch_eval_sections(
 
     else:
         return [
-            llm_eval_section(query, section_content, llm)
-            for section_content in section_contents
+            llm_eval_section(query, section_content, llm, title, metadata)
+            for section_content, title, metadata in zip(
+                section_contents, titles, metadata_list
+            )
         ]

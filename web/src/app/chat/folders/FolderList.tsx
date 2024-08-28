@@ -22,21 +22,20 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
 import { CHAT_SESSION_ID_KEY } from "@/lib/drag/constants";
 import Cookies from "js-cookie";
-import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
-import { Tooltip } from "@/components/tooltip/Tooltip";
 import { Popover } from "@/components/popover/Popover";
-
 const FolderItem = ({
   folder,
   currentChatId,
   isInitiallyExpanded,
+  initiallySelected,
 }: {
   folder: Folder;
   currentChatId?: number;
   isInitiallyExpanded: boolean;
+  initiallySelected: boolean;
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(isInitiallyExpanded);
-  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [isEditing, setIsEditing] = useState<boolean>(initiallySelected);
   const [editedFolderName, setEditedFolderName] = useState<string>(
     folder.folder_name
   );
@@ -82,10 +81,12 @@ const FolderItem = ({
     }
   };
 
-  const saveFolderName = async () => {
+  const saveFolderName = async (continueEditing?: boolean) => {
     try {
       await updateFolderName(folder.folder_id, editedFolderName);
-      setIsEditing(false);
+      if (!continueEditing) {
+        setIsEditing(false);
+      }
       router.refresh(); // Refresh values to update the sidebar
     } catch (error) {
       setPopup({ message: "Failed to save folder name", type: "error" });
@@ -133,6 +134,14 @@ const FolderItem = ({
     };
   }, []);
 
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (initiallySelected && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [initiallySelected]);
+
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragOver(false);
@@ -168,31 +177,6 @@ const FolderItem = ({
         isDragOver ? "bg-hover" : ""
       }`}
     >
-      {showDeleteConfirm && (
-        <div
-          ref={deleteConfirmRef}
-          className="absolute max-w-xs border z-[100] border-border-medium top-0 right-0 w-[250px] -bo-0 top-2 mt-4 p-2 bg-background-100 rounded shadow-lg z-10"
-        >
-          <p className="text-sm mb-2">
-            Are you sure you want to delete <i>{folder.folder_name}</i>? All the
-            content inside this folder will also be deleted
-          </p>
-          <div className="flex justify-end">
-            <button
-              onClick={confirmDelete}
-              className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs mr-2"
-            >
-              Yes
-            </button>
-            <button
-              onClick={cancelDelete}
-              className="bg-gray-300 hover:bg-gray-200 px-2 py-1 rounded text-xs"
-            >
-              No
-            </button>
-          </div>
-        </div>
-      )}
       <BasicSelectable fullWidth selected={false}>
         <div
           onMouseEnter={() => setIsHovering(true)}
@@ -212,10 +196,12 @@ const FolderItem = ({
               </div>
               {isEditing ? (
                 <input
+                  ref={inputRef}
                   type="text"
                   value={editedFolderName}
                   onChange={handleFolderNameChange}
                   onKeyDown={handleKeyDown}
+                  onBlur={() => saveFolderName(true)}
                   className="text-sm px-1 flex-1 min-w-0 -my-px mr-2"
                 />
               ) : (
@@ -232,27 +218,51 @@ const FolderItem = ({
                     <FiEdit2 size={16} />
                   </div>
                   <div className="relative">
-                    <div
-                      onClick={handleDeleteClick}
-                      className="hover:bg-black/10 p-1 -m-1 rounded ml-2"
-                    >
-                      <FiTrash size={16} />
-                    </div>
+                    <Popover
+                      open={showDeleteConfirm}
+                      onOpenChange={setShowDeleteConfirm}
+                      content={
+                        <div
+                          onClick={handleDeleteClick}
+                          className="hover:bg-black/10 p-1 -m-1 rounded ml-2"
+                        >
+                          <FiTrash size={16} />
+                        </div>
+                      }
+                      popover={
+                        <div className="p-2 w-[225px] bg-background-100 rounded shadow-lg">
+                          <p className="text-sm mb-2">
+                            Are you sure you want to delete{" "}
+                            <i>{folder.folder_name}</i>? All the content inside
+                            this folder will also be deleted.
+                          </p>
+                          <div className="flex justify-end">
+                            <button
+                              onClick={confirmDelete}
+                              className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs mr-2"
+                            >
+                              Yes
+                            </button>
+                            <button
+                              onClick={cancelDelete}
+                              className="bg-gray-300 hover:bg-gray-200 px-2 py-1 rounded text-xs"
+                            >
+                              No
+                            </button>
+                          </div>
+                        </div>
+                      }
+                      side="top"
+                      align="center"
+                    />
                   </div>
-
-                  {/* <div
-                    onClick={deleteFolderHandler}
-                    className="hover:bg-black/10 p-1 -m-1 rounded ml-2"
-                  >
-                    <FiTrash size={16} />
-                  </div> */}
                 </div>
               )}
 
               {isEditing && (
                 <div className="flex ml-auto my-auto">
                   <div
-                    onClick={saveFolderName}
+                    onClick={() => saveFolderName()}
                     className="hover:bg-black/10 p-1 -m-1 rounded"
                   >
                     <FiCheck size={16} />
@@ -289,27 +299,36 @@ export const FolderList = ({
   folders,
   currentChatId,
   openedFolders,
+  newFolderId,
 }: {
   folders: Folder[];
   currentChatId?: number;
   openedFolders?: { [key: number]: boolean };
+  newFolderId: number | null;
 }) => {
   if (folders.length === 0) {
     return null;
   }
 
   return (
-    <div className="mt-1 mb-1 overflow-y-auto">
+    <div className="mt-1 mb-1 overflow-visible">
       {folders.map((folder) => (
         <FolderItem
           key={folder.folder_id}
           folder={folder}
           currentChatId={currentChatId}
+          initiallySelected={newFolderId == folder.folder_id}
           isInitiallyExpanded={
             openedFolders ? openedFolders[folder.folder_id] || false : false
           }
         />
       ))}
+      {folders.length == 1 && folders[0].chat_sessions.length == 0 && (
+        <p className="text-sm font-normal text-subtle mt-2">
+          {" "}
+          Drag a chat into a folder to save for later{" "}
+        </p>
+      )}
     </div>
   );
 };

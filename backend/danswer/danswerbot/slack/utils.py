@@ -3,7 +3,6 @@ import random
 import re
 import string
 import time
-from collections.abc import MutableMapping
 from typing import Any
 from typing import cast
 from typing import Optional
@@ -25,7 +24,6 @@ from danswer.configs.danswerbot_configs import DANSWER_BOT_NUM_RETRIES
 from danswer.connectors.slack.utils import make_slack_api_rate_limited
 from danswer.connectors.slack.utils import SlackTextCleaner
 from danswer.danswerbot.slack.constants import FeedbackVisibility
-from danswer.danswerbot.slack.constants import SLACK_CHANNEL_ID
 from danswer.danswerbot.slack.tokens import fetch_tokens
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.users import get_user_by_email
@@ -108,20 +106,6 @@ def get_danswer_bot_app_id(web_client: WebClient) -> Any:
 def remove_danswer_bot_tag(message_str: str, client: WebClient) -> str:
     bot_tag_id = get_danswer_bot_app_id(web_client=client)
     return re.sub(rf"<@{bot_tag_id}>\s", "", message_str)
-
-
-class ChannelIdAdapter(logging.LoggerAdapter):
-    """This is used to add the channel ID to all log messages
-    emitted in this file"""
-
-    def process(
-        self, msg: str, kwargs: MutableMapping[str, Any]
-    ) -> tuple[str, MutableMapping[str, Any]]:
-        channel_id = self.extra.get(SLACK_CHANNEL_ID) if self.extra else None
-        if channel_id:
-            return f"[Channel ID: {channel_id}] {msg}", kwargs
-        else:
-            return msg, kwargs
 
 
 def get_web_client() -> WebClient:

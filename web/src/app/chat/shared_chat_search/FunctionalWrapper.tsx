@@ -28,7 +28,7 @@ const ToggleSwitch = () => {
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     localStorage.setItem("activeTab", tab);
-    if (settings?.isMobile) {
+    if (settings?.isMobile && window) {
       window.location.href = tab;
     } else {
       router.push(tab === "search" ? "/search" : "/chat");
@@ -77,12 +77,13 @@ const ToggleSwitch = () => {
 };
 
 export default function FunctionalWrapper({
-  // children,
   initiallyToggled,
   content,
 }: {
-  // children: React.ReactNode;
-  content: (toggledSidebar: boolean, toggle: () => void) => ReactNode;
+  content: (
+    toggledSidebar: boolean,
+    toggle: (toggled?: boolean) => void
+  ) => ReactNode;
   initiallyToggled: boolean;
 }) {
   const router = useRouter();
@@ -117,23 +118,26 @@ export default function FunctionalWrapper({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [router]);
-  const settings = useContext(SettingsContext)?.settings;
+  const combinedSettings = useContext(SettingsContext);
+  const settings = combinedSettings?.settings;
+  const chatBannerPresent =
+    combinedSettings?.enterpriseSettings?.custom_header_content;
 
   const [toggledSidebar, setToggledSidebar] = useState(initiallyToggled);
 
   const toggle = (value?: boolean) => {
-    if (value !== undefined) {
-      setToggledSidebar(value);
-    } else {
-      setToggledSidebar((prevState) => !prevState);
-    }
+    setToggledSidebar((toggledSidebar) =>
+      value !== undefined ? value : !toggledSidebar
+    );
   };
 
   return (
     <>
       {(!settings ||
         (settings.search_page_enabled && settings.chat_page_enabled)) && (
-        <div className="mobile:hidden z-30 flex fixed top-4 left-1/2 transform -translate-x-1/2">
+        <div
+          className={`mobile:hidden z-30 flex fixed ${chatBannerPresent ? "top-20" : "top-4"} left-1/2 transform -translate-x-1/2`}
+        >
           <div
             style={{ transition: "width 0.30s ease-out" }}
             className={`flex-none overflow-y-hidden bg-background-100 transition-all bg-opacity-80 duration-300 ease-in-out h-full

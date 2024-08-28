@@ -6,7 +6,6 @@ from langchain_core.messages import BaseMessage
 
 from danswer.chat.models import LlmDoc
 from danswer.configs.chat_configs import LANGUAGE_HINT
-from danswer.configs.chat_configs import MULTILINGUAL_QUERY_EXPANSION
 from danswer.configs.constants import DocumentSource
 from danswer.db.models import Prompt
 from danswer.llm.answering.models import PromptConfig
@@ -56,7 +55,7 @@ def add_date_time_to_prompt(prompt_str: str) -> str:
 
 def build_task_prompt_reminders(
     prompt: Prompt | PromptConfig,
-    use_language_hint: bool = bool(MULTILINGUAL_QUERY_EXPANSION),
+    use_language_hint: bool,
     citation_str: str = CITATION_REMINDER,
     language_hint_str: str = LANGUAGE_HINT,
 ) -> str:

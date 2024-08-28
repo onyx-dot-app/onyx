@@ -1,5 +1,8 @@
+import asyncio
 import io
 import uuid
+from collections.abc import Callable
+from collections.abc import Generator
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -129,7 +132,6 @@ def get_chat_session(
     db_session: Session = Depends(get_session),
 ) -> ChatSessionDetailResponse:
     user_id = user.id if user is not None else None
-
     try:
         chat_session = get_chat_session_by_id(
             chat_session_id=session_id,
@@ -208,8 +210,6 @@ def rename_chat_session(
     chat_session_id = rename_req.chat_session_id
     user_id = user.id if user is not None else None
 
-    logger.info(f"Received rename request for chat session: {chat_session_id}")
-
     if name:
         update_chat_session(
             db_session=db_session,
@@ -272,19 +272,39 @@ def delete_chat_session_by_id(
     delete_chat_session(user_id, session_id, db_session)
 
 
+async def is_disconnected(request: Request) -> Callable[[], bool]:
+    main_loop = asyncio.get_event_loop()
+
+    def is_disconnected_sync() -> bool:
+        future = asyncio.run_coroutine_threadsafe(request.is_disconnected(), main_loop)
+        try:
+            return not future.result(timeout=0.01)
+        except asyncio.TimeoutError:
+            logger.error("Asyncio timed out")
+            return True
+        except Exception as e:
+            error_msg = str(e)
+            logger.critical(
+                f"An unexpected error occured with the disconnect check coroutine: {error_msg}"
+            )
+            return True
+
+    return is_disconnected_sync
+
+
 @router.post("/send-message")
 def handle_new_chat_message(
     chat_message_req: CreateChatMessageRequest,
     request: Request,
     user: User | None = Depends(current_user),
     _: None = Depends(check_token_rate_limits),
+    is_disconnected_func: Callable[[], bool] = Depends(is_disconnected),
 ) -> StreamingResponse:
     """This endpoint is both used for all the following purposes:
     - Sending a new message in the session
     - Regenerating a message in the session (just send the same one again)
     - Editing a message (similar to regenerating but sending a different message)
     - Kicking off a seeded chat session (set `use_existing_user_message`)
-
     To avoid extra overhead/latency, this assumes (and checks) that previous messages on the path
     have already been set as latest"""
     logger.debug(f"Received new chat message: {chat_message_req.message}")
@@ -296,15 +316,26 @@ def handle_new_chat_message(
     ):
         raise HTTPException(status_code=400, detail="Empty chat message is invalid")
 
-    packets = stream_chat_message(
-        new_msg_req=chat_message_req,
-        user=user,
-        use_existing_user_message=chat_message_req.use_existing_user_message,
-        litellm_additional_headers=get_litellm_additional_request_headers(
-            request.headers
-        ),
-    )
-    return StreamingResponse(packets, media_type="application/json")
+    import json
+
+    def stream_generator() -> Generator[str, None, None]:
+        try:
+            for packet in stream_chat_message(
+                new_msg_req=chat_message_req,
+                user=user,
+                use_existing_user_message=chat_message_req.use_existing_user_message,
+                litellm_additional_headers=get_litellm_additional_request_headers(
+                    request.headers
+                ),
+                is_connected=is_disconnected_func,
+            ):
+                yield json.dumps(packet) if isinstance(packet, dict) else packet
+
+        except Exception as e:
+            logger.exception(f"Error in chat message streaming: {e}")
+            yield json.dumps({"error": str(e)})
+
+    return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 
 @router.put("/set-message-as-latest")

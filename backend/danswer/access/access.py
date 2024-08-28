@@ -5,19 +5,16 @@ from danswer.access.utils import prefix_user
 from danswer.configs.constants import PUBLIC_DOC_PAT
 from danswer.db.document import get_acccess_info_for_documents
 from danswer.db.models import User
-from danswer.server.documents.models import ConnectorCredentialPairIdentifier
 from danswer.utils.variable_functionality import fetch_versioned_implementation
 
 
 def _get_access_for_documents(
     document_ids: list[str],
     db_session: Session,
-    cc_pair_to_delete: ConnectorCredentialPairIdentifier | None = None,
 ) -> dict[str, DocumentAccess]:
     document_access_info = get_acccess_info_for_documents(
         db_session=db_session,
         document_ids=document_ids,
-        cc_pair_to_delete=cc_pair_to_delete,
     )
     return {
         document_id: DocumentAccess.build(user_ids, [], is_public)
@@ -28,14 +25,13 @@ def _get_access_for_documents(
 def get_access_for_documents(
     document_ids: list[str],
     db_session: Session,
-    cc_pair_to_delete: ConnectorCredentialPairIdentifier | None = None,
 ) -> dict[str, DocumentAccess]:
     """Fetches all access information for the given documents."""
     versioned_get_access_for_documents_fn = fetch_versioned_implementation(
         "danswer.access.access", "_get_access_for_documents"
     )
     return versioned_get_access_for_documents_fn(
-        document_ids, db_session, cc_pair_to_delete
+        document_ids, db_session
     )  # type: ignore
 
 

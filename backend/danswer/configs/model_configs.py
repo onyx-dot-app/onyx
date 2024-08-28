@@ -19,6 +19,8 @@ DOCUMENT_ENCODER_MODEL = (
 # If the below is changed, Vespa deployment must also be changed
 DOC_EMBEDDING_DIM = int(os.environ.get("DOC_EMBEDDING_DIM") or 768)
 # Model should be chosen with 512 context size, ideally don't change this
+# If multipass_indexing is enabled, the max context size would be set to
+# DOC_EMBEDDING_CONTEXT_SIZE * LARGE_CHUNK_RATIO
 DOC_EMBEDDING_CONTEXT_SIZE = 512
 NORMALIZE_EMBEDDINGS = (
     os.environ.get("NORMALIZE_EMBEDDINGS") or "true"
@@ -38,12 +40,11 @@ ASYM_QUERY_PREFIX = os.environ.get("ASYM_QUERY_PREFIX", "search_query: ")
 ASYM_PASSAGE_PREFIX = os.environ.get("ASYM_PASSAGE_PREFIX", "search_document: ")
 # Purely an optimization, memory limitation consideration
 BATCH_SIZE_ENCODE_CHUNKS = 8
+# don't send over too many chunks at once, as sending too many could cause timeouts
+BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES = 512
 # For score display purposes, only way is to know the expected ranges
 CROSS_ENCODER_RANGE_MAX = 1
 CROSS_ENCODER_RANGE_MIN = 0
-
-# Unused currently, can't be used with the current default encoder model due to its output range
-SEARCH_DISTANCE_CUTOFF = 0
 
 
 #####
@@ -81,6 +82,9 @@ GEN_AI_LLM_PROVIDER_TYPE = os.environ.get("GEN_AI_LLM_PROVIDER_TYPE") or None
 GEN_AI_MAX_TOKENS = int(os.environ.get("GEN_AI_MAX_TOKENS") or 0) or None
 # Set this to be enough for an answer + quotes. Also used for Chat
 GEN_AI_MAX_OUTPUT_TOKENS = int(os.environ.get("GEN_AI_MAX_OUTPUT_TOKENS") or 1024)
+
+# Typically, GenAI models nowadays are at least 4K tokens
+GEN_AI_MODEL_DEFAULT_MAX_TOKENS = 4096
 # Number of tokens from chat history to include at maximum
 # 3000 should be enough context regardless of use, no need to include as much as possible
 # as this drives up the cost unnecessarily

@@ -5,12 +5,15 @@
 USEFUL_PAT = "Yes useful"
 NONUSEFUL_PAT = "Not useful"
 SECTION_FILTER_PROMPT = f"""
-Determine if the reference section is USEFUL for answering the user query.
+Determine if the following section is USEFUL for answering the user query.
 It is NOT enough for the section to be related to the query, \
 it must contain information that is USEFUL for answering the query.
 If the section contains ANY useful information, that is good enough, \
 it does not need to fully answer the every part of the user query.
 
+
+Title: {{title}}
+{{optional_metadata}}
 Reference Section:
 ```
 {{chunk_text}}

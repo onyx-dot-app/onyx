@@ -46,6 +46,6 @@ spec:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
           env:
-            - name: ENABLE_MINI_CHUNK
+            - name: ENABLE_MULTIPASS_INDEXING
               value: "{{ .Values.background.enableMiniChunk }}"
             {{- include "danswer-stack.envSecrets" . | nindent 12}}

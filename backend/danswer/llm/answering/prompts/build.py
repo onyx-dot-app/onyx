@@ -56,7 +56,9 @@ class AnswerPromptBuilder:
     def __init__(
         self, message_history: list[PreviousMessage], llm_config: LLMConfig
     ) -> None:
+#        import pdb; pdb.set_trace()
         self.max_tokens = compute_max_llm_input_tokens(llm_config)
+#        import pdb; pdb.set_trace()
 
         (
             self.message_history,

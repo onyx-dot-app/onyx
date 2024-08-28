@@ -190,7 +190,7 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
                 except Exception:
                     logger.error("Unable to decrypt pdf")
             else:
-                logger.info("No Password available to to decrypt pdf")
+                logger.warning("No Password available to to decrypt pdf")
 
             if not decrypt_success:
                 # By user request, keep files that are unreadable just so they

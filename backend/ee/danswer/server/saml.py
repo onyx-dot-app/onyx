@@ -50,7 +50,7 @@ async def upsert_saml_user(email: str) -> User:
                 try:
                     return await user_manager.get_by_email(email)
                 except exceptions.UserNotExists:
-                    logger.info("Creating user from SAML login")
+                    logger.notice("Creating user from SAML login")
 
                 user_count = await get_user_count()
                 role = UserRole.ADMIN if user_count == 0 else UserRole.BASIC
@@ -76,9 +76,13 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
     if request.client is None:
         raise ValueError("Invalid request for SAML")
 
+    # Use X-Forwarded headers if available
+    http_host = request.headers.get("X-Forwarded-Host") or request.client.host
+    server_port = request.headers.get("X-Forwarded-Port") or request.url.port
+
     rv: dict[str, Any] = {
-        "http_host": request.client.host,
-        "server_port": request.url.port,
+        "http_host": http_host,
+        "server_port": server_port,
         "script_name": request.url.path,
         "post_data": {},
         "get_data": {},
@@ -126,16 +130,20 @@ async def saml_login_callback(
         )
 
     if not auth.is_authenticated():
+        detail = "Access denied. User was not authenticated"
+        logger.error(detail)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. User was not Authenticated.",
+            detail=detail,
         )
 
     user_email = auth.get_attribute("email")
     if not user_email:
+        detail = "SAML is not set up correctly, email attribute must be provided."
+        logger.error(detail)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="SAML is not set up correctly, email attribute must be provided.",
+            detail=detail,
         )
 
     user_email = user_email[0]

@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { FeedbackType } from "../types";
 import { FiThumbsDown, FiThumbsUp } from "react-icons/fi";
-import { ModalWrapper } from "./ModalWrapper";
+import { ModalWrapper } from "@/components/modals/ModalWrapper";
 import {
   DislikeFeedbackIcon,
+  FilledLikeIcon,
   LikeFeedbackIcon,
 } from "@/components/icons/icons";
 
@@ -53,19 +54,19 @@ export const FeedbackModal = ({
       : predefinedNegativeFeedbackOptions;
 
   return (
-    <ModalWrapper onClose={onClose} modalClassName="max-w-5xl">
+    <ModalWrapper onClose={onClose} modalClassName="max-w-3xl">
       <>
         <h2 className="text-2xl text-emphasis font-bold mb-4 flex">
           <div className="mr-1 my-auto">
             {feedbackType === "like" ? (
-              <LikeFeedbackIcon
+              <FilledLikeIcon
                 size={20}
                 className="text-green-500 my-auto mr-2"
               />
             ) : (
-              <DislikeFeedbackIcon
+              <FilledLikeIcon
                 size={20}
-                className="text-red-600 my-auto mr-2"
+                className="rotate-180 text-red-600 my-auto mr-2"
               />
             )}
           </div>

@@ -9,7 +9,9 @@ from danswer.chat.models import DanswerContexts
 from danswer.chat.models import DanswerQuotes
 from danswer.chat.models import QADocsResponse
 from danswer.configs.constants import MessageType
+from danswer.search.enums import LLMEvaluationType
 from danswer.search.models import ChunkContext
+from danswer.search.models import RerankingDetails
 from danswer.search.models import RetrievalDetails
 
 
@@ -27,11 +29,11 @@ class DirectQARequest(ChunkContext):
     messages: list[ThreadMessage]
     prompt_id: int | None
     persona_id: int
-    agentic: bool | None = None
+    multilingual_query_expansion: list[str] | None = None
     retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
-    # This is to forcibly skip (or run) the step, if None it uses the system defaults
-    skip_rerank: bool | None = None
-    skip_llm_chunk_filter: bool | None = None
+    rerank_settings: RerankingDetails | None = None
+    evaluation_type: LLMEvaluationType = LLMEvaluationType.UNSPECIFIED
+
     chain_of_thought: bool = False
     return_contexts: bool = False
 
@@ -39,11 +41,6 @@ class DirectQARequest(ChunkContext):
     # can be used if the message sent to the LLM / query should not be the same
     # will also disable Thread-based Rewording if specified
     query_override: str | None = None
-
-    # This is to toggle agentic evaluation:
-    # 1. Evaluates whether each response is relevant or not
-    # 2. Provides a summary of the document's relevance in the resulsts
-    llm_doc_eval: bool = False
 
     # If True, skips generative an AI response to the search query
     skip_gen_ai_answer_generation: bool = False

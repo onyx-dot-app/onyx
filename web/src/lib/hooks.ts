@@ -6,7 +6,7 @@ import {
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DateRangePickerValue } from "@tremor/react";
 import { SourceMetadata } from "./search/interfaces";
 import { destructureValue } from "./llm/utils";
@@ -65,18 +65,20 @@ export const useObjectState = <T>(
 const INDEXING_STATUS_URL = "/api/manage/admin/connector/indexing-status";
 
 export const useConnectorCredentialIndexingStatus = (
-  refreshInterval = 30000 // 30 seconds
+  refreshInterval = 30000, // 30 seconds
+  getEditable = false
 ) => {
   const { mutate } = useSWRConfig();
+  const url = `${INDEXING_STATUS_URL}${getEditable ? "?get_editable=true" : ""}`;
   const swrResponse = useSWR<ConnectorIndexingStatus<any, any>[]>(
-    INDEXING_STATUS_URL,
+    url,
     errorHandlingFetcher,
     { refreshInterval: refreshInterval }
   );
 
   return {
     ...swrResponse,
-    refreshIndexingStatus: () => mutate(INDEXING_STATUS_URL),
+    refreshIndexingStatus: () => mutate(url),
   };
 };
 
@@ -137,14 +139,27 @@ export interface LlmOverride {
 export interface LlmOverrideManager {
   llmOverride: LlmOverride;
   setLlmOverride: React.Dispatch<React.SetStateAction<LlmOverride>>;
+  globalDefault: LlmOverride;
+  setGlobalDefault: React.Dispatch<React.SetStateAction<LlmOverride>>;
   temperature: number | null;
   setTemperature: React.Dispatch<React.SetStateAction<number | null>>;
   updateModelOverrideForChatSession: (chatSession?: ChatSession) => void;
 }
-
 export function useLlmOverride(
-  currentChatSession?: ChatSession
+  globalModel?: string | null,
+  currentChatSession?: ChatSession,
+  defaultTemperature?: number
 ): LlmOverrideManager {
+  const [globalDefault, setGlobalDefault] = useState<LlmOverride>(
+    globalModel
+      ? destructureValue(globalModel)
+      : {
+          name: "",
+          provider: "",
+          modelName: "",
+        }
+  );
+
   const [llmOverride, setLlmOverride] = useState<LlmOverride>(
     currentChatSession && currentChatSession.current_alternate_model
       ? destructureValue(currentChatSession.current_alternate_model)
@@ -159,25 +174,28 @@ export function useLlmOverride(
     setLlmOverride(
       chatSession && chatSession.current_alternate_model
         ? destructureValue(chatSession.current_alternate_model)
-        : {
-            name: "",
-            provider: "",
-            modelName: "",
-          }
+        : globalDefault
     );
   };
 
-  const [temperature, setTemperature] = useState<number | null>(null);
+  const [temperature, setTemperature] = useState<number | null>(
+    defaultTemperature != undefined ? defaultTemperature : 0
+  );
+
+  useEffect(() => {
+    setTemperature(defaultTemperature !== undefined ? defaultTemperature : 0);
+  }, [defaultTemperature]);
 
   return {
     updateModelOverrideForChatSession,
     llmOverride,
     setLlmOverride,
+    globalDefault,
+    setGlobalDefault,
     temperature,
     setTemperature,
   };
 }
-
 /* 
 EE Only APIs
 */
@@ -214,6 +232,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   // OpenAI models
   "gpt-4": "GPT 4",
   "gpt-4o": "GPT 4o",
+  "gpt-4o-2024-08-06": "GPT 4o (Structured Outputs)",
   "gpt-4o-mini": "GPT 4o Mini",
   "gpt-4-0314": "GPT 4 (March 2023)",
   "gpt-4-0613": "GPT 4 (June 2023)",

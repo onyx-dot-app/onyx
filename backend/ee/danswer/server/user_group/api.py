@@ -5,12 +5,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_admin_user
+from danswer.auth.users import current_curator_or_admin_user
 from danswer.db.engine import get_session
 from danswer.db.models import User
+from danswer.db.models import UserRole
 from ee.danswer.db.user_group import fetch_user_groups
+from ee.danswer.db.user_group import fetch_user_groups_for_user
 from ee.danswer.db.user_group import insert_user_group
 from ee.danswer.db.user_group import prepare_user_group_for_deletion
+from ee.danswer.db.user_group import update_user_curator_relationship
 from ee.danswer.db.user_group import update_user_group
+from ee.danswer.server.user_group.models import SetCuratorRequest
 from ee.danswer.server.user_group.models import UserGroup
 from ee.danswer.server.user_group.models import UserGroupCreate
 from ee.danswer.server.user_group.models import UserGroupUpdate
@@ -20,10 +25,17 @@ router = APIRouter(prefix="/manage")
 
 @router.get("/admin/user-group")
 def list_user_groups(
-    _: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
-    user_groups = fetch_user_groups(db_session, only_current=False)
+    if user is None or user.role == UserRole.ADMIN:
+        user_groups = fetch_user_groups(db_session, only_current=False)
+    else:
+        user_groups = fetch_user_groups_for_user(
+            db_session=db_session,
+            user_id=user.id,
+            only_curator_groups=user.role == UserRole.CURATOR,
+        )
     return [UserGroup.from_model(user_group) for user_group in user_groups]
 
 
@@ -47,13 +59,35 @@ def create_user_group(
 @router.patch("/admin/user-group/{user_group_id}")
 def patch_user_group(
     user_group_id: int,
-    user_group: UserGroupUpdate,
-    _: User | None = Depends(current_admin_user),
+    user_group_update: UserGroupUpdate,
+    user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
         return UserGroup.from_model(
-            update_user_group(db_session, user_group_id, user_group)
+            update_user_group(
+                db_session=db_session,
+                user=user,
+                user_group_id=user_group_id,
+                user_group_update=user_group_update,
+            )
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/admin/user-group/{user_group_id}/set-curator")
+def set_user_curator(
+    user_group_id: int,
+    set_curator_request: SetCuratorRequest,
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    try:
+        update_user_curator_relationship(
+            db_session=db_session,
+            user_group_id=user_group_id,
+            set_curator_request=set_curator_request,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

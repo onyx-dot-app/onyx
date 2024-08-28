@@ -1,5 +1,6 @@
 import json
 from collections.abc import Generator
+from enum import Enum
 from typing import Any
 from typing import cast
 
@@ -19,6 +20,7 @@ from danswer.tools.tool import Tool
 from danswer.tools.tool import ToolResponse
 from danswer.utils.logger import setup_logger
 from danswer.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+
 
 logger = setup_logger()
 
@@ -52,6 +54,12 @@ Follow Up Input:
 class ImageGenerationResponse(BaseModel):
     revised_prompt: str
     url: str
+
+
+class ImageShape(str, Enum):
+    SQUARE = "square"
+    PORTRAIT = "portrait"
+    LANDSCAPE = "landscape"
 
 
 class ImageGenerationTool(Tool):
@@ -101,6 +109,11 @@ class ImageGenerationTool(Tool):
                         "prompt": {
                             "type": "string",
                             "description": "Prompt used to generate the image",
+                        },
+                        "shape": {
+                            "type": "string",
+                            "description": "Optional. Image shape: 'square', 'portrait', or 'landscape'",
+                            "enum": [shape.value for shape in ImageShape],
                         },
                     },
                     "required": ["prompt"],
@@ -161,31 +174,74 @@ class ImageGenerationTool(Tool):
             # img_urls=[image_generation.url for image_generation in image_generations],
         )
 
-    def _generate_image(self, prompt: str) -> ImageGenerationResponse:
-        response = image_generation(
-            prompt=prompt,
-            model=self.model,
-            api_key=self.api_key,
-            # need to pass in None rather than empty str
-            api_base=self.api_base or None,
-            api_version=self.api_version or None,
-            n=1,
-            extra_headers=build_llm_extra_headers(self.additional_headers),
-        )
-        return ImageGenerationResponse(
-            revised_prompt=response.data[0]["revised_prompt"],
-            url=response.data[0]["url"],
-        )
+    def _generate_image(
+        self, prompt: str, shape: ImageShape
+    ) -> ImageGenerationResponse:
+        if shape == ImageShape.LANDSCAPE:
+            size = "1792x1024"
+        elif shape == ImageShape.PORTRAIT:
+            size = "1024x1792"
+        else:
+            size = "1024x1024"
+
+        try:
+            response = image_generation(
+                prompt=prompt,
+                model=self.model,
+                api_key=self.api_key,
+                # need to pass in None rather than empty str
+                api_base=self.api_base or None,
+                api_version=self.api_version or None,
+                size=size,
+                n=1,
+                extra_headers=build_llm_extra_headers(self.additional_headers),
+            )
+            return ImageGenerationResponse(
+                revised_prompt=response.data[0]["revised_prompt"],
+                url=response.data[0]["url"],
+            )
+        except Exception as e:
+            logger.debug(f"Error occured during image generation: {e}")
+
+            error_message = str(e)
+            if "OpenAIException" in str(type(e)):
+                if (
+                    "Your request was rejected as a result of our safety system"
+                    in error_message
+                ):
+                    raise ValueError(
+                        "The image generation request was rejected due to OpenAI's content policy. Please try a different prompt."
+                    )
+                elif "Invalid image URL" in error_message:
+                    raise ValueError("Invalid image URL provided for image generation.")
+                elif "invalid_request_error" in error_message:
+                    raise ValueError(
+                        "Invalid request for image generation. Please check your input."
+                    )
+
+            raise ValueError(
+                "An error occurred during image generation. Please try again later."
+            )
 
     def run(self, **kwargs: str) -> Generator[ToolResponse, None, None]:
         prompt = cast(str, kwargs["prompt"])
+        shape = ImageShape(kwargs.get("shape", ImageShape.SQUARE))
 
         # dalle3 only supports 1 image at a time, which is why we have to
         # parallelize this via threading
         results = cast(
             list[ImageGenerationResponse],
             run_functions_tuples_in_parallel(
-                [(self._generate_image, (prompt,)) for _ in range(self.num_imgs)]
+                [
+                    (
+                        self._generate_image,
+                        (
+                            prompt,
+                            shape,
+                        ),
+                    )
+                    for _ in range(self.num_imgs)
+                ]
             ),
         )
         yield ToolResponse(

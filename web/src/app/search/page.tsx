@@ -1,6 +1,3 @@
-import { SearchSection } from "@/components/search/SearchSection";
-import { Header } from "@/components/header/Header";
-import { Footer } from "@/components/Footer";
 import {
   AuthTypeMetadata,
   getAuthTypeMetadataSS,
@@ -22,7 +19,7 @@ import {
 import { unstable_noStore as noStore } from "next/cache";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { personaComparator } from "../admin/assistants/lib";
-import { FullEmbeddingModelResponse } from "../admin/models/embedding/components/types";
+import { FullEmbeddingModelResponse } from "@/components/embedding/interfaces";
 import { NoSourcesModal } from "@/components/initialSetup/search/NoSourcesModal";
 import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
 import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
@@ -33,14 +30,12 @@ import {
   FetchAssistantsResponse,
   fetchAssistantsSS,
 } from "@/lib/assistants/fetchAssistantsSS";
-import FunctionalWrapper from "../chat/shared_chat_search/FunctionalWrapper";
 import { ChatSession } from "../chat/interfaces";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
-import ToggleSearch from "./WrappedSearch";
 import {
   AGENTIC_SEARCH_TYPE_COOKIE_NAME,
   NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN,
-  DISABLE_AGENTIC_SEARCH,
+  DISABLE_LLM_DOC_RELEVANCE,
 } from "@/lib/constants";
 import WrappedSearch from "./WrappedSearch";
 
@@ -57,7 +52,7 @@ export default async function Home() {
     fetchSS("/manage/document-set"),
     fetchAssistantsSS(),
     fetchSS("/query/valid-tags"),
-    fetchSS("/secondary-index/get-embedding-models"),
+    fetchSS("/search-settings/get-embedding-models"),
     fetchSS("/query/user-searches"),
   ];
 
@@ -89,7 +84,6 @@ export default async function Home() {
   const config = await fetchEEASettings();
   
   const {
-    footerHtml,
     disclaimerTitle,
     disclaimerText
   } = config;
@@ -202,6 +196,7 @@ export default async function Home() {
     <>
       <HealthCheckBanner secondsUntilExpiration={secondsUntilExpiration} />
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
+      <InstantSSRAutoRefresh />
 
       {!shouldShowWelcomeModal &&
         !shouldDisplayNoSourcesModal &&
@@ -218,9 +213,8 @@ export default async function Home() {
       <ChatPopup />
 
       <UserDisclaimerModal disclaimerText={disclaimerText} disclaimerTitle={disclaimerTitle}/>
-      <InstantSSRAutoRefresh />
       <WrappedSearch
-        disabledAgentic={DISABLE_AGENTIC_SEARCH}
+        disabledAgentic={DISABLE_LLM_DOC_RELEVANCE}
         initiallyToggled={toggleSidebar}
         querySessions={querySessions}
         user={user}
@@ -230,7 +224,6 @@ export default async function Home() {
         tags={tags}
         searchTypeDefault={searchTypeDefault}
         agenticSearchEnabled={agenticSearchEnabled}
-        footerHtml={footerHtml}
       />
     </>
   );

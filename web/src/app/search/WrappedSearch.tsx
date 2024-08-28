@@ -16,7 +16,6 @@ export default function WrappedSearch({
   agenticSearchEnabled,
   initiallyToggled,
   disabledAgentic,
-  footerHtml,
 }: {
   disabledAgentic: boolean;
   querySessions: ChatSession[];
@@ -28,7 +27,6 @@ export default function WrappedSearch({
   user: User | null;
   agenticSearchEnabled: boolean;
   initiallyToggled: boolean;
-  footerHtml?: any;
 }) {
   return (
     <FunctionalWrapper
@@ -46,7 +44,6 @@ export default function WrappedSearch({
           personas={personas}
           tags={tags}
           defaultSearchType={searchTypeDefault}
-          footerHtml={footerHtml}
         />
       )}
     />

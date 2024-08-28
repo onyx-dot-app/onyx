@@ -21,7 +21,7 @@ logger = setup_logger()
 
 
 def save_postgres(filename: str, container_name: str) -> None:
-    logger.info("Attempting to take Postgres snapshot")
+    logger.notice("Attempting to take Postgres snapshot")
     cmd = f"docker exec {container_name} pg_dump -U {POSTGRES_USER} -h {POSTGRES_HOST} -p {POSTGRES_PORT} -W -F t {POSTGRES_DB}"
     with open(filename, "w") as file:
         subprocess.run(
@@ -35,7 +35,7 @@ def save_postgres(filename: str, container_name: str) -> None:
 
 
 def load_postgres(filename: str, container_name: str) -> None:
-    logger.info("Attempting to load Postgres snapshot")
+    logger.notice("Attempting to load Postgres snapshot")
     try:
         alembic_cfg = Config("alembic.ini")
         command.upgrade(alembic_cfg, "head")
@@ -57,7 +57,7 @@ def load_postgres(filename: str, container_name: str) -> None:
 
 
 def save_vespa(filename: str) -> None:
-    logger.info("Attempting to take Vespa snapshot")
+    logger.notice("Attempting to take Vespa snapshot")
     continuation = ""
     params = {}
     doc_jsons: list[dict] = []

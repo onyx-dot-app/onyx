@@ -1,4 +1,4 @@
-import { LLMProviderDescriptor } from "@/app/admin/models/llm/interfaces";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { fetchSS } from "../utilsSS";
 
 export async function fetchLLMProvidersSS() {

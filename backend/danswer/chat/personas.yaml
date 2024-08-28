@@ -5,7 +5,7 @@ personas:
   # this is for DanswerBot to use when tagged in a non-configured channel
   # Careful setting specific IDs, this won't autoincrement the next ID value for postgres
   - id: 0
-    name: "Danswer"
+    name: "Knowledge"
     description: >
       Assistant with access to documents from your Connected Sources.
     # Default Prompt objects attached to the persona, see prompts.yaml
@@ -17,7 +17,7 @@ personas:
     num_chunks: 10
     # Enable/Disable usage of the LLM chunk filter feature whereby each chunk is passed to the LLM to determine
     # if the chunk is useful or not towards the latest user query
-    # This feature can be overriden for all personas via DISABLE_LLM_CHUNK_FILTER env variable
+    # This feature can be overriden for all personas via DISABLE_LLM_DOC_RELEVANCE env variable
     llm_relevance_filter: true
     # Enable/Disable usage of the LLM to extract query time filters including source type and time range filters
     llm_filter_extraction: true
@@ -39,11 +39,13 @@ personas:
     document_sets: []
     icon_shape: 23013
     icon_color: "#6FB1FF"
+    display_priority: 1
+    is_visible: true
 
   - id: 1
-    name: "GPT"
+    name: "General"
     description: >
-      Assistant with no access to documents. Chat with just the Language Model.
+      Assistant with no access to documents. Chat with just the Large Language Model.
     prompts:
       - "OnlyLLM"
     num_chunks: 0
@@ -53,7 +55,8 @@ personas:
     document_sets: []
     icon_shape: 50910
     icon_color: "#FF6F6F"
-
+    display_priority: 0
+    is_visible: true
 
   - id: 2
     name: "Paraphrase"
@@ -68,4 +71,23 @@ personas:
     document_sets: []
     icon_shape: 45519
     icon_color: "#6FFF8D"
+    display_priority: 2
+    is_visible: false
 
+
+  - id: 3
+    name: "Art"
+    description: >
+      Assistant for generating images based on descriptions.
+    prompts:
+      - "ImageGeneration"
+    num_chunks: 0
+    llm_relevance_filter: false
+    llm_filter_extraction: false
+    recency_bias: "no_decay"
+    document_sets: []
+    icon_shape: 234124 
+    icon_color: "#9B59B6"
+    image_generation: true 
+    display_priority: 3
+    is_visible: true

@@ -41,6 +41,12 @@ def _initializer(
     return func(*args, **kwargs)
 
 
+def _run_in_process(
+    func: Callable, args: list | tuple, kwargs: dict[str, Any] | None = None
+) -> None:
+    _initializer(func, args, kwargs)
+
+
 @dataclass
 class SimpleJob:
     """Drop in replacement for `dask.distributed.Future`"""
@@ -113,7 +119,7 @@ class SimpleJobClient:
         job_id = self.job_id_counter
         self.job_id_counter += 1
 
-        process = Process(target=_initializer(func=func, args=args), daemon=True)
+        process = Process(target=_run_in_process, args=(func, args), daemon=True)
         job = SimpleJob(id=job_id, process=process)
         process.start()
 

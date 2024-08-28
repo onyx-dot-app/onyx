@@ -52,6 +52,7 @@ export const DocumentSidebar = forwardRef<HTMLDivElement, DocumentSidebarProps>(
 
     return (
       <div
+        id="danswer-chat-sidebar"
         className={`fixed inset-0 transition-opacity duration-300 z-50 bg-black/80 ${isOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
         onClick={(e) => {
           if (e.target === e.currentTarget) {
@@ -87,43 +88,40 @@ export const DocumentSidebar = forwardRef<HTMLDivElement, DocumentSidebarProps>(
 
             {currentDocuments ? (
               <div className="overflow-y-auto flex-grow dark-scrollbar flex relative flex-col">
-                <div>
-                  {dedupedDocuments.length > 0 ? (
-                    dedupedDocuments.map((document, ind) => (
-                      <div
-                        key={document.document_id}
-                        className={`${
-                          ind === dedupedDocuments.length - 1
-                            ? "mb-5"
-                            : "border-b  border-border-light mb-3"
-                        }`}
-                      >
-                        <ChatDocumentDisplay
-                          document={document}
-                          setPopup={setPopup}
-                          queryEventId={null}
-                          isAIPick={false}
-                          isSelected={selectedDocumentIds.includes(
-                            document.document_id
-                          )}
-                          handleSelect={(documentId) => {
-                            toggleDocumentSelection(
-                              dedupedDocuments.find(
-                                (document) =>
-                                  document.document_id === documentId
-                              )!
-                            );
-                          }}
-                          tokenLimitReached={tokenLimitReached}
-                        />
-                      </div>
-                    ))
-                  ) : (
-                    <div className="mx-3">
-                      <Text>No documents found for the query.</Text>
+                {dedupedDocuments.length > 0 ? (
+                  dedupedDocuments.map((document, ind) => (
+                    <div
+                      key={document.document_id}
+                      className={`${
+                        ind === dedupedDocuments.length - 1
+                          ? "mb-5"
+                          : "border-b border-border-light mb-3"
+                      }`}
+                    >
+                      <ChatDocumentDisplay
+                        document={document}
+                        setPopup={setPopup}
+                        queryEventId={null}
+                        isAIPick={false}
+                        isSelected={selectedDocumentIds.includes(
+                          document.document_id
+                        )}
+                        handleSelect={(documentId) => {
+                          toggleDocumentSelection(
+                            dedupedDocuments.find(
+                              (document) => document.document_id === documentId
+                            )!
+                          );
+                        }}
+                        tokenLimitReached={tokenLimitReached}
+                      />
                     </div>
-                  )}
-                </div>
+                  ))
+                ) : (
+                  <div className="mx-3">
+                    <Text>No documents found for the query.</Text>
+                  </div>
+                )}
               </div>
             ) : (
               !isLoading && (

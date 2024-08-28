@@ -1,8 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { IconType } from "react-icons";
-import { DefaultDropdownElement } from "../../../components/Dropdown";
-import { Popover } from "../../../components/popover/Popover";
-import { IconProps } from "@/components/icons/icons";
+import { ChevronRightIcon, IconProps } from "@/components/icons/icons";
 
 interface ChatInputOptionProps {
   name?: string;
@@ -10,8 +7,8 @@ interface ChatInputOptionProps {
   onClick?: () => void;
   size?: number;
   tooltipContent?: React.ReactNode;
-  options?: { name: string; value: number; onClick?: () => void }[];
   flexPriority?: "shrink" | "stiff" | "second";
+  toggle?: boolean;
 }
 
 export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
@@ -19,9 +16,9 @@ export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
   Icon,
   // icon: Icon,
   size = 16,
-  options,
   flexPriority,
   tooltipContent,
+  toggle,
   onClick,
 }) => {
   const [isDropupVisible, setDropupVisible] = useState(false);
@@ -76,7 +73,11 @@ export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
       onClick={onClick}
     >
       <Icon size={size} className="flex-none" />
-      {name && <span className="text-sm break-all line-clamp-1">{name}</span>}
+      <div className="flex items-center gap-x-.5">
+        {name && <span className="text-sm break-all line-clamp-1">{name}</span>}
+        {toggle && <ChevronRightIcon className="flex-none" size={size} />}
+      </div>
+
       {isTooltipVisible && tooltipContent && (
         <div
           className="absolute z-10 p-2 text-sm text-white bg-black rounded shadow-lg"

@@ -5,6 +5,7 @@ from fastapi import Request
 from passlib.hash import sha256_crypt
 from pydantic import BaseModel
 
+from danswer.auth.schemas import UserRole
 from ee.danswer.configs.app_configs import API_KEY_HASH_ROUNDS
 
 
@@ -19,6 +20,7 @@ class ApiKeyDescriptor(BaseModel):
     api_key_display: str
     api_key: str | None = None  # only present on initial creation
     api_key_name: str | None = None
+    api_key_role: UserRole
 
     user_id: uuid.UUID
 

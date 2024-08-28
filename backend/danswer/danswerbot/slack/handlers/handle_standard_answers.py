@@ -1,5 +1,3 @@
-import logging
-
 from slack_sdk import WebClient
 from sqlalchemy.orm import Session
 
@@ -21,6 +19,7 @@ from danswer.db.models import SlackBotConfig
 from danswer.db.standard_answer import fetch_standard_answer_categories_by_names
 from danswer.db.standard_answer import find_matching_standard_answers
 from danswer.server.manage.models import StandardAnswer
+from danswer.utils.logger import DanswerLoggingAdapter
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -61,7 +60,7 @@ def handle_standard_answers(
     receiver_ids: list[str] | None,
     slack_bot_config: SlackBotConfig | None,
     prompt: Prompt | None,
-    logger: logging.Logger,
+    logger: DanswerLoggingAdapter,
     client: WebClient,
     db_session: Session,
 ) -> bool:

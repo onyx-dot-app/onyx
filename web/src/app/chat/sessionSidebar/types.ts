@@ -1,1 +1,1 @@
-export type pageType = "search" | "chat" | "assistants" | "admin";
+export type pageType = "search" | "chat" | "assistants" | "admin" | "shared";

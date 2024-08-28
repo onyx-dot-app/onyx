@@ -3,13 +3,10 @@ import { unstable_noStore as noStore } from "next/cache";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
-import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
 import { ChatProvider } from "@/components/context/ChatContext";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
-import FunctionalWrapper from "./shared_chat_search/FunctionalWrapper";
-import { ChatPage } from "./ChatPage";
 import WrappedChat from "./WrappedChat";
 
 export default async function Page({
@@ -29,7 +26,6 @@ export default async function Page({
   const config = await fetchEEASettings();
   
   const {
-    footerHtml,
     disclaimerTitle,
     disclaimerText
   } = config;
@@ -50,6 +46,7 @@ export default async function Page({
     finalDocumentSidebarInitialWidth,
     shouldShowWelcomeModal,
     shouldDisplaySourcesIncompleteModal,
+    userInputPrompts,
   } = data;
 
   return (
@@ -63,7 +60,6 @@ export default async function Page({
       )}
       <ChatProvider
         value={{
-          user,
           chatSessions,
           availableSources,
           availableDocumentSets: documentSets,
@@ -72,13 +68,13 @@ export default async function Page({
           llmProviders,
           folders,
           openedFolders,
+          userInputPrompts,
           }}
       >
 
         <WrappedChat
           defaultAssistantId={defaultAssistantId}
           initiallyToggled={toggleSidebar}
-          footerHtml={footerHtml}
         />
       </ChatProvider>
     </>

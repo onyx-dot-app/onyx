@@ -31,19 +31,20 @@ from danswer.db.index_attempt import get_inprogress_index_attempts
 from danswer.db.index_attempt import get_last_attempt_for_cc_pair
 from danswer.db.index_attempt import get_not_started_index_attempts
 from danswer.db.index_attempt import mark_attempt_failed
-from danswer.db.models import Connector
+from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import EmbeddingModel
 from danswer.db.models import IndexAttempt
 from danswer.db.models import IndexingStatus
 from danswer.db.models import IndexModelStatus
 from danswer.db.swap_index import check_index_swap
-from danswer.natural_language_processing.search_nlp_models import warm_up_encoders
+from danswer.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from danswer.utils.logger import setup_logger
 from danswer.utils.variable_functionality import global_version
 from danswer.utils.variable_functionality import set_is_ee_based_on_env_variable
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import LOG_LEVEL
 from shared_configs.configs import MODEL_SERVER_PORT
+
 
 logger = setup_logger()
 
@@ -57,12 +58,14 @@ _UNEXPECTED_STATE_FAILURE_REASON = (
 
 
 def _should_create_new_indexing(
-    connector: Connector,
+    cc_pair: ConnectorCredentialPair,
     last_index: IndexAttempt | None,
     model: EmbeddingModel,
     secondary_index_building: bool,
     db_session: Session,
 ) -> bool:
+    connector = cc_pair.connector
+
     # User can still manually create single indexing attempts via the UI for the
     # currently in use index
     if DISABLE_INDEX_UPDATE_ON_SWAP:
@@ -72,47 +75,49 @@ def _should_create_new_indexing(
     # When switching over models, always index at least once
     if model.status == IndexModelStatus.FUTURE:
         if last_index:
-            # secondary indexes should not index again after success
-            # or else the model will never be able to swap
+            # No new index if the last index attempt succeeded
+            # Once is enough. The model will never be able to swap otherwise.
             if last_index.status == IndexingStatus.SUCCESS:
+                return False
+
+            # No new index if the last index attempt is waiting to start
+            if last_index.status == IndexingStatus.NOT_STARTED:
+                return False
+
+            # No new index if the last index attempt is running
+            if last_index.status == IndexingStatus.IN_PROGRESS:
                 return False
         else:
             if connector.id == 0:  # Ingestion API
                 return False
         return True
 
-    # If the connector is disabled, don't index
+    # If the connector is paused or is the ingestion API, don't index
     # NOTE: during an embedding model switch over, the following logic
     # is bypassed by the above check for a future model
-    if connector.disabled:
-        return False
-
-    if connector.refresh_freq is None:
+    if not cc_pair.status.is_active() or connector.id == 0:
         return False
 
     if not last_index:
         return True
 
-    # Only one scheduled job per connector at a time
-    # Can schedule another one if the current one is already running however
-    # Because the currently running one will not be until the latest time
-    # Note, this last index is for the given embedding model
-    if last_index.status == IndexingStatus.NOT_STARTED:
+    if connector.refresh_freq is None:
+        return False
+
+    # Only one scheduled/ongoing job per connector at a time
+    # this prevents cases where
+    # (1) the "latest" index_attempt is scheduled so we show
+    #     that in the UI despite another index_attempt being in-progress
+    # (2) multiple scheduled index_attempts at a time
+    if (
+        last_index.status == IndexingStatus.NOT_STARTED
+        or last_index.status == IndexingStatus.IN_PROGRESS
+    ):
         return False
 
     current_db_time = get_db_current_time(db_session)
     time_since_index = current_db_time - last_index.time_updated
     return time_since_index.total_seconds() >= connector.refresh_freq
-
-
-def _is_indexing_job_marked_as_finished(index_attempt: IndexAttempt | None) -> bool:
-    if index_attempt is None:
-        return False
-
-    return (
-        index_attempt.status == IndexingStatus.FAILED
-        or index_attempt.status == IndexingStatus.SUCCESS
-    )
 
 
 def _mark_run_failed(
@@ -175,7 +180,7 @@ def create_indexing_jobs(existing_jobs: dict[int, Future | SimpleJob]) -> None:
                     cc_pair.id, model.id, db_session
                 )
                 if not _should_create_new_indexing(
-                    connector=cc_pair.connector,
+                    cc_pair=cc_pair,
                     last_index=last_attempt,
                     model=model,
                     secondary_index_building=len(embedding_models) > 1,
@@ -200,10 +205,12 @@ def cleanup_indexing_jobs(
             )
 
             # do nothing for ongoing jobs that haven't been stopped
-            if not job.done() and not _is_indexing_job_marked_as_finished(
-                index_attempt
-            ):
-                continue
+            if not job.done():
+                if not index_attempt:
+                    continue
+
+                if not index_attempt.is_finished():
+                    continue
 
             if job.status == "error":
                 logger.error(job.exception())
@@ -283,10 +290,12 @@ def kickoff_indexing_jobs(
             if attempt.id not in existing_jobs
         ]
 
-    logger.info(f"Found {len(new_indexing_attempts)} new indexing tasks.")
+    logger.debug(f"Found {len(new_indexing_attempts)} new indexing task(s).")
 
     if not new_indexing_attempts:
         return existing_jobs
+
+    indexing_attempt_count = 0
 
     for attempt, embedding_model in new_indexing_attempts:
         use_secondary_index = (
@@ -329,14 +338,29 @@ def kickoff_indexing_jobs(
             )
 
         if run:
-            secondary_str = "(secondary index) " if use_secondary_index else ""
+            if indexing_attempt_count == 0:
+                logger.info(
+                    f"Indexing dispatch starts: pending={len(new_indexing_attempts)}"
+                )
+
+            indexing_attempt_count += 1
+            secondary_str = " (secondary index)" if use_secondary_index else ""
             logger.info(
-                f"Kicked off {secondary_str}"
-                f"indexing attempt for connector: '{attempt.connector_credential_pair.connector.name}', "
-                f"with config: '{attempt.connector_credential_pair.connector.connector_specific_config}', and "
-                f"with credentials: '{attempt.connector_credential_pair.credential_id}'"
+                f"Indexing dispatched{secondary_str}: "
+                f"attempt_id={attempt.id} "
+                f"connector='{attempt.connector_credential_pair.connector.name}' "
+                f"config='{attempt.connector_credential_pair.connector.connector_specific_config}' "
+                f"credentials='{attempt.connector_credential_pair.credential_id}'"
             )
             existing_jobs_copy[attempt.id] = run
+
+    if indexing_attempt_count > 0:
+        logger.info(
+            f"Indexing dispatch results: "
+            f"initial_pending={len(new_indexing_attempts)} "
+            f"started={indexing_attempt_count} "
+            f"remaining={len(new_indexing_attempts) - indexing_attempt_count}"
+        )
 
     return existing_jobs_copy
 
@@ -354,9 +378,9 @@ def update_loop(
         # So that the first time users aren't surprised by really slow speed of first
         # batch of documents indexed
 
-        if db_embedding_model.cloud_provider_id is None:
-            logger.info("Running a first inference to warm up embedding model")
-            warm_up_encoders(
+        if db_embedding_model.provider_type is None:
+            logger.notice("Running a first inference to warm up embedding model")
+            warm_up_bi_encoder(
                 embedding_model=db_embedding_model,
                 model_server_host=INDEXING_MODEL_SERVER_HOST,
                 model_server_port=MODEL_SERVER_PORT,
@@ -392,11 +416,11 @@ def update_loop(
     while True:
         start = time.time()
         start_time_utc = datetime.utcfromtimestamp(start).strftime("%Y-%m-%d %H:%M:%S")
-        logger.info(f"Running update, current UTC time: {start_time_utc}")
+        logger.debug(f"Running update, current UTC time: {start_time_utc}")
 
         if existing_jobs:
             # TODO: make this debug level once the "no jobs are being scheduled" issue is resolved
-            logger.info(
+            logger.debug(
                 "Found existing indexing jobs: "
                 f"{[(attempt_id, job.status) for attempt_id, job in existing_jobs.items()]}"
             )
@@ -422,7 +446,7 @@ def update__main() -> None:
     set_is_ee_based_on_env_variable()
     init_sqlalchemy_engine(POSTGRES_INDEXER_APP_NAME)
 
-    logger.info("Starting Indexing Loop")
+    logger.notice("Starting indexing service")
     update_loop()
 
 

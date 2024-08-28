@@ -56,7 +56,7 @@ class _RateLimitDecorator:
             sleep_cnt = 0
             while len(self.call_history) == self.max_calls:
                 sleep_time = self.sleep_time * (self.sleep_backoff**sleep_cnt)
-                logger.info(
+                logger.notice(
                     f"Rate limit exceeded for function {func.__name__}. "
                     f"Waiting {sleep_time} seconds before retrying."
                 )

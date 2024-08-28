@@ -1,4 +1,4 @@
-import { FiCheck, FiChevronDown } from "react-icons/fi";
+import { FiCheck, FiChevronDown, FiX, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../../Dropdown";
 
 interface Option {
@@ -6,36 +6,43 @@ interface Option {
   display: string | JSX.Element;
   displayName?: string;
 }
-
 export function FilterDropdown({
   options,
   selected,
   handleSelect,
   icon,
   defaultDisplay,
+  width = "w-64",
+  dropdownWidth,
+  optionClassName,
+  resetValues,
 }: {
   options: Option[];
   selected: string[];
   handleSelect: (option: Option) => void;
   icon: JSX.Element;
   defaultDisplay: string | JSX.Element;
+  width?: string;
+  dropdownWidth?: string;
+  optionClassName?: string;
+  resetValues?: () => void;
 }) {
   return (
-    <div className="w-64">
+    <div>
       <CustomDropdown
         dropdown={
           <div
             className={`
-          border 
-          border-border 
-          rounded-lg 
-          bg-background
-          flex 
-          flex-col 
-          w-64 
-          max-h-96 
-          overflow-y-auto 
-          overscroll-contain`}
+              border 
+              border-border 
+              rounded-lg 
+              bg-background
+              flex 
+              flex-col 
+              ${dropdownWidth || width}
+              max-h-96 
+              overflow-y-auto 
+              overscroll-contain`}
           >
             {options.map((option, ind) => {
               const isSelected = selected.includes(option.key);
@@ -43,13 +50,16 @@ export function FilterDropdown({
                 <div
                   key={option.key}
                   className={`
+                    ${optionClassName}
                     flex
-                    px-3 
-                    text-sm 
-                    py-2.5 
-                    select-none 
-                    cursor-pointer 
+                    px-3
+                    text-sm
+                    py-2.5
+                    select-none
+                    cursor-pointer
+                    w-fit
                     text-emphasis
+                    gap-x-1
                     hover:bg-hover-light
                     ${
                       ind === options.length - 1 ? "" : "border-b border-border"
@@ -63,7 +73,7 @@ export function FilterDropdown({
                 >
                   {option.display}
                   {isSelected && (
-                    <div className="ml-auto mr-1">
+                    <div className="ml-auto my-auto mr-1">
                       <FiCheck />
                     </div>
                   )}
@@ -75,24 +85,37 @@ export function FilterDropdown({
       >
         <div
           className={`
-        flex 
-        w-64
-        text-sm 
-        px-3
-        py-1.5 
-        rounded-lg 
-        border 
-        border-border
-        cursor-pointer 
-        hover:bg-hover-light`}
+            flex
+            ${width}
+            text-sm
+            px-3
+            py-1.5
+            rounded-lg 
+            border 
+            gap-x-2
+            border-border
+            cursor-pointer 
+            hover:bg-hover-light`}
         >
-          {icon}
-          {selected.length === 0 ? (
+          <div className="flex-none my-auto">{icon}</div>
+          {selected.length === 0 || resetValues ? (
             defaultDisplay
           ) : (
             <p className="line-clamp-1">{selected.join(", ")}</p>
           )}
-          <FiChevronDown className="my-auto ml-auto" />
+          {resetValues && selected.length !== 0 ? (
+            <div
+              className="my-auto ml-auto p-0.5 rounded-full w-fit"
+              onClick={(e) => {
+                resetValues();
+                e.stopPropagation();
+              }}
+            >
+              <FiXCircle />
+            </div>
+          ) : (
+            <FiChevronDown className="my-auto ml-auto" />
+          )}
         </div>
       </CustomDropdown>
     </div>

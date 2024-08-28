@@ -9,18 +9,25 @@ import { AssistantsIcon, RobotIcon } from "@/components/icons/icons";
 import { AdminPageTitle } from "@/components/admin/Title";
 
 export default async function Page() {
-  const personaResponse = await fetchSS("/admin/persona");
+  const allPersonaResponse = await fetchSS("/admin/persona");
+  const editablePersonaResponse = await fetchSS(
+    "/admin/persona?get_editable=true"
+  );
 
-  if (!personaResponse.ok) {
+  if (!allPersonaResponse.ok || !editablePersonaResponse.ok) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch personas - ${await personaResponse.text()}`}
+        errorMsg={`Failed to fetch personas - ${
+          (await allPersonaResponse.text()) ||
+          (await editablePersonaResponse.text())
+        }`}
       />
     );
   }
 
-  const personas = (await personaResponse.json()) as Persona[];
+  const allPersonas = (await allPersonaResponse.json()) as Persona[];
+  const editablePersonas = (await editablePersonaResponse.json()) as Persona[];
 
   return (
     <div className="mx-auto container">
@@ -57,7 +64,10 @@ export default async function Page() {
         <Divider />
 
         <Title>Existing Assistants</Title>
-        <PersonasTable personas={personas} />
+        <PersonasTable
+          allPersonas={allPersonas}
+          editablePersonas={editablePersonas}
+        />
       </div>
     </div>
   );

@@ -14,9 +14,11 @@ export const EditingValue: React.FC<{
   optional?: boolean;
   description?: string;
   setFieldValue: (field: string, value: any) => void;
+  showNever?: boolean;
 
   // These are escape hatches from the overall
   // value editing component (when need to modify)
+  options?: { value: string; label: string }[];
   onChange?: (value: string) => void;
   onChangeBool?: (value: boolean) => void;
   onChangeNumber?: (value: number) => void;
@@ -25,19 +27,22 @@ export const EditingValue: React.FC<{
   name,
   currentValue,
   label,
+  options,
   type,
   includRevert,
   className,
   description,
   optional,
   setFieldValue,
-
+  showNever,
   onChange,
   onChangeBool,
   onChangeNumber,
   onChangeDate,
 }) => {
-  const [value, setValue] = useState<boolean | string | number | Date>();
+  const [value, setValue] = useState<boolean | string | number | Date>(
+    currentValue
+  );
 
   const updateValue = (newValue: string | boolean | number | Date) => {
     setValue(newValue);
@@ -116,7 +121,11 @@ export const EditingValue: React.FC<{
                 type="number"
                 name={name}
                 value={value as number}
-                placeholder={currentValue}
+                placeholder={
+                  currentValue === 0 && showNever
+                    ? "Never"
+                    : currentValue?.toString()
+                }
                 onChange={(e) => {
                   const inputValue = e.target.value;
                   if (inputValue === "") {
@@ -143,6 +152,36 @@ export const EditingValue: React.FC<{
                     focus:invalid:border-pink-500 focus:invalid:ring-pink-500`}
               />
             </>
+          ) : type === "select" ? (
+            <div>
+              <label className="block text-sm font-medium text-text-700 mb-1">
+                {label}
+                {optional && (
+                  <span className="text-text-500 ml-1">(optional)</span>
+                )}
+              </label>
+              {description && <SubLabel>{description}</SubLabel>}
+
+              <select
+                name={name}
+                value={value as string}
+                onChange={(e) => {
+                  updateValue(e.target.value);
+                  if (onChange) {
+                    onChange(e.target.value);
+                  }
+                }}
+                className="mt-2 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-sm shadow-sm
+                    focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              >
+                <option value="">Select an option</option>
+                {options?.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           ) : (
             // Default
             <AdminTextField

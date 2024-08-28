@@ -39,7 +39,8 @@
                 "--reload",
                 "--port",
                 "9000"
-            ]
+            ],
+            "consoleTitle": "Model Server"
         },
         {
             "name": "API Server",
@@ -58,7 +59,8 @@
                 "--reload",
                 "--port",
                 "8080"
-            ]
+            ],
+            "consoleTitle": "API Server"
         },
         {
             "name": "Indexing",
@@ -68,11 +70,12 @@
             "cwd": "${workspaceFolder}/backend",
             "envFile": "${workspaceFolder}/.env",
             "env": {
-                "ENABLE_MINI_CHUNK": "false",
+                "ENABLE_MULTIPASS_INDEXING": "false",
                 "LOG_LEVEL": "DEBUG",
                 "PYTHONUNBUFFERED": "1",
                 "PYTHONPATH": "."
-            }
+            },
+            "consoleTitle": "Indexing"
         },
         // Celery and all async jobs, usually would include indexing as well but this is handled separately above for dev
         {
@@ -90,7 +93,8 @@
             },
             "args": [
                 "--no-indexing"
-            ]
+            ],
+            "consoleTitle": "Background Jobs"
         },
         // For the listner to access the Slack API,
         // DANSWER_BOT_SLACK_APP_TOKEN & DANSWER_BOT_SLACK_BOT_TOKEN need to be set in .env file located in the root of the project
@@ -123,6 +127,18 @@
                 "-v"
                 // Specify a sepcific module/test to run or provide nothing to run all tests
                 //"tests/unit/danswer/llm/answering/test_prune_and_merge.py"
+            ]
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Run Danswer",
+            "configurations": [
+                "Web Server",
+                "Model Server",
+                "API Server",
+                "Indexing",
+                "Background Jobs",
             ]
         }
     ]

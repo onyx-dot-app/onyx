@@ -125,6 +125,30 @@ def extract_citations_from_stream(
                         length_to_add -= diff
                         continue
 
+                    # Handle edge case where LLM outputs citation itself
+                    # by allowing it to generate citations on its own.
+                    if curr_segment.startswith("[["):
+                        match = re.match(r"\[\[(\d+)\]\]", curr_segment)
+                        if match:
+                            try:
+                                doc_id = int(match.group(1))
+                                context_llm_doc = context_docs[doc_id - 1]
+                                yield CitationInfo(
+                                    citation_num=target_citation_num,
+                                    document_id=context_llm_doc.document_id,
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Manual LLM citation didn't properly cite documents {e}"
+                                )
+                        else:
+                            # Will continue attempt on next loops
+                            logger.warning(
+                                "Manual LLM citation wasn't able to close brackets"
+                            )
+
+                        continue
+
                     link = context_llm_doc.link
 
                     # Replace the citation in the current segment
@@ -162,6 +186,7 @@ def extract_citations_from_stream(
                             + curr_segment[end + length_to_add :]
                         )
                         length_to_add += len(curr_segment) - prev_length
+
                     last_citation_end = end + length_to_add
 
             if last_citation_end > 0:

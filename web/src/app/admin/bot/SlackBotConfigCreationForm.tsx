@@ -295,14 +295,14 @@ export const SlackBotCreationForm = ({
                     [Optional] Data Sources and Prompts
                   </SectionHeader>
                   <Text>
-                    Use either a Persona <b>or</b> Document Sets to control how
-                    DanswerBot answers.
+                    Use either an Assistant <b>or</b> Document Sets to control
+                    how DanswerBot answers.
                   </Text>
                   <Text>
                     <ul className="list-disc mt-2 ml-4">
                       <li>
-                        You should use a Persona if you also want to customize
-                        the prompt and retrieval settings.
+                        You should use an Assistant if you also want to
+                        customize the prompt and retrieval settings.
                       </li>
                       <li>
                         You should use Document Sets if you just want to control
@@ -313,8 +313,9 @@ export const SlackBotCreationForm = ({
                   <Text className="mt-2">
                     <b>NOTE:</b> whichever tab you are when you submit the form
                     will be the one that is used. For example, if you are on the
-                    &quot;Personas&quot; tab, then the Persona will be used,
-                    even if you have Document Sets selected.
+                    &quot;Assistants&quot; tab, then the Assistant and its
+                    attached knowledge will be used, even if you have Document
+                    Sets selected.
                   </Text>
                 </div>
 
@@ -324,7 +325,7 @@ export const SlackBotCreationForm = ({
                 >
                   <TabList className="mt-3 mb-4">
                     <Tab icon={BookmarkIcon}>Document Sets</Tab>
-                    <Tab icon={RobotIcon}>Personas</Tab>
+                    <Tab icon={RobotIcon}>Assistants</Tab>
                   </TabList>
                   <TabPanels>
                     <TabPanel>
@@ -385,7 +386,7 @@ export const SlackBotCreationForm = ({
                       <SelectorFormField
                         name="persona_id"
                         subtext={`
-                            The persona to use when responding to queries. The Default persona acts
+                            The assistant to use when responding to queries. The "Knowledge" assistant acts
                             as a question-answering assistant and has access to all documents indexed by non-private connectors.
                           `}
                         options={personas.map((persona) => {

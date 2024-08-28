@@ -36,6 +36,7 @@ class CreatePersonaRequest(BaseModel):
     icon_color: str | None = None
     icon_shape: int | None = None
     uploaded_image_id: str | None = None  # New field for uploaded image
+    remove_image: bool | None = None
 
 
 class PersonaSnapshot(BaseModel):

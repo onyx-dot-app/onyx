@@ -13,7 +13,7 @@ def check_deletion_attempt_is_allowed(
 ) -> str | None:
     """
     To be deletable:
-        (1) connector should be disabled
+        (1) connector should be paused
         (2) there should be no in-progress/planned index attempts
 
     Returns an error message if the deletion attempt is not allowed, otherwise None.
@@ -23,7 +23,7 @@ def check_deletion_attempt_is_allowed(
         f"'{connector_credential_pair.credential_id}' is not deletable."
     )
 
-    if not connector_credential_pair.connector.disabled:
+    if connector_credential_pair.status.is_active():
         return base_error_msg + " Connector must be paused."
 
     connector_id = connector_credential_pair.connector_id

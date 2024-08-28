@@ -17,13 +17,16 @@ This Python script automates the process of running search quality tests for a b
 1. Ensure you have the required dependencies installed.
 2. Configure the `search_test_config.yaml` file based on the `search_test_config.yaml.template` file.
 3. Configure the `.env_eval` file in `deployment/docker_compose` with the correct environment variables.
-4. Navigate to Danswer repo:
+4. Set up the PYTHONPATH permanently:
+   Add the following line to your shell configuration file (e.g., `~/.bashrc`, `~/.zshrc`, or `~/.bash_profile`):
+   ```
+   export PYTHONPATH=$PYTHONPATH:/path/to/danswer/backend
+   ```
+   Replace `/path/to/danswer` with the actual path to your Danswer repository.
+   After adding this line, restart your terminal or run `source ~/.bashrc` (or the appropriate config file) to apply the changes.
+5. Navigate to Danswer repo:
 ```
 cd path/to/danswer
-```
-5. Set Python Path variable:
-```
-export PYTHONPATH=$PYTHONPATH:$PWD/backend
 ```
 6. Navigate to the answer_quality folder:
 ```

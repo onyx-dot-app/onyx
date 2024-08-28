@@ -1,5 +1,3 @@
-import { Header } from "@/components/header/Header";
-import { Footer } from "@/components/Footer";
 import { unstable_noStore as noStore } from "next/cache";
 import {
   getCurrentUserSS,
@@ -9,6 +7,10 @@ import { User } from "@/lib/types";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { notFound } from 'next/navigation'
 import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
+import FixedLogo from "@/app/chat/shared_chat_search/FixedLogo";
+import { useRouter } from "next/navigation";
+import { BackIcon } from "@/components/icons/icons";
+import Link from "next/link";
 
 export default async function Page({
   params,
@@ -34,7 +36,6 @@ export default async function Page({
   const config = await fetchEEASettings();
   
   const {
-    footerHtml,
     eea_config,
   } = config;
   
@@ -42,20 +43,25 @@ export default async function Page({
 
   let pageContent = "404";
   pageContent = eea_config?.pages?.[pageTitle] || "404"
-  console.log(pageContent)
   if (pageContent === "404"){
     return notFound()
   }
   return (
     <>
-      <Header user={user} />
       <div className="m-3">
         <HealthCheckBanner />
       </div>
+      <Link href={"/chat"}>
+            <button className="text-sm block w-52 py-2.5 flex px-2 text-left bg-background-200 hover:bg-background-200/80 cursor-pointer rounded">
+              <BackIcon size={20} className="text-neutral" />
+              <p className="ml-1">Back to GPT Lab</p>
+            </button>
+          </Link>
+
       <div className="px-24 pt-10 flex flex-col items-center min-h-screen overflow-y-auto">
         <p dangerouslySetInnerHTML={{ __html: pageContent }} />
       </div> 
-      <Footer footerHtml={footerHtml}/>
+
     </>
   );
 }

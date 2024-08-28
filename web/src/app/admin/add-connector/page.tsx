@@ -4,7 +4,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { ConnectorIcon } from "@/components/icons/icons";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
-import { Title, Text } from "@tremor/react";
+import { Title, Text, Button } from "@tremor/react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -96,6 +96,13 @@ export default function Page() {
       <AdminPageTitle
         icon={<ConnectorIcon size={32} />}
         title="Add Connector"
+        farRightElement={
+          <Link href="/admin/indexing/status">
+            <Button color="green" size="xs">
+              See Connectors
+            </Button>
+          </Link>
+        }
       />
 
       <input

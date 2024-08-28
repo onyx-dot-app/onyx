@@ -2,10 +2,9 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { CCPairBasicInfo, DocumentSet, User } from "../types";
 import { getCurrentUserSS } from "../userSS";
 import { fetchSS } from "../utilsSS";
-import { FullLLMProvider } from "@/app/admin/models/llm/interfaces";
+import { FullLLMProvider } from "@/app/admin/configuration/llm/interfaces";
 import { ToolSnapshot } from "../tools/interfaces";
 import { fetchToolsSS } from "../tools/fetchTools";
-import { IconManifestType } from "react-icons/lib";
 import {
   OpenAIIcon,
   AnthropicIcon,
@@ -100,9 +99,9 @@ export async function fetchAssistantEditorInfoSS(
     } else if (provider.provider == "anthropic") {
       provider.icon = AnthropicIcon;
     } else if (provider.provider == "bedrock") {
-      provider.icon = AzureIcon;
-    } else if (provider.provider == "azure") {
       provider.icon = AWSIcon;
+    } else if (provider.provider == "azure") {
+      provider.icon = AzureIcon;
     } else {
       provider.icon = OpenSourceIcon;
     }

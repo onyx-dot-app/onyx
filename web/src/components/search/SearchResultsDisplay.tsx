@@ -1,24 +1,20 @@
 "use client";
 
-import { removeDuplicateDocs } from "@/lib/documentUtils";
 import {
-  DanswerDocument,
   DocumentRelevance,
-  FlowType,
-  Quote,
-  Relevance,
   SearchDanswerDocument,
   SearchDefaultOverrides,
   SearchResponse,
-  ValidQuestionResponse,
 } from "@/lib/search/interfaces";
 import { usePopup } from "../admin/connectors/Popup";
-import { AlertIcon, BroomIcon, UndoIcon } from "../icons/icons";
+import { AlertIcon, BroomIcon, MagnifyingIcon, UndoIcon } from "../icons/icons";
 import { AgenticDocumentDisplay, DocumentDisplay } from "./DocumentDisplay";
 import { searchState } from "./SearchSection";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Tooltip } from "../tooltip/Tooltip";
 import KeyboardSymbol from "@/lib/browserUtilities";
+import { SettingsContext } from "../settings/SettingsProvider";
+import { DISABLE_LLM_DOC_RELEVANCE } from "@/lib/constants";
 
 const getSelectedDocumentIds = (
   documents: SearchDanswerDocument[],
@@ -39,8 +35,10 @@ export const SearchResultsDisplay = ({
   isFetching,
   defaultOverrides,
   performSweep,
+  searchState,
   sweep,
 }: {
+  searchState: searchState;
   disabledAgentic?: boolean;
   contentEnriched?: boolean;
   agenticResults?: boolean | null;
@@ -96,16 +94,11 @@ export const SearchResultsDisplay = ({
   if (isFetching && !answer && !documents) {
     return null;
   }
-  if (
-    answer === null &&
-    documents != null &&
-    documents.length == 0 &&
-    !isFetching
-  ) {
+  if (documents != null && documents.length == 0 && searchState == "input") {
     return (
       <div className="text-base gap-x-1.5 flex flex-col">
-        <div className="flex gap-x-2 items-center text-error">
-          <AlertIcon size={16} className="text-error" />
+        <div className="flex gap-x-2 items-center font-semibold">
+          <AlertIcon size={16} />
           No documents were found!
         </div>
         <p>
@@ -118,7 +111,6 @@ export const SearchResultsDisplay = ({
   if (
     answer === null &&
     (documents === null || documents.length === 0) &&
-    quotes === null &&
     !isFetching
   ) {
     return (
@@ -135,31 +127,18 @@ export const SearchResultsDisplay = ({
     );
   }
 
-  const dedupedQuotes: Quote[] = [];
-  const seen = new Set<string>();
-  if (quotes) {
-    quotes.forEach((quote) => {
-      if (!seen.has(quote.document_id)) {
-        dedupedQuotes.push(quote);
-        seen.add(quote.document_id);
-      }
-    });
-  }
-
   const selectedDocumentIds = getSelectedDocumentIds(
     documents || [],
     searchResponse.selectedDocIndices || []
   );
-
   const relevantDocs = documents
     ? documents.filter((doc) => {
         return (
           showAll ||
           (searchResponse &&
             searchResponse.additional_relevance &&
-            searchResponse.additional_relevance[
-              `${doc.document_id}-${doc.chunk_ind}`
-            ].relevant) ||
+            searchResponse.additional_relevance[doc.document_id] &&
+            searchResponse.additional_relevance[doc.document_id].relevant) ||
           doc.is_relevant
         );
       })
@@ -183,56 +162,53 @@ export const SearchResultsDisplay = ({
   return (
     <>
       {popup}
-      {documents && documents.length == 0 && (
-        <p className="flex text-lg font-bold">
-          No docs found! Ensure that you have enabled at least one connector
-        </p>
-      )}
 
       {documents && documents.length > 0 && (
         <div className="mt-4">
           <div className="font-bold flex justify-between text-emphasis border-b mb-3 pb-1 border-border text-lg">
             <p>Results</p>
-            {(contentEnriched || searchResponse.additional_relevance) && (
-              <Tooltip delayDuration={1000} content={`${commandSymbol}O`}>
-                <button
-                  onClick={() => {
-                    performSweep();
-                    if (agenticResults) {
-                      setShowAll((showAll) => !showAll);
-                    }
-                  }}
-                  className={`flex items-center justify-center animate-fade-in-up rounded-lg p-1 text-xs transition-all duration-300 w-20 h-8 ${
-                    !sweep
-                      ? "bg-green-500 text-text-800"
-                      : "bg-rose-700 text-text-100"
-                  }`}
-                  style={{
-                    transform: sweep ? "rotateZ(180deg)" : "rotateZ(0deg)",
-                  }}
-                >
-                  <div
-                    className={`flex items-center ${sweep ? "rotate-180" : ""}`}
+            {!DISABLE_LLM_DOC_RELEVANCE &&
+              (contentEnriched || searchResponse.additional_relevance) && (
+                <Tooltip delayDuration={1000} content={`${commandSymbol}O`}>
+                  <button
+                    onClick={() => {
+                      performSweep();
+                      if (agenticResults) {
+                        setShowAll((showAll) => !showAll);
+                      }
+                    }}
+                    className={`flex items-center justify-center animate-fade-in-up rounded-lg p-1 text-xs transition-all duration-300 w-20 h-8 ${
+                      !sweep
+                        ? "bg-green-500 text-text-800"
+                        : "bg-rose-700 text-text-100"
+                    }`}
+                    style={{
+                      transform: sweep ? "rotateZ(180deg)" : "rotateZ(0deg)",
+                    }}
                   >
-                    <span></span>
-                    {!sweep
-                      ? agenticResults
-                        ? "Show All"
-                        : "Focus"
-                      : agenticResults
-                        ? "Focus"
-                        : "Show All"}
-                    <span className="ml-1">
-                      {!sweep ? (
-                        <BroomIcon className="h-4 w-4" />
-                      ) : (
-                        <UndoIcon className="h-4 w-4" />
-                      )}
-                    </span>
-                  </div>
-                </button>
-              </Tooltip>
-            )}
+                    <div
+                      className={`flex items-center ${sweep ? "rotate-180" : ""}`}
+                    >
+                      <span></span>
+                      {!sweep
+                        ? agenticResults
+                          ? "Show All"
+                          : "Focus"
+                        : agenticResults
+                          ? "Focus"
+                          : "Show All"}
+
+                      <span className="ml-1">
+                        {!sweep ? (
+                          <MagnifyingIcon className="h-4 w-4" />
+                        ) : (
+                          <UndoIcon className="h-4 w-4" />
+                        )}
+                      </span>
+                    </div>
+                  </button>
+                </Tooltip>
+              )}
           </div>
 
           {agenticResults &&
@@ -248,9 +224,7 @@ export const SearchResultsDisplay = ({
           {uniqueDocuments.map((document, ind) => {
             const relevance: DocumentRelevance | null =
               searchResponse.additional_relevance
-                ? searchResponse.additional_relevance[
-                    `${document.document_id}-${document.chunk_ind}`
-                  ]
+                ? searchResponse.additional_relevance[document.document_id]
                 : null;
 
             return agenticResults ? (

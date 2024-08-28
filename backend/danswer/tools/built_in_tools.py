@@ -77,7 +77,7 @@ def load_builtin_tools(db_session: Session) -> None:
             tool.name = tool_name
             tool.description = tool_info["description"]
             tool.display_name = tool_info["display_name"]
-            logger.info(f"Updated tool: {tool_name}")
+            logger.notice(f"Updated tool: {tool_name}")
         else:
             # Add new tool
             new_tool = ToolDBModel(
@@ -87,17 +87,17 @@ def load_builtin_tools(db_session: Session) -> None:
                 in_code_tool_id=tool_info["in_code_tool_id"],
             )
             db_session.add(new_tool)
-            logger.info(f"Added new tool: {tool_name}")
+            logger.notice(f"Added new tool: {tool_name}")
 
     # Remove tools that are no longer in BUILT_IN_TOOLS
     built_in_ids = {tool_info["in_code_tool_id"] for tool_info in BUILT_IN_TOOLS}
     for tool_id, tool in list(in_code_tool_id_to_tool.items()):
         if tool_id not in built_in_ids:
             db_session.delete(tool)
-            logger.info(f"Removed tool no longer in built-in list: {tool.name}")
+            logger.notice(f"Removed tool no longer in built-in list: {tool.name}")
 
     db_session.commit()
-    logger.info("All built-in tools are loaded/verified.")
+    logger.notice("All built-in tools are loaded/verified.")
 
 
 def auto_add_search_tool_to_personas(db_session: Session) -> None:
@@ -140,11 +140,11 @@ def auto_add_search_tool_to_personas(db_session: Session) -> None:
     for persona in personas_to_update:
         if search_tool not in persona.tools:
             persona.tools.append(search_tool)
-            logger.info(f"Added SearchTool to Persona ID: {persona.id}")
+            logger.notice(f"Added SearchTool to Persona ID: {persona.id}")
 
     # Commit changes to the database
     db_session.commit()
-    logger.info("Completed adding SearchTool to relevant Personas.")
+    logger.notice("Completed adding SearchTool to relevant Personas.")
 
 
 _built_in_tools_cache: dict[int, Type[Tool]] | None = None

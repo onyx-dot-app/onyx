@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useRef, useState } from "react";
 import { FiPlusCircle, FiPlus, FiInfo, FiX } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { Persona } from "@/app/admin/assistants/interfaces";
+import { InputPrompt } from "@/app/admin/prompt-library/interfaces";
 import {
   FilterManager,
   getDisplayNameForModel,
@@ -20,6 +21,7 @@ import {
   CpuIconSkeleton,
   FileIcon,
   SendIcon,
+  StopGeneratingIcon,
 } from "@/components/icons/icons";
 import { IconType } from "react-icons";
 import Popup from "../../../components/popup/Popup";
@@ -30,18 +32,22 @@ import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { Tooltip } from "@/components/tooltip/Tooltip";
 import { Hoverable } from "@/components/Hoverable";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { StopCircle } from "@phosphor-icons/react/dist/ssr";
+import { Square } from "@phosphor-icons/react";
+import { ChatState } from "../types";
 const MAX_INPUT_HEIGHT = 200;
 
 export function ChatInputBar({
+  openModelSettings,
   showDocs,
   selectedDocuments,
   message,
   setMessage,
+  stopGenerating,
   onSubmit,
-  isStreaming,
-  setIsCancelled,
   filterManager,
   llmOverrideManager,
+  chatState,
 
   // assistants
   selectedAssistant,
@@ -55,17 +61,20 @@ export function ChatInputBar({
   textAreaRef,
   alternativeAssistant,
   chatSessionId,
+  inputPrompts,
 }: {
+  openModelSettings: () => void;
+  chatState: ChatState;
+  stopGenerating: () => void;
   showDocs: () => void;
   selectedDocuments: DanswerDocument[];
   assistantOptions: Persona[];
   setAlternativeAssistant: (alternativeAssistant: Persona | null) => void;
   setSelectedAssistant: (assistant: Persona) => void;
+  inputPrompts: InputPrompt[];
   message: string;
   setMessage: (message: string) => void;
   onSubmit: () => void;
-  isStreaming: boolean;
-  setIsCancelled: (value: boolean) => void;
   filterManager: FilterManager;
   llmOverrideManager: LlmOverrideManager;
   selectedAssistant: Persona;
@@ -76,7 +85,6 @@ export function ChatInputBar({
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   chatSessionId?: number;
 }) {
-  // handle re-sizing of the text area
   useEffect(() => {
     const textarea = textAreaRef.current;
     if (textarea) {
@@ -111,9 +119,28 @@ export function ChatInputBar({
 
   const suggestionsRef = useRef<HTMLDivElement | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showPrompts, setShowPrompts] = useState(false);
 
   const interactionsRef = useRef<HTMLDivElement | null>(null);
-  // Click out of assistant suggestions
+
+  const hideSuggestions = () => {
+    setShowSuggestions(false);
+    setTabbingIconIndex(0);
+  };
+
+  const hidePrompts = () => {
+    setTimeout(() => {
+      setShowPrompts(false);
+    }, 50);
+
+    setTabbingIconIndex(0);
+  };
+
+  const updateInputPrompt = (prompt: InputPrompt) => {
+    hidePrompts();
+    setMessage(`${prompt.content}`);
+  };
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -123,6 +150,7 @@ export function ChatInputBar({
           !interactionsRef.current.contains(event.target as Node))
       ) {
         hideSuggestions();
+        hidePrompts();
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -131,12 +159,6 @@ export function ChatInputBar({
     };
   }, []);
 
-  const hideSuggestions = () => {
-    setShowSuggestions(false);
-    setAssistantIconIndex(0);
-  };
-
-  // Update selected persona
   const updatedTaggedAssistant = (assistant: Persona) => {
     setAlternativeAssistant(
       assistant.id == selectedAssistant.id ? null : assistant
@@ -145,22 +167,37 @@ export function ChatInputBar({
     setMessage("");
   };
 
-  // Complete user input handling
+  const handleAssistantInput = (text: string) => {
+    if (!text.startsWith("@")) {
+      hideSuggestions();
+    } else {
+      const match = text.match(/(?:\s|^)@(\w*)$/);
+      if (match) {
+        setShowSuggestions(true);
+      } else {
+        hideSuggestions();
+      }
+    }
+  };
+
+  const handlePromptInput = (text: string) => {
+    if (!text.startsWith("/")) {
+      hidePrompts();
+    } else {
+      const promptMatch = text.match(/(?:\s|^)\/(\w*)$/);
+      if (promptMatch) {
+        setShowPrompts(true);
+      } else {
+        hidePrompts();
+      }
+    }
+  };
+
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const text = event.target.value;
     setMessage(text);
-
-    if (!text.startsWith("@")) {
-      hideSuggestions();
-      return;
-    }
-
-    const match = text.match(/(?:\s|^)@(\w*)$/);
-    if (match) {
-      setShowSuggestions(true);
-    } else {
-      hideSuggestions();
-    }
+    handleAssistantInput(text);
+    handlePromptInput(text);
   };
 
   const assistantTagOptions = assistantOptions.filter((assistant) =>
@@ -172,52 +209,79 @@ export function ChatInputBar({
     )
   );
 
-  const [assistantIconIndex, setAssistantIconIndex] = useState(0);
+  const filteredPrompts = inputPrompts.filter(
+    (prompt) =>
+      prompt.active &&
+      prompt.prompt.toLowerCase().startsWith(
+        message
+          .slice(message.lastIndexOf("/") + 1)
+          .split(/\s/)[0]
+          .toLowerCase()
+      )
+  );
+
+  const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (
-      showSuggestions &&
-      assistantTagOptions.length > 0 &&
+      ((showSuggestions && assistantTagOptions.length > 0) || showPrompts) &&
       (e.key === "Tab" || e.key == "Enter")
     ) {
       e.preventDefault();
-      if (assistantIconIndex == assistantTagOptions.length) {
-        window.open("/assistants/new", "_blank");
-        hideSuggestions();
-        setMessage("");
+
+      if (
+        (tabbingIconIndex == assistantTagOptions.length && showSuggestions) ||
+        (tabbingIconIndex == filteredPrompts.length && showPrompts)
+      ) {
+        if (showPrompts) {
+          window.open("/prompts", "_self");
+        } else {
+          window.open("/assistants/new", "_self");
+        }
       } else {
-        const option =
-          assistantTagOptions[assistantIconIndex >= 0 ? assistantIconIndex : 0];
-        updatedTaggedAssistant(option);
+        if (showPrompts) {
+          const uppity =
+            filteredPrompts[tabbingIconIndex >= 0 ? tabbingIconIndex : 0];
+          updateInputPrompt(uppity);
+        } else {
+          const option =
+            assistantTagOptions[tabbingIconIndex >= 0 ? tabbingIconIndex : 0];
+
+          updatedTaggedAssistant(option);
+        }
       }
     }
-    if (!showSuggestions) {
+    if (!showPrompts && !showSuggestions) {
       return;
     }
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setAssistantIconIndex((assistantIconIndex) =>
-        Math.min(assistantIconIndex + 1, assistantTagOptions.length)
+
+      setTabbingIconIndex((tabbingIconIndex) =>
+        Math.min(
+          tabbingIconIndex + 1,
+          showPrompts ? filteredPrompts.length : assistantTagOptions.length
+        )
       );
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setAssistantIconIndex((assistantIconIndex) =>
-        Math.max(assistantIconIndex - 1, 0)
+      setTabbingIconIndex((tabbingIconIndex) =>
+        Math.max(tabbingIconIndex - 1, 0)
       );
     }
   };
 
   return (
-    <div>
-      <div className="flex justify-center pb-2 max-w-screen-lg mx-auto mb-2">
+    <div id="danswer-chat-input">
+      <div className="flex justify-center max-w-screen-lg mx-auto">
         <div
           className="
             w-[90%]
+            max-w-searchbar-max
             shrink
             relative
             desktop:px-4
-            max-w-searchbar-max
             mx-auto
           "
         >
@@ -231,7 +295,7 @@ export function ChatInputBar({
                   <button
                     key={index}
                     className={`px-2 ${
-                      assistantIconIndex == index && "bg-hover-lightish"
+                      tabbingIconIndex == index && "bg-hover-lightish"
                     } rounded  rounded-lg content-start flex gap-x-1 py-2 w-full  hover:bg-hover-lightish cursor-pointer`}
                     onClick={() => {
                       updatedTaggedAssistant(currentAssistant);
@@ -245,12 +309,12 @@ export function ChatInputBar({
                     </p>
                   </button>
                 ))}
+
                 <a
                   key={assistantTagOptions.length}
-                  target="_blank"
+                  target="_self"
                   className={`${
-                    assistantIconIndex == assistantTagOptions.length &&
-                    "bg-hover"
+                    tabbingIconIndex == assistantTagOptions.length && "bg-hover"
                   } rounded rounded-lg px-3 flex gap-x-1 py-2 w-full  items-center  hover:bg-hover-lightish cursor-pointer"`}
                   href="/assistants/new"
                 >
@@ -260,6 +324,46 @@ export function ChatInputBar({
               </div>
             </div>
           )}
+
+          {showPrompts && (
+            <div
+              ref={suggestionsRef}
+              className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full"
+            >
+              <div className="rounded-lg py-1.5 bg-white border border-border-medium overflow-hidden shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
+                {filteredPrompts.map((currentPrompt, index) => (
+                  <button
+                    key={index}
+                    className={`px-2 ${
+                      tabbingIconIndex == index && "bg-hover"
+                    } rounded content-start flex gap-x-1 py-1.5 w-full  hover:bg-hover cursor-pointer`}
+                    onClick={() => {
+                      updateInputPrompt(currentPrompt);
+                    }}
+                  >
+                    <p className="font-bold ">{currentPrompt.prompt}</p>
+                    <p className="line-clamp-1">
+                      {currentPrompt.id == selectedAssistant.id && "(default) "}
+                      {currentPrompt.content}
+                    </p>
+                  </button>
+                ))}
+
+                <a
+                  key={filteredPrompts.length}
+                  target="_self"
+                  className={`${
+                    tabbingIconIndex == filteredPrompts.length && "bg-hover"
+                  } px-3 flex gap-x-1 py-2 w-full  items-center  hover:bg-hover-light cursor-pointer"`}
+                  href="/prompts"
+                >
+                  <FiPlus size={17} />
+                  <p>Create a new prompt</p>
+                </a>
+              </div>
+            </div>
+          )}
+
           <div>
             <SelectedFilterDisplay filterManager={filterManager} />
           </div>
@@ -391,22 +495,26 @@ export function ChatInputBar({
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
-              placeholder={`Send a message ${!settings?.isMobile ? "or @ to tag an assistant..." : ""}`}
+              placeholder={`Send a message ${
+                !settings?.isMobile ? "or try using @ or /" : ""
+              }`}
               value={message}
               onKeyDown={(event) => {
                 if (
                   event.key === "Enter" &&
+                  !showPrompts &&
+                  !showSuggestions &&
                   !event.shiftKey &&
-                  message &&
-                  !isStreaming
+                  !(event.nativeEvent as any).isComposing
                 ) {
-                  onSubmit();
                   event.preventDefault();
+                  if (message) {
+                    onSubmit();
+                  }
                 }
               }}
               suppressContentEditableWarning={true}
             />
-
             <div className="flex items-center space-x-3 mr-12 px-4 pb-2 ">
               <Popup
                 removePadding
@@ -426,6 +534,7 @@ export function ChatInputBar({
                 mobilePosition="top-right"
               >
                 <ChatInputOption
+                  toggle
                   flexPriority="shrink"
                   name={
                     selectedAssistant ? selectedAssistant.name : "Assistants"
@@ -433,15 +542,16 @@ export function ChatInputBar({
                   Icon={AssistantsIconSkeleton as IconType}
                 />
               </Popup>
-
               <Popup
                 tab
                 content={(close, ref) => (
                   <LlmTab
+                    openModelSettings={openModelSettings}
                     currentLlm={
                       llmOverrideManager.llmOverride.modelName ||
                       (selectedAssistant
                         ? selectedAssistant.llm_model_version_override ||
+                          llmOverrideManager.globalDefault.modelName ||
                           llmName
                         : llmName)
                     }
@@ -453,10 +563,10 @@ export function ChatInputBar({
                   />
                 )}
                 position="top"
-                // flexPriority="second"
               >
                 <ChatInputOption
                   flexPriority="second"
+                  toggle
                   name={
                     settings?.isMobile
                       ? undefined
@@ -464,6 +574,7 @@ export function ChatInputBar({
                           llmOverrideManager.llmOverride.modelName ||
                             (selectedAssistant
                               ? selectedAssistant.llm_model_version_override ||
+                                llmOverrideManager.globalDefault.modelName ||
                                 llmName
                               : llmName)
                         )
@@ -492,26 +603,38 @@ export function ChatInputBar({
                 }}
               />
             </div>
+
             <div className="absolute bottom-2.5 mobile:right-4 desktop:right-10">
-              <div
-                className="cursor-pointer"
-                onClick={() => {
-                  if (!isStreaming) {
+              {chatState == "streaming" ||
+              chatState == "toolBuilding" ||
+              chatState == "loading" ? (
+                <button
+                  className={`cursor-pointer ${chatState != "streaming" ? "bg-background-400" : "bg-background-800"}  h-[28px] w-[28px] rounded-full`}
+                  onClick={stopGenerating}
+                  disabled={chatState != "streaming"}
+                >
+                  <StopGeneratingIcon
+                    size={10}
+                    className={`text-emphasis m-auto text-white flex-none
+                      }`}
+                  />
+                </button>
+              ) : (
+                <button
+                  className="cursor-pointer"
+                  onClick={() => {
                     if (message) {
                       onSubmit();
                     }
-                  } else {
-                    setIsCancelled(true);
-                  }
-                }}
-              >
-                <SendIcon
-                  size={28}
-                  className={`text-emphasis text-white p-1 rounded-full ${
-                    message ? "bg-background-800" : "bg-[#D7D7D7]"
-                  }`}
-                />
-              </div>
+                  }}
+                  disabled={chatState != "input"}
+                >
+                  <SendIcon
+                    size={28}
+                    className={`text-emphasis text-white p-1 rounded-full  ${chatState == "input" && message ? "bg-background-800" : "bg-background-400"} `}
+                  />
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -103,6 +103,10 @@ class GuruConnector(LoadConnector, PollConnector):
                     # In UI it's called Folders
                     metadata_dict["folders"] = boards
 
+                collection = card.get("collection", {})
+                if collection:
+                    metadata_dict["collection_name"] = collection.get("name", "")
+
                 owner = card.get("owner", {})
                 author = None
                 if owner:

@@ -1,5 +1,5 @@
 import { FiTrash, FiX } from "react-icons/fi";
-import { ModalWrapper } from "./ModalWrapper";
+import { ModalWrapper } from "@/components/modals/ModalWrapper";
 import { BasicClickable } from "@/components/BasicClickable";
 
 export const DeleteChatModal = ({
@@ -16,12 +16,6 @@ export const DeleteChatModal = ({
       <>
         <div className="flex mb-4">
           <h2 className="my-auto text-2xl font-bold">Delete chat?</h2>
-          <div
-            onClick={onClose}
-            className="my-auto ml-auto p-2 hover:bg-hover rounded cursor-pointer"
-          >
-            <FiX size={20} />
-          </div>
         </div>
         <p className="mb-4">
           Click below to confirm that you want to delete{" "}

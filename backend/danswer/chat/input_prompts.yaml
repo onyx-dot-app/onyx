@@ -1,0 +1,24 @@
+input_prompts:
+  - id: -5
+    prompt: "Elaborate"
+    content: "Elaborate on the above, give me a more in depth explanation."
+    active: true
+    is_public: true
+
+  - id: -4
+    prompt: "Reword"
+    content: "Help me rewrite the following politely and concisely for professional communication:\n"
+    active: true
+    is_public: true
+
+  - id: -3
+    prompt: "Email"
+    content: "Write a professional email for me including a subject line, signature, etc. Template the parts that need editing with [ ]. The email should cover the following points:\n"
+    active: true
+    is_public: true
+
+  - id: -2
+    prompt: "Debug"
+    content: "Provide step-by-step troubleshooting instructions for the following issue:\n"
+    active: true
+    is_public: true

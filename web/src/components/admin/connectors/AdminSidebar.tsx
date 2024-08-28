@@ -2,16 +2,23 @@
 "use client";
 import React, { useContext } from "react";
 import Link from "next/link";
-import { Logo_empty } from "@/components/EEA_Logo";
+import { Logo } from "@/components/EEA_Logo";
 import { NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED } from "@/lib/constants";
-import { HeaderTitle } from "@/components/header/Header";
+import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { BackIcon } from "@/components/icons/icons";
-import Image from "next/image";
+import { WarningCircle, WarningDiamond } from "@phosphor-icons/react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@radix-ui/react-tooltip";
 
 interface Item {
   name: string | JSX.Element;
   link: string;
+  error?: boolean;
 }
 
 interface Collection {
@@ -24,6 +31,7 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
   if (!combinedSettings) {
     return null;
   }
+
   const settings = combinedSettings.settings;
   const enterpriseSettings = combinedSettings.enterpriseSettings;
 
@@ -42,7 +50,7 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
             >
               <div className="max-w-[200px] flex gap-x-1 my-auto">
                 <div className="flex-none mb-auto">
-                  <Logo_empty />
+                  <Logo />
 
                 </div>
                 <div className="my-auto">
@@ -83,14 +91,40 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
             </h2>
             {collection.items.map((item) => (
               <Link key={item.link} href={item.link}>
-                <button className="text-sm block w-52 py-2.5 px-2 text-left hover:bg-hover rounded">
+                <button
+                  className={`  text-sm block  flex gap-x-2 items-center w-52 py-2.5 px-2 text-left hover:bg-hover rounded`}
+                >
                   {item.name}
+                  {item.error && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <WarningCircle size={18} className="text-error" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-xs text-text-100 mb-1 p-2 rounded-lg bg-background-900">
+                            Navigate here to update your search settings
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                 </button>
               </Link>
             ))}
           </div>
         ))}
       </nav>
+      {combinedSettings.webVersion && (
+        <div
+          className="flex flex-col mt-6 items-center justify-center w-full"
+          key={"danswerVersion"}
+        >
+          <h2 className="text-xs text-text w-52 font-medium pb-2">
+            Danswer version: {combinedSettings.webVersion}
+          </h2>
+        </div>
+      )}
     </div>
   );
 }

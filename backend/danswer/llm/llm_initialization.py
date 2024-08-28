@@ -75,6 +75,6 @@ def load_llm_providers(db_session: Session) -> None:
     )
     llm_provider = upsert_llm_provider(db_session, llm_provider_request)
     update_default_provider(db_session, llm_provider.id)
-    logger.info(
+    logger.notice(
         f"Migrated LLM provider from env variables for provider '{GEN_AI_MODEL_PROVIDER}'"
     )

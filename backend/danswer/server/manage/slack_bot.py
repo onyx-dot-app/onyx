@@ -161,6 +161,7 @@ def patch_slack_bot_config(
             channel_names=channel_config["channel_names"],
             document_set_ids=slack_bot_config_creation_request.document_sets,
             existing_persona_id=existing_persona_id,
+            enable_auto_filters=slack_bot_config_creation_request.enable_auto_filters,
         ).id
 
     slack_bot_config_model = update_slack_bot_config(

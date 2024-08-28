@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from collections.abc import Iterator
 from typing import cast
 from uuid import uuid4
@@ -115,6 +116,7 @@ class Answer:
         # Returns the full document sections text from the search tool
         return_contexts: bool = False,
         skip_gen_ai_answer_generation: bool = False,
+        is_connected: Callable[[], bool] | None = None,
     ) -> None:
         if single_message_history and message_history:
             raise ValueError(
@@ -122,6 +124,7 @@ class Answer:
             )
 
         self.question = question
+        self.is_connected: Callable[[], bool] | None = is_connected
 
         self.latest_query_files = latest_query_files or []
         self.file_id_to_file = {file.file_id: file for file in (files or [])}
@@ -153,6 +156,7 @@ class Answer:
 
         self._return_contexts = return_contexts
         self.skip_gen_ai_answer_generation = skip_gen_ai_answer_generation
+        self._is_cancelled = False
 
     def _update_prompt_builder_for_search_tool(
         self, prompt_builder: AnswerPromptBuilder, final_context_documents: list[LlmDoc]
@@ -235,6 +239,8 @@ class Answer:
                         tool_call_chunk += message  # type: ignore
                 else:
                     if message.content:
+                        if self.is_cancelled:
+                            return
                         yield cast(str, message.content)
 
             if not tool_call_chunk:
@@ -292,12 +298,15 @@ class Answer:
             yield tool_runner.tool_final_result()
 
             prompt = prompt_builder.build(tool_call_summary=tool_call_summary)
-            yield from message_generator_to_string_generator(
+            for token in message_generator_to_string_generator(
                 self.llm.stream(
                     prompt=prompt,
                     tools=[tool.tool_definition() for tool in self.tools],
                 )
-            )
+            ):
+                if self.is_cancelled:
+                    return
+                yield token
 
             return
 
@@ -366,7 +375,7 @@ class Answer:
                 else None
             )
 
-            logger.info(f"Chosen tool: {chosen_tool_and_args}")
+            logger.notice(f"Chosen tool: {chosen_tool_and_args}")
 
         if not chosen_tool_and_args:
             prompt_builder.update_system_prompt(
@@ -378,9 +387,13 @@ class Answer:
                 )
             )
             prompt = prompt_builder.build()
-            yield from message_generator_to_string_generator(
+            for token in message_generator_to_string_generator(
                 self.llm.stream(prompt=prompt)
-            )
+            ):
+                if self.is_cancelled:
+                    return
+                yield token
+
             return
 
         tool, tool_args = chosen_tool_and_args
@@ -434,7 +447,12 @@ class Answer:
         yield final
 
         prompt = prompt_builder.build()
-        yield from message_generator_to_string_generator(self.llm.stream(prompt=prompt))
+        for token in message_generator_to_string_generator(
+            self.llm.stream(prompt=prompt)
+        ):
+            if self.is_cancelled:
+                return
+            yield token
 
     @property
     def processed_streamed_output(self) -> AnswerStream:
@@ -483,6 +501,7 @@ class Answer:
                         ]
                     elif message.id == FINAL_CONTEXT_DOCUMENTS:
                         final_context_docs = cast(list[LlmDoc], message.response)
+
                     elif (
                         message.id == SEARCH_DOC_CONTENT_ID
                         and not self._return_contexts
@@ -536,3 +555,15 @@ class Answer:
                 citations.append(packet)
 
         return citations
+
+    @property
+    def is_cancelled(self) -> bool:
+        if self._is_cancelled:
+            return True
+
+        if self.is_connected is not None:
+            if not self.is_connected():
+                logger.debug("Answer stream has been cancelled")
+            self._is_cancelled = not self.is_connected()
+
+        return self._is_cancelled

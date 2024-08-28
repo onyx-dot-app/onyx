@@ -19,6 +19,9 @@ depends_on: None = None
 def upgrade() -> None:
     op.drop_table("deletion_attempt")
 
+    # Remove the DeletionStatus enum
+    op.execute("DROP TYPE IF EXISTS deletionstatus;")
+
 
 def downgrade() -> None:
     op.create_table(

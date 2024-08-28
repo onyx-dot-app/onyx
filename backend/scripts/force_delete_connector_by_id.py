@@ -5,6 +5,8 @@ import sys
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
+from danswer.db.enums import ConnectorCredentialPairStatus
+
 # Modify sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -22,7 +24,7 @@ from danswer.db.connector import fetch_connector_by_id
 from danswer.db.document import get_documents_for_connector_credential_pair
 from danswer.db.index_attempt import (
     delete_index_attempts,
-    cancel_indexing_attempts_for_connector,
+    cancel_indexing_attempts_for_ccpair,
 )
 from danswer.db.models import ConnectorCredentialPair
 from danswer.document_index.interfaces import DocumentIndex
@@ -117,7 +119,7 @@ def _unsafe_deletion(
         db_session.delete(connector)
     db_session.commit()
 
-    logger.info(
+    logger.notice(
         "Successfully deleted connector_credential_pair with connector_id:"
         f" '{connector_id}' and credential_id: '{credential_id}'. Deleted {num_docs_deleted} docs."
     )
@@ -131,20 +133,20 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
         Are you SURE you want to continue? (enter 'Y' to continue): "
     )
     if user_input != "Y":
-        logger.info(f"You entered {user_input}. Exiting!")
+        logger.notice(f"You entered {user_input}. Exiting!")
         return
 
-    logger.info("Getting connector credential pair")
+    logger.notice("Getting connector credential pair")
     cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
 
     if not cc_pair:
         logger.error(f"Connector credential pair with ID {cc_pair_id} not found")
         return
 
-    if not cc_pair.connector.disabled:
+    if cc_pair.status == ConnectorCredentialPairStatus.ACTIVE:
         logger.error(
-            f"Connector {cc_pair.connector.name} is not disabled, cannot continue. \
-            Please navigate to the connector and disbale before attempting again"
+            f"Connector {cc_pair.connector.name} is active, cannot continue. \
+            Please navigate to the connector and pause before attempting again"
         )
         return
 
@@ -158,9 +160,9 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
         )
         return
 
-    logger.info("Cancelling indexing attempt for the connector")
-    cancel_indexing_attempts_for_connector(
-        connector_id=connector_id, db_session=db_session, include_secondary_index=True
+    logger.notice("Cancelling indexing attempt for the connector")
+    cancel_indexing_attempts_for_ccpair(
+        cc_pair_id=cc_pair_id, db_session=db_session, include_secondary_index=True
     )
 
     validated_cc_pair = get_connector_credential_pair(
@@ -175,8 +177,13 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
             f"{connector_id} and Credential ID: {credential_id} does not exist."
         )
 
+    file_names: list[str] = (
+        cc_pair.connector.connector_specific_config["file_locations"]
+        if cc_pair.connector.source == DocumentSource.FILE
+        else []
+    )
     try:
-        logger.info("Deleting information from Vespa and Postgres")
+        logger.notice("Deleting information from Vespa and Postgres")
         curr_ind_name, sec_ind_name = get_both_index_names(db_session)
         document_index = get_default_document_index(
             primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
@@ -188,17 +195,16 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
             cc_pair=cc_pair,
             pair_id=cc_pair_id,
         )
-        logger.info(f"Deleted {files_deleted_count} files!")
+        logger.notice(f"Deleted {files_deleted_count} files!")
 
     except Exception as e:
         logger.error(f"Failed to delete connector due to {e}")
 
-    if cc_pair.connector.source == DocumentSource.FILE:
-        connector = cc_pair.connector
-        logger.info("Deleting stored files!")
+    if file_names:
+        logger.notice("Deleting stored files!")
         file_store = get_default_file_store(db_session)
-        for file_name in connector.connector_specific_config["file_locations"]:
-            logger.info(f"Deleting file {file_name}")
+        for file_name in file_names:
+            logger.notice(f"Deleting file {file_name}")
             file_store.delete_file(file_name)
 
 

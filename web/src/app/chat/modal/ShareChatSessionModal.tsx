@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ModalWrapper } from "./ModalWrapper";
+import { ModalWrapper } from "@/components/modals/ModalWrapper";
 import { Button, Callout, Divider, Text } from "@tremor/react";
 import { Spinner } from "@/components/Spinner";
 import { ChatSessionSharedStatus } from "../interfaces";
@@ -63,13 +63,6 @@ export function ShareChatSessionModal({
           <h2 className="text-2xl text-emphasis font-bold flex my-auto">
             Share link to Chat
           </h2>
-
-          <div
-            onClick={onClose}
-            className="my-auto ml-auto p-2 hover:bg-hover rounded cursor-pointer"
-          >
-            <FiX size={20} />
-          </div>
         </div>
 
         {linkGenerating && <Spinner />}

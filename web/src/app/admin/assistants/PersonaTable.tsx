@@ -5,12 +5,15 @@ import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
 import { CustomCheckbox } from "@/components/CustomCheckbox";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { UniqueIdentifier } from "@dnd-kit/core";
 import { DraggableTable } from "@/components/table/DraggableTable";
 import { deletePersona, personaComparator } from "./lib";
 import { FiEdit2 } from "react-icons/fi";
 import { TrashIcon } from "@/components/icons/icons";
+import { getCurrentUser } from "@/lib/user";
+import { UserRole, User } from "@/lib/types";
+import { useUser } from "@/components/user/UserProvider";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.default_persona) {
@@ -28,21 +31,51 @@ function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   return <Text>Personal {persona.owner && <>({persona.owner.email})</>}</Text>;
 }
 
-export function PersonasTable({ personas }: { personas: Persona[] }) {
+const togglePersonaVisibility = async (
+  personaId: number,
+  isVisible: boolean
+) => {
+  const response = await fetch(`/api/admin/persona/${personaId}/visible`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      is_visible: !isVisible,
+    }),
+  });
+  return response;
+};
+
+export function PersonasTable({
+  allPersonas,
+  editablePersonas,
+}: {
+  allPersonas: Persona[];
+  editablePersonas: Persona[];
+}) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
 
-  const availablePersonaIds = new Set(
-    personas.map((persona) => persona.id.toString())
+  const { isLoadingUser, isAdmin } = useUser();
+
+  const editablePersonaIds = new Set(
+    editablePersonas.map((p) => p.id.toString())
   );
-  const sortedPersonas = [...personas];
-  sortedPersonas.sort(personaComparator);
+
+  const sortedPersonas = useMemo(() => {
+    const editable = editablePersonas.sort(personaComparator);
+    const nonEditable = allPersonas
+      .filter((p) => !editablePersonaIds.has(p.id.toString()))
+      .sort(personaComparator);
+    return [...editable, ...nonEditable];
+  }, [allPersonas, editablePersonas]);
 
   const [finalPersonas, setFinalPersonas] = useState<string[]>(
     sortedPersonas.map((persona) => persona.id.toString())
   );
   const finalPersonaValues = finalPersonas
-    .filter((id) => availablePersonaIds.has(id))
+    .filter((id) => new Set(allPersonas.map((p) => p.id.toString())).has(id))
     .map((id) => {
       return sortedPersonas.find(
         (persona) => persona.id.toString() === id
@@ -75,6 +108,10 @@ export function PersonasTable({ personas }: { personas: Persona[] }) {
     }
   };
 
+  if (isLoadingUser) {
+    return <></>;
+  }
+
   return (
     <div>
       {popup}
@@ -82,12 +119,14 @@ export function PersonasTable({ personas }: { personas: Persona[] }) {
       <Text className="my-2">
         Assistants will be displayed as options on the Chat / Search interfaces
         in the order they are displayed below. Assistants marked as hidden will
-        not be displayed.
+        not be displayed. Editable assistants are shown at the top.
       </Text>
 
       <DraggableTable
         headers={["Name", "Description", "Type", "Is Visible", "Delete"]}
+        isAdmin={isAdmin}
         rows={finalPersonaValues.map((persona) => {
+          const isEditable = editablePersonaIds.has(persona.id.toString());
           return {
             id: persona.id.toString(),
             cells: [
@@ -116,28 +155,22 @@ export function PersonasTable({ personas }: { personas: Persona[] }) {
               <div
                 key="is_visible"
                 onClick={async () => {
-                  const response = await fetch(
-                    `/api/admin/persona/${persona.id}/visible`,
-                    {
-                      method: "PATCH",
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({
-                        is_visible: !persona.is_visible,
-                      }),
+                  if (isEditable) {
+                    const response = await togglePersonaVisibility(
+                      persona.id,
+                      persona.is_visible
+                    );
+                    if (response.ok) {
+                      router.refresh();
+                    } else {
+                      setPopup({
+                        type: "error",
+                        message: `Failed to update persona - ${await response.text()}`,
+                      });
                     }
-                  );
-                  if (response.ok) {
-                    router.refresh();
-                  } else {
-                    setPopup({
-                      type: "error",
-                      message: `Failed to update persona - ${await response.text()}`,
-                    });
                   }
                 }}
-                className="px-1 py-0.5 hover:bg-hover-light rounded flex cursor-pointer select-none w-fit"
+                className={`px-1 py-0.5 rounded flex ${isEditable ? "hover:bg-hover cursor-pointer" : ""} select-none w-fit`}
               >
                 <div className="my-auto w-12">
                   {!persona.is_visible ? (
@@ -152,7 +185,7 @@ export function PersonasTable({ personas }: { personas: Persona[] }) {
               </div>,
               <div key="edit" className="flex">
                 <div className="mx-auto my-auto">
-                  {!persona.default_persona ? (
+                  {!persona.default_persona && isEditable ? (
                     <div
                       className="hover:bg-hover rounded p-1 cursor-pointer"
                       onClick={async () => {

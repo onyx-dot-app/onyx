@@ -344,6 +344,7 @@ interface BooleanFormFieldProps {
   small?: boolean;
   alignTop?: boolean;
   noLabel?: boolean;
+  disabled?: boolean;
 }
 
 export const BooleanFormField = ({
@@ -354,12 +355,14 @@ export const BooleanFormField = ({
   noPadding,
   noLabel,
   small,
+  disabled,
   alignTop,
 }: BooleanFormFieldProps) => {
   return (
     <div className="mb-4">
       <label className="flex text-sm">
         <Field
+          disabled={disabled}
           name={name}
           type="checkbox"
           className={`${noPadding ? "mr-3" : "mx-3"} px-5 w-3.5 h-3.5 ${

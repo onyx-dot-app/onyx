@@ -1,5 +1,5 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { LLMProviderDescriptor } from "@/app/admin/models/llm/interfaces";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { LlmOverride } from "@/lib/hooks";
 
 export function getFinalLLM(
@@ -32,6 +32,34 @@ export function getFinalLLM(
   }
 
   return [provider, model];
+}
+
+export function getLLMProviderOverrideForPersona(
+  liveAssistant: Persona,
+  llmProviders: LLMProviderDescriptor[]
+): LlmOverride | null {
+  const overrideProvider = liveAssistant.llm_model_provider_override;
+  const overrideModel = liveAssistant.llm_model_version_override;
+
+  if (!overrideModel) {
+    return null;
+  }
+
+  const matchingProvider = llmProviders.find(
+    (provider) =>
+      (overrideProvider ? provider.name === overrideProvider : true) &&
+      provider.model_names.includes(overrideModel)
+  );
+
+  if (matchingProvider) {
+    return {
+      name: matchingProvider.name,
+      provider: matchingProvider.provider,
+      modelName: overrideModel,
+    };
+  }
+
+  return null;
 }
 
 const MODELS_SUPPORTING_IMAGES = [

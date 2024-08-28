@@ -16,7 +16,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from danswer.auth.schemas import UserRole
-from danswer.chat.models import LLMRelevanceSummaryResponse
+from danswer.chat.models import DocumentRelevance
 from danswer.configs.chat_configs import HARD_DELETE_CHATS
 from danswer.configs.constants import MessageType
 from danswer.db.models import ChatMessage
@@ -117,6 +117,7 @@ def get_chat_sessions_by_user(
     deleted: bool | None,
     db_session: Session,
     only_one_shot: bool = False,
+    limit: int = 50,
 ) -> list[ChatSession]:
     stmt = select(ChatSession).where(ChatSession.user_id == user_id)
 
@@ -129,6 +130,9 @@ def get_chat_sessions_by_user(
 
     if deleted is not None:
         stmt = stmt.where(ChatSession.deleted == deleted)
+
+    if limit:
+        stmt = stmt.limit(limit)
 
     result = db_session.execute(stmt)
     chat_sessions = result.scalars().all()
@@ -393,6 +397,34 @@ def get_or_create_root_message(
         return new_root_message
 
 
+def reserve_message_id(
+    db_session: Session,
+    chat_session_id: int,
+    parent_message: int,
+    message_type: MessageType,
+) -> int:
+    # Create an empty chat message
+    empty_message = ChatMessage(
+        chat_session_id=chat_session_id,
+        parent_message=parent_message,
+        latest_child_message=None,
+        message="",
+        token_count=0,
+        message_type=message_type,
+    )
+
+    # Add the empty message to the session
+    db_session.add(empty_message)
+
+    # Flush the session to get an ID for the new chat message
+    db_session.flush()
+
+    # Get the ID of the newly created message
+    new_id = empty_message.id
+
+    return new_id
+
+
 def create_new_chat_message(
     chat_session_id: int,
     parent_message: ChatMessage,
@@ -410,28 +442,53 @@ def create_new_chat_message(
     citations: dict[int, int] | None = None,
     tool_calls: list[ToolCall] | None = None,
     commit: bool = True,
+    reserved_message_id: int | None = None,
+    overridden_model: str | None = None,
 ) -> ChatMessage:
-    new_chat_message = ChatMessage(
-        chat_session_id=chat_session_id,
-        parent_message=parent_message.id,
-        latest_child_message=None,
-        message=message,
-        rephrased_query=rephrased_query,
-        prompt_id=prompt_id,
-        token_count=token_count,
-        message_type=message_type,
-        citations=citations,
-        files=files,
-        tool_calls=tool_calls if tool_calls else [],
-        error=error,
-        alternate_assistant_id=alternate_assistant_id,
-    )
+    if reserved_message_id is not None:
+        # Edit existing message
+        existing_message = db_session.query(ChatMessage).get(reserved_message_id)
+        if existing_message is None:
+            raise ValueError(f"No message found with id {reserved_message_id}")
+
+        existing_message.chat_session_id = chat_session_id
+        existing_message.parent_message = parent_message.id
+        existing_message.message = message
+        existing_message.rephrased_query = rephrased_query
+        existing_message.prompt_id = prompt_id
+        existing_message.token_count = token_count
+        existing_message.message_type = message_type
+        existing_message.citations = citations
+        existing_message.files = files
+        existing_message.tool_calls = tool_calls if tool_calls else []
+        existing_message.error = error
+        existing_message.alternate_assistant_id = alternate_assistant_id
+        existing_message.overridden_model = overridden_model
+
+        new_chat_message = existing_message
+    else:
+        # Create new message
+        new_chat_message = ChatMessage(
+            chat_session_id=chat_session_id,
+            parent_message=parent_message.id,
+            latest_child_message=None,
+            message=message,
+            rephrased_query=rephrased_query,
+            prompt_id=prompt_id,
+            token_count=token_count,
+            message_type=message_type,
+            citations=citations,
+            files=files,
+            tool_calls=tool_calls if tool_calls else [],
+            error=error,
+            alternate_assistant_id=alternate_assistant_id,
+            overridden_model=overridden_model,
+        )
+        db_session.add(new_chat_message)
 
     # SQL Alchemy will propagate this to update the reference_docs' foreign keys
     if reference_docs:
         new_chat_message.search_docs = reference_docs
-
-    db_session.add(new_chat_message)
 
     # Flush the session to get an ID for the new chat message
     db_session.flush()
@@ -541,11 +598,11 @@ def get_doc_query_identifiers_from_model(
 def update_search_docs_table_with_relevance(
     db_session: Session,
     reference_db_search_docs: list[SearchDoc],
-    relevance_summary: LLMRelevanceSummaryResponse,
+    relevance_summary: DocumentRelevance,
 ) -> None:
     for search_doc in reference_db_search_docs:
         relevance_data = relevance_summary.relevance_summaries.get(
-            f"{search_doc.document_id}-{search_doc.chunk_ind}"
+            search_doc.document_id
         )
         if relevance_data is not None:
             db_session.execute(
@@ -665,6 +722,7 @@ def translate_db_message_to_chat_message_detail(
             for tool_call in chat_message.tool_calls
         ],
         alternate_assistant_id=chat_message.alternate_assistant_id,
+        overridden_model=chat_message.overridden_model,
     )
 
     return chat_msg_detail

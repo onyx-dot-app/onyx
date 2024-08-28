@@ -7,6 +7,7 @@ import {
   LightBulbIcon,
   LightSettingsIcon,
 } from "../icons/icons";
+import { CustomTooltip } from "../tooltip/CustomTooltip";
 
 type DocumentFeedbackType = "endorse" | "reject" | "hide" | "unhide";
 
@@ -115,21 +116,24 @@ export const DocumentFeedbackBlock = ({
 }: DocumentFeedbackBlockProps) => {
   return (
     <div className="flex items-center gap-x-2">
-      <DocumentFeedback
-        documentId={documentId}
-        messageId={messageId}
-        documentRank={documentRank}
-        setPopup={setPopup}
-        feedbackType="endorse"
-      />
-
-      <DocumentFeedback
-        documentId={documentId}
-        messageId={messageId}
-        documentRank={documentRank}
-        setPopup={setPopup}
-        feedbackType="reject"
-      />
+      <CustomTooltip showTick line content="Good response">
+        <DocumentFeedback
+          documentId={documentId}
+          messageId={messageId}
+          documentRank={documentRank}
+          setPopup={setPopup}
+          feedbackType="endorse"
+        />
+      </CustomTooltip>
+      <CustomTooltip showTick line content="Bad response">
+        <DocumentFeedback
+          documentId={documentId}
+          messageId={messageId}
+          documentRank={documentRank}
+          setPopup={setPopup}
+          feedbackType="reject"
+        />
+      </CustomTooltip>
     </div>
   );
 };

@@ -4,19 +4,75 @@ from uuid import UUID
 
 from sqlalchemy import and_
 from sqlalchemy import delete
+from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import or_
+from sqlalchemy import Select
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
+from danswer.db.connector_credential_pair import get_cc_pair_groups_for_ids
+from danswer.db.connector_credential_pair import get_connector_credential_pairs
+from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import Document
 from danswer.db.models import DocumentByConnectorCredentialPair
 from danswer.db.models import DocumentSet as DocumentSetDBModel
 from danswer.db.models import DocumentSet__ConnectorCredentialPair
+from danswer.db.models import DocumentSet__UserGroup
+from danswer.db.models import User
+from danswer.db.models import User__UserGroup
+from danswer.db.models import UserRole
 from danswer.server.features.document_set.models import DocumentSetCreationRequest
 from danswer.server.features.document_set.models import DocumentSetUpdateRequest
 from danswer.utils.variable_functionality import fetch_versioned_implementation
+
+
+def _add_user_filters(
+    stmt: Select, user: User | None, get_editable: bool = True
+) -> Select:
+    # If user is None, assume the user is an admin or auth is disabled
+    if user is None or user.role == UserRole.ADMIN:
+        return stmt
+
+    DocumentSet__UG = aliased(DocumentSet__UserGroup)
+    User__UG = aliased(User__UserGroup)
+    """
+    Here we select cc_pairs by relation:
+    User -> User__UserGroup -> DocumentSet__UserGroup -> DocumentSet
+    """
+    stmt = stmt.outerjoin(DocumentSet__UG).outerjoin(
+        User__UserGroup,
+        User__UserGroup.user_group_id == DocumentSet__UG.user_group_id,
+    )
+    """
+    Filter DocumentSets by:
+    - if the user is in the user_group that owns the DocumentSet
+    - if the user is not a global_curator, they must also have a curator relationship
+    to the user_group
+    - if editing is being done, we also filter out DocumentSets that are owned by groups
+    that the user isn't a curator for
+    - if we are not editing, we show all DocumentSets in the groups the user is a curator
+    for (as well as public DocumentSets)
+    """
+    where_clause = User__UserGroup.user_id == user.id
+    if user.role == UserRole.CURATOR and get_editable:
+        where_clause &= User__UserGroup.is_curator == True  # noqa: E712
+    if get_editable:
+        user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
+        if user.role == UserRole.CURATOR:
+            user_groups = user_groups.where(User__UG.is_curator == True)  # noqa: E712
+        where_clause &= (
+            ~exists()
+            .where(DocumentSet__UG.document_set_id == DocumentSetDBModel.id)
+            .where(~DocumentSet__UG.user_group_id.in_(user_groups))
+            .correlate(DocumentSetDBModel)
+        )
+    else:
+        where_clause |= DocumentSetDBModel.is_public == True  # noqa: E712
+
+    return stmt.where(where_clause)
 
 
 def _delete_document_set_cc_pairs__no_commit(
@@ -49,11 +105,15 @@ def delete_document_set_privacy__no_commit(
 
 
 def get_document_set_by_id(
-    db_session: Session, document_set_id: int
+    db_session: Session,
+    document_set_id: int,
+    user: User | None = None,
+    get_editable: bool = True,
 ) -> DocumentSetDBModel | None:
-    return db_session.scalar(
-        select(DocumentSetDBModel).where(DocumentSetDBModel.id == document_set_id)
-    )
+    stmt = select(DocumentSetDBModel).distinct()
+    stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
+    stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
+    return db_session.scalar(stmt)
 
 
 def get_document_set_by_name(
@@ -85,6 +145,45 @@ def make_doc_set_private(
         raise NotImplementedError("Danswer MIT does not support private Document Sets")
 
 
+def _check_if_cc_pairs_are_owned_by_groups(
+    db_session: Session,
+    cc_pair_ids: list[int],
+    group_ids: list[int],
+) -> None:
+    """
+    This function checks if the CC pairs are owned by the specified groups or public.
+    If not, it raises a ValueError.
+    """
+    group_cc_pair_relationships = get_cc_pair_groups_for_ids(
+        db_session=db_session,
+        cc_pair_ids=cc_pair_ids,
+    )
+
+    group_cc_pair_relationships_set = {
+        (relationship.cc_pair_id, relationship.user_group_id)
+        for relationship in group_cc_pair_relationships
+    }
+
+    missing_cc_pair_ids = []
+    for cc_pair_id in cc_pair_ids:
+        for group_id in group_ids:
+            if (cc_pair_id, group_id) not in group_cc_pair_relationships_set:
+                missing_cc_pair_ids.append(cc_pair_id)
+                break
+
+    if missing_cc_pair_ids:
+        cc_pairs = get_connector_credential_pairs(
+            db_session=db_session,
+            ids=missing_cc_pair_ids,
+        )
+        for cc_pair in cc_pairs:
+            if not cc_pair.is_public:
+                raise ValueError(
+                    f"Connector Credential Pair with ID: '{cc_pair.id}'"
+                    " is not owned by the specified groups"
+                )
+
+
 def insert_document_set(
     document_set_creation_request: DocumentSetCreationRequest,
     user_id: UUID | None,
@@ -94,8 +193,12 @@ def insert_document_set(
         # It's cc-pairs in actuality but the UI displays this error
         raise ValueError("Cannot create a document set with no Connectors")
 
-    # start a transaction
-    db_session.begin()
+    if not document_set_creation_request.is_public:
+        _check_if_cc_pairs_are_owned_by_groups(
+            db_session=db_session,
+            cc_pair_ids=document_set_creation_request.cc_pair_ids,
+            group_ids=document_set_creation_request.groups or [],
+        )
 
     try:
         new_document_set_row = DocumentSetDBModel(
@@ -138,19 +241,28 @@ def insert_document_set(
 
 
 def update_document_set(
-    document_set_update_request: DocumentSetUpdateRequest, db_session: Session
+    db_session: Session,
+    document_set_update_request: DocumentSetUpdateRequest,
+    user: User | None = None,
 ) -> tuple[DocumentSetDBModel, list[DocumentSet__ConnectorCredentialPair]]:
     if not document_set_update_request.cc_pair_ids:
         # It's cc-pairs in actuality but the UI displays this error
         raise ValueError("Cannot create a document set with no Connectors")
 
-    # start a transaction
-    db_session.begin()
+    if not document_set_update_request.is_public:
+        _check_if_cc_pairs_are_owned_by_groups(
+            db_session=db_session,
+            cc_pair_ids=document_set_update_request.cc_pair_ids,
+            group_ids=document_set_update_request.groups,
+        )
 
     try:
         # update the description
         document_set_row = get_document_set_by_id(
-            db_session=db_session, document_set_id=document_set_update_request.id
+            db_session=db_session,
+            document_set_id=document_set_update_request.id,
+            user=user,
+            get_editable=True,
         )
         if document_set_row is None:
             raise ValueError(
@@ -228,20 +340,26 @@ def delete_document_set(
 
 
 def mark_document_set_as_to_be_deleted(
-    document_set_id: int, db_session: Session
+    db_session: Session,
+    document_set_id: int,
+    user: User | None = None,
 ) -> None:
     """Cleans up all document_set -> cc_pair relationships and marks the document set
     as needing an update. The actual document set row will be deleted by the background
     job which syncs these changes to Vespa."""
-    # start a transaction
-    db_session.begin()
 
     try:
         document_set_row = get_document_set_by_id(
-            db_session=db_session, document_set_id=document_set_id
+            db_session=db_session,
+            document_set_id=document_set_id,
+            user=user,
+            get_editable=True,
         )
         if document_set_row is None:
-            raise ValueError(f"No document set with ID: '{document_set_id}'")
+            error_msg = f"Document set with ID: '{document_set_id}' does not exist "
+            if user is not None:
+                error_msg += f"or is not editable by user with email: '{user.email}'"
+            raise ValueError(error_msg)
         if not document_set_row.is_up_to_date:
             raise ValueError(
                 "Cannot delete document set while it is syncing. Please wait "
@@ -270,37 +388,20 @@ def mark_document_set_as_to_be_deleted(
         raise
 
 
-def mark_cc_pair__document_set_relationships_to_be_deleted__no_commit(
-    cc_pair_id: int, db_session: Session
-) -> set[int]:
-    """Marks all CC Pair -> Document Set relationships for the specified
-    `cc_pair_id` as not current and returns the list of all document set IDs
-    affected.
-
-    NOTE: rases a `ValueError` if any of the document sets are currently syncing
-    to avoid getting into a bad state."""
-    document_set__cc_pair_relationships = db_session.scalars(
-        select(DocumentSet__ConnectorCredentialPair).where(
+def delete_document_set_cc_pair_relationship__no_commit(
+    connector_id: int, credential_id: int, db_session: Session
+) -> None:
+    """Deletes all rows from DocumentSet__ConnectorCredentialPair where the
+    connector_credential_pair_id matches the given cc_pair_id."""
+    delete_stmt = delete(DocumentSet__ConnectorCredentialPair).where(
+        and_(
+            ConnectorCredentialPair.connector_id == connector_id,
+            ConnectorCredentialPair.credential_id == credential_id,
             DocumentSet__ConnectorCredentialPair.connector_credential_pair_id
-            == cc_pair_id
+            == ConnectorCredentialPair.id,
         )
-    ).all()
-
-    document_set_ids_touched: set[int] = set()
-    for document_set__cc_pair_relationship in document_set__cc_pair_relationships:
-        document_set__cc_pair_relationship.is_current = False
-
-        if not document_set__cc_pair_relationship.document_set.is_up_to_date:
-            raise ValueError(
-                "Cannot delete CC pair while it is attached to a document set "
-                "that is syncing. Please wait for the document set to finish "
-                "syncing, and then try again."
-            )
-
-        document_set__cc_pair_relationship.document_set.is_up_to_date = False
-        document_set_ids_touched.add(document_set__cc_pair_relationship.document_set_id)
-
-    return document_set_ids_touched
+    )
+    db_session.execute(delete_stmt)
 
 
 def fetch_document_sets(
@@ -357,29 +458,14 @@ def fetch_document_sets(
     ]
 
 
-def fetch_all_document_sets(db_session: Session) -> Sequence[DocumentSetDBModel]:
-    """Used for Admin UI where they should have visibility into all document sets"""
-    return db_session.scalars(select(DocumentSetDBModel)).all()
-
-
-def fetch_user_document_sets(
-    user_id: UUID | None, db_session: Session
-) -> list[tuple[DocumentSetDBModel, list[ConnectorCredentialPair]]]:
-    # If Auth is turned off, all document sets become visible
-    # document sets are not permission enforced, only for organizational purposes
-    # the documents themselves are permission enforced
-    if user_id is None:
-        return fetch_document_sets(
-            user_id=user_id, db_session=db_session, include_outdated=True
-        )
-
-    versioned_fetch_doc_sets_fn = fetch_versioned_implementation(
-        "danswer.db.document_set", "fetch_document_sets"
-    )
-
-    return versioned_fetch_doc_sets_fn(
-        user_id=user_id, db_session=db_session, include_outdated=True
-    )
+def fetch_all_document_sets_for_user(
+    db_session: Session,
+    user: User | None = None,
+    get_editable: bool = True,
+) -> Sequence[DocumentSetDBModel]:
+    stmt = select(DocumentSetDBModel).distinct()
+    stmt = _add_user_filters(stmt, user, get_editable=get_editable)
+    return db_session.scalars(stmt).all()
 
 
 def fetch_documents_for_document_set_paginated(
@@ -431,8 +517,10 @@ def fetch_documents_for_document_set_paginated(
 
 
 def fetch_document_sets_for_documents(
-    document_ids: list[str], db_session: Session
+    document_ids: list[str],
+    db_session: Session,
 ) -> Sequence[tuple[str, list[str]]]:
+    """Gives back a list of (document_id, list[document_set_names]) tuples"""
     stmt = (
         select(Document.id, func.array_agg(DocumentSetDBModel.name))
         .join(
@@ -459,6 +547,10 @@ def fetch_document_sets_for_documents(
             Document.id == DocumentByConnectorCredentialPair.id,
         )
         .where(Document.id.in_(document_ids))
+        # don't include CC pairs that are being deleted
+        # NOTE: CC pairs can never go from DELETING to any other state -> it's safe to ignore them
+        # as we can assume their document sets are no longer relevant
+        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
         .where(DocumentSet__ConnectorCredentialPair.is_current == True)  # noqa: E712
         .group_by(Document.id)
     )

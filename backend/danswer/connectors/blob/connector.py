@@ -56,7 +56,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         Raises ValueError for unsupported bucket types.
         """
 
-        logger.info(
+        logger.debug(
             f"Loading credentials for {self.bucket_name} or type {self.bucket_type}"
         )
 
@@ -169,7 +169,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         end: datetime,
     ) -> GenerateDocumentsOutput:
         if self.s3_client is None:
-            raise ConnectorMissingCredentialError("Blog storage")
+            raise ConnectorMissingCredentialError("Blob storage")
 
         paginator = self.s3_client.get_paginator("list_objects_v2")
         pages = paginator.paginate(Bucket=self.bucket_name, Prefix=self.prefix)
@@ -220,7 +220,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             yield batch
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        logger.info("Loading blob objects")
+        logger.debug("Loading blob objects")
         return self._yield_blob_objects(
             start=datetime(1970, 1, 1, tzinfo=timezone.utc),
             end=datetime.now(timezone.utc),
@@ -230,7 +230,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
         if self.s3_client is None:
-            raise ConnectorMissingCredentialError("Blog storage")
+            raise ConnectorMissingCredentialError("Blob storage")
 
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
         end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)

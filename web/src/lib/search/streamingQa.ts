@@ -61,8 +61,7 @@ export const searchRequestStreamed = async ({
           filters: filters,
           enable_auto_detect_filters: false,
         },
-        llm_doc_eval: true,
-        skip_gen_ai_answer_generation: true,
+        evaluation_type: agentic ? "agentic" : "basic",
       }),
       headers: {
         "Content-Type": "application/json",
@@ -103,7 +102,6 @@ export const searchRequestStreamed = async ({
 
         if (Object.hasOwn(chunk, "relevance_summaries")) {
           const relevanceChunk = chunk as RelevanceChunk;
-          const responseTaken = relevanceChunk.relevance_summaries;
           updateDocumentRelevance(relevanceChunk.relevance_summaries);
         }
 
@@ -184,6 +182,18 @@ export const searchRequestStreamed = async ({
     }
   } catch (err) {
     console.error("Fetch error:", err);
+    let errorMessage = "An error occurred while fetching the answer.";
+
+    if (err instanceof Error) {
+      if (err.message.includes("rate_limit_error")) {
+        errorMessage =
+          "Rate limit exceeded. Please try again later or reduce the length of your query.";
+      } else {
+        errorMessage = err.message;
+      }
+    }
+
+    updateError(errorMessage);
   }
 
   return { answer, quotes, relevantDocuments };

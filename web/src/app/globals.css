@@ -17,6 +17,28 @@
   }
 }
 
+.include-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.include-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.include-scrollbar::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.include-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.include-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #888 #f1f1f1;
+}
+
 .inputscroll::-webkit-scrollbar-track {
   background: #e5e7eb;
   scrollbar-width: none;
@@ -138,4 +160,87 @@
 
 body {
   overscroll-behavior-y: none;
+}
+
+/* Base styles for code blocks */
+.prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  background-color: theme("colors.code-bg");
+  font-size: theme("fontSize.code-sm");
+}
+
+pre[class*="language-"],
+code[class*="language-"] {
+  color: theme("colors.code-text");
+}
+
+/* Token styles */
+.code-line .token.comment,
+.code-line .token.prolog,
+.code-line .token.doctype,
+.code-line .token.cdata {
+  color: theme("colors.token-comment");
+}
+
+.code-line .token.punctuation,
+.code-line .token.operator,
+.code-line .token.entity,
+.code-line .token.url,
+.code-line .language-css .token.string,
+.code-line .style .token.string {
+  color: theme("colors.token-punctuation");
+}
+
+.code-line .token.property,
+.code-line .token.tag,
+.code-line .token.boolean,
+.code-line .token.number,
+.code-line .token.constant,
+.code-line .token.symbol,
+.code-line .token.deleted,
+.code-line .token.tag .token.punctuation {
+  color: theme("colors.token-property");
+}
+
+.code-line .token.selector,
+.code-line .token.attr-name,
+.code-line .token.string,
+.code-line .token.char,
+.code-line .token.builtin,
+.code-line .token.inserted,
+.code-line .token.attr-value,
+.code-line .token.attr-value .token.punctuation {
+  color: theme("colors.token-selector");
+}
+
+.code-line .token.atrule,
+.code-line .token.keyword {
+  color: theme("colors.token-atrule");
+}
+
+.code-line .token.function,
+.code-line .token.class-name {
+  color: theme("colors.token-function");
+}
+
+.code-line .token.regex,
+.code-line .token.important,
+.code-line .token.variable {
+  color: theme("colors.token-regex");
+}
+
+.code-line .token.important,
+.code-line .token.bold {
+  font-weight: theme("fontWeight.token-bold");
+}
+
+.code-line .token.italic {
+  font-style: theme("fontStyle.token-italic");
+}
+
+.code-line .token.entity {
+  cursor: help;
+}
+
+.code-line .token.attr-name {
+  color: theme("colors.token-attr-name");
 }

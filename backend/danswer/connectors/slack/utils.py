@@ -68,12 +68,13 @@ def make_slack_api_call_paginated(
 
 
 def make_slack_api_rate_limited(
-    call: Callable[..., SlackResponse], max_retries: int = 3
+    call: Callable[..., SlackResponse], max_retries: int = 7
 ) -> Callable[..., SlackResponse]:
     """Wraps calls to slack API so that they automatically handle rate limiting"""
 
     @wraps(call)
     def rate_limited_call(**kwargs: Any) -> SlackResponse:
+        last_exception = None
         for _ in range(max_retries):
             try:
                 # Make the API call
@@ -85,14 +86,20 @@ def make_slack_api_rate_limited(
                 return response
 
             except SlackApiError as e:
-                if e.response["error"] == "ratelimited":
+                last_exception = e
+                try:
+                    error = e.response["error"]
+                except KeyError:
+                    error = "unknown error"
+
+                if error == "ratelimited":
                     # Handle rate limiting: get the 'Retry-After' header value and sleep for that duration
                     retry_after = int(e.response.headers.get("Retry-After", 1))
                     logger.info(
                         f"Slack call rate limited, retrying after {retry_after} seconds. Exception: {e}"
                     )
                     time.sleep(retry_after)
-                elif e.response["error"] in ["already_reacted", "no_reaction"]:
+                elif error in ["already_reacted", "no_reaction"]:
                     # The response isn't used for reactions, this is basically just a pass
                     return e.response
                 else:
@@ -100,7 +107,11 @@ def make_slack_api_rate_limited(
                     raise
 
         # If the code reaches this point, all retries have been exhausted
-        raise Exception(f"Max retries ({max_retries}) exceeded")
+        msg = f"Max retries ({max_retries}) exceeded"
+        if last_exception:
+            raise Exception(msg) from last_exception
+        else:
+            raise Exception(msg)
 
     return rate_limited_call
 

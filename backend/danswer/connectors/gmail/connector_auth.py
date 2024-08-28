@@ -12,16 +12,16 @@ from sqlalchemy.orm import Session
 
 from danswer.configs.app_configs import WEB_DOMAIN
 from danswer.configs.constants import DocumentSource
-from danswer.connectors.gmail.constants import CRED_KEY
+from danswer.configs.constants import KV_CRED_KEY
+from danswer.configs.constants import KV_GMAIL_CRED_KEY
+from danswer.configs.constants import KV_GMAIL_SERVICE_ACCOUNT_KEY
 from danswer.connectors.gmail.constants import (
     DB_CREDENTIALS_DICT_DELEGATED_USER_KEY,
 )
 from danswer.connectors.gmail.constants import DB_CREDENTIALS_DICT_TOKEN_KEY
-from danswer.connectors.gmail.constants import GMAIL_CRED_KEY
 from danswer.connectors.gmail.constants import (
     GMAIL_DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
 )
-from danswer.connectors.gmail.constants import GMAIL_SERVICE_ACCOUNT_KEY
 from danswer.connectors.gmail.constants import SCOPES
 from danswer.db.credentials import update_credential_json
 from danswer.db.models import User
@@ -50,7 +50,7 @@ def get_gmail_creds_for_authorized_user(
         try:
             creds.refresh(Request())
             if creds.valid:
-                logger.info("Refreshed Gmail tokens.")
+                logger.notice("Refreshed Gmail tokens.")
                 return creds
         except Exception as e:
             logger.exception(f"Failed to refresh gmail access token due to: {e}")
@@ -72,7 +72,7 @@ def get_gmail_creds_for_service_account(
 
 
 def verify_csrf(credential_id: int, state: str) -> None:
-    csrf = get_dynamic_config_store().load(CRED_KEY.format(str(credential_id)))
+    csrf = get_dynamic_config_store().load(KV_CRED_KEY.format(str(credential_id)))
     if csrf != state:
         raise PermissionError(
             "State from Gmail Connector callback does not match expected"
@@ -80,7 +80,7 @@ def verify_csrf(credential_id: int, state: str) -> None:
 
 
 def get_gmail_auth_url(credential_id: int) -> str:
-    creds_str = str(get_dynamic_config_store().load(GMAIL_CRED_KEY))
+    creds_str = str(get_dynamic_config_store().load(KV_GMAIL_CRED_KEY))
     credential_json = json.loads(creds_str)
     flow = InstalledAppFlow.from_client_config(
         credential_json,
@@ -92,12 +92,14 @@ def get_gmail_auth_url(credential_id: int) -> str:
     parsed_url = cast(ParseResult, urlparse(auth_url))
     params = parse_qs(parsed_url.query)
 
-    get_dynamic_config_store().store(CRED_KEY.format(credential_id), params.get("state", [None])[0], encrypt=True)  # type: ignore
+    get_dynamic_config_store().store(
+        KV_CRED_KEY.format(credential_id), params.get("state", [None])[0], encrypt=True
+    )  # type: ignore
     return str(auth_url)
 
 
 def get_auth_url(credential_id: int) -> str:
-    creds_str = str(get_dynamic_config_store().load(GMAIL_CRED_KEY))
+    creds_str = str(get_dynamic_config_store().load(KV_GMAIL_CRED_KEY))
     credential_json = json.loads(creds_str)
     flow = InstalledAppFlow.from_client_config(
         credential_json,
@@ -109,7 +111,9 @@ def get_auth_url(credential_id: int) -> str:
     parsed_url = cast(ParseResult, urlparse(auth_url))
     params = parse_qs(parsed_url.query)
 
-    get_dynamic_config_store().store(CRED_KEY.format(credential_id), params.get("state", [None])[0], encrypt=True)  # type: ignore
+    get_dynamic_config_store().store(
+        KV_CRED_KEY.format(credential_id), params.get("state", [None])[0], encrypt=True
+    )  # type: ignore
     return str(auth_url)
 
 
@@ -154,22 +158,22 @@ def build_service_account_creds(
 
 
 def get_google_app_gmail_cred() -> GoogleAppCredentials:
-    creds_str = str(get_dynamic_config_store().load(GMAIL_CRED_KEY))
+    creds_str = str(get_dynamic_config_store().load(KV_GMAIL_CRED_KEY))
     return GoogleAppCredentials(**json.loads(creds_str))
 
 
 def upsert_google_app_gmail_cred(app_credentials: GoogleAppCredentials) -> None:
     get_dynamic_config_store().store(
-        GMAIL_CRED_KEY, app_credentials.json(), encrypt=True
+        KV_GMAIL_CRED_KEY, app_credentials.json(), encrypt=True
     )
 
 
 def delete_google_app_gmail_cred() -> None:
-    get_dynamic_config_store().delete(GMAIL_CRED_KEY)
+    get_dynamic_config_store().delete(KV_GMAIL_CRED_KEY)
 
 
 def get_gmail_service_account_key() -> GoogleServiceAccountKey:
-    creds_str = str(get_dynamic_config_store().load(GMAIL_SERVICE_ACCOUNT_KEY))
+    creds_str = str(get_dynamic_config_store().load(KV_GMAIL_SERVICE_ACCOUNT_KEY))
     return GoogleServiceAccountKey(**json.loads(creds_str))
 
 
@@ -177,19 +181,19 @@ def upsert_gmail_service_account_key(
     service_account_key: GoogleServiceAccountKey,
 ) -> None:
     get_dynamic_config_store().store(
-        GMAIL_SERVICE_ACCOUNT_KEY, service_account_key.json(), encrypt=True
+        KV_GMAIL_SERVICE_ACCOUNT_KEY, service_account_key.json(), encrypt=True
     )
 
 
 def upsert_service_account_key(service_account_key: GoogleServiceAccountKey) -> None:
     get_dynamic_config_store().store(
-        GMAIL_SERVICE_ACCOUNT_KEY, service_account_key.json(), encrypt=True
+        KV_GMAIL_SERVICE_ACCOUNT_KEY, service_account_key.json(), encrypt=True
     )
 
 
 def delete_gmail_service_account_key() -> None:
-    get_dynamic_config_store().delete(GMAIL_SERVICE_ACCOUNT_KEY)
+    get_dynamic_config_store().delete(KV_GMAIL_SERVICE_ACCOUNT_KEY)
 
 
 def delete_service_account_key() -> None:
-    get_dynamic_config_store().delete(GMAIL_SERVICE_ACCOUNT_KEY)
+    get_dynamic_config_store().delete(KV_GMAIL_SERVICE_ACCOUNT_KEY)

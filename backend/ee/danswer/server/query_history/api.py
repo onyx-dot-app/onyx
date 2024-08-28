@@ -102,6 +102,10 @@ class ChatSessionSnapshot(BaseModel):
 
 
 class QuestionAnswerPairSnapshot(BaseModel):
+    chat_session_id: int
+    # 1-indexed message number in the chat_session
+    # e.g. the first message pair in the chat_session is 1, the second is 2, etc.
+    message_pair_num: int
     user_message: str
     ai_response: str
     retrieved_documents: list[AbridgedSearchDoc]
@@ -127,6 +131,8 @@ class QuestionAnswerPairSnapshot(BaseModel):
 
         return [
             cls(
+                chat_session_id=chat_session_snapshot.id,
+                message_pair_num=ind + 1,
                 user_message=user_message.message,
                 ai_response=ai_message.message,
                 retrieved_documents=ai_message.documents,
@@ -136,11 +142,13 @@ class QuestionAnswerPairSnapshot(BaseModel):
                 user_email=get_display_email(chat_session_snapshot.user_email),
                 time_created=user_message.time_created,
             )
-            for user_message, ai_message in message_pairs
+            for ind, (user_message, ai_message) in enumerate(message_pairs)
         ]
 
     def to_json(self) -> dict[str, str]:
         return {
+            "chat_session_id": str(self.chat_session_id),
+            "message_pair_num": str(self.message_pair_num),
             "user_message": self.user_message,
             "ai_response": self.ai_response,
             "retrieved_documents": "|".join(

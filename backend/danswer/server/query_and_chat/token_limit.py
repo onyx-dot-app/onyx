@@ -123,7 +123,7 @@ def _is_rate_limited(
 def any_rate_limit_exists() -> bool:
     """Checks if any rate limit exists in the database. Is cached, so that if no rate limits
     are setup, we don't have any effect on average query latency."""
-    logger.info("Checking for any rate limits...")
+    logger.debug("Checking for any rate limits...")
     with get_session_context_manager() as db_session:
         return (
             db_session.scalar(

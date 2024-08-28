@@ -103,84 +103,117 @@ function IntegerInput({
 
 export function SettingsForm() {
   const router = useRouter();
-  const combinedSettings = useContext(SettingsContext);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [chatRetention, setChatRetention] = useState("");
   const { popup, setPopup } = usePopup();
   const isEnterpriseEnabled = usePaidEnterpriseFeaturesEnabled();
 
+  const combinedSettings = useContext(SettingsContext);
+
   useEffect(() => {
-    if (combinedSettings?.settings.maximum_chat_retention_days !== undefined) {
+    if (combinedSettings) {
+      setSettings(combinedSettings.settings);
       setChatRetention(
         combinedSettings.settings.maximum_chat_retention_days?.toString() || ""
       );
     }
-  }, [combinedSettings?.settings.maximum_chat_retention_days]);
+  }, []);
 
-  if (!combinedSettings) {
+  if (!settings) {
     return null;
   }
-  const settings = combinedSettings.settings;
 
   async function updateSettingField(
     updateRequests: { fieldName: keyof Settings; newValue: any }[]
   ) {
-    const newValues: any = {};
-    updateRequests.forEach(({ fieldName, newValue }) => {
-      newValues[fieldName] = newValue;
-    });
+    // Optimistically update the local state
+    const newSettings: Settings | null = settings
+      ? {
+          ...settings,
+          ...updateRequests.reduce((acc, { fieldName, newValue }) => {
+            acc[fieldName] = newValue ?? settings[fieldName];
+            return acc;
+          }, {} as Partial<Settings>),
+        }
+      : null;
+    setSettings(newSettings);
 
-    const response = await fetch("/api/admin/settings", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ...settings,
-        ...newValues,
-      }),
-    });
-    if (response.ok) {
+    try {
+      const response = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newSettings),
+      });
+
+      if (!response.ok) {
+        const errorMsg = (await response.json()).detail;
+        throw new Error(errorMsg);
+      }
+
       router.refresh();
-    } else {
-      const errorMsg = (await response.json()).detail;
-      alert(`Failed to update settings. ${errorMsg}`);
+      setPopup({
+        message: "Settings updated successfully!",
+        type: "success",
+      });
+    } catch (error) {
+      // Revert the optimistic update
+      setSettings(settings);
+      console.error("Error updating settings:", error);
+      setPopup({
+        message: `Failed to update settings`,
+        type: "error",
+      });
     }
   }
 
+  function handleToggleSettingsField(
+    fieldName: keyof Settings,
+    checked: boolean
+  ) {
+    const updates: { fieldName: keyof Settings; newValue: any }[] = [
+      { fieldName, newValue: checked },
+    ];
+
+    // If we're disabling a page, check if we need to update the default page
+    if (
+      !checked &&
+      (fieldName === "search_page_enabled" || fieldName === "chat_page_enabled")
+    ) {
+      const otherPageField =
+        fieldName === "search_page_enabled"
+          ? "chat_page_enabled"
+          : "search_page_enabled";
+      const otherPageEnabled = settings && settings[otherPageField];
+
+      if (
+        otherPageEnabled &&
+        settings?.default_page ===
+          (fieldName === "search_page_enabled" ? "search" : "chat")
+      ) {
+        updates.push({
+          fieldName: "default_page",
+          newValue: fieldName === "search_page_enabled" ? "chat" : "search",
+        });
+      }
+    }
+
+    updateSettingField(updates);
+  }
+
   function handleSetChatRetention() {
-    // Convert chatRetention to a number or null and update the global settings
-    const newValue =
-      chatRetention === "" ? null : parseInt(chatRetention.toString(), 10);
+    const newValue = chatRetention === "" ? null : parseInt(chatRetention, 10);
     updateSettingField([
-      { fieldName: "maximum_chat_retention_days", newValue: newValue },
-    ])
-      .then(() => {
-        setPopup({
-          message: "Chat retention settings updated successfully!",
-          type: "success",
-        });
-      })
-      .catch((error) => {
-        console.error("Error updating settings:", error);
-        const errorMessage =
-          error.response?.data?.message || error.message || "Unknown error";
-        setPopup({
-          message: `Failed to update settings: ${errorMessage}`,
-          type: "error",
-        });
-      });
+      { fieldName: "maximum_chat_retention_days", newValue },
+    ]);
   }
 
   function handleClearChatRetention() {
-    setChatRetention(""); // Clear the chat retention input
+    setChatRetention("");
     updateSettingField([
       { fieldName: "maximum_chat_retention_days", newValue: null },
-    ]).then(() => {
-      setPopup({
-        message: "Chat retention cleared successfully!",
-        type: "success",
-      });
-    });
+    ]);
   }
 
   return (
@@ -190,36 +223,20 @@ export function SettingsForm() {
 
       <Checkbox
         label="Search Page Enabled?"
-        sublabel={`If set, then the "Search" page will be accessible to all users 
-        and will show up as an option on the top navbar. If unset, then this 
-        page will not be available.`}
+        sublabel="If set, then the 'Search' page will be accessible to all users and will show up as an option on the top navbar. If unset, then this page will not be available."
         checked={settings.search_page_enabled}
-        onChange={(e) => {
-          const updates: any[] = [
-            { fieldName: "search_page_enabled", newValue: e.target.checked },
-          ];
-          if (!e.target.checked && settings.default_page === "search") {
-            updates.push({ fieldName: "default_page", newValue: "chat" });
-          }
-          updateSettingField(updates);
-        }}
+        onChange={(e) =>
+          handleToggleSettingsField("search_page_enabled", e.target.checked)
+        }
       />
 
       <Checkbox
         label="Chat Page Enabled?"
-        sublabel={`If set, then the "Chat" page will be accessible to all users 
-        and will show up as an option on the top navbar. If unset, then this 
-        page will not be available.`}
+        sublabel="If set, then the 'Chat' page will be accessible to all users and will show up as an option on the top navbar. If unset, then this page will not be available."
         checked={settings.chat_page_enabled}
-        onChange={(e) => {
-          const updates: any[] = [
-            { fieldName: "chat_page_enabled", newValue: e.target.checked },
-          ];
-          if (!e.target.checked && settings.default_page === "chat") {
-            updates.push({ fieldName: "default_page", newValue: "search" });
-          }
-          updateSettingField(updates);
-        }}
+        onChange={(e) =>
+          handleToggleSettingsField("chat_page_enabled", e.target.checked)
+        }
       />
 
       <Selector
@@ -237,6 +254,7 @@ export function SettingsForm() {
             ]);
         }}
       />
+
       {isEnterpriseEnabled && (
         <>
           <Title className="mb-4">Chat Settings</Title>
@@ -246,10 +264,8 @@ export function SettingsForm() {
             value={chatRetention === "" ? null : Number(chatRetention)}
             onChange={(e) => {
               const numValue = parseInt(e.target.value, 10);
-              if (numValue >= 1) {
-                setChatRetention(numValue.toString());
-              } else if (e.target.value === "") {
-                setChatRetention("");
+              if (numValue >= 1 || e.target.value === "") {
+                setChatRetention(e.target.value);
               }
             }}
             id="chatRetentionInput"

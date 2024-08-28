@@ -1,11 +1,9 @@
 import os
 from typing import cast
 
+from danswer.configs.constants import KV_SLACK_BOT_TOKENS_CONFIG_KEY
 from danswer.dynamic_configs.factory import get_dynamic_config_store
 from danswer.server.manage.models import SlackBotTokens
-
-
-_SLACK_BOT_TOKENS_CONFIG_KEY = "slack_bot_tokens_config_key"
 
 
 def fetch_tokens() -> SlackBotTokens:
@@ -17,7 +15,7 @@ def fetch_tokens() -> SlackBotTokens:
 
     dynamic_config_store = get_dynamic_config_store()
     return SlackBotTokens(
-        **cast(dict, dynamic_config_store.load(key=_SLACK_BOT_TOKENS_CONFIG_KEY))
+        **cast(dict, dynamic_config_store.load(key=KV_SLACK_BOT_TOKENS_CONFIG_KEY))
     )
 
 
@@ -26,5 +24,5 @@ def save_tokens(
 ) -> None:
     dynamic_config_store = get_dynamic_config_store()
     dynamic_config_store.store(
-        key=_SLACK_BOT_TOKENS_CONFIG_KEY, val=dict(tokens), encrypt=True
+        key=KV_SLACK_BOT_TOKENS_CONFIG_KEY, val=dict(tokens), encrypt=True
     )

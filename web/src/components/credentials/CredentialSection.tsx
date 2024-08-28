@@ -6,6 +6,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { FaSwatchbook } from "react-icons/fa";
 import { NewChatIcon } from "@/components/icons/icons";
 import { useState } from "react";
+import { useUserGroups } from "@/lib/hooks";
 import {
   deleteCredential,
   swapCredential,
@@ -27,6 +28,7 @@ import {
   ConfluenceCredentialJson,
   Credential,
 } from "@/lib/connectors/credentials";
+import { UserGroup } from "@/lib/types"; // Added this import
 
 export default function CredentialSection({
   ccPair,
@@ -46,6 +48,11 @@ export default function CredentialSection({
     buildSimilarCredentialInfoURL(sourceType),
     errorHandlingFetcher,
     { refreshInterval: 5000 } // 5 seconds
+  );
+  const { data: editableCredentials } = useSWR<Credential<any>[]>(
+    buildSimilarCredentialInfoURL(sourceType, true),
+    errorHandlingFetcher,
+    { refreshInterval: 5000 }
   );
 
   const onSwap = async (
@@ -112,7 +119,7 @@ export default function CredentialSection({
   };
   const { popup, setPopup } = usePopup();
 
-  if (!credentials) {
+  if (!credentials || !editableCredentials) {
     return <></>;
   }
 
@@ -152,6 +159,7 @@ export default function CredentialSection({
             attachedConnector={ccPair.connector}
             defaultedCredential={defaultedCredential}
             credentials={credentials}
+            editableCredentials={editableCredentials}
             onDeleteCredential={onDeleteCredential}
             onEditCredential={(credential: Credential<any>) =>
               onEditCredential(credential)

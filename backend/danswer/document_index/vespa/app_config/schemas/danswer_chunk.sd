@@ -20,18 +20,10 @@ schema DANSWER_CHUNK_NAME {
         # `semantic_identifier` will be the channel name, but the `title` will be empty
         field title type string {
             indexing: summary | index | attribute
-            match {
-                gram
-                gram-size: 3
-            }
             index: enable-bm25
         }
         field content type string {
             indexing: summary | index
-            match {
-                gram
-                gram-size: 3
-            }
             index: enable-bm25
         }
         # duplication of `content` is far from ideal, but is needed for 
@@ -87,6 +79,10 @@ schema DANSWER_CHUNK_NAME {
             indexing: summary | attribute
             rank:filter
             attribute: fast-search
+        }
+        # If chunk is a large chunk, this will contain the ids of the smaller chunks
+        field large_chunk_reference_ids type array<int> {
+            indexing: summary | attribute
         }
         field metadata type string {
             indexing: summary | attribute
@@ -153,43 +149,45 @@ schema DANSWER_CHUNK_NAME {
             query(query_embedding) tensor<float>(x[VARIABLE_DIM])
         }
 
-        # This must be separate function for normalize_linear to work
-        function vector_score() {
+        function title_vector_score() {
             expression {
-                # If no title, the full vector score comes from the content embedding
-                (query(title_content_ratio) * if(attribute(skip_title), closeness(field, embeddings), closeness(field, title_embedding))) +
-                ((1 - query(title_content_ratio)) * closeness(field, embeddings))
+                # If no good matching titles, then it should use the context embeddings rather than having some
+                # irrelevant title have a vector score of 1. This way at least it will be the doc with the highest
+                # matching content score getting the full score
+                max(closeness(field, embeddings), closeness(field, title_embedding))
             }
         }
 
-        # This must be separate function for normalize_linear to work
-        function keyword_score() {
-            expression {
-                (query(title_content_ratio) * bm25(title)) +
-                ((1 - query(title_content_ratio)) * bm25(content))
-            }
-        }
-
+        # First phase must be vector to allow hits that have no keyword matches
         first-phase {
-            expression: vector_score
+            expression: closeness(field, embeddings)
         }
 
         # Weighted average between Vector Search and BM-25
-        # Each is a weighted average between the Title and Content fields
-        # Finally each doc is boosted by it's user feedback based boost and recency
-        # If any embedding or index field is missing, it just receives a score of 0
-        # Assumptions:
-        # - For a given query + corpus, the BM-25 scores will be relatively similar in distribution
-        #   therefore not normalizing before combining.
-        # - For documents without title, it gets a score of 0 for that and this is ok as documents
-        #   without any title match should be penalized.
         global-phase {
             expression {
                 (
                     # Weighted Vector Similarity Score
-                    (query(alpha) * normalize_linear(vector_score)) +
+                    (
+                        query(alpha) * (
+                            (query(title_content_ratio) * normalize_linear(title_vector_score))
+                            +
+                            ((1 - query(title_content_ratio)) * normalize_linear(closeness(field, embeddings)))
+                        )
+                    )
+
+                    +
+
                     # Weighted Keyword Similarity Score
-                    ((1 - query(alpha)) * normalize_linear(keyword_score))
+                    # Note: for the BM25 Title score, it requires decent stopword removal in the query
+                    # This needs to be the case so there aren't irrelevant titles being normalized to a score of 1
+                    (
+                        (1 - query(alpha)) * (
+                            (query(title_content_ratio) * normalize_linear(bm25(title)))
+                            +
+                            ((1 - query(title_content_ratio)) * normalize_linear(bm25(content)))
+                        )
+                    )
                 )
                 # Boost based on user feedback
                 * document_boost
@@ -204,8 +202,6 @@ schema DANSWER_CHUNK_NAME {
             bm25(content)
             closeness(field, title_embedding)
             closeness(field, embeddings)
-            keyword_score
-            vector_score
             document_boost
             recency_bias
             closest(embeddings)
@@ -218,29 +214,5 @@ schema DANSWER_CHUNK_NAME {
         first-phase {
             expression: bm25(content) + (5 * bm25(title))
         }
-    }
-
-    # THE ONES BELOW ARE OUT OF DATE, DO NOT USE
-    # THEY MIGHT NOT EVEN WORK AT ALL
-    rank-profile keyword_search inherits default, default_rank {
-        first-phase {
-            expression: bm25(content) * document_boost * recency_bias
-        }
-
-        match-features: recency_bias document_boost bm25(content)
-    }
-
-    rank-profile semantic_searchVARIABLE_DIM inherits default, default_rank {
-        inputs {
-            query(query_embedding) tensor<float>(x[VARIABLE_DIM])
-        }
-
-        first-phase {
-            # Cannot do boost with the chosen embedding model because of high default similarity
-            # This depends on the embedding model chosen
-            expression: closeness(field, embeddings)
-        }
-
-        match-features: recency_bias document_boost closest(embeddings)
     }
 }

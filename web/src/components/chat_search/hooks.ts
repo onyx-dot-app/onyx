@@ -52,7 +52,12 @@ export const useSidebarVisibility = ({
           !isWithinSidebar &&
           !toggledSidebar
         ) {
-          setShowDocSidebar(false);
+          setTimeout(() => {
+            setShowDocSidebar((showDocSidebar) => {
+              // Account for possition as point in time of
+              return !(xPosition.current > sidebarRect.right);
+            });
+          }, 200);
         } else if (currentXPosition < 100 && !showDocSidebar) {
           if (!mobile) {
             setShowDocSidebar(true);
@@ -61,10 +66,16 @@ export const useSidebarVisibility = ({
       }
     };
 
+    const handleMouseLeave = () => {
+      setShowDocSidebar(false);
+    };
+
     document.addEventListener("mousemove", handleEvent);
+    document.addEventListener("mouseleave", handleMouseLeave);
 
     return () => {
       document.removeEventListener("mousemove", handleEvent);
+      document.removeEventListener("mouseleave", handleMouseLeave);
     };
   }, [showDocSidebar, toggledSidebar, sidebarElementRef, mobile]);
 

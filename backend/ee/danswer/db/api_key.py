@@ -2,9 +2,9 @@ import uuid
 
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
-from danswer.auth.schemas import UserRole
 from danswer.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from danswer.configs.constants import DANSWER_API_KEY_PREFIX
 from danswer.configs.constants import UNNAMED_KEY_PLACEHOLDER
@@ -22,10 +22,15 @@ def is_api_key_email_address(email: str) -> bool:
 
 
 def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
-    api_keys = db_session.scalars(select(ApiKey)).all()
+    api_keys = (
+        db_session.scalars(select(ApiKey).options(joinedload(ApiKey.user)))
+        .unique()
+        .all()
+    )
     return [
         ApiKeyDescriptor(
             api_key_id=api_key.id,
+            api_key_role=api_key.user.role,
             api_key_display=api_key.api_key_display,
             api_key_name=api_key.name,
             user_id=api_key.user_id,
@@ -67,7 +72,7 @@ def insert_api_key(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.BASIC,
+        role=api_key_args.role,
     )
     db_session.add(api_key_user_row)
 
@@ -83,6 +88,7 @@ def insert_api_key(
     db_session.commit()
     return ApiKeyDescriptor(
         api_key_id=api_key_row.id,
+        api_key_role=api_key_user_row.role,
         api_key_display=api_key_row.api_key_display,
         api_key=api_key,
         api_key_name=api_key_args.name,
@@ -106,12 +112,14 @@ def update_api_key(
 
     email_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
     api_key_user.email = get_api_key_fake_email(email_name, str(api_key_user.id))
+    api_key_user.role = api_key_args.role
     db_session.commit()
 
     return ApiKeyDescriptor(
         api_key_id=existing_api_key.id,
         api_key_display=existing_api_key.api_key_display,
         api_key_name=api_key_args.name,
+        api_key_role=api_key_user.role,
         user_id=existing_api_key.user_id,
     )
 
@@ -121,6 +129,12 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
     existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
     if existing_api_key is None:
         raise ValueError(f"API key with id {api_key_id} does not exist")
+
+    api_key_user = db_session.scalar(
+        select(User).where(User.id == existing_api_key.user_id)  # type: ignore
+    )
+    if api_key_user is None:
+        raise RuntimeError("API Key does not have associated user.")
 
     new_api_key = generate_api_key()
     existing_api_key.hashed_api_key = hash_api_key(new_api_key)
@@ -132,6 +146,7 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
         api_key_display=existing_api_key.api_key_display,
         api_key=new_api_key,
         api_key_name=existing_api_key.name,
+        api_key_role=api_key_user.role,
         user_id=existing_api_key.user_id,
     )
 

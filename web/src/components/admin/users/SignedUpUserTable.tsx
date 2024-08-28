@@ -1,4 +1,4 @@
-import { type User, UserStatus } from "@/lib/types";
+import { type User, UserStatus, UserRole } from "@/lib/types";
 import CenteredPageSelector from "./CenteredPageSelector";
 import { type PageSelectorProps } from "@/components/PageSelector";
 import { HidableSection } from "@/app/admin/assistants/HidableSection";
@@ -13,7 +13,19 @@ import {
   TableBody,
   TableCell,
   Button,
+  Select,
+  SelectItem,
 } from "@tremor/react";
+import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
+import { useState } from "react";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+
+const USER_ROLE_LABELS: Record<UserRole, string> = {
+  [UserRole.BASIC]: "Basic",
+  [UserRole.ADMIN]: "Admin",
+  [UserRole.GLOBAL_CURATOR]: "Global Curator",
+  [UserRole.CURATOR]: "Curator",
+};
 
 interface Props {
   users: Array<User>;
@@ -21,33 +33,88 @@ interface Props {
   mutate: () => void;
 }
 
-const PromoterButton = ({
+const UserRoleDropdown = ({
   user,
-  promote,
   onSuccess,
   onError,
 }: {
   user: User;
-  promote: boolean;
   onSuccess: () => void;
   onError: (message: string) => void;
 }) => {
-  const { trigger, isMutating } = useSWRMutation(
-    promote
-      ? "/api/manage/promote-user-to-admin"
-      : "/api/manage/demote-admin-to-basic",
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingRole, setPendingRole] = useState<string | null>(null);
+
+  const { trigger: setUserRole, isMutating: isSettingRole } = useSWRMutation(
+    "/api/manage/set-user-role",
     userMutationFetcher,
     { onSuccess, onError }
   );
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+
+  const handleChange = (value: string) => {
+    if (value === user.role) return;
+    if (user.role === UserRole.CURATOR) {
+      setShowConfirmModal(true);
+      setPendingRole(value);
+    } else {
+      setUserRole({
+        user_email: user.email,
+        new_role: value,
+      });
+    }
+  };
+
+  const handleConfirm = () => {
+    if (pendingRole) {
+      setUserRole({
+        user_email: user.email,
+        new_role: pendingRole,
+      });
+    }
+    setShowConfirmModal(false);
+    setPendingRole(null);
+  };
+
   return (
-    <Button
-      className="w-min"
-      onClick={() => trigger({ user_email: user.email })}
-      disabled={isMutating}
-      size="xs"
-    >
-      {promote ? "Promote" : "Demote"} to {promote ? "Admin" : "Basic"} User
-    </Button>
+    <>
+      <Select
+        value={user.role}
+        onValueChange={handleChange}
+        disabled={isSettingRole}
+        className="w-40 mx-auto"
+      >
+        {Object.entries(USER_ROLE_LABELS).map(([role, label]) =>
+          !isPaidEnterpriseFeaturesEnabled &&
+          (role === UserRole.CURATOR ||
+            role === UserRole.GLOBAL_CURATOR) ? null : (
+            <SelectItem
+              key={role}
+              value={role}
+              className={
+                role === UserRole.CURATOR ? "opacity-30 cursor-not-allowed" : ""
+              }
+              title={
+                role === UserRole.CURATOR
+                  ? "Curator role must be assigned in the Groups tab"
+                  : ""
+              }
+            >
+              {label}
+            </SelectItem>
+          )
+        )}
+      </Select>
+      {showConfirmModal && (
+        <GenericConfirmModal
+          title="Change Curator Role"
+          message={`Warning: Switching roles from Curator to ${USER_ROLE_LABELS[pendingRole as UserRole] ?? USER_ROLE_LABELS[user.role]} will remove their status as individual curators from all groups.`}
+          confirmText={`Switch Role to ${USER_ROLE_LABELS[pendingRole as UserRole] ?? USER_ROLE_LABELS[user.role]}`}
+          onClose={() => setShowConfirmModal(false)}
+          onConfirm={handleConfirm}
+        />
+      )}
+    </>
   );
 };
 
@@ -100,31 +167,15 @@ const SignedUpUserTable = ({
 }: Props & PageSelectorProps) => {
   if (!users.length) return null;
 
-  const onSuccess = (message: string) => {
-    mutate();
-    setPopup({
-      message,
-      type: "success",
-    });
+  const handlePopup = (message: string, type: "success" | "error") => {
+    if (type === "success") mutate();
+    setPopup({ message, type });
   };
-  const onError = (message: string) => {
-    setPopup({
-      message,
-      type: "error",
-    });
-  };
-  const onPromotionSuccess = () => {
-    onSuccess("User promoted to admin user!");
-  };
-  const onPromotionError = (errorMsg: string) => {
-    onError(`Unable to promote user - ${errorMsg}`);
-  };
-  const onDemotionSuccess = () => {
-    onSuccess("Admin demoted to basic user!");
-  };
-  const onDemotionError = (errorMsg: string) => {
-    onError(`Unable to demote admin - ${errorMsg}`);
-  };
+
+  const onRoleChangeSuccess = () =>
+    handlePopup("User role updated successfully!", "success");
+  const onRoleChangeError = (errorMsg: string) =>
+    handlePopup(`Unable to update user role - ${errorMsg}`, "error");
 
   return (
     <HidableSection sectionTitle="Current Users">
@@ -140,8 +191,8 @@ const SignedUpUserTable = ({
           <TableHead>
             <TableRow>
               <TableHeaderCell>Email</TableHeaderCell>
-              <TableHeaderCell>Role</TableHeaderCell>
-              <TableHeaderCell>Status</TableHeaderCell>
+              <TableHeaderCell className="text-center">Role</TableHeaderCell>
+              <TableHeaderCell className="text-center">Status</TableHeaderCell>
               <TableHeaderCell>
                 <div className="flex">
                   <div className="ml-auto">Actions</div>
@@ -154,19 +205,17 @@ const SignedUpUserTable = ({
               <TableRow key={user.id}>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>
-                  <i>{user.role === "admin" ? "Admin" : "User"}</i>
+                  <UserRoleDropdown
+                    user={user}
+                    onSuccess={onRoleChangeSuccess}
+                    onError={onRoleChangeError}
+                  />
                 </TableCell>
-                <TableCell>
+                <TableCell className="text-center">
                   <i>{user.status === "live" ? "Active" : "Inactive"}</i>
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col items-end gap-y-2">
-                    <PromoterButton
-                      user={user}
-                      promote={user.role !== "admin"}
-                      onSuccess={onPromotionSuccess}
-                      onError={onPromotionError}
-                    />
                     <DeactivaterButton
                       user={user}
                       deactivate={user.status === UserStatus.live}

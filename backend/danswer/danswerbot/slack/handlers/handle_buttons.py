@@ -1,4 +1,3 @@
-import logging
 from typing import Any
 from typing import cast
 
@@ -134,7 +133,7 @@ def handle_generate_answer_button(
             receiver_ids=None,
             client=client.web_client,
             channel=channel_id,
-            logger=cast(logging.Logger, logger),
+            logger=logger,
             feedback_reminder_id=None,
         )
 

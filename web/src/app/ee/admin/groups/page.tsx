@@ -4,7 +4,9 @@ import { GroupsIcon } from "@/components/icons/icons";
 import { UserGroupsTable } from "./UserGroupsTable";
 import { UserGroupCreationForm } from "./UserGroupCreationForm";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getCurrentUser } from "@/lib/user";
+import { User, UserRole } from "@/lib/types";
 import { ThreeDotsLoader } from "@/components/Loading";
 import {
   useConnectorCredentialIndexingStatus,
@@ -13,6 +15,7 @@ import {
 } from "@/lib/hooks";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { Button, Divider } from "@tremor/react";
+import { useUser } from "@/components/user/UserProvider";
 
 const Main = () => {
   const { popup, setPopup } = usePopup();
@@ -31,6 +34,11 @@ const Main = () => {
     isLoading: userIsLoading,
     error: usersError,
   } = useUsers();
+
+  const { isLoadingUser, isAdmin } = useUser();
+  if (isLoadingUser) {
+    return <></>;
+  }
 
   if (isLoading || isCCPairsLoading || userIsLoading) {
     return <ThreeDotsLoader />;
@@ -51,14 +59,16 @@ const Main = () => {
   return (
     <>
       {popup}
-      <div className="my-3">
-        <Button size="xs" color="green" onClick={() => setShowForm(true)}>
-          Create New User Group
-        </Button>
-      </div>
+      {isAdmin && (
+        <div className="my-3">
+          <Button size="xs" color="green" onClick={() => setShowForm(true)}>
+            Create New User Group
+          </Button>
+        </div>
+      )}
       {data.length > 0 && (
         <div>
-          <Divider />
+          {isAdmin && <Divider />}
           <UserGroupsTable
             userGroups={data}
             setPopup={setPopup}

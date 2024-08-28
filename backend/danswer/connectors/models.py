@@ -166,6 +166,36 @@ class Document(DocumentBase):
         )
 
 
+class DocumentErrorSummary(BaseModel):
+    id: str
+    semantic_id: str
+    section_link: str | None
+
+    @classmethod
+    def from_document(cls, doc: Document) -> "DocumentErrorSummary":
+        section_link = doc.sections[0].link if len(doc.sections) > 0 else None
+        return cls(
+            id=doc.id, semantic_id=doc.semantic_identifier, section_link=section_link
+        )
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "DocumentErrorSummary":
+        return cls(
+            id=str(data.get("id")),
+            semantic_id=str(data.get("semantic_id")),
+            section_link=str(data.get("section_link")),
+        )
+
+    def to_dict(self) -> dict[str, str | None]:
+        return {
+            "id": self.id,
+            "semantic_id": self.semantic_id,
+            "section_link": self.section_link,
+        }
+
+
 class IndexAttemptMetadata(BaseModel):
+    batch_num: int | None = None
+    num_exceptions: int = 0
     connector_id: int
     credential_id: int

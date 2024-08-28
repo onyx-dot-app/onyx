@@ -26,6 +26,7 @@ import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { deleteApiKey, regenerateApiKey } from "./lib";
 import { DanswerApiKeyForm } from "./DanswerApiKeyForm";
+import { APIKey } from "./types";
 
 const API_KEY_TEXT = `
 API Keys allow you to access Danswer APIs programmatically. Click the button below to generate a new API Key.
@@ -173,6 +174,7 @@ function Main() {
           <TableRow>
             <TableHeaderCell>Name</TableHeaderCell>
             <TableHeaderCell>API Key</TableHeaderCell>
+            <TableHeaderCell>Role</TableHeaderCell>
             <TableHeaderCell>Regenerate</TableHeaderCell>
             <TableHeaderCell>Delete</TableHeaderCell>
           </TableRow>
@@ -200,6 +202,9 @@ function Main() {
               </TableCell>
               <TableCell className="max-w-64">
                 {apiKey.api_key_display}
+              </TableCell>
+              <TableCell className="max-w-64">
+                {apiKey.api_key_role.toUpperCase()}
               </TableCell>
               <TableCell>
                 <div

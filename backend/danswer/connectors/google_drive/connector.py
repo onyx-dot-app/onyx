@@ -267,7 +267,7 @@ def get_all_files_batched(
     yield from batch_generator(
         items=found_files,
         batch_size=batch_size,
-        pre_batch_yield=lambda batch_files: logger.info(
+        pre_batch_yield=lambda batch_files: logger.debug(
             f"Parseable Documents in batch: {[file['name'] for file in batch_files]}"
         ),
     )
@@ -306,24 +306,29 @@ def get_all_files_batched(
 
 def extract_text(file: dict[str, str], service: discovery.Resource) -> str:
     mime_type = file["mimeType"]
+
     if mime_type not in set(item.value for item in GDriveMimeType):
         # Unsupported file types can still have a title, finding this way is still useful
         return UNSUPPORTED_FILE_TYPE_CONTENT
 
-    if mime_type == GDriveMimeType.DOC.value:
-        return (
+    if mime_type in [
+        GDriveMimeType.DOC.value,
+        GDriveMimeType.PPT.value,
+        GDriveMimeType.SPREADSHEET.value,
+    ]:
+        export_mime_type = "text/plain"
+        if mime_type == GDriveMimeType.SPREADSHEET.value:
+            export_mime_type = "text/csv"
+        elif mime_type == GDriveMimeType.PPT.value:
+            export_mime_type = "text/plain"
+
+        response = (
             service.files()
-            .export(fileId=file["id"], mimeType="text/plain")
+            .export(fileId=file["id"], mimeType=export_mime_type)
             .execute()
-            .decode("utf-8")
         )
-    elif mime_type == GDriveMimeType.SPREADSHEET.value:
-        return (
-            service.files()
-            .export(fileId=file["id"], mimeType="text/csv")
-            .execute()
-            .decode("utf-8")
-        )
+        return response.decode("utf-8")
+
     elif mime_type == GDriveMimeType.WORD_DOC.value:
         response = service.files().get_media(fileId=file["id"]).execute()
         return docx_to_text(file=io.BytesIO(response))
@@ -331,9 +336,6 @@ def extract_text(file: dict[str, str], service: discovery.Resource) -> str:
         response = service.files().get_media(fileId=file["id"]).execute()
         return pdf_to_text(file=io.BytesIO(response))
     elif mime_type == GDriveMimeType.POWERPOINT.value:
-        response = service.files().get_media(fileId=file["id"]).execute()
-        return pptx_to_text(file=io.BytesIO(response))
-    elif mime_type == GDriveMimeType.PPT.value:
         response = service.files().get_media(fileId=file["id"]).execute()
         return pptx_to_text(file=io.BytesIO(response))
 

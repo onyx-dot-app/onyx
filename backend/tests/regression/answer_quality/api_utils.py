@@ -66,7 +66,6 @@ def get_answer_from_query(
     except Exception as e:
         print("Failed to answer the questions:")
         print(f"\t {str(e)}")
-        print("Try restarting vespa container and trying agian")
         raise e
 
     return context_data_list, answer
@@ -165,15 +164,12 @@ def create_connector(env_name: str, file_paths: list[str]) -> int:
         connector_specific_config={"file_locations": file_paths},
         refresh_freq=None,
         prune_freq=None,
-        disabled=False,
         indexing_start=None,
     )
 
     body = connector.dict()
-    print("body:", body)
     response = requests.post(url, headers=GENERAL_HEADERS, json=body)
     if response.status_code == 200:
-        print("Connector created successfully:", response.json())
         return response.json()["id"]
     else:
         raise RuntimeError(response.__dict__)

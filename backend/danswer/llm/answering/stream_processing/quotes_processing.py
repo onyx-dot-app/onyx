@@ -17,7 +17,6 @@ from danswer.chat.models import LlmDoc
 from danswer.configs.chat_configs import QUOTE_ALLOWED_ERROR_PERCENT
 from danswer.prompts.constants import ANSWER_PAT
 from danswer.prompts.constants import QUOTE_PAT
-from danswer.prompts.constants import UNCERTAINTY_PAT
 from danswer.search.models import InferenceChunk
 from danswer.utils.logger import setup_logger
 from danswer.utils.text_processing import clean_model_quote
@@ -27,6 +26,7 @@ from danswer.utils.text_processing import shared_precompare_cleanup
 
 
 logger = setup_logger()
+answer_pattern = re.compile(r'{\s*"answer"\s*:\s*"', re.IGNORECASE)
 
 
 def _extract_answer_quotes_freeform(
@@ -166,18 +166,15 @@ def process_answer(
     into an Answer and Quotes AND (2) after the complete streaming response
     has been received to process the model output into an Answer and Quotes."""
     answer, quote_strings = separate_answer_quotes(answer_raw, is_json_prompt)
-    if answer == UNCERTAINTY_PAT or not answer:
-        if answer == UNCERTAINTY_PAT:
-            logger.debug("Answer matched UNCERTAINTY_PAT")
-        else:
-            logger.debug("No answer extracted from raw output")
+    if not answer:
+        logger.debug("No answer extracted from raw output")
         return DanswerAnswer(answer=None), DanswerQuotes(quotes=[])
 
-    logger.info(f"Answer: {answer}")
+    logger.notice(f"Answer: {answer}")
     if not quote_strings:
         logger.debug("No quotes extracted from raw output")
         return DanswerAnswer(answer=answer), DanswerQuotes(quotes=[])
-    logger.info(f"All quotes (including unmatched): {quote_strings}")
+    logger.debug(f"All quotes (including unmatched): {quote_strings}")
     quotes = match_quotes_to_docs(quote_strings, docs)
     logger.debug(f"Final quotes: {quotes}")
 
@@ -200,7 +197,7 @@ def _extract_quotes_from_completed_token_stream(
 ) -> DanswerQuotes:
     answer, quotes = process_answer(model_output, context_docs, is_json_prompt)
     if answer:
-        logger.info(answer)
+        logger.notice(answer)
     elif model_output:
         logger.warning("Answer extraction from model output failed.")
 
@@ -227,22 +224,27 @@ def process_model_tokens(
     found_answer_start = False if is_json_prompt else True
     found_answer_end = False
     hold_quote = ""
+
     for token in tokens:
         model_previous = model_output
         model_output += token
 
-        if not found_answer_start and '{"answer":"' in re.sub(r"\s", "", model_output):
-            # Note, if the token that completes the pattern has additional text, for example if the token is "?
-            # Then the chars after " will not be streamed, but this is ok as it prevents streaming the ? in the
-            # event that the model outputs the UNCERTAINTY_PAT
-            found_answer_start = True
+        if not found_answer_start:
+            m = answer_pattern.search(model_output)
+            if m:
+                found_answer_start = True
 
-            # Prevent heavy cases of hallucinations where model is not even providing a json until later
-            if is_json_prompt and len(model_output) > 40:
-                logger.warning("LLM did not produce json as prompted")
-                found_answer_end = True
+                # Prevent heavy cases of hallucinations where model is never providing a JSON
+                # We want to quickly update the user - not stream forever
+                if is_json_prompt and len(model_output) > 70:
+                    logger.warning("LLM did not produce json as prompted")
+                    found_answer_end = True
+                    continue
 
-            continue
+                remaining = model_output[m.end() :]
+                if len(remaining) > 0:
+                    yield DanswerAnswerPiece(answer_piece=remaining)
+                continue
 
         if found_answer_start and not found_answer_end:
             if is_json_prompt and _stream_json_answer_end(model_previous, token):

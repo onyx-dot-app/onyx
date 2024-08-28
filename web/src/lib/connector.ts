@@ -24,6 +24,21 @@ export async function createConnector<T>(
   return handleResponse(response);
 }
 
+export async function updateConnectorCredentialPairName(
+  ccPairId: number,
+  newName: string
+): Promise<Response> {
+  return fetch(
+    `/api/manage/admin/cc-pair/${ccPairId}/name?new_name=${encodeURIComponent(newName)}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
+
 export async function updateConnector<T>(
   connector: Connector<T>
 ): Promise<Connector<T>> {
@@ -35,26 +50,6 @@ export async function updateConnector<T>(
     body: JSON.stringify(connector),
   });
   return await response.json();
-}
-
-export async function disableConnector(
-  connector: Connector<any>,
-  setPopup: (popupSpec: PopupSpec | null) => void,
-  onUpdate: () => void
-) {
-  updateConnector({
-    ...connector,
-    disabled: !connector.disabled,
-  }).then(() => {
-    setPopup({
-      message: connector.disabled ? "Enabled connector!" : "Paused connector!",
-      type: "success",
-    });
-    setTimeout(() => {
-      setPopup(null);
-    }, 4000);
-    onUpdate && onUpdate();
-  });
 }
 
 export async function deleteConnector(

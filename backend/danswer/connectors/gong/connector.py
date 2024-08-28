@@ -81,10 +81,10 @@ class GongConnector(LoadConnector, PollConnector):
 
         for workspace in workspace_list:
             if workspace:
-                logger.info(f"Updating workspace: {workspace}")
+                logger.info(f"Updating Gong workspace: {workspace}")
                 workspace_id = workspace_map.get(workspace)
                 if not workspace_id:
-                    logger.error(f"Invalid workspace: {workspace}")
+                    logger.error(f"Invalid Gong workspace: {workspace}")
                     if not self.continue_on_fail:
                         raise ValueError(f"Invalid workspace: {workspace}")
                     continue

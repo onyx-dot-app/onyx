@@ -32,7 +32,7 @@ def simple_log_function_time(
             if debug_only:
                 logger.debug(final_log)
             else:
-                logger.info(final_log)
+                logger.notice(final_log)
 
             return result
 

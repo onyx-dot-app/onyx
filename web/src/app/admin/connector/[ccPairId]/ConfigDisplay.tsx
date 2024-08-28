@@ -38,6 +38,67 @@ function buildConfigEntries(
   return obj;
 }
 
+export function AdvancedConfigDisplay({
+  pruneFreq,
+  refreshFreq,
+  indexingStart,
+}: {
+  pruneFreq: number | null;
+  refreshFreq: number | null;
+  indexingStart: Date | null;
+}) {
+  const formatRefreshFrequency = (seconds: number | null): string => {
+    if (seconds === null) return "-";
+    const minutes = Math.round(seconds / 60);
+    return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+  };
+  const formatPruneFrequency = (seconds: number | null): string => {
+    if (seconds === null) return "-";
+    const days = Math.round(seconds / (60 * 60 * 24));
+    return `${days} day${days !== 1 ? "s" : ""}`;
+  };
+
+  const formatDate = (date: Date | null): string => {
+    if (date === null) return "-";
+    return date.toLocaleString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+  };
+
+  return (
+    <>
+      <Title className="mt-8 mb-2">Advanced Configuration</Title>
+      <Card>
+        <List>
+          {pruneFreq && (
+            <ListItem key={0}>
+              <span>Pruning Frequency</span>
+              <span>{formatPruneFrequency(pruneFreq)}</span>
+            </ListItem>
+          )}
+          {refreshFreq && (
+            <ListItem key={1}>
+              <span>Refresh Frequency</span>
+              <span>{formatRefreshFrequency(refreshFreq)}</span>
+            </ListItem>
+          )}
+          {indexingStart && (
+            <ListItem key={2}>
+              <span>Indexing Start</span>
+              <span>{formatDate(indexingStart)}</span>
+            </ListItem>
+          )}
+        </List>
+      </Card>
+    </>
+  );
+}
+
 export function ConfigDisplay({
   connectorSpecificConfig,
   sourceType,

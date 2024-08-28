@@ -8,20 +8,28 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { destructureValue, getFinalLLM, structureValue } from "@/lib/llm/utils";
 import { updateModelOverrideForChatSession } from "../../lib";
 import { Tooltip } from "@/components/tooltip/Tooltip";
-import { InfoIcon } from "@/components/icons/icons";
+import { GearIcon, InfoIcon } from "@/components/icons/icons";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 
 interface LlmTabProps {
   llmOverrideManager: LlmOverrideManager;
   currentAssistant: Persona;
   currentLlm: string;
+  openModelSettings: () => void;
   chatSessionId?: number;
   close: () => void;
 }
 
 export const LlmTab = forwardRef<HTMLDivElement, LlmTabProps>(
   (
-    { llmOverrideManager, currentAssistant, chatSessionId, currentLlm, close },
+    {
+      llmOverrideManager,
+      currentAssistant,
+      chatSessionId,
+      currentLlm,
+      close,
+      openModelSettings,
+    },
     ref
   ) => {
     const { llmProviders } = useChatContext();
@@ -42,12 +50,6 @@ export const LlmTab = forwardRef<HTMLDivElement, LlmTabProps>(
       setLocalTemperature(value);
       debouncedSetTemperature(value);
     };
-
-    const [_, defaultLlmName] = getFinalLLM(
-      llmProviders,
-      currentAssistant,
-      null
-    );
 
     const llmOptionsByProvider: {
       [provider: string]: { name: string; value: string }[];
@@ -81,8 +83,16 @@ export const LlmTab = forwardRef<HTMLDivElement, LlmTabProps>(
     );
     return (
       <div className="w-full">
-        <div className="flex w-full content-center gap-x-2">
-          <label className="block text-sm font-medium mb-2">Choose Model</label>
+        <div className="flex w-full justify-between content-center mb-2 gap-x-2">
+          <label className="block text-sm font-medium ">Choose Model</label>
+          <button
+            onClick={() => {
+              close();
+              openModelSettings();
+            }}
+          >
+            <GearIcon />
+          </button>
         </div>
         <div className="max-h-[300px] flex flex-col gap-y-1 overflow-y-scroll">
           {llmOptions.map(({ name, value }, index) => {

@@ -1,4 +1,4 @@
-interface DocumentSetCreationRequest {
+export interface DocumentSetCreationRequest {
   name: string;
   description: string;
   cc_pair_ids: number[];

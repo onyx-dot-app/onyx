@@ -12,7 +12,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFormContext } from "@/components/context/FormContext";
 import { getSourceDisplayName } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { submitConnector } from "@/components/admin/connectors/ConnectorForm";
 import { deleteCredential, linkCredential } from "@/lib/credential";
 import { submitFiles } from "./pages/utils/files";
@@ -38,6 +38,7 @@ import {
   useGoogleDriveCredentials,
 } from "./pages/utils/hooks";
 import { FormikProps } from "formik";
+import { useUser } from "@/components/user/UserProvider";
 
 export type AdvancedConfig = {
   pruneFreq: number | null;
@@ -56,6 +57,11 @@ export default function AddConnector({
 
   const { data: credentials } = useSWR<Credential<any>[]>(
     buildSimilarCredentialInfoURL(connector),
+    errorHandlingFetcher,
+    { refreshInterval: 5000 }
+  );
+  const { data: editableCredentials } = useSWR<Credential<any>[]>(
+    buildSimilarCredentialInfoURL(connector, true),
     errorHandlingFetcher,
     { refreshInterval: 5000 }
   );
@@ -88,13 +94,22 @@ export default function AddConnector({
 
   // Default to 10 minutes unless otherwise specified
   const defaultRefresh = configuration.overrideDefaultFreq || 10;
-  // default is 1 day (in minutes)
-  const defaultPrune = 24 * 60;
+  // Default is 30 days
+  const defaultPrune = 30;
 
   const [refreshFreq, setRefreshFreq] = useState<number>(defaultRefresh || 0);
   const [pruneFreq, setPruneFreq] = useState<number>(defaultPrune);
   const [indexingStart, setIndexingStart] = useState<Date | null>(null);
-  const [isPublic, setIsPublic] = useState(false);
+  const { isAdmin, isLoadingUser } = useUser();
+
+  const [isPublic, setIsPublic] = useState(isAdmin);
+  useEffect(() => {
+    if (!isLoadingUser) {
+      setIsPublic(isAdmin);
+    }
+  }, [isLoadingUser, isAdmin]);
+
+  const [groups, setGroups] = useState<number[]>([]);
   const [createConnectorToggle, setCreateConnectorToggle] = useState(false);
   const formRef = useRef<FormikProps<any>>(null);
   const [advancedFormPageState, setAdvancedFormPageState] = useState(true);
@@ -110,7 +125,9 @@ export default function AddConnector({
   const { liveGmailCredential } = useGmailCredentials();
 
   const credentialActivated =
-    liveGDriveCredential || liveGmailCredential || currentCredential;
+    (connector === "google_drive" && liveGDriveCredential) ||
+    (connector === "gmail" && liveGmailCredential) ||
+    currentCredential;
 
   const noCredentials = credentialTemplate == null;
   if (noCredentials && 1 != formStep) {
@@ -119,6 +136,10 @@ export default function AddConnector({
 
   if (!noCredentials && !credentialActivated && formStep != 0) {
     setFormStep(Math.min(formStep, 0));
+  }
+
+  if (isLoadingUser) {
+    return <></>;
   }
 
   const resetAdvancedConfigs = () => {
@@ -140,9 +161,9 @@ export default function AddConnector({
 
   const createConnector = async () => {
     const AdvancedConfig: AdvancedConfig = {
-      pruneFreq: (pruneFreq || defaultPrune) * 60,
+      pruneFreq: pruneFreq * 60 * 60 * 24,
       indexingStart,
-      refreshFreq: (refreshFreq || defaultRefresh) * 60,
+      refreshFreq: refreshFreq * 60,
     };
 
     // google sites-specific handling
@@ -170,7 +191,8 @@ export default function AddConnector({
         setSelectedFiles,
         name,
         AdvancedConfig,
-        isPublic
+        isPublic,
+        groups
       );
       if (response) {
         setTimeout(() => {
@@ -186,13 +208,15 @@ export default function AddConnector({
         input_type: connector == "web" ? "load_state" : "poll", // single case
         name: name,
         source: connector,
-        refresh_freq: (refreshFreq || defaultRefresh) * 60,
-        prune_freq: (pruneFreq || defaultPrune) * 60,
+        refresh_freq: refreshFreq * 60 || null,
+        prune_freq: pruneFreq * 60 * 60 * 24 || null,
         indexing_start: indexingStart,
-        disabled: false,
+        is_public: isPublic,
+        groups: groups,
       },
       undefined,
-      credentialActivated ? false : true
+      credentialActivated ? false : true,
+      isPublic
     );
 
     // If no credential
@@ -211,14 +235,15 @@ export default function AddConnector({
     }
 
     // Without credential
-    if (isSuccess && response && credentialActivated) {
+    if (credentialActivated && isSuccess && response) {
       const credential =
         currentCredential || liveGDriveCredential || liveGmailCredential;
       const linkCredentialResponse = await linkCredential(
         response.id,
         credential?.id!,
         name,
-        isPublic
+        isPublic,
+        groups
       );
       if (linkCredentialResponse.ok) {
         setPopup({
@@ -228,14 +253,26 @@ export default function AddConnector({
         setTimeout(() => {
           window.open("/admin/indexing/status", "_self");
         }, 1000);
+      } else {
+        const errorData = await linkCredentialResponse.json();
+        setPopup({
+          message: errorData.message,
+          type: "error",
+        });
       }
+    } else if (isSuccess) {
+      setPopup({
+        message:
+          "Credential created succsfully! Redirecting to connector home page",
+        type: "success",
+      });
     } else {
       setPopup({ message: message, type: "error" });
     }
   };
 
   const displayName = getSourceDisplayName(connector) || connector;
-  if (!credentials) {
+  if (!credentials || !editableCredentials) {
     return <></>;
   }
 
@@ -316,7 +353,6 @@ export default function AddConnector({
           <>
             <Card>
               <Title className="mb-2 text-lg">Select a credential</Title>
-
               <GmailMain />
             </Card>
             <div className="mt-4 flex w-full justify-end">
@@ -339,6 +375,7 @@ export default function AddConnector({
                 source={connector}
                 defaultedCredential={currentCredential!}
                 credentials={credentials}
+                editableCredentials={editableCredentials}
                 onDeleteCredential={onDeleteCredential}
                 onSwitch={onSwap}
               />
@@ -400,6 +437,8 @@ export default function AddConnector({
               setName={setName}
               config={configuration}
               isPublic={isPublic}
+              groups={groups}
+              setGroups={setGroups}
               defaultValues={values}
               initialName={name}
               onFormStatusChange={handleFormStatusChange}
@@ -419,7 +458,10 @@ export default function AddConnector({
             )}
             <button
               className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-accent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
-              disabled={!isFormValid}
+              disabled={
+                !isFormValid ||
+                (connector == "file" && selectedFiles.length == 0)
+              }
               onClick={async () => {
                 await createConnector();
               }}
@@ -453,10 +495,10 @@ export default function AddConnector({
               key={advancedFormPageState ? 0 : 1}
               setIndexingStart={setIndexingStart}
               indexingStart={indexingStart}
-              currentPruneFreq={pruneFreq}
-              currentRefreshFreq={refreshFreq}
               setPruneFreq={setPruneFreq}
+              currentPruneFreq={pruneFreq}
               setRefreshFreq={setRefreshFreq}
+              currentRefreshFreq={refreshFreq}
               ref={formRef}
             />
 

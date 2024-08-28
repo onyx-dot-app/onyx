@@ -10,15 +10,22 @@ from danswer.chat.chat_utils import llm_doc_from_inference_section
 from danswer.chat.models import DanswerContext
 from danswer.chat.models import DanswerContexts
 from danswer.chat.models import LlmDoc
-from danswer.configs.chat_configs import DISABLE_AGENTIC_SEARCH
+from danswer.chat.models import SectionRelevancePiece
+from danswer.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
+from danswer.configs.chat_configs import CONTEXT_CHUNKS_BELOW
+from danswer.configs.model_configs import GEN_AI_MODEL_DEFAULT_MAX_TOKENS
 from danswer.db.models import Persona
 from danswer.db.models import User
 from danswer.dynamic_configs.interface import JSON_ro
+from danswer.llm.answering.models import ContextualPruningConfig
 from danswer.llm.answering.models import DocumentPruningConfig
 from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.answering.models import PromptConfig
+from danswer.llm.answering.prompts.citations_prompt import compute_max_llm_input_tokens
 from danswer.llm.answering.prune_and_merge import prune_and_merge_sections
+from danswer.llm.answering.prune_and_merge import prune_sections
 from danswer.llm.interfaces import LLM
+from danswer.search.enums import LLMEvaluationType
 from danswer.search.enums import QueryFlow
 from danswer.search.enums import SearchType
 from danswer.search.models import IndexFilters
@@ -78,14 +85,14 @@ class SearchTool(Tool):
         llm: LLM,
         fast_llm: LLM,
         pruning_config: DocumentPruningConfig,
+        evaluation_type: LLMEvaluationType,
         # if specified, will not actually run a search and will instead return these
         # sections. Used when the user selects specific docs to talk to
         selected_sections: list[InferenceSection] | None = None,
-        chunks_above: int = 0,
-        chunks_below: int = 0,
+        chunks_above: int | None = None,
+        chunks_below: int | None = None,
         full_doc: bool = False,
         bypass_acl: bool = False,
-        llm_doc_eval: bool = False,
     ) -> None:
         self.user = user
         self.persona = persona
@@ -93,16 +100,47 @@ class SearchTool(Tool):
         self.prompt_config = prompt_config
         self.llm = llm
         self.fast_llm = fast_llm
-        self.pruning_config = pruning_config
+        self.evaluation_type = evaluation_type
 
         self.selected_sections = selected_sections
 
-        self.chunks_above = chunks_above
-        self.chunks_below = chunks_below
         self.full_doc = full_doc
         self.bypass_acl = bypass_acl
         self.db_session = db_session
-        self.llm_doc_eval = llm_doc_eval
+
+        self.chunks_above = (
+            chunks_above
+            if chunks_above is not None
+            else (
+                persona.chunks_above
+                if persona.chunks_above is not None
+                else CONTEXT_CHUNKS_ABOVE
+            )
+        )
+        self.chunks_below = (
+            chunks_below
+            if chunks_below is not None
+            else (
+                persona.chunks_below
+                if persona.chunks_below is not None
+                else CONTEXT_CHUNKS_BELOW
+            )
+        )
+
+        # For small context models, don't include additional surrounding context
+        # The 3 here for at least minimum 1 above, 1 below and 1 for the middle chunk
+        max_llm_tokens = compute_max_llm_input_tokens(self.llm.config)
+        if max_llm_tokens < 3 * GEN_AI_MODEL_DEFAULT_MAX_TOKENS:
+            self.chunks_above = 0
+            self.chunks_below = 0
+
+        num_chunk_multiple = self.chunks_above + self.chunks_below + 1
+
+        self.contextual_pruning_config = (
+            ContextualPruningConfig.from_doc_pruning_config(
+                num_chunk_multiple=num_chunk_multiple, doc_pruning_config=pruning_config
+            )
+        )
 
     @property
     def name(self) -> str:
@@ -179,7 +217,7 @@ class SearchTool(Tool):
         self, query: str
     ) -> Generator[ToolResponse, None, None]:
         if self.selected_sections is None:
-            raise ValueError("sections must be specified")
+            raise ValueError("Sections must be specified")
 
         yield ToolResponse(
             id=SEARCH_RESPONSE_SUMMARY_ID,
@@ -192,9 +230,20 @@ class SearchTool(Tool):
                 recency_bias_multiplier=1.0,
             ),
         )
+
+        # Build selected sections for specified documents
+        selected_sections = [
+            SectionRelevancePiece(
+                relevant=True,
+                document_id=section.center_chunk.document_id,
+                chunk_id=section.center_chunk.chunk_id,
+            )
+            for section in self.selected_sections
+        ]
+
         yield ToolResponse(
             id=SECTION_RELEVANCE_LIST_ID,
-            response=[i for i in range(len(self.selected_sections))],
+            response=selected_sections,
         )
 
         final_context_sections = prune_and_merge_sections(
@@ -203,12 +252,14 @@ class SearchTool(Tool):
             prompt_config=self.prompt_config,
             llm_config=self.llm.config,
             question=query,
-            document_pruning_config=self.pruning_config,
+            contextual_pruning_config=self.contextual_pruning_config,
         )
+
         llm_docs = [
             llm_doc_from_inference_section(section)
             for section in final_context_sections
         ]
+
         yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS, response=llm_docs)
 
     def run(self, **kwargs: str) -> Generator[ToolResponse, None, None]:
@@ -221,6 +272,7 @@ class SearchTool(Tool):
         search_pipeline = SearchPipeline(
             search_request=SearchRequest(
                 query=query,
+                evaluation_type=self.evaluation_type,
                 human_selected_filters=(
                     self.retrieval_options.filters if self.retrieval_options else None
                 ),
@@ -244,14 +296,13 @@ class SearchTool(Tool):
             bypass_acl=self.bypass_acl,
             db_session=self.db_session,
             prompt_config=self.prompt_config,
-            pruning_config=self.pruning_config,
         )
 
         yield ToolResponse(
             id=SEARCH_RESPONSE_SUMMARY_ID,
             response=SearchResponseSummary(
                 rephrased_query=query,
-                top_sections=search_pipeline.reranked_sections,
+                top_sections=search_pipeline.final_context_sections,
                 predicted_flow=search_pipeline.predicted_flow,
                 predicted_search=search_pipeline.predicted_search_type,
                 final_filters=search_pipeline.search_query.filters,
@@ -276,29 +327,23 @@ class SearchTool(Tool):
 
         yield ToolResponse(
             id=SECTION_RELEVANCE_LIST_ID,
-            response=search_pipeline.relevant_section_indices,
+            response=search_pipeline.section_relevance,
         )
 
-        final_context_sections = prune_and_merge_sections(
-            sections=search_pipeline.reranked_sections,
+        pruned_sections = prune_sections(
+            sections=search_pipeline.final_context_sections,
             section_relevance_list=search_pipeline.section_relevance_list,
             prompt_config=self.prompt_config,
             llm_config=self.llm.config,
             question=query,
-            document_pruning_config=self.pruning_config,
+            contextual_pruning_config=self.contextual_pruning_config,
         )
 
         llm_docs = [
-            llm_doc_from_inference_section(section)
-            for section in final_context_sections
+            llm_doc_from_inference_section(section) for section in pruned_sections
         ]
 
         yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS, response=llm_docs)
-
-        if self.llm_doc_eval and not DISABLE_AGENTIC_SEARCH:
-            yield ToolResponse(
-                id=SEARCH_EVALUATION_ID, response=search_pipeline.relevance_summaries
-            )
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
         final_docs = cast(

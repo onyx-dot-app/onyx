@@ -47,7 +47,8 @@ export function linkCredential(
   connectorId: number,
   credentialId: number,
   name?: string,
-  isPublic?: boolean
+  isPublic?: boolean,
+  groups?: number[]
 ) {
   return fetch(
     `/api/manage/connector/${connectorId}/credential/${credentialId}`,
@@ -59,6 +60,7 @@ export function linkCredential(
       body: JSON.stringify({
         name: name || null,
         is_public: isPublic !== undefined ? isPublic : true,
+        groups: groups || null,
       }),
     }
   );

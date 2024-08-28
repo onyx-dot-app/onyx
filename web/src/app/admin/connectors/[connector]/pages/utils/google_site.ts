@@ -44,7 +44,6 @@ export const submitGoogleSite = async (
         refresh_freq: advancedConfig.refreshFreq,
         prune_freq: advancedConfig.pruneFreq,
         indexing_start: advancedConfig.indexingStart,
-        disabled: false,
       });
     if (connectorErrorMsg || !connector) {
       setPopup({

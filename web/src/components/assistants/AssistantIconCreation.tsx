@@ -1,19 +1,23 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { buildImgUrl } from "@/app/chat/files/images/utils";
-import { useEffect, useState } from "react";
+import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import Dropzone from "react-dropzone";
 import { usePopup } from "../admin/connectors/Popup";
 
 export const IconImageSelection = ({
-  existingPersona,
   setFieldValue,
+  existingPersonaImageId,
+  setExistingPersonaImageId,
+  setRemovePersonaImage,
 }: {
-  existingPersona: Persona | null;
+  setExistingPersonaImageId: Dispatch<SetStateAction<string | null>>;
+  existingPersonaImageId: string | null;
   setFieldValue: (
     field: string,
     value: any,
     shouldValidate?: boolean
   ) => Promise<any>;
+  setRemovePersonaImage: Dispatch<SetStateAction<boolean>>;
 }) => {
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
 
@@ -22,19 +26,37 @@ export const IconImageSelection = ({
     setFieldValue("uploaded_image", image);
   };
 
+  const resetPreviousAssistantImage = () => {
+    setRemovePersonaImage(true);
+    setExistingPersonaImageId(null);
+  };
+
   return (
     <div className="mt-2 gap-y-2 flex flex-col">
       <p className="font-bold text-sm text-gray-800">Or Upload Image</p>
-      {existingPersona && existingPersona.uploaded_image_id && (
+      {existingPersonaImageId && (
         <div className="flex gap-x-2">
           Current image:
           <img
             className="h-12 w-12"
-            src={buildImgUrl(existingPersona?.uploaded_image_id)}
+            src={buildImgUrl(existingPersonaImageId)}
           />
         </div>
       )}
-      <IconImageUpload selectedFile={uploadedImage} updateFile={updateFile} />
+      <div className="flex gap-x-2">
+        <IconImageUpload selectedFile={uploadedImage} updateFile={updateFile} />
+        {existingPersonaImageId && (
+          <button
+            onClick={resetPreviousAssistantImage}
+            className={
+              "text-sm text-text-800 max-w-[200px] p-2 rounded " +
+              "shadow-lg border border-border cursor-pointer"
+            }
+          >
+            Remove current image
+          </button>
+        )}
+      </div>
       <p className="text-sm text-gray-600">
         Uploading an image will override the generated icon.
       </p>

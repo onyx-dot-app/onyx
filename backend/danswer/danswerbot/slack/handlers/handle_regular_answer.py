@@ -1,5 +1,4 @@
 import functools
-import logging
 from collections.abc import Callable
 from typing import Any
 from typing import cast
@@ -50,7 +49,8 @@ from danswer.one_shot_answer.models import OneShotQAResponse
 from danswer.search.enums import OptionalSearchSetting
 from danswer.search.models import BaseFilters
 from danswer.search.models import RetrievalDetails
-from shared_configs.configs import ENABLE_RERANKING_ASYNC_FLOW
+from danswer.search.search_settings import get_search_settings
+from danswer.utils.logger import DanswerLoggingAdapter
 
 
 srl = SlackRateLimiter()
@@ -83,7 +83,7 @@ def handle_regular_answer(
     receiver_ids: list[str] | None,
     client: WebClient,
     channel: str,
-    logger: logging.Logger,
+    logger: DanswerLoggingAdapter,
     feedback_reminder_id: str | None,
     num_retries: int = DANSWER_BOT_NUM_RETRIES,
     answer_generation_timeout: int = DANSWER_BOT_ANSWER_GENERATION_TIMEOUT,
@@ -136,7 +136,6 @@ def handle_regular_answer(
         tries=num_retries,
         delay=0.25,
         backoff=2,
-        logger=logger,
     )
     @rate_limits(client=client, channel=channel, thread_ts=message_ts_to_respond_to)
     def _get_answer(new_message_request: DirectQARequest) -> OneShotQAResponse | None:
@@ -147,7 +146,12 @@ def handle_regular_answer(
             if len(new_message_request.messages) > 1:
                 persona = cast(
                     Persona,
-                    fetch_persona_by_id(db_session, new_message_request.persona_id),
+                    fetch_persona_by_id(
+                        db_session,
+                        new_message_request.persona_id,
+                        user=None,
+                        get_editable=False,
+                    ),
                 )
                 llm, _ = get_llms_for_persona(persona)
 
@@ -223,15 +227,23 @@ def handle_regular_answer(
             enable_auto_detect_filters=auto_detect_filters,
         )
 
+        # Always apply reranking settings if it exists, this is the non-streaming flow
+        saved_search_settings = get_search_settings()
+
         # This includes throwing out answer via reflexion
         answer = _get_answer(
             DirectQARequest(
                 messages=messages,
+                multilingual_query_expansion=saved_search_settings.multilingual_expansion
+                if saved_search_settings
+                else None,
                 prompt_id=prompt.id if prompt else None,
                 persona_id=persona.id if persona is not None else 0,
                 retrieval_options=retrieval_details,
                 chain_of_thought=not disable_cot,
-                skip_rerank=not ENABLE_RERANKING_ASYNC_FLOW,
+                rerank_settings=saved_search_settings.to_reranking_detail()
+                if saved_search_settings
+                else None,
             )
         )
     except Exception as e:
@@ -311,7 +323,7 @@ def handle_regular_answer(
     )
 
     if answer.answer_valid is False:
-        logger.info(
+        logger.notice(
             "Answer was evaluated to be invalid, throwing it away without responding."
         )
         update_emote_react(
@@ -349,7 +361,7 @@ def handle_regular_answer(
         return True
 
     if not answer.answer and disable_docs_only_answer:
-        logger.info(
+        logger.notice(
             "Unable to find answer - not responding since the "
             "`DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER` env variable is set"
         )
