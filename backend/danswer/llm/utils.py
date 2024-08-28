@@ -335,6 +335,11 @@ def get_llm_max_tokens(
 ) -> int:
     """Best effort attempt to get the max tokens for the LLM"""
 #    import pdb; pdb.set_trace()
+    if model_name.startswith('meta-llama/Meta-Llama-3.1'):
+        logger.info(
+            f"Meta-Llama-3.1 is used, return 131072."
+        )
+        return 131072
 
     if GEN_AI_MAX_TOKENS:
         # This is an override, so always return this
@@ -352,14 +357,11 @@ def get_llm_max_tokens(
             return model_obj["max_tokens"]
         raise RuntimeError("No max tokens found for LLM")
     except Exception:
-        ret_tokens = GEN_AI_MODEL_DEFAULT_MAX_TOKENS
-        if model_name.startswith('meta-llama/Meta-Llama-3.1'):
-            ret_tokens = 131072
         logger.exception(
-            f"Failed to get max tokens for LLM with name {model_name}. Defaulting to {ret_tokens}."
+            f"Failed to get max tokens for LLM with name {model_name}. Defaulting to {GEN_AI_MODEL_DEFAULT_MAX_TOKENS}."
         )
 
-        return ret_tokens
+        return GEN_AI_MODEL_DEFAULT_MAX_TOKENS
 
 
 def get_max_input_tokens(
