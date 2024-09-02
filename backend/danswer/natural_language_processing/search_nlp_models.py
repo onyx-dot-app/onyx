@@ -33,7 +33,7 @@ from shared_configs.model_server_models import RerankRequest
 from shared_configs.model_server_models import RerankResponse
 from shared_configs.utils import batch_list
 
-from tenacity import retry, stop_after_attempt, wait_exponential
+#from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = setup_logger()
 
@@ -165,7 +165,7 @@ class EmbeddingModel:
             embeddings.extend(response.embeddings)
         return embeddings
 
-    @retry(wait=wait_exponential(), stop=stop_after_attempt(3))
+#    @retry(wait=wait_exponential(), stop=stop_after_attempt(3))
     def encode(
         self,
         texts: list[str],
