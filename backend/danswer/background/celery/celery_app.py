@@ -6,6 +6,7 @@ from typing import cast
 from celery import Celery  # type: ignore
 from celery.contrib.abortable import AbortableTask  # type: ignore
 from celery.exceptions import TaskRevokedError
+from sqlalchemy import inspect
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -20,7 +21,10 @@ from danswer.background.task_utils import name_cc_cleanup_task
 from danswer.background.task_utils import name_cc_prune_task
 from danswer.background.task_utils import name_document_set_sync_task
 from danswer.configs.app_configs import JOB_TIMEOUT
-from danswer.configs.constants import POSTGRES_CELERY_APP_NAME
+from danswer.configs.app_configs import REDIS_DB_NUMBER_CELERY
+from danswer.configs.app_configs import REDIS_HOST
+from danswer.configs.app_configs import REDIS_PASSWORD
+from danswer.configs.app_configs import REDIS_PORT
 from danswer.configs.constants import PostgresAdvisoryLocks
 from danswer.connectors.factory import instantiate_connector
 from danswer.connectors.models import InputType
@@ -35,9 +39,7 @@ from danswer.db.document_set import fetch_document_sets_for_documents
 from danswer.db.document_set import fetch_documents_for_document_set_paginated
 from danswer.db.document_set import get_document_set_by_id
 from danswer.db.document_set import mark_document_set_as_synced
-from danswer.db.engine import build_connection_string
 from danswer.db.engine import get_sqlalchemy_engine
-from danswer.db.engine import SYNC_DB_API
 from danswer.db.models import DocumentSet
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
@@ -46,11 +48,17 @@ from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
 
-connection_string = build_connection_string(
-    db_api=SYNC_DB_API, app_name=POSTGRES_CELERY_APP_NAME
+CELERY_PASSWORD_PART = ""
+if REDIS_PASSWORD:
+    CELERY_PASSWORD_PART = f":{REDIS_PASSWORD}@"
+
+# example celery_broker_url: "redis://:password@localhost:6379/15"
+celery_broker_url = (
+    f"redis://{CELERY_PASSWORD_PART}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER_CELERY}"
 )
-celery_broker_url = f"sqla+{connection_string}"
-celery_backend_url = f"db+{connection_string}"
+celery_backend_url = (
+    f"redis://{CELERY_PASSWORD_PART}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER_CELERY}"
+)
 celery_app = Celery(__name__, broker=celery_broker_url, backend=celery_backend_url)
 
 
@@ -359,6 +367,15 @@ def kombu_message_cleanup_task_helper(ctx: dict, db_session: Session) -> bool:
     Returns:
         bool: Returns True if there are more rows to process, False if not.
     """
+
+    inspector = inspect(db_session.bind)
+    if not inspector:
+        return False
+
+    # With the move to redis as celery's broker and backend, kombu tables may not even exist.
+    # We can fail silently.
+    if not inspector.has_table("kombu_message"):
+        return False
 
     query = text(
         """

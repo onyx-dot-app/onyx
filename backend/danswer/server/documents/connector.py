@@ -63,19 +63,18 @@ from danswer.db.credentials import delete_google_drive_service_account_credentia
 from danswer.db.credentials import fetch_credential_by_id
 from danswer.db.deletion_attempt import check_deletion_attempt_is_allowed
 from danswer.db.document import get_document_cnts_for_cc_pairs
-from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.engine import get_session
 from danswer.db.index_attempt import create_index_attempt
 from danswer.db.index_attempt import get_index_attempts_for_cc_pair
-from danswer.db.index_attempt import get_latest_finished_index_attempt_for_cc_pair
+from danswer.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from danswer.db.index_attempt import get_latest_index_attempts
 from danswer.db.models import User
 from danswer.db.models import UserRole
+from danswer.db.search_settings import get_current_search_settings
 from danswer.dynamic_configs.interface import ConfigNotFoundError
 from danswer.file_store.file_store import get_default_file_store
 from danswer.server.documents.models import AuthStatus
 from danswer.server.documents.models import AuthUrl
-from danswer.server.documents.models import ConnectorBase
 from danswer.server.documents.models import ConnectorCredentialPairIdentifier
 from danswer.server.documents.models import ConnectorIndexingStatus
 from danswer.server.documents.models import ConnectorSnapshot
@@ -93,6 +92,7 @@ from danswer.server.documents.models import ObjectCreationIdResponse
 from danswer.server.documents.models import RunConnectorRequest
 from danswer.server.models import StatusResponse
 from danswer.utils.logger import setup_logger
+from ee.danswer.db.user_group import validate_user_creation_permissions
 
 logger = setup_logger()
 
@@ -387,7 +387,12 @@ def get_connector_indexing_status(
 ) -> list[ConnectorIndexingStatus]:
     indexing_statuses: list[ConnectorIndexingStatus] = []
 
-    # TODO: make this one query
+    # NOTE: If the connector is deleting behind the scenes,
+    # accessing cc_pairs can be inconsistent and members like
+    # connector or credential may be None.
+    # Additional checks are done to make sure the connector and credential still exists.
+    # TODO: make this one query ... possibly eager load or wrap in a read transaction
+    # to avoid the complexity of trying to error check throughout the function
     cc_pairs = get_connector_credential_pairs(
         db_session=db_session,
         user=user,
@@ -440,14 +445,19 @@ def get_connector_indexing_status(
 
         connector = cc_pair.connector
         credential = cc_pair.credential
+        if not connector or not credential:
+            # This may happen if background deletion is happening
+            continue
+
         latest_index_attempt = cc_pair_to_latest_index_attempt.get(
             (connector.id, credential.id)
         )
 
-        latest_finished_attempt = get_latest_finished_index_attempt_for_cc_pair(
+        latest_finished_attempt = get_latest_index_attempt_for_cc_pair_id(
+            db_session=db_session,
             connector_credential_pair_id=cc_pair.id,
             secondary_index=secondary_index,
-            db_session=db_session,
+            only_finished=True,
         )
 
         indexing_statuses.append(
@@ -514,35 +524,6 @@ def _validate_connector_allowed(source: DocumentSource) -> None:
     )
 
 
-def _check_connector_permissions(
-    connector_data: ConnectorUpdateRequest, user: User | None
-) -> ConnectorBase:
-    """
-    This is not a proper permission check, but this should prevent curators creating bad situations
-    until a long-term solution is implemented (Replacing CC pairs/Connectors with Connections)
-    """
-    if user and user.role != UserRole.ADMIN:
-        if connector_data.is_public:
-            raise HTTPException(
-                status_code=400,
-                detail="Public connectors can only be created by admins",
-            )
-        if not connector_data.groups:
-            raise HTTPException(
-                status_code=400,
-                detail="Connectors created by curators must have groups",
-            )
-    return ConnectorBase(
-        name=connector_data.name,
-        source=connector_data.source,
-        input_type=connector_data.input_type,
-        connector_specific_config=connector_data.connector_specific_config,
-        refresh_freq=connector_data.refresh_freq,
-        prune_freq=connector_data.prune_freq,
-        indexing_start=connector_data.indexing_start,
-    )
-
-
 @router.post("/admin/connector")
 def create_connector_from_model(
     connector_data: ConnectorUpdateRequest,
@@ -551,12 +532,19 @@ def create_connector_from_model(
 ) -> ObjectCreationIdResponse:
     try:
         _validate_connector_allowed(connector_data.source)
-        connector_base = _check_connector_permissions(connector_data, user)
+        validate_user_creation_permissions(
+            db_session=db_session,
+            user=user,
+            target_group_ids=connector_data.groups,
+            object_is_public=connector_data.is_public,
+        )
+        connector_base = connector_data.to_connector_base()
         return create_connector(
             db_session=db_session,
             connector_data=connector_base,
         )
     except ValueError as e:
+        logger.error(f"Error creating connector: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -607,12 +595,18 @@ def create_connector_with_mock_credential(
 def update_connector_from_model(
     connector_id: int,
     connector_data: ConnectorUpdateRequest,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
     try:
         _validate_connector_allowed(connector_data.source)
-        connector_base = _check_connector_permissions(connector_data, user)
+        validate_user_creation_permissions(
+            db_session=db_session,
+            user=user,
+            target_group_ids=connector_data.groups,
+            object_is_public=connector_data.is_public,
+        )
+        connector_base = connector_data.to_connector_base()
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -642,7 +636,7 @@ def update_connector_from_model(
 @router.delete("/admin/connector/{connector_id}", response_model=StatusResponse[int])
 def delete_connector_by_id(
     connector_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     try:
@@ -705,7 +699,7 @@ def connector_run_once(
         )
     ]
 
-    embedding_model = get_current_db_embedding_model(db_session)
+    search_settings = get_current_search_settings(db_session)
 
     connector_credential_pairs = [
         get_connector_credential_pair(run_info.connector_id, credential_id, db_session)
@@ -716,7 +710,7 @@ def connector_run_once(
     index_attempt_ids = [
         create_index_attempt(
             connector_credential_pair_id=connector_credential_pair.id,
-            embedding_model_id=embedding_model.id,
+            search_settings_id=search_settings.id,
             from_beginning=run_info.from_beginning,
             db_session=db_session,
         )

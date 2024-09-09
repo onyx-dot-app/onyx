@@ -11,6 +11,9 @@ class LLMOverride(BaseModel):
     model_version: str | None = None
     temperature: float | None = None
 
+    # This disables the "model_" protected namespace for pydantic
+    model_config = {"protected_namespaces": ()}
+
 
 class PromptOverride(BaseModel):
     system_prompt: str | None = None

@@ -43,6 +43,35 @@ def replace_whitespaces_w_space(s: str) -> str:
     return re.sub(r"\s", " ", s)
 
 
+# Function to remove punctuation from a string
+def remove_punctuation(s: str) -> str:
+    return s.translate(str.maketrans("", "", string.punctuation))
+
+
+def escape_quotes(original_json_str: str) -> str:
+    result = []
+    in_string = False
+    for i, char in enumerate(original_json_str):
+        if char == '"':
+            if not in_string:
+                in_string = True
+                result.append(char)
+            else:
+                next_char = (
+                    original_json_str[i + 1] if i + 1 < len(original_json_str) else None
+                )
+                if result and result[-1] == "\\":
+                    result.append(char)
+                elif next_char not in [",", ":", "}", "\n"]:
+                    result.append("\\" + char)
+                else:
+                    result.append(char)
+                    in_string = False
+        else:
+            result.append(char)
+    return "".join(result)
+
+
 def extract_embedded_json(s: str) -> dict:
     first_brace_index = s.find("{")
     last_brace_index = s.rfind("}")
@@ -50,7 +79,15 @@ def extract_embedded_json(s: str) -> dict:
     if first_brace_index == -1 or last_brace_index == -1:
         raise ValueError("No valid json found")
 
-    return json.loads(s[first_brace_index : last_brace_index + 1], strict=False)
+    json_str = s[first_brace_index : last_brace_index + 1]
+    try:
+        return json.loads(json_str, strict=False)
+
+    except json.JSONDecodeError:
+        try:
+            return json.loads(escape_quotes(json_str), strict=False)
+        except json.JSONDecodeError as e:
+            raise ValueError("Failed to parse JSON, even after escaping quotes") from e
 
 
 def clean_up_code_blocks(model_out_raw: str) -> str:

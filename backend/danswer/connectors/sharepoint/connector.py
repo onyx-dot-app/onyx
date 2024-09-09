@@ -25,7 +25,6 @@ from danswer.connectors.models import Section
 from danswer.file_processing.extract_file_text import extract_file_text
 from danswer.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
@@ -138,7 +137,7 @@ class SharepointConnector(LoadConnector, PollConnector):
                     .execute_query()
                 ]
         else:
-            sites = self.graph_client.sites.get().execute_query()
+            sites = self.graph_client.sites.get_all().execute_query()
             self.site_data = [
                 SiteData(url=None, folder=None, sites=sites, driveitems=[])
             ]

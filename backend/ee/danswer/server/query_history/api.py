@@ -376,7 +376,7 @@ def get_query_history_as_csv(
     # Create an in-memory text stream
     stream = io.StringIO()
     writer = csv.DictWriter(
-        stream, fieldnames=list(QuestionAnswerPairSnapshot.__fields__.keys())
+        stream, fieldnames=list(QuestionAnswerPairSnapshot.model_fields.keys())
     )
     writer.writeheader()
     for row in question_answer_pairs:

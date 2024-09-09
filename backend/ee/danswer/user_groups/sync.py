@@ -2,8 +2,8 @@ from sqlalchemy.orm import Session
 
 from danswer.access.access import get_access_for_documents
 from danswer.db.document import prepare_to_modify_documents
-from danswer.db.embedding_model import get_current_db_embedding_model
-from danswer.db.embedding_model import get_secondary_db_embedding_model
+from danswer.db.search_settings import get_current_search_settings
+from danswer.db.search_settings import get_secondary_search_settings
 from danswer.document_index.factory import get_default_document_index
 from danswer.document_index.interfaces import DocumentIndex
 from danswer.document_index.interfaces import UpdateRequest
@@ -47,13 +47,13 @@ def _sync_user_group_batch(
 
 def sync_user_groups(user_group_id: int, db_session: Session) -> None:
     """Sync the status of Postgres for the specified user group"""
-    db_embedding_model = get_current_db_embedding_model(db_session)
-    secondary_db_embedding_model = get_secondary_db_embedding_model(db_session)
+    search_settings = get_current_search_settings(db_session)
+    secondary_search_settings = get_secondary_search_settings(db_session)
 
     document_index = get_default_document_index(
-        primary_index_name=db_embedding_model.index_name,
-        secondary_index_name=secondary_db_embedding_model.index_name
-        if secondary_db_embedding_model
+        primary_index_name=search_settings.index_name,
+        secondary_index_name=secondary_search_settings.index_name
+        if secondary_search_settings
         else None,
     )
 

@@ -1,20 +1,21 @@
 import React, { Dispatch, forwardRef, SetStateAction } from "react";
 import { Formik, Form, FormikProps, FieldArray, Field } from "formik";
 import * as Yup from "yup";
-import { EditingValue } from "@/components/credentials/EditingValue";
 import CredentialSubText from "@/components/credentials/CredentialFields";
 import { TrashIcon } from "@/components/icons/icons";
 import { FaPlus } from "react-icons/fa";
-import { AdvancedDetails, RerankingDetails } from "../interfaces";
+import { AdvancedSearchConfiguration, RerankingDetails } from "../interfaces";
+import { BooleanFormField } from "@/components/admin/connectors/Field";
+import NumberInput from "../../connectors/[connector]/pages/ConnectorInput/NumberInput";
 
 interface AdvancedEmbeddingFormPageProps {
   updateAdvancedEmbeddingDetails: (
-    key: keyof AdvancedDetails,
+    key: keyof AdvancedSearchConfiguration,
     value: any
   ) => void;
-  advancedEmbeddingDetails: AdvancedDetails;
-  setRerankingDetails: Dispatch<SetStateAction<RerankingDetails>>;
+  advancedEmbeddingDetails: AdvancedSearchConfiguration;
   numRerank: number;
+  updateNumRerank: (value: number) => void;
 }
 
 const AdvancedEmbeddingFormPage = forwardRef<
@@ -25,8 +26,8 @@ const AdvancedEmbeddingFormPage = forwardRef<
     {
       updateAdvancedEmbeddingDetails,
       advancedEmbeddingDetails,
-      setRerankingDetails,
       numRerank,
+      updateNumRerank,
     },
     ref
   ) => {
@@ -56,7 +57,7 @@ const AdvancedEmbeddingFormPage = forwardRef<
           enableReinitialize={true}
         >
           {({ values, setFieldValue }) => (
-            <Form className="space-y-6">
+            <Form>
               <FieldArray name="multilingual_expansion">
                 {({ push, remove }) => (
                   <div>
@@ -131,54 +132,44 @@ const AdvancedEmbeddingFormPage = forwardRef<
                 )}
               </FieldArray>
 
-              <div key="multipass_indexing">
-                <EditingValue
-                  description="Enable multipass indexing for both mini and large chunks."
-                  optional
-                  currentValue={values.multipass_indexing}
-                  onChangeBool={(value: boolean) => {
-                    updateAdvancedEmbeddingDetails("multipass_indexing", value);
-                    setFieldValue("multipass_indexing", value);
-                  }}
-                  setFieldValue={setFieldValue}
-                  type="checkbox"
-                  label="Multipass Indexing"
-                  name="multipassIndexing"
-                />
-              </div>
-              <div key="disable_rerank_for_streaming">
-                <EditingValue
-                  description="Disable reranking for streaming to improve response time."
-                  optional
-                  currentValue={values.disable_rerank_for_streaming}
-                  onChangeBool={(value: boolean) => {
-                    updateAdvancedEmbeddingDetails(
-                      "disable_rerank_for_streaming",
-                      value
-                    );
-                    setFieldValue("disable_rerank_for_streaming", value);
-                  }}
-                  setFieldValue={setFieldValue}
-                  type="checkbox"
-                  label="Disable Rerank for Streaming"
-                  name="disableRerankForStreaming"
-                />
-              </div>
-              <div key="num_rerank">
-                <EditingValue
-                  description="Number of results to rerank"
-                  optional={false}
-                  currentValue={values.num_rerank}
-                  onChangeNumber={(value: number) => {
-                    setRerankingDetails({ ...values, num_rerank: value });
-                    setFieldValue("num_rerank", value);
-                  }}
-                  setFieldValue={setFieldValue}
-                  type="number"
-                  label="Number of Results to Rerank"
-                  name="num_rerank"
-                />
-              </div>
+              <BooleanFormField
+                subtext="Enable multipass indexing for both mini and large chunks."
+                optional
+                checked={values.multipass_indexing}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  const checked = e.target.checked;
+                  updateAdvancedEmbeddingDetails("multipass_indexing", checked);
+                  setFieldValue("multipass_indexing", checked);
+                }}
+                label="Multipass Indexing"
+                name="multipassIndexing"
+              />
+              <BooleanFormField
+                subtext="Disable reranking for streaming to improve response time."
+                optional
+                checked={values.disable_rerank_for_streaming}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  const checked = e.target.checked;
+                  updateAdvancedEmbeddingDetails(
+                    "disable_rerank_for_streaming",
+                    checked
+                  );
+                  setFieldValue("disable_rerank_for_streaming", checked);
+                }}
+                label="Disable Rerank for Streaming"
+                name="disableRerankForStreaming"
+              />
+              <NumberInput
+                onChange={(value: number) => {
+                  updateNumRerank(value);
+                  setFieldValue("num_rerank", value);
+                }}
+                description="Number of results to rerank"
+                optional={false}
+                value={values.num_rerank}
+                label="Number of Results to Rerank"
+                name="num_rerank"
+              />
             </Form>
           )}
         </Formik>

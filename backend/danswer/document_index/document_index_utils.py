@@ -3,8 +3,8 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from danswer.db.embedding_model import get_current_db_embedding_model
-from danswer.db.embedding_model import get_secondary_db_embedding_model
+from danswer.db.search_settings import get_current_search_settings
+from danswer.db.search_settings import get_secondary_search_settings
 from danswer.indexing.models import IndexChunk
 from danswer.search.models import InferenceChunk
 
@@ -14,13 +14,13 @@ DEFAULT_INDEX_NAME = "danswer_chunk"
 
 
 def get_both_index_names(db_session: Session) -> tuple[str, str | None]:
-    model = get_current_db_embedding_model(db_session)
+    search_settings = get_current_search_settings(db_session)
 
-    model_new = get_secondary_db_embedding_model(db_session)
-    if not model_new:
-        return model.index_name, None
+    search_settings_new = get_secondary_search_settings(db_session)
+    if not search_settings_new:
+        return search_settings.index_name, None
 
-    return model.index_name, model_new.index_name
+    return search_settings.index_name, search_settings_new.index_name
 
 
 def translate_boost_count_to_multiplier(boost: int) -> float:

@@ -194,6 +194,7 @@ const AddUserButton = ({
           Invite Users
         </div>
       </Button>
+
       {modal && (
         <Modal title="Bulk Add Users" onOutsideClick={() => setModal(false)}>
           <div className="flex flex-col gap-y-4">

@@ -67,10 +67,11 @@ const EditRow = ({
         </div>
       )}
       <div
-        className={
-          "text-emphasis font-medium my-auto p-1 hover:bg-hover-light flex cursor-pointer select-none" +
-          (documentSet.is_up_to_date ? " cursor-pointer" : " cursor-default")
-        }
+        className={`
+          text-emphasis font-medium my-auto p-1 hover:bg-hover-light flex items-center select-none
+          ${documentSet.is_up_to_date ? "cursor-pointer" : "cursor-default"}
+        `}
+        style={{ wordBreak: "normal", overflowWrap: "break-word" }}
         onClick={() => {
           if (documentSet.is_up_to_date) {
             router.push(`/admin/documents/sets/${documentSet.id}`);
@@ -87,8 +88,8 @@ const EditRow = ({
           }
         }}
       >
-        <FiEdit2 className="text-emphasis mr-1 my-auto" />
-        {documentSet.name}
+        <FiEdit2 className="mr-2 flex-shrink-0" />
+        <span className="font-medium">{documentSet.name}</span>
       </div>
     </div>
   );

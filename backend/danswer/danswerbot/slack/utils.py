@@ -21,6 +21,12 @@ from danswer.configs.danswerbot_configs import DANSWER_BOT_FEEDBACK_VISIBILITY
 from danswer.configs.danswerbot_configs import DANSWER_BOT_MAX_QPM
 from danswer.configs.danswerbot_configs import DANSWER_BOT_MAX_WAIT_TIME
 from danswer.configs.danswerbot_configs import DANSWER_BOT_NUM_RETRIES
+from danswer.configs.danswerbot_configs import (
+    DANSWER_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD,
+)
+from danswer.configs.danswerbot_configs import (
+    DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
+)
 from danswer.connectors.slack.utils import make_slack_api_rate_limited
 from danswer.connectors.slack.utils import SlackTextCleaner
 from danswer.danswerbot.slack.constants import FeedbackVisibility
@@ -41,7 +47,41 @@ from danswer.utils.text_processing import replace_whitespaces_w_space
 logger = setup_logger()
 
 
-DANSWER_BOT_APP_ID: str | None = None
+_DANSWER_BOT_APP_ID: str | None = None
+_DANSWER_BOT_MESSAGE_COUNT: int = 0
+_DANSWER_BOT_COUNT_START_TIME: float = time.time()
+
+
+def get_danswer_bot_app_id(web_client: WebClient) -> Any:
+    global _DANSWER_BOT_APP_ID
+    if _DANSWER_BOT_APP_ID is None:
+        _DANSWER_BOT_APP_ID = web_client.auth_test().get("user_id")
+    return _DANSWER_BOT_APP_ID
+
+
+def check_message_limit() -> bool:
+    """
+    This isnt a perfect solution.
+    High traffic at the end of one period and start of another could cause
+    the limit to be exceeded.
+    """
+    if DANSWER_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD == 0:
+        return True
+    global _DANSWER_BOT_MESSAGE_COUNT
+    global _DANSWER_BOT_COUNT_START_TIME
+    time_since_start = time.time() - _DANSWER_BOT_COUNT_START_TIME
+    if time_since_start > DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS:
+        _DANSWER_BOT_MESSAGE_COUNT = 0
+        _DANSWER_BOT_COUNT_START_TIME = time.time()
+    if (_DANSWER_BOT_MESSAGE_COUNT + 1) > DANSWER_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD:
+        logger.error(
+            f"DanswerBot has reached the message limit {DANSWER_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD}"
+            f" for the time period {DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS} seconds."
+            " These limits are configurable in backend/danswer/configs/danswerbot_configs.py"
+        )
+        return False
+    _DANSWER_BOT_MESSAGE_COUNT += 1
+    return True
 
 
 def rephrase_slack_message(msg: str) -> str:
@@ -94,13 +134,6 @@ def update_emote_react(
             logger.error(f"Failed to remove Reaction due to: {e}")
         else:
             logger.error(f"Was not able to react to user message due to: {e}")
-
-
-def get_danswer_bot_app_id(web_client: WebClient) -> Any:
-    global DANSWER_BOT_APP_ID
-    if DANSWER_BOT_APP_ID is None:
-        DANSWER_BOT_APP_ID = web_client.auth_test().get("user_id")
-    return DANSWER_BOT_APP_ID
 
 
 def remove_danswer_bot_tag(message_str: str, client: WebClient) -> str:

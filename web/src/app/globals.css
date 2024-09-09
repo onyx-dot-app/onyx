@@ -36,7 +36,7 @@
 
 .include-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #888 #f1f1f1;
+  scrollbar-color: #888 transparent;
 }
 
 .inputscroll::-webkit-scrollbar-track {
@@ -243,4 +243,18 @@ code[class*="language-"] {
 
 .code-line .token.attr-name {
   color: theme("colors.token-attr-name");
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  align-items: start;
+}
+
+ol > li > p,
+ul > li > p {
+  margin-top: 0;
+  margin-bottom: 0;
+  display: inline; /* Make paragraphs inline to reduce vertical space */
 }

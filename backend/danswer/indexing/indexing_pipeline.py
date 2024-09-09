@@ -3,9 +3,11 @@ from functools import partial
 from typing import Protocol
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
 from danswer.access.access import get_access_for_documents
+from danswer.access.models import DocumentAccess
 from danswer.configs.app_configs import ENABLE_MULTIPASS_INDEXING
 from danswer.configs.app_configs import INDEXING_EXCEPTION_LIMIT
 from danswer.configs.constants import DEFAULT_BOOST
@@ -21,6 +23,7 @@ from danswer.db.document import upsert_documents_complete
 from danswer.db.document_set import fetch_document_sets_for_documents
 from danswer.db.index_attempt import create_index_attempt_error
 from danswer.db.models import Document as DBDocument
+from danswer.db.search_settings import get_current_search_settings
 from danswer.db.tag import create_or_add_document_tag
 from danswer.db.tag import create_or_add_document_tag_list
 from danswer.document_index.interfaces import DocumentIndex
@@ -29,7 +32,6 @@ from danswer.indexing.chunker import Chunker
 from danswer.indexing.embedder import IndexingEmbedder
 from danswer.indexing.models import DocAwareChunk
 from danswer.indexing.models import DocMetadataAwareIndexChunk
-from danswer.search.search_settings import get_search_settings
 from danswer.utils.logger import setup_logger
 from danswer.utils.timing import log_function_time
 from shared_configs.enums import EmbeddingProvider
@@ -40,9 +42,7 @@ logger = setup_logger()
 class DocumentBatchPrepareContext(BaseModel):
     updatable_docs: list[Document]
     id_to_db_doc_map: dict[str, DBDocument]
-
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class IndexingPipelineProtocol(Protocol):
@@ -264,6 +264,8 @@ def index_doc_batch(
     Note that the documents should already be batched at this point so that it does not inflate the
     memory requirements"""
 
+    no_access = DocumentAccess.build([], [], False)
+
     ctx = index_doc_batch_prepare(
         document_batch=document_batch,
         index_attempt_metadata=index_attempt_metadata,
@@ -308,7 +310,9 @@ def index_doc_batch(
         access_aware_chunks = [
             DocMetadataAwareIndexChunk.from_index_chunk(
                 index_chunk=chunk,
-                access=document_id_to_access_info[chunk.source_document.id],
+                access=document_id_to_access_info.get(
+                    chunk.source_document.id, no_access
+                ),
                 document_sets=set(
                     document_id_to_document_set.get(chunk.source_document.id, [])
                 ),
@@ -360,7 +364,7 @@ def build_indexing_pipeline(
     attempt_id: int | None = None,
 ) -> IndexingPipelineProtocol:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
-    search_settings = get_search_settings()
+    search_settings = get_current_search_settings(db_session)
     multipass = (
         search_settings.multipass_indexing
         if search_settings

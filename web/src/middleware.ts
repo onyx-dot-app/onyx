@@ -10,6 +10,7 @@ const eePaths = [
   "/admin/whitelabeling",
   "/admin/performance/custom-analytics",
 ];
+
 const eePathsForMatcher = eePaths.map((path) => `${path}/:path*`);
 
 export async function middleware(request: NextRequest) {

@@ -41,8 +41,8 @@ from danswer.connectors.interfaces import SecondsSinceUnixEpoch
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.file_processing.extract_file_text import docx_to_text
-from danswer.file_processing.extract_file_text import pdf_to_text
 from danswer.file_processing.extract_file_text import pptx_to_text
+from danswer.file_processing.extract_file_text import read_pdf_file
 from danswer.utils.batching import batch_generator
 from danswer.utils.logger import setup_logger
 
@@ -62,6 +62,8 @@ class GDriveMimeType(str, Enum):
     POWERPOINT = (
         "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     )
+    PLAIN_TEXT = "text/plain"
+    MARKDOWN = "text/markdown"
 
 
 GoogleDriveFileType = dict[str, Any]
@@ -315,12 +317,19 @@ def extract_text(file: dict[str, str], service: discovery.Resource) -> str:
         GDriveMimeType.DOC.value,
         GDriveMimeType.PPT.value,
         GDriveMimeType.SPREADSHEET.value,
+        GDriveMimeType.PLAIN_TEXT.value,
+        GDriveMimeType.MARKDOWN.value,
     ]:
         export_mime_type = "text/plain"
         if mime_type == GDriveMimeType.SPREADSHEET.value:
             export_mime_type = "text/csv"
         elif mime_type == GDriveMimeType.PPT.value:
             export_mime_type = "text/plain"
+        elif mime_type in [
+            GDriveMimeType.PLAIN_TEXT.value,
+            GDriveMimeType.MARKDOWN.value,
+        ]:
+            export_mime_type = mime_type
 
         response = (
             service.files()
@@ -334,7 +343,8 @@ def extract_text(file: dict[str, str], service: discovery.Resource) -> str:
         return docx_to_text(file=io.BytesIO(response))
     elif mime_type == GDriveMimeType.PDF.value:
         response = service.files().get_media(fileId=file["id"]).execute()
-        return pdf_to_text(file=io.BytesIO(response))
+        text, _ = read_pdf_file(file=io.BytesIO(response))
+        return text
     elif mime_type == GDriveMimeType.POWERPOINT.value:
         response = service.files().get_media(fileId=file["id"]).execute()
         return pptx_to_text(file=io.BytesIO(response))

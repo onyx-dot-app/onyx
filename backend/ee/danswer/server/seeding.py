@@ -51,10 +51,12 @@ def _seed_llms(
     if llm_upsert_requests:
         logger.notice("Seeding LLMs")
         seeded_providers = [
-            upsert_llm_provider(db_session, llm_upsert_request)
+            upsert_llm_provider(llm_upsert_request, db_session)
             for llm_upsert_request in llm_upsert_requests
         ]
-        update_default_provider(db_session, seeded_providers[0].id)
+        update_default_provider(
+            provider_id=seeded_providers[0].id, db_session=db_session
+        )
 
 
 def _seed_personas(db_session: Session, personas: list[CreatePersonaRequest]) -> None:

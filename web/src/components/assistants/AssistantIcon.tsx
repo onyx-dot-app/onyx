@@ -49,7 +49,7 @@ export function AssistantIcon({
             {createSVG(
               { encodedGrid: assistant.icon_shape, filledSquares: 0 },
               assistant.icon_color,
-              size == "large" ? 48 : 36
+              size == "large" ? 36 : 24
             )}
           </div>
         ) : (

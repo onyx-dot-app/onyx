@@ -74,11 +74,13 @@ export const UserGroupsTable = ({
                 <TableRow key={userGroup.id}>
                   <TableCell>
                     <Link
-                      className="whitespace-normal break-all flex cursor-pointer p-2 rounded hover:bg-hover w-fit"
+                      className="whitespace-nowrap overflow-hidden text-ellipsis inline-flex items-center cursor-pointer p-2 rounded hover:bg-hover max-w-full"
                       href={`/admin/groups/${userGroup.id}`}
                     >
-                      <FiEdit2 className="my-auto mr-2" />
-                      <p className="text font-medium">{userGroup.name}</p>
+                      <FiEdit2 className="mr-2 flex-shrink-0" />
+                      <span className="font-medium truncate">
+                        {userGroup.name}
+                      </span>
                     </Link>
                   </TableCell>
                   <TableCell>

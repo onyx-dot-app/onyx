@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
 
@@ -47,7 +48,7 @@ class ToolRunner:
 def check_which_tools_should_run_for_non_tool_calling_llm(
     tools: list[Tool], query: str, history: list[PreviousMessage], llm: LLM
 ) -> list[dict[str, Any] | None]:
-    tool_args_list = [
+    tool_args_list: list[tuple[Callable[..., Any], tuple[Any, ...]]] = [
         (tool.get_args_for_non_tool_calling_llm, (query, history, llm))
         for tool in tools
     ]

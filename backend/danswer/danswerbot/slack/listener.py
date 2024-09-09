@@ -38,6 +38,7 @@ from danswer.danswerbot.slack.handlers.handle_message import (
 from danswer.danswerbot.slack.handlers.handle_message import schedule_feedback_reminder
 from danswer.danswerbot.slack.models import SlackMessageInfo
 from danswer.danswerbot.slack.tokens import fetch_tokens
+from danswer.danswerbot.slack.utils import check_message_limit
 from danswer.danswerbot.slack.utils import decompose_action_id
 from danswer.danswerbot.slack.utils import get_channel_name_from_id
 from danswer.danswerbot.slack.utils import get_danswer_bot_app_id
@@ -45,9 +46,10 @@ from danswer.danswerbot.slack.utils import read_slack_thread
 from danswer.danswerbot.slack.utils import remove_danswer_bot_tag
 from danswer.danswerbot.slack.utils import rephrase_slack_message
 from danswer.danswerbot.slack.utils import respond_in_thread
-from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.engine import get_sqlalchemy_engine
+from danswer.db.search_settings import get_current_search_settings
 from danswer.dynamic_configs.interface import ConfigNotFoundError
+from danswer.natural_language_processing.search_nlp_models import EmbeddingModel
 from danswer.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from danswer.one_shot_answer.models import ThreadMessage
 from danswer.search.retrieval.search_runner import download_nltk_data
@@ -129,9 +131,19 @@ def prefilter_requests(req: SocketModeRequest, client: SocketModeClient) -> bool
 
         if event_type == "message":
             bot_tag_id = get_danswer_bot_app_id(client.web_client)
+
+            is_dm = event.get("channel_type") == "im"
+            is_tagged = bot_tag_id and bot_tag_id in msg
+            is_danswer_bot_msg = bot_tag_id and bot_tag_id in event.get("user", "")
+
+            # DanswerBot should never respond to itself
+            if is_danswer_bot_msg:
+                logger.info("Ignoring message from DanswerBot")
+                return False
+
             # DMs with the bot don't pick up the @DanswerBot so we have to keep the
             # caught events_api
-            if bot_tag_id and bot_tag_id in msg and event.get("channel_type") != "im":
+            if is_tagged and not is_dm:
                 # Let the tag flow handle this case, don't reply twice
                 return False
 
@@ -198,6 +210,9 @@ def prefilter_requests(req: SocketModeRequest, client: SocketModeClient) -> bool
                 "Cannot respond to DanswerBot command without sender to respond to."
             )
             return False
+
+    if not check_message_limit():
+        return False
 
     logger.debug(f"Handling Slack request with Payload: '{req.payload}'")
     return True
@@ -468,13 +483,16 @@ if __name__ == "__main__":
                     # This happens on the very first time the listener process comes up
                     # or the tokens have updated (set up for the first time)
                     with Session(get_sqlalchemy_engine()) as db_session:
-                        embedding_model = get_current_db_embedding_model(db_session)
-                        if embedding_model.provider_type is None:
-                            warm_up_bi_encoder(
-                                embedding_model=embedding_model,
-                                model_server_host=MODEL_SERVER_HOST,
-                                model_server_port=MODEL_SERVER_PORT,
-                            )
+                        search_settings = get_current_search_settings(db_session)
+                        embedding_model = EmbeddingModel.from_db_model(
+                            search_settings=search_settings,
+                            server_host=MODEL_SERVER_HOST,
+                            server_port=MODEL_SERVER_PORT,
+                        )
+
+                        warm_up_bi_encoder(
+                            embedding_model=embedding_model,
+                        )
 
                 slack_bot_tokens = latest_slack_bot_tokens
                 # potentially may cause a message to be dropped, but it is complicated

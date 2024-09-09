@@ -93,11 +93,13 @@ export const StandardAnswerCreationForm = ({
                 placeholder="e.g. Wifi Password"
                 autoCompleteDisabled={true}
               />
-              <MarkdownFormField
-                name="answer"
-                label="Answer"
-                placeholder="The answer in markdown"
-              />
+              <div className="w-full">
+                <MarkdownFormField
+                  name="answer"
+                  label="Answer"
+                  placeholder="The answer in markdown"
+                />
+              </div>
               <div className="w-4/12">
                 <MultiSelectDropdown
                   name="categories"

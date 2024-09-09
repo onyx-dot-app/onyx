@@ -2,12 +2,12 @@ import { redirect } from "next/navigation";
 import { unstable_noStore as noStore } from "next/cache";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
-import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import { ChatProvider } from "@/components/context/ChatContext";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
 import WrappedChat from "./WrappedChat";
+import { ProviderContextProvider } from "@/components/chat_search/ProviderContext";
 
 export default async function Page({
   searchParams,
@@ -33,7 +33,6 @@ export default async function Page({
   const {
     user,
     chatSessions,
-    ccPairs,
     availableSources,
     documentSets,
     assistants,
@@ -43,9 +42,7 @@ export default async function Page({
     toggleSidebar,
     openedFolders,
     defaultAssistantId,
-    finalDocumentSidebarInitialWidth,
     shouldShowWelcomeModal,
-    shouldDisplaySourcesIncompleteModal,
     userInputPrompts,
   } = data;
 
@@ -55,9 +52,7 @@ export default async function Page({
 
       <InstantSSRAutoRefresh />
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
-      {!shouldShowWelcomeModal && !shouldDisplaySourcesIncompleteModal && (
-        <ApiKeyModal user={user} />
-      )}
+
       <ChatProvider
         value={{
           chatSessions,
@@ -69,13 +64,13 @@ export default async function Page({
           folders,
           openedFolders,
           userInputPrompts,
-          }}
+          shouldShowWelcomeModal,
+          defaultAssistantId,
+        }}
       >
-
-        <WrappedChat
-          defaultAssistantId={defaultAssistantId}
-          initiallyToggled={toggleSidebar}
-        />
+        <ProviderContextProvider>
+          <WrappedChat initiallyToggled={toggleSidebar} />
+        </ProviderContextProvider>
       </ChatProvider>
     </>
   );

@@ -151,8 +151,7 @@ def delete_connector_credential_pair(
     # index attempts
     delete_index_attempts(
         db_session=db_session,
-        connector_id=connector_id,
-        credential_id=credential_id,
+        cc_pair_id=cc_pair.id,
     )
 
     # document sets

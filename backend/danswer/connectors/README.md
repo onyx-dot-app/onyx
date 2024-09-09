@@ -59,6 +59,8 @@ if __name__ == "__main__":
     latest_docs = test_connector.poll_source(one_day_ago, current)
 ```
 
+> Note: Be sure to set PYTHONPATH to danswer/backend before running the above main.
+
 
 ### Additional Required Changes:
 #### Backend Changes
@@ -68,17 +70,16 @@ if __name__ == "__main__":
 [here](https://github.com/danswer-ai/danswer/blob/main/backend/danswer/connectors/factory.py#L33)
 
 #### Frontend Changes
-- Create the new connector directory and admin page under `danswer/web/src/app/admin/connectors/`
-- Create the new icon, type, source, and filter changes
-(refer to existing [PR](https://github.com/danswer-ai/danswer/pull/139))
+- Add the new Connector definition to the `SOURCE_METADATA_MAP` [here](https://github.com/danswer-ai/danswer/blob/main/web/src/lib/sources.ts#L59).
+- Add the definition for the new Form to the `connectorConfigs` object [here](https://github.com/danswer-ai/danswer/blob/main/web/src/lib/connectors/connectors.ts#L79). 
 
 #### Docs Changes
 Create the new connector page (with guiding images!) with how to get the connector credentials and how to set up the
-connector in Danswer. Then create a Pull Request in https://github.com/danswer-ai/danswer-docs
-
+connector in Danswer. Then create a Pull Request in https://github.com/danswer-ai/danswer-docs.
 
 ### Before opening PR
 1. Be sure to fully test changes end to end with setting up the connector and updating the index with new docs from the
-new connector.
-2. Be sure to run the linting/formatting, refer to the formatting and linting section in
+new connector. To make it easier to review, please attach a video showing the successful creation of the connector via the UI (starting from the `Add Connector` page).
+2. Add a folder + tests under `backend/tests/daily/connectors` director. For an example, checkout the [test for Confluence](https://github.com/danswer-ai/danswer/blob/main/backend/tests/daily/connectors/confluence/test_confluence_basic.py). In the PR description, include a guide on how to setup the new source to pass the test. Before merging, we will re-create the environment and make sure the test(s) pass.  
+3. Be sure to run the linting/formatting, refer to the formatting and linting section in
 [CONTRIBUTING.md](https://github.com/danswer-ai/danswer/blob/main/CONTRIBUTING.md#formatting-and-linting)

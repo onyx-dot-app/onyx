@@ -101,6 +101,7 @@ export function getSecondsUntilExpiration(
   if (!userInfo) {
     return null;
   }
+
   const { oidc_expiry, current_token_created_at, current_token_expiry_length } =
     userInfo;
 

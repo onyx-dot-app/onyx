@@ -51,40 +51,23 @@ CROSS_ENCODER_RANGE_MIN = 0
 # Generative AI Model Configs
 #####
 
-# If changing GEN_AI_MODEL_PROVIDER or GEN_AI_MODEL_VERSION from the default,
-# be sure to use one that is LiteLLM compatible:
-# https://litellm.vercel.app/docs/providers/azure#completion---using-env-variables
-# The provider is the prefix before / in the model argument
-
-# Additionally Danswer supports GPT4All and custom request library based models
-# Set GEN_AI_MODEL_PROVIDER to "custom" to use the custom requests approach
-# Set GEN_AI_MODEL_PROVIDER to "gpt4all" to use gpt4all models running locally
-GEN_AI_MODEL_PROVIDER = os.environ.get("GEN_AI_MODEL_PROVIDER") or "openai"
-# If using Azure, it's the engine name, for example: Danswer
+# NOTE: the 3 below should only be used for dev.
+GEN_AI_API_KEY = os.environ.get("GEN_AI_API_KEY")
 GEN_AI_MODEL_VERSION = os.environ.get("GEN_AI_MODEL_VERSION")
-
-# For secondary flows like extracting filters or deciding if a chunk is useful, we don't need
-# as powerful of a model as say GPT-4 so we can use an alternative that is faster and cheaper
 FAST_GEN_AI_MODEL_VERSION = os.environ.get("FAST_GEN_AI_MODEL_VERSION")
 
-# If the Generative AI model requires an API key for access, otherwise can leave blank
-GEN_AI_API_KEY = (
-    os.environ.get("GEN_AI_API_KEY", os.environ.get("OPENAI_API_KEY")) or None
-)
-
-# API Base, such as (for Azure): https://danswer.openai.azure.com/
-GEN_AI_API_ENDPOINT = os.environ.get("GEN_AI_API_ENDPOINT") or None
-# API Version, such as (for Azure): 2023-09-15-preview
-GEN_AI_API_VERSION = os.environ.get("GEN_AI_API_VERSION") or None
-# LiteLLM custom_llm_provider
-GEN_AI_LLM_PROVIDER_TYPE = os.environ.get("GEN_AI_LLM_PROVIDER_TYPE") or None
 # Override the auto-detection of LLM max context length
 GEN_AI_MAX_TOKENS = int(os.environ.get("GEN_AI_MAX_TOKENS") or 0) or None
+
 # Set this to be enough for an answer + quotes. Also used for Chat
-GEN_AI_MAX_OUTPUT_TOKENS = int(os.environ.get("GEN_AI_MAX_OUTPUT_TOKENS") or 1024)
+# This is the minimum token context we will leave for the LLM to generate an answer
+GEN_AI_NUM_RESERVED_OUTPUT_TOKENS = int(
+    os.environ.get("GEN_AI_NUM_RESERVED_OUTPUT_TOKENS") or 1024
+)
 
 # Typically, GenAI models nowadays are at least 4K tokens
-GEN_AI_MODEL_DEFAULT_MAX_TOKENS = 4096
+GEN_AI_MODEL_FALLBACK_MAX_TOKENS = 4096
+
 # Number of tokens from chat history to include at maximum
 # 3000 should be enough context regardless of use, no need to include as much as possible
 # as this drives up the cost unnecessarily

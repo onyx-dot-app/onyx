@@ -9,10 +9,10 @@ from danswer.connectors.models import IndexAttemptMetadata
 from danswer.db.connector_credential_pair import get_connector_credential_pair_from_id
 from danswer.db.document import get_documents_by_cc_pair
 from danswer.db.document import get_ingestion_documents
-from danswer.db.embedding_model import get_current_db_embedding_model
-from danswer.db.embedding_model import get_secondary_db_embedding_model
 from danswer.db.engine import get_session
 from danswer.db.models import User
+from danswer.db.search_settings import get_current_search_settings
+from danswer.db.search_settings import get_secondary_search_settings
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
 from danswer.indexing.embedder import DefaultIndexingEmbedder
@@ -90,10 +90,10 @@ def upsert_ingestion_doc(
         primary_index_name=curr_ind_name, secondary_index_name=None
     )
 
-    db_embedding_model = get_current_db_embedding_model(db_session)
+    search_settings = get_current_search_settings(db_session)
 
-    index_embedding_model = DefaultIndexingEmbedder.from_db_embedding_model(
-        db_embedding_model
+    index_embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
+        search_settings=search_settings
     )
 
     indexing_pipeline = build_indexing_pipeline(
@@ -117,16 +117,16 @@ def upsert_ingestion_doc(
             primary_index_name=curr_ind_name, secondary_index_name=None
         )
 
-        sec_db_embedding_model = get_secondary_db_embedding_model(db_session)
+        sec_search_settings = get_secondary_search_settings(db_session)
 
-        if sec_db_embedding_model is None:
+        if sec_search_settings is None:
             # Should not ever happen
             raise RuntimeError(
-                "Secondary index exists but no embedding model configured"
+                "Secondary index exists but no search settings configured"
             )
 
-        new_index_embedding_model = DefaultIndexingEmbedder.from_db_embedding_model(
-            sec_db_embedding_model
+        new_index_embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
+            search_settings=sec_search_settings
         )
 
         sec_ind_pipeline = build_indexing_pipeline(

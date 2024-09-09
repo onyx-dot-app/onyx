@@ -14,13 +14,6 @@ data:
   SMTP_PASS: ""  # 'your-gmail-password'
   EMAIL_FROM: ""  # 'your-email@company.com' SMTP_USER missing used instead
   # Gen AI Settings
-  GEN_AI_MODEL_PROVIDER: ""
-  GEN_AI_MODEL_VERSION: ""
-  FAST_GEN_AI_MODEL_VERSION: ""
-  GEN_AI_API_KEY: ""
-  GEN_AI_API_ENDPOINT: ""
-  GEN_AI_API_VERSION: ""
-  GEN_AI_LLM_PROVIDER_TYPE: ""
   GEN_AI_MAX_TOKENS: ""
   QA_TIMEOUT: "60"
   MAX_CHUNKS_FED_TO_CHAT: ""
@@ -38,6 +31,7 @@ data:
   # Other Services
   POSTGRES_HOST: "relational-db-service"
   VESPA_HOST: "document-index-service"
+  REDIS_HOST: "redis-service"
   # Internet Search Tool
   BING_API_KEY: ""
   # Don't change the NLP models unless you know what you're doing

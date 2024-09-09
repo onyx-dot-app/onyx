@@ -58,30 +58,22 @@ const AddPromptModal = ({ onClose, onSubmit }: AddPromptModalProps) => {
               Add prompt
             </h2>
 
-            <div className="space-y-4">
-              <TextFormField
-                label="Title"
-                name="title"
-                placeholder="Title (e.g. 'Reword')"
-              />
+            <TextFormField
+              label="Title"
+              name="title"
+              placeholder="Title (e.g. 'Reword')"
+            />
 
-              <TextFormField
-                isTextArea
-                label="Prompt"
-                name="prompt"
-                placeholder="Enter a prompt (e.g. 'help me rewrite the following politely and concisely for professional communication')"
-              />
+            <TextFormField
+              isTextArea
+              label="Prompt"
+              name="prompt"
+              placeholder="Enter a prompt (e.g. 'help me rewrite the following politely and concisely for professional communication')"
+            />
 
-              <div className="mt-6">
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isSubmitting}
-                >
-                  Add prompt
-                </Button>
-              </div>
-            </div>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              Add prompt
+            </Button>
           </Form>
         )}
       </Formik>

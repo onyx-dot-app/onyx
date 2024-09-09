@@ -3,28 +3,94 @@
 import { errorHandlingFetcher, RedirectError } from "@/lib/fetcher";
 import useSWR from "swr";
 import { Modal } from "../Modal";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getSecondsUntilExpiration } from "@/lib/time";
+import { User } from "@/lib/types";
 
-export const HealthCheckBanner = ({
-  secondsUntilExpiration,
-}: {
-  secondsUntilExpiration?: number | null;
-}) => {
+export const HealthCheckBanner = () => {
   const { error } = useSWR("/api/health", errorHandlingFetcher);
   const [expired, setExpired] = useState(false);
+  const [secondsUntilExpiration, setSecondsUntilExpiration] = useState<
+    number | null
+  >(null);
+  const { data: user, mutate: mutateUser } = useSWR<User>(
+    "/api/me",
+    errorHandlingFetcher
+  );
 
-  if (secondsUntilExpiration !== null && secondsUntilExpiration !== undefined) {
-    setTimeout(
-      () => {
-        setExpired(true);
-      },
-      secondsUntilExpiration * 1000 - 200
-    );
-  }
+  const updateExpirationTime = async () => {
+    const updatedUser = await mutateUser();
+
+    if (updatedUser) {
+      const seconds = getSecondsUntilExpiration(updatedUser);
+      setSecondsUntilExpiration(seconds);
+      console.debug(`Updated seconds until expiration:! ${seconds}`);
+    }
+  };
+
+  useEffect(() => {
+    updateExpirationTime();
+  }, [user]);
+
+  useEffect(() => {
+    if (true) {
+      let refreshTimeoutId: NodeJS.Timeout;
+      let expireTimeoutId: NodeJS.Timeout;
+
+      const refreshToken = async () => {
+        try {
+          const response = await fetch(
+            "/api/enterprise-settings/refresh-token",
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            }
+          );
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          console.debug("Token refresh successful");
+          // Force revalidation of user data
+
+          await mutateUser(undefined, { revalidate: true });
+          updateExpirationTime();
+        } catch (error) {
+          console.error("Error refreshing token:", error);
+        }
+      };
+
+      const scheduleRefreshAndExpire = () => {
+        if (secondsUntilExpiration !== null) {
+          const timeUntilRefresh = (secondsUntilExpiration + 0.5) * 1000;
+          refreshTimeoutId = setTimeout(refreshToken, timeUntilRefresh);
+
+          const timeUntilExpire = (secondsUntilExpiration + 10) * 1000;
+          expireTimeoutId = setTimeout(() => {
+            console.debug("Session expired. Setting expired state to true.");
+            setExpired(true);
+          }, timeUntilExpire);
+        }
+      };
+
+      scheduleRefreshAndExpire();
+
+      return () => {
+        clearTimeout(refreshTimeoutId);
+        clearTimeout(expireTimeoutId);
+      };
+    }
+  }, [secondsUntilExpiration, user]);
 
   if (!error && !expired) {
     return null;
   }
+
+  console.debug(
+    `Rendering HealthCheckBanner. Error: ${error}, Expired: ${expired}`
+  );
 
   if (error instanceof RedirectError || expired) {
     return (

@@ -26,7 +26,10 @@ from danswer.db.models import User__UserGroup
 from danswer.db.models import UserRole
 from danswer.server.features.document_set.models import DocumentSetCreationRequest
 from danswer.server.features.document_set.models import DocumentSetUpdateRequest
+from danswer.utils.logger import setup_logger
 from danswer.utils.variable_functionality import fetch_versioned_implementation
+
+logger = setup_logger()
 
 
 def _add_user_filters(
@@ -233,9 +236,9 @@ def insert_document_set(
         )
 
         db_session.commit()
-    except:
+    except Exception as e:
         db_session.rollback()
-        raise
+        logger.error(f"Error creating document set: {e}")
 
     return new_document_set_row, ds_cc_pairs
 
@@ -521,37 +524,66 @@ def fetch_document_sets_for_documents(
     db_session: Session,
 ) -> Sequence[tuple[str, list[str]]]:
     """Gives back a list of (document_id, list[document_set_names]) tuples"""
+
+    """Building subqueries"""
+    # NOTE: have to build these subqueries first in order to guarantee that we get one
+    # returned row for each specified document_id. Basically, we want to do the filters first,
+    # then the outer joins.
+
+    # don't include CC pairs that are being deleted
+    # NOTE: CC pairs can never go from DELETING to any other state -> it's safe to ignore them
+    # as we can assume their document sets are no longer relevant
+    valid_cc_pairs_subquery = aliased(
+        ConnectorCredentialPair,
+        select(ConnectorCredentialPair)
+        .where(
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING
+        )  # noqa: E712
+        .subquery(),
+    )
+
+    valid_document_set__cc_pairs_subquery = aliased(
+        DocumentSet__ConnectorCredentialPair,
+        select(DocumentSet__ConnectorCredentialPair)
+        .where(DocumentSet__ConnectorCredentialPair.is_current == True)  # noqa: E712
+        .subquery(),
+    )
+    """End building subqueries"""
+
     stmt = (
-        select(Document.id, func.array_agg(DocumentSetDBModel.name))
-        .join(
-            DocumentSet__ConnectorCredentialPair,
-            DocumentSetDBModel.id
-            == DocumentSet__ConnectorCredentialPair.document_set_id,
+        select(
+            Document.id,
+            func.coalesce(
+                func.array_remove(func.array_agg(DocumentSetDBModel.name), None), []
+            ).label("document_set_names"),
         )
-        .join(
-            ConnectorCredentialPair,
-            ConnectorCredentialPair.id
-            == DocumentSet__ConnectorCredentialPair.connector_credential_pair_id,
-        )
-        .join(
+        # Here we select document sets by relation:
+        # Document -> DocumentByConnectorCredentialPair -> ConnectorCredentialPair ->
+        # DocumentSet__ConnectorCredentialPair -> DocumentSet
+        .outerjoin(
             DocumentByConnectorCredentialPair,
-            and_(
-                DocumentByConnectorCredentialPair.connector_id
-                == ConnectorCredentialPair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                == ConnectorCredentialPair.credential_id,
-            ),
-        )
-        .join(
-            Document,
             Document.id == DocumentByConnectorCredentialPair.id,
         )
+        .outerjoin(
+            valid_cc_pairs_subquery,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == valid_cc_pairs_subquery.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == valid_cc_pairs_subquery.credential_id,
+            ),
+        )
+        .outerjoin(
+            valid_document_set__cc_pairs_subquery,
+            valid_cc_pairs_subquery.id
+            == valid_document_set__cc_pairs_subquery.connector_credential_pair_id,
+        )
+        .outerjoin(
+            DocumentSetDBModel,
+            DocumentSetDBModel.id
+            == valid_document_set__cc_pairs_subquery.document_set_id,
+        )
         .where(Document.id.in_(document_ids))
-        # don't include CC pairs that are being deleted
-        # NOTE: CC pairs can never go from DELETING to any other state -> it's safe to ignore them
-        # as we can assume their document sets are no longer relevant
-        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
-        .where(DocumentSet__ConnectorCredentialPair.is_current == True)  # noqa: E712
         .group_by(Document.id)
     )
     return db_session.execute(stmt).all()  # type: ignore

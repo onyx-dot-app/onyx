@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_curator_or_admin_user
 from danswer.auth.users import current_user
-from danswer.auth.users import validate_curator_request
 from danswer.db.credentials import alter_credential
 from danswer.db.credentials import create_credential
 from danswer.db.credentials import CREDENTIAL_PERMISSIONS_TO_IGNORE
@@ -20,7 +19,6 @@ from danswer.db.credentials import update_credential
 from danswer.db.engine import get_session
 from danswer.db.models import DocumentSource
 from danswer.db.models import User
-from danswer.db.models import UserRole
 from danswer.server.documents.models import CredentialBase
 from danswer.server.documents.models import CredentialDataUpdateRequest
 from danswer.server.documents.models import CredentialSnapshot
@@ -28,6 +26,7 @@ from danswer.server.documents.models import CredentialSwapRequest
 from danswer.server.documents.models import ObjectCreationIdResponse
 from danswer.server.models import StatusResponse
 from danswer.utils.logger import setup_logger
+from ee.danswer.db.user_group import validate_user_creation_permissions
 
 logger = setup_logger()
 
@@ -80,7 +79,7 @@ def get_cc_source_full_info(
     ]
 
 
-@router.get("/credentials/{id}")
+@router.get("/credential/{id}")
 def list_credentials_by_id(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -105,7 +104,7 @@ def delete_credential_by_id_admin(
     )
 
 
-@router.put("/admin/credentials/swap")
+@router.put("/admin/credential/swap")
 def swap_credentials_for_connector(
     credential_swap_req: CredentialSwapRequest,
     user: User | None = Depends(current_user),
@@ -131,14 +130,12 @@ def create_credential_from_model(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    if (
-        user
-        and user.role != UserRole.ADMIN
-        and not _ignore_credential_permissions(credential_info.source)
-    ):
-        validate_curator_request(
-            groups=credential_info.groups,
-            is_public=credential_info.curator_public,
+    if not _ignore_credential_permissions(credential_info.source):
+        validate_user_creation_permissions(
+            db_session=db_session,
+            user=user,
+            target_group_ids=credential_info.groups,
+            object_is_public=credential_info.curator_public,
         )
 
     credential = create_credential(credential_info, user, db_session)
@@ -179,7 +176,7 @@ def get_credential_by_id(
     return CredentialSnapshot.from_credential_db_model(credential)
 
 
-@router.put("/admin/credentials/{credential_id}")
+@router.put("/admin/credential/{credential_id}")
 def update_credential_data(
     credential_id: int,
     credential_update: CredentialDataUpdateRequest,

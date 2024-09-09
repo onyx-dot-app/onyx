@@ -19,7 +19,7 @@ class FolderCreationRequest(BaseModel):
 
 
 class FolderUpdateRequest(BaseModel):
-    folder_name: str | None
+    folder_name: str | None = None
 
 
 class FolderChatSessionRequest(BaseModel):

@@ -98,6 +98,15 @@ class ProductboardConnector(PollConnector):
             owner = self._get_owner_email(feature)
             experts = [BasicExpertInfo(email=owner)] if owner else None
 
+            metadata: dict[str, str | list[str]] = {}
+            entity_type = feature.get("type", "feature")
+            if entity_type:
+                metadata["entity_type"] = str(entity_type)
+
+            status = feature.get("status", {}).get("name")
+            if status:
+                metadata["status"] = str(status)
+
             yield Document(
                 id=feature["id"],
                 sections=[
@@ -110,10 +119,7 @@ class ProductboardConnector(PollConnector):
                 source=DocumentSource.PRODUCTBOARD,
                 doc_updated_at=time_str_to_utc(feature["updatedAt"]),
                 primary_owners=experts,
-                metadata={
-                    "entity_type": feature["type"],
-                    "status": feature["status"]["name"],
-                },
+                metadata=metadata,
             )
 
     def _get_components(self) -> Generator[Document, None, None]:
@@ -174,6 +180,12 @@ class ProductboardConnector(PollConnector):
             owner = self._get_owner_email(objective)
             experts = [BasicExpertInfo(email=owner)] if owner else None
 
+            metadata: dict[str, str | list[str]] = {
+                "entity_type": "objective",
+            }
+            if objective.get("state"):
+                metadata["state"] = str(objective["state"])
+
             yield Document(
                 id=objective["id"],
                 sections=[
@@ -186,10 +198,7 @@ class ProductboardConnector(PollConnector):
                 source=DocumentSource.PRODUCTBOARD,
                 doc_updated_at=time_str_to_utc(objective["updatedAt"]),
                 primary_owners=experts,
-                metadata={
-                    "entity_type": "release",
-                    "state": objective["state"],
-                },
+                metadata=metadata,
             )
 
     def _is_updated_at_out_of_time_range(

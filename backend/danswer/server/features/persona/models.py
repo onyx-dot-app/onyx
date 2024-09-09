@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import Field
 
 from danswer.db.models import Persona
 from danswer.db.models import StarterMessage
@@ -31,8 +32,8 @@ class CreatePersonaRequest(BaseModel):
     llm_model_version_override: str | None = None
     starter_messages: list[StarterMessage] | None = None
     # For Private Personas, who should be able to access these
-    users: list[UUID] | None = None
-    groups: list[int] | None = None
+    users: list[UUID] = Field(default_factory=list)
+    groups: list[int] = Field(default_factory=list)
     icon_color: str | None = None
     icon_shape: int | None = None
     uploaded_image_id: str | None = None  # New field for uploaded image

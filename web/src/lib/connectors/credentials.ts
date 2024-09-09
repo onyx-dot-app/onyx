@@ -288,6 +288,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   mediawiki: null,
   web: null,
   not_applicable: null,
+  ingestion_api: null,
 
   // NOTE: These are Special Cases
   google_drive: { google_drive_tokens: "" } as GoogleDriveCredentialJson,

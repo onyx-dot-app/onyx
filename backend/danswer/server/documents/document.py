@@ -5,9 +5,9 @@ from fastapi import Query
 from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_user
-from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.engine import get_session
 from danswer.db.models import User
+from danswer.db.search_settings import get_current_search_settings
 from danswer.document_index.factory import get_default_document_index
 from danswer.document_index.interfaces import VespaChunkRequest
 from danswer.natural_language_processing.utils import get_tokenizer
@@ -29,10 +29,10 @@ def get_document_info(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> DocumentInfo:
-    embedding_model = get_current_db_embedding_model(db_session)
+    search_settings = get_current_search_settings(db_session)
 
     document_index = get_default_document_index(
-        primary_index_name=embedding_model.index_name, secondary_index_name=None
+        primary_index_name=search_settings.index_name, secondary_index_name=None
     )
 
     user_acl_filters = build_access_filters_for_user(user, db_session)
@@ -51,8 +51,8 @@ def get_document_info(
     # get actual document context used for LLM
     first_chunk = inference_chunks[0]
     tokenizer_encode = get_tokenizer(
-        provider_type=embedding_model.provider_type,
-        model_name=embedding_model.model_name,
+        provider_type=search_settings.provider_type,
+        model_name=search_settings.model_name,
     ).encode
     full_context_str = build_doc_context_str(
         semantic_identifier=first_chunk.semantic_identifier,
@@ -76,10 +76,10 @@ def get_chunk_info(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> ChunkInfo:
-    embedding_model = get_current_db_embedding_model(db_session)
+    search_settings = get_current_search_settings(db_session)
 
     document_index = get_default_document_index(
-        primary_index_name=embedding_model.index_name, secondary_index_name=None
+        primary_index_name=search_settings.index_name, secondary_index_name=None
     )
 
     user_acl_filters = build_access_filters_for_user(user, db_session)
@@ -100,8 +100,8 @@ def get_chunk_info(
     chunk_content = inference_chunks[0].content
 
     tokenizer_encode = get_tokenizer(
-        provider_type=embedding_model.provider_type,
-        model_name=embedding_model.model_name,
+        provider_type=search_settings.provider_type,
+        model_name=search_settings.model_name,
     ).encode
 
     return ChunkInfo(

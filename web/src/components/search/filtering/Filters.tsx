@@ -101,7 +101,7 @@ export function SourceSelector({
         showDocSidebar ? "4xl:block" : "!block"
       } duration-1000 flex  ease-out transition-all transform origin-top-right`}
     >
-      <div className=" mb-4 pb-2 flex border-b border-border text-emphasis">
+      <div className="mb-4 pb-2 flex border-b border-border text-emphasis">
         <h2 className="font-bold my-auto">Filters</h2>
         <FiFilter className="my-auto ml-2" size="16" />
       </div>
@@ -111,10 +111,23 @@ export function SourceSelector({
         <DateRangeSelector value={timeRange} onValueChange={setTimeRange} />
       </div>
 
+      {availableTags.length > 0 && (
+        <>
+          <div className="mt-4 mb-2">
+            <SectionTitle>Tags</SectionTitle>
+          </div>
+          <TagFilter
+            tags={availableTags}
+            selectedTags={selectedTags}
+            setSelectedTags={setSelectedTags}
+          />
+        </>
+      )}
+
       {existingSources.length > 0 && (
         <div className="mt-4">
           <div className="flex w-full gap-x-2 items-center">
-            <div className="font-bold text-xs  mt-2 flex items-center gap-x-2">
+            <div className="font-bold text-xs mt-2 flex items-center gap-x-2">
               <p>Sources</p>
               <input
                 type="checkbox"
@@ -189,19 +202,6 @@ export function SourceSelector({
               </div>
             ))}
           </div>
-        </>
-      )}
-
-      {availableTags.length > 0 && (
-        <>
-          <div className="mt-4 mb-2">
-            <SectionTitle>Tags</SectionTitle>
-          </div>
-          <TagFilter
-            tags={availableTags}
-            selectedTags={selectedTags}
-            setSelectedTags={setSelectedTags}
-          />
         </>
       )}
     </div>

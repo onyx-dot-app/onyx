@@ -125,27 +125,27 @@ export function AdminTextField({
 interface BooleanFormFieldProps {
   name: string;
   label: string;
+  checked: boolean;
   subtext?: string | JSX.Element;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   small?: boolean;
   alignTop?: boolean;
   noLabel?: boolean;
-  checked: boolean;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export const AdminBooleanFormField = ({
   name,
   label,
   subtext,
-  onChange,
   noLabel,
   small,
   checked,
   alignTop,
+  onChange,
 }: BooleanFormFieldProps) => {
   return (
     <div>
-      <label className="flex text-sm">
+      <label className={`flex text-sm`}>
         <Field
           name={name}
           checked={checked}
@@ -153,7 +153,6 @@ export const AdminBooleanFormField = ({
           className={`mr-3 bg-white px-5 w-3.5 h-3.5 ${
             alignTop ? "mt-1" : "my-auto"
           }`}
-          {...(onChange ? { onChange } : {})}
         />
         {!noLabel && (
           <div>

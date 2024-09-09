@@ -11,7 +11,6 @@ from danswer.llm.answering.stream_processing.utils import DocumentIdOrderMapping
 from danswer.prompts.constants import TRIPLE_BACKTICK
 from danswer.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
@@ -204,7 +203,9 @@ def extract_citations_from_stream(
 def build_citation_processor(
     context_docs: list[LlmDoc], doc_id_to_rank_map: DocumentIdOrderMapping
 ) -> StreamProcessor:
-    def stream_processor(tokens: Iterator[str]) -> AnswerQuestionStreamReturn:
+    def stream_processor(
+        tokens: Iterator[str],
+    ) -> AnswerQuestionStreamReturn:
         yield from extract_citations_from_stream(
             tokens=tokens,
             context_docs=context_docs,

@@ -98,7 +98,7 @@ export const searchRequestStreamed = async ({
       }
       previousPartialChunk = partialChunk as string | null;
       completedChunks.forEach((chunk) => {
-        // check for answer peice / end of answer
+        // check for answer piece / end of answer
 
         if (Object.hasOwn(chunk, "relevance_summaries")) {
           const relevanceChunk = chunk as RelevanceChunk;

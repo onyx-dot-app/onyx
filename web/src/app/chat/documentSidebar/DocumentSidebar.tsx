@@ -69,7 +69,7 @@ export const DocumentSidebar = forwardRef<HTMLDivElement, DocumentSidebarProps>(
             width: initialWidth,
           }}
         >
-          <div className="pb-6 flex-initial overflow-y-hidden flex flex-col h-screen ">
+          <div className="pb-6 flex-initial overflow-y-hidden flex flex-col h-screen">
             {popup}
             <div className="pl-3 mx-2 pr-6 mt-3 flex text-text-800 flex-col text-2xl text-emphasis flex font-semibold">
               {dedupedDocuments.length} Documents

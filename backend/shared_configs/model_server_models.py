@@ -7,17 +7,30 @@ from shared_configs.enums import RerankerProvider
 Embedding = list[float]
 
 
+class ConnectorClassificationRequest(BaseModel):
+    available_connectors: list[str]
+    query: str
+
+
+class ConnectorClassificationResponse(BaseModel):
+    connectors: list[str]
+
+
 class EmbedRequest(BaseModel):
     texts: list[str]
     # Can be none for cloud embedding model requests, error handling logic exists for other cases
-    model_name: str | None
+    model_name: str | None = None
     max_context_length: int
     normalize_embeddings: bool
-    api_key: str | None
-    provider_type: EmbeddingProvider | None
+    api_key: str | None = None
+    provider_type: EmbeddingProvider | None = None
     text_type: EmbedTextType
-    manual_query_prefix: str | None
-    manual_passage_prefix: str | None
+    manual_query_prefix: str | None = None
+    manual_passage_prefix: str | None = None
+    api_url: str | None = None
+
+    # This disables the "model_" protected namespace for pydantic
+    model_config = {"protected_namespaces": ()}
 
 
 class EmbedResponse(BaseModel):
@@ -28,8 +41,11 @@ class RerankRequest(BaseModel):
     query: str
     documents: list[str]
     model_name: str
-    provider_type: RerankerProvider | None
-    api_key: str | None
+    provider_type: RerankerProvider | None = None
+    api_key: str | None = None
+
+    # This disables the "model_" protected namespace for pydantic
+    model_config = {"protected_namespaces": ()}
 
 
 class RerankResponse(BaseModel):

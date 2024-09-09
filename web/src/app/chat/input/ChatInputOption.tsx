@@ -1,5 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
-import { ChevronRightIcon, IconProps } from "@/components/icons/icons";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  IconProps,
+} from "@/components/icons/icons";
 
 interface ChatInputOptionProps {
   name?: string;
@@ -75,7 +79,9 @@ export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
       <Icon size={size} className="flex-none" />
       <div className="flex items-center gap-x-.5">
         {name && <span className="text-sm break-all line-clamp-1">{name}</span>}
-        {toggle && <ChevronRightIcon className="flex-none" size={size} />}
+        {toggle && (
+          <ChevronDownIcon className="flex-none ml-1" size={size - 4} />
+        )}
       </div>
 
       {isTooltipVisible && tooltipContent && (

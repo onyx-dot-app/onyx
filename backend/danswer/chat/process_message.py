@@ -32,13 +32,13 @@ from danswer.db.chat import get_or_create_root_message
 from danswer.db.chat import reserve_message_id
 from danswer.db.chat import translate_db_message_to_chat_message_detail
 from danswer.db.chat import translate_db_search_doc_to_server_search_doc
-from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.engine import get_session_context_manager
 from danswer.db.llm import fetch_existing_llm_providers
 from danswer.db.models import SearchDoc as DbSearchDoc
 from danswer.db.models import ToolCall
 from danswer.db.models import User
 from danswer.db.persona import get_persona_by_id
+from danswer.db.search_settings import get_current_search_settings
 from danswer.document_index.factory import get_default_document_index
 from danswer.file_store.models import ChatFileType
 from danswer.file_store.models import FileDescriptor
@@ -331,9 +331,9 @@ def stream_chat_message_objects(
             Callable[[str], list[int]], llm_tokenizer.encode
         )
 
-        embedding_model = get_current_db_embedding_model(db_session)
+        search_settings = get_current_search_settings(db_session)
         document_index = get_default_document_index(
-            primary_index_name=embedding_model.index_name, secondary_index_name=None
+            primary_index_name=search_settings.index_name, secondary_index_name=None
         )
 
         # Every chat Session begins with an empty root message
@@ -813,4 +813,4 @@ def stream_chat_message(
             is_connected=is_connected,
         )
         for obj in objects:
-            yield get_json_line(obj.dict())
+            yield get_json_line(obj.model_dump())

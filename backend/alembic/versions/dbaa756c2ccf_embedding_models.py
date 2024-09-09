@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import table, column, String, Integer, Boolean
 
-from danswer.db.embedding_model import (
+from danswer.db.search_settings import (
     get_new_default_embedding_model,
     get_old_default_embedding_model,
     user_has_overridden_embedding_model,
@@ -71,14 +71,14 @@ def upgrade() -> None:
                 "query_prefix": old_embedding_model.query_prefix,
                 "passage_prefix": old_embedding_model.passage_prefix,
                 "index_name": old_embedding_model.index_name,
-                "status": old_embedding_model.status,
+                "status": IndexModelStatus.PRESENT,
             }
         ],
     )
     # if the user has not overridden the default embedding model via env variables,
     # insert the new default model into the database to auto-upgrade them
     if not user_has_overridden_embedding_model():
-        new_embedding_model = get_new_default_embedding_model(is_present=False)
+        new_embedding_model = get_new_default_embedding_model()
         op.bulk_insert(
             EmbeddingModel,
             [

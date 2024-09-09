@@ -50,6 +50,12 @@ export function CodeBlock({
     );
     codeText = codeText.trim();
 
+    // Find the last occurrence of closing backticks
+    const lastBackticksIndex = codeText.lastIndexOf("```");
+    if (lastBackticksIndex !== -1) {
+      codeText = codeText.slice(0, lastBackticksIndex + 3);
+    }
+
     // Remove the language declaration and trailing backticks
     const codeLines = codeText.split("\n");
     if (
@@ -133,9 +139,7 @@ export function CodeBlock({
         )}
       </div>
       <pre {...props} className="overflow-x-scroll" style={{ padding: "1rem" }}>
-        <code className={`text-sm overflow-x-auto ${className}`}>
-          {children}
-        </code>
+        <code className={`text-xs overflow-x-auto `}>{children}</code>
       </pre>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { ValidSources } from "@/lib/types";
+import { ConfigurableSources, ValidSources } from "@/lib/types";
 import AddConnector from "./AddConnectorPage";
 import { FormProvider } from "@/components/context/FormContext";
 import Sidebar from "./Sidebar";
@@ -8,7 +8,11 @@ import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { Button } from "@tremor/react";
 import { isValidSource } from "@/lib/sources";
 
-export default function ConnectorWrapper({ connector }: { connector: string }) {
+export default function ConnectorWrapper({
+  connector,
+}: {
+  connector: ConfigurableSources;
+}) {
   return (
     <FormProvider connector={connector}>
       <div className="flex justify-center w-full h-full">
@@ -28,7 +32,7 @@ export default function ConnectorWrapper({ connector }: { connector: string }) {
               </Button>
             </div>
           ) : (
-            <AddConnector connector={connector as ValidSources} />
+            <AddConnector connector={connector} />
           )}
         </div>
       </div>

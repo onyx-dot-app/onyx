@@ -13,8 +13,8 @@ import sqlalchemy as sa
 # revision identifiers, used by Alembic.
 revision = "f17bf3b0d9f1"
 down_revision = "351faebd379d"
-branch_labels = None
-depends_on = None
+branch_labels: None = None
+depends_on: None = None
 
 
 def upgrade() -> None:
@@ -159,5 +159,14 @@ def downgrade() -> None:
         "embedding_model",
         "embedding_provider",
         ["cloud_provider_id"],
+        ["id"],
+    )
+
+    # Recreate the foreign key constraint in embedding_model table
+    op.create_foreign_key(
+        "fk_embedding_provider_default_model",
+        "embedding_provider",
+        "embedding_model",
+        ["default_model_id"],
         ["id"],
     )

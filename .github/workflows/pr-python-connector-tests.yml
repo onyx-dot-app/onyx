@@ -1,0 +1,57 @@
+name: Connector Tests
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    # This cron expression runs the job daily at 16:00 UTC (9am PT)
+    - cron: "0 16 * * *"
+
+env:
+  # Confluence
+  CONFLUENCE_TEST_SPACE_URL: ${{ secrets.CONFLUENCE_TEST_SPACE_URL }}
+  CONFLUENCE_TEST_SPACE: ${{ secrets.CONFLUENCE_TEST_SPACE }}
+  CONFLUENCE_IS_CLOUD: ${{ secrets.CONFLUENCE_IS_CLOUD }}
+  CONFLUENCE_TEST_PAGE_ID: ${{ secrets.CONFLUENCE_TEST_PAGE_ID }}
+  CONFLUENCE_USER_NAME: ${{ secrets.CONFLUENCE_USER_NAME }}
+  CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
+
+jobs:
+  connectors-check:
+    runs-on: ubuntu-latest
+
+    env:
+      PYTHONPATH: ./backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements/default.txt
+          pip install -r backend/requirements/dev.txt
+
+      - name: Run Tests
+        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        run: py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/connectors
+
+      - name: Alert on Failure
+        if: failure() && github.event_name == 'schedule'
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        run: |
+          curl -X POST \
+            -H 'Content-type: application/json' \
+            --data '{"text":"Scheduled Connector Tests failed! Check the run at: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            $SLACK_WEBHOOK

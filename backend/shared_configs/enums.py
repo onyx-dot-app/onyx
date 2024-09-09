@@ -6,6 +6,7 @@ class EmbeddingProvider(str, Enum):
     COHERE = "cohere"
     VOYAGE = "voyage"
     GOOGLE = "google"
+    LITELLM = "litellm"
 
 
 class RerankerProvider(str, Enum):

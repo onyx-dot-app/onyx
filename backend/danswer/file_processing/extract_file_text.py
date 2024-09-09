@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from email.parser import Parser as EmailParser
 from pathlib import Path
 from typing import Any
+from typing import Dict
 from typing import IO
 
 import chardet
@@ -178,6 +179,17 @@ def read_text_file(
 
 
 def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
+    """Extract text from a PDF file."""
+    # Return only the extracted text from read_pdf_file
+    text, _ = read_pdf_file(file, pdf_pass)
+    return text
+
+
+def read_pdf_file(
+    file: IO[Any],
+    pdf_pass: str | None = None,
+) -> tuple[str, dict]:
+    metadata: Dict[str, Any] = {}
     try:
         pdf_reader = PdfReader(file)
 
@@ -189,16 +201,33 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
                     decrypt_success = pdf_reader.decrypt(pdf_pass) != 0
                 except Exception:
                     logger.error("Unable to decrypt pdf")
-            else:
-                logger.warning("No Password available to to decrypt pdf")
 
             if not decrypt_success:
                 # By user request, keep files that are unreadable just so they
                 # can be discoverable by title.
-                return ""
+                return "", metadata
+        else:
+            logger.warning("No Password available to to decrypt pdf")
 
-        return TEXT_SECTION_SEPARATOR.join(
-            page.extract_text() for page in pdf_reader.pages
+        # Extract metadata from the PDF, removing leading '/' from keys if present
+        # This standardizes the metadata keys for consistency
+        metadata = {}
+        if pdf_reader.metadata is not None:
+            for key, value in pdf_reader.metadata.items():
+                clean_key = key.lstrip("/")
+                if isinstance(value, str) and value.strip():
+                    metadata[clean_key] = value
+
+                elif isinstance(value, list) and all(
+                    isinstance(item, str) for item in value
+                ):
+                    metadata[clean_key] = ", ".join(value)
+
+        return (
+            TEXT_SECTION_SEPARATOR.join(
+                page.extract_text() for page in pdf_reader.pages
+            ),
+            metadata,
         )
     except PdfStreamError:
         logger.exception("PDF file is not a valid PDF")
@@ -207,13 +236,47 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
 
     # File is still discoverable by title
     # but the contents are not included as they cannot be parsed
-    return ""
+    return "", metadata
 
 
 def docx_to_text(file: IO[Any]) -> str:
+    def is_simple_table(table: docx.table.Table) -> bool:
+        for row in table.rows:
+            # No omitted cells
+            if row.grid_cols_before > 0 or row.grid_cols_after > 0:
+                return False
+
+            # No nested tables
+            if any(cell.tables for cell in row.cells):
+                return False
+
+        return True
+
+    def extract_cell_text(cell: docx.table._Cell) -> str:
+        cell_paragraphs = [para.text.strip() for para in cell.paragraphs]
+        return " ".join(p for p in cell_paragraphs if p) or "N/A"
+
+    paragraphs = []
     doc = docx.Document(file)
-    full_text = [para.text for para in doc.paragraphs]
-    return TEXT_SECTION_SEPARATOR.join(full_text)
+    for item in doc.iter_inner_content():
+        if isinstance(item, docx.text.paragraph.Paragraph):
+            paragraphs.append(item.text)
+
+        elif isinstance(item, docx.table.Table):
+            if not item.rows or not is_simple_table(item):
+                continue
+
+            # Every row is a new line, joined with a single newline
+            table_content = "\n".join(
+                [
+                    ",\t".join(extract_cell_text(cell) for cell in row.cells)
+                    for row in item.rows
+                ]
+            )
+            paragraphs.append(table_content)
+
+    # Docx already has good spacing between paragraphs
+    return "\n".join(paragraphs)
 
 
 def pptx_to_text(file: IO[Any]) -> str:

@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from danswer.chat.models import SectionRelevancePiece
 from danswer.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
-from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.models import User
+from danswer.db.search_settings import get_current_search_settings
 from danswer.document_index.factory import get_default_document_index
 from danswer.document_index.interfaces import VespaChunkRequest
 from danswer.llm.answering.models import PromptConfig
@@ -65,9 +65,9 @@ class SearchPipeline:
         self.retrieval_metrics_callback = retrieval_metrics_callback
         self.rerank_metrics_callback = rerank_metrics_callback
 
-        self.embedding_model = get_current_db_embedding_model(db_session)
+        self.search_settings = get_current_search_settings(db_session)
         self.document_index = get_default_document_index(
-            primary_index_name=self.embedding_model.index_name,
+            primary_index_name=self.search_settings.index_name,
             secondary_index_name=None,
         )
         self.prompt_config: PromptConfig | None = prompt_config
@@ -209,7 +209,9 @@ class SearchPipeline:
                 if inference_section is not None:
                     expanded_inference_sections.append(inference_section)
                 else:
-                    logger.warning("Skipped creation of section, no chunks found")
+                    logger.warning(
+                        "Skipped creation of section for full docs, no chunks found"
+                    )
 
             self._retrieved_sections = expanded_inference_sections
             return expanded_inference_sections
@@ -269,6 +271,11 @@ class SearchPipeline:
         doc_chunk_ind_to_chunk = {
             (chunk.document_id, chunk.chunk_id): chunk for chunk in inference_chunks
         }
+
+        # In case of failed parallel calls to Vespa, at least we should have the initial retrieved chunks
+        doc_chunk_ind_to_chunk.update(
+            {(chunk.document_id, chunk.chunk_id): chunk for chunk in retrieved_chunks}
+        )
 
         # Build the surroundings for all of the initial retrieved chunks
         for chunk in retrieved_chunks:
@@ -360,10 +367,10 @@ class SearchPipeline:
             try:
                 results = run_functions_in_parallel(function_calls=functions)
                 self._section_relevance = list(results.values())
-            except Exception:
+            except Exception as e:
                 raise ValueError(
-                    "An issue occured during the agentic evaluation proecss."
-                )
+                    "An issue occured during the agentic evaluation process."
+                ) from e
 
         elif self.search_query.evaluation_type == LLMEvaluationType.BASIC:
             if DISABLE_LLM_DOC_RELEVANCE:

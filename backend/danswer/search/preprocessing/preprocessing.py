@@ -10,18 +10,19 @@ from danswer.configs.chat_configs import HYBRID_ALPHA_KEYWORD
 from danswer.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
 from danswer.configs.chat_configs import NUM_RETURNED_HITS
 from danswer.db.models import User
+from danswer.db.search_settings import get_current_search_settings
 from danswer.llm.interfaces import LLM
 from danswer.natural_language_processing.search_nlp_models import QueryAnalysisModel
 from danswer.search.enums import LLMEvaluationType
 from danswer.search.enums import RecencyBiasSetting
+from danswer.search.enums import SearchType
 from danswer.search.models import BaseFilters
 from danswer.search.models import IndexFilters
+from danswer.search.models import RerankingDetails
 from danswer.search.models import SearchQuery
 from danswer.search.models import SearchRequest
-from danswer.search.models import SearchType
 from danswer.search.preprocessing.access_filters import build_access_filters_for_user
 from danswer.search.retrieval.search_runner import remove_stop_words_and_punctuation
-from danswer.search.search_settings import get_search_settings
 from danswer.secondary_llm_flows.source_filter import extract_source_filter
 from danswer.secondary_llm_flows.time_filter import extract_time_filter
 from danswer.utils.logger import setup_logger
@@ -179,12 +180,11 @@ def retrieval_preprocessing(
     rerank_settings = search_request.rerank_settings
     # If not explicitly specified by the query, use the current settings
     if rerank_settings is None:
-        saved_search_settings = get_search_settings()
-        if not saved_search_settings:
-            rerank_settings = None
+        search_settings = get_current_search_settings(db_session)
+
         # For non-streaming flows, the rerank settings are applied at the search_request level
-        elif not saved_search_settings.disable_rerank_for_streaming:
-            rerank_settings = saved_search_settings.to_reranking_detail()
+        if not search_settings.disable_rerank_for_streaming:
+            rerank_settings = RerankingDetails.from_db_model(search_settings)
 
     # Decays at 1 / (1 + (multiplier * num years))
     if persona and persona.recency_bias == RecencyBiasSetting.NO_DECAY:

@@ -31,22 +31,20 @@ const AddUserFormRenderer = ({
   errors,
   isSubmitting,
 }: FormikProps<FormValues>) => (
-  <Form>
-    <div className="flex flex-col gap-y-4">
-      <Field id="emails" name="emails" as="textarea" className="p-4" />
-      {touched.emails && errors.emails && (
-        <div className="text-error text-sm">{errors.emails}</div>
-      )}
-      <Button
-        className="mx-auto"
-        color="green"
-        size="md"
-        type="submit"
-        disabled={isSubmitting}
-      >
-        Add!
-      </Button>
-    </div>
+  <Form className="w-full">
+    <Field id="emails" name="emails" as="textarea" className="w-full p-4" />
+    {touched.emails && errors.emails && (
+      <div className="text-error text-sm">{errors.emails}</div>
+    )}
+    <Button
+      className="mx-auto"
+      color="green"
+      size="md"
+      type="submit"
+      disabled={isSubmitting}
+    >
+      Add!
+    </Button>
   </Form>
 );
 

@@ -1,9 +1,9 @@
 from sqlalchemy.orm import Session
 
-from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.index_attempt import get_last_attempt
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import IndexingStatus
+from danswer.db.search_settings import get_current_search_settings
 
 
 def check_deletion_attempt_is_allowed(
@@ -28,12 +28,12 @@ def check_deletion_attempt_is_allowed(
 
     connector_id = connector_credential_pair.connector_id
     credential_id = connector_credential_pair.credential_id
-    current_embedding_model = get_current_db_embedding_model(db_session)
+    search_settings = get_current_search_settings(db_session)
 
     last_indexing = get_last_attempt(
         connector_id=connector_id,
         credential_id=credential_id,
-        embedding_model_id=current_embedding_model.id,
+        search_settings_id=search_settings.id,
         db_session=db_session,
     )
 

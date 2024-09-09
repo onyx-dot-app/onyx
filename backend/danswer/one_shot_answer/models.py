@@ -1,8 +1,6 @@
-from typing import Any
-
 from pydantic import BaseModel
 from pydantic import Field
-from pydantic import root_validator
+from pydantic import model_validator
 
 from danswer.chat.models import CitationInfo
 from danswer.chat.models import DanswerContexts
@@ -21,7 +19,7 @@ class QueryRephrase(BaseModel):
 
 class ThreadMessage(BaseModel):
     message: str
-    sender: str | None
+    sender: str | None = None
     role: MessageType = MessageType.USER
 
 
@@ -45,21 +43,16 @@ class DirectQARequest(ChunkContext):
     # If True, skips generative an AI response to the search query
     skip_gen_ai_answer_generation: bool = False
 
-    @root_validator
-    def check_chain_of_thought_and_prompt_id(
-        cls, values: dict[str, Any]
-    ) -> dict[str, Any]:
-        chain_of_thought = values.get("chain_of_thought")
-        prompt_id = values.get("prompt_id")
-
-        if chain_of_thought and prompt_id is not None:
+    @model_validator(mode="after")
+    def check_chain_of_thought_and_prompt_id(self) -> "DirectQARequest":
+        if self.chain_of_thought and self.prompt_id is not None:
             raise ValueError(
                 "If chain_of_thought is True, prompt_id must be None"
                 "The chain of thought prompt is only for question "
                 "answering and does not accept customizing."
             )
 
-        return values
+        return self
 
 
 class OneShotQAResponse(BaseModel):

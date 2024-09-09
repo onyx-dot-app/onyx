@@ -3,15 +3,21 @@ import torch.nn.functional as F
 from fastapi import APIRouter
 from huggingface_hub import snapshot_download  # type: ignore
 from transformers import AutoTokenizer  # type: ignore
-from transformers import BatchEncoding
+from transformers import BatchEncoding  # type: ignore
+from transformers import PreTrainedTokenizer  # type: ignore
 
 from danswer.utils.logger import setup_logger
 from model_server.constants import MODEL_WARM_UP_STRING
+from model_server.danswer_torch_model import ConnectorClassifier
 from model_server.danswer_torch_model import HybridClassifier
 from model_server.utils import simple_log_function_time
+from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_REPO
+from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_TAG
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import INTENT_MODEL_TAG
 from shared_configs.configs import INTENT_MODEL_VERSION
+from shared_configs.model_server_models import ConnectorClassificationRequest
+from shared_configs.model_server_models import ConnectorClassificationResponse
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
 
@@ -19,8 +25,53 @@ logger = setup_logger()
 
 router = APIRouter(prefix="/custom")
 
+_CONNECTOR_CLASSIFIER_TOKENIZER: AutoTokenizer | None = None
+_CONNECTOR_CLASSIFIER_MODEL: ConnectorClassifier | None = None
+
 _INTENT_TOKENIZER: AutoTokenizer | None = None
 _INTENT_MODEL: HybridClassifier | None = None
+
+
+def get_connector_classifier_tokenizer() -> AutoTokenizer:
+    global _CONNECTOR_CLASSIFIER_TOKENIZER
+    if _CONNECTOR_CLASSIFIER_TOKENIZER is None:
+        # The tokenizer details are not uploaded to the HF hub since it's just the
+        # unmodified distilbert tokenizer.
+        _CONNECTOR_CLASSIFIER_TOKENIZER = AutoTokenizer.from_pretrained(
+            "distilbert-base-uncased"
+        )
+    return _CONNECTOR_CLASSIFIER_TOKENIZER
+
+
+def get_local_connector_classifier(
+    model_name_or_path: str = CONNECTOR_CLASSIFIER_MODEL_REPO,
+    tag: str = CONNECTOR_CLASSIFIER_MODEL_TAG,
+) -> ConnectorClassifier:
+    global _CONNECTOR_CLASSIFIER_MODEL
+    if _CONNECTOR_CLASSIFIER_MODEL is None:
+        try:
+            # Calculate where the cache should be, then load from local if available
+            local_path = snapshot_download(
+                repo_id=model_name_or_path, revision=tag, local_files_only=True
+            )
+            _CONNECTOR_CLASSIFIER_MODEL = ConnectorClassifier.from_pretrained(
+                local_path
+            )
+        except Exception as e:
+            logger.warning(f"Failed to load model directly: {e}")
+            try:
+                # Attempt to download the model snapshot
+                logger.info(f"Downloading model snapshot for {model_name_or_path}")
+                local_path = snapshot_download(repo_id=model_name_or_path, revision=tag)
+                _CONNECTOR_CLASSIFIER_MODEL = ConnectorClassifier.from_pretrained(
+                    local_path
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to load model even after attempted snapshot download: {e}"
+                )
+                raise
+    return _CONNECTOR_CLASSIFIER_MODEL
 
 
 def get_intent_model_tokenizer() -> AutoTokenizer:
@@ -59,6 +110,74 @@ def get_local_intent_model(
                 )
                 raise
     return _INTENT_MODEL
+
+
+def tokenize_connector_classification_query(
+    connectors: list[str],
+    query: str,
+    tokenizer: PreTrainedTokenizer,
+    connector_token_end_id: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Tokenize the connectors & user query into one prompt for the forward pass of ConnectorClassifier models
+
+    The attention mask is just all 1s. The prompt is CLS + each connector name suffixed with the connector end
+    token and then the user query.
+    """
+
+    input_ids = torch.tensor([tokenizer.cls_token_id], dtype=torch.long)
+
+    for connector in connectors:
+        connector_token_ids = tokenizer(
+            connector,
+            add_special_tokens=False,
+            return_tensors="pt",
+        )
+
+        input_ids = torch.cat(
+            (
+                input_ids,
+                connector_token_ids["input_ids"].squeeze(dim=0),
+                torch.tensor([connector_token_end_id], dtype=torch.long),
+            ),
+            dim=-1,
+        )
+    query_token_ids = tokenizer(
+        query,
+        add_special_tokens=False,
+        return_tensors="pt",
+    )
+
+    input_ids = torch.cat(
+        (
+            input_ids,
+            query_token_ids["input_ids"].squeeze(dim=0),
+            torch.tensor([tokenizer.sep_token_id], dtype=torch.long),
+        ),
+        dim=-1,
+    )
+    attention_mask = torch.ones(input_ids.numel(), dtype=torch.long)
+
+    return input_ids.unsqueeze(0), attention_mask.unsqueeze(0)
+
+
+def warm_up_connector_classifier_model() -> None:
+    logger.info(
+        f"Warming up connector_classifier model {CONNECTOR_CLASSIFIER_MODEL_TAG}"
+    )
+    connector_classifier_tokenizer = get_connector_classifier_tokenizer()
+    connector_classifier = get_local_connector_classifier()
+
+    input_ids, attention_mask = tokenize_connector_classification_query(
+        ["GitHub"],
+        "danswer classifier query google doc",
+        connector_classifier_tokenizer,
+        connector_classifier.connector_end_token_id,
+    )
+    input_ids = input_ids.to(connector_classifier.device)
+    attention_mask = attention_mask.to(connector_classifier.device)
+
+    connector_classifier(input_ids, attention_mask)
 
 
 def warm_up_intent_model() -> None:
@@ -157,6 +276,35 @@ def clean_keywords(keywords: list[str]) -> list[str]:
     return cleaned_words
 
 
+def run_connector_classification(req: ConnectorClassificationRequest) -> list[str]:
+    tokenizer = get_connector_classifier_tokenizer()
+    model = get_local_connector_classifier()
+
+    connector_names = req.available_connectors
+
+    input_ids, attention_mask = tokenize_connector_classification_query(
+        connector_names,
+        req.query,
+        tokenizer,
+        model.connector_end_token_id,
+    )
+    input_ids = input_ids.to(model.device)
+    attention_mask = attention_mask.to(model.device)
+
+    global_confidence, classifier_confidence = model(input_ids, attention_mask)
+
+    if global_confidence.item() < 0.5:
+        return []
+
+    passed_connectors = []
+
+    for i, connector_name in enumerate(connector_names):
+        if classifier_confidence.view(-1)[i].item() > 0.5:
+            passed_connectors.append(connector_name)
+
+    return passed_connectors
+
+
 def run_analysis(intent_req: IntentRequest) -> tuple[bool, list[str]]:
     tokenizer = get_intent_model_tokenizer()
     model_input = tokenizer(
@@ -187,6 +335,22 @@ def run_analysis(intent_req: IntentRequest) -> tuple[bool, list[str]]:
     cleaned_keywords = clean_keywords(keywords)
 
     return is_keyword_sequence, cleaned_keywords
+
+
+@router.post("/connector-classification")
+async def process_connector_classification_request(
+    classification_request: ConnectorClassificationRequest,
+) -> ConnectorClassificationResponse:
+    if INDEXING_ONLY:
+        raise RuntimeError(
+            "Indexing model server should not call connector classification endpoint"
+        )
+
+    if len(classification_request.available_connectors) == 0:
+        return ConnectorClassificationResponse(connectors=[])
+
+    connectors = run_connector_classification(classification_request)
+    return ConnectorClassificationResponse(connectors=connectors)
 
 
 @router.post("/query-analysis")

@@ -1,7 +1,7 @@
 version: '3'
 services:
   api_server:
-    image: danswer/danswer-backend:latest
+    image: danswer/danswer-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -12,6 +12,7 @@ services:
     depends_on:
       - relational_db
       - index
+      - cache
       - inference_model_server
     restart: always
     env_file:
@@ -20,6 +21,7 @@ services:
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
+      - REDIS_HOST=cache
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -31,7 +33,7 @@ services:
 
 
   background:
-    image: danswer/danswer-backend:latest
+    image: danswer/danswer-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -39,6 +41,7 @@ services:
     depends_on:
       - relational_db
       - index
+      - cache
       - inference_model_server
       - indexing_model_server
     restart: always
@@ -48,6 +51,7 @@ services:
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
+      - REDIS_HOST=cache
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
     extra_hosts:
@@ -59,7 +63,7 @@ services:
         max-file: "6"
 
   web_server:
-    image: danswer/danswer-web-server:latest
+    image: danswer/danswer-web-server:${IMAGE_TAG:-latest}
     build:
       context: ../../web
       dockerfile: Dockerfile
@@ -101,7 +105,7 @@ services:
 
 
   inference_model_server:
-    image: danswer/danswer-model-server:latest
+    image: danswer/danswer-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
@@ -128,7 +132,7 @@ services:
 
 
   indexing_model_server:
-    image: danswer/danswer-model-server:latest
+    image: danswer/danswer-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
@@ -221,7 +225,18 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
 
+  cache:
+    image: redis:7.4-alpine
+    restart: always
+    ports:
+      - '6379:6379'
+    command: redis-server
+    volumes: 
+      - cache_volume:/data
+
+
 volumes:
+  cache_volume:
   db_volume:
   vespa_volume:
   # Created by the container itself

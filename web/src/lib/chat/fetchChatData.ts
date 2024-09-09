@@ -44,7 +44,6 @@ interface FetchChatDataResult {
   toggleSidebar: boolean;
   finalDocumentSidebarInitialWidth?: number;
   shouldShowWelcomeModal: boolean;
-  shouldDisplaySourcesIncompleteModal: boolean;
   userInputPrompts: InputPrompt[];
 }
 
@@ -126,6 +125,7 @@ export async function fetchChatData(searchParams: {
       `Failed to fetch chat sessions - ${chatSessionsResponse?.text()}`
     );
   }
+
   // Larger ID -> created later
   chatSessions.sort((a, b) => (a.id > b.id ? -1 : 1));
 
@@ -241,7 +241,6 @@ export async function fetchChatData(searchParams: {
     finalDocumentSidebarInitialWidth,
     toggleSidebar,
     shouldShowWelcomeModal,
-    shouldDisplaySourcesIncompleteModal,
     userInputPrompts,
   };
 }

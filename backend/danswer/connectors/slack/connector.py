@@ -29,6 +29,7 @@ from danswer.connectors.slack.utils import make_slack_api_rate_limited
 from danswer.connectors.slack.utils import SlackTextCleaner
 from danswer.utils.logger import setup_logger
 
+
 logger = setup_logger()
 
 

@@ -2,6 +2,7 @@ import {
   AnswerPiecePacket,
   DanswerDocument,
   Filters,
+  StreamStopInfo,
 } from "@/lib/search/interfaces";
 import { handleSSEStream, handleStream } from "@/lib/search/streamingUtils";
 import { ChatState, FeedbackType } from "./types";
@@ -111,7 +112,8 @@ export type PacketType =
   | DocumentsResponse
   | ImageGenerationDisplay
   | StreamingError
-  | MessageResponseIDInfo;
+  | MessageResponseIDInfo
+  | StreamStopInfo;
 
 export async function* sendMessage({
   regenerate,

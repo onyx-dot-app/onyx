@@ -71,7 +71,7 @@ export function AssistantTools({
                     w-fit 
                     flex
                     items-center
-                    ${hovered ? "bg-background-300" : list ? "bg-background-125" : "bg-background-100"}`}
+                    ${list ? "bg-background-125" : "bg-background-100"}`}
                 >
                   <div className="flex gap-x-1">
                     <FiSearch key={ind} className="ml-1 h-3 w-3 my-auto" />
@@ -91,7 +91,7 @@ export function AssistantTools({
                     border-border 
                     w-fit 
                     flex
-                    ${hovered ? "bg-background-300" : list ? "bg-background-125" : "bg-background-100"}`}
+                    ${list ? "bg-background-125" : "bg-background-100"}`}
                 >
                   <div className="flex items-center gap-x-1">
                     <FiImage

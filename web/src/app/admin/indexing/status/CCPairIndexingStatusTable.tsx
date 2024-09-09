@@ -34,16 +34,6 @@ import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { ConnectorCredentialPairStatus } from "../../connector/[ccPairId]/types";
 
-const columnWidths = {
-  first: "20%",
-  second: "15%",
-  third: "15%",
-  fourth: "15%",
-  fifth: "15%",
-  sixth: "15%",
-  seventh: "5%",
-};
-
 function SummaryRow({
   source,
   summary,
@@ -61,9 +51,9 @@ function SummaryRow({
   return (
     <TableRow
       onClick={onToggle}
-      className="border-border bg-white rounded-sm !border sbg-white cursor-pointer"
+      className="border-border bg-white py-4 rounded-sm !border cursor-pointer"
     >
-      <TableCell className={`py-4 w-[${columnWidths.first}]`}>
+      <TableCell>
         <div className="text-xl flex items-center truncate ellipsis gap-x-2 font-semibold">
           <div className="cursor-pointer">
             {isOpen ? (
@@ -77,12 +67,12 @@ function SummaryRow({
         </div>
       </TableCell>
 
-      <TableCell className={`py-4 w-[${columnWidths.first}]`}>
+      <TableCell>
         <div className="text-sm text-gray-500">Total Connectors</div>
         <div className="text-xl font-semibold">{summary.count}</div>
       </TableCell>
 
-      <TableCell className={` py-4 w-[${columnWidths.second}]`}>
+      <TableCell>
         <div className="text-sm text-gray-500">Active Connectors</div>
         <Tooltip
           content={`${summary.active} out of ${summary.count} connectors are active`}
@@ -102,7 +92,7 @@ function SummaryRow({
       </TableCell>
 
       {isPaidEnterpriseFeaturesEnabled && (
-        <TableCell className={`py-4 w-[${columnWidths.fourth}]`}>
+        <TableCell>
           <div className="text-sm text-gray-500">Public Connectors</div>
           <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
             {summary.public}/{summary.count}
@@ -110,14 +100,14 @@ function SummaryRow({
         </TableCell>
       )}
 
-      <TableCell className={`py-4 w-[${columnWidths.fifth}]`}>
+      <TableCell>
         <div className="text-sm text-gray-500">Total Docs Indexed</div>
         <div className="text-xl font-semibold">
           {summary.totalDocsIndexed.toLocaleString()}
         </div>
       </TableCell>
 
-      <TableCell className={`w-[${columnWidths.sixth}]`}>
+      <TableCell>
         <div className="text-sm text-gray-500">Errors</div>
 
         <div className="flex items-center text-lg gap-x-1 font-semibold">
@@ -126,7 +116,7 @@ function SummaryRow({
         </div>
       </TableCell>
 
-      <TableCell className={`w-[${columnWidths.seventh}]`}></TableCell>
+      <TableCell />
     </TableRow>
   );
 }
@@ -231,19 +221,17 @@ function ConnectorRow({
         router.push(`/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`);
       }}
     >
-      <TableCell className={`!pr-0 w-[${columnWidths.first}]`}>
-        <p className="w-[200px] inline-block ellipsis truncate">
+      <TableCell className="!w-[300px]">
+        <p className="w-[200px] xl:w-[400px] inline-block ellipsis truncate">
           {ccPairsIndexingStatus.name}
         </p>
       </TableCell>
-      <TableCell className={` w-[${columnWidths.fifth}]`}>
+      <TableCell>
         {timeAgo(ccPairsIndexingStatus?.last_success) || "-"}
       </TableCell>
-      <TableCell className={`w-[${columnWidths.third}]`}>
-        {getActivityBadge()}
-      </TableCell>
+      <TableCell>{getActivityBadge()}</TableCell>
       {isPaidEnterpriseFeaturesEnabled && (
-        <TableCell className={`w-[${columnWidths.fourth}]`}>
+        <TableCell>
           {ccPairsIndexingStatus.public_doc ? (
             <Badge
               size="md"
@@ -259,17 +247,15 @@ function ConnectorRow({
           )}
         </TableCell>
       )}
-      <TableCell className={`w-[${columnWidths.sixth}]`}>
-        {ccPairsIndexingStatus.docs_indexed}
-      </TableCell>
-      <TableCell className={`w-[${columnWidths.second}]`}>
+      <TableCell>{ccPairsIndexingStatus.docs_indexed}</TableCell>
+      <TableCell>
         <IndexAttemptStatus
           status={ccPairsIndexingStatus.last_finished_status || null}
           errorMsg={ccPairsIndexingStatus?.latest_index_attempt?.error_msg}
           size="xs"
         />
       </TableCell>
-      <TableCell className={`w-[${columnWidths.seventh}]`}>
+      <TableCell>
         {isEditable && (
           <CustomTooltip content="Manage Connector">
             <FiSettings
@@ -447,25 +433,27 @@ export function CCPairIndexingStatusTable({
           }}
           isEditable={false}
         />
-        <div className="-mb-10" />
+        <div className="flex items-center w-0 mt-4 gap-x-2">
+          <input
+            type="text"
+            ref={searchInputRef}
+            placeholder="Search connectors..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="ml-1 w-96 h-9 flex-none rounded-md border border-border bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+
+          <Button className="h-9" onClick={() => toggleSources()}>
+            {!shouldExpand ? "Collapse All" : "Expand All"}
+          </Button>
+        </div>
 
         <TableBody>
-          <div className="flex items-center mt-4 gap-x-2">
-            <input
-              type="text"
-              ref={searchInputRef}
-              placeholder="Search connectors..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="ml-2 w-96 h-9 flex-none rounded-md border-2 border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-
-            <Button className="h-9" onClick={() => toggleSources()}>
-              {!shouldExpand ? "Collapse All" : "Expand All"}
-            </Button>
-          </div>
           {sortedSources
-            .filter((source) => source != "not_applicable")
+            .filter(
+              (source) =>
+                source != "not_applicable" && source != "ingestion_api"
+            )
             .map((source, ind) => {
               const sourceMatches = source
                 .toLowerCase()
@@ -479,7 +467,7 @@ export function CCPairIndexingStatusTable({
               if (sourceMatches || matchingConnectors.length > 0) {
                 return (
                   <React.Fragment key={ind}>
-                    <div className="mt-4" />
+                    <br className="mt-4" />
 
                     <SummaryRow
                       source={source}
@@ -491,41 +479,15 @@ export function CCPairIndexingStatusTable({
                     {connectorsToggled[source] && (
                       <>
                         <TableRow className="border border-border">
-                          <TableHeaderCell
-                            className={`w-[${columnWidths.first}]`}
-                          >
-                            Name
-                          </TableHeaderCell>
-                          <TableHeaderCell
-                            className={`w-[${columnWidths.fifth}]`}
-                          >
-                            Last Indexed
-                          </TableHeaderCell>
-                          <TableHeaderCell
-                            className={`w-[${columnWidths.second}]`}
-                          >
-                            Activity
-                          </TableHeaderCell>
+                          <TableHeaderCell>Name</TableHeaderCell>
+                          <TableHeaderCell>Last Indexed</TableHeaderCell>
+                          <TableHeaderCell>Activity</TableHeaderCell>
                           {isPaidEnterpriseFeaturesEnabled && (
-                            <TableHeaderCell
-                              className={`w-[${columnWidths.fourth}]`}
-                            >
-                              Permissions
-                            </TableHeaderCell>
+                            <TableHeaderCell>Permissions</TableHeaderCell>
                           )}
-                          <TableHeaderCell
-                            className={`w-[${columnWidths.sixth}]`}
-                          >
-                            Total Docs
-                          </TableHeaderCell>
-                          <TableHeaderCell
-                            className={`w-[${columnWidths.third}]`}
-                          >
-                            Last Status
-                          </TableHeaderCell>
-                          <TableHeaderCell
-                            className={`w-[${columnWidths.seventh}]`}
-                          ></TableHeaderCell>
+                          <TableHeaderCell>Total Docs</TableHeaderCell>
+                          <TableHeaderCell>Last Status</TableHeaderCell>
+                          <TableHeaderCell></TableHeaderCell>
                         </TableRow>
                         {(sourceMatches
                           ? groupedStatuses[source]

@@ -14,10 +14,10 @@ from danswer.db.connector import fetch_connector_by_id
 from danswer.db.credentials import fetch_credential_by_id
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.models import ConnectorCredentialPair
-from danswer.db.models import EmbeddingModel
 from danswer.db.models import IndexAttempt
 from danswer.db.models import IndexingStatus
 from danswer.db.models import IndexModelStatus
+from danswer.db.models import SearchSettings
 from danswer.db.models import User
 from danswer.db.models import User__UserGroup
 from danswer.db.models import UserGroup__ConnectorCredentialPair
@@ -159,12 +159,13 @@ def get_connector_credential_pair_from_id(
 def get_last_successful_attempt_time(
     connector_id: int,
     credential_id: int,
-    embedding_model: EmbeddingModel,
+    earliest_index: float,
+    search_settings: SearchSettings,
     db_session: Session,
 ) -> float:
     """Gets the timestamp of the last successful index run stored in
     the CC Pair row in the database"""
-    if embedding_model.status == IndexModelStatus.PRESENT:
+    if search_settings.status == IndexModelStatus.PRESENT:
         connector_credential_pair = get_connector_credential_pair(
             connector_id, credential_id, db_session
         )
@@ -172,7 +173,7 @@ def get_last_successful_attempt_time(
             connector_credential_pair is None
             or connector_credential_pair.last_successful_index_time is None
         ):
-            return 0.0
+            return earliest_index
 
         return connector_credential_pair.last_successful_index_time.timestamp()
 
@@ -186,17 +187,15 @@ def get_last_successful_attempt_time(
         .filter(
             ConnectorCredentialPair.connector_id == connector_id,
             ConnectorCredentialPair.credential_id == credential_id,
-            IndexAttempt.embedding_model_id == embedding_model.id,
+            IndexAttempt.search_settings_id == search_settings.id,
             IndexAttempt.status == IndexingStatus.SUCCESS,
         )
         .order_by(IndexAttempt.time_started.desc())
         .first()
     )
+
     if not attempt or not attempt.time_started:
-        connector = fetch_connector_by_id(connector_id, db_session)
-        if connector and connector.indexing_start:
-            return connector.indexing_start.timestamp()
-        return 0.0
+        return earliest_index
 
     return attempt.time_started.timestamp()
 
@@ -335,9 +334,13 @@ def add_credential_to_connector(
         raise HTTPException(status_code=404, detail="Connector does not exist")
 
     if credential is None:
+        error_msg = (
+            f"Credential {credential_id} does not exist or does not belong to user"
+        )
+        logger.error(error_msg)
         raise HTTPException(
             status_code=401,
-            detail="Credential does not exist or does not belong to user",
+            detail=error_msg,
         )
 
     existing_association = (
@@ -351,7 +354,7 @@ def add_credential_to_connector(
     if existing_association is not None:
         return StatusResponse(
             success=False,
-            message=f"Connector already has Credential {credential_id}",
+            message=f"Connector {connector_id} already has Credential {credential_id}",
             data=connector_id,
         )
 
@@ -375,8 +378,8 @@ def add_credential_to_connector(
     db_session.commit()
 
     return StatusResponse(
-        success=False,
-        message=f"Connector already has Credential {credential_id}",
+        success=True,
+        message=f"Creating new association between Connector {connector_id} and Credential {credential_id}",
         data=association.id,
     )
 
@@ -445,11 +448,11 @@ def resync_cc_pair(
                 ConnectorCredentialPair,
                 IndexAttempt.connector_credential_pair_id == ConnectorCredentialPair.id,
             )
-            .join(EmbeddingModel, IndexAttempt.embedding_model_id == EmbeddingModel.id)
+            .join(SearchSettings, IndexAttempt.search_settings_id == SearchSettings.id)
             .filter(
                 ConnectorCredentialPair.connector_id == connector_id,
                 ConnectorCredentialPair.credential_id == credential_id,
-                EmbeddingModel.status == IndexModelStatus.PRESENT,
+                SearchSettings.status == IndexModelStatus.PRESENT,
             )
         )
 

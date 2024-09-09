@@ -211,7 +211,7 @@ export default function ModifyCredential({
       )}
 
       <div className="mb-0">
-        <Text className="mb-4 ">
+        <Text className="mb-4">
           Select a credential as needed! Ensure that you have selected a
           credential with the proper permissions for this connector!
         </Text>

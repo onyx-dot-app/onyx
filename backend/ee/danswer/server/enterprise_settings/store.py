@@ -30,13 +30,13 @@ def load_settings() -> EnterpriseSettings:
         )
     except ConfigNotFoundError:
         settings = EnterpriseSettings()
-        dynamic_config_store.store(KV_ENTERPRISE_SETTINGS_KEY, settings.dict())
+        dynamic_config_store.store(KV_ENTERPRISE_SETTINGS_KEY, settings.model_dump())
 
     return settings
 
 
 def store_settings(settings: EnterpriseSettings) -> None:
-    get_dynamic_config_store().store(KV_ENTERPRISE_SETTINGS_KEY, settings.dict())
+    get_dynamic_config_store().store(KV_ENTERPRISE_SETTINGS_KEY, settings.model_dump())
 
 
 _CUSTOM_ANALYTICS_SECRET_KEY = os.environ.get("CUSTOM_ANALYTICS_SECRET_KEY")

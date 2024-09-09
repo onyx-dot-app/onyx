@@ -73,3 +73,15 @@ DANSWER_BOT_FEEDBACK_REMINDER = int(
 DANSWER_BOT_REPHRASE_MESSAGE = (
     os.environ.get("DANSWER_BOT_REPHRASE_MESSAGE", "").lower() == "true"
 )
+
+# DANSWER_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD is the number of
+# responses DanswerBot can send in a given time period.
+# Set to 0 to disable the limit.
+DANSWER_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD = int(
+    os.environ.get("DANSWER_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD", "5000")
+)
+# DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS is the number
+# of seconds until the response limit is reset.
+DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS = int(
+    os.environ.get("DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS", "86400")
+)

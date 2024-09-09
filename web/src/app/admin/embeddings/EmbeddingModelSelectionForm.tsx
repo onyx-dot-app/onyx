@@ -24,10 +24,14 @@ import { ChangeCredentialsModal } from "./modals/ChangeCredentialsModal";
 import { ModelSelectionConfirmationModal } from "./modals/ModelSelectionModal";
 import { AlreadyPickedModal } from "./modals/AlreadyPickedModal";
 import { ModelOption } from "../../../components/embedding/ModelSelector";
-import { EMBEDDING_PROVIDERS_ADMIN_URL } from "../configuration/llm/constants";
+import {
+  EMBEDDING_MODELS_ADMIN_URL,
+  EMBEDDING_PROVIDERS_ADMIN_URL,
+} from "../configuration/llm/constants";
 
 export interface EmbeddingDetails {
-  api_key: string;
+  api_key?: string;
+  api_url?: string;
   custom_config: any;
   provider_type: EmbeddingProvider;
 }
@@ -77,12 +81,20 @@ export function EmbeddingModelSelection({
 
   const [showDeleteCredentialsModal, setShowDeleteCredentialsModal] =
     useState<boolean>(false);
+
   const [showAddConnectorPopup, setShowAddConnectorPopup] =
     useState<boolean>(false);
 
+  const { data: embeddingModelDetails } = useSWR<CloudEmbeddingModel[]>(
+    EMBEDDING_MODELS_ADMIN_URL,
+    errorHandlingFetcher,
+    { refreshInterval: 5000 } // 5 seconds
+  );
+
   const { data: embeddingProviderDetails } = useSWR<EmbeddingDetails[]>(
     EMBEDDING_PROVIDERS_ADMIN_URL,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    { refreshInterval: 5000 } // 5 seconds
   );
 
   const { data: connectors } = useSWR<Connector<any>[]>(
@@ -93,10 +105,10 @@ export function EmbeddingModelSelection({
 
   const onConfirmSelection = async (model: EmbeddingModelDescriptor) => {
     const response = await fetch(
-      "/api/search-settings/set-new-embedding-model",
+      "/api/search-settings/set-new-search-settings",
       {
         method: "POST",
-        body: JSON.stringify(model),
+        body: JSON.stringify({ ...model, index_name: null }),
         headers: {
           "Content-Type": "application/json",
         },
@@ -104,7 +116,7 @@ export function EmbeddingModelSelection({
     );
     if (response.ok) {
       setShowTentativeModel(null);
-      mutate("/api/search-settings/get-secondary-embedding-model");
+      mutate("/api/search-settings/get-secondary-search-settings");
       if (!connectors || !connectors.length) {
         setShowAddConnectorPopup(true);
       }
@@ -175,6 +187,7 @@ export function EmbeddingModelSelection({
 
       {showTentativeProvider && (
         <ProviderCreationModal
+          isProxy={showTentativeProvider.provider_type == "LiteLLM"}
           selectedProvider={showTentativeProvider}
           onConfirm={() => {
             setShowTentativeProvider(showUnconfiguredProvider);
@@ -189,8 +202,10 @@ export function EmbeddingModelSelection({
           }}
         />
       )}
+
       {changeCredentialsProvider && (
         <ChangeCredentialsModal
+          isProxy={changeCredentialsProvider.provider_type == "LiteLLM"}
           useFileUpload={changeCredentialsProvider.provider_type == "Google"}
           onDeleted={() => {
             clientsideRemoveProvider(changeCredentialsProvider);
@@ -227,7 +242,7 @@ export function EmbeddingModelSelection({
         />
       )}
 
-      <p className=" t mb-4">
+      <p className="t mb-4">
         Select from cloud, self-hosted models, or continue with your current
         embedding model.
       </p>
@@ -242,7 +257,7 @@ export function EmbeddingModelSelection({
         >
           Current
         </button>
-        <div className="px-2 ">
+        <div className="px-2">
           <button
             onClick={() => setModelTab("cloud")}
             className={`mx-2 p-2 font-bold  ${
@@ -254,7 +269,7 @@ export function EmbeddingModelSelection({
             Cloud-based
           </button>
         </div>
-        <div className="px-2 ">
+        <div className="px-2">
           <button
             onClick={() => setModelTab("open")}
             className={` mx-2 p-2 font-bold  ${
@@ -277,9 +292,10 @@ export function EmbeddingModelSelection({
 
       {modelTab == "cloud" && (
         <CloudEmbeddingPage
+          embeddingModelDetails={embeddingModelDetails}
           setShowModelInQueue={setShowModelInQueue}
           setShowTentativeModel={setShowTentativeModel}
-          currentModel={selectedProvider}
+          currentModel={selectedProvider || currentEmbeddingModel}
           setAlreadySelectedModel={setAlreadySelectedModel}
           embeddingProviderDetails={embeddingProviderDetails}
           newEnabledProviders={newEnabledProviders}

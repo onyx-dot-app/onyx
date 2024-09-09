@@ -64,9 +64,9 @@ def fetch_settings(
         needs_reindexing = False
 
     return UserSettings(
-        **general_settings.dict(),
+        **general_settings.model_dump(),
         notifications=user_notifications,
-        needs_reindexing=needs_reindexing
+        needs_reindexing=needs_reindexing,
     )
 
 

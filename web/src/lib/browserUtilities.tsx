@@ -1,5 +1,6 @@
 "use client";
 
+import { MacIcon, WindowsIcon } from "@/components/icons/icons";
 import { useState, useEffect } from "react";
 
 type OperatingSystem = "Windows" | "Mac" | "Other";
@@ -23,9 +24,9 @@ const KeyboardSymbol = () => {
   const os = useOperatingSystem();
 
   if (os === "Windows") {
-    return "⊞";
+    return <WindowsIcon size={12} />;
   } else {
-    return "⌘";
+    return <MacIcon size={12} />;
   }
 };
 

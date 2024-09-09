@@ -60,11 +60,13 @@ module.exports = {
         searchbar: "850px",
         "document-sidebar": "800px",
         "document-sidebar-large": "1000px",
+        "searchbar-max": "60px",
       },
       maxWidth: {
         "document-sidebar": "1000px",
-        "message-max": "725px",
-        "searchbar-max": "750px",
+        "message-max": "850px",
+        "content-max": "725px",
+        "searchbar-max": "800px",
       },
       colors: {
         // code styling
@@ -83,7 +85,8 @@ module.exports = {
 
         // background
         "background-search": "#ffffff", // white
-        input: "#f5f5f5",
+
+        input: "#ffffff",
 
         background: "#fafafa", // 50
         "background-100": "#f5f5f5", // neutral-100
@@ -113,7 +116,10 @@ module.exports = {
         "text-600": "#525252", // dark, neutral-600
         "text-700": "#404040", // solid, neutral-700
         "text-800": "#262626", // solidDark, neutral-800
+        "text-900": "#111827", // neutral-900
+        "text-950": "#0a0a0a", // solidDark, neutral-800
 
+        description: "#a3a3a3",
         subtle: "#6b7280", // gray-500
         default: "#4b5563", // gray-600
         emphasis: "#374151", // gray-700
@@ -130,7 +136,7 @@ module.exports = {
         accent: "#6366F1", // indigo-500
 
         // borders
-        border: "#e5e7eb", // gray-200
+        border: "#d1d5db", // gray-200
         "border-light": "#f3f4f6", // gray-100
         "border-medium": "#d1d5db", // gray-300
         "border-strong": "#9ca3af", // gray-400
@@ -257,6 +263,7 @@ module.exports = {
         "tremor-metric": ["1.875rem", { lineHeight: "2.25rem" }],
       },
       fontWeight: {
+        description: "375",
         "token-bold": "bold",
       },
       fontStyle: {

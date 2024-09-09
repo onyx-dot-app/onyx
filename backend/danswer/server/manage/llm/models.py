@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
+from pydantic import Field
 
 from danswer.llm.llm_provider_options import fetch_models_for_provider
 
@@ -56,26 +57,26 @@ class LLMProviderDescriptor(BaseModel):
 class LLMProvider(BaseModel):
     name: str
     provider: str
-    api_key: str | None
-    api_base: str | None
-    api_version: str | None
-    custom_config: dict[str, str] | None
+    api_key: str | None = None
+    api_base: str | None = None
+    api_version: str | None = None
+    custom_config: dict[str, str] | None = None
     default_model_name: str
-    fast_default_model_name: str | None
+    fast_default_model_name: str | None = None
     is_public: bool = True
-    groups: list[int] | None = None
-    display_model_names: list[str] | None
+    groups: list[int] = Field(default_factory=list)
+    display_model_names: list[str] | None = None
 
 
 class LLMProviderUpsertRequest(LLMProvider):
     # should only be used for a "custom" provider
     # for default providers, the built-in model names are used
-    model_names: list[str] | None
+    model_names: list[str] | None = None
 
 
 class FullLLMProvider(LLMProvider):
     id: int
-    is_default_provider: bool | None
+    is_default_provider: bool | None = None
     model_names: list[str]
 
     @classmethod

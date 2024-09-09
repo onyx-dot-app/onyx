@@ -22,6 +22,7 @@ export function AssistantsGallery({
   user,
 }: {
   assistants: Persona[];
+
   user: User | null;
 }) {
   function filterAssistants(assistants: Persona[], query: string): Persona[] {
@@ -150,9 +151,9 @@ export function AssistantsGallery({
                           }
                         }}
                         size="xs"
-                        color="red"
+                        color="blue"
                       >
-                        Remove
+                        Deselect
                       </Button>
                     ) : (
                       <Button

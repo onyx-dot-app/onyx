@@ -3,6 +3,7 @@ from langchain.schema.messages import HumanMessage
 from danswer.chat.models import LlmDoc
 from danswer.configs.chat_configs import LANGUAGE_HINT
 from danswer.configs.chat_configs import QA_PROMPT_OVERRIDE
+from danswer.db.search_settings import get_multilingual_expansion
 from danswer.llm.answering.models import PromptConfig
 from danswer.prompts.direct_qa_prompts import CONTEXT_BLOCK
 from danswer.prompts.direct_qa_prompts import HISTORY_BLOCK
@@ -11,7 +12,6 @@ from danswer.prompts.direct_qa_prompts import WEAK_LLM_PROMPT
 from danswer.prompts.prompt_utils import add_date_time_to_prompt
 from danswer.prompts.prompt_utils import build_complete_context_str
 from danswer.search.models import InferenceChunk
-from danswer.search.search_settings import get_search_settings
 
 
 def _build_weak_llm_quotes_prompt(
@@ -48,10 +48,7 @@ def _build_strong_llm_quotes_prompt(
     history_str: str,
     prompt: PromptConfig,
 ) -> HumanMessage:
-    search_settings = get_search_settings()
-    use_language_hint = (
-        bool(search_settings.multilingual_expansion) if search_settings else False
-    )
+    use_language_hint = bool(get_multilingual_expansion())
 
     context_block = ""
     if context_docs:

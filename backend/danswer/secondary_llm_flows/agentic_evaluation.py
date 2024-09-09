@@ -58,25 +58,30 @@ def evaluate_inference_section(
         center_metadata=center_metadata_str,
     )
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-    model_output = message_to_string(llm.invoke(filled_llm_prompt))
+    try:
+        model_output = message_to_string(llm.invoke(filled_llm_prompt))
 
-    # Search for the "Useful Analysis" section in the model output
-    # This regex looks for "2. Useful Analysis" (case-insensitive) followed by an optional colon,
-    # then any text up to "3. Final Relevance"
-    # The (?i) flag makes it case-insensitive, and re.DOTALL allows the dot to match newlines
-    # If no match is found, the entire model output is used as the analysis
-    analysis_match = re.search(
-        r"(?i)2\.\s*useful analysis:?\s*(.+?)\n\n3\.\s*final relevance",
-        model_output,
-        re.DOTALL,
-    )
-    analysis = analysis_match.group(1).strip() if analysis_match else model_output
+        # Search for the "Useful Analysis" section in the model output
+        # This regex looks for "2. Useful Analysis" (case-insensitive) followed by an optional colon,
+        # then any text up to "3. Final Relevance"
+        # The (?i) flag makes it case-insensitive, and re.DOTALL allows the dot to match newlines
+        # If no match is found, the entire model output is used as the analysis
+        analysis_match = re.search(
+            r"(?i)2\.\s*useful analysis:?\s*(.+?)\n\n3\.\s*final relevance",
+            model_output,
+            re.DOTALL,
+        )
+        analysis = analysis_match.group(1).strip() if analysis_match else model_output
 
-    # Get the last non-empty line
-    last_line = next(
-        (line for line in reversed(model_output.split("\n")) if line.strip()), ""
-    )
-    relevant = last_line.strip().lower().startswith("true")
+        # Get the last non-empty line
+        last_line = next(
+            (line for line in reversed(model_output.split("\n")) if line.strip()), ""
+        )
+        relevant = last_line.strip().lower().startswith("true")
+    except Exception as e:
+        logger.exception(f"An issue occured during the agentic evaluation process. {e}")
+        relevant = False
+        analysis = ""
 
     return SectionRelevancePiece(
         document_id=document_id,

@@ -27,13 +27,11 @@ function UsageTypeSection({
   title,
   description,
   callToAction,
-  icon,
   onClick,
 }: {
   title: string;
   description: string | JSX.Element;
   callToAction: string;
-  icon?: React.ElementType;
   onClick: () => void;
 }) {
   return (
@@ -243,7 +241,6 @@ export function _WelcomeModal({ user }: { user: User | null }) {
                 this is the option for you!
               </Text>
             }
-            icon={FiMessageSquare}
             callToAction="Get Started"
             onClick={() => {
               setSelectedFlow("chat");

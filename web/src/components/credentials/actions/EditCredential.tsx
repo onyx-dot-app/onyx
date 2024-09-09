@@ -5,7 +5,6 @@ import { FaNewspaper } from "react-icons/fa";
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { EditingValue } from "../EditingValue";
 import {
   Credential,
   getDisplayNameForCredentialKey,
@@ -63,8 +62,8 @@ const EditCredential = ({
           <Form>
             <Card className="mt-4 flex flex-col gap-y-4">
               <TextFormField
+                includeRevert
                 onChange={(e) => setFieldValue("name", e.target.value)}
-                noPadding
                 name="name"
                 placeholder={credential.name || ""}
                 label="Name (optional):"
@@ -72,12 +71,12 @@ const EditCredential = ({
 
               {Object.entries(credential.credential_json).map(
                 ([key, value]) => (
-                  <EditingValue
-                    includRevert
+                  <TextFormField
+                    includeRevert
                     key={key}
-                    setFieldValue={setFieldValue}
+                    onChange={(e) => setFieldValue(key, e.target.value)}
                     name={key}
-                    currentValue={value}
+                    placeholder={value}
                     label={getDisplayNameForCredentialKey(key)}
                     type={
                       key.toLowerCase().includes("token") ||

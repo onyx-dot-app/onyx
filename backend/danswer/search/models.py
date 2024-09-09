@@ -2,12 +2,16 @@ from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
-from pydantic import validator
+from pydantic import ConfigDict
+from pydantic import Field
+from pydantic import field_validator
 
 from danswer.configs.chat_configs import NUM_RETURNED_HITS
 from danswer.configs.constants import DocumentSource
 from danswer.db.models import Persona
+from danswer.db.models import SearchSettings
 from danswer.indexing.models import BaseChunk
+from danswer.indexing.models import IndexingSetting
 from danswer.search.enums import LLMEvaluationType
 from danswer.search.enums import OptionalSearchSetting
 from danswer.search.enums import SearchType
@@ -22,28 +26,62 @@ MAX_METRICS_CONTENT = (
 class RerankingDetails(BaseModel):
     # If model is None (or num_rerank is 0), then reranking is turned off
     rerank_model_name: str | None
-    provider_type: RerankerProvider | None
-    api_key: str | None
+    rerank_provider_type: RerankerProvider | None
+    rerank_api_key: str | None = None
 
     num_rerank: int
 
-
-class SavedSearchSettings(RerankingDetails):
-    # Empty for no additional expansion
-    multilingual_expansion: list[str]
-    # Encompasses both mini and large chunks
-    multipass_indexing: bool
-
     # For faster flows where the results should start immediately
     # this more time intensive step can be skipped
-    disable_rerank_for_streaming: bool
+    disable_rerank_for_streaming: bool = False
 
-    def to_reranking_detail(self) -> RerankingDetails:
-        return RerankingDetails(
-            rerank_model_name=self.rerank_model_name,
-            provider_type=self.provider_type,
-            api_key=self.api_key,
-            num_rerank=self.num_rerank,
+    @classmethod
+    def from_db_model(cls, search_settings: SearchSettings) -> "RerankingDetails":
+        return cls(
+            rerank_model_name=search_settings.rerank_model_name,
+            rerank_provider_type=search_settings.rerank_provider_type,
+            rerank_api_key=search_settings.rerank_api_key,
+            num_rerank=search_settings.num_rerank,
+        )
+
+
+class InferenceSettings(RerankingDetails):
+    # Empty for no additional expansion
+    multilingual_expansion: list[str]
+
+
+class SearchSettingsCreationRequest(InferenceSettings, IndexingSetting):
+    @classmethod
+    def from_db_model(
+        cls, search_settings: SearchSettings
+    ) -> "SearchSettingsCreationRequest":
+        inference_settings = InferenceSettings.from_db_model(search_settings)
+        indexing_setting = IndexingSetting.from_db_model(search_settings)
+
+        return cls(**inference_settings.dict(), **indexing_setting.dict())
+
+
+class SavedSearchSettings(InferenceSettings, IndexingSetting):
+    @classmethod
+    def from_db_model(cls, search_settings: SearchSettings) -> "SavedSearchSettings":
+        return cls(
+            # Indexing Setting
+            model_name=search_settings.model_name,
+            model_dim=search_settings.model_dim,
+            normalize=search_settings.normalize,
+            query_prefix=search_settings.query_prefix,
+            passage_prefix=search_settings.passage_prefix,
+            provider_type=search_settings.provider_type,
+            index_name=search_settings.index_name,
+            multipass_indexing=search_settings.multipass_indexing,
+            # Reranking Details
+            rerank_model_name=search_settings.rerank_model_name,
+            rerank_provider_type=search_settings.rerank_provider_type,
+            rerank_api_key=search_settings.rerank_api_key,
+            num_rerank=search_settings.num_rerank,
+            # Multilingual Expansion
+            multilingual_expansion=search_settings.multilingual_expansion,
+            api_url=search_settings.api_url,
         )
 
 
@@ -77,7 +115,8 @@ class ChunkContext(BaseModel):
     chunks_below: int | None = None
     full_doc: bool = False
 
-    @validator("chunks_above", "chunks_below", pre=True, each_item=False)
+    @field_validator("chunks_above", "chunks_below")
+    @classmethod
     def check_non_negative(cls, value: int, field: Any) -> int:
         if value is not None and value < 0:
             raise ValueError(f"{field.name} must be non-negative")
@@ -102,9 +141,7 @@ class SearchRequest(ChunkContext):
     hybrid_alpha: float | None = None
     rerank_settings: RerankingDetails | None = None
     evaluation_type: LLMEvaluationType = LLMEvaluationType.UNSPECIFIED
-
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class SearchQuery(ChunkContext):
@@ -128,9 +165,7 @@ class SearchQuery(ChunkContext):
 
     num_hits: int = NUM_RETURNED_HITS
     offset: int = 0
-
-    class Config:
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class RetrievalDetails(ChunkContext):
@@ -174,7 +209,7 @@ class InferenceChunk(BaseChunk):
     updated_at: datetime | None
     primary_owners: list[str] | None = None
     secondary_owners: list[str] | None = None
-    large_chunk_reference_ids: list[int] = []
+    large_chunk_reference_ids: list[int] = Field(default_factory=list)
 
     @property
     def unique_id(self) -> str:
@@ -233,7 +268,7 @@ class InferenceChunkUncleaned(InferenceChunk):
         # Assumes the cleaning has already been applied and just needs to translate to the right type
         inference_chunk_data = {
             k: v
-            for k, v in self.dict().items()
+            for k, v in self.model_dump().items()
             if k
             not in ["metadata_suffix"]  # May be other fields to throw out in the future
         }
@@ -253,7 +288,7 @@ class SearchDoc(BaseModel):
     document_id: str
     chunk_ind: int
     semantic_identifier: str
-    link: str | None
+    link: str | None = None
     blurb: str
     source_type: DocumentSource
     boost: int
@@ -262,7 +297,7 @@ class SearchDoc(BaseModel):
     # be `True` when doing an admin search
     hidden: bool
     metadata: dict[str, str | list[str]]
-    score: float | None
+    score: float | None = None
     is_relevant: bool | None = None
     relevance_explanation: str | None = None
     # Matched sections in the doc. Uses Vespa syntax e.g. <hi>TEXT</hi>
@@ -270,13 +305,13 @@ class SearchDoc(BaseModel):
     # ["<hi>the</hi> <hi>answer</hi> is 42", "the answer is <hi>42</hi>""]
     match_highlights: list[str]
     # when the doc was last updated
-    updated_at: datetime | None
-    primary_owners: list[str] | None
-    secondary_owners: list[str] | None
+    updated_at: datetime | None = None
+    primary_owners: list[str] | None = None
+    secondary_owners: list[str] | None = None
     is_internet: bool = False
 
-    def dict(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
-        initial_dict = super().dict(*args, **kwargs)  # type: ignore
+    def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
+        initial_dict = super().model_dump(*args, **kwargs)  # type: ignore
         initial_dict["updated_at"] = (
             self.updated_at.isoformat() if self.updated_at else None
         )
@@ -294,7 +329,7 @@ class SavedSearchDoc(SearchDoc):
         """IMPORTANT: careful using this and not providing a db_doc_id If db_doc_id is not
         provided, it won't be able to actually fetch the saved doc and info later on. So only skip
         providing this if the SavedSearchDoc will not be used in the future"""
-        search_doc_data = search_doc.dict()
+        search_doc_data = search_doc.model_dump()
         search_doc_data["score"] = search_doc_data.get("score") or 0.0
         return cls(**search_doc_data, db_doc_id=db_doc_id)
 

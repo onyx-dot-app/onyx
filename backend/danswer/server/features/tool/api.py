@@ -26,14 +26,14 @@ admin_router = APIRouter(prefix="/admin/tool")
 
 class CustomToolCreate(BaseModel):
     name: str
-    description: str | None
+    description: str | None = None
     definition: dict[str, Any]
 
 
 class CustomToolUpdate(BaseModel):
-    name: str | None
-    description: str | None
-    definition: dict[str, Any] | None
+    name: str | None = None
+    description: str | None = None
+    definition: dict[str, Any] | None = None
 
 
 def _validate_tool_definition(definition: dict[str, Any]) -> None:

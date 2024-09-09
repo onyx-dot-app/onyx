@@ -27,7 +27,7 @@ export function SkippedSearch({
   handleForceSearch: () => void;
 }) {
   return (
-    <div className="flex  text-sm !pt-0 p-1">
+    <div className="flex text-sm !pt-0 p-1">
       <div className="flex mb-auto">
         <FiBook className="my-auto flex-none mr-2" size={14} />
         <div className="my-auto cursor-default">

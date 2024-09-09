@@ -64,7 +64,7 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import GeneratingImageDisplay from "../tools/GeneratingImageDisplay";
 import RegenerateOption from "../RegenerateOption";
 import { LlmOverride } from "@/lib/hooks";
-import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
+import { ContinueGenerating } from "./ContinueMessage";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -123,6 +123,7 @@ function FileDisplay({
 export const AIMessage = ({
   regenerate,
   overriddenModel,
+  continueGenerating,
   shared,
   isActive,
   toggleDocumentSelection,
@@ -150,6 +151,7 @@ export const AIMessage = ({
 }: {
   shared?: boolean;
   isActive?: boolean;
+  continueGenerating?: () => void;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (messageId: number) => void;
   selectedDocuments?: DanswerDocument[] | null;
@@ -231,13 +233,8 @@ export const AIMessage = ({
       }
       return content;
     };
-
     content = trimIncompleteCodeSection(content);
   }
-
-  const danswerSearchToolEnabledForPersona = currentPersona.tools.some(
-    (tool) => tool.in_code_tool_id === SEARCH_TOOL_NAME
-  );
 
   let filteredDocs: FilteredDanswerDocument[] = [];
 
@@ -277,22 +274,23 @@ export const AIMessage = ({
     <div
       id="danswer-ai-message"
       ref={trackedElementRef}
-      className={"py-5 px-2 lg:px-5 relative flex "}
+      className={"py-5 ml-4 px-5 relative flex "}
     >
       <div
-        className={`mx-auto ${shared ? "w-full" : "w-[90%]"} max-w-message-max`}
+        className={`mx-auto ${shared ? "w-full" : "w-[90%]"}  max-w-message-max`}
       >
-        <div className={`${!shared && "mobile:ml-4 xl:ml-8"}`}>
+        <div className={`desktop:mr-12 ${!shared && "mobile:ml-0 md:ml-8"}`}>
           <div className="flex">
             <AssistantIcon
               size="small"
               assistant={alternativeAssistant || currentPersona}
             />
+
             <div className="w-full">
               <div className="max-w-message-max break-words">
                 <div className="w-full ml-4">
                   <div className="max-w-message-max break-words">
-                    {(!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME) && (
+                    {!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
                       <>
                         {query !== undefined &&
                           handleShowRetrieved !== undefined &&
@@ -320,7 +318,8 @@ export const AIMessage = ({
                             </div>
                           )}
                       </>
-                    )}
+                    ) : null}
+
                     {toolCall &&
                       !TOOLS_WITH_CUSTOM_HANDLING.includes(
                         toolCall.tool_name
@@ -363,10 +362,10 @@ export const AIMessage = ({
                         <FileDisplay files={files || []} />
 
                         {typeof content === "string" ? (
-                          <div className="overflow-x-visible w-full pr-2 max-w-[675px]">
+                          <div className="overflow-x-visible max-w-content-max">
                             <ReactMarkdown
                               key={messageId}
-                              className="prose max-w-full"
+                              className="prose max-w-full text-base"
                               components={{
                                 a: (props) => {
                                   const { node, ...rest } = props;
@@ -451,7 +450,7 @@ export const AIMessage = ({
                                     className="text-sm flex w-full pt-1 gap-x-1.5 overflow-hidden justify-between font-semibold text-text-700"
                                   >
                                     <Citation link={doc.link} index={ind + 1} />
-                                    <p className="shrink truncate ellipsis break-all ">
+                                    <p className="shrink truncate ellipsis break-all">
                                       {doc.semantic_identifier ||
                                         doc.document_id}
                                     </p>
@@ -638,6 +637,11 @@ export const AIMessage = ({
             </div>
           </div>
         </div>
+        {(!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME) &&
+          !query &&
+          continueGenerating && (
+            <ContinueGenerating handleContinueGenerating={continueGenerating} />
+          )}
       </div>
     </div>
   );
@@ -732,14 +736,13 @@ export const HumanMessage = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div
-        className={`mx-auto ${shared ? "w-full" : "w-[90%]"} max-w-searchbar-max`}
-      >
+      <div className={`mx-auto ${shared ? "w-full" : "w-[90%]"} max-w-[790px]`}>
         <div className="xl:ml-8">
           <div className="flex flex-col mr-4">
             <FileDisplay alignBubble files={files || []} />
+
             <div className="flex justify-end">
-              <div className="w-full ml-8 flex w-full max-w-message-max break-words">
+              <div className="w-full ml-8 flex w-full w-[800px] break-words">
                 {isEditing ? (
                   <div className="w-full">
                     <div
@@ -760,24 +763,24 @@ export const HumanMessage = ({
                       <textarea
                         ref={textareaRef}
                         className={`
-                      m-0 
-                      w-full 
-                      h-auto
-                      shrink
-                      border-0
-                      rounded-lg 
-                      overflow-y-hidden
-                      bg-background-emphasis 
-                      whitespace-normal 
-                      break-word
-                      overscroll-contain
-                      outline-none 
-                      placeholder-gray-400 
-                      resize-none
-                      pl-4
-                      overflow-y-auto
-                      pr-12 
-                      py-4`}
+                        m-0 
+                        w-full 
+                        h-auto
+                        shrink
+                        border-0
+                        rounded-lg 
+                        overflow-y-hidden
+                        bg-background-emphasis 
+                        whitespace-normal 
+                        break-word
+                        overscroll-contain
+                        outline-none 
+                        placeholder-gray-400 
+                        resize-none
+                        pl-4
+                        overflow-y-auto
+                        pr-12 
+                        py-4`}
                         aria-multiline
                         role="textarea"
                         value={editedContent}
@@ -901,7 +904,7 @@ export const HumanMessage = ({
                     ) : (
                       <div className="h-[27px]" />
                     )}
-                    <p className="ml-auto rounded-lg p-1">{content}</p>
+                    <div className="ml-auto rounded-lg p-1">{content}</div>
                   </>
                 )}
               </div>

@@ -16,8 +16,11 @@ INDEXING_MODEL_SERVER_PORT = int(
 )
 
 # Danswer custom Deep Learning Models
+CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
+CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
 INTENT_MODEL_VERSION = "danswer/hybrid-intent-token-classifier"
 INTENT_MODEL_TAG = "v1.0.3"
+
 
 # Bi-Encoder, other details
 DOC_EMBEDDING_CONTEXT_SIZE = 512
@@ -54,3 +57,21 @@ LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "danswer"
 DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true"
 # notset, debug, info, notice, warning, error, or critical
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "notice")
+
+
+# Fields which should only be set on new search setting
+PRESERVED_SEARCH_FIELDS = [
+    "id",
+    "provider_type",
+    "api_key",
+    "model_name",
+    "api_url",
+    "index_name",
+    "multipass_indexing",
+    "model_dim",
+    "normalize",
+    "passage_prefix",
+    "query_prefix",
+]
+
+CUSTOM_REFRESH_URL = os.environ.get("CUSTOM_REFRESH_URL") or "/settings/refresh-token"

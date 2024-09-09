@@ -33,6 +33,12 @@ spec:
         - containerPort: 3000
         # There are some extra values since this is shared between services
         # There are no conflicts though, extra env variables are simply ignored
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: danswer-secrets
+              key: redis_password
         envFrom:
         - configMapRef:
             name: env-configmap

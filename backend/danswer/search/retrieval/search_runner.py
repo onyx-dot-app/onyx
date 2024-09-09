@@ -3,11 +3,11 @@ from collections.abc import Callable
 
 import nltk  # type:ignore
 from nltk.corpus import stopwords  # type:ignore
-from nltk.stem import WordNetLemmatizer  # type:ignore
 from nltk.tokenize import word_tokenize  # type:ignore
 from sqlalchemy.orm import Session
 
-from danswer.db.embedding_model import get_current_db_embedding_model
+from danswer.db.search_settings import get_current_search_settings
+from danswer.db.search_settings import get_multilingual_expansion
 from danswer.document_index.interfaces import DocumentIndex
 from danswer.document_index.interfaces import VespaChunkRequest
 from danswer.document_index.vespa.shared_utils.utils import (
@@ -23,7 +23,6 @@ from danswer.search.models import MAX_METRICS_CONTENT
 from danswer.search.models import RetrievalMetricsContainer
 from danswer.search.models import SearchQuery
 from danswer.search.postprocessing.postprocessing import cleanup_chunks
-from danswer.search.search_settings import get_multilingual_expansion
 from danswer.search.utils import inference_section_from_chunks
 from danswer.secondary_llm_flows.query_expansion import multilingual_query_expansion
 from danswer.utils.logger import setup_logger
@@ -40,7 +39,7 @@ logger = setup_logger()
 def download_nltk_data() -> None:
     resources = {
         "stopwords": "corpora/stopwords",
-        "wordnet": "corpora/wordnet",
+        # "wordnet": "corpora/wordnet",  # Not in use
         "punkt": "tokenizers/punkt",
     }
 
@@ -58,15 +57,16 @@ def download_nltk_data() -> None:
 
 
 def lemmatize_text(keywords: list[str]) -> list[str]:
-    try:
-        query = " ".join(keywords)
-        lemmatizer = WordNetLemmatizer()
-        word_tokens = word_tokenize(query)
-        lemmatized_words = [lemmatizer.lemmatize(word) for word in word_tokens]
-        combined_keywords = list(set(keywords + lemmatized_words))
-        return combined_keywords
-    except Exception:
-        return keywords
+    raise NotImplementedError("Lemmatization should not be used currently")
+    # try:
+    #     query = " ".join(keywords)
+    #     lemmatizer = WordNetLemmatizer()
+    #     word_tokens = word_tokenize(query)
+    #     lemmatized_words = [lemmatizer.lemmatize(word) for word in word_tokens]
+    #     combined_keywords = list(set(keywords + lemmatized_words))
+    #     return combined_keywords
+    # except Exception:
+    #     return keywords
 
 
 def remove_stop_words_and_punctuation(keywords: list[str]) -> list[str]:
@@ -121,15 +121,10 @@ def doc_index_retrieval(
     from the large chunks to the referenced chunks,
     dedupes the chunks, and cleans the chunks.
     """
-    db_embedding_model = get_current_db_embedding_model(db_session)
+    search_settings = get_current_search_settings(db_session)
 
-    model = EmbeddingModel(
-        model_name=db_embedding_model.model_name,
-        query_prefix=db_embedding_model.query_prefix,
-        passage_prefix=db_embedding_model.passage_prefix,
-        normalize=db_embedding_model.normalize,
-        api_key=db_embedding_model.api_key,
-        provider_type=db_embedding_model.provider_type,
+    model = EmbeddingModel.from_db_model(
+        search_settings=search_settings,
         # The below are globally set, this flow always uses the indexing one
         server_host=MODEL_SERVER_HOST,
         server_port=MODEL_SERVER_PORT,
@@ -230,7 +225,7 @@ def retrieve_chunks(
 ) -> list[InferenceChunk]:
     """Returns a list of the best chunks from an initial keyword/semantic/ hybrid search."""
 
-    multilingual_expansion = get_multilingual_expansion()
+    multilingual_expansion = get_multilingual_expansion(db_session)
     # Don't do query expansion on complex queries, rephrasings likely would not work well
     if not multilingual_expansion or "\n" in query.query or "\r" in query.query:
         top_chunks = doc_index_retrieval(

@@ -15,14 +15,19 @@ export function ChangeCredentialsModal({
   onCancel,
   onDeleted,
   useFileUpload,
+  isProxy = false,
 }: {
   provider: CloudEmbeddingProvider;
   onConfirm: () => void;
   onCancel: () => void;
   onDeleted: () => void;
   useFileUpload: boolean;
+  isProxy?: boolean;
 }) {
   const [apiKey, setApiKey] = useState("");
+  const [apiUrl, setApiUrl] = useState("");
+  const [modelName, setModelName] = useState("");
+
   const [testError, setTestError] = useState<string>("");
   const [fileName, setFileName] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -74,7 +79,7 @@ export function ChangeCredentialsModal({
 
     try {
       const response = await fetch(
-        `${EMBEDDING_PROVIDERS_ADMIN_URL}/${provider.provider_type}`,
+        `${EMBEDDING_PROVIDERS_ADMIN_URL}/${provider.provider_type.toLowerCase()}`,
         {
           method: "DELETE",
         }
@@ -99,13 +104,18 @@ export function ChangeCredentialsModal({
 
   const handleSubmit = async () => {
     setTestError("");
+    const normalizedProviderType = provider.provider_type
+      .toLowerCase()
+      .split(" ")[0];
     try {
       const testResponse = await fetch("/api/admin/embedding/test-embedding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          provider_type: provider.provider_type.toLowerCase().split(" ")[0],
+          provider_type: normalizedProviderType,
           api_key: apiKey,
+          api_url: apiUrl,
+          model_name: modelName,
         }),
       });
 
@@ -118,8 +128,9 @@ export function ChangeCredentialsModal({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          provider_type: provider.provider_type.toLowerCase().split(" ")[0],
+          provider_type: normalizedProviderType,
           api_key: apiKey,
+          api_url: apiUrl,
           is_default_provider: false,
           is_configured: true,
         }),
@@ -128,7 +139,8 @@ export function ChangeCredentialsModal({
       if (!updateResponse.ok) {
         const errorData = await updateResponse.json();
         throw new Error(
-          errorData.detail || "Failed to update provider- check your API key"
+          errorData.detail ||
+            `Failed to update provider- check your ${isProxy ? "API URL" : "API key"}`
         );
       }
 
@@ -144,26 +156,20 @@ export function ChangeCredentialsModal({
     <Modal
       width="max-w-3xl"
       icon={provider.icon}
-      title={`Modify your ${provider.provider_type} key`}
+      title={`Modify your ${provider.provider_type} ${isProxy ? "Configuration" : "key"}`}
       onOutsideClick={onCancel}
     >
-      <div className="mb-4">
-        <Subtitle className="font-bold text-lg">
-          Want to swap out your key?
-        </Subtitle>
-        <a
-          href={provider.apiLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline cursor-pointer mt-2 mb-4"
-        >
-          Visit API
-        </a>
+      <>
+        <p className="mb-4">
+          You can modify your configuration by providing a new API key
+          {isProxy ? " or API URL." : "."}
+        </p>
 
-        <div className="flex flex-col mt-4 gap-y-2">
+        <div className="mb-4 flex flex-col gap-y-2">
+          <Label className="mt-2">API Key</Label>
           {useFileUpload ? (
             <>
-              <Label>Upload JSON File</Label>
+              <Label className="mt-2">Upload JSON File</Label>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -191,42 +197,97 @@ export function ChangeCredentialsModal({
               />
             </>
           )}
-        </div>
 
-        {testError && (
-          <Callout title="Error" color="red" className="mt-4">
-            {testError}
-          </Callout>
-        )}
+          {isProxy && (
+            <>
+              <Label className="mt-2">API URL</Label>
 
-        <div className="flex mt-4 justify-between">
+              <input
+                className={`
+                    border 
+                    border-border 
+                    rounded 
+                    w-full 
+                    py-2 
+                    px-3 
+                    bg-background-emphasis
+                `}
+                value={apiUrl}
+                onChange={(e: any) => setApiUrl(e.target.value)}
+                placeholder="Paste your API URL here"
+              />
+
+              {deletionError && (
+                <Callout title="Error" color="red" className="mt-4">
+                  {deletionError}
+                </Callout>
+              )}
+
+              <div>
+                <Label className="mt-2">Test Model</Label>
+                <p>
+                  Since you are using a liteLLM proxy, we&apos;ll need a model
+                  name to test the connection with.
+                </p>
+              </div>
+              <input
+                className={`
+                 border 
+                 border-border 
+                 rounded 
+                 w-full 
+                 py-2 
+                 px-3 
+                 bg-background-emphasis
+             `}
+                value={modelName}
+                onChange={(e: any) => setModelName(e.target.value)}
+                placeholder="Paste your API URL here"
+              />
+
+              {deletionError && (
+                <Callout title="Error" color="red" className="mt-4">
+                  {deletionError}
+                </Callout>
+              )}
+            </>
+          )}
+
+          {testError && (
+            <Callout title="Error" color="red" className="my-4">
+              {testError}
+            </Callout>
+          )}
+
           <Button
+            className="mr-auto mt-4"
             color="blue"
             onClick={() => handleSubmit()}
             disabled={!apiKey}
           >
-            Swap Key
+            Update Configuration
           </Button>
+
+          <Divider />
+
+          <Subtitle className="mt-4 font-bold text-lg mb-2">
+            You can also delete your configuration.
+          </Subtitle>
+          <Text className="mb-2">
+            This is only possible if you have already switched to a different
+            embedding type!
+          </Text>
+
+          <Button className="mr-auto" onClick={handleDelete} color="red">
+            Delete Configuration
+          </Button>
+          {deletionError && (
+            <Callout title="Error" color="red" className="mt-4">
+              {deletionError}
+            </Callout>
+          )}
         </div>
-        <Divider />
-
-        <Subtitle className="mt-4 font-bold text-lg mb-2">
-          You can also delete your key.
-        </Subtitle>
-        <Text className="mb-2">
-          This is only possible if you have already switched to a different
-          embedding type!
-        </Text>
-
-        <Button onClick={handleDelete} color="red">
-          Delete key
-        </Button>
-        {deletionError && (
-          <Callout title="Error" color="red" className="mt-4">
-            {deletionError}
-          </Callout>
-        )}
-      </div>
+      </>
     </Modal>
   );
 }

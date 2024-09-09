@@ -2,6 +2,7 @@ import { Quote } from "@/lib/search/interfaces";
 import { ResponseSection, StatusOptions } from "./ResponseSection";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { MinimalMarkdown } from "@/components/chat_search/MinimalMarkdown";
 
 const TEMP_STRING = "__$%^TEMP$%^__";
 
@@ -40,12 +41,10 @@ export const AnswerSection = (props: AnswerSectionProps) => {
     header = <></>;
 
     body = (
-      <ReactMarkdown
-        className="prose text-sm max-w-full"
-        remarkPlugins={[remarkGfm]}
-      >
-        {replaceNewlines(props.answer || "")}
-      </ReactMarkdown>
+      <MinimalMarkdown
+        useCodeBlock
+        content={replaceNewlines(props.answer || "")}
+      />
     );
 
     // error while building answer (NOTE: if error occurs during quote generation
@@ -63,12 +62,7 @@ export const AnswerSection = (props: AnswerSectionProps) => {
     status = "success";
     header = <></>;
     body = (
-      <ReactMarkdown
-        className="prose text-sm max-w-full"
-        remarkPlugins={[remarkGfm]}
-      >
-        {replaceNewlines(props.answer)}
-      </ReactMarkdown>
+      <MinimalMarkdown useCodeBlock content={replaceNewlines(props.answer)} />
     );
   }
 

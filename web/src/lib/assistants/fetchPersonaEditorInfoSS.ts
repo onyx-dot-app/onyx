@@ -2,7 +2,10 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { CCPairBasicInfo, DocumentSet, User } from "../types";
 import { getCurrentUserSS } from "../userSS";
 import { fetchSS } from "../utilsSS";
-import { FullLLMProvider } from "@/app/admin/configuration/llm/interfaces";
+import {
+  FullLLMProvider,
+  getProviderIcon,
+} from "@/app/admin/configuration/llm/interfaces";
 import { ToolSnapshot } from "../tools/interfaces";
 import { fetchToolsSS } from "../tools/fetchTools";
 import {
@@ -94,17 +97,7 @@ export async function fetchAssistantEditorInfoSS(
   }
 
   for (const provider of llmProviders) {
-    if (provider.provider == "openai") {
-      provider.icon = OpenAIIcon;
-    } else if (provider.provider == "anthropic") {
-      provider.icon = AnthropicIcon;
-    } else if (provider.provider == "bedrock") {
-      provider.icon = AWSIcon;
-    } else if (provider.provider == "azure") {
-      provider.icon = AzureIcon;
-    } else {
-      provider.icon = OpenSourceIcon;
-    }
+    provider.icon = getProviderIcon(provider.provider);
   }
 
   const existingPersona = personaResponse

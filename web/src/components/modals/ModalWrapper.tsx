@@ -1,5 +1,6 @@
 "use client";
 import { XIcon } from "@/components/icons/icons";
+import { isEventWithinRef } from "@/lib/contains";
 import { useRef } from "react";
 
 export const ModalWrapper = ({
@@ -19,7 +20,8 @@ export const ModalWrapper = ({
     if (
       onClose &&
       modalRef.current &&
-      !modalRef.current.contains(e.target as Node)
+      !modalRef.current.contains(e.target as Node) &&
+      !isEventWithinRef(e.nativeEvent, modalRef)
     ) {
       onClose();
     }

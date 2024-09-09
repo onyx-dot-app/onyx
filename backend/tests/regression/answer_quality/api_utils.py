@@ -57,7 +57,7 @@ def get_answer_from_query(
         "Content-Type": "application/json",
     }
 
-    body = new_message_request.dict()
+    body = new_message_request.model_dump()
     body["user"] = None
     try:
         response_json = requests.post(url, headers=headers, json=body).json()
@@ -122,7 +122,7 @@ def create_cc_pair(env_name: str, connector_id: int, credential_id: int) -> None
         env_name, f"/manage/connector/{connector_id}/credential/{credential_id}"
     )
 
-    body = {"name": "zip_folder_contents", "is_public": True}
+    body = {"name": "zip_folder_contents", "is_public": True, "groups": []}
     print("body:", body)
     response = requests.put(url, headers=GENERAL_HEADERS, json=body)
     if response.status_code == 200:
@@ -167,7 +167,7 @@ def create_connector(env_name: str, file_paths: list[str]) -> int:
         indexing_start=None,
     )
 
-    body = connector.dict()
+    body = connector.model_dump()
     response = requests.post(url, headers=GENERAL_HEADERS, json=body)
     if response.status_code == 200:
         return response.json()["id"]

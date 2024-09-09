@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from collections.abc import Iterator
-from typing import Any
 from typing import TYPE_CHECKING
 
 from langchain.schema.messages import AIMessage
@@ -8,8 +7,9 @@ from langchain.schema.messages import BaseMessage
 from langchain.schema.messages import HumanMessage
 from langchain.schema.messages import SystemMessage
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
-from pydantic import root_validator
+from pydantic import model_validator
 
 from danswer.chat.models import AnswerQuestionStreamReturn
 from danswer.configs.constants import MessageType
@@ -117,22 +117,19 @@ class AnswerStyleConfig(BaseModel):
         default_factory=DocumentPruningConfig
     )
 
-    @root_validator
-    def check_quotes_and_citation(cls, values: dict[str, Any]) -> dict[str, Any]:
-        citation_config = values.get("citation_config")
-        quotes_config = values.get("quotes_config")
-
-        if citation_config is None and quotes_config is None:
+    @model_validator(mode="after")
+    def check_quotes_and_citation(self) -> "AnswerStyleConfig":
+        if self.citation_config is None and self.quotes_config is None:
             raise ValueError(
                 "One of `citation_config` or `quotes_config` must be provided"
             )
 
-        if citation_config is not None and quotes_config is not None:
+        if self.citation_config is not None and self.quotes_config is not None:
             raise ValueError(
                 "Only one of `citation_config` or `quotes_config` must be provided"
             )
 
-        return values
+        return self
 
 
 class PromptConfig(BaseModel):
@@ -160,6 +157,4 @@ class PromptConfig(BaseModel):
             include_citations=model.include_citations,
         )
 
-    # needed so that this can be passed into lru_cache funcs
-    class Config:
-        frozen = True
+    model_config = ConfigDict(frozen=True)

@@ -9,6 +9,7 @@ from danswer.auth.users import current_curator_or_admin_user
 from danswer.db.engine import get_session
 from danswer.db.models import User
 from danswer.db.models import UserRole
+from danswer.utils.logger import setup_logger
 from ee.danswer.db.user_group import fetch_user_groups
 from ee.danswer.db.user_group import fetch_user_groups_for_user
 from ee.danswer.db.user_group import insert_user_group
@@ -19,6 +20,8 @@ from ee.danswer.server.user_group.models import SetCuratorRequest
 from ee.danswer.server.user_group.models import UserGroup
 from ee.danswer.server.user_group.models import UserGroupCreate
 from ee.danswer.server.user_group.models import UserGroupUpdate
+
+logger = setup_logger()
 
 router = APIRouter(prefix="/manage")
 
@@ -90,6 +93,7 @@ def set_user_curator(
             set_curator_request=set_curator_request,
         )
     except ValueError as e:
+        logger.error(f"Error setting user curator: {e}")
         raise HTTPException(status_code=404, detail=str(e))
 
 

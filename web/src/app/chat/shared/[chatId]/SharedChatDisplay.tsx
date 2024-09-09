@@ -67,7 +67,7 @@ export function SharedChatDisplay({
     <div className="w-full h-[100dvh] overflow-hidden">
       <div className="flex max-h-full overflow-hidden pb-[72px]">
         <div className="flex w-full overflow-hidden overflow-y-scroll">
-          <div className="w-full h-full flex-col flex  max-w-message-max mx-auto">
+          <div className="w-full h-full flex-col flex max-w-message-max mx-auto">
             <div className="px-5 pt-8">
               <h1 className="text-3xl text-strong font-bold">
                 {chatSession.description ||

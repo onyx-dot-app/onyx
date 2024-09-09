@@ -19,6 +19,7 @@ import {
 import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
 import { useState } from "react";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
 
 const USER_ROLE_LABELS: Record<UserRole, string> = {
   [UserRole.BASIC]: "Basic",
@@ -157,6 +158,59 @@ const DeactivaterButton = ({
   );
 };
 
+const DeleteUserButton = ({
+  user,
+  setPopup,
+  mutate,
+}: {
+  user: User;
+  setPopup: (spec: PopupSpec) => void;
+  mutate: () => void;
+}) => {
+  const { trigger, isMutating } = useSWRMutation(
+    "/api/manage/admin/delete-user",
+    userMutationFetcher,
+    {
+      onSuccess: () => {
+        mutate();
+        setPopup({
+          message: "User deleted successfully!",
+          type: "success",
+        });
+      },
+      onError: (errorMsg) =>
+        setPopup({
+          message: `Unable to delete user - ${errorMsg}`,
+          type: "error",
+        }),
+    }
+  );
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  return (
+    <>
+      {showDeleteModal && (
+        <DeleteEntityModal
+          entityType="user"
+          entityName={user.email}
+          onClose={() => setShowDeleteModal(false)}
+          onSubmit={() => trigger({ user_email: user.email, method: "DELETE" })}
+        />
+      )}
+
+      <Button
+        className="w-min"
+        onClick={() => setShowDeleteModal(true)}
+        disabled={isMutating}
+        size="xs"
+        color="red"
+      >
+        Delete
+      </Button>
+    </>
+  );
+};
+
 const SignedUpUserTable = ({
   users,
   setPopup,
@@ -215,13 +269,20 @@ const SignedUpUserTable = ({
                   <i>{user.status === "live" ? "Active" : "Inactive"}</i>
                 </TableCell>
                 <TableCell>
-                  <div className="flex flex-col items-end gap-y-2">
+                  <div className="flex justify-end  gap-x-2">
                     <DeactivaterButton
                       user={user}
                       deactivate={user.status === UserStatus.live}
                       setPopup={setPopup}
                       mutate={mutate}
                     />
+                    {user.status == UserStatus.deactivated && (
+                      <DeleteUserButton
+                        user={user}
+                        setPopup={setPopup}
+                        mutate={mutate}
+                      />
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

@@ -66,7 +66,7 @@ const SlackBotConfigsTable = ({
         <TableHead>
           <TableRow>
             <TableHeaderCell>Channels</TableHeaderCell>
-            <TableHeaderCell>Persona</TableHeaderCell>
+            <TableHeaderCell>Assistant</TableHeaderCell>
             <TableHeaderCell>Document Sets</TableHeaderCell>
             <TableHeaderCell>Delete</TableHeaderCell>
           </TableRow>

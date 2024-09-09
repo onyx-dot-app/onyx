@@ -57,7 +57,7 @@ export function ChatDocumentDisplay({
           ) : (
             <SourceIcon sourceType={document.source_type} iconSize={18} />
           )}
-          <p className="overflow-hidden text-left text-ellipsis mx-2 my-auto text-sm ">
+          <p className="overflow-hidden text-left text-ellipsis mx-2 my-auto text-sm">
             {document.semantic_identifier || document.document_id}
           </p>
         </a>

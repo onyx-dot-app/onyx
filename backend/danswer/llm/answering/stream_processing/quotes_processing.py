@@ -285,7 +285,9 @@ def process_model_tokens(
 def build_quotes_processor(
     context_docs: list[LlmDoc], is_json_prompt: bool
 ) -> Callable[[Iterator[str]], AnswerQuestionStreamReturn]:
-    def stream_processor(tokens: Iterator[str]) -> AnswerQuestionStreamReturn:
+    def stream_processor(
+        tokens: Iterator[str],
+    ) -> AnswerQuestionStreamReturn:
         yield from process_model_tokens(
             tokens=tokens,
             context_docs=context_docs,

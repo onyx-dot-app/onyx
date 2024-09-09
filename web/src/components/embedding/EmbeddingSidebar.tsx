@@ -19,7 +19,7 @@ export default function EmbeddingSidebar() {
   const settingSteps = ["Embedding Model", "Reranking Model", "Advanced"];
 
   return (
-    <div className="flex bg-background text-default ">
+    <div className="flex bg-background text-default">
       <div
         className={`flex-none
                   bg-background-100

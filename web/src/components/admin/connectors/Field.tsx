@@ -21,6 +21,7 @@ import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState } from "react";
 import remarkGfm from "remark-gfm";
+import { EditIcon } from "@/components/icons/icons";
 
 export function SectionHeader({
   children,
@@ -33,13 +34,15 @@ export function SectionHeader({
 export function Label({
   children,
   small,
+  className,
 }: {
   children: string | JSX.Element;
   small?: boolean;
+  className?: string;
 }) {
   return (
     <div
-      className={`block font-medium base ${small ? "text-sm" : "text-base"}`}
+      className={`block font-medium base ${className} ${small ? "text-sm" : "text-base"}`}
     >
       {children}
     </div>
@@ -63,7 +66,7 @@ export function ExplanationText({
 }) {
   return link ? (
     <a
-      className="underline cursor-pointer text-sm font-medium"
+      className="underline text-text-500 cursor-pointer text-sm font-medium"
       target="_blank"
       href={link}
     >
@@ -100,8 +103,11 @@ export function TextFormField({
   label,
   subtext,
   placeholder,
+  value,
   onChange,
   type = "text",
+  optional,
+  includeRevert,
   isTextArea = false,
   disabled = false,
   autoCompleteDisabled = true,
@@ -114,19 +120,20 @@ export function TextFormField({
   explanationText,
   explanationLink,
   small,
-  noPadding,
   removeLabel,
 }: {
+  value?: string;
   name: string;
   removeLabel?: boolean;
   label: string;
   subtext?: string | JSX.Element;
   placeholder?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  includeRevert?: boolean;
+  optional?: boolean;
   type?: string;
   isTextArea?: boolean;
   disabled?: boolean;
-  noPadding?: boolean;
   autoCompleteDisabled?: boolean;
   error?: string;
   defaultHeight?: string;
@@ -142,11 +149,27 @@ export function TextFormField({
   if (isTextArea && !heightString) {
     heightString = "h-28";
   }
+  const [field, , helpers] = useField(name);
+  const { setValue } = helpers;
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    setValue(e.target.value);
+    if (onChange) {
+      onChange(e as React.ChangeEvent<HTMLInputElement>);
+    }
+  };
 
   return (
-    <div className={`${!noPadding && "mb-6"}`}>
+    <div className="w-full">
       <div className="flex gap-x-2 items-center">
-        {!removeLabel && <Label small={small}>{label}</Label>}
+        {!removeLabel && (
+          <Label className="text-text-950" small={small}>
+            {label}
+          </Label>
+        )}
+        {optional ? <span>(optional) </span> : ""}
         {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
         {error ? (
           <ManualErrorMessage>{error}</ManualErrorMessage>
@@ -160,33 +183,55 @@ export function TextFormField({
           )
         )}
       </div>
-
       {subtext && <SubLabel>{subtext}</SubLabel>}
-
-      <Field
-        as={isTextArea ? "textarea" : "input"}
-        type={type}
-        name={name}
-        id={name}
-        className={`
+      <div className={`w-full flex ${includeRevert && "gap-x-2"}`}>
+        <Field
+          as={isTextArea ? "textarea" : "input"}
+          type={type}
+          defaultValue={value}
+          name={name}
+          id={name}
+          className={`
           ${small && "text-sm"}
           border 
           border-border 
-          rounded 
+          rounded-lg
           w-full 
           py-2 
-          px-3 
+          px-3
           mt-1
+          placeholder:font-description 
+          placeholder:text-base 
+          placeholder:text-text-400
           ${heightString}
           ${fontSize}
-          ${disabled ? " bg-background-strong" : " bg-background-emphasis"}
+          ${disabled ? " bg-background-strong" : " bg-white"}
           ${isCode ? " font-mono" : ""}
         `}
-        disabled={disabled}
-        placeholder={placeholder}
-        autoComplete={autoCompleteDisabled ? "off" : undefined}
-        {...(onChange ? { onChange } : {})}
-      />
+          disabled={disabled}
+          placeholder={placeholder}
+          autoComplete={autoCompleteDisabled ? "off" : undefined}
+          onChange={handleChange}
+        />
+        {includeRevert && (
+          <div className="flex-none mt-auto">
+            <button
+              className="text-xs h-[35px] my-auto p-1.5 rounded bg-background-900 border-border-dark text-text-300 flex gap-x-1"
+              onClick={(e) => {
+                if (onChange) {
+                  onChange({
+                    target: { value: "" },
+                  } as React.ChangeEvent<HTMLInputElement>);
+                }
+                e.preventDefault();
+              }}
+            >
+              <EditIcon className="text-netural-300 my-auto" />
+              <p className="my-auto">Revert</p>
+            </button>
+          </div>
+        )}
+      </div>
 
       {explanationText && (
         <ExplanationText link={explanationLink} text={explanationText} />
@@ -340,11 +385,13 @@ interface BooleanFormFieldProps {
   label: string;
   subtext?: string | JSX.Element;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  noPadding?: boolean;
+  removeIndent?: boolean;
   small?: boolean;
   alignTop?: boolean;
   noLabel?: boolean;
   disabled?: boolean;
+  checked?: boolean;
+  optional?: boolean;
 }
 
 export const BooleanFormField = ({
@@ -352,27 +399,41 @@ export const BooleanFormField = ({
   label,
   subtext,
   onChange,
-  noPadding,
+  removeIndent,
   noLabel,
+  optional,
   small,
   disabled,
   alignTop,
+  checked,
 }: BooleanFormFieldProps) => {
+  const [field, meta, helpers] = useField<boolean>(name);
+  const { setValue } = helpers;
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValue(e.target.checked);
+    if (onChange) {
+      onChange(e);
+    }
+  };
+
   return (
-    <div className="mb-4">
+    <div>
       <label className="flex text-sm">
         <Field
-          disabled={disabled}
-          name={name}
           type="checkbox"
-          className={`${noPadding ? "mr-3" : "mx-3"} px-5 w-3.5 h-3.5 ${
-            alignTop ? "mt-1" : "my-auto"
-          }`}
-          {...(onChange ? { onChange } : {})}
+          {...field}
+          checked={checked !== undefined ? checked : field.value}
+          disabled={disabled}
+          onChange={handleChange}
+          className={`${removeIndent ? "mr-2" : "mx-3"}     
+              px-5 w-3.5 h-3.5 ${alignTop ? "mt-1" : "my-auto"}`}
         />
         {!noLabel && (
           <div>
-            <Label small={small}>{label}</Label>
+            <Label
+              small={small}
+            >{`${label}${optional ? " (Optional)" : ""}`}</Label>
             {subtext && <SubLabel>{subtext}</SubLabel>}
           </div>
         )}
@@ -509,10 +570,9 @@ export function SelectorFormField({
   const { setFieldValue } = useFormikContext();
 
   return (
-    <div className="mb-4">
+    <div>
       {label && <Label>{label}</Label>}
       {subtext && <SubLabel>{subtext}</SubLabel>}
-
       <div className="mt-2">
         <DefaultDropdown
           options={options}

@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from io import BytesIO
+from typing import Any
 from typing import cast
 from uuid import uuid4
 
@@ -73,5 +75,7 @@ def save_file_from_url(url: str) -> str:
 
 
 def save_files_from_urls(urls: list[str]) -> list[str]:
-    funcs = [(save_file_from_url, (url,)) for url in urls]
+    funcs: list[tuple[Callable[..., Any], tuple[Any, ...]]] = [
+        (save_file_from_url, (url,)) for url in urls
+    ]
     return run_functions_tuples_in_parallel(funcs)

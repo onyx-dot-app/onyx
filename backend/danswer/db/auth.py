@@ -28,7 +28,7 @@ def get_default_admin_user_emails() -> list[str]:
     get_default_admin_user_emails_fn: Callable[
         [], list[str]
     ] = fetch_versioned_implementation_with_fallback(
-        "danswer.auth.users", "get_default_admin_user_emails_", lambda: []
+        "danswer.auth.users", "get_default_admin_user_emails_", lambda: list[str]()
     )
     return get_default_admin_user_emails_fn()
 

@@ -20,6 +20,7 @@ export default async function Page() {
       <Card>
         <AssistantEditor
           {...values}
+          admin
           defaultPublic={true}
           redirectType={SuccessfulPersonaUpdateRedirectType.ADMIN}
         />

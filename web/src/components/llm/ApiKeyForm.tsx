@@ -55,6 +55,7 @@ export const ApiKeyForm = ({
             return (
               <TabPanel key={provider.name}>
                 <LLMProviderUpdateForm
+                  hideAdvanced
                   llmProviderDescriptor={provider}
                   onClose={() => onSuccess()}
                   shouldMarkAsDefault

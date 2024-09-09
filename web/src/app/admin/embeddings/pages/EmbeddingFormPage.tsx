@@ -8,7 +8,7 @@ import { Button, Card, Text } from "@tremor/react";
 import { ArrowLeft, ArrowRight, WarningCircle } from "@phosphor-icons/react";
 import {
   CloudEmbeddingModel,
-  EmbeddingModelDescriptor,
+  EmbeddingProvider,
   HostedEmbeddingModel,
 } from "../../../../components/embedding/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -17,7 +17,8 @@ import useSWR, { mutate } from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
 import AdvancedEmbeddingFormPage from "./AdvancedEmbeddingFormPage";
 import {
-  AdvancedDetails,
+  AdvancedSearchConfiguration,
+  RerankerProvider,
   RerankingDetails,
   SavedSearchSettings,
 } from "../interfaces";
@@ -30,21 +31,28 @@ export default function EmbeddingForm() {
   const { popup, setPopup } = usePopup();
 
   const [advancedEmbeddingDetails, setAdvancedEmbeddingDetails] =
-    useState<AdvancedDetails>({
-      disable_rerank_for_streaming: false,
-      multilingual_expansion: [],
+    useState<AdvancedSearchConfiguration>({
+      model_name: "",
+      model_dim: 0,
+      normalize: false,
+      query_prefix: "",
+      passage_prefix: "",
+      index_name: "",
       multipass_indexing: true,
+      multilingual_expansion: [],
+      disable_rerank_for_streaming: false,
+      api_url: null,
     });
 
   const [rerankingDetails, setRerankingDetails] = useState<RerankingDetails>({
-    api_key: "",
+    rerank_api_key: "",
     num_rerank: 0,
-    provider_type: null,
+    rerank_provider_type: null,
     rerank_model_name: "",
   });
 
   const updateAdvancedEmbeddingDetails = (
-    key: keyof AdvancedDetails,
+    key: keyof AdvancedSearchConfiguration,
     value: any
   ) => {
     setAdvancedEmbeddingDetails((values) => ({ ...values, [key]: value }));
@@ -52,7 +60,7 @@ export default function EmbeddingForm() {
 
   async function updateSearchSettings(searchSettings: SavedSearchSettings) {
     const response = await fetch(
-      "/api/search-settings/update-search-settings",
+      "/api/search-settings/update-inference-settings",
       {
         method: "POST",
         headers: {
@@ -80,7 +88,7 @@ export default function EmbeddingForm() {
     isLoading: isLoadingCurrentModel,
     error: currentEmbeddingModelError,
   } = useSWR<CloudEmbeddingModel | HostedEmbeddingModel | null>(
-    "/api/search-settings/get-current-embedding-model",
+    "/api/search-settings/get-current-search-settings",
     errorHandlingFetcher,
     { refreshInterval: 5000 } // 5 seconds
   );
@@ -91,7 +99,7 @@ export default function EmbeddingForm() {
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
     useSWR<SavedSearchSettings | null>(
-      "/api/search-settings/get-search-settings",
+      "/api/search-settings/get-current-search-settings",
       errorHandlingFetcher,
       { refreshInterval: 5000 } // 5 seconds
     );
@@ -99,31 +107,38 @@ export default function EmbeddingForm() {
   useEffect(() => {
     if (searchSettings) {
       setAdvancedEmbeddingDetails({
+        model_name: searchSettings.model_name,
+        model_dim: searchSettings.model_dim,
+        normalize: searchSettings.normalize,
+        query_prefix: searchSettings.query_prefix,
+        passage_prefix: searchSettings.passage_prefix,
+        index_name: searchSettings.index_name,
+        multipass_indexing: searchSettings.multipass_indexing,
+        multilingual_expansion: searchSettings.multilingual_expansion,
         disable_rerank_for_streaming:
           searchSettings.disable_rerank_for_streaming,
-        multilingual_expansion: searchSettings.multilingual_expansion,
-        multipass_indexing: searchSettings.multipass_indexing,
+        api_url: null,
       });
       setRerankingDetails({
-        api_key: searchSettings.api_key,
+        rerank_api_key: searchSettings.rerank_api_key,
         num_rerank: searchSettings.num_rerank,
-        provider_type: searchSettings.provider_type,
+        rerank_provider_type: searchSettings.rerank_provider_type,
         rerank_model_name: searchSettings.rerank_model_name,
       });
     }
   }, [searchSettings]);
 
-  const originalRerankingDetails = searchSettings
+  const originalRerankingDetails: RerankingDetails = searchSettings
     ? {
-        api_key: searchSettings.api_key,
+        rerank_api_key: searchSettings.rerank_api_key,
         num_rerank: searchSettings.num_rerank,
-        provider_type: searchSettings.provider_type,
+        rerank_provider_type: searchSettings.rerank_provider_type,
         rerank_model_name: searchSettings.rerank_model_name,
       }
     : {
-        api_key: "",
+        rerank_api_key: "",
         num_rerank: 0,
-        provider_type: null,
+        rerank_provider_type: null,
         rerank_model_name: "",
       };
 
@@ -149,14 +164,17 @@ export default function EmbeddingForm() {
     let values: SavedSearchSettings = {
       ...rerankingDetails,
       ...advancedEmbeddingDetails,
+      provider_type:
+        selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null,
     };
+
     const response = await updateSearchSettings(values);
     if (response.ok) {
       setPopup({
         message: "Updated search settings succesffuly",
         type: "success",
       });
-      mutate("/api/search-settings/get-search-settings");
+      mutate("/api/search-settings/get-current-search-settings");
       return true;
     } else {
       setPopup({ message: "Failed to update search settings", type: "error" });
@@ -165,29 +183,37 @@ export default function EmbeddingForm() {
   };
 
   const onConfirm = async () => {
-    let newModel: EmbeddingModelDescriptor;
+    if (!selectedProvider) {
+      return;
+    }
+    let newModel: SavedSearchSettings;
 
-    if ("provider_type" in selectedProvider) {
-      // This is a CloudEmbeddingModel
+    if (selectedProvider.provider_type != null) {
+      // This is a cloud model
       newModel = {
+        ...advancedEmbeddingDetails,
         ...selectedProvider,
+        ...rerankingDetails,
         model_name: selectedProvider.model_name,
-        provider_type: selectedProvider.provider_type
-          ?.toLowerCase()
-          .split(" ")[0],
+        provider_type:
+          (selectedProvider.provider_type
+            ?.toLowerCase()
+            .split(" ")[0] as EmbeddingProvider) || null,
       };
     } else {
-      // This is an EmbeddingModelDescriptor
+      // This is a locally hosted model
       newModel = {
+        ...advancedEmbeddingDetails,
         ...selectedProvider,
+        ...rerankingDetails,
         model_name: selectedProvider.model_name!,
-        description: "",
         provider_type: null,
       };
     }
+    newModel.index_name = null;
 
     const response = await fetch(
-      "/api/search-settings/set-new-embedding-model",
+      "/api/search-settings/set-new-search-settings",
       {
         method: "POST",
         body: JSON.stringify(newModel),
@@ -201,7 +227,7 @@ export default function EmbeddingForm() {
         message: "Changed provider suceessfully. Redirecing to embedding page",
         type: "success",
       });
-      mutate("/api/search-settings/get-secondary-embedding-model");
+      mutate("/api/search-settings/get-secondary-search-settings");
       setTimeout(() => {
         window.open("/admin/configuration/search", "_self");
       }, 2000);
@@ -217,14 +243,14 @@ export default function EmbeddingForm() {
     searchSettings?.multipass_indexing !=
       advancedEmbeddingDetails.multipass_indexing;
 
-  const ReIndxingButton = () => {
-    return (
+  const ReIndexingButton = ({ needsReIndex }: { needsReIndex: boolean }) => {
+    return needsReIndex ? (
       <div className="flex mx-auto gap-x-1 ml-auto items-center">
         <button
           className="enabled:cursor-pointer disabled:bg-accent/50 disabled:cursor-not-allowed bg-accent flex gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
           onClick={async () => {
-            const updated = await updateSearch();
-            if (updated) {
+            const update = await updateSearch();
+            if (update) {
               await onConfirm();
             }
           }}
@@ -251,6 +277,15 @@ export default function EmbeddingForm() {
           </div>
         </div>
       </div>
+    ) : (
+      <button
+        className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-accent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
+        onClick={async () => {
+          updateSearch();
+        }}
+      >
+        Update Search
+      </button>
     );
   };
 
@@ -361,18 +396,7 @@ export default function EmbeddingForm() {
                 Previous
               </button>
 
-              {needsReIndex ? (
-                <ReIndxingButton />
-              ) : (
-                <button
-                  className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-accent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
-                  onClick={async () => {
-                    updateSearch();
-                  }}
-                >
-                  Update Search
-                </button>
-              )}
+              <ReIndexingButton needsReIndex={needsReIndex} />
 
               <div className="flex w-full justify-end">
                 <button
@@ -393,8 +417,13 @@ export default function EmbeddingForm() {
           <>
             <Card>
               <AdvancedEmbeddingFormPage
+                updateNumRerank={(newNumRerank: number) =>
+                  setRerankingDetails({
+                    ...rerankingDetails,
+                    num_rerank: newNumRerank,
+                  })
+                }
                 numRerank={rerankingDetails.num_rerank}
-                setRerankingDetails={setRerankingDetails}
                 advancedEmbeddingDetails={advancedEmbeddingDetails}
                 updateAdvancedEmbeddingDetails={updateAdvancedEmbeddingDetails}
               />
@@ -410,20 +439,7 @@ export default function EmbeddingForm() {
                 Previous
               </button>
 
-              {needsReIndex ? (
-                <ReIndxingButton />
-              ) : (
-                <button
-                  className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 
-                    disabled:cursor-not-allowed bg-accent flex mx-auto gap-x-1 items-center 
-                    text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
-                  onClick={async () => {
-                    updateSearch();
-                  }}
-                >
-                  Update Search
-                </button>
-              )}
+              <ReIndexingButton needsReIndex={needsReIndex} />
             </div>
           </>
         )}

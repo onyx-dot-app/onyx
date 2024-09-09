@@ -25,6 +25,9 @@ NUM_THREADS = (
     32  # since Vespa doesn't allow batching of inserts / updates, we use threads
 )
 MAX_ID_SEARCH_QUERY_SIZE = 400
+# Suspect that adding too many "or" conditions will cause Vespa to timeout and return
+# an empty list of hits (with no error status and coverage: 0 and degraded)
+MAX_OR_CONDITIONS = 10
 # up from 500ms for now, since we've seen quite a few timeouts
 # in the long term, we are looking to improve the performance of Vespa
 # so that we can bring this back to default

@@ -82,10 +82,12 @@ function decodeGrid(encoded: number): boolean[][] {
 export function createSVG(
   shape: GridShape,
   color: string = "#FF6FBF",
-  size: number = 48
+  size: number = 48,
+  padding?: boolean
 ) {
-  const cellSize = size / 6;
+  const cellSize = size / 4;
   const grid = decodeGrid(shape.encodedGrid);
+
   let path = "";
   for (let row = 0; row < 4; row++) {
     for (let col = 0; col < 4; col++) {
@@ -99,6 +101,7 @@ export function createSVG(
 
   return (
     <svg
+      className={`${padding && "p-1.5"}  m-auto`}
       width={size}
       height={size}
       viewBox={`0 0 ${size} ${size}`}

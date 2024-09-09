@@ -2,6 +2,7 @@ import {
   CohereIcon,
   GoogleIcon,
   IconProps,
+  LiteLLMIcon,
   MicrosoftIcon,
   NomicIcon,
   OpenAIIcon,
@@ -14,11 +15,13 @@ export enum EmbeddingProvider {
   COHERE = "Cohere",
   VOYAGE = "Voyage",
   GOOGLE = "Google",
+  LITELLM = "LiteLLM",
 }
 
 export interface CloudEmbeddingProvider {
   provider_type: EmbeddingProvider;
   api_key?: string;
+  api_url?: string;
   custom_config?: Record<string, string>;
   docsLink?: string;
 
@@ -36,13 +39,17 @@ export interface CloudEmbeddingProvider {
 
 // Embedding Models
 export interface EmbeddingModelDescriptor {
+  id?: number;
   model_name: string;
   model_dim: number;
   normalize: boolean;
   query_prefix: string;
   passage_prefix: string;
-  provider_type?: string | null;
+  provider_type: string | null;
   description: string;
+  api_key: string | null;
+  api_url: string | null;
+  index_name: string | null;
 }
 
 export interface CloudEmbeddingModel extends EmbeddingModelDescriptor {
@@ -68,7 +75,7 @@ export interface FullEmbeddingModelResponse {
 }
 
 export interface CloudEmbeddingProviderFull extends CloudEmbeddingProvider {
-  configured: boolean;
+  configured?: boolean;
 }
 
 export const AVAILABLE_MODELS: HostedEmbeddingModel[] = [
@@ -82,6 +89,10 @@ export const AVAILABLE_MODELS: HostedEmbeddingModel[] = [
     link: "https://huggingface.co/nomic-ai/nomic-embed-text-v1",
     query_prefix: "search_query: ",
     passage_prefix: "search_document: ",
+    index_name: "",
+    provider_type: null,
+    api_key: null,
+    api_url: null,
   },
   {
     model_name: "intfloat/e5-base-v2",
@@ -92,6 +103,10 @@ export const AVAILABLE_MODELS: HostedEmbeddingModel[] = [
     link: "https://huggingface.co/intfloat/e5-base-v2",
     query_prefix: "query: ",
     passage_prefix: "passage: ",
+    index_name: "",
+    provider_type: null,
+    api_url: null,
+    api_key: null,
   },
   {
     model_name: "intfloat/e5-small-v2",
@@ -102,6 +117,10 @@ export const AVAILABLE_MODELS: HostedEmbeddingModel[] = [
     link: "https://huggingface.co/intfloat/e5-small-v2",
     query_prefix: "query: ",
     passage_prefix: "passage: ",
+    index_name: "",
+    provider_type: null,
+    api_key: null,
+    api_url: null,
   },
   {
     model_name: "intfloat/multilingual-e5-base",
@@ -112,6 +131,10 @@ export const AVAILABLE_MODELS: HostedEmbeddingModel[] = [
     link: "https://huggingface.co/intfloat/multilingual-e5-base",
     query_prefix: "query: ",
     passage_prefix: "passage: ",
+    index_name: "",
+    provider_type: null,
+    api_key: null,
+    api_url: null,
   },
   {
     model_name: "intfloat/multilingual-e5-small",
@@ -122,8 +145,21 @@ export const AVAILABLE_MODELS: HostedEmbeddingModel[] = [
     link: "https://huggingface.co/intfloat/multilingual-e5-base",
     query_prefix: "query: ",
     passage_prefix: "passage: ",
+    index_name: "",
+    provider_type: null,
+    api_key: null,
+    api_url: null,
   },
 ];
+
+export const LITELLM_CLOUD_PROVIDER: CloudEmbeddingProvider = {
+  provider_type: EmbeddingProvider.LITELLM,
+  website: "https://github.com/BerriAI/litellm",
+  icon: LiteLLMIcon,
+  description: "Open-source library to call LLM APIs using OpenAI format",
+  apiLink: "https://docs.litellm.ai/docs/proxy/quick_start",
+  embedding_models: [], // No default embedding models
+};
 
 export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
   {
@@ -150,6 +186,9 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         normalize: false,
         query_prefix: "",
         passage_prefix: "",
+        index_name: "",
+        api_key: null,
+        api_url: null,
       },
       {
         model_name: "embed-english-light-v3.0",
@@ -164,6 +203,9 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         normalize: false,
         query_prefix: "",
         passage_prefix: "",
+        index_name: "",
+        api_key: null,
+        api_url: null,
       },
     ],
   },
@@ -190,6 +232,9 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         mtebScore: 64.6,
         maxContext: 8191,
         enabled: false,
+        index_name: "",
+        api_key: null,
+        api_url: null,
       },
       {
         provider_type: EmbeddingProvider.OPENAI,
@@ -204,6 +249,9 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         enabled: false,
         mtebScore: 62.3,
         maxContext: 8191,
+        index_name: "",
+        api_key: null,
+        api_url: null,
       },
     ],
   },
@@ -231,6 +279,9 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         normalize: false,
         query_prefix: "",
         passage_prefix: "",
+        index_name: "",
+        api_key: null,
+        api_url: null,
       },
       {
         provider_type: EmbeddingProvider.GOOGLE,
@@ -244,6 +295,9 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         normalize: false,
         query_prefix: "",
         passage_prefix: "",
+        index_name: "",
+        api_key: null,
+        api_url: null,
       },
     ],
   },
@@ -270,6 +324,9 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         normalize: false,
         query_prefix: "",
         passage_prefix: "",
+        index_name: "",
+        api_key: null,
+        api_url: null,
       },
       {
         provider_type: EmbeddingProvider.VOYAGE,
@@ -284,6 +341,9 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         normalize: false,
         query_prefix: "",
         passage_prefix: "",
+        index_name: "",
+        api_key: null,
+        api_url: null,
       },
     ],
   },

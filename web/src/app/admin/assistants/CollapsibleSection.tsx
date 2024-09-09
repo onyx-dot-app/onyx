@@ -40,7 +40,6 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         onClick={toggleCollapse}
       >
         {" "}
-        Great and also a
         {isCollapsed ? (
           <span className="collapse-toggle text-lg absolute left-0 top-0 text-sm flex items-center gap-x-3 cursor-pointer">
             <FiSettings className="pointer-events-none my-auto" size={16} />

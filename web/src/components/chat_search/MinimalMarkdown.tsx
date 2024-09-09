@@ -1,3 +1,4 @@
+import { CodeBlock } from "@/app/chat/message/CodeBlock";
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -5,11 +6,13 @@ import remarkGfm from "remark-gfm";
 interface MinimalMarkdownProps {
   content: string;
   className?: string;
+  useCodeBlock?: boolean;
 }
 
 export const MinimalMarkdown: React.FC<MinimalMarkdownProps> = ({
   content,
   className = "",
+  useCodeBlock = false,
 }) => {
   return (
     <ReactMarkdown
@@ -26,6 +29,11 @@ export const MinimalMarkdown: React.FC<MinimalMarkdownProps> = ({
         p: ({ node, ...props }) => (
           <p {...props} className="text-wrap break-word text-sm m-0 w-full" />
         ),
+        code: useCodeBlock
+          ? (props) => (
+              <CodeBlock className="w-full" {...props} content={content} />
+            )
+          : (props) => <code {...props} />,
       }}
       remarkPlugins={[remarkGfm]}
     >

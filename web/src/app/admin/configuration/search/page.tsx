@@ -36,14 +36,14 @@ function Main() {
     isLoading: isLoadingCurrentModel,
     error: currentEmeddingModelError,
   } = useSWR<CloudEmbeddingModel | HostedEmbeddingModel | null>(
-    "/api/search-settings/get-current-embedding-model",
+    "/api/search-settings/get-current-search-settings",
     errorHandlingFetcher,
     { refreshInterval: 5000 } // 5 seconds
   );
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
     useSWR<SavedSearchSettings | null>(
-      "/api/search-settings/get-search-settings",
+      "/api/search-settings/get-current-search-settings",
       errorHandlingFetcher,
       { refreshInterval: 5000 } // 5 seconds
     );
@@ -53,7 +53,7 @@ function Main() {
     isLoading: isLoadingFutureModel,
     error: futureEmeddingModelError,
   } = useSWR<CloudEmbeddingModel | HostedEmbeddingModel | null>(
-    "/api/search-settings/get-secondary-embedding-model",
+    "/api/search-settings/get-secondary-search-settings",
     errorHandlingFetcher,
     { refreshInterval: 5000 } // 5 seconds
   );

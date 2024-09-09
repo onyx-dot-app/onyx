@@ -23,7 +23,7 @@ from danswer.file_processing.extract_file_text import extract_file_text
 from danswer.file_processing.extract_file_text import get_file_ext
 from danswer.file_processing.extract_file_text import is_text_file_extension
 from danswer.file_processing.extract_file_text import load_files_from_zip
-from danswer.file_processing.extract_file_text import pdf_to_text
+from danswer.file_processing.extract_file_text import read_pdf_file
 from danswer.file_processing.extract_file_text import read_text_file
 from danswer.file_store.file_store import get_default_file_store
 from danswer.utils.logger import setup_logger
@@ -75,7 +75,7 @@ def _process_file(
 
     # Using the PDF reader function directly to pass in password cleanly
     elif extension == ".pdf":
-        file_content_raw = pdf_to_text(file=file, pdf_pass=pdf_pass)
+        file_content_raw, file_metadata = read_pdf_file(file=file, pdf_pass=pdf_pass)
 
     else:
         file_content_raw = extract_file_text(

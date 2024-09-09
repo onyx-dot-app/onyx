@@ -17,6 +17,8 @@ import {
   GoogleDriveServiceAccountCredentialJson,
 } from "@/lib/connectors/credentials";
 
+import { Button as TremorButton } from "@tremor/react";
+
 type GoogleDriveCredentialJsonTypes = "authorized_user" | "service_account";
 
 export const DriveJsonUpload = ({
@@ -344,7 +346,7 @@ export const DriveOAuthSection = ({
   if (serviceAccountKeyData?.service_account_email) {
     return (
       <div>
-        <p className="text-sm mb-2">
+        <p className="text-sm mb-6">
           When using a Google Drive Service Account, you can either have Danswer
           act as the service account itself OR you can specify an account for
           the service account to impersonate.
@@ -356,70 +358,59 @@ export const DriveOAuthSection = ({
           the documents you want to index with the service account.
         </p>
 
-        <Card>
-          <Formik
-            initialValues={{
-              google_drive_delegated_user: "",
-            }}
-            validationSchema={Yup.object().shape({
-              google_drive_delegated_user: Yup.string().optional(),
-            })}
-            onSubmit={async (values, formikHelpers) => {
-              formikHelpers.setSubmitting(true);
-
-              const response = await fetch(
-                "/api/manage/admin/connector/google-drive/service-account-credential",
-                {
-                  method: "PUT",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    google_drive_delegated_user:
-                      values.google_drive_delegated_user,
-                  }),
-                }
-              );
-
-              if (response.ok) {
-                setPopup({
-                  message: "Successfully created service account credential",
-                  type: "success",
-                });
-              } else {
-                const errorMsg = await response.text();
-                setPopup({
-                  message: `Failed to create service account credential - ${errorMsg}`,
-                  type: "error",
-                });
+        <Formik
+          initialValues={{
+            google_drive_delegated_user: "",
+          }}
+          validationSchema={Yup.object().shape({
+            google_drive_delegated_user: Yup.string().optional(),
+          })}
+          onSubmit={async (values, formikHelpers) => {
+            formikHelpers.setSubmitting(true);
+            const response = await fetch(
+              "/api/manage/admin/connector/google-drive/service-account-credential",
+              {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  google_drive_delegated_user:
+                    values.google_drive_delegated_user,
+                }),
               }
-              refreshCredentials();
-            }}
-          >
-            {({ isSubmitting }) => (
-              <Form>
-                <TextFormField
-                  name="google_drive_delegated_user"
-                  label="[Optional] User email to impersonate:"
-                  subtext="If left blank, Danswer will use the service account itself."
-                />
-                <div className="flex">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className={
-                      "bg-slate-500 hover:bg-slate-700 text-white " +
-                      "font-bold py-2 px-4 rounded focus:outline-none " +
-                      "focus:shadow-outline w-full max-w-sm mx-auto"
-                    }
-                  >
-                    Submit
-                  </button>
-                </div>
-              </Form>
-            )}
-          </Formik>
-        </Card>
+            );
+
+            if (response.ok) {
+              setPopup({
+                message: "Successfully created service account credential",
+                type: "success",
+              });
+            } else {
+              const errorMsg = await response.text();
+              setPopup({
+                message: `Failed to create service account credential - ${errorMsg}`,
+                type: "error",
+              });
+            }
+            refreshCredentials();
+          }}
+        >
+          {({ isSubmitting }) => (
+            <Form>
+              <TextFormField
+                name="google_drive_delegated_user"
+                label="[Optional] User email to impersonate:"
+                subtext="If left blank, Danswer will use the service account itself."
+              />
+              <div className="flex">
+                <TremorButton type="submit" disabled={isSubmitting}>
+                  Create Credential
+                </TremorButton>
+              </div>
+            </Form>
+          )}
+        </Formik>
       </div>
     );
   }

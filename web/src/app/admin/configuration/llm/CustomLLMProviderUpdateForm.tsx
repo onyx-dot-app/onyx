@@ -211,15 +211,13 @@ export function CustomLLMProviderUpdateForm({
     >
       {({ values, setFieldValue }) => {
         return (
-          <Form>
+          <Form className="gap-y-6 mt-8">
             <TextFormField
               name="name"
               label="Display Name"
               subtext="A name which you can use to identify this provider when selecting it in the UI."
               placeholder="Display Name"
             />
-
-            <Divider />
 
             <TextFormField
               name="provider"
@@ -426,7 +424,7 @@ export function CustomLLMProviderUpdateForm({
                   <>
                     <BooleanFormField
                       small
-                      noPadding
+                      removeIndent
                       alignTop
                       name="is_public"
                       label="Is Public?"

@@ -201,7 +201,7 @@ export default function CreateCredential({
               for information on setting up this connector.
             </p>
           )}
-          <Card className="!border-0 mt-4">
+          <Card className="!border-0 mt-4 flex flex-col gap-y-6">
             <TextFormField
               name="name"
               placeholder="(Optional) credential name.."
@@ -236,6 +236,7 @@ export default function CreateCredential({
                         <IsPublicGroupSelector
                           formikProps={formikProps}
                           objectName="credential"
+                          publicToWhom="Curators"
                         />
                       )}
                     </div>

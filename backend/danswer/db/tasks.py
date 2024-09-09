@@ -44,12 +44,11 @@ def get_latest_task_by_type(
 
 
 def register_task(
-    task_id: str,
     task_name: str,
     db_session: Session,
 ) -> TaskQueueState:
     new_task = TaskQueueState(
-        task_id=task_id, task_name=task_name, status=TaskStatus.PENDING
+        task_id="", task_name=task_name, status=TaskStatus.PENDING
     )
 
     db_session.add(new_task)

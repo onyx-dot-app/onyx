@@ -187,7 +187,7 @@ class InternetSearchTool(Tool):
         self, *args: ToolResponse
     ) -> str | list[str | dict[str, Any]]:
         search_response = cast(InternetSearchResponse, args[0].response)
-        return json.dumps(search_response.dict())
+        return json.dumps(search_response.model_dump())
 
     def _perform_search(self, query: str) -> InternetSearchResponse:
         response = self.client.get(
@@ -230,4 +230,4 @@ class InternetSearchTool(Tool):
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
         search_response = cast(InternetSearchResponse, args[0].response)
-        return search_response.dict()
+        return search_response.model_dump()

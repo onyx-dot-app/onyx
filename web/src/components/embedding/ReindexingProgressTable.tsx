@@ -27,10 +27,16 @@ export function ReindexingProgressTable({
       <Table>
         <TableHead>
           <TableRow>
-            <TableHeaderCell>Connector Name</TableHeaderCell>
-            <TableHeaderCell>Status</TableHeaderCell>
-            <TableHeaderCell>Docs Re-Indexed</TableHeaderCell>
-            <TableHeaderCell>Error Message</TableHeaderCell>
+            <TableHeaderCell className="w-1/7 sm:w-1/5">
+              Connector Name
+            </TableHeaderCell>
+            <TableHeaderCell className="w-1/7 sm:w-1/5">Status</TableHeaderCell>
+            <TableHeaderCell className="w-1/7 sm:w-1/5">
+              Docs Re-Indexed
+            </TableHeaderCell>
+            <TableHeaderCell className="w-4/7 sm:w-2/5">
+              Error Message
+            </TableHeaderCell>
           </TableRow>
         </TableHead>
         <TableBody>

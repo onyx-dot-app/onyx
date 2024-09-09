@@ -1,3 +1,13 @@
+import {
+  AnthropicIcon,
+  AWSIcon,
+  AzureIcon,
+  CPUIcon,
+  OpenAIIcon,
+  OpenSourceIcon,
+} from "@/components/icons/icons";
+import { FaRobot } from "react-icons/fa";
+
 export interface CustomConfigKey {
   name: string;
   description: string | null;
@@ -53,3 +63,18 @@ export interface LLMProviderDescriptor {
   groups: number[];
   display_model_names: string[] | null;
 }
+
+export const getProviderIcon = (providerName: string) => {
+  switch (providerName) {
+    case "openai":
+      return OpenAIIcon;
+    case "anthropic":
+      return AnthropicIcon;
+    case "bedrock":
+      return AWSIcon;
+    case "azure":
+      return AzureIcon;
+    default:
+      return CPUIcon;
+  }
+};

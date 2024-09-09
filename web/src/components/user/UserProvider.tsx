@@ -8,6 +8,7 @@ interface UserContextType {
   user: User | null;
   isLoadingUser: boolean;
   isAdmin: boolean;
+  isCurator: boolean;
   refreshUser: () => Promise<void>;
 }
 
@@ -17,12 +18,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isCurator, setIsCurator] = useState(false);
 
   const fetchUser = async () => {
     try {
       const user = await getCurrentUser();
       setUser(user);
       setIsAdmin(user?.role === UserRole.ADMIN);
+      setIsCurator(
+        user?.role === UserRole.CURATOR || user?.role == UserRole.GLOBAL_CURATOR
+      );
     } catch (error) {
       console.error("Error fetching current user:", error);
     } finally {
@@ -40,7 +45,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <UserContext.Provider value={{ user, isLoadingUser, isAdmin, refreshUser }}>
+    <UserContext.Provider
+      value={{ user, isLoadingUser, isAdmin, refreshUser, isCurator }}
+    >
       {children}
     </UserContext.Provider>
   );

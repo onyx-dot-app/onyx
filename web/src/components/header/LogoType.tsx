@@ -56,7 +56,7 @@ export default function LogoType({
       >
         <div className="max-w-[175px] min-w-[140px]">
           {enterpriseSettings && enterpriseSettings.application_name ? (
-            <div>
+            <div className="w-full">
               <HeaderTitle>{enterpriseSettings.application_name}</HeaderTitle>
               {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
                 <p className="text-xs text-subtle">Powered by Danswer</p>

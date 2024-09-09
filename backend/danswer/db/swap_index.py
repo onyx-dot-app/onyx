@@ -3,14 +3,14 @@ from sqlalchemy.orm import Session
 from danswer.configs.constants import KV_REINDEX_KEY
 from danswer.db.connector_credential_pair import get_connector_credential_pairs
 from danswer.db.connector_credential_pair import resync_cc_pair
-from danswer.db.embedding_model import get_current_db_embedding_model
-from danswer.db.embedding_model import get_secondary_db_embedding_model
-from danswer.db.embedding_model import update_embedding_model_status
 from danswer.db.enums import IndexModelStatus
 from danswer.db.index_attempt import cancel_indexing_attempts_past_model
 from danswer.db.index_attempt import (
     count_unique_cc_pairs_with_successful_index_attempts,
 )
+from danswer.db.search_settings import get_current_search_settings
+from danswer.db.search_settings import get_secondary_search_settings
+from danswer.db.search_settings import update_search_settings_status
 from danswer.dynamic_configs.factory import get_dynamic_config_store
 from danswer.utils.logger import setup_logger
 
@@ -24,13 +24,13 @@ def check_index_swap(db_session: Session) -> None:
     # Default CC-pair created for Ingestion API unused here
     all_cc_pairs = get_connector_credential_pairs(db_session)
     cc_pair_count = max(len(all_cc_pairs) - 1, 0)
-    embedding_model = get_secondary_db_embedding_model(db_session)
+    search_settings = get_secondary_search_settings(db_session)
 
-    if not embedding_model:
+    if not search_settings:
         return
 
     unique_cc_indexings = count_unique_cc_pairs_with_successful_index_attempts(
-        embedding_model_id=embedding_model.id, db_session=db_session
+        search_settings_id=search_settings.id, db_session=db_session
     )
 
     # Index Attempts are cleaned up as well when the cc-pair is deleted so the logic in this
@@ -40,15 +40,15 @@ def check_index_swap(db_session: Session) -> None:
 
     if cc_pair_count == 0 or cc_pair_count == unique_cc_indexings:
         # Swap indices
-        now_old_embedding_model = get_current_db_embedding_model(db_session)
-        update_embedding_model_status(
-            embedding_model=now_old_embedding_model,
+        now_old_search_settings = get_current_search_settings(db_session)
+        update_search_settings_status(
+            search_settings=now_old_search_settings,
             new_status=IndexModelStatus.PAST,
             db_session=db_session,
         )
 
-        update_embedding_model_status(
-            embedding_model=embedding_model,
+        update_search_settings_status(
+            search_settings=search_settings,
             new_status=IndexModelStatus.PRESENT,
             db_session=db_session,
         )

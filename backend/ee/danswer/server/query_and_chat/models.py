@@ -17,7 +17,7 @@ class StandardAnswerRequest(BaseModel):
 
 
 class StandardAnswerResponse(BaseModel):
-    standard_answers: list[StandardAnswer] = []
+    standard_answers: list[StandardAnswer] = Field(default_factory=list)
 
 
 class DocumentSearchRequest(ChunkContext):

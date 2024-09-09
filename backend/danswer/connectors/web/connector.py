@@ -1,6 +1,8 @@
 import io
 import ipaddress
 import socket
+from datetime import datetime
+from datetime import timezone
 from enum import Enum
 from typing import Any
 from typing import cast
@@ -27,7 +29,7 @@ from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import LoadConnector
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
-from danswer.file_processing.extract_file_text import pdf_to_text
+from danswer.file_processing.extract_file_text import read_pdf_file
 from danswer.file_processing.html_utils import web_html_cleanup
 from danswer.utils.logger import setup_logger
 from danswer.utils.sitemap import list_pages_for_site
@@ -84,6 +86,20 @@ def check_internet_connection(url: str) -> None:
     try:
         response = requests.get(url, timeout=3)
         response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        # Extract status code from the response, defaulting to -1 if response is None
+        status_code = e.response.status_code if e.response is not None else -1
+        error_msg = {
+            400: "Bad Request",
+            401: "Unauthorized",
+            403: "Forbidden",
+            404: "Not Found",
+            500: "Internal Server Error",
+            502: "Bad Gateway",
+            503: "Service Unavailable",
+            504: "Gateway Timeout",
+        }.get(status_code, "HTTP Error")
+        raise Exception(f"{error_msg} ({status_code}) for {url} - {e}")
     except requests.exceptions.SSLError as e:
         cause = (
             e.args[0].reason
@@ -91,8 +107,8 @@ def check_internet_connection(url: str) -> None:
             else e.args
         )
         raise Exception(f"SSL error {str(cause)}")
-    except (requests.RequestException, ValueError):
-        raise Exception(f"Unable to reach {url} - check your internet connection")
+    except (requests.RequestException, ValueError) as e:
+        raise Exception(f"Unable to reach {url} - check your internet connection: {e}")
 
 
 def is_valid_url(url: str) -> bool:
@@ -189,6 +205,15 @@ def _read_urls_file(location: str) -> list[str]:
     return urls
 
 
+def _get_datetime_from_last_modified_header(last_modified: str) -> datetime | None:
+    try:
+        return datetime.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z").replace(
+            tzinfo=timezone.utc
+        )
+    except (ValueError, TypeError):
+        return None
+
+
 class WebConnector(LoadConnector):
     def __init__(
         self,
@@ -271,7 +296,10 @@ class WebConnector(LoadConnector):
                 if current_url.split(".")[-1] == "pdf":
                     # PDF files are not checked for links
                     response = requests.get(current_url)
-                    page_text = pdf_to_text(file=io.BytesIO(response.content))
+                    page_text, metadata = read_pdf_file(
+                        file=io.BytesIO(response.content)
+                    )
+                    last_modified = response.headers.get("Last-Modified")
 
                     doc_batch.append(
                         Document(
@@ -279,13 +307,23 @@ class WebConnector(LoadConnector):
                             sections=[Section(link=current_url, text=page_text)],
                             source=DocumentSource.WEB,
                             semantic_identifier=current_url.split("/")[-1],
-                            metadata={},
+                            metadata=metadata,
+                            doc_updated_at=_get_datetime_from_last_modified_header(
+                                last_modified
+                            )
+                            if last_modified
+                            else None,
                         )
                     )
                     continue
 
                 page = context.new_page()
                 page_response = page.goto(current_url)
+                last_modified = (
+                    page_response.header_value("Last-Modified")
+                    if page_response
+                    else None
+                )
                 final_page = page.url
                 if final_page != current_url:
                     logger.info(f"Redirected to {final_page}")
@@ -321,6 +359,11 @@ class WebConnector(LoadConnector):
                         source=DocumentSource.WEB,
                         semantic_identifier=parsed_html.title or current_url,
                         metadata={},
+                        doc_updated_at=_get_datetime_from_last_modified_header(
+                            last_modified
+                        )
+                        if last_modified
+                        else None,
                     )
                 )
 

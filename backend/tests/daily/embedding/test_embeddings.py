@@ -32,6 +32,7 @@ def openai_embedding_model() -> EmbeddingModel:
         passage_prefix=None,
         api_key=os.getenv("OPENAI_API_KEY"),
         provider_type=EmbeddingProvider.OPENAI,
+        api_url=None,
     )
 
 
@@ -51,6 +52,7 @@ def cohere_embedding_model() -> EmbeddingModel:
         passage_prefix=None,
         api_key=os.getenv("COHERE_API_KEY"),
         provider_type=EmbeddingProvider.COHERE,
+        api_url=None,
     )
 
 
@@ -70,6 +72,7 @@ def local_nomic_embedding_model() -> EmbeddingModel:
         passage_prefix="search_document: ",
         api_key=None,
         provider_type=None,
+        api_url=None,
     )
 
 

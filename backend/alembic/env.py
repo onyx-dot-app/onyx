@@ -8,6 +8,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 from celery.backends.database.session import ResultModelBase  # type: ignore
+from sqlalchemy.schema import SchemaItem
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -15,7 +16,9 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-if config.config_file_name is not None:
+if config.config_file_name is not None and config.attributes.get(
+    "configure_logger", True
+):
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here
@@ -28,6 +31,20 @@ target_metadata = [Base.metadata, ResultModelBase.metadata]
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+
+EXCLUDE_TABLES = {"kombu_queue", "kombu_message"}
+
+
+def include_object(
+    object: SchemaItem,
+    name: str,
+    type_: str,
+    reflected: bool,
+    compare_to: SchemaItem | None,
+) -> bool:
+    if type_ == "table" and name in EXCLUDE_TABLES:
+        return False
+    return True
 
 
 def run_migrations_offline() -> None:
@@ -55,7 +72,11 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)  # type: ignore
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,  # type: ignore
+        include_object=include_object,
+    )  # type: ignore
 
     with context.begin_transaction():
         context.run_migrations()

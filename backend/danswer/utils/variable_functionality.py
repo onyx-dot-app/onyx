@@ -68,13 +68,7 @@ def fetch_versioned_implementation_with_fallback(
 ) -> T:
     try:
         return fetch_versioned_implementation(module, attribute)
-    except Exception as e:
-        logger.warning(
-            "Failed to fetch versioned implementation for %s.%s: %s",
-            module,
-            attribute,
-            e,
-        )
+    except Exception:
         return fallback
 
 

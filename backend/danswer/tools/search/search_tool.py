@@ -13,7 +13,7 @@ from danswer.chat.models import LlmDoc
 from danswer.chat.models import SectionRelevancePiece
 from danswer.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from danswer.configs.chat_configs import CONTEXT_CHUNKS_BELOW
-from danswer.configs.model_configs import GEN_AI_MODEL_DEFAULT_MAX_TOKENS
+from danswer.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from danswer.db.models import Persona
 from danswer.db.models import User
 from danswer.dynamic_configs.interface import JSON_ro
@@ -130,7 +130,7 @@ class SearchTool(Tool):
         # For small context models, don't include additional surrounding context
         # The 3 here for at least minimum 1 above, 1 below and 1 for the middle chunk
         max_llm_tokens = compute_max_llm_input_tokens(self.llm.config)
-        if max_llm_tokens < 3 * GEN_AI_MODEL_DEFAULT_MAX_TOKENS:
+        if max_llm_tokens < 3 * GEN_AI_MODEL_FALLBACK_MAX_TOKENS:
             self.chunks_above = 0
             self.chunks_below = 0
 

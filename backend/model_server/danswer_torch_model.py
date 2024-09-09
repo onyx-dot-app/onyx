@@ -4,7 +4,8 @@ import os
 import torch
 import torch.nn as nn
 from transformers import DistilBertConfig  # type: ignore
-from transformers import DistilBertModel
+from transformers import DistilBertModel  # type: ignore
+from transformers import DistilBertTokenizer  # type: ignore
 
 
 class HybridClassifier(nn.Module):
@@ -21,7 +22,6 @@ class HybridClassifier(nn.Module):
             self.distilbert.config.dim, self.distilbert.config.dim
         )
         self.intent_classifier = nn.Linear(self.distilbert.config.dim, 2)
-        self.dropout = nn.Dropout(self.distilbert.config.seq_classif_dropout)
 
         self.device = torch.device("cpu")
 
@@ -36,8 +36,7 @@ class HybridClassifier(nn.Module):
         # Intent classification on the CLS token
         cls_token_state = sequence_output[:, 0, :]
         pre_classifier_out = self.pre_classifier(cls_token_state)
-        dropout_out = self.dropout(pre_classifier_out)
-        intent_logits = self.intent_classifier(dropout_out)
+        intent_logits = self.intent_classifier(pre_classifier_out)
 
         # Keyword classification on all tokens
         token_logits = self.keyword_classifier(sequence_output)
@@ -68,6 +67,73 @@ class HybridClassifier(nn.Module):
 
         model.eval()
         # Eval doesn't set requires_grad to False, do it manually to save memory and have faster inference
+        for param in model.parameters():
+            param.requires_grad = False
+
+        return model
+
+
+class ConnectorClassifier(nn.Module):
+    def __init__(self, config: DistilBertConfig) -> None:
+        super().__init__()
+
+        self.config = config
+        self.distilbert = DistilBertModel(config)
+        self.connector_global_classifier = nn.Linear(self.distilbert.config.dim, 1)
+        self.connector_match_classifier = nn.Linear(self.distilbert.config.dim, 1)
+        self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+
+        # Token indicating end of connector name, and on which classifier is used
+        self.connector_end_token_id = self.tokenizer.get_vocab()[
+            self.config.connector_end_token
+        ]
+
+        self.device = torch.device("cpu")
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        hidden_states = self.distilbert(
+            input_ids=input_ids, attention_mask=attention_mask
+        ).last_hidden_state
+
+        cls_hidden_states = hidden_states[
+            :, 0, :
+        ]  # Take leap of faith that first token is always [CLS]
+        global_logits = self.connector_global_classifier(cls_hidden_states).view(-1)
+        global_confidence = torch.sigmoid(global_logits).view(-1)
+
+        connector_end_position_ids = input_ids == self.connector_end_token_id
+        connector_end_hidden_states = hidden_states[connector_end_position_ids]
+        classifier_output = self.connector_match_classifier(connector_end_hidden_states)
+        classifier_confidence = torch.nn.functional.sigmoid(classifier_output).view(-1)
+
+        return global_confidence, classifier_confidence
+
+    @classmethod
+    def from_pretrained(cls, repo_dir: str) -> "ConnectorClassifier":
+        config = DistilBertConfig.from_pretrained(os.path.join(repo_dir, "config.json"))
+        device = (
+            torch.device("cuda")
+            if torch.cuda.is_available()
+            else torch.device("mps")
+            if torch.backends.mps.is_available()
+            else torch.device("cpu")
+        )
+        state_dict = torch.load(
+            os.path.join(repo_dir, "pytorch_model.pt"),
+            map_location=device,
+            weights_only=True,
+        )
+
+        model = cls(config)
+        model.load_state_dict(state_dict)
+        model.to(device)
+        model.device = device
+        model.eval()
+
         for param in model.parameters():
             param.requires_grad = False
 

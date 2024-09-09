@@ -4,7 +4,6 @@ from typing import TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel
-from pydantic.generics import GenericModel
 
 from danswer.auth.schemas import UserRole
 from danswer.auth.schemas import UserStatus
@@ -13,7 +12,7 @@ from danswer.auth.schemas import UserStatus
 DataT = TypeVar("DataT")
 
 
-class StatusResponse(GenericModel, Generic[DataT]):
+class StatusResponse(BaseModel, Generic[DataT]):
     success: bool
     message: Optional[str] = None
     data: Optional[DataT] = None

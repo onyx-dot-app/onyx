@@ -8,8 +8,6 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { ConnectorIndexingStatus } from "@/lib/types";
-import { getCurrentUser } from "@/lib/user";
-import { User, UserRole } from "@/lib/types";
 import { usePublicCredentials } from "@/lib/hooks";
 import { Title } from "@tremor/react";
 import { DriveJsonUploadSection, DriveOAuthSection } from "./Credential";
@@ -109,6 +107,7 @@ const GDriveMain = ({}: {}) => {
     | undefined = credentialsData.find(
     (credential) => credential.credential_json?.google_drive_service_account_key
   );
+
   const googleDriveConnectorIndexingStatuses: ConnectorIndexingStatus<
     GoogleDriveConfig,
     GoogleDriveCredentialJson

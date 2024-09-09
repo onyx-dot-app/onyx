@@ -10,16 +10,16 @@ from danswer.configs.app_configs import POSTGRES_HOST
 from danswer.configs.app_configs import POSTGRES_PASSWORD
 from danswer.configs.app_configs import POSTGRES_PORT
 from danswer.configs.app_configs import POSTGRES_USER
-from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.engine import build_connection_string
 from danswer.db.engine import get_session_context_manager
 from danswer.db.engine import SYNC_DB_API
+from danswer.db.search_settings import get_current_search_settings
 from danswer.db.swap_index import check_index_swap
 from danswer.document_index.vespa.index import DOCUMENT_ID_ENDPOINT
 from danswer.document_index.vespa.index import VespaIndex
+from danswer.indexing.models import IndexingSetting
 from danswer.main import setup_postgres
 from danswer.main import setup_vespa
-from tests.integration.common_utils.llm import seed_default_openai_provider
 
 
 def _run_migrations(
@@ -31,6 +31,7 @@ def _run_migrations(
     # Create an Alembic configuration object
     alembic_cfg = Config("alembic.ini")
     alembic_cfg.set_section_option("logger_alembic", "level", "WARN")
+    alembic_cfg.attributes["configure_logger"] = False
 
     # Set the SQLAlchemy URL in the Alembic configuration
     alembic_cfg.set_main_option("sqlalchemy.url", database_url)
@@ -127,13 +128,13 @@ def reset_vespa() -> None:
         # swap to the correct default model
         check_index_swap(db_session)
 
-        current_model = get_current_db_embedding_model(db_session)
-        index_name = current_model.index_name
+        search_settings = get_current_search_settings(db_session)
+        index_name = search_settings.index_name
 
     setup_vespa(
         document_index=VespaIndex(index_name=index_name, secondary_index_name=None),
-        db_embedding_model=current_model,
-        secondary_db_embedding_model=None,
+        index_setting=IndexingSetting.from_db_model(search_settings),
+        secondary_index_setting=None,
     )
 
     for _ in range(5):
@@ -166,6 +167,4 @@ def reset_all() -> None:
     reset_postgres()
     print("Resetting Vespa...")
     reset_vespa()
-    print("Seeding LLM Providers...")
-    seed_default_openai_provider()
     print("Finished resetting all.")

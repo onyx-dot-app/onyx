@@ -269,7 +269,10 @@ def delete_chat_session_by_id(
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id if user is not None else None
-    delete_chat_session(user_id, session_id, db_session)
+    try:
+        delete_chat_session(user_id, session_id, db_session)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 async def is_disconnected(request: Request) -> Callable[[], bool]:

@@ -38,7 +38,7 @@ const RemoveUserButton = ({
   );
   return (
     <Button onClick={() => trigger({ user_email: user.email })}>
-      Uninivite User
+      Uninvite User
     </Button>
   );
 };

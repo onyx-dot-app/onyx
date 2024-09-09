@@ -3,6 +3,7 @@ import { Divider } from "@tremor/react";
 import { FiX } from "react-icons/fi";
 import { IconProps } from "./icons/icons";
 import { useRef } from "react";
+import { isEventWithinRef } from "@/lib/contains";
 
 interface ModalProps {
   icon?: ({ size, className }: IconProps) => JSX.Element;
@@ -33,7 +34,8 @@ export function Modal({
     if (
       onOutsideClick &&
       modalRef.current &&
-      !modalRef.current.contains(e.target as Node)
+      !modalRef.current.contains(e.target as Node) &&
+      !isEventWithinRef(e.nativeEvent, modalRef)
     ) {
       onOutsideClick();
     }

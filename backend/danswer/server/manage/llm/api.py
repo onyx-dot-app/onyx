@@ -121,7 +121,7 @@ def put_llm_provider(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> FullLLMProvider:
-    return upsert_llm_provider(db_session, llm_provider)
+    return upsert_llm_provider(llm_provider=llm_provider, db_session=db_session)
 
 
 @admin_router.delete("/provider/{provider_id}")
@@ -139,7 +139,7 @@ def set_provider_as_default(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_default_provider(db_session, provider_id)
+    update_default_provider(provider_id=provider_id, db_session=db_session)
 
 
 """Endpoints for all"""

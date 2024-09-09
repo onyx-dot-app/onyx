@@ -90,20 +90,20 @@ def _run_indexing(
     """
     start_time = time.time()
 
-    db_embedding_model = index_attempt.embedding_model
-    index_name = db_embedding_model.index_name
+    search_settings = index_attempt.search_settings
+    index_name = search_settings.index_name
 
     # Only update cc-pair status for primary index jobs
     # Secondary index syncs at the end when swapping
-    is_primary = index_attempt.embedding_model.status == IndexModelStatus.PRESENT
+    is_primary = search_settings.status == IndexModelStatus.PRESENT
 
     # Indexing is only done into one index at a time
     document_index = get_default_document_index(
         primary_index_name=index_name, secondary_index_name=None
     )
 
-    embedding_model = DefaultIndexingEmbedder.from_db_embedding_model(
-        db_embedding_model
+    embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
+        search_settings=search_settings
     )
 
     indexing_pipeline = build_indexing_pipeline(
@@ -111,26 +111,26 @@ def _run_indexing(
         embedder=embedding_model,
         document_index=document_index,
         ignore_time_skip=index_attempt.from_beginning
-        or (db_embedding_model.status == IndexModelStatus.FUTURE),
+        or (search_settings.status == IndexModelStatus.FUTURE),
         db_session=db_session,
     )
 
     db_cc_pair = index_attempt.connector_credential_pair
     db_connector = index_attempt.connector_credential_pair.connector
     db_credential = index_attempt.connector_credential_pair.credential
+    earliest_index_time = (
+        db_connector.indexing_start.timestamp() if db_connector.indexing_start else 0
+    )
 
     last_successful_index_time = (
-        db_connector.indexing_start.timestamp()
-        if index_attempt.from_beginning and db_connector.indexing_start is not None
-        else (
-            0.0
-            if index_attempt.from_beginning
-            else get_last_successful_attempt_time(
-                connector_id=db_connector.id,
-                credential_id=db_credential.id,
-                embedding_model=index_attempt.embedding_model,
-                db_session=db_session,
-            )
+        earliest_index_time
+        if index_attempt.from_beginning
+        else get_last_successful_attempt_time(
+            connector_id=db_connector.id,
+            credential_id=db_credential.id,
+            earliest_index=earliest_index_time,
+            search_settings=index_attempt.search_settings,
+            db_session=db_session,
         )
     )
 
@@ -185,7 +185,7 @@ def _run_indexing(
                 if (
                     (
                         db_cc_pair.status == ConnectorCredentialPairStatus.PAUSED
-                        and db_embedding_model.status != IndexModelStatus.FUTURE
+                        and search_settings.status != IndexModelStatus.FUTURE
                     )
                     # if it's deleting, we don't care if this is a secondary index
                     or db_cc_pair.status == ConnectorCredentialPairStatus.DELETING

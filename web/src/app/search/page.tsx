@@ -3,10 +3,8 @@ import {
   getAuthTypeMetadataSS,
   getCurrentUserSS,
 } from "@/lib/userSS";
-import { getSecondsUntilExpiration } from "@/lib/time";
 import { redirect } from "next/navigation";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
-import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import { fetchSS } from "@/lib/utilsSS";
 import { CCPairBasicInfo, DocumentSet, Tag, User } from "@/lib/types";
 import { cookies } from "next/headers";
@@ -38,6 +36,8 @@ import {
   DISABLE_LLM_DOC_RELEVANCE,
 } from "@/lib/constants";
 import WrappedSearch from "./WrappedSearch";
+import { SearchProvider } from "@/components/context/SearchContext";
+import { ProviderContextProvider } from "@/components/chat_search/ProviderContext";
 
 export default async function Home() {
   // Disable caching so we always get the up to date connector / document set / persona info
@@ -52,7 +52,7 @@ export default async function Home() {
     fetchSS("/manage/document-set"),
     fetchAssistantsSS(),
     fetchSS("/query/valid-tags"),
-    fetchSS("/search-settings/get-embedding-models"),
+    fetchSS("/search-settings/get-all-search-settings"),
     fetchSS("/query/user-searches"),
   ];
 
@@ -190,17 +190,12 @@ export default async function Home() {
   const agenticSearchEnabled = agenticSearchToggle
     ? agenticSearchToggle.value.toLocaleLowerCase() == "true" || false
     : false;
-  const secondsUntilExpiration = getSecondsUntilExpiration(user);
 
   return (
     <>
-      <HealthCheckBanner secondsUntilExpiration={secondsUntilExpiration} />
+      <HealthCheckBanner />
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
       <InstantSSRAutoRefresh />
-
-      {!shouldShowWelcomeModal &&
-        !shouldDisplayNoSourcesModal &&
-        !shouldDisplaySourcesIncompleteModal && <ApiKeyModal user={user} />}
 
       {shouldDisplayNoSourcesModal && <NoSourcesModal />}
 
@@ -213,18 +208,27 @@ export default async function Home() {
       <ChatPopup />
 
       <UserDisclaimerModal disclaimerText={disclaimerText} disclaimerTitle={disclaimerTitle}/>
-      <WrappedSearch
-        disabledAgentic={DISABLE_LLM_DOC_RELEVANCE}
-        initiallyToggled={toggleSidebar}
-        querySessions={querySessions}
-        user={user}
-        ccPairs={ccPairs}
-        documentSets={documentSets}
-        personas={assistants}
-        tags={tags}
-        searchTypeDefault={searchTypeDefault}
-        agenticSearchEnabled={agenticSearchEnabled}
-      />
+      <SearchProvider
+        value={{
+          querySessions,
+          ccPairs,
+          documentSets,
+          assistants,
+          tags,
+          agenticSearchEnabled,
+          disabledAgentic: DISABLE_LLM_DOC_RELEVANCE,
+          initiallyToggled: toggleSidebar,
+          shouldShowWelcomeModal,
+          shouldDisplayNoSources: shouldDisplayNoSourcesModal,
+        }}
+      >
+        <ProviderContextProvider>
+          <WrappedSearch
+            initiallyToggled={toggleSidebar}
+            searchTypeDefault={searchTypeDefault}
+          />
+        </ProviderContextProvider>
+      </SearchProvider>
     </>
   );
 }

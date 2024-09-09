@@ -326,7 +326,7 @@ def stream_search_answer(
             db_session=session,
         )
         for obj in objects:
-            yield get_json_line(obj.dict())
+            yield get_json_line(obj.model_dump())
 
 
 def get_search_answer(

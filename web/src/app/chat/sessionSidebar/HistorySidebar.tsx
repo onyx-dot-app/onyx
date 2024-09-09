@@ -179,7 +179,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
           )}
           <div className="border-b border-border pb-4 mx-3" />
           <PagesTab
-            stopGenerating={stopGenerating}
             newFolderId={newFolderId}
             showDeleteModal={showDeleteModal}
             showShareModal={showShareModal}

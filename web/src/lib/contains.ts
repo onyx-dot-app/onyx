@@ -1,3 +1,5 @@
+import { RefObject } from "react";
+
 interface SomeNonNestedObject {
   [key: string]: any;
 }
@@ -30,4 +32,22 @@ export function containsObject(
 ): boolean {
   // NOTE: only works for non-nested objects
   return list.some((item) => objectsAreEquivalent(item, obj));
+}
+
+export function isEventWithinRef(
+  event: MouseEvent | TouchEvent,
+  ref: RefObject<HTMLElement>
+): boolean {
+  if (!ref.current) return false;
+
+  const rect = ref.current.getBoundingClientRect();
+  const clientX = "touches" in event ? event.touches[0].clientX : event.clientX;
+  const clientY = "touches" in event ? event.touches[0].clientY : event.clientY;
+
+  return (
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom
+  );
 }

@@ -156,17 +156,14 @@ export const CreateRateLimitModal = ({
               type="number"
               placeholder=""
             />
-            <div className="flex">
-              <Button
-                type="submit"
-                size="xs"
-                color="green"
-                disabled={isSubmitting}
-                className="mx-auto w-64"
-              >
-                Create!
-              </Button>
-            </div>
+            <Button
+              type="submit"
+              size="xs"
+              color="green"
+              disabled={isSubmitting}
+            >
+              Create!
+            </Button>
           </Form>
         )}
       </Formik>

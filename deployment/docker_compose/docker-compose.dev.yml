@@ -1,7 +1,7 @@
 version: '3'
 services:
   api_server:
-    image: danswer/danswer-backend:latest
+    image: danswer/danswer-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -12,6 +12,7 @@ services:
     depends_on:
       - relational_db
       - index
+      - cache
       - inference_model_server
     restart: always
     ports:
@@ -35,13 +36,6 @@ services:
       - OPENID_CONFIG_URL=${OPENID_CONFIG_URL:-}
       - TRACK_EXTERNAL_IDP_EXPIRY=${TRACK_EXTERNAL_IDP_EXPIRY:-}
       # Gen AI Settings
-      - GEN_AI_MODEL_PROVIDER=${GEN_AI_MODEL_PROVIDER:-}
-      - GEN_AI_MODEL_VERSION=${GEN_AI_MODEL_VERSION:-}
-      - FAST_GEN_AI_MODEL_VERSION=${FAST_GEN_AI_MODEL_VERSION:-}
-      - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
-      - GEN_AI_API_ENDPOINT=${GEN_AI_API_ENDPOINT:-}
-      - GEN_AI_API_VERSION=${GEN_AI_API_VERSION:-}
-      - GEN_AI_LLM_PROVIDER_TYPE=${GEN_AI_LLM_PROVIDER_TYPE:-}
       - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
       - QA_TIMEOUT=${QA_TIMEOUT:-}
       - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
@@ -69,6 +63,7 @@ services:
       # Other services
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
+      - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-} # For frontend redirect auth purpose
       # Don't change the NLP model configs unless you know what you're doing
       - DOCUMENT_ENCODER_MODEL=${DOCUMENT_ENCODER_MODEL:-}
@@ -106,7 +101,7 @@ services:
         max-file: "6"
 
   background:
-    image: danswer/danswer-backend:latest
+    image: danswer/danswer-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -114,19 +109,13 @@ services:
     depends_on:
       - relational_db
       - index
+      - cache
       - inference_model_server
       - indexing_model_server
     restart: always
     environment:
       - ENCRYPTION_KEY_SECRET=${ENCRYPTION_KEY_SECRET:-}
       # Gen AI Settings (Needed by DanswerBot)
-      - GEN_AI_MODEL_PROVIDER=${GEN_AI_MODEL_PROVIDER:-}
-      - GEN_AI_MODEL_VERSION=${GEN_AI_MODEL_VERSION:-}
-      - FAST_GEN_AI_MODEL_VERSION=${FAST_GEN_AI_MODEL_VERSION:-}
-      - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
-      - GEN_AI_API_ENDPOINT=${GEN_AI_API_ENDPOINT:-}
-      - GEN_AI_API_VERSION=${GEN_AI_API_VERSION:-}
-      - GEN_AI_LLM_PROVIDER_TYPE=${GEN_AI_LLM_PROVIDER_TYPE:-}
       - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
       - QA_TIMEOUT=${QA_TIMEOUT:-}
       - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
@@ -151,6 +140,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
       - POSTGRES_DB=${POSTGRES_DB:-}
       - VESPA_HOST=index
+      - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-} # For frontend redirect auth purpose for OAuth2 connectors
       # Don't change the NLP model configs unless you know what you're doing
       - DOCUMENT_ENCODER_MODEL=${DOCUMENT_ENCODER_MODEL:-}
@@ -186,6 +176,7 @@ services:
       - NOTIFY_SLACKBOT_NO_ANSWER=${NOTIFY_SLACKBOT_NO_ANSWER:-}
       - DANSWER_BOT_MAX_QPM=${DANSWER_BOT_MAX_QPM:-}
       - DANSWER_BOT_MAX_WAIT_TIME=${DANSWER_BOT_MAX_WAIT_TIME:-}
+      - CUSTOM_REFRESH_URL=${CUSTOM_REFRESH_URL:-}
       # Logging
       # Leave this on pretty please? Nothing sensitive is collected!
       # https://docs.danswer.dev/more/telemetry
@@ -207,7 +198,7 @@ services:
         max-file: "6"
 
   web_server:
-    image: danswer/danswer-web-server:latest
+    image: danswer/danswer-web-server:${IMAGE_TAG:-latest}
     build:
       context: ../../web
       dockerfile: Dockerfile
@@ -234,9 +225,10 @@ services:
 
       # Enterprise Edition only
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
+      - CUSTOM_REFRESH_URL=${CUSTOM_REFRESH_URL:-}
 
   inference_model_server:
-    image: danswer/danswer-model-server:latest
+    image: danswer/danswer-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
@@ -262,7 +254,7 @@ services:
         max-file: "6"
 
   indexing_model_server:
-    image: danswer/danswer-model-server:latest
+    image: danswer/danswer-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
@@ -342,9 +334,19 @@ services:
     # in order to make this work on both Unix-like systems and windows
     command: > 
       /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
-      && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev"
-        
+      && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev"  
+
+  cache:
+    image: redis:7.4-alpine
+    restart: always
+    ports:
+      - '6379:6379'
+    command: redis-server
+    volumes: 
+      - cache_volume:/data
+
 volumes:
+  cache_volume:
   db_volume:
   vespa_volume: # Created by the container itself
 

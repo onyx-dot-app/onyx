@@ -7,14 +7,16 @@ from datetime import timezone
 from functools import lru_cache
 from typing import Any
 from typing import cast
-from urllib.parse import urlparse
 
 import bs4
 from atlassian import Confluence  # type:ignore
 from requests import HTTPError
 
+from danswer.configs.app_configs import (
+    CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
+)
 from danswer.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
-from danswer.configs.app_configs import CONFLUENCE_CONNECTOR_INDEX_ONLY_ACTIVE_PAGES
+from danswer.configs.app_configs import CONFLUENCE_CONNECTOR_INDEX_ARCHIVED_PAGES
 from danswer.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
 from danswer.configs.app_configs import CONFLUENCE_CONNECTOR_SKIP_LABEL_INDEXING
 from danswer.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
@@ -42,77 +44,12 @@ logger = setup_logger()
 # 2. Segment into Sections for more accurate linking, can split by headers but make sure no text/ordering is lost
 
 
-def _extract_confluence_keys_from_cloud_url(wiki_url: str) -> tuple[str, str, str]:
-    """Sample
-    URL w/ page: https://danswer.atlassian.net/wiki/spaces/1234abcd/pages/5678efgh/overview
-    URL w/o page: https://danswer.atlassian.net/wiki/spaces/ASAM/overview
-
-    wiki_base is https://danswer.atlassian.net/wiki
-    space is 1234abcd
-    page_id is 5678efgh
-    """
-    parsed_url = urlparse(wiki_url)
-    wiki_base = (
-        parsed_url.scheme
-        + "://"
-        + parsed_url.netloc
-        + parsed_url.path.split("/spaces")[0]
-    )
-
-    path_parts = parsed_url.path.split("/")
-    space = path_parts[3]
-
-    page_id = path_parts[5] if len(path_parts) > 5 else ""
-    return wiki_base, space, page_id
-
-
-def _extract_confluence_keys_from_datacenter_url(wiki_url: str) -> tuple[str, str, str]:
-    """Sample
-    URL w/ page https://danswer.ai/confluence/display/1234abcd/pages/5678efgh/overview
-    URL w/o page https://danswer.ai/confluence/display/1234abcd/overview
-    wiki_base is https://danswer.ai/confluence
-    space is 1234abcd
-    page_id is 5678efgh
-    """
-    # /display/ is always right before the space and at the end of the base print()
-    DISPLAY = "/display/"
-    PAGE = "/pages/"
-
-    parsed_url = urlparse(wiki_url)
-    wiki_base = (
-        parsed_url.scheme
-        + "://"
-        + parsed_url.netloc
-        + parsed_url.path.split(DISPLAY)[0]
-    )
-    space = DISPLAY.join(parsed_url.path.split(DISPLAY)[1:]).split("/")[0]
-    page_id = ""
-    if (content := parsed_url.path.split(PAGE)) and len(content) > 1:
-        page_id = content[1]
-    return wiki_base, space, page_id
-
-
-def extract_confluence_keys_from_url(wiki_url: str) -> tuple[str, str, str, bool]:
-    is_confluence_cloud = (
-        ".atlassian.net/wiki/spaces/" in wiki_url
-        or ".jira.com/wiki/spaces/" in wiki_url
-    )
-
-    try:
-        if is_confluence_cloud:
-            wiki_base, space, page_id = _extract_confluence_keys_from_cloud_url(
-                wiki_url
-            )
-        else:
-            wiki_base, space, page_id = _extract_confluence_keys_from_datacenter_url(
-                wiki_url
-            )
-    except Exception as e:
-        error_msg = f"Not a valid Confluence Wiki Link, unable to extract wiki base, space, and page id. Exception: {e}"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-
-    return wiki_base, space, page_id, is_confluence_cloud
+NO_PERMISSIONS_TO_VIEW_ATTACHMENTS_ERROR_STR = (
+    "User not permitted to view attachments on content"
+)
+NO_PARENT_OR_NO_PERMISSIONS_ERROR_STR = (
+    "No parent or not permitted to view content with id"
+)
 
 
 @lru_cache()
@@ -200,16 +137,22 @@ def _comment_dfs(
         comments_str += "\nComment:\n" + parse_html_page(
             comment_html, confluence_client
         )
-        child_comment_pages = get_page_child_by_type(
-            comment_page["id"],
-            type="comment",
-            start=None,
-            limit=None,
-            expand="body.storage.value",
-        )
-        comments_str = _comment_dfs(
-            comments_str, child_comment_pages, confluence_client
-        )
+        try:
+            child_comment_pages = get_page_child_by_type(
+                comment_page["id"],
+                type="comment",
+                start=None,
+                limit=None,
+                expand="body.storage.value",
+            )
+            comments_str = _comment_dfs(
+                comments_str, child_comment_pages, confluence_client
+            )
+        except HTTPError as e:
+            # not the cleanest, but I'm not aware of a nicer way to check the error
+            if NO_PARENT_OR_NO_PERMISSIONS_ERROR_STR not in str(e):
+                raise
+
     return comments_str
 
 
@@ -355,7 +298,10 @@ class RecursiveIndexer:
 class ConfluenceConnector(LoadConnector, PollConnector):
     def __init__(
         self,
-        wiki_page_url: str,
+        wiki_base: str,
+        space: str,
+        is_cloud: bool,
+        page_id: str = "",
         index_recursively: bool = True,
         batch_size: int = INDEX_BATCH_SIZE,
         continue_on_failure: bool = CONTINUE_ON_CONNECTOR_FAILURE,
@@ -369,15 +315,15 @@ class ConfluenceConnector(LoadConnector, PollConnector):
         self.labels_to_skip = set(labels_to_skip)
         self.recursive_indexer: RecursiveIndexer | None = None
         self.index_recursively = index_recursively
-        (
-            self.wiki_base,
-            self.space,
-            self.page_id,
-            self.is_cloud,
-        ) = extract_confluence_keys_from_url(wiki_page_url)
+
+        # Remove trailing slash from wiki_base if present
+        self.wiki_base = wiki_base.rstrip("/")
+        self.space = space
+        self.page_id = page_id
+
+        self.is_cloud = is_cloud
 
         self.space_level_scan = False
-
         self.confluence_client: Confluence | None = None
 
         if self.page_id is None or self.page_id == "":
@@ -397,7 +343,6 @@ class ConfluenceConnector(LoadConnector, PollConnector):
             username=username if self.is_cloud else None,
             password=access_token if self.is_cloud else None,
             token=access_token if not self.is_cloud else None,
-            cloud=self.is_cloud,
         )
         return None
 
@@ -416,9 +361,7 @@ class ConfluenceConnector(LoadConnector, PollConnector):
                     start=start_ind,
                     limit=batch_size,
                     status=(
-                        "current"
-                        if CONFLUENCE_CONNECTOR_INDEX_ONLY_ACTIVE_PAGES
-                        else None
+                        None if CONFLUENCE_CONNECTOR_INDEX_ARCHIVED_PAGES else "current"
                     ),
                     expand="body.storage.value,version",
                 )
@@ -439,9 +382,9 @@ class ConfluenceConnector(LoadConnector, PollConnector):
                                 start=start_ind + i,
                                 limit=1,
                                 status=(
-                                    "current"
-                                    if CONFLUENCE_CONNECTOR_INDEX_ONLY_ACTIVE_PAGES
-                                    else None
+                                    None
+                                    if CONFLUENCE_CONNECTOR_INDEX_ARCHIVED_PAGES
+                                    else "current"
                                 ),
                                 expand="body.storage.value,version",
                             )
@@ -548,10 +491,64 @@ class ConfluenceConnector(LoadConnector, PollConnector):
             logger.exception("Ran into exception when fetching labels from Confluence")
             return []
 
+    @classmethod
+    def _attachment_to_download_link(
+        cls, confluence_client: Confluence, attachment: dict[str, Any]
+    ) -> str:
+        return confluence_client.url + attachment["_links"]["download"]
+
+    @classmethod
+    def _attachment_to_content(
+        cls,
+        confluence_client: Confluence,
+        attachment: dict[str, Any],
+    ) -> str | None:
+        """If it returns None, assume that we should skip this attachment."""
+        if attachment["metadata"]["mediaType"] in [
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/svg+xml",
+            "video/mp4",
+            "video/quicktime",
+        ]:
+            return None
+
+        download_link = cls._attachment_to_download_link(confluence_client, attachment)
+
+        attachment_size = attachment["extensions"]["fileSize"]
+        if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
+            logger.warning(
+                f"Skipping {download_link} due to size. "
+                f"size={attachment_size} "
+                f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD}"
+            )
+            return None
+
+        response = confluence_client._session.get(download_link)
+        if response.status_code != 200:
+            logger.warning(
+                f"Failed to fetch {download_link} with invalid status code {response.status_code}"
+            )
+            return None
+
+        extracted_text = extract_file_text(
+            attachment["title"], io.BytesIO(response.content), False
+        )
+        if len(extracted_text) > CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD:
+            logger.warning(
+                f"Skipping {download_link} due to char count. "
+                f"char count={len(extracted_text)} "
+                f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD}"
+            )
+            return None
+
+        return extracted_text
+
     def _fetch_attachments(
         self, confluence_client: Confluence, page_id: str, files_in_used: list[str]
     ) -> tuple[str, list[dict[str, Any]]]:
-        unused_attachments = []
+        unused_attachments: list = []
 
         get_attachments_from_content = make_confluence_call_handle_rate_limit(
             confluence_client.get_attachments_from_content
@@ -564,40 +561,25 @@ class ConfluenceConnector(LoadConnector, PollConnector):
                 page_id, start=0, limit=500, expand=expand
             )
             for attachment in attachments_container["results"]:
-                if attachment["metadata"]["mediaType"] in [
-                    "image/jpeg",
-                    "image/png",
-                    "image/gif",
-                    "image/svg+xml",
-                    "video/mp4",
-                    "video/quicktime",
-                ]:
-                    continue
-
-                download_link = confluence_client.url + attachment["_links"]["download"]
-
-                attachment_size = attachment["extensions"]["fileSize"]
-                if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
-                    logger.warning(
-                        f"Skipping {download_link} due to size. "
-                        f"size={attachment_size} "
-                        f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD}"
-                    )
-                    continue
-
                 if attachment["title"] not in files_in_used:
                     unused_attachments.append(attachment)
                     continue
 
-                response = confluence_client._session.get(download_link)
-
-                if response.status_code == 200:
-                    extract = extract_file_text(
-                        attachment["title"], io.BytesIO(response.content), False
-                    )
-                    files_attachment_content.append(extract)
+                attachment_content = self._attachment_to_content(
+                    confluence_client, attachment
+                )
+                if attachment_content:
+                    files_attachment_content.append(attachment_content)
 
         except Exception as e:
+            if isinstance(
+                e, HTTPError
+            ) and NO_PERMISSIONS_TO_VIEW_ATTACHMENTS_ERROR_STR in str(e):
+                logger.warning(
+                    f"User does not have access to attachments on page '{page_id}'"
+                )
+                return "", []
+
             if not self.continue_on_failure:
                 raise e
             logger.exception(
@@ -610,7 +592,7 @@ class ConfluenceConnector(LoadConnector, PollConnector):
         self, start_ind: int, time_filter: Callable[[datetime], bool] | None = None
     ) -> tuple[list[Document], list[dict[str, Any]], int]:
         doc_batch: list[Document] = []
-        unused_attachments = []
+        unused_attachments: list[dict[str, Any]] = []
 
         if self.confluence_client is None:
             raise ConnectorMissingCredentialError("Confluence")
@@ -701,17 +683,16 @@ class ConfluenceConnector(LoadConnector, PollConnector):
             if time_filter and not time_filter(last_updated):
                 continue
 
-            download_url = self.confluence_client.url + attachment["_links"]["download"]
-
-            response = self.confluence_client._session.get(download_url)
-            if response.status_code != 200:
+            attachment_url = self._attachment_to_download_link(
+                self.confluence_client, attachment
+            )
+            attachment_content = self._attachment_to_content(
+                self.confluence_client, attachment
+            )
+            if attachment_content is None:
                 continue
 
-            extracted_text = extract_file_text(
-                attachment["title"], io.BytesIO(response.content), False
-            )
-
-            creator_email = attachment["history"]["createdBy"]["email"]
+            creator_email = attachment["history"]["createdBy"].get("email")
 
             comment = attachment["metadata"].get("comment", "")
             doc_metadata: dict[str, str | list[str]] = {"comment": comment}
@@ -725,8 +706,8 @@ class ConfluenceConnector(LoadConnector, PollConnector):
 
             doc_batch.append(
                 Document(
-                    id=download_url,
-                    sections=[Section(link=download_url, text=extracted_text)],
+                    id=attachment_url,
+                    sections=[Section(link=attachment_url, text=attachment_content)],
                     source=DocumentSource.CONFLUENCE,
                     semantic_identifier=attachment["title"],
                     doc_updated_at=last_updated,
@@ -813,7 +794,13 @@ class ConfluenceConnector(LoadConnector, PollConnector):
 
 
 if __name__ == "__main__":
-    connector = ConfluenceConnector(os.environ["CONFLUENCE_TEST_SPACE_URL"])
+    connector = ConfluenceConnector(
+        wiki_base=os.environ["CONFLUENCE_TEST_SPACE_URL"],
+        space=os.environ["CONFLUENCE_TEST_SPACE"],
+        is_cloud=os.environ.get("CONFLUENCE_IS_CLOUD", "true").lower() == "true",
+        page_id=os.environ.get("CONFLUENCE_TEST_PAGE_ID", ""),
+        index_recursively=True,
+    )
     connector.load_credentials(
         {
             "confluence_username": os.environ["CONFLUENCE_USER_NAME"],

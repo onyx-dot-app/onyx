@@ -1,9 +1,9 @@
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Modal } from "@/components/Modal";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { ConnectorIndexingStatus } from "@/lib/types";
+import { ConnectorIndexingStatus, ValidStatuses } from "@/lib/types";
 import { Button, Text, Title } from "@tremor/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { ReindexingProgressTable } from "../../../../components/embedding/ReindexingProgressTable";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -40,7 +40,7 @@ export default function UpgradingPage({
       method: "POST",
     });
     if (response.ok) {
-      mutate("/api/search-settings/get-secondary-embedding-model");
+      mutate("/api/search-settings/get-secondary-search-settings");
     } else {
       alert(
         `Failed to cancel embedding model update - ${await response.text()}`
@@ -48,6 +48,29 @@ export default function UpgradingPage({
     }
     setIsCancelling(false);
   };
+  const statusOrder: Record<ValidStatuses, number> = {
+    failed: 0,
+    completed_with_errors: 1,
+    not_started: 2,
+    in_progress: 3,
+    success: 4,
+  };
+
+  const sortedReindexingProgress = useMemo(() => {
+    return [...(ongoingReIndexingStatus || [])].sort((a, b) => {
+      const statusComparison =
+        statusOrder[a.latest_index_attempt?.status || "not_started"] -
+        statusOrder[b.latest_index_attempt?.status || "not_started"];
+
+      if (statusComparison !== 0) {
+        return statusComparison;
+      }
+
+      return (
+        (a.latest_index_attempt?.id || 0) - (b.latest_index_attempt?.id || 0)
+      );
+    });
+  }, [ongoingReIndexingStatus]);
 
   return (
     <>
@@ -101,9 +124,9 @@ export default function UpgradingPage({
 
             {isLoadingOngoingReIndexingStatus ? (
               <ThreeDotsLoader />
-            ) : ongoingReIndexingStatus ? (
+            ) : sortedReindexingProgress ? (
               <ReindexingProgressTable
-                reindexingProgress={ongoingReIndexingStatus}
+                reindexingProgress={sortedReindexingProgress}
               />
             ) : (
               <ErrorCallout errorTitle="Failed to fetch re-indexing progress" />

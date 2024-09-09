@@ -1,5 +1,5 @@
-# Copy this file to .env at the base of the repo and fill in the <REPLACE THIS> values
-# This will help with development iteration speed and reduce repeat tasks for dev
+# Copy this file to .env in the .vscode folder
+# Fill in the <REPLACE THIS> values as needed, it is recommended to set the GEN_AI_API_KEY value to avoid having to set up an LLM in the UI
 # Also check out danswer/backend/scripts/restart_containers.sh for a script to restart the containers which Danswer relies on outside of VSCode/Cursor processes
 
 # For local dev, often user Authentication is not needed
@@ -15,7 +15,7 @@ LOG_LEVEL=debug
 
 # This passes top N results to LLM an additional time for reranking prior to answer generation
 # This step is quite heavy on token usage so we disable it for dev generally
-DISABLE_LLM_DOC_RELEVANCE=True
+DISABLE_LLM_DOC_RELEVANCE=False
 
 
 # Useful if you want to toggle auth on/off (google_oauth/OIDC specifically)
@@ -27,9 +27,9 @@ REQUIRE_EMAIL_VERIFICATION=False
 
 # Set these so if you wipe the DB, you don't end up having to go through the UI every time
 GEN_AI_API_KEY=<REPLACE THIS>
-# If answer quality isn't important for dev, use 3.5 turbo due to it being cheaper
-GEN_AI_MODEL_VERSION=gpt-3.5-turbo
-FAST_GEN_AI_MODEL_VERSION=gpt-3.5-turbo
+# If answer quality isn't important for dev, use gpt-4o-mini since it's cheaper
+GEN_AI_MODEL_VERSION=gpt-4o
+FAST_GEN_AI_MODEL_VERSION=gpt-4o
 
 # For Danswer Slack Bot, overrides the UI values so no need to set this up via UI every time
 # Only needed if using DanswerBot
@@ -38,7 +38,7 @@ FAST_GEN_AI_MODEL_VERSION=gpt-3.5-turbo
 
 
 # Python stuff
-PYTHONPATH=./backend
+PYTHONPATH=../backend
 PYTHONUNBUFFERED=1
 
 
@@ -49,4 +49,3 @@ BING_API_KEY=<REPLACE THIS>
 # Enable the full set of Danswer Enterprise Edition features
 # NOTE: DO NOT ENABLE THIS UNLESS YOU HAVE A PAID ENTERPRISE LICENSE (or if you are using this for local testing/development)
 ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=False
-

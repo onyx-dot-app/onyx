@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 from danswer.db.models import IndexModelStatus
 from danswer.search.enums import RecencyBiasSetting
-from danswer.search.models import SearchType
+from danswer.search.enums import SearchType
 
 # revision identifiers, used by Alembic.
 revision = "776b3bbe9092"

@@ -5,7 +5,7 @@ from danswer.connectors.models import DocumentBase
 
 class IngestionDocument(BaseModel):
     document: DocumentBase
-    cc_pair_id: int | None
+    cc_pair_id: int | None = None
 
 
 class IngestionResult(BaseModel):
@@ -16,4 +16,4 @@ class IngestionResult(BaseModel):
 class DocMinimalInfo(BaseModel):
     document_id: str
     semantic_id: str
-    link: str | None
+    link: str | None = None

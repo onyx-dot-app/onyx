@@ -1,6 +1,7 @@
 name: Python Checks
 
 on:
+  merge_group:
   pull_request:
     branches: [ main ]
 

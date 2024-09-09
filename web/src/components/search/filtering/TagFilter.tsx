@@ -115,7 +115,7 @@ export function TagFilter({
               <FiTag className="mr-1 my-auto" />
               Tags
             </div>
-            <div className="flex flex-wrap gap-x-1 gap-y-1">
+            <div className="flex overflow-y-scroll overflow-x-hidden input-scrollbar max-h-96 flex-wrap gap-x-1 gap-y-1">
               {filteredTags.length > 0 ? (
                 filteredTags.map((tag) => (
                   <div

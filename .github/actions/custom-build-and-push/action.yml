@@ -1,0 +1,76 @@
+name: 'Build and Push Docker Image with Retry'
+description: 'Attempts to build and push a Docker image, with a retry on failure'
+inputs:
+  context:
+    description: 'Build context'
+    required: true
+  file:
+    description: 'Dockerfile location'
+    required: true
+  platforms:
+    description: 'Target platforms'
+    required: true
+  pull:
+    description: 'Always attempt to pull a newer version of the image'
+    required: false
+    default: 'true'
+  push:
+    description: 'Push the image to registry'
+    required: false
+    default: 'true'
+  load:
+    description: 'Load the image into Docker daemon'
+    required: false
+    default: 'true'
+  tags:
+    description: 'Image tags'
+    required: true
+  cache-from:
+    description: 'Cache sources'
+    required: false
+  cache-to:
+    description: 'Cache destinations'
+    required: false
+  retry-wait-time:
+    description: 'Time to wait before retry in seconds'
+    required: false
+    default: '5'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Build and push Docker image (First Attempt)
+      id: buildx1
+      uses: docker/build-push-action@v5
+      continue-on-error: true
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        platforms: ${{ inputs.platforms }}
+        pull: ${{ inputs.pull }}
+        push: ${{ inputs.push }}
+        load: ${{ inputs.load }}
+        tags: ${{ inputs.tags }}
+        cache-from: ${{ inputs.cache-from }}
+        cache-to: ${{ inputs.cache-to }}
+
+    - name: Wait to retry
+      if: steps.buildx1.outcome != 'success'
+      run: |
+        echo "First attempt failed. Waiting ${{ inputs.retry-wait-time }} seconds before retry..."
+        sleep ${{ inputs.retry-wait-time }}
+      shell: bash
+
+    - name: Build and push Docker image (Retry Attempt)
+      if: steps.buildx1.outcome != 'success'
+      uses: docker/build-push-action@v5
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        platforms: ${{ inputs.platforms }}
+        pull: ${{ inputs.pull }}
+        push: ${{ inputs.push }}
+        load: ${{ inputs.load }}
+        tags: ${{ inputs.tags }}
+        cache-from: ${{ inputs.cache-from }}
+        cache-to: ${{ inputs.cache-to }}

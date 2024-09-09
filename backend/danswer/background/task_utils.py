@@ -93,9 +93,16 @@ def build_apply_async_wrapper(build_name_fn: Callable[..., str]) -> Callable[[AA
             kwargs_for_build_name = kwargs or {}
             task_name = build_name_fn(*args_for_build_name, **kwargs_for_build_name)
             with Session(get_sqlalchemy_engine()) as db_session:
-                # mark the task as started
+                # register_task must come before fn = apply_async or else the task
+                # might run mark_task_start (and crash) before the task row exists
+                db_task = register_task(task_name, db_session)
+
                 task = fn(args, kwargs, *other_args, **other_kwargs)
-                register_task(task.id, task_name, db_session)
+
+                # we update the celery task id for diagnostic purposes
+                # but it isn't currently used by any code
+                db_task.task_id = task.id
+                db_session.commit()
 
             return task
 

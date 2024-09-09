@@ -30,10 +30,9 @@ from litellm.exceptions import Timeout  # type: ignore
 from litellm.exceptions import UnprocessableEntityError  # type: ignore
 
 from danswer.configs.constants import MessageType
-from danswer.configs.model_configs import GEN_AI_MAX_OUTPUT_TOKENS
 from danswer.configs.model_configs import GEN_AI_MAX_TOKENS
-from danswer.configs.model_configs import GEN_AI_MODEL_DEFAULT_MAX_TOKENS
-from danswer.configs.model_configs import GEN_AI_MODEL_PROVIDER
+from danswer.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+from danswer.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 from danswer.db.models import ChatMessage
 from danswer.file_store.models import ChatFileType
 from danswer.file_store.models import InMemoryChatFile
@@ -331,7 +330,7 @@ def test_llm(llm: LLM) -> str | None:
 def get_llm_max_tokens(
     model_map: dict,
     model_name: str,
-    model_provider: str = GEN_AI_MODEL_PROVIDER,
+    model_provider: str,
 ) -> int:
     """Best effort attempt to get the max tokens for the LLM"""
 #    import pdb; pdb.set_trace()
@@ -343,31 +342,80 @@ def get_llm_max_tokens(
 
     if GEN_AI_MAX_TOKENS:
         # This is an override, so always return this
+        logger.info(f"Using override GEN_AI_MAX_TOKENS: {GEN_AI_MAX_TOKENS}")
         return GEN_AI_MAX_TOKENS
 
     try:
         model_obj = model_map.get(f"{model_provider}/{model_name}")
         if not model_obj:
             model_obj = model_map[model_name]
+            logger.debug(f"Using model object for {model_name}")
+        else:
+            logger.debug(f"Using model object for {model_provider}/{model_name}")
 
         if "max_input_tokens" in model_obj:
-            return model_obj["max_input_tokens"]
+            max_tokens = model_obj["max_input_tokens"]
+            logger.info(
+                f"Max tokens for {model_name}: {max_tokens} (from max_input_tokens)"
+            )
+            return max_tokens
 
         if "max_tokens" in model_obj:
-            return model_obj["max_tokens"]
+            max_tokens = model_obj["max_tokens"]
+            logger.info(f"Max tokens for {model_name}: {max_tokens} (from max_tokens)")
+            return max_tokens
+
+        logger.error(f"No max tokens found for LLM: {model_name}")
         raise RuntimeError("No max tokens found for LLM")
     except Exception:
         logger.exception(
-            f"Failed to get max tokens for LLM with name {model_name}. Defaulting to {GEN_AI_MODEL_DEFAULT_MAX_TOKENS}."
+            f"Failed to get max tokens for LLM with name {model_name}. Defaulting to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS}."
         )
+        return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
-        return GEN_AI_MODEL_DEFAULT_MAX_TOKENS
+
+def get_llm_max_output_tokens(
+    model_map: dict,
+    model_name: str,
+    model_provider: str,
+) -> int:
+    """Best effort attempt to get the max output tokens for the LLM"""
+    try:
+        model_obj = model_map.get(f"{model_provider}/{model_name}")
+        if not model_obj:
+            model_obj = model_map[model_name]
+            logger.debug(f"Using model object for {model_name}")
+        else:
+            logger.debug(f"Using model object for {model_provider}/{model_name}")
+
+        if "max_output_tokens" in model_obj:
+            max_output_tokens = model_obj["max_output_tokens"]
+            logger.info(f"Max output tokens for {model_name}: {max_output_tokens}")
+            return max_output_tokens
+
+        # Fallback to a fraction of max_tokens if max_output_tokens is not specified
+        if "max_tokens" in model_obj:
+            max_output_tokens = int(model_obj["max_tokens"] * 0.1)
+            logger.info(
+                f"Fallback max output tokens for {model_name}: {max_output_tokens} (10% of max_tokens)"
+            )
+            return max_output_tokens
+
+        logger.error(f"No max output tokens found for LLM: {model_name}")
+        raise RuntimeError("No max output tokens found for LLM")
+    except Exception:
+        default_output_tokens = int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
+        logger.exception(
+            f"Failed to get max output tokens for LLM with name {model_name}. "
+            f"Defaulting to {default_output_tokens} (fallback max tokens)."
+        )
+        return default_output_tokens
 
 
 def get_max_input_tokens(
     model_name: str,
     model_provider: str,
-    output_tokens: int = GEN_AI_MAX_OUTPUT_TOKENS,
+    output_tokens: int = GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
 ) -> int:
     # NOTE: we previously used `litellm.get_max_tokens()`, but despite the name, this actually
     # returns the max OUTPUT tokens. Under the hood, this uses the `litellm.model_cost` dict,

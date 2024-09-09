@@ -98,8 +98,8 @@ def semantic_reranking(
 
     cross_encoder = RerankingModel(
         model_name=rerank_settings.rerank_model_name,
-        provider_type=rerank_settings.provider_type,
-        api_key=rerank_settings.api_key,
+        provider_type=rerank_settings.rerank_provider_type,
+        api_key=rerank_settings.rerank_api_key,
     )
 
     passages = [
@@ -253,8 +253,8 @@ def search_postprocessing(
 
     if not retrieved_sections:
         # Avoids trying to rerank an empty list which throws an error
-        yield []
-        yield []
+        yield cast(list[InferenceSection], [])
+        yield cast(list[SectionRelevancePiece], [])
         return
 
     rerank_task_id = None

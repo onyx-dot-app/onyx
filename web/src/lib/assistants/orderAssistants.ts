@@ -24,5 +24,6 @@ export function orderAssistantsForUser(
       return orderA - orderB;
     });
   }
+
   return assistants;
 }

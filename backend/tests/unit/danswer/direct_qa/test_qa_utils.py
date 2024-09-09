@@ -12,6 +12,37 @@ from danswer.llm.answering.stream_processing.quotes_processing import (
 from danswer.search.models import InferenceChunk
 
 
+def test_passed_in_quotes() -> None:
+    # Test case 1: Basic quote separation
+    test_answer = """{
+        "answer": "I can assist "James" with that",
+        "quotes": [
+            "Danswer can just ingest PDFs as they are. How GOOD it embeds them depends on the formatting of your PDFs.",
+            "the ` danswer. llm ` package aims to provide a comprehensive framework."
+        ]
+    }"""
+
+    answer, quotes = separate_answer_quotes(test_answer, is_json_prompt=True)
+    assert answer == 'I can assist "James" with that'
+    assert quotes == [
+        "Danswer can just ingest PDFs as they are. How GOOD it embeds them depends on the formatting of your PDFs.",
+        "the ` danswer. llm ` package aims to provide a comprehensive framework.",
+    ]
+
+    # Test case 2: Additional quotes
+    test_answer = """{
+        "answer": "She said the resposne was "1" and I said the reponse was "2".",
+        "quotes": [
+            "Danswer can efficiently ingest PDFs, with the quality of embedding depending on the PDF's formatting."
+        ]
+    }"""
+    answer, quotes = separate_answer_quotes(test_answer, is_json_prompt=True)
+    assert answer == 'She said the resposne was "1" and I said the reponse was "2".'
+    assert quotes == [
+        "Danswer can efficiently ingest PDFs, with the quality of embedding depending on the PDF's formatting.",
+    ]
+
+
 def test_separate_answer_quotes() -> None:
     # Test case 1: Basic quote separation
     test_answer = textwrap.dedent(

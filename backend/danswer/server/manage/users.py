@@ -213,6 +213,52 @@ def deactivate_user(
     db_session.commit()
 
 
+@router.delete("/manage/admin/delete-user")
+async def delete_user(
+    user_email: UserByEmail,
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    user_to_delete = get_user_by_email(
+        email=user_email.user_email, db_session=db_session
+    )
+    if not user_to_delete:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user_to_delete.is_active is True:
+        logger.warning(
+            "{} must be deactivated before deleting".format(user_to_delete.email)
+        )
+        raise HTTPException(
+            status_code=400, detail="User must be deactivated before deleting"
+        )
+
+    # Detach the user from the current session
+    db_session.expunge(user_to_delete)
+
+    try:
+        # Delete related OAuthAccounts first
+        for oauth_account in user_to_delete.oauth_accounts:
+            db_session.delete(oauth_account)
+
+        db_session.delete(user_to_delete)
+        db_session.commit()
+
+        # NOTE: edge case may exist with race conditions
+        # with this `invited user` scheme generally.
+        user_emails = get_invited_users()
+        remaining_users = [
+            user for user in user_emails if user != user_email.user_email
+        ]
+        write_invited_users(remaining_users)
+
+        logger.info(f"Deleted user {user_to_delete.email}")
+    except Exception as e:
+        db_session.rollback()
+        logger.error(f"Error deleting user {user_to_delete.email}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error deleting user")
+
+
 @router.patch("/manage/admin/activate-user")
 def activate_user(
     user_email: UserByEmail,
@@ -323,7 +369,7 @@ def verify_user_logged_in(
 
 
 class ChosenDefaultModelRequest(BaseModel):
-    default_model: str | None
+    default_model: str | None = None
 
 
 @router.patch("/user/default-model")

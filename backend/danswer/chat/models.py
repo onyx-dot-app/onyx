@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
@@ -35,12 +36,27 @@ class QADocsResponse(RetrievalDocs):
     applied_time_cutoff: datetime | None
     recency_bias_multiplier: float
 
-    def dict(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
-        initial_dict = super().dict(*args, **kwargs)  # type: ignore
+    def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
+        initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
         initial_dict["applied_time_cutoff"] = (
             self.applied_time_cutoff.isoformat() if self.applied_time_cutoff else None
         )
+
         return initial_dict
+
+
+class StreamStopReason(Enum):
+    CONTEXT_LENGTH = "context_length"
+    CANCELLED = "cancelled"
+
+
+class StreamStopInfo(BaseModel):
+    stop_reason: StreamStopReason
+
+    def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
+        data = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
+        data["stop_reason"] = self.stop_reason.name
+        return data
 
 
 class LLMRelevanceFilterResponse(BaseModel):
@@ -143,6 +159,7 @@ AnswerQuestionPossibleReturn = (
     | ImageGenerationDisplay
     | CustomToolResponse
     | StreamingError
+    | StreamStopInfo
 )
 
 
