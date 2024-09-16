@@ -14,26 +14,6 @@ const AddPromptSchema = Yup.object().shape({
 });
 
 const AddPromptModal = ({ onClose, onSubmit }: AddPromptModalProps) => {
-  const defaultPrompts = [
-    {
-      title: "Email help",
-      prompt: "Write a professional email addressing the following points:",
-    },
-    {
-      title: "Code explanation",
-      prompt: "Explain the following code snippet in simple terms:",
-    },
-    {
-      title: "Product description",
-      prompt: "Write a compelling product description for the following item:",
-    },
-    {
-      title: "Troubleshooting steps",
-      prompt:
-        "Provide step-by-step troubleshooting instructions for the following issue:",
-    },
-  ];
-
   return (
     <ModalWrapper onClose={onClose} modalClassName="max-w-xl">
       <Formik
@@ -53,7 +33,7 @@ const AddPromptModal = ({ onClose, onSubmit }: AddPromptModalProps) => {
       >
         {({ isSubmitting, setFieldValue }) => (
           <Form>
-            <h2 className="text-2xl gap-x-2 text-emphasis font-bold mb-3 flex items-center">
+            <h2 className="w-full text-2xl gap-x-2 text-emphasis font-bold mb-3 flex items-center">
               <BookstackIcon size={20} />
               Add prompt
             </h2>

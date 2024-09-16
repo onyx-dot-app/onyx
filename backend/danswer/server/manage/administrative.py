@@ -77,16 +77,10 @@ def document_boost_update(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
-    curr_ind_name, sec_ind_name = get_both_index_names(db_session)
-    document_index = get_default_document_index(
-        primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
-    )
-
     update_document_boost(
         db_session=db_session,
         document_id=boost_update.document_id,
         boost=boost_update.boost,
-        document_index=document_index,
         user=user,
     )
     return StatusResponse(success=True, message="Updated document boost")

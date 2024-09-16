@@ -30,12 +30,9 @@ export function ReindexingProgressTable({
             <TableHeaderCell className="w-1/7 sm:w-1/5">
               Connector Name
             </TableHeaderCell>
-            <TableHeaderCell className="w-1/7 sm:w-1/5">Status</TableHeaderCell>
-            <TableHeaderCell className="w-1/7 sm:w-1/5">
+            <TableHeaderCell className="w-3/7 sm:w-1/5">Status</TableHeaderCell>
+            <TableHeaderCell className="w-3/7 sm:w-1/5">
               Docs Re-Indexed
-            </TableHeaderCell>
-            <TableHeaderCell className="w-4/7 sm:w-2/5">
-              Error Message
             </TableHeaderCell>
           </TableRow>
         </TableHead>
@@ -64,13 +61,6 @@ export function ReindexingProgressTable({
                   <TableCell>
                     {reindexingProgress?.latest_index_attempt
                       ?.total_docs_indexed || "-"}
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <Text className="flex flex-wrap whitespace-normal">
-                        {reindexingProgress.error_msg || "-"}
-                      </Text>
-                    </div>
                   </TableCell>
                 </TableRow>
               );

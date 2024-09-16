@@ -39,9 +39,13 @@ SIM_SCORE_RANGE_HIGH = float(os.environ.get("SIM_SCORE_RANGE_HIGH") or 1.0)
 ASYM_QUERY_PREFIX = os.environ.get("ASYM_QUERY_PREFIX", "search_query: ")
 ASYM_PASSAGE_PREFIX = os.environ.get("ASYM_PASSAGE_PREFIX", "search_document: ")
 # Purely an optimization, memory limitation consideration
-BATCH_SIZE_ENCODE_CHUNKS = 8
+
+# User's set embedding batch size overrides the default encoding batch sizes
+EMBEDDING_BATCH_SIZE = int(os.environ.get("EMBEDDING_BATCH_SIZE") or 0) or None
+
+BATCH_SIZE_ENCODE_CHUNKS = EMBEDDING_BATCH_SIZE or 8
 # don't send over too many chunks at once, as sending too many could cause timeouts
-BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES = 512
+BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES = EMBEDDING_BATCH_SIZE or 512
 # For score display purposes, only way is to know the expected ranges
 CROSS_ENCODER_RANGE_MAX = 1
 CROSS_ENCODER_RANGE_MIN = 0

@@ -1,7 +1,7 @@
 import React from "react";
 import { Button, Text, Card } from "@tremor/react";
 
-import { FaNewspaper } from "react-icons/fa";
+import { FaNewspaper, FaPaperPlane, FaTractor, FaTrash } from "react-icons/fa";
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -48,7 +48,7 @@ const EditCredential = ({
   };
 
   return (
-    <div className="mb-4">
+    <div className="flex flex-col gap-y-6">
       <Text>
         Ensure that you update to a credential with the proper permissions!
       </Text>
@@ -58,37 +58,37 @@ const EditCredential = ({
         validationSchema={validationSchema}
         onSubmit={handleSubmit}
       >
-        {({ isSubmitting, setFieldValue }) => (
+        {({ isSubmitting, resetForm }) => (
           <Form>
-            <Card className="mt-4 flex flex-col gap-y-4">
+            <TextFormField
+              includeRevert
+              name="name"
+              placeholder={credential.name || ""}
+              label="Name (optional):"
+            />
+
+            {Object.entries(credential.credential_json).map(([key, value]) => (
               <TextFormField
                 includeRevert
-                onChange={(e) => setFieldValue("name", e.target.value)}
-                name="name"
-                placeholder={credential.name || ""}
-                label="Name (optional):"
+                key={key}
+                name={key}
+                placeholder={value}
+                label={getDisplayNameForCredentialKey(key)}
+                type={
+                  key.toLowerCase().includes("token") ||
+                  key.toLowerCase().includes("password")
+                    ? "password"
+                    : "text"
+                }
               />
-
-              {Object.entries(credential.credential_json).map(
-                ([key, value]) => (
-                  <TextFormField
-                    includeRevert
-                    key={key}
-                    onChange={(e) => setFieldValue(key, e.target.value)}
-                    name={key}
-                    placeholder={value}
-                    label={getDisplayNameForCredentialKey(key)}
-                    type={
-                      key.toLowerCase().includes("token") ||
-                      key.toLowerCase().includes("password")
-                        ? "password"
-                        : "text"
-                    }
-                  />
-                )
-              )}
-            </Card>
-            <div className="flex mt-8 justify-end">
+            ))}
+            <div className="flex justify-between w-full">
+              <Button type="button" onClick={() => resetForm()}>
+                <div className="flex gap-x-2 items-center w-full border-none">
+                  <FaTrash />
+                  <p>Reset Changes</p>
+                </div>
+              </Button>
               <Button
                 type="submit"
                 disabled={isSubmitting}

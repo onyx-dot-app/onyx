@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from danswer.background.task_utils import name_cc_cleanup_task
 from danswer.background.task_utils import name_cc_prune_task
-from danswer.background.task_utils import name_document_set_sync_task
 from danswer.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING
 from danswer.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
 from danswer.connectors.cross_connector_utils.rate_limit_wrapper import (
@@ -22,7 +21,6 @@ from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.models import Connector
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import Credential
-from danswer.db.models import DocumentSet
 from danswer.db.models import TaskQueueState
 from danswer.db.tasks import check_task_is_live_and_not_timed_out
 from danswer.db.tasks import get_latest_task
@@ -78,21 +76,6 @@ def should_kick_off_deletion_of_cc_pair(
     ):
         return False
 
-    return True
-
-
-def should_sync_doc_set(document_set: DocumentSet, db_session: Session) -> bool:
-    if document_set.is_up_to_date:
-        return False
-
-    task_name = name_document_set_sync_task(document_set.id)
-    latest_sync = get_latest_task(task_name, db_session)
-
-    if latest_sync and check_task_is_live_and_not_timed_out(latest_sync, db_session):
-        logger.info(f"Document set '{document_set.id}' is already syncing. Skipping.")
-        return False
-
-    logger.info(f"Document set {document_set.id} syncing now.")
     return True
 
 

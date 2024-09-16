@@ -362,6 +362,28 @@ def cohere_rerank(
     return [result.relevance_score for result in sorted_results]
 
 
+def litellm_rerank(
+    query: str, docs: list[str], api_url: str, model_name: str, api_key: str | None
+) -> list[float]:
+    headers = {} if not api_key else {"Authorization": f"Bearer {api_key}"}
+    with httpx.Client() as client:
+        response = client.post(
+            api_url,
+            json={
+                "model": model_name,
+                "query": query,
+                "documents": docs,
+            },
+            headers=headers,
+        )
+        response.raise_for_status()
+        result = response.json()
+        return [
+            item["relevance_score"]
+            for item in sorted(result["results"], key=lambda x: x["index"])
+        ]
+
+
 @router.post("/bi-encoder-embed")
 async def process_embed_request(
     embed_request: EmbedRequest,
@@ -418,6 +440,20 @@ async def process_rerank_request(rerank_request: RerankRequest) -> RerankRespons
                 model_name=rerank_request.model_name,
             )
             return RerankResponse(scores=sim_scores)
+        elif rerank_request.provider_type == RerankerProvider.LITELLM:
+            if rerank_request.api_url is None:
+                raise ValueError("API URL is required for LiteLLM reranking.")
+
+            sim_scores = litellm_rerank(
+                query=rerank_request.query,
+                docs=rerank_request.documents,
+                api_url=rerank_request.api_url,
+                model_name=rerank_request.model_name,
+                api_key=rerank_request.api_key,
+            )
+
+            return RerankResponse(scores=sim_scores)
+
         elif rerank_request.provider_type == RerankerProvider.COHERE:
             if rerank_request.api_key is None:
                 raise RuntimeError("Cohere Rerank Requires an API Key")

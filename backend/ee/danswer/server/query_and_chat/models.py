@@ -52,9 +52,11 @@ class BasicCreateChatMessageWithHistoryRequest(ChunkContext):
     messages: list[ThreadMessage]
     prompt_id: int | None
     persona_id: int
-    retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
+    retrieval_options: RetrievalDetails | None = None
     query_override: str | None = None
     skip_rerank: bool | None = None
+    # If search_doc_ids provided, then retrieval options are unused
+    search_doc_ids: list[int] | None = None
 
 
 class SimpleDoc(BaseModel):
@@ -74,4 +76,7 @@ class ChatBasicResponse(BaseModel):
     simple_search_docs: list[SimpleDoc] | None = None
     error_msg: str | None = None
     message_id: int | None = None
-    llm_chunks_indices: list[int] | None = None
+    llm_selected_doc_indices: list[int] | None = None
+    final_context_doc_indices: list[int] | None = None
+    # this is a map of the citation number to the document id
+    cited_documents: dict[int, str] | None = None

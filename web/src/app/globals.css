@@ -2,6 +2,192 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --text-50: #fafafa;
+    /* neutral-50 - Very light gray */
+    --text-100: #f5f5f5;
+    /* neutral-100, lighter - Light gray */
+    --text-200: #e5e5e5;
+    /* neutral-200, light - Lighter gray */
+    --text-300: #d4d4d4;
+    /* neutral-300, stronger - Light medium gray */
+    --text-400: #a3a3a3;
+    /* neutral-400, medium - Medium gray */
+    --text-500: #737373;
+    /* neutral-500, darkMedium - Dark medium gray */
+    --text-600: #525252;
+    /* neutral-600, dark - Dark gray */
+    --text-700: #404040;
+    /* neutral-700, solid - Very dark gray */
+    --text-800: #262626;
+    /* neutral-800, solidDark - Nearly black */
+    --text-900: #111827;
+    /* neutral-900 - Very dark, almost black */
+    --text-950: #0a0a0a;
+    /* solidDark - Nearly pure black */
+
+    --background: #fafafa;
+    /* 50 - Almost white */
+    --background-100: #f5f5f5;
+    /* neutral-100 - Very light gray */
+    --background-125: #f1f2f4;
+    /* gray-125 - Light grayish */
+    --background-150: #eaeaea;
+    /* gray-150 - Light gray */
+    --background-200: #e5e5e5;
+    /* neutral-200 - Light medium gray */
+    --background-300: #d4d4d4;
+    /* neutral-300 - Medium light gray */
+    --background-400: #a3a3a3;
+    /* neutral-400 - Medium gray */
+    --background-500: #737373;
+    /* neutral-500 - Medium dark gray */
+    --background-600: #525252;
+    /* neutral-600 - Dark gray */
+    --background-700: #404040;
+    /* neutral-700 - Very dark gray */
+    --background-800: #262626;
+    /* neutral-800 - Nearly black */
+    --background-900: #111827;
+    /* gray-900 - Very dark, almost black */
+    --background-inverted: #000000;
+    /* black - Pure black */
+
+    --background-emphasis: #f6f7f8;
+    /* Very light grayish blue */
+    --background-strong: #eaecef;
+    /* Light grayish blue */
+    --border: #e5e7eb;
+    /* gray-200 - Light gray */
+    --border-light: #f5f5f5;
+    /* gray-100 - Very light gray */
+    --border-medium: #d4d4d4;
+    /* gray-300 - Medium light gray */
+    --border-strong: #a3a3a3;
+    /* gray-400 - Medium gray */
+    --border-dark: #525252;
+    /* neutral-600 - Dark gray */
+
+    --link: #3b82f6;
+    /* blue-500 - Bright blue */
+    --link-hover: #1d4ed8;
+    /* blue-700 - Dark blue */
+    --error: #ef4444;
+    /* red-500 - Bright red */
+    --success: #059669;
+    /* emerald-600 - Deep green */
+    --alert: #f59e0b;
+    /* amber-600 - Orange */
+    --accent: #6366f1;
+    /* indigo-500 - Bright indigo */
+    --accent-hover: #4f46e5;
+    /* Darker indigo */
+
+    --black: #000000;
+    /* Pure black */
+    --white: #ffffff;
+    /* Pure white */
+
+    --code-text: #e0e0e0;
+    /* Light gray for code text */
+    --token-comment: #608b4e;
+    /* Muted green for comments */
+    --token-punctuation: #d4d4d4;
+    /* Light gray for punctuation */
+    --token-property: #569cd6;
+    /* Light blue for properties */
+    --token-selector: #e07b53;
+    /* Soft orange for selectors */
+    --token-atrule: #d18ad8;
+    /* Light purple for at-rules */
+    --token-function: #f0e68c;
+    /* Light yellow for functions */
+    --token-regex: #9cdcfe;
+    /* Light blue for regex */
+    --token-attr-name: #9cdcfe;
+    /* Light blue for attribute names */
+
+    --non-selectable: #f8d7da;
+    /* Light pink for non-selectable elements */
+    --highlight-text: #fef9c3;
+    /* Very light yellow for highlighted text */
+    --user-bubble: #f1f2f4;
+    /* near gray-100 - Very light grayish */
+    --ai-bubble: #272a2d;
+    /* Dark grayish for AI bubbles */
+    --document-color: #f43f5e;
+    /* pink-500 - Bright pink for documents */
+
+    --scrollbar-track: #f9fafb;
+    /* Very light gray for scrollbar track */
+    --scrollbar-thumb: #e5e7eb;
+    /* Light gray for scrollbar thumb */
+    --scrollbar-thumb-hover: #d1d5db;
+    /* Medium light gray for scrollbar thumb on hover */
+    --scrollbar-dark-thumb: #989a9c;
+    /* Medium gray for dark scrollbar thumb */
+    --scrollbar-dark-thumb-hover: #c7cdd2;
+    /* Light medium gray for dark scrollbar thumb on hover */
+
+    /* Adding missing colors from tailwind-themes/tailwind.config.js */
+    --tremor-brand-faint: #eff6ff;
+    /* blue-50 */
+    --tremor-brand-muted: #bfdbfe;
+    /* blue-200 */
+    --tremor-brand-subtle: #60a5fa;
+    /* blue-400 */
+    --tremor-brand-emphasis: #1d4ed8;
+    /* blue-700 */
+    --tremor-brand-inverted: #ffffff;
+    /* white */
+    --tremor-background-muted: #f9fafb;
+    /* gray-50 */
+    --tremor-background-subtle: #f3f4f6;
+    /* gray-100 */
+    --tremor-background-emphasis: #374151;
+    /* gray-700 */
+    --tremor-content-subtle: #9ca3af;
+    /* gray-400 */
+    --tremor-content-default: #4b5563;
+    /* gray-600 */
+    --tremor-content-emphasis: #374151;
+    /* gray-700 */
+    --tremor-content-strong: #111827;
+    /* gray-900 */
+    --tremor-content-inverted: #ffffff;
+    /* white */
+    --dark-tremor-brand-faint: #0b1229;
+    /* custom */
+    --dark-tremor-brand-muted: #172554;
+    /* blue-950 */
+    --dark-tremor-brand-subtle: #1e40af;
+    /* blue-800 */
+    --dark-tremor-brand-emphasis: #60a5fa;
+    /* blue-400 */
+    --dark-tremor-brand-inverted: #030712;
+    /* gray-950 */
+    --dark-tremor-background-muted: #131a2b;
+    /* custom */
+    --dark-tremor-background-subtle: #1f2937;
+    /* gray-800 */
+    --dark-tremor-background-default: #111827;
+    /* gray-900 */
+    --dark-tremor-background-emphasis: #d1d5db;
+    /* gray-300 */
+    --dark-tremor-content-subtle: #6b7280;
+    /* gray-500 */
+    --dark-tremor-content-default: #d1d5db;
+    /* gray-300 */
+    --dark-tremor-content-emphasis: #f3f4f6;
+    /* gray-100 */
+    --dark-tremor-content-strong: #f9fafb;
+    /* gray-50 */
+    --dark-tremor-content-inverted: #000000;
+    /* black */
+  }
+}
+
 @layer utilities {
   /* Hide scrollbar for Chrome, Safari and Opera */
   .no-scrollbar::-webkit-scrollbar {
@@ -256,5 +442,6 @@ ol > li > p,
 ul > li > p {
   margin-top: 0;
   margin-bottom: 0;
-  display: inline; /* Make paragraphs inline to reduce vertical space */
+  display: inline;
+  /* Make paragraphs inline to reduce vertical space */
 }

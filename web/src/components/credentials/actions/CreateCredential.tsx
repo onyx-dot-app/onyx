@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Button, Card } from "@tremor/react";
 import { ValidSources } from "@/lib/types";
 import { FaAccusoft } from "react-icons/fa";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
 import { TextFormField } from "@/components/admin/connectors/Field";
-import { Form, Formik, FormikHelpers, FormikProps } from "formik";
+import { Form, Formik, FormikHelpers } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { getSourceDocLink } from "@/lib/sources";
 import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
@@ -178,7 +178,7 @@ export default function CreateCredential({
       initialValues={
         {
           name: "",
-          is_public: isAdmin,
+          is_public: isAdmin || !isPaidEnterpriseFeaturesEnabled,
           groups: [],
         } as formType
       }
@@ -232,7 +232,7 @@ export default function CreateCredential({
                           setShowAdvancedOptions={setShowAdvancedOptions}
                         />
                       )}
-                      {(showAdvancedOptions || !isAdmin) && (
+                      {showAdvancedOptions && (
                         <IsPublicGroupSelector
                           formikProps={formikProps}
                           objectName="credential"

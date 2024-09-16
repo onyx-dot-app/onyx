@@ -43,6 +43,7 @@ class RerankRequest(BaseModel):
     model_name: str
     provider_type: RerankerProvider | None = None
     api_key: str | None = None
+    api_url: str | None = None
 
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}

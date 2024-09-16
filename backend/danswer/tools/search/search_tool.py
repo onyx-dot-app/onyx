@@ -45,7 +45,7 @@ logger = setup_logger()
 SEARCH_RESPONSE_SUMMARY_ID = "search_response_summary"
 SEARCH_DOC_CONTENT_ID = "search_doc_content"
 SECTION_RELEVANCE_LIST_ID = "section_relevance_list"
-FINAL_CONTEXT_DOCUMENTS = "final_context_documents"
+FINAL_CONTEXT_DOCUMENTS_ID = "final_context_documents"
 SEARCH_EVALUATION_ID = "llm_doc_eval"
 
 
@@ -179,7 +179,7 @@ class SearchTool(Tool):
         self, *args: ToolResponse
     ) -> str | list[str | dict[str, Any]]:
         final_context_docs_response = next(
-            response for response in args if response.id == FINAL_CONTEXT_DOCUMENTS
+            response for response in args if response.id == FINAL_CONTEXT_DOCUMENTS_ID
         )
         final_context_docs = cast(list[LlmDoc], final_context_docs_response.response)
 
@@ -260,7 +260,7 @@ class SearchTool(Tool):
             for section in final_context_sections
         ]
 
-        yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS, response=llm_docs)
+        yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
 
     def run(self, **kwargs: str) -> Generator[ToolResponse, None, None]:
         query = cast(str, kwargs["query"])
@@ -343,12 +343,12 @@ class SearchTool(Tool):
             llm_doc_from_inference_section(section) for section in pruned_sections
         ]
 
-        yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS, response=llm_docs)
+        yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
         final_docs = cast(
             list[LlmDoc],
-            next(arg.response for arg in args if arg.id == FINAL_CONTEXT_DOCUMENTS),
+            next(arg.response for arg in args if arg.id == FINAL_CONTEXT_DOCUMENTS_ID),
         )
         # NOTE: need to do this json.loads(doc.json()) stuff because there are some
         # subfields that are not serializable by default (datetime)

@@ -158,14 +158,7 @@ export function ProviderCreationModal({
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
         >
-          {({
-            values,
-            errors,
-            touched,
-            isSubmitting,
-            handleSubmit,
-            setFieldValue,
-          }) => (
+          {({ isSubmitting, handleSubmit, setFieldValue }) => (
             <Form onSubmit={handleSubmit} className="space-y-4">
               <Text className="text-lg mb-2">
                 You are setting the credentials for this provider. To access
@@ -220,7 +213,7 @@ export function ProviderCreationModal({
                 ) : (
                   <TextFormField
                     name="api_key"
-                    label={`API Key ${isProxy && "(for non-local deployments)"}`}
+                    label={`API Key ${isProxy ? "(for non-local deployments)" : ""}`}
                     placeholder="API Key"
                     type="password"
                   />

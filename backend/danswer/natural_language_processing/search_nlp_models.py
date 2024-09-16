@@ -245,6 +245,7 @@ class RerankingModel:
         model_name: str,
         provider_type: RerankerProvider | None,
         api_key: str | None,
+        api_url: str | None,
         model_server_host: str = MODEL_SERVER_HOST,
         model_server_port: int = MODEL_SERVER_PORT,
     ) -> None:
@@ -253,6 +254,7 @@ class RerankingModel:
         self.model_name = model_name
         self.provider_type = provider_type
         self.api_key = api_key
+        self.api_url = api_url
 
     def predict(self, query: str, passages: list[str]) -> list[float]:
         rerank_request = RerankRequest(
@@ -261,6 +263,7 @@ class RerankingModel:
             model_name=self.model_name,
             provider_type=self.provider_type,
             api_key=self.api_key,
+            api_url=self.api_url,
         )
 
         response = requests.post(
@@ -352,8 +355,8 @@ def warm_up_retry(
                 return func(*args, **kwargs)
             except Exception as e:
                 exceptions.append(e)
-                logger.exception(
-                    f"Attempt {attempt + 1} failed; retrying in {delay} seconds..."
+                logger.info(
+                    f"Attempt {attempt + 1}/{tries} failed; retrying in {delay} seconds..."
                 )
                 time.sleep(delay)
         raise Exception(f"All retries failed: {exceptions}")
@@ -403,6 +406,7 @@ def warm_up_cross_encoder(
     reranking_model = RerankingModel(
         model_name=rerank_model_name,
         provider_type=None,
+        api_url=None,
         api_key=None,
     )
 

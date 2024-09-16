@@ -100,6 +100,7 @@ def semantic_reranking(
         model_name=rerank_settings.rerank_model_name,
         provider_type=rerank_settings.rerank_provider_type,
         api_key=rerank_settings.rerank_api_key,
+        api_url=rerank_settings.rerank_api_url,
     )
 
     passages = [

@@ -19,14 +19,22 @@ class IndexAttemptSingleton:
     main background job (scheduler), etc. this will not be used."""
 
     _INDEX_ATTEMPT_ID: None | int = None
+    _CONNECTOR_CREDENTIAL_PAIR_ID: None | int = None
 
     @classmethod
     def get_index_attempt_id(cls) -> None | int:
         return cls._INDEX_ATTEMPT_ID
 
     @classmethod
-    def set_index_attempt_id(cls, index_attempt_id: int) -> None:
+    def get_connector_credential_pair_id(cls) -> None | int:
+        return cls._CONNECTOR_CREDENTIAL_PAIR_ID
+
+    @classmethod
+    def set_cc_and_index_id(
+        cls, index_attempt_id: int, connector_credential_pair_id: int
+    ) -> None:
         cls._INDEX_ATTEMPT_ID = index_attempt_id
+        cls._CONNECTOR_CREDENTIAL_PAIR_ID = connector_credential_pair_id
 
 
 def get_log_level_from_str(log_level_str: str = LOG_LEVEL) -> int:
@@ -50,8 +58,13 @@ class DanswerLoggingAdapter(logging.LoggerAdapter):
         # If this is an indexing job, add the attempt ID to the log message
         # This helps filter the logs for this specific indexing
         attempt_id = IndexAttemptSingleton.get_index_attempt_id()
+        cc_pair_id = IndexAttemptSingleton.get_connector_credential_pair_id()
+
         if attempt_id is not None:
             msg = f"[Attempt ID: {attempt_id}] {msg}"
+
+        if cc_pair_id is not None:
+            msg = f"[CC Pair ID: {cc_pair_id}] {msg}"
 
         # For Slack Bot, logs the channel relevant to the request
         channel_id = self.extra.get(SLACK_CHANNEL_ID) if self.extra else None
@@ -65,6 +78,16 @@ class DanswerLoggingAdapter(logging.LoggerAdapter):
         self.log(
             logging.getLevelName("NOTICE"), str(msg), *args, **kwargs, stacklevel=2
         )
+
+
+class PlainFormatter(logging.Formatter):
+    """Adds log levels."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        levelname = record.levelname
+        level_display = f"{levelname}:"
+        formatted_message = super().format(record)
+        return f"{level_display.ljust(9)} {formatted_message}"
 
 
 class ColoredFormatter(logging.Formatter):
@@ -101,6 +124,13 @@ def get_standard_formatter() -> ColoredFormatter:
     )
 
 
+DANSWER_DOCKER_ENV_STR = "DANSWER_RUNNING_IN_DOCKER"
+
+
+def is_running_in_container() -> bool:
+    return os.getenv(DANSWER_DOCKER_ENV_STR) == "true"
+
+
 def setup_logger(
     name: str = __name__,
     log_level: int = get_log_level_from_str(),
@@ -128,7 +158,7 @@ def setup_logger(
         uvicorn_logger.addHandler(handler)
         uvicorn_logger.setLevel(log_level)
 
-    is_containerized = os.path.exists("/.dockerenv")
+    is_containerized = is_running_in_container()
     if LOG_FILE_NAME and (is_containerized or DEV_LOGGING_ENABLED):
         log_levels = ["debug", "info", "notice"]
         for level in log_levels:

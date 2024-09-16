@@ -11,7 +11,8 @@ jobs:
 
     env:
       PYTHONPATH: ./backend
-
+      REDIS_CLOUD_PYTEST_PASSWORD: ${{ secrets.REDIS_CLOUD_PYTEST_PASSWORD }}
+      
     steps:
     - name: Checkout code
       uses: actions/checkout@v4

@@ -1,3 +1,5 @@
+import * as Yup from "yup";
+import { IsPublicGroupSelectorFormType } from "@/components/IsPublicGroupSelector";
 import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
 
 export type InputType =
@@ -222,7 +224,7 @@ export const connectorConfigs: Record<
     description: "Configure Confluence connector",
     subtext: `Specify the base URL of your Confluence instance, the space name, and optionally a specific page ID to index. If no page ID is provided, the entire space will be indexed.
 
-For example, entering "https://pablosfsanchez.atlassian.net/wiki" as the Wiki Base URL, "KB" as the Space, and "164331" as the Page ID will index the specific page at https://pablosfsanchez.atlassian.net/wiki/spaces/KB/pages/164331/Page. If you leave the Page ID empty, it will index the entire KB space.
+For example, entering "https://your-company.atlassian.net/wiki" as the Wiki Base URL, "KB" as the Space, and "164331" as the Page ID will index the specific page at https:///your-company.atlassian.net/wiki/spaces/KB/pages/164331/Page. If you leave the Page ID empty, it will index the entire KB space.
 
 Selecting the "Index Recursively" checkbox will index the specified page and all of its children.`,
     values: [
@@ -586,7 +588,20 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
   },
   zendesk: {
     description: "Configure Zendesk connector",
-    values: [],
+    values: [
+      {
+        type: "select",
+        query: "Select the what content this connector will index:",
+        label: "Content Type",
+        name: "content_type",
+        optional: false,
+        options: [
+          { name: "articles", value: "articles" },
+          { name: "tickets", value: "tickets" },
+        ],
+        default: 0,
+      },
+    ],
   },
   linear: {
     description: "Configure Dropbox connector",
@@ -795,6 +810,68 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
   },
 };
+export function createConnectorInitialValues(
+  connector: ConfigurableSources
+): Record<string, any> & IsPublicGroupSelectorFormType {
+  const configuration = connectorConfigs[connector];
+
+  return {
+    name: "",
+    groups: [],
+    is_public: true,
+    ...configuration.values.reduce(
+      (acc, field) => {
+        if (field.type === "select") {
+          acc[field.name] = null;
+        } else if (field.type === "list") {
+          acc[field.name] = field.default || [];
+        } else if (field.type === "checkbox") {
+          acc[field.name] = field.default || false;
+        } else if (field.default !== undefined) {
+          acc[field.name] = field.default;
+        }
+        return acc;
+      },
+      {} as { [record: string]: any }
+    ),
+  };
+}
+
+export function createConnectorValidationSchema(
+  connector: ConfigurableSources
+): Yup.ObjectSchema<Record<string, any>> {
+  const configuration = connectorConfigs[connector];
+
+  return Yup.object().shape({
+    name: Yup.string().required("Connector Name is required"),
+    ...configuration.values.reduce(
+      (acc, field) => {
+        let schema: any =
+          field.type === "select"
+            ? Yup.string()
+            : field.type === "list"
+              ? Yup.array().of(Yup.string())
+              : field.type === "checkbox"
+                ? Yup.boolean()
+                : field.type === "file"
+                  ? Yup.mixed()
+                  : Yup.string();
+
+        if (!field.optional) {
+          schema = schema.required(`${field.label} is required`);
+        }
+
+        acc[field.name] = schema;
+        return acc;
+      },
+      {} as Record<string, any>
+    ),
+    // These are advanced settings
+    indexingStart: Yup.string().nullable(),
+    pruneFreq: Yup.number().min(0, "Prune frequency must be non-negative"),
+    refreshFreq: Yup.number().min(0, "Refresh frequency must be non-negative"),
+  });
+}
 
 // CONNECTORS
 export interface ConnectorBase<T> {

@@ -169,7 +169,10 @@ export const SearchResultsDisplay = ({
             <p>Results</p>
             {!DISABLE_LLM_DOC_RELEVANCE &&
               (contentEnriched || searchResponse.additional_relevance) && (
-                <Tooltip delayDuration={1000} content={`${commandSymbol}O`}>
+                <Tooltip
+                  delayDuration={1000}
+                  content={<div className="flex">{commandSymbol}O</div>}
+                >
                   <button
                     onClick={() => {
                       performSweep();

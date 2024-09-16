@@ -7,6 +7,6 @@ chart-repos:
   - vespa=https://unoplat.github.io/vespa-helm-charts
   - postgresql=https://charts.bitnami.com/bitnami
   
-helm-extra-args: --timeout 900s
+helm-extra-args: --timeout 600s
 
 validate-maintainers: false

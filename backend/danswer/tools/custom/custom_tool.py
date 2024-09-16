@@ -24,6 +24,9 @@ from danswer.tools.custom.openapi_parsing import openapi_to_method_specs
 from danswer.tools.custom.openapi_parsing import openapi_to_url
 from danswer.tools.custom.openapi_parsing import REQUEST_BODY
 from danswer.tools.custom.openapi_parsing import validate_openapi_schema
+from danswer.tools.models import CHAT_SESSION_ID_PLACEHOLDER
+from danswer.tools.models import DynamicSchemaInfo
+from danswer.tools.models import MESSAGE_ID_PLACEHOLDER
 from danswer.tools.tool import Tool
 from danswer.tools.tool import ToolResponse
 from danswer.utils.logger import setup_logger
@@ -39,7 +42,11 @@ class CustomToolCallSummary(BaseModel):
 
 
 class CustomTool(Tool):
-    def __init__(self, method_spec: MethodSpec, base_url: str) -> None:
+    def __init__(
+        self,
+        method_spec: MethodSpec,
+        base_url: str,
+    ) -> None:
         self._base_url = base_url
         self._method_spec = method_spec
         self._tool_definition = self._method_spec.to_tool_definition()
@@ -141,6 +148,7 @@ class CustomTool(Tool):
         request_body = kwargs.get(REQUEST_BODY)
 
         path_params = {}
+
         for path_param_schema in self._method_spec.get_path_param_schemas():
             path_params[path_param_schema["name"]] = kwargs[path_param_schema["name"]]
 
@@ -168,8 +176,23 @@ class CustomTool(Tool):
 
 
 def build_custom_tools_from_openapi_schema(
-    openapi_schema: dict[str, Any]
+    openapi_schema: dict[str, Any],
+    dynamic_schema_info: DynamicSchemaInfo | None = None,
 ) -> list[CustomTool]:
+    if dynamic_schema_info:
+        # Process dynamic schema information
+        schema_str = json.dumps(openapi_schema)
+        placeholders = {
+            CHAT_SESSION_ID_PLACEHOLDER: dynamic_schema_info.chat_session_id,
+            MESSAGE_ID_PLACEHOLDER: dynamic_schema_info.message_id,
+        }
+
+        for placeholder, value in placeholders.items():
+            if value:
+                schema_str = schema_str.replace(placeholder, str(value))
+
+        openapi_schema = json.loads(schema_str)
+
     url = openapi_to_url(openapi_schema)
     method_specs = openapi_to_method_specs(openapi_schema)
     return [CustomTool(method_spec, url) for method_spec in method_specs]
@@ -223,7 +246,9 @@ if __name__ == "__main__":
     }
     validate_openapi_schema(openapi_schema)
 
-    tools = build_custom_tools_from_openapi_schema(openapi_schema)
+    tools = build_custom_tools_from_openapi_schema(
+        openapi_schema, dynamic_schema_info=None
+    )
 
     openai_client = openai.OpenAI()
     response = openai_client.chat.completions.create(

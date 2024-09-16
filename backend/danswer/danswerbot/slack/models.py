@@ -9,6 +9,7 @@ class SlackMessageInfo(BaseModel):
     msg_to_respond: str | None
     thread_to_respond: str | None
     sender: str | None
+    email: str | None
     bypass_filters: bool  # User has tagged @DanswerBot
     is_bot_msg: bool  # User is using /DanswerBot
     is_bot_dm: bool  # User is direct messaging to DanswerBot

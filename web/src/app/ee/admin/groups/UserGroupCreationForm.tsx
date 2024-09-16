@@ -29,7 +29,7 @@ export const UserGroupCreationForm = ({
   const isUpdate = existingUserGroup !== undefined;
 
   return (
-    <Modal onOutsideClick={onClose}>
+    <Modal className="w-fit" onOutsideClick={onClose}>
       <div className="px-8 py-6 bg-background">
         <h2 className="text-xl font-bold flex">
           {isUpdate ? "Update a User Group" : "Create a new User Group"}

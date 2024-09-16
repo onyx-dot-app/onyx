@@ -98,6 +98,18 @@ def get_connector_credential_pairs(
     return list(results.all())
 
 
+def add_deletion_failure_message(
+    db_session: Session,
+    cc_pair_id: int,
+    failure_message: str,
+) -> None:
+    cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+    if not cc_pair:
+        return
+    cc_pair.deletion_failure_message = failure_message
+    db_session.commit()
+
+
 def get_cc_pair_groups_for_ids(
     db_session: Session,
     cc_pair_ids: list[int],

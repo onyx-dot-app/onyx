@@ -341,6 +341,7 @@ def kickoff_indexing_jobs(
             run = secondary_client.submit(
                 run_indexing_entrypoint,
                 attempt.id,
+                attempt.connector_credential_pair_id,
                 global_version.get_is_ee_version(),
                 pure=False,
             )
@@ -348,6 +349,7 @@ def kickoff_indexing_jobs(
             run = client.submit(
                 run_indexing_entrypoint,
                 attempt.id,
+                attempt.connector_credential_pair_id,
                 global_version.get_is_ee_version(),
                 pure=False,
             )

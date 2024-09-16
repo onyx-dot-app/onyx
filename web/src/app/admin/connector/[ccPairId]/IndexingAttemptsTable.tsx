@@ -19,11 +19,12 @@ import { buildCCPairInfoUrl } from "./lib";
 import { localizeAndPrettify } from "@/lib/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { SearchIcon } from "@/components/icons/icons";
+import { InfoIcon, SearchIcon } from "@/components/icons/icons";
 import Link from "next/link";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { PaginatedIndexAttempts } from "./types";
 import { useRouter } from "next/navigation";
+import { Tooltip } from "@/components/tooltip/Tooltip";
 
 // This is the number of index attempts to display per page
 const NUM_IN_PAGE = 8;
@@ -192,7 +193,19 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
             <TableHeaderCell>Time Started</TableHeaderCell>
             <TableHeaderCell>Status</TableHeaderCell>
             <TableHeaderCell>New Doc Cnt</TableHeaderCell>
-            <TableHeaderCell>Total Doc Cnt</TableHeaderCell>
+            <TableHeaderCell>
+              <div className="w-fit">
+                <Tooltip
+                  width="max-w-sm"
+                  content="Total number of documents replaced in the index during this indexing attempt"
+                >
+                  <span className="cursor-help flex items-center">
+                    Total Doc Cnt
+                    <InfoIcon className="ml-1 w-4 h-4" />
+                  </span>
+                </Tooltip>
+              </div>
+            </TableHeaderCell>
             <TableHeaderCell>Error Message</TableHeaderCell>
           </TableRow>
         </TableHead>
@@ -212,10 +225,16 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
                     status={indexAttempt.status || "not_started"}
                     size="xs"
                   />
-                  {docsPerMinute && (
+                  {docsPerMinute ? (
                     <div className="text-xs mt-1">
                       {docsPerMinute} docs / min
                     </div>
+                  ) : (
+                    indexAttempt.status === "success" && (
+                      <div className="text-xs mt-1">
+                        No additional docs processed
+                      </div>
+                    )
                   )}
                 </TableCell>
                 <TableCell>

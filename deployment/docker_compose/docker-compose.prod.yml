@@ -1,4 +1,3 @@
-version: '3'
 services:
   api_server:
     image: danswer/danswer-backend:${IMAGE_TAG:-latest}
@@ -149,6 +148,7 @@ services:
       - INDEXING_ONLY=True
       # Set to debug to get more fine-grained logs
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-1}
     volumes:
       # Not necessary, this is just to reduce download time during startup
       - indexing_huggingface_model_cache:/root/.cache/huggingface/
@@ -230,13 +230,12 @@ services:
     restart: always
     ports:
       - '6379:6379'
-    command: redis-server
-    volumes: 
-      - cache_volume:/data
+    # docker silently mounts /data even without an explicit volume mount, which enables
+    # persistence. explicitly setting save and appendonly forces ephemeral behavior.
+    command: redis-server --save "" --appendonly no
 
 
 volumes:
-  cache_volume:
   db_volume:
   vespa_volume:
   # Created by the container itself

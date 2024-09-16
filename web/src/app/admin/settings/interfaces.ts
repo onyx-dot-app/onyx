@@ -35,6 +35,7 @@ export interface EnterpriseSettings {
   two_lines_for_chat_header: boolean | null;
   custom_popup_header: string | null;
   custom_popup_content: string | null;
+  enable_consent_screen: boolean | null;
 }
 
 export interface CombinedSettings {

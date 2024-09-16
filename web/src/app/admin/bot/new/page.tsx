@@ -10,13 +10,10 @@ import {
   FetchAssistantsResponse,
   fetchAssistantsSS,
 } from "@/lib/assistants/fetchAssistantsSS";
+import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
 async function Page() {
-  const tasks = [
-    fetchSS("/manage/document-set"),
-    fetchAssistantsSS(),
-    fetchSS("/manage/admin/standard-answer/category"),
-  ];
+  const tasks = [fetchSS("/manage/document-set"), fetchAssistantsSS()];
   const [
     documentSetsResponse,
     [assistants, assistantsFetchError],
@@ -26,6 +23,9 @@ async function Page() {
     FetchAssistantsResponse,
     Response,
   ];
+
+  const eeStandardAnswerCategoryResponse =
+    await getStandardAnswerCategoriesIfEE();
 
   if (!documentSetsResponse.ok) {
     return (
@@ -46,18 +46,6 @@ async function Page() {
     );
   }
 
-  if (!standardAnswerCategoriesResponse.ok) {
-    return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories - ${await standardAnswerCategoriesResponse.text()}`}
-      />
-    );
-  }
-
-  const standardAnswerCategories =
-    (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
-
   return (
     <div className="container mx-auto">
       <BackButton />
@@ -66,15 +54,10 @@ async function Page() {
         title="New Slack Bot Config"
       />
 
-      <Text className="mb-8">
-        Define a new configuration below! This config will determine how
-        DanswerBot behaves in the specified channels.
-      </Text>
-
       <SlackBotCreationForm
         documentSets={documentSets}
         personas={assistants}
-        standardAnswerCategories={standardAnswerCategories}
+        standardAnswerCategoryResponse={eeStandardAnswerCategoryResponse}
       />
     </div>
   );

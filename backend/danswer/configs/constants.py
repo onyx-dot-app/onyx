@@ -61,6 +61,8 @@ KV_INSTANCE_DOMAIN_KEY = "instance_domain"
 KV_ENTERPRISE_SETTINGS_KEY = "danswer_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 
+CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 60
+
 
 class DocumentSource(str, Enum):
     # Special case, document passed in via Danswer APIs without specifying a source type
@@ -167,3 +169,23 @@ class FileOrigin(str, Enum):
 
 class PostgresAdvisoryLocks(Enum):
     KOMBU_MESSAGE_CLEANUP_LOCK_ID = auto()
+
+
+class DanswerCeleryQueues:
+    VESPA_DOCSET_SYNC_GENERATOR = "vespa_docset_sync_generator"
+    VESPA_USERGROUP_SYNC_GENERATOR = "vespa_usergroup_sync_generator"
+    VESPA_METADATA_SYNC = "vespa_metadata_sync"
+    CONNECTOR_DELETION = "connector_deletion"
+
+
+class DanswerRedisLocks:
+    CHECK_VESPA_SYNC_BEAT_LOCK = "da_lock:check_vespa_sync_beat"
+    MONITOR_VESPA_SYNC_BEAT_LOCK = "da_lock:monitor_vespa_sync_beat"
+
+
+class DanswerCeleryPriority(int, Enum):
+    HIGHEST = 0
+    HIGH = auto()
+    MEDIUM = auto()
+    LOW = auto()
+    LOWEST = auto()

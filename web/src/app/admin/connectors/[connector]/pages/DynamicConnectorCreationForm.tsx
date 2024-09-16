@@ -1,28 +1,9 @@
-import React, {
-  ChangeEvent,
-  Dispatch,
-  FC,
-  SetStateAction,
-  useEffect,
-  useState,
-} from "react";
-import { Formik, Form, Field, FieldArray, FormikProps } from "formik";
-import * as Yup from "yup";
-import { FaPlus } from "react-icons/fa";
-import { useUserGroups } from "@/lib/hooks";
-import { UserGroup, User, UserRole } from "@/lib/types";
-import { Divider } from "@tremor/react";
+import React, { Dispatch, FC, SetStateAction } from "react";
 import CredentialSubText, {
   AdminBooleanFormField,
 } from "@/components/credentials/CredentialFields";
-import { TrashIcon } from "@/components/icons/icons";
 import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import { ConnectionConfiguration } from "@/lib/connectors/connectors";
-import { useFormContext } from "@/components/context/FormContext";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { Text } from "@tremor/react";
-import { getCurrentUser } from "@/lib/user";
-import { FiUsers } from "react-icons/fi";
 import SelectInput from "./ConnectorInput/SelectInput";
 import NumberInput from "./ConnectorInput/NumberInput";
 import { TextFormField } from "@/components/admin/connectors/Field";
@@ -63,6 +44,7 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
             <div key={field.name}>
               {field.type == "file" ? (
                 <FileUpload
+                  name={field.name}
                   selectedFiles={selectedFiles}
                   setSelectedFiles={setSelectedFiles}
                 />
@@ -78,11 +60,16 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
               ) : field.type === "list" ? (
                 <ListInput field={field} />
               ) : field.type === "select" ? (
-                <SelectInput field={field} value={values[field.name]} />
+                <SelectInput
+                  name={field.name}
+                  optional={field.optional}
+                  description={field.description}
+                  options={field.options || []}
+                  label={field.label}
+                />
               ) : field.type === "number" ? (
                 <NumberInput
                   label={field.label}
-                  value={values[field.name]}
                   optional={field.optional}
                   description={field.description}
                   name={field.name}

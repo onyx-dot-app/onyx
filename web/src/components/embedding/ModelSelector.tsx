@@ -1,15 +1,13 @@
+import { getCurrentModelCopy } from "@/app/admin/embeddings/interfaces";
 import {
-  MicrosoftIcon,
-  NomicIcon,
-  OpenSourceIcon,
-} from "@/components/icons/icons";
-import {
+  AVAILABLE_CLOUD_PROVIDERS,
+  AVAILABLE_MODELS,
   EmbeddingModelDescriptor,
   getIconForRerankType,
   getTitleForRerankType,
   HostedEmbeddingModel,
 } from "./interfaces";
-import { FiExternalLink, FiStar } from "react-icons/fi";
+import { FiExternalLink } from "react-icons/fi";
 
 export function ModelPreview({
   model,
@@ -18,15 +16,17 @@ export function ModelPreview({
   model: EmbeddingModelDescriptor;
   display?: boolean;
 }) {
+  const currentModelCopy = getCurrentModelCopy(model.model_name);
+
   return (
     <div
       className={`border border-border rounded shadow-md ${display ? "bg-inverted rounded-lg p-4" : "bg-hover-light p-2"} w-96 flex flex-col`}
     >
       <div className="font-bold text-lg flex">{model.model_name}</div>
       <div className="text-sm mt-1 mx-1">
-        {model.description
-          ? model.description
-          : "Custom model—no description is available."}
+        {model.description ||
+          currentModelCopy?.description ||
+          "Custom model—no description is available."}
       </div>
     </div>
   );
@@ -41,6 +41,8 @@ export function ModelOption({
   onSelect?: (model: HostedEmbeddingModel) => void;
   selected: boolean;
 }) {
+  const currentModelCopy = getCurrentModelCopy(model.model_name);
+
   return (
     <div
       className={`p-4 w-96 border rounded-lg transition-all duration-200 ${
@@ -65,7 +67,9 @@ export function ModelOption({
         )}
       </div>
       <p className="text-sm k text-gray-600 text-left mb-2">
-        {model.description || "Custom model—no description is available."}
+        {model.description ||
+          currentModelCopy?.description ||
+          "Custom model—no description is available."}
       </p>
       <div className="text-xs text-gray-500">
         {model.isDefault ? "Default" : "Self-hosted"}

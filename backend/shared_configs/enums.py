@@ -11,6 +11,7 @@ class EmbeddingProvider(str, Enum):
 
 class RerankerProvider(str, Enum):
     COHERE = "cohere"
+    LITELLM = "litellm"
 
 
 class EmbedTextType(str, Enum):

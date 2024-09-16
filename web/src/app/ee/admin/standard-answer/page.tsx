@@ -26,6 +26,7 @@ import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 import { FiTag } from "react-icons/fi";
 import { SelectedBubble } from "@/components/search/filtering/Filters";
 import { PageSelector } from "@/components/PageSelector";
+import { CustomCheckbox } from "@/components/CustomCheckbox";
 
 const NUM_RESULTS_PER_PAGE = 10;
 
@@ -36,15 +37,23 @@ const RowTemplate = ({
   entries,
 }: {
   id: number;
-  entries: [Displayable, Displayable, Displayable, Displayable, Displayable];
+  entries: [
+    Displayable,
+    Displayable,
+    Displayable,
+    Displayable,
+    Displayable,
+    Displayable,
+  ];
 }) => {
   return (
     <TableRow key={id}>
       <TableCell className="w-1/24">{entries[0]}</TableCell>
       <TableCell className="w-2/12">{entries[1]}</TableCell>
       <TableCell className="w-2/12">{entries[2]}</TableCell>
-      <TableCell className="w-7/12 overflow-auto">{entries[3]}</TableCell>
-      <TableCell className="w-1/24">{entries[4]}</TableCell>
+      <TableCell className="w-1/24">{entries[3]}</TableCell>
+      <TableCell className="w-7/12 overflow-auto">{entries[4]}</TableCell>
+      <TableCell className="w-1/24">{entries[5]}</TableCell>
     </TableRow>
   );
 };
@@ -108,7 +117,15 @@ const StandardAnswersTableRow = ({
             <CategoryBubble key={category.id} name={category.name} />
           ))}
         </div>,
-        standardAnswer.keyword,
+        <ReactMarkdown key={`keyword-${standardAnswer.id}`}>
+          {standardAnswer.match_regex
+            ? `\`${standardAnswer.keyword}\``
+            : standardAnswer.keyword}
+        </ReactMarkdown>,
+        <CustomCheckbox
+          key={`match_regex-${standardAnswer.id}`}
+          checked={standardAnswer.match_regex}
+        />,
         <ReactMarkdown
           key={`answer-${standardAnswer.id}`}
           className="prose"
@@ -147,13 +164,21 @@ const StandardAnswersTable = ({
   const columns = [
     { name: "", key: "edit" },
     { name: "Categories", key: "category" },
-    { name: "Keyword/Phrase", key: "keyword" },
+    { name: "Keywords/Pattern", key: "keyword" },
+    { name: "Match regex?", key: "match_regex" },
     { name: "Answer", key: "answer" },
     { name: "", key: "delete" },
   ];
 
   const filteredStandardAnswers = standardAnswers.filter((standardAnswer) => {
-    const { answer, id, categories, ...fieldsToSearch } = standardAnswer;
+    const {
+      answer,
+      id,
+      categories,
+      match_regex,
+      match_any_keywords,
+      ...fieldsToSearch
+    } = standardAnswer;
     const cleanedQuery = query.toLowerCase();
     const searchMatch = Object.values(fieldsToSearch).some((value) => {
       return value.toLowerCase().includes(cleanedQuery);
@@ -285,7 +310,7 @@ const StandardAnswersTable = ({
                 />
               ))
             ) : (
-              <RowTemplate id={0} entries={["", "", "", "", ""]} />
+              <RowTemplate id={0} entries={["", "", "", "", "", ""]} />
             )}
           </TableBody>
         </Table>

@@ -16,6 +16,7 @@ import requests
 from danswer.configs.chat_configs import DOC_TIME_DECAY
 from danswer.configs.chat_configs import NUM_RETURNED_HITS
 from danswer.configs.chat_configs import TITLE_CONTENT_RATIO
+from danswer.configs.chat_configs import VESPA_SEARCHER_THREADS
 from danswer.configs.constants import KV_REINDEX_KEY
 from danswer.document_index.interfaces import DocumentIndex
 from danswer.document_index.interfaces import DocumentInsertionRecord
@@ -52,6 +53,7 @@ from danswer.document_index.vespa_constants import DOCUMENT_REPLACEMENT_PAT
 from danswer.document_index.vespa_constants import DOCUMENT_SETS
 from danswer.document_index.vespa_constants import HIDDEN
 from danswer.document_index.vespa_constants import NUM_THREADS
+from danswer.document_index.vespa_constants import SEARCH_THREAD_NUMBER_PAT
 from danswer.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from danswer.document_index.vespa_constants import VESPA_DIM_REPLACEMENT_PAT
 from danswer.document_index.vespa_constants import VESPA_TIMEOUT
@@ -118,7 +120,7 @@ class VespaIndex(DocumentIndex):
         secondary_index_embedding_dim: int | None,
     ) -> None:
         deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
-        logger.debug(f"Sending Vespa zip to {deploy_url}")
+        logger.info(f"Deploying Vespa application package to {deploy_url}")
 
         vespa_schema_path = os.path.join(
             os.getcwd(), "danswer", "document_index", "vespa", "app_config"
@@ -134,6 +136,10 @@ class VespaIndex(DocumentIndex):
 
         doc_lines = _create_document_xml_lines(schema_names)
         services = services_template.replace(DOCUMENT_REPLACEMENT_PAT, doc_lines)
+        services = services.replace(
+            SEARCH_THREAD_NUMBER_PAT, str(VESPA_SEARCHER_THREADS)
+        )
+
         kv_store = get_dynamic_config_store()
 
         needs_reindexing = False
@@ -282,7 +288,7 @@ class VespaIndex(DocumentIndex):
                         raise requests.HTTPError(failure_msg) from e
 
     def update(self, update_requests: list[UpdateRequest]) -> None:
-        logger.info(f"Updating {len(update_requests)} documents in Vespa")
+        logger.debug(f"Updating {len(update_requests)} documents in Vespa")
 
         # Handle Vespa character limitations
         # Mutating update_requests but it's not used later anyway

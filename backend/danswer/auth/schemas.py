@@ -33,7 +33,9 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
 
 class UserCreate(schemas.BaseUserCreate):
     role: UserRole = UserRole.BASIC
+    has_web_login: bool | None = True
 
 
 class UserUpdate(schemas.BaseUserUpdate):
     role: UserRole
+    has_web_login: bool | None = True

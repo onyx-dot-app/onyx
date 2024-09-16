@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import func
+from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import Session
@@ -81,10 +82,25 @@ def fetch_user_group(db_session: Session, user_group_id: int) -> UserGroup | Non
 
 
 def fetch_user_groups(
-    db_session: Session, only_current: bool = True
+    db_session: Session, only_up_to_date: bool = True
 ) -> Sequence[UserGroup]:
+    """
+    Fetches user groups from the database.
+
+    This function retrieves a sequence of `UserGroup` objects from the database.
+    If `only_up_to_date` is set to `True`, it filters the user groups to return only those
+    that are marked as up-to-date (`is_up_to_date` is `True`).
+
+    Args:
+        db_session (Session): The SQLAlchemy session used to query the database.
+        only_up_to_date (bool, optional): Flag to determine whether to filter the results
+            to include only up to date user groups. Defaults to `True`.
+
+    Returns:
+        Sequence[UserGroup]: A sequence of `UserGroup` objects matching the query criteria.
+    """
     stmt = select(UserGroup)
-    if only_current:
+    if only_up_to_date:
         stmt = stmt.where(UserGroup.is_up_to_date == True)  # noqa: E712
     return db_session.scalars(stmt).all()
 
@@ -101,6 +117,42 @@ def fetch_user_groups_for_user(
     if only_curator_groups:
         stmt = stmt.where(User__UserGroup.is_curator == True)  # noqa: E712
     return db_session.scalars(stmt).all()
+
+
+def construct_document_select_by_usergroup(
+    user_group_id: int,
+) -> Select:
+    """This returns a statement that should be executed using
+    .yield_per() to minimize overhead. The primary consumers of this function
+    are background processing task generators."""
+    stmt = (
+        select(Document)
+        .join(
+            DocumentByConnectorCredentialPair,
+            Document.id == DocumentByConnectorCredentialPair.id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .join(
+            UserGroup__ConnectorCredentialPair,
+            UserGroup__ConnectorCredentialPair.cc_pair_id == ConnectorCredentialPair.id,
+        )
+        .join(
+            UserGroup,
+            UserGroup__ConnectorCredentialPair.user_group_id == UserGroup.id,
+        )
+        .where(UserGroup.id == user_group_id)
+        .order_by(Document.id)
+    )
+    stmt = stmt.distinct()
+    return stmt
 
 
 def fetch_documents_for_user_group_paginated(
@@ -361,6 +413,10 @@ def update_user_group(
     user_group_id: int,
     user_group_update: UserGroupUpdate,
 ) -> UserGroup:
+    """If successful, this can set db_user_group.is_up_to_date = False.
+    That will be processed by check_for_vespa_user_groups_sync_task and trigger
+    a long running background sync to Vespa.
+    """
     stmt = select(UserGroup).where(UserGroup.id == user_group_id)
     db_user_group = db_session.scalar(stmt)
     if db_user_group is None:

@@ -35,6 +35,7 @@ data:
   # Internet Search Tool
   BING_API_KEY: ""
   # Don't change the NLP models unless you know what you're doing
+  EMBEDDING_BATCH_SIZE: ""
   DOCUMENT_ENCODER_MODEL: ""
   NORMALIZE_EMBEDDINGS: ""
   ASYM_QUERY_PREFIX: ""
@@ -45,6 +46,7 @@ data:
   INDEXING_MODEL_SERVER_HOST: "indexing-model-server-service"
   MIN_THREADS_ML_MODELS: ""
   # Indexing Configs
+  VESPA_SEARCHER_THREADS: ""
   NUM_INDEXING_WORKERS: ""
   ENABLED_CONNECTOR_TYPES: ""
   DISABLE_INDEX_UPDATE_ON_SWAP: ""
@@ -76,3 +78,5 @@ data:
   INTERNAL_URL: "http://api-server-service:80"  # for web server
   WEB_DOMAIN: "http://localhost:3000"  # for web server and api server
   DOMAIN: "localhost"  # for nginx
+  # Chat Configs
+  HARD_DELETE_CHATS: ""

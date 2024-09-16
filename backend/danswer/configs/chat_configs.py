@@ -83,11 +83,15 @@ DISABLE_LLM_DOC_RELEVANCE = (
 # Stops streaming answers back to the UI if this pattern is seen:
 STOP_STREAM_PAT = os.environ.get("STOP_STREAM_PAT") or None
 
-# The backend logic for this being True isn't fully supported yet
-HARD_DELETE_CHATS = False
+# Set this to "true" to hard delete chats
+# This will make chats unviewable by admins after a user deletes them
+# As opposed to soft deleting them, which just hides them from non-admin users
+HARD_DELETE_CHATS = os.environ.get("HARD_DELETE_CHATS", "").lower() == "true"
 
 # Internet Search
 BING_API_KEY = os.environ.get("BING_API_KEY") or None
 
 # Enable in-house model for detecting connector-based filtering in queries
 ENABLE_CONNECTOR_CLASSIFIER = os.environ.get("ENABLE_CONNECTOR_CLASSIFIER", False)
+
+VESPA_SEARCHER_THREADS = int(os.environ.get("VESPA_SEARCHER_THREADS") or 2)

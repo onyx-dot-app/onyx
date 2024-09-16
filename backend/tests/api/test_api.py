@@ -101,4 +101,4 @@ def test_handle_send_message_simple_with_history(client: TestClient) -> None:
     resp_json = response.json()
 
     # persona must have LLM relevance enabled for this to pass
-    assert len(resp_json["llm_chunks_indices"]) > 0
+    assert len(resp_json["llm_selected_doc_indices"]) > 0

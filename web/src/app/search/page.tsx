@@ -222,12 +222,10 @@ export default async function Home() {
           shouldDisplayNoSources: shouldDisplayNoSourcesModal,
         }}
       >
-        <ProviderContextProvider>
-          <WrappedSearch
-            initiallyToggled={toggleSidebar}
-            searchTypeDefault={searchTypeDefault}
-          />
-        </ProviderContextProvider>
+        <WrappedSearch
+          initiallyToggled={toggleSidebar}
+          searchTypeDefault={searchTypeDefault}
+        />
       </SearchProvider>
     </>
   );

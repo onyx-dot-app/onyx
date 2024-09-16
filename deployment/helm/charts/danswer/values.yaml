@@ -290,6 +290,7 @@ background:
   tolerations: []
 
 vespa:
+  enabled: true
   replicaCount: 1
   image:
     repository: vespa
@@ -300,7 +301,6 @@ vespa:
     app: vespa
     app.kubernetes.io/instance: danswer
     app.kubernetes.io/name: vespa
-  enabled: true
 
   podSecurityContext: {}
     # fsGroup: 2000
@@ -308,12 +308,6 @@ vespa:
   securityContext:
     privileged: true
     runAsUser: 0
-    # capabilities:
-    #   drop:
-    #   - ALL
-    # readOnlyRootFilesystem: true
-    # runAsNonRoot: true
-    # runAsUser: 1000
 
   resources:
   # The Vespa Helm chart specifies default resources, which are quite modest. We override
@@ -328,6 +322,31 @@ vespa:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+
+
+redis:
+  enabled: true
+  architecture: standalone
+  commonConfiguration: |-
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly no
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+  master:
+    replicaCount: 1
+    image:
+      registry: docker.io
+      repository: bitnami/redis
+      tag: "7.4.0"
+      pullPolicy: IfNotPresent
+    persistence:
+      enabled: false
+  service:
+    type: ClusterIP
+    port: 6379
+  auth:
+    existingSecret: danswer-secrets
+    existingSecretPasswordKey: redis_password
 
 
 # ingress:
@@ -412,6 +431,7 @@ configMap:
   # Internet Search Tool
   BING_API_KEY: ""
   # Don't change the NLP models unless you know what you're doing
+  EMBEDDING_BATCH_SIZE: ""
   DOCUMENT_ENCODER_MODEL: ""
   NORMALIZE_EMBEDDINGS: ""
   ASYM_QUERY_PREFIX: ""
@@ -420,6 +440,7 @@ configMap:
   MODEL_SERVER_PORT: ""
   MIN_THREADS_ML_MODELS: ""
   # Indexing Configs
+  VESPA_SEARCHER_THREADS: ""
   NUM_INDEXING_WORKERS: ""
   DISABLE_INDEX_UPDATE_ON_SWAP: ""
   DASK_JOB_CLIENT_ENABLED: ""
@@ -448,3 +469,5 @@ configMap:
   # Shared or Non-backend Related
   WEB_DOMAIN: "http://localhost:3000"  # for web server and api server
   DOMAIN: "localhost"  # for nginx
+  # Chat Configs
+  HARD_DELETE_CHATS: ""

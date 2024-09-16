@@ -62,7 +62,7 @@ class OneShotQAResponse(BaseModel):
     quotes: DanswerQuotes | None = None
     citations: list[CitationInfo] | None = None
     docs: QADocsResponse | None = None
-    llm_chunks_indices: list[int] | None = None
+    llm_selected_doc_indices: list[int] | None = None
     error_msg: str | None = None
     answer_valid: bool = True  # Reflexion result, default True if Reflexion not run
     chat_message_id: int | None = None

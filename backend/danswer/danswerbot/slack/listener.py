@@ -13,6 +13,7 @@ from danswer.configs.constants import MessageType
 from danswer.configs.danswerbot_configs import DANSWER_BOT_REPHRASE_MESSAGE
 from danswer.configs.danswerbot_configs import DANSWER_BOT_RESPOND_EVERY_CHANNEL
 from danswer.configs.danswerbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
+from danswer.connectors.slack.utils import expert_info_from_slack_id
 from danswer.danswerbot.slack.config import get_slack_bot_config_for_channel
 from danswer.danswerbot.slack.constants import DISLIKE_BLOCK_ACTION_ID
 from danswer.danswerbot.slack.constants import FEEDBACK_DOC_BUTTON_BLOCK_ACTION_ID
@@ -55,6 +56,7 @@ from danswer.one_shot_answer.models import ThreadMessage
 from danswer.search.retrieval.search_runner import download_nltk_data
 from danswer.server.manage.models import SlackBotTokens
 from danswer.utils.logger import setup_logger
+from danswer.utils.variable_functionality import set_is_ee_based_on_env_variable
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.configs import SLACK_CHANNEL_ID
@@ -256,6 +258,11 @@ def build_request_details(
         tagged = event.get("type") == "app_mention"
         message_ts = event.get("ts")
         thread_ts = event.get("thread_ts")
+        sender = event.get("user") or None
+        expert_info = expert_info_from_slack_id(
+            sender, client.web_client, user_cache={}
+        )
+        email = expert_info.email if expert_info else None
 
         msg = remove_danswer_bot_tag(msg, client=client.web_client)
 
@@ -286,7 +293,8 @@ def build_request_details(
             channel_to_respond=channel,
             msg_to_respond=cast(str, message_ts or thread_ts),
             thread_to_respond=cast(str, thread_ts or message_ts),
-            sender=event.get("user") or None,
+            sender=sender,
+            email=email,
             bypass_filters=tagged,
             is_bot_msg=False,
             is_bot_dm=event.get("channel_type") == "im",
@@ -296,6 +304,10 @@ def build_request_details(
         channel = req.payload["channel_id"]
         msg = req.payload["text"]
         sender = req.payload["user_id"]
+        expert_info = expert_info_from_slack_id(
+            sender, client.web_client, user_cache={}
+        )
+        email = expert_info.email if expert_info else None
 
         single_msg = ThreadMessage(message=msg, sender=None, role=MessageType.USER)
 
@@ -305,6 +317,7 @@ def build_request_details(
             msg_to_respond=None,
             thread_to_respond=None,
             sender=sender,
+            email=email,
             bypass_filters=True,
             is_bot_msg=True,
             is_bot_dm=False,
@@ -468,6 +481,8 @@ def _initialize_socket_client(socket_client: SocketModeClient) -> None:
 if __name__ == "__main__":
     slack_bot_tokens: SlackBotTokens | None = None
     socket_client: SocketModeClient | None = None
+
+    set_is_ee_based_on_env_variable()
 
     logger.notice("Verifying query preprocessing (NLTK) data is downloaded")
     download_nltk_data()

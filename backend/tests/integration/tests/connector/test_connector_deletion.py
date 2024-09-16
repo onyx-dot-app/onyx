@@ -7,6 +7,13 @@ This file contains tests for the following:
 """
 from uuid import uuid4
 
+from sqlalchemy.orm import Session
+
+from danswer.db.engine import get_sqlalchemy_engine
+from danswer.db.enums import IndexingStatus
+from danswer.db.index_attempt import create_index_attempt_error
+from danswer.db.models import IndexAttempt
+from danswer.db.search_settings import get_current_search_settings
 from danswer.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import NUM_DOCS
 from tests.integration.common_utils.managers.api_key import APIKeyManager
@@ -78,6 +85,27 @@ def test_connector_deletion(reset: None, vespa_client: TestVespaClient) -> None:
         user_performing_action=admin_user,
     )
     UserGroupManager.wait_for_sync(user_performing_action=admin_user)
+
+    # inject a finished index attempt and index attempt error (exercises foreign key errors)
+    with Session(get_sqlalchemy_engine()) as db_session:
+        primary_search_settings = get_current_search_settings(db_session)
+        new_attempt = IndexAttempt(
+            connector_credential_pair_id=cc_pair_1.id,
+            search_settings_id=primary_search_settings.id,
+            from_beginning=False,
+            status=IndexingStatus.COMPLETED_WITH_ERRORS,
+        )
+        db_session.add(new_attempt)
+        db_session.commit()
+
+        create_index_attempt_error(
+            index_attempt_id=new_attempt.id,
+            batch=1,
+            docs=[],
+            exception_msg="",
+            exception_traceback="",
+            db_session=db_session,
+        )
 
     # delete connector 1
     CCPairManager.pause_cc_pair(
@@ -263,8 +291,6 @@ def test_connector_deletion_for_overlapping_connectors(
         group_names=[user_group_1.name, user_group_2.name],
         doc_creating_user=admin_user,
     )
-
-    # EVERYTHING BELOW HERE IS CURRENTLY BROKEN AND NEEDS TO BE FIXED SERVER SIDE
 
     # delete connector 1
     CCPairManager.pause_cc_pair(

@@ -1,10 +1,9 @@
 "use client";
 
 import { useContext, useEffect, useRef, useState } from "react";
-import { FullSearchBar } from "./SearchBar";
+import { FullSearchBar, SearchBar } from "./SearchBar";
 import { SearchResultsDisplay } from "./SearchResultsDisplay";
 import { SourceSelector } from "./filtering/Filters";
-import { CCPairBasicInfo, DocumentSet, Tag, User } from "@/lib/types";
 import {
   Quote,
   SearchResponse,
@@ -374,6 +373,7 @@ export const SearchSection = ({
     setSearchAnswerExpanded(false);
   };
 
+  const [previousSearch, setPreviousSearch] = useState<string>("");
   const [agenticResults, setAgenticResults] = useState<boolean | null>(null);
 
   let lastSearchCancellationToken = useRef<CancellationToken | null>(null);
@@ -398,6 +398,7 @@ export const SearchSection = ({
     setIsFetching(true);
     setSearchResponse(initialSearchResponse);
     setValidQuestionResponse(VALID_QUESTION_RESPONSE_DEFAULT);
+    setPreviousSearch(overrideMessage || query);
     const searchFnArgs = {
       query: overrideMessage || query,
       sources: filterManager.selectedSources,
@@ -762,9 +763,12 @@ export const SearchSection = ({
                     />
 
                     <FullSearchBar
+                      setPopup={setPopup}
+                      disabled={previousSearch === query}
                       toggleAgentic={
                         disabledAgentic ? undefined : toggleAgentic
                       }
+                      previousSearch={previousSearch}
                       showingSidebar={toggledSidebar}
                       agentic={agentic}
                       query={query}

@@ -8,7 +8,10 @@ visit https://github.com/danswer-ai/danswer."
 
 # Default DANSWER_VERSION, typically overriden during builds by GitHub Actions.
 ARG DANSWER_VERSION=0.3-dev
-ENV DANSWER_VERSION=${DANSWER_VERSION}
+ENV DANSWER_VERSION=${DANSWER_VERSION} \
+    DANSWER_RUNNING_IN_DOCKER="true"
+
+
 RUN echo "DANSWER_VERSION: ${DANSWER_VERSION}"
 
 COPY ./requirements/model_server.txt /tmp/requirements.txt

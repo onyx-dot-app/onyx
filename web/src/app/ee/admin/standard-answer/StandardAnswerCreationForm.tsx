@@ -9,13 +9,24 @@ import * as Yup from "yup";
 import {
   createStandardAnswer,
   createStandardAnswerCategory,
+  StandardAnswerCreationRequest,
   updateStandardAnswer,
 } from "./lib";
 import {
   TextFormField,
   MarkdownFormField,
+  BooleanFormField,
+  SelectorFormField,
 } from "@/components/admin/connectors/Field";
 import MultiSelectDropdown from "@/components/MultiSelectDropdown";
+
+function mapKeywordSelectToMatchAny(keywordSelect: "any" | "all"): boolean {
+  return keywordSelect == "any";
+}
+
+function mapMatchAnyToKeywordSelect(matchAny: boolean): "any" | "all" {
+  return matchAny ? "any" : "all";
+}
 
 export const StandardAnswerCreationForm = ({
   standardAnswerCategories,
@@ -41,10 +52,18 @@ export const StandardAnswerCreationForm = ({
             categories: existingStandardAnswer
               ? existingStandardAnswer.categories
               : [],
+            matchRegex: existingStandardAnswer
+              ? existingStandardAnswer.match_regex
+              : false,
+            matchAnyKeywords: existingStandardAnswer
+              ? mapMatchAnyToKeywordSelect(
+                  existingStandardAnswer.match_any_keywords
+                )
+              : "all",
           }}
           validationSchema={Yup.object().shape({
             keyword: Yup.string()
-              .required("Keyword or phrase is required")
+              .required("Keywords or pattern is required")
               .max(255)
               .min(1),
             answer: Yup.string().required("Answer is required").min(1),
@@ -55,8 +74,11 @@ export const StandardAnswerCreationForm = ({
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
-            const cleanedValues = {
+            const cleanedValues: StandardAnswerCreationRequest = {
               ...values,
+              matchAnyKeywords: mapKeywordSelectToMatchAny(
+                values.matchAnyKeywords
+              ),
               categories: values.categories.map((category) => category.id),
             };
 
@@ -86,18 +108,63 @@ export const StandardAnswerCreationForm = ({
         >
           {({ isSubmitting, values, setFieldValue }) => (
             <Form>
-              <TextFormField
-                name="keyword"
-                label="Keywords"
-                tooltip="If all specified keywords are in the question, then we will respond with the answer below"
-                placeholder="e.g. Wifi Password"
-                autoCompleteDisabled={true}
+              {values.matchRegex ? (
+                <TextFormField
+                  name="keyword"
+                  label="Regex pattern"
+                  isCode
+                  tooltip="Triggers if the question matches this regex pattern (using Python `re.search()`)"
+                  placeholder="(?:it|support)\s*ticket"
+                />
+              ) : values.matchAnyKeywords == "any" ? (
+                <TextFormField
+                  name="keyword"
+                  label="Any of these keywords, separated by spaces"
+                  tooltip="A question must match these keywords in order to trigger the answer."
+                  placeholder="ticket problem issue"
+                  autoCompleteDisabled={true}
+                />
+              ) : (
+                <TextFormField
+                  name="keyword"
+                  label="All of these keywords, in any order, separated by spaces"
+                  tooltip="A question must match these keywords in order to trigger the answer."
+                  placeholder="it ticket"
+                  autoCompleteDisabled={true}
+                />
+              )}
+              <BooleanFormField
+                subtext="Match a regex pattern instead of an exact keyword"
+                optional
+                label="Match regex"
+                name="matchRegex"
               />
+              {values.matchRegex ? null : (
+                <SelectorFormField
+                  defaultValue={`all`}
+                  label="Keyword detection strategy"
+                  subtext="Choose whether to require the user's question to contain any or all of the keywords above to show this answer."
+                  name="matchAnyKeywords"
+                  options={[
+                    {
+                      name: "All keywords",
+                      value: "all",
+                    },
+                    {
+                      name: "Any keywords",
+                      value: "any",
+                    },
+                  ]}
+                  onSelect={(selected) => {
+                    setFieldValue("matchAnyKeywords", selected);
+                  }}
+                />
+              )}
               <div className="w-full">
                 <MarkdownFormField
                   name="answer"
                   label="Answer"
-                  placeholder="The answer in markdown"
+                  placeholder="The answer in Markdown. Example: If you need any help from the IT team, please email internalsupport@company.com"
                 />
               </div>
               <div className="w-4/12">

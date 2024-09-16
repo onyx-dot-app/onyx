@@ -131,11 +131,13 @@ def reset_vespa() -> None:
         search_settings = get_current_search_settings(db_session)
         index_name = search_settings.index_name
 
-    setup_vespa(
+    success = setup_vespa(
         document_index=VespaIndex(index_name=index_name, secondary_index_name=None),
         index_setting=IndexingSetting.from_db_model(search_settings),
         secondary_index_setting=None,
     )
+    if not success:
+        raise RuntimeError("Could not connect to Vespa within the specified timeout.")
 
     for _ in range(5):
         try:

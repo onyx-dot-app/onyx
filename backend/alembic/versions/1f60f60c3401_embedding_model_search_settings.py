@@ -30,7 +30,7 @@ def upgrade() -> None:
     op.add_column(
         "search_settings",
         sa.Column(
-            "multipass_indexing", sa.Boolean(), nullable=False, server_default="true"
+            "multipass_indexing", sa.Boolean(), nullable=False, server_default="false"
         ),
     )
     op.add_column(

@@ -11,6 +11,17 @@ from ee.danswer.db.user_group import fetch_user_groups_for_documents
 from ee.danswer.db.user_group import fetch_user_groups_for_user
 
 
+def _get_access_for_document(
+    document_id: str,
+    db_session: Session,
+) -> DocumentAccess:
+    id_to_access = _get_access_for_documents([document_id], db_session)
+    if len(id_to_access) == 0:
+        return DocumentAccess.build(user_ids=[], user_groups=[], is_public=False)
+
+    return next(iter(id_to_access.values()))
+
+
 def _get_access_for_documents(
     document_ids: list[str],
     db_session: Session,

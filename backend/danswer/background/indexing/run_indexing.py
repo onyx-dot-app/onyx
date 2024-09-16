@@ -384,17 +384,22 @@ def _prepare_index_attempt(db_session: Session, index_attempt_id: int) -> IndexA
     return attempt
 
 
-def run_indexing_entrypoint(index_attempt_id: int, is_ee: bool = False) -> None:
+def run_indexing_entrypoint(
+    index_attempt_id: int, connector_credential_pair_id: int, is_ee: bool = False
+) -> None:
     """Entrypoint for indexing run when using dask distributed.
     Wraps the actual logic in a `try` block so that we can catch any exceptions
     and mark the attempt as failed."""
+
     try:
         if is_ee:
             global_version.set_ee()
 
         # set the indexing attempt ID so that all log messages from this process
         # will have it added as a prefix
-        IndexAttemptSingleton.set_index_attempt_id(index_attempt_id)
+        IndexAttemptSingleton.set_cc_and_index_id(
+            index_attempt_id, connector_credential_pair_id
+        )
 
         with Session(get_sqlalchemy_engine()) as db_session:
             # make sure that it is valid to run this indexing attempt + mark it

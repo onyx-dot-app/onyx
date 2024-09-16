@@ -118,3 +118,28 @@ class TestPersona(BaseModel):
     llm_model_version_override: str | None
     users: list[str]
     groups: list[int]
+
+
+#
+class TestChatSession(BaseModel):
+    id: int
+    persona_id: int
+    description: str
+
+
+class TestChatMessage(BaseModel):
+    id: str | None = None
+    chat_session_id: int
+    parent_message_id: str | None
+    message: str
+    response: str
+
+
+class StreamedResponse(BaseModel):
+    full_message: str = ""
+    rephrased_query: str | None = None
+    tool_name: str | None = None
+    top_documents: list[dict[str, Any]] | None = None
+    relevance_summaries: list[dict[str, Any]] | None = None
+    tool_result: Any | None = None
+    user: str | None = None

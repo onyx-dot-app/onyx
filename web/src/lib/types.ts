@@ -58,6 +58,15 @@ export interface DocumentBoostStatus {
   hidden: boolean;
 }
 
+export interface FailedConnectorIndexingStatus {
+  cc_pair_id: number;
+  name: string | null;
+  error_msg: string | null;
+  is_deletable: boolean;
+  connector_id: number;
+  credential_id: number;
+}
+
 export interface IndexAttemptSnapshot {
   id: number;
   status: ValidStatuses | null;
@@ -152,6 +161,8 @@ export interface StandardAnswer {
   id: number;
   keyword: string;
   answer: string;
+  match_regex: boolean;
+  match_any_keywords: boolean;
   categories: StandardAnswerCategory[];
 }
 

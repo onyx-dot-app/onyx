@@ -22,7 +22,6 @@ from danswer.configs.danswerbot_configs import DANSWER_BOT_USE_QUOTES
 from danswer.configs.danswerbot_configs import DANSWER_FOLLOWUP_EMOJI
 from danswer.configs.danswerbot_configs import DANSWER_REACT_EMOJI
 from danswer.configs.danswerbot_configs import ENABLE_DANSWERBOT_REFLEXION
-from danswer.connectors.slack.utils import expert_info_from_slack_id
 from danswer.danswerbot.slack.blocks import build_documents_blocks
 from danswer.danswerbot.slack.blocks import build_follow_up_block
 from danswer.danswerbot.slack.blocks import build_qa_response_blocks
@@ -103,13 +102,10 @@ def handle_regular_answer(
     is_bot_msg = message_info.is_bot_msg
     user = None
     if message_info.is_bot_dm:
-        slack_user_info = expert_info_from_slack_id(
-            message_info.sender, client, user_cache={}
-        )
-        if slack_user_info and slack_user_info.email:
+        if message_info.email:
             engine = get_sqlalchemy_engine()
             with Session(engine) as db_session:
-                user = get_user_by_email(slack_user_info.email, db_session)
+                user = get_user_by_email(message_info.email, db_session)
 
     document_set_names: list[str] | None = None
     persona = slack_bot_config.persona if slack_bot_config else None
@@ -139,7 +135,8 @@ def handle_regular_answer(
         else slack_bot_config.response_type == SlackBotResponseType.CITATIONS
     )
 
-    if not message_ts_to_respond_to:
+    if not message_ts_to_respond_to and not is_bot_msg:
+        # if the message is not "/danswer" command, then it should have a message ts to respond to
         raise RuntimeError(
             "No message timestamp to respond to in `handle_message`. This should never happen."
         )
@@ -423,7 +420,7 @@ def handle_regular_answer(
     )
 
     # Get the chunks fed to the LLM only, then fill with other docs
-    llm_doc_inds = answer.llm_chunks_indices or []
+    llm_doc_inds = answer.llm_selected_doc_indices or []
     llm_docs = [top_docs[i] for i in llm_doc_inds]
     remaining_docs = [
         doc for idx, doc in enumerate(top_docs) if idx not in llm_doc_inds
@@ -474,7 +471,9 @@ def handle_regular_answer(
 
         # For DM (ephemeral message), we need to create a thread via a normal message so the user can see
         # the ephemeral message. This also will give the user a notification which ephemeral message does not.
-        if receiver_ids:
+        # if there is no message_ts_to_respond_to, and we have made it this far, then this is a /danswer message
+        # so we shouldn't send_team_member_message
+        if receiver_ids and message_ts_to_respond_to is not None:
             send_team_member_message(
                 client=client,
                 channel=channel,

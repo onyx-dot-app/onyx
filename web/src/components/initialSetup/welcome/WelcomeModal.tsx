@@ -13,6 +13,7 @@ import { ApiKeyForm } from "@/components/llm/ApiKeyForm";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { checkLlmProvider } from "./lib";
 import { User } from "@/lib/types";
+import { useProviderStatus } from "@/components/chat_search/ProviderContext";
 
 function setWelcomeFlowComplete() {
   Cookies.set(COMPLETED_WELCOME_FLOW_COOKIE, "true", { expires: 365 });
@@ -62,6 +63,12 @@ export function _WelcomeModal({ user }: { user: User | null }) {
   const [providerOptions, setProviderOptions] = useState<
     WellKnownLLMProviderDescriptor[]
   >([]);
+  const { refreshProviderInfo } = useProviderStatus();
+
+  const clientSetWelcomeFlowComplete = async () => {
+    setWelcomeFlowComplete();
+    refreshProviderInfo();
+  };
 
   useEffect(() => {
     async function fetchProviderInfo() {
@@ -124,7 +131,7 @@ export function _WelcomeModal({ user }: { user: User | null }) {
                   href="/admin/add-connector"
                   onClick={(e) => {
                     e.preventDefault();
-                    setWelcomeFlowComplete();
+                    clientSetWelcomeFlowComplete();
                     router.push("/admin/add-connector");
                   }}
                   className="w-fit mx-auto"
@@ -183,7 +190,6 @@ export function _WelcomeModal({ user }: { user: User | null }) {
                 href="/admin/add-connector"
                 onClick={(e) => {
                   e.preventDefault();
-                  setWelcomeFlowComplete();
                   router.push("/admin/add-connector");
                 }}
               >
@@ -197,7 +203,7 @@ export function _WelcomeModal({ user }: { user: User | null }) {
                 href="/chat"
                 onClick={(e) => {
                   e.preventDefault();
-                  setWelcomeFlowComplete();
+                  clientSetWelcomeFlowComplete();
                   router.push("/chat");
                   setIsHidden(true);
                 }}

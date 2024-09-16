@@ -2,14 +2,12 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { createConnector, runConnector } from "@/lib/connector";
 import { createCredential, linkCredential } from "@/lib/credential";
 import { FileConfig } from "@/lib/connectors/connectors";
-import { AdvancedConfigFinal } from "../../AddConnectorPage";
 
 export const submitFiles = async (
   selectedFiles: File[],
   setPopup: (popup: PopupSpec) => void,
   setSelectedFiles: (files: File[]) => void,
   name: string,
-  advancedConfig: AdvancedConfigFinal,
   isPublic: boolean,
   groups?: number[]
 ) => {

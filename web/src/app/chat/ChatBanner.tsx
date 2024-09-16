@@ -45,6 +45,7 @@ export function ChatBanner() {
         shadow-sm
         rounded
         border-l-8 border-l-400
+        bg-background
         border-r-4 border-r-200
         border-border
         border

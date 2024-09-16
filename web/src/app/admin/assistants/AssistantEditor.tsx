@@ -132,11 +132,6 @@ export function AssistantEditor({
 
   const [isIconDropdownOpen, setIsIconDropdownOpen] = useState(false);
 
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-
-  // EE only
-  const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
-
   const [finalPrompt, setFinalPrompt] = useState<string | null>("");
   const [finalPromptError, setFinalPromptError] = useState<string>("");
   const [removePersonaImage, setRemovePersonaImage] = useState(false);
@@ -172,7 +167,7 @@ export function AssistantEditor({
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
   );
-  const defaultProviderName = defaultProvider?.provider;
+
   const defaultModelName = defaultProvider?.default_model_name;
   const providerDisplayNameToProviderName = new Map<string, string>();
   llmProviders.forEach((llmProvider) => {
@@ -193,7 +188,8 @@ export function AssistantEditor({
     modelOptionsByProvider.set(llmProvider.name, providerOptions);
   });
   const providerSupportingImageGenerationExists = llmProviders.some(
-    (provider) => provider.provider === "openai"
+    (provider) =>
+      provider.provider === "openai" || provider.provider === "anthropic"
   );
 
   const personaCurrentToolIds =
@@ -347,11 +343,6 @@ export function AssistantEditor({
           if (imageGenerationToolEnabled) {
             if (
               !checkLLMSupportsImageInput(
-                providerDisplayNameToProviderName.get(
-                  values.llm_model_provider_override || ""
-                ) ||
-                  defaultProviderName ||
-                  "",
                 values.llm_model_version_override || defaultModelName || ""
               )
             ) {
@@ -767,9 +758,6 @@ export function AssistantEditor({
                           <div
                             className={`w-fit ${
                               !checkLLMSupportsImageInput(
-                                providerDisplayNameToProviderName.get(
-                                  values.llm_model_provider_override || ""
-                                ) || "",
                                 values.llm_model_version_override || ""
                               )
                                 ? "opacity-70 cursor-not-allowed"
@@ -785,9 +773,6 @@ export function AssistantEditor({
                               }}
                               disabled={
                                 !checkLLMSupportsImageInput(
-                                  providerDisplayNameToProviderName.get(
-                                    values.llm_model_provider_override || ""
-                                  ) || "",
                                   values.llm_model_version_override || ""
                                 )
                               }
@@ -795,9 +780,6 @@ export function AssistantEditor({
                           </div>
                         </TooltipTrigger>
                         {!checkLLMSupportsImageInput(
-                          providerDisplayNameToProviderName.get(
-                            values.llm_model_provider_override || ""
-                          ) || "",
                           values.llm_model_version_override || ""
                         ) && (
                           <TooltipContent side="top" align="center">
@@ -1184,20 +1166,16 @@ export function AssistantEditor({
                     />
                   </div>
 
-                  {isPaidEnterpriseFeaturesEnabled &&
-                    userGroups &&
-                    userGroups.length > 0 && (
-                      <IsPublicGroupSelector
-                        formikProps={{
-                          values,
-                          isSubmitting,
-                          setFieldValue,
-                          ...formikProps,
-                        }}
-                        objectName="assistant"
-                        enforceGroupSelection={false}
-                      />
-                    )}
+                  <IsPublicGroupSelector
+                    formikProps={{
+                      values,
+                      isSubmitting,
+                      setFieldValue,
+                      ...formikProps,
+                    }}
+                    objectName="assistant"
+                    enforceGroupSelection={false}
+                  />
                 </>
               )}
 

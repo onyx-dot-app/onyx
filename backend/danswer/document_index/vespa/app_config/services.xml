@@ -26,6 +26,17 @@
                 <disk>0.75</disk>
             </resource-limits>
         </tuning>
+        <engine>    
+            <proton>
+                <tuning>
+                    <searchnode>
+                        <requestthreads>
+                            <persearch>SEARCH_THREAD_NUMBER</persearch>
+                        </requestthreads>
+                    </searchnode>
+                </tuning>
+            </proton>
+        </engine>
         <config name="vespa.config.search.summary.juniperrc">
             <max_matches>3</max_matches>
             <length>750</length>

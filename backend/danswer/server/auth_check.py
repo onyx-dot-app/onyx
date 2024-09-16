@@ -7,6 +7,7 @@ from starlette.routing import BaseRoute
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_curator_or_admin_user
 from danswer.auth.users import current_user
+from danswer.auth.users import current_user_with_expired_token
 from danswer.configs.app_configs import APP_API_PREFIX
 from danswer.server.danswer_api.ingestion import api_key_dep
 
@@ -97,6 +98,7 @@ def check_router_auth(
                     or depends_fn == current_admin_user
                     or depends_fn == current_curator_or_admin_user
                     or depends_fn == api_key_dep
+                    or depends_fn == current_user_with_expired_token
                 ):
                     found_auth = True
                     break

@@ -6,7 +6,7 @@ import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import { TextFormField } from "@/components/admin/connectors/Field";
-import { Button, Divider } from "@tremor/react";
+import { Button, Divider, Text } from "@tremor/react";
 import {
   createCustomTool,
   updateCustomTool,
@@ -14,6 +14,7 @@ import {
 } from "@/lib/tools/edit";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import debounce from "lodash/debounce";
+import Link from "next/link";
 
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
@@ -85,8 +86,8 @@ function ToolForm({
   }, [values.definition, debouncedValidateDefinition]);
 
   return (
-    <Form>
-      <div className="relative">
+    <Form className="max-w-4xl">
+      <div className="relative w-full">
         <TextFormField
           name="definition"
           label="Definition"
@@ -138,6 +139,28 @@ function ToolForm({
         component="div"
         className="text-error text-sm"
       />
+      <div className="mt-4 text-sm bg-blue-50 p-4 rounded-md border border-blue-200">
+        <Link
+          href="https://docs.danswer.dev/tools/custom"
+          className="text-link hover:underline flex items-center"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5 mr-2"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+              clipRule="evenodd"
+            />
+          </svg>
+          Learn more about tool calling in our documentation
+        </Link>
+      </div>
 
       {methodSpecs && methodSpecs.length > 0 && (
         <div className="mt-4">

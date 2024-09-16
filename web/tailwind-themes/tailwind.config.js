@@ -70,126 +70,121 @@ module.exports = {
       },
       colors: {
         // code styling
-        "code-bg": "black", // black
-        "code-text": "#e0e0e0", // light gray
-        "token-comment": "#608b4e", // green
-        "token-punctuation": "#d4d4d4", // light gray
-        "token-property": "#569cd6", // blue
-        "token-selector": "#e07b53", // more vibrant orange
-        "token-atrule": "#d18ad8", // more vibrant purple
-        "token-function": "#f0e68c", // more vibrant light yellow
-        "token-regex": "#9cdcfe", // light blue
-        "token-attr-name": "#9cdcfe", // light blue
-
-        "non-selectable": "#f8d7da", // red-100
+        "code-bg": "var(--black)",
+        "code-text": "var(--code-text)",
+        "token-comment": "var(--token-comment)",
+        "token-punctuation": "var(--token-punctuation)",
+        "token-property": "var(--token-property)",
+        "token-selector": "var(--token-selector)",
+        "token-atrule": "var(--token-atrule)",
+        "token-function": "var(--token-function)",
+        "token-regex": "var(--token-regex)",
+        "token-attr-name": "var(--token-attr-name)",
+        "non-selectable": "var(--non-selectable)",
 
         // background
-        "background-search": "#ffffff", // white
+        background: "var(--background)",
+        "background-100": "var(--background-100)",
+        "background-125": "var(--background-125)",
+        "background-150": "var(--background-150)",
+        "background-200": "var(--background-200)",
+        "background-300": "var(--background-300)",
+        "background-400": "var(--background-400)",
+        "background-500": "var(--background-500)",
+        "background-600": "var(--background-600)",
+        "background-700": "var(--background-700)",
+        "background-800": "var(--background-800)",
+        "background-900": "var(--background-900)",
 
-        input: "#ffffff",
+        "background-inverted": "var(--background-inverted)",
+        "background-emphasis": "var(--background-emphasis)",
+        "background-strong": "var(--background-strong)",
+        "background-search": "var(--white)",
+        input: "var(--white)",
 
-        background: "#fafafa", // 50
-        "background-100": "#f5f5f5", // neutral-100
-        "background-125": "#F1F2F4", // gray-125
-        "background-150": "#EAEAEA", // gray-150
-        "background-200": "#e5e5e5", // neutral-200
-        "background-300": "#d4d4d4", // neutral-300
-        "background-400": "#a3a3a3", // neutral-400
-        "background-600": "#525252", // neutral-800
-        "background-500": "#737373", // neutral-400
-        "background-600": "#525252", // neutral-400
-        "background-700": "#404040", // neutral-400
-        "background-800": "#262626", // neutral-800
-        "background-900": "#111827", // gray-900
-        "background-inverted": "#000000", // black
+        "text-50": "var(--text-50)",
+        "text-100": "var(--text-100)",
+        "text-200": "var(--text-200)",
+        "text-300": "var(--text-300)",
+        "text-400": "var(--text-400)",
+        "text-500": "var(--text-500)",
+        "text-600": "var(--text-600)",
+        "text-700": "var(--text-700)",
+        "text-800": "var(--text-800)",
+        "text-900": "var(--text-900)",
+        "text-950": "var(--text-950)",
 
-        "background-emphasis": "#f6f7f8",
-        "background-strong": "#eaecef",
-
-        // text or icons
-        "text-50": "#fafafa", // 50, neutral-50
-        "text-100": "#f5f5f5", // lighter, neutral-100
-        "text-200": "#e5e5e5", // light, neutral-200
-        "text-300": "#d4d4d4", // stronger, neutral-300
-        "text-400": "#a3a3a3", // medium, neutral-400
-        "text-500": "#737373", // darkMedium, neutral-500
-        "text-600": "#525252", // dark, neutral-600
-        "text-700": "#404040", // solid, neutral-700
-        "text-800": "#262626", // solidDark, neutral-800
-        "text-900": "#111827", // neutral-900
-        "text-950": "#0a0a0a", // solidDark, neutral-800
-
-        description: "#a3a3a3",
-        subtle: "#6b7280", // gray-500
-        default: "#4b5563", // gray-600
-        emphasis: "#374151", // gray-700
-        strong: "#111827", // gray-900
-
-        link: "#3b82f6", // blue-500
-        "link-hover": "#1d4ed8", // blue-700
-        inverted: "#ffffff", // white
-
-        // one offs
-        error: "#ef4444", // red-500
-        success: "#059669", // emerald-600
-        alert: "#f59e0b", // amber-600
-        accent: "#6366F1", // indigo-500
+        description: "var(--text-400)",
+        subtle: "var(--text-500)",
+        default: "var(--text-600)",
+        emphasis: "var(--text-700)",
+        strong: "var(--text-900)",
 
         // borders
-        border: "#d1d5db", // gray-200
-        "border-light": "#f3f4f6", // gray-100
-        "border-medium": "#d1d5db", // gray-300
-        "border-strong": "#9ca3af", // gray-400
-        "border-dark": "#525252", // neutral-600
-        "non-selectable-border": "#f5c2c7", // red-200
+        border: "var(--border)",
+        "border-light": "var(--border-light)",
+        "border-medium": "var(--border-medium)",
+        "border-strong": "var(--border-strong)",
+        "border-dark": "var(--border-dark)",
+        "non-selectable-border": "#f5c2c7",
+
+        inverted: "var(--white)",
+        link: "var(--link)",
+        "link-hover": "var(--link-hover)",
+
+        // one offs
+        error: "var(--error)",
+        success: "var(--success)",
+        alert: "var(--alert)",
+        accent: "var(--accent)",
 
         // hover
-        "hover-light": "#f3f4f6", // gray-100
-        "hover-lightish": "#EAEBEF", // gray-160
+        "hover-light": "var(--background-100)",
+        "hover-lightish": "var(--background-125)",
 
-        hover: "#e5e7eb", // gray-200
-        "hover-emphasis": "#d1d5db", // gray-300
-        "accent-hover": "#4F46E5",
+        hover: "var(--background-200)",
+        "hover-emphasis": "var(--background-300)",
+        "accent-hover": "var(--accent-hover)",
 
         // keyword highlighting
         highlight: {
-          text: "#fef9c3", // yellow-100
+          text: "var(--highlight-text)",
         },
 
         // scrollbar
         scrollbar: {
-          track: "#f9fafb",
-          thumb: "#e5e7eb",
-          "thumb-hover": "#d1d5db",
+          track: "var(--scrollbar-track)",
+          thumb: "var(--scrollbar-thumb)",
+          "thumb-hover": "var(--scrollbar-thumb-hover)",
 
           dark: {
-            thumb: "#989a9c",
-            "thumb-hover": "#c7cdd2",
+            thumb: "var(--scrollbar-dark-thumb)",
+            "thumb-hover": "var(--scrollbar-dark-thumb-hover)",
           },
         },
 
         // bubbles in chat for each "user"
-        user: "#F1F2F4", // near gray-100
-        ai: "#60a5fa", // blue-400
+        user: "var(--user-bubble)",
+        ai: "var(--ai-bubble)",
 
         // for display documents
-        document: "#f43f5e", // pink-500
+        document: "var(--document-color)",
 
         // light mode
         tremor: {
           brand: {
-            faint: "#eff6ff", // blue-50
-            muted: "#bfdbfe", // blue-200
-            subtle: "#60a5fa", // blue-400
+            faint: "var(--tremor-brand-faint)",
+            muted: "var(--tremor-brand-muted)",
+            subtle: "var(--tremor-brand-subtle)",
             DEFAULT: "#3b82f6", // blue-500
-            emphasis: "#1d4ed8", // blue-700
-            inverted: "#ffffff", // white
+            emphasis: "var(--tremor-brand-emphasis)",
+            inverted: "var(--tremor-brand-inverted)",
           },
           background: {
-            muted: "#f9fafb", // gray-50
-            subtle: "#f3f4f6", // gray-100
+            muted: "var(--tremor-background-muted)",
+            subtle: "var(--tremor-background-subtle)",
             DEFAULT: "#ffffff", // white
-            emphasis: "#374151", // gray-700
+            emphasis: "var(--tremor-background-emphasis)",
           },
           border: {
             DEFAULT: "#e5e7eb", // gray-200
@@ -198,28 +193,28 @@ module.exports = {
             DEFAULT: "#e5e7eb", // gray-200
           },
           content: {
-            subtle: "#9ca3af", // gray-400
-            DEFAULT: "#4b5563", // gray-600
-            emphasis: "#374151", // gray-700
-            strong: "#111827", // gray-900
-            inverted: "#ffffff", // white
+            subtle: "var(--tremor-content-subtle)",
+            DEFAULT: "var(--tremor-content-default)",
+            emphasis: "var(--tremor-content-emphasis)",
+            strong: "var(--tremor-content-strong)",
+            inverted: "var(--tremor-content-inverted)",
           },
         },
         // dark mode
         "dark-tremor": {
           brand: {
-            faint: "#0B1229", // custom
-            muted: "#172554", // blue-950
-            subtle: "#1e40af", // blue-800
+            faint: "var(--dark-tremor-brand-faint)",
+            muted: "var(--dark-tremor-brand-muted)",
+            subtle: "var(--dark-tremor-brand-subtle)",
             DEFAULT: "#3b82f6", // blue-500
-            emphasis: "#60a5fa", // blue-400
-            inverted: "#030712", // gray-950
+            emphasis: "var(--dark-tremor-brand-emphasis)",
+            inverted: "var(--dark-tremor-brand-inverted)",
           },
           background: {
-            muted: "#131A2B", // custom
-            subtle: "#1f2937", // gray-800
-            DEFAULT: "#111827", // gray-900
-            emphasis: "#d1d5db", // gray-300
+            muted: "var(--dark-tremor-background-muted)",
+            subtle: "var(--dark-tremor-background-subtle)",
+            DEFAULT: "var(--dark-tremor-background-default)",
+            emphasis: "var(--dark-tremor-background-emphasis)",
           },
           border: {
             DEFAULT: "#1f2937", // gray-800
@@ -228,11 +223,11 @@ module.exports = {
             DEFAULT: "#1f2937", // gray-800
           },
           content: {
-            subtle: "#6b7280", // gray-500
-            DEFAULT: "#d1d5db", // gray-300
-            emphasis: "#f3f4f6", // gray-100
-            strong: "#f9fafb", // gray-50
-            inverted: "#000000", // black
+            subtle: "var(--dark-tremor-content-subtle)",
+            DEFAULT: "var(--dark-tremor-content-default)",
+            emphasis: "var(--dark-tremor-content-emphasis)",
+            strong: "var(--dark-tremor-content-strong)",
+            inverted: "var(--dark-tremor-content-inverted)",
           },
         },
       },

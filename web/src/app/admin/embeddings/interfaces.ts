@@ -1,16 +1,25 @@
-import { EmbeddingProvider } from "@/components/embedding/interfaces";
-import { NonNullChain } from "typescript";
+import {
+  AVAILABLE_CLOUD_PROVIDERS,
+  AVAILABLE_MODELS,
+  CloudEmbeddingModel,
+  EmbeddingProvider,
+  HostedEmbeddingModel,
+} from "@/components/embedding/interfaces";
 
+// This is a slightly differnte interface than used in the backend
+// but is always used in conjunction with `AdvancedSearchConfiguration`
 export interface RerankingDetails {
   rerank_model_name: string | null;
   rerank_provider_type: RerankerProvider | null;
   rerank_api_key: string | null;
-  num_rerank: number;
+  rerank_api_url: string | null;
 }
 
 export enum RerankerProvider {
   COHERE = "cohere",
+  LITELLM = "litellm",
 }
+
 export interface AdvancedSearchConfiguration {
   model_name: string;
   model_dim: number;
@@ -22,25 +31,18 @@ export interface AdvancedSearchConfiguration {
   multilingual_expansion: string[];
   disable_rerank_for_streaming: boolean;
   api_url: string | null;
+  num_rerank: number;
 }
 
-export interface SavedSearchSettings extends RerankingDetails {
-  model_name: string;
-  model_dim: number;
-  normalize: boolean;
-  query_prefix: string;
-  passage_prefix: string;
-  index_name: string | null;
-  multipass_indexing: boolean;
-  multilingual_expansion: string[];
-  disable_rerank_for_streaming: boolean;
-  api_url: string | null;
+export interface SavedSearchSettings
+  extends RerankingDetails,
+    AdvancedSearchConfiguration {
   provider_type: EmbeddingProvider | null;
 }
 
 export interface RerankingModel {
   rerank_provider_type: RerankerProvider | null;
-  modelName: string;
+  modelName?: string;
   displayName: string;
   description: string;
   link: string;
@@ -48,6 +50,13 @@ export interface RerankingModel {
 }
 
 export const rerankingModels: RerankingModel[] = [
+  {
+    rerank_provider_type: RerankerProvider.LITELLM,
+    cloud: true,
+    displayName: "LiteLLM",
+    description: "Host your own reranker or router with LiteLLM proxy",
+    link: "https://docs.litellm.ai/docs/proxy",
+  },
   {
     rerank_provider_type: null,
     cloud: false,
@@ -89,3 +98,24 @@ export const rerankingModels: RerankingModel[] = [
     link: "https://docs.cohere.com/docs/rerank",
   },
 ];
+
+export const getCurrentModelCopy = (
+  currentModelName: string
+): CloudEmbeddingModel | HostedEmbeddingModel | null => {
+  const AVAILABLE_CLOUD_PROVIDERS_FLATTENED = AVAILABLE_CLOUD_PROVIDERS.flatMap(
+    (provider) =>
+      provider.embedding_models.map((model) => ({
+        ...model,
+        provider_type: provider.provider_type,
+        model_name: model.model_name,
+      }))
+  );
+
+  return (
+    AVAILABLE_MODELS.find((model) => model.model_name === currentModelName) ||
+    AVAILABLE_CLOUD_PROVIDERS_FLATTENED.find(
+      (model) => model.model_name === currentModelName
+    ) ||
+    null
+  );
+};

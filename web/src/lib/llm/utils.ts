@@ -62,25 +62,30 @@ export function getLLMProviderOverrideForPersona(
   return null;
 }
 
-const MODELS_SUPPORTING_IMAGES = [
-  ["openai", "gpt-4o"],
-  ["openai", "gpt-4o-mini"],
-  ["openai", "gpt-4-vision-preview"],
-  ["openai", "gpt-4-turbo"],
-  ["openai", "gpt-4-1106-vision-preview"],
-  ["azure", "gpt-4o"],
-  ["azure", "gpt-4o-mini"],
-  ["azure", "gpt-4-vision-preview"],
-  ["azure", "gpt-4-turbo"],
-  ["azure", "gpt-4-1106-vision-preview"],
+const MODEL_NAMES_SUPPORTING_IMAGES = [
+  "gpt-4o",
+  "gpt-4o-mini",
+  "gpt-4-vision-preview",
+  "gpt-4-turbo",
+  "gpt-4-1106-vision-preview",
+  "gpt-4o",
+  "gpt-4o-mini",
+  "gpt-4-vision-preview",
+  "gpt-4-turbo",
+  "gpt-4-1106-vision-preview",
+  "claude-3-5-sonnet-20240620",
+  "claude-3-opus-20240229",
+  "claude-3-sonnet-20240229",
+  "claude-3-haiku-20240307",
+  "anthropic.claude-3-opus-20240229-v1:0",
+  "anthropic.claude-3-sonnet-20240229-v1:0",
+  "anthropic.claude-3-haiku-20240307-v1:0",
+  "anthropic.claude-3-5-sonnet-20240620-v1:0",
 ];
 
-export function checkLLMSupportsImageInput(provider: string, model: string) {
-  return MODELS_SUPPORTING_IMAGES.some(
-    ([p, m]) => p === provider && m === model
-  );
+export function checkLLMSupportsImageInput(model: string) {
+  return MODEL_NAMES_SUPPORTING_IMAGES.some((modelName) => modelName === model);
 }
-
 export const structureValue = (
   name: string,
   provider: string,

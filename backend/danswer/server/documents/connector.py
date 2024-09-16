@@ -68,6 +68,8 @@ from danswer.db.index_attempt import create_index_attempt
 from danswer.db.index_attempt import get_index_attempts_for_cc_pair
 from danswer.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from danswer.db.index_attempt import get_latest_index_attempts
+from danswer.db.index_attempt import get_latest_index_attempts_by_status
+from danswer.db.models import IndexingStatus
 from danswer.db.models import User
 from danswer.db.models import UserRole
 from danswer.db.search_settings import get_current_search_settings
@@ -81,6 +83,7 @@ from danswer.server.documents.models import ConnectorSnapshot
 from danswer.server.documents.models import ConnectorUpdateRequest
 from danswer.server.documents.models import CredentialBase
 from danswer.server.documents.models import CredentialSnapshot
+from danswer.server.documents.models import FailedConnectorIndexingStatus
 from danswer.server.documents.models import FileUploadResponse
 from danswer.server.documents.models import GDriveCallback
 from danswer.server.documents.models import GmailCallback
@@ -374,6 +377,95 @@ def upload_files(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return FileUploadResponse(file_paths=deduped_file_paths)
+
+
+# Retrieves most recent failure cases for connectors that are currently failing
+@router.get("/admin/connector/failed-indexing-status")
+def get_currently_failed_indexing_status(
+    secondary_index: bool = False,
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+    get_editable: bool = Query(
+        False, description="If true, return editable document sets"
+    ),
+) -> list[FailedConnectorIndexingStatus]:
+    # Get the latest failed indexing attempts
+    latest_failed_indexing_attempts = get_latest_index_attempts_by_status(
+        secondary_index=secondary_index,
+        db_session=db_session,
+        status=IndexingStatus.FAILED,
+    )
+
+    # Get the latest successful indexing attempts
+    latest_successful_indexing_attempts = get_latest_index_attempts_by_status(
+        secondary_index=secondary_index,
+        db_session=db_session,
+        status=IndexingStatus.SUCCESS,
+    )
+
+    # Get all connector credential pairs
+    cc_pairs = get_connector_credential_pairs(
+        db_session=db_session,
+        user=user,
+        get_editable=get_editable,
+    )
+
+    # Filter out failed attempts that have a more recent successful attempt
+    filtered_failed_attempts = [
+        failed_attempt
+        for failed_attempt in latest_failed_indexing_attempts
+        if not any(
+            success_attempt.connector_credential_pair_id
+            == failed_attempt.connector_credential_pair_id
+            and success_attempt.time_updated > failed_attempt.time_updated
+            for success_attempt in latest_successful_indexing_attempts
+        )
+    ]
+
+    # Filter cc_pairs to include only those with failed attempts
+    cc_pairs = [
+        cc_pair
+        for cc_pair in cc_pairs
+        if any(
+            attempt.connector_credential_pair == cc_pair
+            for attempt in filtered_failed_attempts
+        )
+    ]
+
+    # Create a mapping of cc_pair_id to its latest failed index attempt
+    cc_pair_to_latest_index_attempt = {
+        attempt.connector_credential_pair_id: attempt
+        for attempt in filtered_failed_attempts
+    }
+
+    indexing_statuses = []
+
+    for cc_pair in cc_pairs:
+        # Skip DefaultCCPair
+        if cc_pair.name == "DefaultCCPair":
+            continue
+
+        latest_index_attempt = cc_pair_to_latest_index_attempt.get(cc_pair.id)
+
+        indexing_statuses.append(
+            FailedConnectorIndexingStatus(
+                cc_pair_id=cc_pair.id,
+                name=cc_pair.name,
+                error_msg=(
+                    latest_index_attempt.error_msg if latest_index_attempt else None
+                ),
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
+                is_deletable=check_deletion_attempt_is_allowed(
+                    connector_credential_pair=cc_pair,
+                    db_session=db_session,
+                    allow_scheduled=True,
+                )
+                is None,
+            )
+        )
+
+    return indexing_statuses
 
 
 @router.get("/admin/connector/indexing-status")

@@ -3,11 +3,7 @@ import { CPUIcon } from "@/components/icons/icons";
 import { SlackBotCreationForm } from "../SlackBotConfigCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import {
-  DocumentSet,
-  SlackBotConfig,
-  StandardAnswerCategory,
-} from "@/lib/types";
+import { DocumentSet, SlackBotConfig } from "@/lib/types";
 import { Text } from "@tremor/react";
 import { BackButton } from "@/components/BackButton";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
@@ -15,26 +11,27 @@ import {
   FetchAssistantsResponse,
   fetchAssistantsSS,
 } from "@/lib/assistants/fetchAssistantsSS";
+import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
 async function Page({ params }: { params: { id: string } }) {
   const tasks = [
     fetchSS("/manage/admin/slack-bot/config"),
     fetchSS("/manage/document-set"),
     fetchAssistantsSS(),
-    fetchSS("/manage/admin/standard-answer/category"),
   ];
 
   const [
     slackBotsResponse,
     documentSetsResponse,
     [assistants, assistantsFetchError],
-    standardAnswerCategoriesResponse,
   ] = (await Promise.all(tasks)) as [
     Response,
     Response,
     FetchAssistantsResponse,
-    Response,
   ];
+
+  const eeStandardAnswerCategoryResponse =
+    await getStandardAnswerCategoriesIfEE();
 
   if (!slackBotsResponse.ok) {
     return (
@@ -77,18 +74,6 @@ async function Page({ params }: { params: { id: string } }) {
     );
   }
 
-  if (!standardAnswerCategoriesResponse.ok) {
-    return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories - ${await standardAnswerCategoriesResponse.text()}`}
-      />
-    );
-  }
-
-  const standardAnswerCategories =
-    (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
-
   return (
     <div className="container mx-auto">
       <InstantSSRAutoRefresh />
@@ -107,7 +92,7 @@ async function Page({ params }: { params: { id: string } }) {
       <SlackBotCreationForm
         documentSets={documentSets}
         personas={assistants}
-        standardAnswerCategories={standardAnswerCategories}
+        standardAnswerCategoryResponse={eeStandardAnswerCategoryResponse}
         existingSlackBotConfig={slackBotConfig}
       />
     </div>

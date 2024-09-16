@@ -79,6 +79,7 @@ async function handleRequest(request: NextRequest, path: string[]) {
       method: request.method,
       headers: request.headers,
       body: request.body,
+      signal: request.signal,
       // @ts-ignore
       duplex: "half",
     });

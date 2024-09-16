@@ -2,13 +2,14 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { createConnector, runConnector } from "@/lib/connector";
 import { linkCredential } from "@/lib/credential";
 import { GoogleSitesConfig } from "@/lib/connectors/connectors";
-import { AdvancedConfigFinal } from "../../AddConnectorPage";
 
 export const submitGoogleSite = async (
   selectedFiles: File[],
   base_url: any,
   setPopup: (popup: PopupSpec) => void,
-  advancedConfig: AdvancedConfigFinal,
+  refreshFreq: number,
+  pruneFreq: number,
+  indexingStart: Date,
   name?: string
 ) => {
   const uploadCreateAndTriggerConnector = async () => {
@@ -41,9 +42,9 @@ export const submitGoogleSite = async (
           base_url: base_url,
           zip_path: filePaths[0],
         },
-        refresh_freq: advancedConfig.refreshFreq,
-        prune_freq: advancedConfig.pruneFreq,
-        indexing_start: advancedConfig.indexingStart,
+        refresh_freq: refreshFreq,
+        prune_freq: pruneFreq,
+        indexing_start: indexingStart,
       });
     if (connectorErrorMsg || !connector) {
       setPopup({

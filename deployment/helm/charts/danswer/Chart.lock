@@ -8,5 +8,8 @@ dependencies:
 - name: nginx
   repository: oci://registry-1.docker.io/bitnamicharts
   version: 15.14.0
-digest: sha256:ab17b5d2c3883055cb4a26bf530043521be5220c24f804e954bb428273d16ba8
-generated: "2024-05-24T16:55:30.598279-07:00"
+- name: redis
+  repository: https://charts.bitnami.com/bitnami
+  version: 20.1.0
+digest: sha256:fb42426c1d13667a4929d0d6a7d681bf08120e4a4eb1d15437e4ec70920be3f8
+generated: "2024-09-11T09:16:03.312328-07:00"

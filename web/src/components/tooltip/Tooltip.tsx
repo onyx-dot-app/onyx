@@ -14,12 +14,14 @@ export function Tooltip({
   delayDuration = 200,
   side = "top",
   align = "center",
+  width,
 }: {
   children: ReactNode;
   content: ReactNode;
   delayDuration?: number;
   side?: "top" | "right" | "bottom" | "left";
   align?: "start" | "center" | "end";
+  width?: string;
 }) {
   return (
     <TooltipPrimitive.Provider delayDuration={delayDuration}>
@@ -33,7 +35,11 @@ export function Tooltip({
             text-inverted 
             text-sm 
             rounded 
+            ${width}
             py-1 
+            whitespace-normal
+            break-words
+            flex
             px-2 
             z-10
             shadow-lg

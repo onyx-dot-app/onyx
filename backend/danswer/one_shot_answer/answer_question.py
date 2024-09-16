@@ -371,7 +371,7 @@ def get_search_answer(
         elif isinstance(packet, QADocsResponse):
             qa_response.docs = packet
         elif isinstance(packet, LLMRelevanceFilterResponse):
-            qa_response.llm_chunks_indices = packet.relevant_chunk_indices
+            qa_response.llm_selected_doc_indices = packet.llm_selected_doc_indices
         elif isinstance(packet, DanswerQuotes):
             qa_response.quotes = packet
         elif isinstance(packet, CitationInfo):

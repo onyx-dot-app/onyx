@@ -78,6 +78,8 @@ export function EmailPasswordForm({
             let errorMsg = "Unknown error";
             if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
               errorMsg = "Invalid email or password";
+            } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
+              errorMsg = "Create an account to set a password";
             }
             setPopup({
               type: "error",

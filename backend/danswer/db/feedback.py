@@ -1,3 +1,5 @@
+from datetime import datetime
+from datetime import timezone
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -24,7 +26,6 @@ from danswer.db.models import User__UserGroup
 from danswer.db.models import UserGroup__ConnectorCredentialPair
 from danswer.db.models import UserRole
 from danswer.document_index.interfaces import DocumentIndex
-from danswer.document_index.interfaces import UpdateRequest
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -123,12 +124,11 @@ def update_document_boost(
     db_session: Session,
     document_id: str,
     boost: int,
-    document_index: DocumentIndex,
     user: User | None = None,
 ) -> None:
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     stmt = _add_user_filters(stmt, user, get_editable=True)
-    result = db_session.execute(stmt).scalar_one_or_none()
+    result: DbDocument | None = db_session.execute(stmt).scalar_one_or_none()
     if result is None:
         raise HTTPException(
             status_code=400, detail="Document is not editable by this user"
@@ -136,13 +136,9 @@ def update_document_boost(
 
     result.boost = boost
 
-    update = UpdateRequest(
-        document_ids=[document_id],
-        boost=boost,
-    )
-
-    document_index.update(update_requests=[update])
-
+    # updating last_modified triggers sync
+    # TODO: Should this submit to the queue directly so that the UI can update?
+    result.last_modified = datetime.now(timezone.utc)
     db_session.commit()
 
 
@@ -163,13 +159,9 @@ def update_document_hidden(
 
     result.hidden = hidden
 
-    update = UpdateRequest(
-        document_ids=[document_id],
-        hidden=hidden,
-    )
-
-    document_index.update(update_requests=[update])
-
+    # updating last_modified triggers sync
+    # TODO: Should this submit to the queue directly so that the UI can update?
+    result.last_modified = datetime.now(timezone.utc)
     db_session.commit()
 
 
@@ -210,11 +202,9 @@ def create_doc_retrieval_feedback(
         SearchFeedbackType.REJECT,
         SearchFeedbackType.HIDE,
     ]:
-        update = UpdateRequest(
-            document_ids=[document_id], boost=db_doc.boost, hidden=db_doc.hidden
-        )
-        # Updates are generally batched for efficiency, this case only 1 doc/value is updated
-        document_index.update(update_requests=[update])
+        # updating last_modified triggers sync
+        # TODO: Should this submit to the queue directly so that the UI can update?
+        db_doc.last_modified = datetime.now(timezone.utc)
 
     db_session.add(retrieval_feedback)
     db_session.commit()

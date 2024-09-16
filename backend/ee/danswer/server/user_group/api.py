@@ -32,7 +32,7 @@ def list_user_groups(
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
     if user is None or user.role == UserRole.ADMIN:
-        user_groups = fetch_user_groups(db_session, only_current=False)
+        user_groups = fetch_user_groups(db_session, only_up_to_date=False)
     else:
         user_groups = fetch_user_groups_for_user(
             db_session=db_session,

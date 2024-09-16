@@ -52,7 +52,7 @@ from danswer.tools.images.prompt import build_image_generation_user_prompt
 from danswer.tools.internet_search.internet_search_tool import InternetSearchTool
 from danswer.tools.message import build_tool_message
 from danswer.tools.message import ToolCallSummary
-from danswer.tools.search.search_tool import FINAL_CONTEXT_DOCUMENTS
+from danswer.tools.search.search_tool import FINAL_CONTEXT_DOCUMENTS_ID
 from danswer.tools.search.search_tool import SEARCH_DOC_CONTENT_ID
 from danswer.tools.search.search_tool import SEARCH_RESPONSE_SUMMARY_ID
 from danswer.tools.search.search_tool import SearchResponseSummary
@@ -433,7 +433,7 @@ class Answer:
         if tool.name in {SearchTool._NAME, InternetSearchTool._NAME}:
             final_context_documents = None
             for response in tool_runner.tool_responses():
-                if response.id == FINAL_CONTEXT_DOCUMENTS:
+                if response.id == FINAL_CONTEXT_DOCUMENTS_ID:
                     final_context_documents = cast(list[LlmDoc], response.response)
                 yield response
 
@@ -501,12 +501,10 @@ class Answer:
             message = None
 
             # special things we need to keep track of for the SearchTool
-            search_results: list[
-                LlmDoc
-            ] | None = None  # raw results that will be displayed to the user
-            final_context_docs: list[
-                LlmDoc
-            ] | None = None  # processed docs to feed into the LLM
+            # raw results that will be displayed to the user
+            search_results: list[LlmDoc] | None = None
+            # processed docs to feed into the LLM
+            final_context_docs: list[LlmDoc] | None = None
 
             for message in stream:
                 if isinstance(message, ToolCallKickoff) or isinstance(
@@ -525,8 +523,9 @@ class Answer:
                                 SearchResponseSummary, message.response
                             ).top_sections
                         ]
-                    elif message.id == FINAL_CONTEXT_DOCUMENTS:
+                    elif message.id == FINAL_CONTEXT_DOCUMENTS_ID:
                         final_context_docs = cast(list[LlmDoc], message.response)
+                        yield message
 
                     elif (
                         message.id == SEARCH_DOC_CONTENT_ID

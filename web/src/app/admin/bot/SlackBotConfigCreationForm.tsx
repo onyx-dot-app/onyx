@@ -3,14 +3,10 @@
 import { ArrayHelpers, FieldArray, Form, Formik } from "formik";
 import * as Yup from "yup";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import {
-  DocumentSet,
-  SlackBotConfig,
-  StandardAnswerCategory,
-} from "@/lib/types";
+import { DocumentSet, SlackBotConfig } from "@/lib/types";
 import {
   BooleanFormField,
-  SectionHeader,
+  Label,
   SelectorFormField,
   SubLabel,
   TextArrayField,
@@ -20,32 +16,26 @@ import {
   isPersonaASlackBotPersona,
   updateSlackBotConfig,
 } from "./lib";
-import {
-  Button,
-  Card,
-  Divider,
-  Tab,
-  TabGroup,
-  TabList,
-  TabPanel,
-  TabPanels,
-  Text,
-} from "@tremor/react";
+import { Button, Card, Divider } from "@tremor/react";
 import { useRouter } from "next/navigation";
 import { Persona } from "../assistants/interfaces";
 import { useState } from "react";
-import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
 import MultiSelectDropdown from "@/components/MultiSelectDropdown";
+import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
+import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
+import CollapsibleSection from "../assistants/CollapsibleSection";
+import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
+import { StandardAnswerCategoryDropdownField } from "@/components/standardAnswers/StandardAnswerCategoryDropdown";
 
 export const SlackBotCreationForm = ({
   documentSets,
   personas,
-  standardAnswerCategories,
+  standardAnswerCategoryResponse,
   existingSlackBotConfig,
 }: {
   documentSets: DocumentSet[];
   personas: Persona[];
-  standardAnswerCategories: StandardAnswerCategory[];
+  standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
   existingSlackBotConfig?: SlackBotConfig;
 }) => {
   const isUpdate = existingSlackBotConfig !== undefined;
@@ -57,6 +47,9 @@ export const SlackBotCreationForm = ({
   const [usingPersonas, setUsingPersonas] = useState(
     existingSlackBotUsesPersona
   );
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+
+  const knowledgePersona = personas.find((persona) => persona.id === 0);
 
   return (
     <div>
@@ -66,7 +59,7 @@ export const SlackBotCreationForm = ({
           initialValues={{
             channel_names: existingSlackBotConfig
               ? existingSlackBotConfig.channel_config.channel_names
-              : ([] as string[]),
+              : ([""] as string[]),
             answer_validity_check_enabled: (
               existingSlackBotConfig?.channel_config?.answer_filters || []
             ).includes("well_answered_postfilter"),
@@ -93,11 +86,12 @@ export const SlackBotCreationForm = ({
                     (documentSet) => documentSet.id
                   )
                 : ([] as number[]),
+            // prettier-ignore
             persona_id:
               existingSlackBotConfig?.persona &&
               !isPersonaASlackBotPersona(existingSlackBotConfig.persona)
                 ? existingSlackBotConfig.persona.id
-                : null,
+                : knowledgePersona?.id ?? null,
             response_type: existingSlackBotConfig?.response_type || "citations",
             standard_answer_categories: existingSlackBotConfig
               ? existingSlackBotConfig.standard_answer_categories
@@ -168,227 +162,56 @@ export const SlackBotCreationForm = ({
         >
           {({ isSubmitting, values, setFieldValue }) => (
             <Form>
-              <div className="px-6 pb-6">
-                <SectionHeader>The Basics</SectionHeader>
-
+              <div className="px-6 pb-6 pt-4 w-full">
                 <TextArrayField
                   name="channel_names"
                   label="Channel Names"
                   values={values}
-                  subtext={
-                    <div>
-                      The names of the Slack channels you want this
-                      configuration to apply to. For example,
-                      &apos;#ask-danswer&apos;.
-                      <br />
-                      <br />
-                      <i>NOTE</i>: you still need to add DanswerBot to the
-                      channel(s) in Slack itself. Setting this config will not
-                      auto-add the bot to the channel.
-                    </div>
-                  }
+                  subtext="The names of the Slack channels you want this configuration to apply to. 
+                  For example, #ask-danswer."
+                  minFields={1}
+                  placeholder="Enter channel name..."
                 />
 
-                <SelectorFormField
-                  name="response_type"
-                  label="Response Format"
-                  subtext={
-                    <>
-                      If set to Citations, DanswerBot will respond with a direct
-                      answer with inline citations. It will also provide links
-                      to these cited documents below the answer. When in doubt,
-                      choose this option.
-                      <br />
-                      <br />
-                      If set to Quotes, DanswerBot will respond with a direct
-                      answer as well as with quotes pulled from the context
-                      documents to support that answer. DanswerBot will also
-                      give a list of relevant documents. Choose this option if
-                      you want a very detailed response AND/OR a list of
-                      relevant documents would be useful just in case the LLM
-                      missed anything.
-                    </>
-                  }
-                  options={[
-                    { name: "Citations", value: "citations" },
-                    { name: "Quotes", value: "quotes" },
-                  ]}
-                />
+                <div className="mt-6">
+                  <Label>Knowledge Sources</Label>
 
-                <Divider />
+                  <SubLabel>
+                    Controls which information DanswerBot will pull from when
+                    answering questions.
+                  </SubLabel>
 
-                <SectionHeader>When should DanswerBot respond?</SectionHeader>
+                  <div className="flex mt-4">
+                    <button
+                      type="button"
+                      onClick={() => setUsingPersonas(false)}
+                      className={`p-2 font-bold text-xs mr-3 ${
+                        !usingPersonas
+                          ? "rounded bg-background-900 text-text-100 underline"
+                          : "hover:underline bg-background-100"
+                      }`}
+                    >
+                      Document Sets
+                    </button>
 
-                <BooleanFormField
-                  name="answer_validity_check_enabled"
-                  label="Hide Non-Answers"
-                  subtext="If set, will only answer questions that the model determines it can answer"
-                />
-                <BooleanFormField
-                  name="questionmark_prefilter_enabled"
-                  label="Only respond to questions"
-                  subtext="If set, will only respond to messages that contain a question mark"
-                />
-                <BooleanFormField
-                  name="respond_tag_only"
-                  label="Respond to @DanswerBot Only"
-                  subtext="If set, DanswerBot will only respond when directly tagged"
-                />
-                <BooleanFormField
-                  name="respond_to_bots"
-                  label="Responds to Bot messages"
-                  subtext="If not set, DanswerBot will always ignore messages from Bots"
-                />
-                <BooleanFormField
-                  name="enable_auto_filters"
-                  label="Enable LLM Autofiltering"
-                  subtext="If set, the LLM will generate source and time filters based on the user's query"
-                />
-                <TextArrayField
-                  name="respond_member_group_list"
-                  label="Team Member Emails Or Slack Group Names/Handles"
-                  subtext={`If specified, DanswerBot responses will only be 
-                  visible to the members or groups in this list. This is
-                  useful if you want DanswerBot to operate in an
-                  "assistant" mode, where it helps the team members find
-                  answers, but let's them build on top of DanswerBot's response / throw 
-                  out the occasional incorrect answer. Group names and handles are case sensitive.`}
-                  values={values}
-                />
-                <Divider />
+                    <button
+                      type="button"
+                      onClick={() => setUsingPersonas(true)}
+                      className={`p-2 font-bold text-xs  ${
+                        usingPersonas
+                          ? "rounded bg-background-900 text-text-100 underline"
+                          : "hover:underline bg-background-100"
+                      }`}
+                    >
+                      Assistants
+                    </button>
+                  </div>
 
-                <SectionHeader>Post Response Behavior</SectionHeader>
-
-                <BooleanFormField
-                  name="still_need_help_enabled"
-                  label="Should Danswer give a “Still need help?” button?"
-                  subtext={`If specified, DanswerBot's response will include a button at the bottom 
-                  of the response that asks the user if they still need help.`}
-                />
-                {values.still_need_help_enabled && (
-                  <TextArrayField
-                    name="follow_up_tags"
-                    label="Users to Tag"
-                    values={values}
-                    subtext={
-                      <div>
-                        The full email addresses of the Slack users we should
-                        tag if the user clicks the &quot;Still need help?&quot;
-                        button. For example, &apos;mark@acme.com&apos;.
-                        <br />
-                        Or provide a user group by either the name or the
-                        handle. For example, &apos;Danswer Team&apos; or
-                        &apos;danswer-team&apos;.
-                        <br />
-                        <br />
-                        If no emails are provided, we will not tag anyone and
-                        will just react with a 🆘 emoji to the original message.
-                      </div>
-                    }
-                  />
-                )}
-
-                <Divider />
-
-                <div>
-                  <SectionHeader>
-                    [Optional] Data Sources and Prompts
-                  </SectionHeader>
-                  <Text>
-                    Use either an Assistant <b>or</b> Document Sets to control
-                    how DanswerBot answers.
-                  </Text>
-                  <Text>
-                    <ul className="list-disc mt-2 ml-4">
-                      <li>
-                        You should use an Assistant if you also want to
-                        customize the prompt and retrieval settings.
-                      </li>
-                      <li>
-                        You should use Document Sets if you just want to control
-                        which documents DanswerBot uses as references.
-                      </li>
-                    </ul>
-                  </Text>
-                  <Text className="mt-2">
-                    <b>NOTE:</b> whichever tab you are when you submit the form
-                    will be the one that is used. For example, if you are on the
-                    &quot;Assistants&quot; tab, then the Assistant and its
-                    attached knowledge will be used, even if you have Document
-                    Sets selected.
-                  </Text>
-                </div>
-
-                <TabGroup
-                  index={usingPersonas ? 1 : 0}
-                  onIndexChange={(index) => setUsingPersonas(index === 1)}
-                >
-                  <TabList className="mt-3 mb-4">
-                    <Tab icon={BookmarkIcon}>Document Sets</Tab>
-                    <Tab icon={RobotIcon}>Assistants</Tab>
-                  </TabList>
-                  <TabPanels>
-                    <TabPanel>
-                      <FieldArray
-                        name="document_sets"
-                        render={(arrayHelpers: ArrayHelpers) => (
-                          <div>
-                            <div>
-                              <SubLabel>
-                                The document sets that DanswerBot should search
-                                through. If left blank, DanswerBot will search
-                                through all documents.
-                              </SubLabel>
-                            </div>
-                            <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
-                              {documentSets.map((documentSet) => {
-                                const ind = values.document_sets.indexOf(
-                                  documentSet.id
-                                );
-                                let isSelected = ind !== -1;
-                                return (
-                                  <div
-                                    key={documentSet.id}
-                                    className={
-                                      `
-                                      px-3 
-                                      py-1
-                                      rounded-lg 
-                                      border
-                                      border-border 
-                                      w-fit 
-                                      flex 
-                                      cursor-pointer ` +
-                                      (isSelected
-                                        ? " bg-hover"
-                                        : " bg-background hover:bg-hover-light")
-                                    }
-                                    onClick={() => {
-                                      if (isSelected) {
-                                        arrayHelpers.remove(ind);
-                                      } else {
-                                        arrayHelpers.push(documentSet.id);
-                                      }
-                                    }}
-                                  >
-                                    <div className="my-auto">
-                                      {documentSet.name}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      />
-                    </TabPanel>
-                    <TabPanel>
+                  <div className="mt-4">
+                    {/* TODO: make this look nicer */}
+                    {usingPersonas ? (
                       <SelectorFormField
                         name="persona_id"
-                        subtext={`
-                            The assistant to use when responding to queries. The "Knowledge" assistant acts
-                            as a question-answering assistant and has access to all documents indexed by non-private connectors.
-                          `}
                         options={personas.map((persona) => {
                           return {
                             name: persona.name,
@@ -396,50 +219,152 @@ export const SlackBotCreationForm = ({
                           };
                         })}
                       />
-                    </TabPanel>
-                  </TabPanels>
-                </TabGroup>
+                    ) : (
+                      <FieldArray
+                        name="document_sets"
+                        render={(arrayHelpers: ArrayHelpers) => (
+                          <div>
+                            <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
+                              {documentSets.map((documentSet) => {
+                                const ind = values.document_sets.indexOf(
+                                  documentSet.id
+                                );
+                                let isSelected = ind !== -1;
 
-                <Divider />
-
-                <div>
-                  <SectionHeader>
-                    [Optional] Standard Answer Categories
-                  </SectionHeader>
-                  <div className="w-4/12">
-                    <MultiSelectDropdown
-                      name="standard_answer_categories"
-                      label=""
-                      onChange={(selected_options) => {
-                        const selected_categories = selected_options.map(
-                          (option) => {
-                            return {
-                              id: Number(option.value),
-                              name: option.label,
-                            };
-                          }
-                        );
-                        setFieldValue(
-                          "standard_answer_categories",
-                          selected_categories
-                        );
-                      }}
-                      creatable={false}
-                      options={standardAnswerCategories.map((category) => ({
-                        label: category.name,
-                        value: category.id.toString(),
-                      }))}
-                      initialSelectedOptions={values.standard_answer_categories.map(
-                        (category) => ({
-                          label: category.name,
-                          value: category.id.toString(),
-                        })
-                      )}
-                    />
+                                return (
+                                  <DocumentSetSelectable
+                                    key={documentSet.id}
+                                    documentSet={documentSet}
+                                    isSelected={isSelected}
+                                    onSelect={() => {
+                                      if (isSelected) {
+                                        arrayHelpers.remove(ind);
+                                      } else {
+                                        arrayHelpers.push(documentSet.id);
+                                      }
+                                    }}
+                                  />
+                                );
+                              })}
+                            </div>
+                            <div>
+                              <SubLabel>
+                                Note: If left blank, DanswerBot will search
+                                through all connected documents.
+                              </SubLabel>
+                            </div>
+                          </div>
+                        )}
+                      />
+                    )}
                   </div>
                 </div>
 
                 <Divider />
+
+                <AdvancedOptionsToggle
+                  showAdvancedOptions={showAdvancedOptions}
+                  setShowAdvancedOptions={setShowAdvancedOptions}
+                />
+
+                {showAdvancedOptions && (
+                  <div className="mt-4">
+                    <div className="w-64 mb-4">
+                      <SelectorFormField
+                        name="response_type"
+                        label="Answer Type"
+                        tooltip="Controls the format of DanswerBot's responses."
+                        options={[
+                          { name: "Standard", value: "citations" },
+                          { name: "Detailed", value: "quotes" },
+                        ]}
+                      />
+                    </div>
+
+                    <div className="flex flex-col space-y-3 mt-2">
+                      <BooleanFormField
+                        name="still_need_help_enabled"
+                        removeIndent
+                        label={'Give a "Still need help?" button'}
+                        tooltip={`DanswerBot's response will include a button at the bottom 
+                      of the response that asks the user if they still need help.`}
+                      />
+                      {values.still_need_help_enabled && (
+                        <CollapsibleSection prompt="Configure Still Need Help Button">
+                          <TextArrayField
+                            name="follow_up_tags"
+                            label="(Optional) Users / Groups to Tag"
+                            values={values}
+                            subtext={
+                              <div>
+                                The Slack users / groups we should tag if the
+                                user clicks the &quot;Still need help?&quot;
+                                button. If no emails are provided, we will not
+                                tag anyone and will just react with a 🆘 emoji
+                                to the original message.
+                              </div>
+                            }
+                            placeholder="User email or user group name..."
+                          />
+                        </CollapsibleSection>
+                      )}
+
+                      <BooleanFormField
+                        name="answer_validity_check_enabled"
+                        removeIndent
+                        label="Hide Non-Answers"
+                        tooltip="If set, will only answer questions that the model determines it can answer"
+                      />
+                      <BooleanFormField
+                        name="questionmark_prefilter_enabled"
+                        removeIndent
+                        label="Only respond to questions"
+                        tooltip="If set, will only respond to messages that contain a question mark"
+                      />
+                      <BooleanFormField
+                        name="respond_tag_only"
+                        removeIndent
+                        label="Respond to @DanswerBot Only"
+                        tooltip="If set, DanswerBot will only respond when directly tagged"
+                      />
+                      <BooleanFormField
+                        name="respond_to_bots"
+                        removeIndent
+                        label="Respond to Bot messages"
+                        tooltip="If not set, DanswerBot will always ignore messages from Bots"
+                      />
+                      <BooleanFormField
+                        name="enable_auto_filters"
+                        removeIndent
+                        label="Enable LLM Autofiltering"
+                        tooltip="If set, the LLM will generate source and time filters based on the user's query"
+                      />
+
+                      <div className="mt-12">
+                        <TextArrayField
+                          name="respond_member_group_list"
+                          label="(Optional) Respond to Certain Users / Groups"
+                          subtext={
+                            "If specified, DanswerBot responses will only " +
+                            "be visible to the members or groups in this list."
+                          }
+                          values={values}
+                          placeholder="User email or user group name..."
+                        />
+                      </div>
+                    </div>
+
+                    <StandardAnswerCategoryDropdownField
+                      standardAnswerCategoryResponse={
+                        standardAnswerCategoryResponse
+                      }
+                      categories={values.standard_answer_categories}
+                      setCategories={(categories) =>
+                        setFieldValue("standard_answer_categories", categories)
+                      }
+                    />
+                  </div>
+                )}
 
                 <div className="flex">
                   <Button

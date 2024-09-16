@@ -25,6 +25,7 @@ import { useEffect, useRef, useState } from "react";
 import { CheckmarkIcon, EditIcon, XIcon } from "@/components/icons/icons";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { updateConnectorCredentialPairName } from "@/lib/connector";
+import DeletionErrorStatus from "./DeletionErrorStatus";
 
 // since the uploaded files are cleaned up after some period of time
 // re-indexing will not work for the file connector. Also, it would not
@@ -187,6 +188,17 @@ function Main({ ccPairId }: { ccPairId: number }) {
             : "This connector belongs to groups where you don't have curator permissions, so it's not editable."}
         </div>
       )}
+
+      {ccPair.deletion_failure_message &&
+        ccPair.status === ConnectorCredentialPairStatus.DELETING && (
+          <>
+            <div className="mt-6" />
+            <DeletionErrorStatus
+              deletion_failure_message={ccPair.deletion_failure_message}
+            />
+          </>
+        )}
+
       {credentialTemplates[ccPair.connector.source] &&
         ccPair.is_editable_for_current_user && (
           <>

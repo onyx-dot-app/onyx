@@ -148,20 +148,24 @@ export function ClientLayout({
                         {
                           name: (
                             <div className="flex">
-                              <ClipboardIcon size={18} />
-                              <div className="ml-1">Standard Answers</div>
-                            </div>
-                          ),
-                          link: "/admin/standard-answer",
-                        },
-                        {
-                          name: (
-                            <div className="flex">
                               <ClosedBookIcon size={18} />
                               <div className="ml-1">Prompt Library</div>
                             </div>
                           ),
                           link: "/admin/prompt-library",
+                        },
+                      ]
+                    : []),
+                  ...(enableEnterprise
+                    ? [
+                        {
+                          name: (
+                            <div className="flex">
+                              <ClipboardIcon size={18} />
+                              <div className="ml-1">Standard Answers</div>
+                            </div>
+                          ),
+                          link: "/admin/standard-answer",
                         },
                       ]
                     : []),

@@ -181,6 +181,45 @@ def get_last_attempt(
     return db_session.execute(stmt).scalars().first()
 
 
+def get_latest_index_attempts_by_status(
+    secondary_index: bool,
+    db_session: Session,
+    status: IndexingStatus,
+) -> Sequence[IndexAttempt]:
+    """
+    Retrieves the most recent index attempt with the specified status for each connector_credential_pair.
+    Filters attempts based on the secondary_index flag to get either future or present index attempts.
+    Returns a sequence of IndexAttempt objects, one for each unique connector_credential_pair.
+    """
+    latest_failed_attempts = (
+        select(
+            IndexAttempt.connector_credential_pair_id,
+            func.max(IndexAttempt.id).label("max_failed_id"),
+        )
+        .join(SearchSettings, IndexAttempt.search_settings_id == SearchSettings.id)
+        .where(
+            SearchSettings.status
+            == (
+                IndexModelStatus.FUTURE if secondary_index else IndexModelStatus.PRESENT
+            ),
+            IndexAttempt.status == status,
+        )
+        .group_by(IndexAttempt.connector_credential_pair_id)
+        .subquery()
+    )
+
+    stmt = select(IndexAttempt).join(
+        latest_failed_attempts,
+        (
+            IndexAttempt.connector_credential_pair_id
+            == latest_failed_attempts.c.connector_credential_pair_id
+        )
+        & (IndexAttempt.id == latest_failed_attempts.c.max_failed_id),
+    )
+
+    return db_session.execute(stmt).scalars().all()
+
+
 def get_latest_index_attempts(
     secondary_index: bool,
     db_session: Session,
@@ -335,6 +374,16 @@ def delete_index_attempts(
     cc_pair_id: int,
     db_session: Session,
 ) -> None:
+    # First, delete related entries in IndexAttemptErrors
+    stmt_errors = delete(IndexAttemptError).where(
+        IndexAttemptError.index_attempt_id.in_(
+            select(IndexAttempt.id).where(
+                IndexAttempt.connector_credential_pair_id == cc_pair_id
+            )
+        )
+    )
+    db_session.execute(stmt_errors)
+
     stmt = delete(IndexAttempt).where(
         IndexAttempt.connector_credential_pair_id == cc_pair_id,
     )

@@ -1,4 +1,3 @@
-import string
 from collections.abc import Sequence
 
 from sqlalchemy import select
@@ -41,6 +40,8 @@ def insert_standard_answer(
     keyword: str,
     answer: str,
     category_ids: list[int],
+    match_regex: bool,
+    match_any_keywords: bool,
     db_session: Session,
 ) -> StandardAnswer:
     existing_categories = fetch_standard_answer_categories_by_ids(
@@ -55,6 +56,8 @@ def insert_standard_answer(
         answer=answer,
         categories=existing_categories,
         active=True,
+        match_regex=match_regex,
+        match_any_keywords=match_any_keywords,
     )
     db_session.add(standard_answer)
     db_session.commit()
@@ -66,6 +69,8 @@ def update_standard_answer(
     keyword: str,
     answer: str,
     category_ids: list[int],
+    match_regex: bool,
+    match_any_keywords: bool,
     db_session: Session,
 ) -> StandardAnswer:
     standard_answer = db_session.scalar(
@@ -84,6 +89,8 @@ def update_standard_answer(
     standard_answer.keyword = keyword
     standard_answer.answer = answer
     standard_answer.categories = list(existing_categories)
+    standard_answer.match_regex = match_regex
+    standard_answer.match_any_keywords = match_any_keywords
 
     db_session.commit()
 
@@ -140,17 +147,6 @@ def fetch_standard_answer_category(
     )
 
 
-def fetch_standard_answer_categories_by_names(
-    standard_answer_category_names: list[str],
-    db_session: Session,
-) -> Sequence[StandardAnswerCategory]:
-    return db_session.scalars(
-        select(StandardAnswerCategory).where(
-            StandardAnswerCategory.name.in_(standard_answer_category_names)
-        )
-    ).all()
-
-
 def fetch_standard_answer_categories_by_ids(
     standard_answer_category_ids: list[int],
     db_session: Session,
@@ -175,39 +171,6 @@ def fetch_standard_answer(
     return db_session.scalar(
         select(StandardAnswer).where(StandardAnswer.id == standard_answer_id)
     )
-
-
-def find_matching_standard_answers(
-    id_in: list[int],
-    query: str,
-    db_session: Session,
-) -> list[StandardAnswer]:
-    stmt = (
-        select(StandardAnswer)
-        .where(StandardAnswer.active.is_(True))
-        .where(StandardAnswer.id.in_(id_in))
-    )
-    possible_standard_answers = db_session.scalars(stmt).all()
-
-    matching_standard_answers: list[StandardAnswer] = []
-    for standard_answer in possible_standard_answers:
-        # Remove punctuation and split the keyword into individual words
-        keyword_words = "".join(
-            char
-            for char in standard_answer.keyword.lower()
-            if char not in string.punctuation
-        ).split()
-
-        # Remove punctuation and split the query into individual words
-        query_words = "".join(
-            char for char in query.lower() if char not in string.punctuation
-        ).split()
-
-        # Check if all of the keyword words are in the query words
-        if all(word in query_words for word in keyword_words):
-            matching_standard_answers.append(standard_answer)
-
-    return matching_standard_answers
 
 
 def fetch_standard_answers(db_session: Session) -> Sequence[StandardAnswer]:

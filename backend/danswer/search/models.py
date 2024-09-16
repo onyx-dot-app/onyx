@@ -26,6 +26,7 @@ MAX_METRICS_CONTENT = (
 class RerankingDetails(BaseModel):
     # If model is None (or num_rerank is 0), then reranking is turned off
     rerank_model_name: str | None
+    rerank_api_url: str | None
     rerank_provider_type: RerankerProvider | None
     rerank_api_key: str | None = None
 
@@ -42,6 +43,7 @@ class RerankingDetails(BaseModel):
             rerank_provider_type=search_settings.rerank_provider_type,
             rerank_api_key=search_settings.rerank_api_key,
             num_rerank=search_settings.num_rerank,
+            rerank_api_url=search_settings.rerank_api_url,
         )
 
 
@@ -81,7 +83,7 @@ class SavedSearchSettings(InferenceSettings, IndexingSetting):
             num_rerank=search_settings.num_rerank,
             # Multilingual Expansion
             multilingual_expansion=search_settings.multilingual_expansion,
-            api_url=search_settings.api_url,
+            rerank_api_url=search_settings.rerank_api_url,
         )
 
 

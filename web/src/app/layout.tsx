@@ -19,6 +19,7 @@ import { Card } from "@tremor/react";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { Logo } from "@/components/Logo";
 import { UserProvider } from "@/components/user/UserProvider";
+import { ProviderContextProvider } from "@/components/chat_search/ProviderContext";
 
 
 declare global {
@@ -145,9 +146,11 @@ export default async function RootLayout({
           }`}
         >
           <UserProvider>
-            <SettingsProvider settings={combinedSettings}>
-              {children}
-            </SettingsProvider>
+            <ProviderContextProvider>
+              <SettingsProvider settings={combinedSettings}>
+                {children}
+              </SettingsProvider>
+            </ProviderContextProvider>
           </UserProvider>
         </div>
       </body>

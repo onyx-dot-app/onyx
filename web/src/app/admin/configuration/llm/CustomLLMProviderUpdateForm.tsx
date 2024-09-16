@@ -28,6 +28,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
+import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 
 function customConfigProcessing(customConfigsList: [string, string][]) {
   const customConfig: { [key: string]: string } = {};
@@ -209,7 +210,7 @@ export function CustomLLMProviderUpdateForm({
         setSubmitting(false);
       }}
     >
-      {({ values, setFieldValue }) => {
+      {(formikProps) => {
         return (
           <Form className="gap-y-6 mt-8">
             <TextFormField
@@ -285,7 +286,7 @@ export function CustomLLMProviderUpdateForm({
               name="custom_config_list"
               render={(arrayHelpers: ArrayHelpers<any[]>) => (
                 <div>
-                  {values.custom_config_list.map((_, index) => {
+                  {formikProps.values.custom_config_list.map((_, index) => {
                     return (
                       <div
                         key={index}
@@ -371,7 +372,7 @@ export function CustomLLMProviderUpdateForm({
             <TextArrayField
               name="model_names"
               label="Model Names"
-              values={values}
+              values={formikProps.values}
               subtext={
                 <>
                   List the individual models that you want to make available as
@@ -419,64 +420,12 @@ export function CustomLLMProviderUpdateForm({
             />
 
             {showAdvancedOptions && (
-              <>
-                {isPaidEnterpriseFeaturesEnabled && userGroups && (
-                  <>
-                    <BooleanFormField
-                      small
-                      removeIndent
-                      alignTop
-                      name="is_public"
-                      label="Is Public?"
-                      subtext="If set, this LLM Provider will be available to all users. If not, only the specified User Groups will be able to use it."
-                    />
-
-                    {userGroups &&
-                      userGroups.length > 0 &&
-                      !values.is_public && (
-                        <div>
-                          <Text>
-                            Select which User Groups should have access to this
-                            LLM Provider.
-                          </Text>
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {userGroups.map((userGroup) => {
-                              const isSelected = values.groups.includes(
-                                userGroup.id
-                              );
-                              return (
-                                <Bubble
-                                  key={userGroup.id}
-                                  isSelected={isSelected}
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      setFieldValue(
-                                        "groups",
-                                        values.groups.filter(
-                                          (id) => id !== userGroup.id
-                                        )
-                                      );
-                                    } else {
-                                      setFieldValue("groups", [
-                                        ...values.groups,
-                                        userGroup.id,
-                                      ]);
-                                    }
-                                  }}
-                                >
-                                  <div className="flex">
-                                    <GroupsIcon />
-                                    <div className="ml-1">{userGroup.name}</div>
-                                  </div>
-                                </Bubble>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                  </>
-                )}
-              </>
+              <IsPublicGroupSelector
+                formikProps={formikProps}
+                objectName="LLM Provider"
+                publicToWhom="all users"
+                enforceGroupSelection={true}
+              />
             )}
 
             <div>

@@ -28,6 +28,7 @@ class EnterpriseSettings(BaseModel):
     custom_header_content: str | None = None
     custom_popup_header: str | None = None
     custom_popup_content: str | None = None
+    enable_consent_screen: bool | None = None
 
     def check_validity(self) -> None:
         return

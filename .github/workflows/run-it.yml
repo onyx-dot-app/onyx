@@ -87,6 +87,8 @@ jobs:
         run: |
           echo "Starting wait-for-service script..."
           
+          docker logs -f danswer-stack-api_server-1 &
+
           start_time=$(date +%s)
           timeout=300  # 5 minutes in seconds
           

@@ -2,7 +2,9 @@ import React, { KeyboardEvent, ChangeEvent, useContext } from "react";
 
 import { MagnifyingGlass } from "@phosphor-icons/react";
 interface FullSearchBarProps {
+  disabled: boolean;
   query: string;
+  setPopup: (popupSpec: PopupSpec | null) => void;
   setQuery: (query: string) => void;
   onSearch: (fast?: boolean) => void;
   agentic?: boolean;
@@ -14,6 +16,7 @@ interface FullSearchBarProps {
   finalAvailableSources: string[];
   tags: Tag[];
   showingSidebar: boolean;
+  previousSearch: string;
 }
 
 import { useState, useEffect, useRef } from "react";
@@ -25,6 +28,7 @@ import { SettingsContext } from "../settings/SettingsProvider";
 import { HorizontalSourceSelector, SourceSelector } from "./filtering/Filters";
 import { CCPairBasicInfo, DocumentSet, Tag } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
+import { PopupSpec } from "../admin/connectors/Popup";
 
 export const AnimatedToggle = ({
   isOn,
@@ -123,6 +127,7 @@ export const AnimatedToggle = ({
 export default AnimatedToggle;
 
 export const FullSearchBar = ({
+  disabled,
   showingSidebar,
   query,
   setQuery,
@@ -133,8 +138,10 @@ export const FullSearchBar = ({
   documentSets,
   filterManager,
   finalAvailableDocumentSets,
+  setPopup,
   finalAvailableSources,
   tags,
+  previousSearch,
 }: FullSearchBarProps) => {
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const target = event.target;
@@ -152,8 +159,10 @@ export const FullSearchBar = ({
       !event.shiftKey &&
       !(event.nativeEvent as any).isComposing
     ) {
-      onSearch(agentic);
       event.preventDefault();
+      if (!disabled) {
+        onSearch(agentic);
+      }
     }
   };
 
@@ -200,13 +209,12 @@ export const FullSearchBar = ({
         style={{ scrollbarWidth: "thin" }}
         role="textarea"
         aria-multiline
-        placeholder="Search for something..."
+        placeholder="Search for anything..."
         value={query}
         onChange={handleChange}
         onKeyDown={(event) => {}}
         suppressContentEditableWarning={true}
       />
-
       <div
         className={`flex ${showingSidebar ? " 2xl:justify-between" : "2xl:justify-end"} justify-between 4xl:justify-end w-full items-center space-x-3 py-3 px-4`}
       >
@@ -226,9 +234,9 @@ export const FullSearchBar = ({
           {toggleAgentic && (
             <AnimatedToggle isOn={agentic!} handleToggle={toggleAgentic} />
           )}
-
           <div className="my-auto pl-2">
             <button
+              disabled={disabled}
               onClick={() => {
                 onSearch(agentic);
               }}
@@ -236,7 +244,7 @@ export const FullSearchBar = ({
             >
               <SendIcon
                 size={28}
-                className={`text-emphasis text-white p-1 rounded-full ${
+                className={`text-emphasis ${disabled && "opacity-50"} text-white p-1 rounded-full ${
                   query ? "bg-background-800" : "bg-[#D7D7D7]"
                 }`}
               />

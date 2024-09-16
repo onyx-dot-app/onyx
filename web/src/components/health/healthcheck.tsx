@@ -6,6 +6,8 @@ import { Modal } from "../Modal";
 import { useEffect, useState } from "react";
 import { getSecondsUntilExpiration } from "@/lib/time";
 import { User } from "@/lib/types";
+import { mockedRefreshToken, refreshToken } from "./refreshUtils";
+import { CUSTOM_REFRESH_URL } from "@/lib/constants";
 
 export const HealthCheckBanner = () => {
   const { error } = useSWR("/api/health", errorHandlingFetcher);
@@ -33,27 +35,32 @@ export const HealthCheckBanner = () => {
   }, [user]);
 
   useEffect(() => {
-    if (true) {
+    if (CUSTOM_REFRESH_URL) {
+      const refreshUrl = CUSTOM_REFRESH_URL;
       let refreshTimeoutId: NodeJS.Timeout;
       let expireTimeoutId: NodeJS.Timeout;
 
-      const refreshToken = async () => {
+      const attemptTokenRefresh = async () => {
         try {
+          // NOTE: This is a mocked refresh token for testing purposes.
+          // const refreshTokenData = mockedRefreshToken();
+
+          const refreshTokenData = await refreshToken(refreshUrl);
+
           const response = await fetch(
             "/api/enterprise-settings/refresh-token",
             {
-              method: "GET",
+              method: "POST",
               headers: {
                 "Content-Type": "application/json",
               },
+              body: JSON.stringify(refreshTokenData),
             }
           );
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
-
-          console.debug("Token refresh successful");
-          // Force revalidation of user data
+          await new Promise((resolve) => setTimeout(resolve, 4000));
 
           await mutateUser(undefined, { revalidate: true });
           updateExpirationTime();
@@ -65,7 +72,7 @@ export const HealthCheckBanner = () => {
       const scheduleRefreshAndExpire = () => {
         if (secondsUntilExpiration !== null) {
           const timeUntilRefresh = (secondsUntilExpiration + 0.5) * 1000;
-          refreshTimeoutId = setTimeout(refreshToken, timeUntilRefresh);
+          refreshTimeoutId = setTimeout(attemptTokenRefresh, timeUntilRefresh);
 
           const timeUntilExpire = (secondsUntilExpiration + 10) * 1000;
           expireTimeoutId = setTimeout(() => {

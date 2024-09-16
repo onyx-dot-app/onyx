@@ -383,17 +383,13 @@ export const AIMessage = ({
                                     // TODO: fix the fact that you have to double click to follow link
                                     // for the first link
                                     return (
-                                      <Citation
-                                        link={rest?.href}
-                                        key={node?.position?.start?.offset}
-                                      >
+                                      <Citation link={rest?.href}>
                                         {rest.children}
                                       </Citation>
                                     );
                                   } else {
                                     return (
                                       <a
-                                        key={node?.position?.start?.offset}
                                         onMouseDown={() =>
                                           rest.href
                                             ? window.open(rest.href, "_blank")
@@ -570,8 +566,8 @@ export const AIMessage = ({
                       <div
                         ref={hoverElementRef}
                         className={`
-
                         absolute -bottom-5
+                        z-20
                         invisible ${(isHovering || isRegenerateHovered || settings?.isMobile) && "!visible"}
                         opacity-0 ${(isHovering || isRegenerateHovered || settings?.isMobile) && "!opacity-100"}
                         translate-y-2 ${(isHovering || settings?.isMobile) && "!translate-y-0"}
@@ -715,6 +711,7 @@ export const HumanMessage = ({
       // Move the cursor to the end of the text
       textareaRef.current.selectionStart = textareaRef.current.value.length;
       textareaRef.current.selectionEnd = textareaRef.current.value.length;
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [isEditing]);
 
@@ -787,6 +784,7 @@ export const HumanMessage = ({
                         style={{ scrollbarWidth: "thin" }}
                         onChange={(e) => {
                           setEditedContent(e.target.value);
+                          textareaRef.current!.style.height = "auto";
                           e.target.style.height = `${e.target.scrollHeight}px`;
                         }}
                         onKeyDown={(e) => {
@@ -881,7 +879,7 @@ export const HumanMessage = ({
                           !isEditing &&
                           (!files || files.length === 0)
                         ) && "ml-auto"
-                      } relative   flex-none max-w-[70%] mb-auto whitespace-break-spaces rounded-3xl bg-user px-5 py-2.5`}
+                      } relative flex-none max-w-[70%] mb-auto whitespace-break-spaces rounded-3xl bg-user px-5 py-2.5`}
                     >
                       {content}
                     </div>
