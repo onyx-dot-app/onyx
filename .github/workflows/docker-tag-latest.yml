@@ -1,3 +1,6 @@
+# This workflow is set up to be manually triggered via the GitHub Action tab.
+# Given a version, it will tag those backend and webserver images as "latest".
+
 name: Tag Latest Version
 
 on:
@@ -9,7 +12,9 @@ on:
 
 jobs:
   tag:
-    runs-on: ubuntu-latest
+    # See https://runs-on.com/runners/linux/
+    # use a lower powered instance since this just does i/o to docker hub
+    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}"]
     steps:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1

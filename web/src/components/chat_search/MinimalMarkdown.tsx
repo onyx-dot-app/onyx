@@ -1,4 +1,9 @@
 import { CodeBlock } from "@/app/chat/message/CodeBlock";
+import { extractCodeText } from "@/app/chat/message/codeUtils";
+import {
+  MemoizedLink,
+  MemoizedParagraph,
+} from "@/app/chat/message/MemoizedTextComponents";
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -6,34 +11,27 @@ import remarkGfm from "remark-gfm";
 interface MinimalMarkdownProps {
   content: string;
   className?: string;
-  useCodeBlock?: boolean;
 }
 
 export const MinimalMarkdown: React.FC<MinimalMarkdownProps> = ({
   content,
   className = "",
-  useCodeBlock = false,
 }) => {
   return (
     <ReactMarkdown
       className={`w-full text-wrap break-word ${className}`}
       components={{
-        a: ({ node, ...props }) => (
-          <a
-            {...props}
-            className="text-sm text-link hover:text-link-hover"
-            target="_blank"
-            rel="noopener noreferrer"
-          />
-        ),
-        p: ({ node, ...props }) => (
-          <p {...props} className="text-wrap break-word text-sm m-0 w-full" />
-        ),
-        code: useCodeBlock
-          ? (props) => (
-              <CodeBlock className="w-full" {...props} content={content} />
-            )
-          : (props) => <code {...props} />,
+        a: MemoizedLink,
+        p: MemoizedParagraph,
+        code: ({ node, inline, className, children, ...props }: any) => {
+          const codeText = extractCodeText(node, content, children);
+
+          return (
+            <CodeBlock className={className} codeText={codeText}>
+              {children}
+            </CodeBlock>
+          );
+        },
       }}
       remarkPlugins={[remarkGfm]}
     >

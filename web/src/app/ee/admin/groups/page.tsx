@@ -4,9 +4,7 @@ import { GroupsIcon } from "@/components/icons/icons";
 import { UserGroupsTable } from "./UserGroupsTable";
 import { UserGroupCreationForm } from "./UserGroupCreationForm";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useState, useEffect } from "react";
-import { getCurrentUser } from "@/lib/user";
-import { User, UserRole } from "@/lib/types";
+import { useState } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";
 import {
   useConnectorCredentialIndexingStatus,

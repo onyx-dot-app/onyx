@@ -7,7 +7,6 @@ import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
 import WrappedChat from "./WrappedChat";
-import { ProviderContextProvider } from "@/components/chat_search/ProviderContext";
 
 export default async function Page({
   searchParams,

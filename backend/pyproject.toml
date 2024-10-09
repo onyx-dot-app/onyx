@@ -4,6 +4,10 @@ mypy_path = "$MYPY_CONFIG_FILE_DIR"
 explicit_package_bases = true
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+module = "alembic.versions.*"
+disable_error_code = ["var-annotated"]
+
 [tool.ruff]
 ignore = []
 line-length = 130

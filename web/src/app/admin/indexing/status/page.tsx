@@ -1,16 +1,13 @@
 "use client";
 
-import useSWR from "swr";
-
 import { LoadingAnimation } from "@/components/Loading";
 import { NotebookIcon } from "@/components/icons/icons";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { ConnectorIndexingStatus } from "@/lib/types";
 import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { AdminPageTitle } from "@/components/admin/Title";
 import Link from "next/link";
 import { Button, Text } from "@tremor/react";
 import { useConnectorCredentialIndexingStatus } from "@/lib/hooks";
+import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
 
 function Main() {
   const {
@@ -75,8 +72,20 @@ function Main() {
 }
 
 export default function Status() {
+  const { popup } = usePopupFromQuery({
+    "connector-created": {
+      message: "Connector created successfully",
+      type: "success",
+    },
+    "connector-deleted": {
+      message: "Connector deleted successfully",
+      type: "success",
+    },
+  });
+
   return (
     <div className="mx-auto container">
+      {popup}
       <AdminPageTitle
         icon={<NotebookIcon size={32} />}
         title="Existing Connectors"

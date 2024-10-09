@@ -11,7 +11,7 @@ import {
   Text,
 } from "@tremor/react";
 import { useState } from "react";
-import { FiGlobe, FiShield, FiUser, FiUsers } from "react-icons/fi";
+import { FiGlobe, FiUser, FiUsers } from "react-icons/fi";
 import {
   insertGlobalTokenRateLimit,
   insertGroupTokenRateLimit,

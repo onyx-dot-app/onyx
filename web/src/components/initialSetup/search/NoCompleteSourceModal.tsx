@@ -20,7 +20,7 @@ export function NoCompleteSourcesModal({
     }, 5000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [router]);
 
   if (isHidden) {
     return null;

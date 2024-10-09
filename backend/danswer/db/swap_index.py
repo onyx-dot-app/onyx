@@ -11,7 +11,7 @@ from danswer.db.index_attempt import (
 from danswer.db.search_settings import get_current_search_settings
 from danswer.db.search_settings import get_secondary_search_settings
 from danswer.db.search_settings import update_search_settings_status
-from danswer.dynamic_configs.factory import get_dynamic_config_store
+from danswer.key_value_store.factory import get_kv_store
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -54,7 +54,7 @@ def check_index_swap(db_session: Session) -> None:
         )
 
         if cc_pair_count > 0:
-            kv_store = get_dynamic_config_store()
+            kv_store = get_kv_store()
             kv_store.store(KV_REINDEX_KEY, False)
 
             # Expire jobs for the now past index/embedding model

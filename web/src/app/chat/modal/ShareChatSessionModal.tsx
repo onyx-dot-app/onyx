@@ -3,7 +3,7 @@ import { ModalWrapper } from "@/components/modals/ModalWrapper";
 import { Button, Callout, Divider, Text } from "@tremor/react";
 import { Spinner } from "@/components/Spinner";
 import { ChatSessionSharedStatus } from "../interfaces";
-import { FiCopy, FiX } from "react-icons/fi";
+import { FiCopy } from "react-icons/fi";
 import { CopyButton } from "@/components/CopyButton";
 
 function buildShareLink(chatSessionId: number) {
@@ -82,6 +82,7 @@ export function ShareChatSessionModal({
                   href={shareLink}
                   target="_blank"
                   className="underline text-link mt-1 ml-1 text-sm my-auto"
+                  rel="noreferrer"
                 >
                   {shareLink}
                 </a>

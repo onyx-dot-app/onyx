@@ -41,7 +41,7 @@ export function ResizableSection({
     Cookies.set(DOCUMENT_SIDEBAR_WIDTH_COOKIE_NAME, newWidth.toString(), {
       path: "/",
     });
-  }, [minWidth, maxWidth]);
+  }, [minWidth, maxWidth, width]);
 
   const startResizing = (mouseDownEvent: React.MouseEvent<HTMLDivElement>) => {
     setIsResizing(true);

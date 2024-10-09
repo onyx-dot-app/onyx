@@ -18,8 +18,11 @@ from danswer.db.swap_index import check_index_swap
 from danswer.document_index.vespa.index import DOCUMENT_ID_ENDPOINT
 from danswer.document_index.vespa.index import VespaIndex
 from danswer.indexing.models import IndexingSetting
-from danswer.main import setup_postgres
-from danswer.main import setup_vespa
+from danswer.setup import setup_postgres
+from danswer.setup import setup_vespa
+from danswer.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def _run_migrations(
@@ -165,8 +168,8 @@ def reset_vespa() -> None:
 
 def reset_all() -> None:
     """Reset both Postgres and Vespa."""
-    print("Resetting Postgres...")
+    logger.info("Resetting Postgres...")
     reset_postgres()
-    print("Resetting Vespa...")
+    logger.info("Resetting Vespa...")
     reset_vespa()
-    print("Finished resetting all.")
+    logger.info("Finished resetting all.")

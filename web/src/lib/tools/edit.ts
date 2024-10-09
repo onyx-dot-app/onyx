@@ -1,3 +1,4 @@
+import { Header } from "next/dist/lib/load-custom-routes";
 import { MethodSpec, ToolSnapshot } from "./interfaces";
 
 interface ApiResponse<T> {
@@ -9,6 +10,7 @@ export async function createCustomTool(toolData: {
   name: string;
   description?: string;
   definition: Record<string, any>;
+  custom_headers: { key: string; value: string }[];
 }): Promise<ApiResponse<ToolSnapshot>> {
   try {
     const response = await fetch("/api/admin/tool/custom", {
@@ -38,6 +40,7 @@ export async function updateCustomTool(
     name?: string;
     description?: string;
     definition?: Record<string, any>;
+    custom_headers: { key: string; value: string }[];
   }
 ): Promise<ApiResponse<ToolSnapshot>> {
   try {

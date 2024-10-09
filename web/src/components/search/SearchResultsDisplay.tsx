@@ -73,7 +73,7 @@ export const SearchResultsDisplay = ({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [performSweep, agenticResults]);
 
   if (!searchResponse) {
     return null;
@@ -182,8 +182,8 @@ export const SearchResultsDisplay = ({
                     }}
                     className={`flex items-center justify-center animate-fade-in-up rounded-lg p-1 text-xs transition-all duration-300 w-20 h-8 ${
                       !sweep
-                        ? "bg-green-500 text-text-800"
-                        : "bg-rose-700 text-text-100"
+                        ? "bg-background-agentic-toggled text-text-agentic-toggled"
+                        : "bg-background-agentic-untoggled text-text-agentic-untoggled"
                     }`}
                     style={{
                       transform: sweep ? "rotateZ(180deg)" : "rotateZ(0deg)",

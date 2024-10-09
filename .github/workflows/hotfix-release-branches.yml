@@ -1,0 +1,105 @@
+# This workflow is intended to be manually triggered via the GitHub Action tab.
+# Given a hotfix branch, it will attempt to open a PR to all release branches and
+# by default auto merge them
+
+name: Hotfix release branches
+
+on:
+  workflow_dispatch:
+    inputs:
+      hotfix_branch:
+        description: 'Hotfix branch name'
+        required: true
+      release_branch_pattern:
+        description: 'Release branch pattern (regex)'
+        required: true
+        default: 'release/.*'
+      auto_merge:
+        description: 'Automatically merge the PRs if set to true'
+        required: false
+        default: 'true'
+        
+jobs:
+  hotfix_to_release:
+    # See https://runs-on.com/runners/linux/
+    # use a lower powered instance since this just does i/o to docker hub
+    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}"]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch All Branches
+        run: |
+          git fetch --all --prune
+
+      - name: Get Release Branches
+        id: get_release_branches
+        run: |
+          BRANCHES=$(git branch -r | grep -E "${{ github.event.inputs.release_branch_pattern }}" | sed 's|origin/||' | tr -d ' ')
+          if [ -z "$BRANCHES" ]; then
+            echo "No release branches found matching pattern '${{ github.event.inputs.release_branch_pattern }}'."
+            exit 1
+          fi
+          
+          echo "Found release branches:"
+          echo "$BRANCHES"
+          
+          # Join the branches into a single line separated by commas
+            BRANCHES_JOINED=$(echo "$BRANCHES" | tr '\n' ',' | sed 's/,$//')
+
+          # Set the branches as an output
+          echo "branches=$BRANCHES_JOINED" >> $GITHUB_OUTPUT
+
+      - name: Ensure Hotfix Branch Exists Locally
+        run: |
+          git fetch origin "${{ github.event.inputs.hotfix_branch }}":"${{ github.event.inputs.hotfix_branch }}" || true
+
+      - name: Create and Merge Pull Requests to Matching Release Branches
+        env:
+          HOTFIX_BRANCH: ${{ github.event.inputs.hotfix_branch }}
+          AUTO_MERGE: ${{ github.event.inputs.auto_merge }}
+        run: |
+          # Get the branches from the previous step
+          BRANCHES="${{ steps.get_release_branches.outputs.branches }}"
+
+          # Convert BRANCHES to an array
+          IFS=$',' read -ra BRANCH_ARRAY <<< "$BRANCHES"
+
+          # Loop through each release branch and create and merge a PR
+          for RELEASE_BRANCH in $BRANCHES; do
+            echo "Creating PR from $HOTFIX_BRANCH to $RELEASE_BRANCH"
+
+            # Check if PR already exists
+            EXISTING_PR=$(gh pr list --head "$HOTFIX_BRANCH" --base "$RELEASE_BRANCH" --state open --json number --jq '.[0].number')
+
+            if [ -n "$EXISTING_PR" ]; then
+              echo "An open PR already exists: #$EXISTING_PR. Skipping..."
+              continue
+            fi
+            
+            # Create a new PR
+            PR_URL=$(gh pr create --title "Merge $HOTFIX_BRANCH into $RELEASE_BRANCH" \
+              --body "Automated PR to merge \`$HOTFIX_BRANCH\` into \`$RELEASE_BRANCH\`." \
+              --head "$HOTFIX_BRANCH" --base "$RELEASE_BRANCH" --json url --jq '.url')
+
+            echo "Pull request created: $PR_URL"
+
+            # Extract PR number from URL
+            PR_NUMBER=$(basename "$PR_URL")
+
+            if [ "$AUTO_MERGE" == "true" ]; then
+              echo "Attempting to merge pull request #$PR_NUMBER"
+
+              # Attempt to merge the PR
+              gh pr merge "$PR_NUMBER" --merge --yes
+
+              if [ $? -eq 0 ]; then
+                echo "Pull request #$PR_NUMBER merged successfully."
+              else
+                echo "Failed to merge pull request #$PR_NUMBER."
+                # Optionally, handle the error or continue
+              fi
+            fi
+          done

@@ -57,9 +57,15 @@ export const EmbeddingFormProvider: React.FC<{
   useEffect(() => {
     // Update URL when formStep changes
     const updatedSearchParams = new URLSearchParams(searchParams.toString());
+    const existingStep = updatedSearchParams.get("step");
     updatedSearchParams.set("step", formStep.toString());
     const newUrl = `${pathname}?${updatedSearchParams.toString()}`;
-    router.push(newUrl);
+
+    if (!existingStep) {
+      router.replace(newUrl);
+    } else if (newUrl !== pathname) {
+      router.push(newUrl);
+    }
   }, [formStep, router, pathname, searchParams]);
 
   // Update formStep when URL changes

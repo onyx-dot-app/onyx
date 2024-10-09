@@ -1,7 +1,6 @@
 import { BasicClickable } from "@/components/BasicClickable";
 import { DanswerDocument } from "@/lib/search/interfaces";
-import { useState } from "react";
-import { FiBook, FiFilter } from "react-icons/fi";
+import { FiBook } from "react-icons/fi";
 
 export function SelectedDocuments({
   selectedDocuments,

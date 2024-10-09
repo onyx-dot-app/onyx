@@ -1,3 +1,4 @@
+"use client";
 import {
   ConnectorIndexingStatus,
   DocumentBoostStatus,
@@ -6,14 +7,14 @@ import {
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { DateRangePickerValue } from "@tremor/react";
 import { SourceMetadata } from "./search/interfaces";
 import { destructureValue } from "./llm/utils";
 import { ChatSession } from "@/app/chat/interfaces";
 import { UsersResponse } from "./users/interfaces";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { Credential } from "./connectors/credentials";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -151,7 +152,7 @@ export function useLlmOverride(
   defaultTemperature?: number
 ): LlmOverrideManager {
   const [globalDefault, setGlobalDefault] = useState<LlmOverride>(
-    globalModel
+    globalModel != null
       ? destructureValue(globalModel)
       : {
           name: "",
@@ -183,6 +184,18 @@ export function useLlmOverride(
   );
 
   useEffect(() => {
+    setGlobalDefault(
+      globalModel != null
+        ? destructureValue(globalModel)
+        : {
+            name: "",
+            provider: "",
+            modelName: "",
+          }
+    );
+  }, [globalModel]);
+
+  useEffect(() => {
     setTemperature(defaultTemperature !== undefined ? defaultTemperature : 0);
   }, [defaultTemperature]);
 
@@ -208,8 +221,14 @@ export const useUserGroups = (): {
   error: string;
   refreshUserGroups: () => void;
 } => {
-  const swrResponse = useSWR<UserGroup[]>(USER_GROUP_URL, errorHandlingFetcher);
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const combinedSettings = useContext(SettingsContext);
+  const isPaidEnterpriseFeaturesEnabled =
+    combinedSettings && combinedSettings.enterpriseSettings !== null;
+
+  const swrResponse = useSWR<UserGroup[]>(
+    isPaidEnterpriseFeaturesEnabled ? USER_GROUP_URL : null,
+    errorHandlingFetcher
+  );
 
   if (!isPaidEnterpriseFeaturesEnabled) {
     return {
@@ -230,6 +249,8 @@ export const useUserGroups = (): {
 
 const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   // OpenAI models
+  "o1-mini": "O1 Mini",
+  "o1-preview": "O1 Preview",
   "gpt-4": "GPT 4",
   "gpt-4o": "GPT 4o",
   "gpt-4o-2024-08-06": "GPT 4o (Structured Outputs)",
@@ -292,7 +313,7 @@ export function getDisplayNameForModel(modelName: string): string {
 }
 
 export const defaultModelsByProvider: { [name: string]: string[] } = {
-  openai: ["gpt-4", "gpt-4o", "gpt-4o-mini"],
+  openai: ["gpt-4", "gpt-4o", "gpt-4o-mini", "o1-mini", "o1-preview"],
   bedrock: [
     "meta.llama3-1-70b-instruct-v1:0",
     "meta.llama3-1-8b-instruct-v1:0",

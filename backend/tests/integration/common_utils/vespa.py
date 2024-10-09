@@ -3,7 +3,7 @@ import requests
 from danswer.document_index.vespa.index import DOCUMENT_ID_ENDPOINT
 
 
-class TestVespaClient:
+class vespa_fixture:
     def __init__(self, index_name: str):
         self.index_name = index_name
         self.vespa_document_url = DOCUMENT_ID_ENDPOINT.format(index_name=index_name)

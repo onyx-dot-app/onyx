@@ -52,7 +52,7 @@ const EditPromptModal = ({
         }}
       >
         {({ isSubmitting, values }) => (
-          <Form>
+          <Form className="items-stretch">
             <h2 className="text-2xl text-emphasis font-bold mb-3 flex items-center">
               <svg
                 className="w-6 h-6 mr-2"

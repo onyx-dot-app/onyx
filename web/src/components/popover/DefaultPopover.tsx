@@ -5,7 +5,7 @@ import { Popover } from "./Popover";
 
 export function DefaultPopover(props: {
   content: JSX.Element;
-  children: JSX.Element[];
+  children: (JSX.Element | null)[];
   side?: "top" | "right" | "bottom" | "left";
   align?: "start" | "center" | "end";
   sideOffset?: number;
@@ -39,15 +39,17 @@ export function DefaultPopover(props: {
           overscroll-contain
         `}
         >
-          {props.children.map((child, index) => (
-            <div
-              key={index}
-              className="cursor-pointer text-left text-sm p-2 hover:bg-hover-light"
-              onClick={() => setPopoverOpen(false)}
-            >
-              {child}
-            </div>
-          ))}
+          {props.children
+            .filter((child) => child !== null)
+            .map((child, index) => (
+              <div
+                key={index}
+                className="cursor-pointer text-left text-sm p-2 hover:bg-hover-light"
+                onClick={() => setPopoverOpen(false)}
+              >
+                {child}
+              </div>
+            ))}
         </div>
       }
       {...props}

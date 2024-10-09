@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from danswer.configs.constants import DocumentSource
 from danswer.db.connector import fetch_connector_by_id
 from danswer.db.credentials import fetch_credential_by_id
+from danswer.db.enums import AccessType
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import IndexAttempt
@@ -24,6 +25,8 @@ from danswer.db.models import UserGroup__ConnectorCredentialPair
 from danswer.db.models import UserRole
 from danswer.server.models import StatusResponse
 from danswer.utils.logger import setup_logger
+from ee.danswer.db.external_perm import delete_user__ext_group_for_cc_pair__no_commit
+from ee.danswer.external_permissions.sync_params import check_if_valid_sync_source
 
 logger = setup_logger()
 
@@ -74,7 +77,7 @@ def _add_user_filters(
             .correlate(ConnectorCredentialPair)
         )
     else:
-        where_clause |= ConnectorCredentialPair.is_public == True  # noqa: E712
+        where_clause |= ConnectorCredentialPair.access_type == AccessType.PUBLIC
 
     return stmt.where(where_clause)
 
@@ -94,8 +97,7 @@ def get_connector_credential_pairs(
         )  # noqa
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
-    results = db_session.scalars(stmt)
-    return list(results.all())
+    return list(db_session.scalars(stmt).all())
 
 
 def add_deletion_failure_message(
@@ -309,9 +311,9 @@ def associate_default_cc_pair(db_session: Session) -> None:
     association = ConnectorCredentialPair(
         connector_id=0,
         credential_id=0,
+        access_type=AccessType.PUBLIC,
         name="DefaultCCPair",
         status=ConnectorCredentialPairStatus.ACTIVE,
-        is_public=True,
     )
     db_session.add(association)
     db_session.commit()
@@ -336,14 +338,22 @@ def add_credential_to_connector(
     connector_id: int,
     credential_id: int,
     cc_pair_name: str | None,
-    is_public: bool,
+    access_type: AccessType,
     groups: list[int] | None,
+    auto_sync_options: dict | None = None,
 ) -> StatusResponse:
     connector = fetch_connector_by_id(connector_id, db_session)
     credential = fetch_credential_by_id(credential_id, user, db_session)
 
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")
+
+    if access_type == AccessType.SYNC:
+        if not check_if_valid_sync_source(connector.source):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Connector of type {connector.source} does not support SYNC access type",
+            )
 
     if credential is None:
         error_msg = (
@@ -375,12 +385,13 @@ def add_credential_to_connector(
         credential_id=credential_id,
         name=cc_pair_name,
         status=ConnectorCredentialPairStatus.ACTIVE,
-        is_public=is_public,
+        access_type=access_type,
+        auto_sync_options=auto_sync_options,
     )
     db_session.add(association)
     db_session.flush()  # make sure the association has an id
 
-    if groups:
+    if groups and access_type != AccessType.SYNC:
         _relate_groups_to_cc_pair__no_commit(
             db_session=db_session,
             cc_pair_id=association.id,
@@ -423,6 +434,10 @@ def remove_credential_from_connector(
     )
 
     if association is not None:
+        delete_user__ext_group_for_cc_pair__no_commit(
+            db_session=db_session,
+            cc_pair_id=association.id,
+        )
         db_session.delete(association)
         db_session.commit()
         return StatusResponse(

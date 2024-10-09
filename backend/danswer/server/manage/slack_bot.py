@@ -18,7 +18,7 @@ from danswer.db.slack_bot_config import fetch_slack_bot_configs
 from danswer.db.slack_bot_config import insert_slack_bot_config
 from danswer.db.slack_bot_config import remove_slack_bot_config
 from danswer.db.slack_bot_config import update_slack_bot_config
-from danswer.dynamic_configs.interface import ConfigNotFoundError
+from danswer.key_value_store.interface import KvKeyNotFoundError
 from danswer.server.manage.models import SlackBotConfig
 from danswer.server.manage.models import SlackBotConfigCreationRequest
 from danswer.server.manage.models import SlackBotTokens
@@ -108,6 +108,7 @@ def create_slack_bot_config(
         persona_id=persona_id,
         channel_config=channel_config,
         response_type=slack_bot_config_creation_request.response_type,
+        # XXX this is going away soon
         standard_answer_category_ids=slack_bot_config_creation_request.standard_answer_categories,
         db_session=db_session,
         enable_auto_filters=slack_bot_config_creation_request.enable_auto_filters,
@@ -211,5 +212,5 @@ def put_tokens(
 def get_tokens(_: User | None = Depends(current_admin_user)) -> SlackBotTokens:
     try:
         return fetch_tokens()
-    except ConfigNotFoundError:
+    except KvKeyNotFoundError:
         raise HTTPException(status_code=404, detail="No tokens found")

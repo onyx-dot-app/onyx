@@ -20,6 +20,8 @@ from pypdf.errors import PdfStreamError
 
 from danswer.configs.constants import DANSWER_METADATA_FILENAME
 from danswer.file_processing.html_utils import parse_html_page_basic
+from danswer.file_processing.unstructured import get_unstructured_api_key
+from danswer.file_processing.unstructured import unstructured_to_text
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -331,9 +333,10 @@ def file_io_to_text(file: IO[Any]) -> str:
 
 
 def extract_file_text(
-    file_name: str | None,
     file: IO[Any],
+    file_name: str,
     break_on_unprocessable: bool = True,
+    extension: str | None = None,
 ) -> str:
     extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
         ".pdf": pdf_to_text,
@@ -345,22 +348,29 @@ def extract_file_text(
         ".html": parse_html_page_basic,
     }
 
-    def _process_file() -> str:
-        if file_name:
-            extension = get_file_ext(file_name)
-            if check_file_ext_is_valid(extension):
-                return extension_to_function.get(extension, file_io_to_text)(file)
+    try:
+        if get_unstructured_api_key():
+            return unstructured_to_text(file, file_name)
 
-        # Either the file somehow has no name or the extension is not one that we are familiar with
+        if file_name or extension:
+            if extension is not None:
+                final_extension = extension
+            elif file_name is not None:
+                final_extension = get_file_ext(file_name)
+
+            if check_file_ext_is_valid(final_extension):
+                return extension_to_function.get(final_extension, file_io_to_text)(file)
+
+        # Either the file somehow has no name or the extension is not one that we recognize
         if is_text_file(file):
             return file_io_to_text(file)
 
         raise ValueError("Unknown file extension and unknown text encoding")
 
-    try:
-        return _process_file()
     except Exception as e:
         if break_on_unprocessable:
-            raise RuntimeError(f"Failed to process file: {str(e)}") from e
-        logger.warning(f"Failed to process file: {str(e)}")
+            raise RuntimeError(
+                f"Failed to process file {file_name or 'Unknown'}: {str(e)}"
+            ) from e
+        logger.warning(f"Failed to process file {file_name or 'Unknown'}: {str(e)}")
         return ""

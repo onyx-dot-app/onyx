@@ -77,6 +77,7 @@ export const useSidebarVisibility = ({
       document.removeEventListener("mousemove", handleEvent);
       document.removeEventListener("mouseleave", handleMouseLeave);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showDocSidebar, toggledSidebar, sidebarElementRef, mobile]);
 
   return { showDocSidebar };

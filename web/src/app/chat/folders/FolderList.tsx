@@ -205,7 +205,7 @@ const FolderItem = ({
                   className="text-sm px-1 flex-1 min-w-0 -my-px mr-2"
                 />
               ) : (
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 break-all min-w-0">
                   {editedFolderName || folder.folder_name}
                 </div>
               )}

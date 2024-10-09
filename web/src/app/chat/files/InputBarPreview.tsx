@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChatFileType, FileDescriptor } from "../interfaces";
+import { FileDescriptor } from "../interfaces";
 
 import { FiX, FiLoader, FiFileText } from "react-icons/fi";
 import { InputBarPreviewImage } from "./images/InputBarPreviewImage";

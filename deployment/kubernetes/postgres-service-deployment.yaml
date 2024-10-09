@@ -40,7 +40,7 @@ spec:
             secretKeyRef:
               name: danswer-secrets
               key: postgres_password
-        args: ["-c", "max_connections=150"]
+        args: ["-c", "max_connections=250"]
         ports:
         - containerPort: 5432
         volumeMounts:
@@ -55,4 +55,4 @@ spec:
       resources:
         requests:
           # Adjust the storage request size as needed.
-          storage: 5Gi
+          storage: 10Gi

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from danswer.configs.constants import DocumentSource
 from danswer.db.connector_credential_pair import get_connector_credential_pair
+from danswer.db.enums import AccessType
 from danswer.db.models import Connector
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import UserGroup__ConnectorCredentialPair
@@ -32,14 +33,30 @@ def _delete_connector_credential_pair_user_groups_relationship__no_commit(
 
 
 def get_cc_pairs_by_source(
-    source_type: DocumentSource,
     db_session: Session,
+    source_type: DocumentSource,
+    only_sync: bool,
 ) -> list[ConnectorCredentialPair]:
-    cc_pairs = (
+    query = (
         db_session.query(ConnectorCredentialPair)
         .join(ConnectorCredentialPair.connector)
         .filter(Connector.source == source_type)
-        .all()
     )
 
+    if only_sync:
+        query = query.filter(ConnectorCredentialPair.access_type == AccessType.SYNC)
+
+    cc_pairs = query.all()
     return cc_pairs
+
+
+def get_all_auto_sync_cc_pairs(
+    db_session: Session,
+) -> list[ConnectorCredentialPair]:
+    return (
+        db_session.query(ConnectorCredentialPair)
+        .where(
+            ConnectorCredentialPair.access_type == AccessType.SYNC,
+        )
+        .all()
+    )

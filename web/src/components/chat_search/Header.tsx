@@ -51,7 +51,7 @@ export default function FunctionalHeader({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [page, currentChatSession]);
   const router = useRouter();
 
   const handleNewChat = () => {

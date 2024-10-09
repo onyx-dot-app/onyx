@@ -40,7 +40,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshUser = async () => {
-    setIsLoadingUser(true);
     await fetchUser();
   };
 

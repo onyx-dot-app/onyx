@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Text,
   Table,
   TableHead,
   TableRow,

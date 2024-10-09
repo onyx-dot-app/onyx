@@ -16,9 +16,13 @@ export function ChatBanner() {
   useLayoutEffect(() => {
     const checkOverflow = () => {
       if (contentRef.current && fullContentRef.current) {
-        setIsOverflowing(
-          fullContentRef.current.scrollHeight > contentRef.current.clientHeight
-        );
+        const contentRect = contentRef.current.getBoundingClientRect();
+        const fullContentRect = fullContentRef.current.getBoundingClientRect();
+
+        const isWidthOverflowing = fullContentRect.width > contentRect.width;
+        const isHeightOverflowing = fullContentRect.height > contentRect.height;
+
+        setIsOverflowing(isWidthOverflowing || isHeightOverflowing);
       }
     };
 
@@ -53,23 +57,27 @@ export function ChatBanner() {
     >
       <div className="text-emphasis text-sm w-full">
         <div className="relative">
-          <div
-            ref={contentRef}
-            className={`${settings.enterpriseSettings.two_lines_for_chat_header ? "line-clamp-2" : "line-clamp-1"} text-center w-full overflow-hidden pr-8`}
-          >
-            <MinimalMarkdown
-              className="prose text-sm max-w-full"
-              content={settings.enterpriseSettings.custom_header_content}
-            />
+          <div className={`flex justify-center w-full overflow-hidden pr-8`}>
+            <div
+              ref={contentRef}
+              className={`overflow-hidden ${settings.enterpriseSettings.two_lines_for_chat_header ? "line-clamp-2" : "line-clamp-1"} text-center max-w-full`}
+            >
+              <MinimalMarkdown
+                className="prose text-sm max-w-full"
+                content={settings.enterpriseSettings.custom_header_content}
+              />
+            </div>
           </div>
-          <div
-            ref={fullContentRef}
-            className="absolute top-0 left-0 invisible w-full"
-          >
-            <MinimalMarkdown
-              className="prose text-sm max-w-full"
-              content={settings.enterpriseSettings.custom_header_content}
-            />
+          <div className="absolute top-0 left-0 invisible flex justify-center max-w-full">
+            <div
+              ref={fullContentRef}
+              className={`overflow-hidden invisible ${settings.enterpriseSettings.two_lines_for_chat_header ? "line-clamp-2" : "line-clamp-1"} text-center max-w-full`}
+            >
+              <MinimalMarkdown
+                className="prose text-sm max-w-full"
+                content={settings.enterpriseSettings.custom_header_content}
+              />
+            </div>
           </div>
           <div className="absolute bottom-0 right-0">
             {isOverflowing && (

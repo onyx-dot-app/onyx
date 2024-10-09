@@ -7,7 +7,7 @@ import { Folder } from "../folders/interfaces";
 import { CHAT_SESSION_ID_KEY, FOLDER_ID_KEY } from "@/lib/drag/constants";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { pageType } from "./types";
 
 export function PagesTab({
@@ -66,7 +66,7 @@ export function PagesTab({
   const isHistoryEmpty = !existingChats || existingChats.length === 0;
 
   return (
-    <div className="mb-1 ml-3 relative miniscroll mobile:pb-40 overflow-y-auto h-full">
+    <div className="mb-1 text-text-sidebar ml-3 relative miniscroll mobile:pb-40 overflow-y-auto h-full">
       {folders && folders.length > 0 && (
         <div className="py-2 border-b border-border">
           <div className="text-xs text-subtle flex pb-0.5 mb-1.5 mt-2 font-bold">
@@ -92,14 +92,14 @@ export function PagesTab({
         } rounded-md`}
       >
         {(page == "chat" || page == "search") && (
-          <p className="my-2 text-xs text-subtle flex font-bold">
+          <p className="my-2 text-xs text-sidebar-subtle flex font-bold">
             {page == "chat" && "Chat "}
             {page == "search" && "Search "}
             History
           </p>
         )}
         {isHistoryEmpty ? (
-          <p className="text-sm text-subtle mt-2 w-[250px]">
+          <p className="text-sm mt-2 w-[250px]">
             {page === "search"
               ? "Try running a search! Your search history will appear here."
               : "Try sending a message! Your chat history will appear here."}
@@ -111,7 +111,7 @@ export function PagesTab({
                 return (
                   <div key={dateRange}>
                     <div
-                      className={`text-xs text-subtle ${
+                      className={`text-xs text-text-sidebar-subtle ${
                         ind != 0 && "mt-5"
                       } flex pb-0.5 mb-1.5 font-medium`}
                     >

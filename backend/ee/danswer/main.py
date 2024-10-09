@@ -34,6 +34,7 @@ from ee.danswer.server.query_history.api import router as query_history_router
 from ee.danswer.server.reporting.usage_export_api import router as usage_export_router
 from ee.danswer.server.saml import router as saml_router
 from ee.danswer.server.seeding import seed_db
+from ee.danswer.server.tenants.api import router as tenants_router
 from ee.danswer.server.token_rate_limits.api import (
     router as token_rate_limit_settings_router,
 )
@@ -79,6 +80,8 @@ def get_application() -> FastAPI:
 
     # RBAC / group access control
     include_router_with_global_prefix_prepended(application, user_group_router)
+    # Tenant management
+    include_router_with_global_prefix_prepended(application, tenants_router)
     # Analytics endpoints
     include_router_with_global_prefix_prepended(application, analytics_router)
     include_router_with_global_prefix_prepended(application, query_history_router)

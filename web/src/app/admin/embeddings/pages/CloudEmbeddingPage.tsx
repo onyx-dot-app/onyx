@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, Text, Title } from "@tremor/react";
+import { Card, Text, Title } from "@tremor/react";
 
 import {
   CloudEmbeddingProvider,
@@ -56,7 +56,7 @@ export default function CloudEmbeddingPage({
     );
   }
 
-  let providers: CloudEmbeddingProviderFull[] = AVAILABLE_CLOUD_PROVIDERS.map(
+  const providers: CloudEmbeddingProviderFull[] = AVAILABLE_CLOUD_PROVIDERS.map(
     (model) => ({
       ...model,
       configured:

@@ -3,6 +3,7 @@ import React from "react";
 import { Tooltip } from "../tooltip/Tooltip";
 import { createSVG } from "@/lib/assistantIconUtils";
 import { buildImgUrl } from "@/app/chat/files/images/utils";
+import { CustomTooltip } from "../tooltip/CustomTooltip";
 
 export function darkerGenerateColorFromId(id: string): string {
   const hash = Array.from(id).reduce(
@@ -30,11 +31,12 @@ export function AssistantIcon({
   const color = darkerGenerateColorFromId(assistant.id.toString());
 
   return (
-    <Tooltip delayDuration={1000} content={assistant.description}>
+    <CustomTooltip showTick line wrap content={assistant.description}>
       {
         // Prioritization order: image, graph, defaults
         assistant.uploaded_image_id ? (
           <img
+            alt={assistant.name}
             className={`object-cover object-center rounded-sm overflow-hidden transition-opacity duration-300 opacity-100
               ${size === "large" ? "w-8 h-8" : "w-6 h-6"}`}
             src={buildImgUrl(assistant.uploaded_image_id)}
@@ -44,7 +46,7 @@ export function AssistantIcon({
           <div
             className={`flex-none
                   ${border && "ring ring-[1px] ring-border-strong "}
-                  ${size === "large" ? "w-8 h-8" : "w-6 h-6"} `}
+                  ${size === "large" ? "w-10 h-10" : "w-6 h-6"} `}
           >
             {createSVG(
               { encodedGrid: assistant.icon_shape, filledSquares: 0 },
@@ -62,6 +64,6 @@ export function AssistantIcon({
           />
         )
       }
-    </Tooltip>
+    </CustomTooltip>
   );
 }

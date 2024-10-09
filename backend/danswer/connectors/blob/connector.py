@@ -194,8 +194,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
                 try:
                     text = extract_file_text(
-                        name,
                         BytesIO(downloaded_file),
+                        file_name=name,
                         break_on_unprocessable=False,
                     )
                     batch.append(

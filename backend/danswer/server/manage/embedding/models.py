@@ -18,6 +18,9 @@ class TestEmbeddingRequest(BaseModel):
     api_url: str | None = None
     model_name: str | None = None
 
+    # This disables the "model_" protected namespace for pydantic
+    model_config = {"protected_namespaces": ()}
+
 
 class CloudEmbeddingProvider(BaseModel):
     provider_type: EmbeddingProvider

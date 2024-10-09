@@ -4,7 +4,6 @@ from collections.abc import Generator
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timezone
-from uuid import UUID
 
 from sqlalchemy import and_
 from sqlalchemy import delete
@@ -17,14 +16,17 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.expression import null
 
 from danswer.configs.constants import DEFAULT_BOOST
+from danswer.db.enums import AccessType
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.feedback import delete_document_feedback_for_documents__no_commit
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import Credential
 from danswer.db.models import Document as DbDocument
 from danswer.db.models import DocumentByConnectorCredentialPair
+from danswer.db.models import User
 from danswer.db.tag import delete_document_tags_for_documents__no_commit
 from danswer.db.utils import model_to_dict
 from danswer.document_index.interfaces import DocumentMetadata
@@ -102,6 +104,18 @@ def construct_document_select_for_connector_credential_pair(
     return stmt
 
 
+def get_document_ids_for_connector_credential_pair(
+    db_session: Session, connector_id: int, credential_id: int, limit: int | None = None
+) -> list[str]:
+    doc_ids_stmt = select(DocumentByConnectorCredentialPair.id).where(
+        and_(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+        )
+    )
+    return list(db_session.execute(doc_ids_stmt).scalars().all())
+
+
 def get_documents_for_connector_credential_pair(
     db_session: Session, connector_id: int, credential_id: int, limit: int | None = None
 ) -> Sequence[DbDocument]:
@@ -118,15 +132,26 @@ def get_documents_for_connector_credential_pair(
 
 
 def get_documents_by_ids(
-    document_ids: list[str],
     db_session: Session,
+    document_ids: list[str],
 ) -> list[DbDocument]:
     stmt = select(DbDocument).where(DbDocument.id.in_(document_ids))
     documents = db_session.execute(stmt).scalars().all()
     return list(documents)
 
 
-def get_document_connector_cnts(
+def get_document_connector_count(
+    db_session: Session,
+    document_id: str,
+) -> int:
+    results = get_document_connector_counts(db_session, [document_id])
+    if not results or len(results) == 0:
+        return 0
+
+    return results[0][1]
+
+
+def get_document_connector_counts(
     db_session: Session,
     document_ids: list[str],
 ) -> Sequence[tuple[str, int]]:
@@ -141,7 +166,7 @@ def get_document_connector_cnts(
     return db_session.execute(stmt).all()  # type: ignore
 
 
-def get_document_cnts_for_cc_pairs(
+def get_document_counts_for_cc_pairs(
     db_session: Session, cc_pair_identifiers: list[ConnectorCredentialPairIdentifier]
 ) -> Sequence[tuple[int, int, int]]:
     stmt = (
@@ -175,16 +200,14 @@ def get_document_cnts_for_cc_pairs(
 def get_access_info_for_document(
     db_session: Session,
     document_id: str,
-) -> tuple[str, list[UUID | None], bool] | None:
+) -> tuple[str, list[str | None], bool] | None:
     """Gets access info for a single document by calling the get_access_info_for_documents function
     and passing a list with a single document ID.
-
     Args:
         db_session (Session): The database session to use.
         document_id (str): The document ID to fetch access info for.
-
     Returns:
-        Optional[Tuple[str, List[UUID | None], bool]]: A tuple containing the document ID, a list of user IDs,
+        Optional[Tuple[str, List[str | None], bool]]: A tuple containing the document ID, a list of user emails,
         and a boolean indicating if the document is globally public, or None if no results are found.
     """
     results = get_access_info_for_documents(db_session, [document_id])
@@ -197,19 +220,27 @@ def get_access_info_for_document(
 def get_access_info_for_documents(
     db_session: Session,
     document_ids: list[str],
-) -> Sequence[tuple[str, list[UUID | None], bool]]:
+) -> Sequence[tuple[str, list[str | None], bool]]:
     """Gets back all relevant access info for the given documents. This includes
     the user_ids for cc pairs that the document is associated with + whether any
     of the associated cc pairs are intending to make the document globally public.
+    Returns the list where each element contains:
+    - Document ID (which is also the ID of the DocumentByConnectorCredentialPair)
+    - List of emails of Danswer users with direct access to the doc (includes a "None" element if
+      the connector was set up by an admin when auth was off
+    - bool for whether the document is public (the document later can also be marked public by
+      automatic permission sync step)
     """
+    stmt = select(
+        DocumentByConnectorCredentialPair.id,
+        func.array_agg(func.coalesce(User.email, null())).label("user_emails"),
+        func.bool_or(ConnectorCredentialPair.access_type == AccessType.PUBLIC).label(
+            "public_doc"
+        ),
+    ).where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+
     stmt = (
-        select(
-            DocumentByConnectorCredentialPair.id,
-            func.array_agg(Credential.user_id).label("user_ids"),
-            func.bool_or(ConnectorCredentialPair.is_public).label("public_doc"),
-        )
-        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
-        .join(
+        stmt.join(
             Credential,
             DocumentByConnectorCredentialPair.credential_id == Credential.id,
         )
@@ -220,6 +251,13 @@ def get_access_info_for_documents(
                 == ConnectorCredentialPair.connector_id,
                 DocumentByConnectorCredentialPair.credential_id
                 == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .outerjoin(
+            User,
+            and_(
+                Credential.user_id == User.id,
+                ConnectorCredentialPair.access_type != AccessType.SYNC,
             ),
         )
         # don't include CC pairs that are being deleted
@@ -267,9 +305,19 @@ def upsert_documents(
             for doc in seen_documents.values()
         ]
     )
-    # for now, there are no columns to update. If more metadata is added, then this
-    # needs to change to an `on_conflict_do_update`
-    on_conflict_stmt = insert_stmt.on_conflict_do_nothing()
+
+    on_conflict_stmt = insert_stmt.on_conflict_do_update(
+        index_elements=["id"],  # Conflict target
+        set_={
+            "from_ingestion_api": insert_stmt.excluded.from_ingestion_api,
+            "boost": insert_stmt.excluded.boost,
+            "hidden": insert_stmt.excluded.hidden,
+            "semantic_id": insert_stmt.excluded.semantic_id,
+            "link": insert_stmt.excluded.link,
+            "primary_owners": insert_stmt.excluded.primary_owners,
+            "secondary_owners": insert_stmt.excluded.secondary_owners,
+        },
+    )
     db_session.execute(on_conflict_stmt)
     db_session.commit()
 
@@ -351,10 +399,33 @@ def upsert_documents_complete(
 
 def delete_document_by_connector_credential_pair__no_commit(
     db_session: Session,
+    document_id: str,
+    connector_credential_pair_identifier: ConnectorCredentialPairIdentifier
+    | None = None,
+) -> None:
+    """Deletes a single document by cc pair relationship entry.
+    Foreign key rows are left in place.
+    The implicit assumption is that the document itself still has other cc_pair
+    references and needs to continue existing.
+    """
+    delete_documents_by_connector_credential_pair__no_commit(
+        db_session=db_session,
+        document_ids=[document_id],
+        connector_credential_pair_identifier=connector_credential_pair_identifier,
+    )
+
+
+def delete_documents_by_connector_credential_pair__no_commit(
+    db_session: Session,
     document_ids: list[str],
     connector_credential_pair_identifier: ConnectorCredentialPairIdentifier
     | None = None,
 ) -> None:
+    """This deletes just the document by cc pair entries for a particular cc pair.
+    Foreign key rows are left in place.
+    The implicit assumption is that the document itself still has other cc_pair
+    references and needs to continue existing.
+    """
     stmt = delete(DocumentByConnectorCredentialPair).where(
         DocumentByConnectorCredentialPair.id.in_(document_ids)
     )
@@ -377,8 +448,9 @@ def delete_documents__no_commit(db_session: Session, document_ids: list[str]) ->
 def delete_documents_complete__no_commit(
     db_session: Session, document_ids: list[str]
 ) -> None:
+    """This completely deletes the documents from the db, including all foreign key relationships"""
     logger.info(f"Deleting {len(document_ids)} documents from the DB")
-    delete_document_by_connector_credential_pair__no_commit(db_session, document_ids)
+    delete_documents_by_connector_credential_pair__no_commit(db_session, document_ids)
     delete_document_feedback_for_documents__no_commit(
         document_ids=document_ids, db_session=db_session
     )

@@ -1,9 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  IconProps,
-} from "@/components/icons/icons";
+import { ChevronDownIcon, IconProps } from "@/components/icons/icons";
 
 interface ChatInputOptionProps {
   name?: string;

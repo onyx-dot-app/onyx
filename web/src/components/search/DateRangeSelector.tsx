@@ -1,14 +1,8 @@
-import { getXDaysAgo, getXYearsAgo } from "@/lib/dateUtils";
 import { DateRangePickerValue } from "@tremor/react";
 import { FiCalendar, FiChevronDown, FiXCircle } from "react-icons/fi";
-import { CustomDropdown, DefaultDropdownElement } from "../Dropdown";
-
-
-export const LAST_2_YEARS = "Last 2 years";
-export const LAST_YEAR = "Last year";
-export const LAST_30_DAYS = "Last 30 days";
-export const LAST_7_DAYS = "Last 7 days";
-export const TODAY = "Today";
+import { CustomDropdown } from "../Dropdown";
+import { timeRangeValues } from "@/app/config/timeRange";
+import { TimeRangeSelector } from "@/components/filters/TimeRangeSelector";
 
 export function DateRangeSelector({
   value,
@@ -23,85 +17,23 @@ export function DateRangeSelector({
     <div>
       <CustomDropdown
         dropdown={
-          <div
+          <TimeRangeSelector
+            value={value}
             className={`
-              border 
-              border-border 
-              bg-background
-              rounded-lg 
-              flex 
-              flex-col 
-              w-64 
-              max-h-96 
-              overflow-y-auto 
-              flex
-              overscroll-contain`}
-          >
-            <DefaultDropdownElement
-              key={LAST_2_YEARS}
-              name={LAST_2_YEARS}
-              onSelect={() =>
-                onValueChange({
-                  to: new Date(),
-                  from: getXYearsAgo(2),
-                  selectValue: LAST_2_YEARS,
-                })
-              }
-              isSelected={value?.selectValue === LAST_2_YEARS}
-            />
-
-            <DefaultDropdownElement
-              key={LAST_YEAR}
-              name={LAST_YEAR}
-              onSelect={() =>
-                onValueChange({
-                  to: new Date(),
-                  from: getXYearsAgo(1),
-                  selectValue: LAST_YEAR,
-                })
-              }
-              isSelected={value?.selectValue === LAST_YEAR}
-            />
-
-            <DefaultDropdownElement
-              key={LAST_30_DAYS}
-              name={LAST_30_DAYS}
-              onSelect={() =>
-                onValueChange({
-                  to: new Date(),
-                  from: getXDaysAgo(30),
-                  selectValue: LAST_30_DAYS,
-                })
-              }
-              isSelected={value?.selectValue === LAST_30_DAYS}
-            />
-
-            <DefaultDropdownElement
-              key={LAST_7_DAYS}
-              name={LAST_7_DAYS}
-              onSelect={() =>
-                onValueChange({
-                  to: new Date(),
-                  from: getXDaysAgo(7),
-                  selectValue: LAST_7_DAYS,
-                })
-              }
-              isSelected={value?.selectValue === LAST_7_DAYS}
-            />
-
-            <DefaultDropdownElement
-              key={TODAY}
-              name={TODAY}
-              onSelect={() =>
-                onValueChange({
-                  to: new Date(),
-                  from: getXDaysAgo(1),
-                  selectValue: TODAY,
-                })
-              }
-              isSelected={value?.selectValue === TODAY}
-            />
-          </div>
+            border
+            border-border
+            bg-background
+            rounded-lg
+            flex
+            flex-col
+            w-64
+            max-h-96
+            overflow-y-auto
+            flex
+            overscroll-contain`}
+            timeRangeValues={timeRangeValues}
+            onValueChange={onValueChange}
+          />
         }
       >
         <div

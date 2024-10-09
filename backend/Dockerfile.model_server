@@ -15,7 +15,10 @@ ENV DANSWER_VERSION=${DANSWER_VERSION} \
 RUN echo "DANSWER_VERSION: ${DANSWER_VERSION}"
 
 COPY ./requirements/model_server.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
+RUN pip install --no-cache-dir --upgrade \
+        --retries 5 \
+        --timeout 30 \
+        -r /tmp/requirements.txt
 
 RUN apt-get remove -y --allow-remove-essential perl-base && \
     apt-get autoremove -y
@@ -52,6 +55,6 @@ COPY ./shared_configs /app/shared_configs
 # Model Server main code
 COPY ./model_server /app/model_server
 
-ENV PYTHONPATH /app
+ENV PYTHONPATH=/app
 
 CMD ["uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "9000"]

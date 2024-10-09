@@ -25,6 +25,7 @@ export default async function Page({ params }: { params: { id: string } }) {
             <Card>
               <AssistantEditor
                 {...values}
+                admin
                 defaultPublic={false}
                 redirectType={SuccessfulPersonaUpdateRedirectType.CHAT}
               />

@@ -6,8 +6,8 @@ from danswer.db.models import UserRole
 from ee.danswer.server.api_key.models import APIKeyArgs
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.test_models import TestAPIKey
-from tests.integration.common_utils.test_models import TestUser
+from tests.integration.common_utils.test_models import DATestAPIKey
+from tests.integration.common_utils.test_models import DATestUser
 
 
 class APIKeyManager:
@@ -15,8 +15,8 @@ class APIKeyManager:
     def create(
         name: str | None = None,
         api_key_role: UserRole = UserRole.ADMIN,
-        user_performing_action: TestUser | None = None,
-    ) -> TestAPIKey:
+        user_performing_action: DATestUser | None = None,
+    ) -> DATestAPIKey:
         name = f"{name}-api-key" if name else f"test-api-key-{uuid4()}"
         api_key_request = APIKeyArgs(
             name=name,
@@ -31,7 +31,7 @@ class APIKeyManager:
         )
         api_key_response.raise_for_status()
         api_key = api_key_response.json()
-        result_api_key = TestAPIKey(
+        result_api_key = DATestAPIKey(
             api_key_id=api_key["api_key_id"],
             api_key_display=api_key["api_key_display"],
             api_key=api_key["api_key"],
@@ -45,8 +45,8 @@ class APIKeyManager:
 
     @staticmethod
     def delete(
-        api_key: TestAPIKey,
-        user_performing_action: TestUser | None = None,
+        api_key: DATestAPIKey,
+        user_performing_action: DATestUser | None = None,
     ) -> None:
         api_key_response = requests.delete(
             f"{API_SERVER_URL}/admin/api-key/{api_key.api_key_id}",
@@ -58,8 +58,8 @@ class APIKeyManager:
 
     @staticmethod
     def get_all(
-        user_performing_action: TestUser | None = None,
-    ) -> list[TestAPIKey]:
+        user_performing_action: DATestUser | None = None,
+    ) -> list[DATestAPIKey]:
         api_key_response = requests.get(
             f"{API_SERVER_URL}/admin/api-key",
             headers=user_performing_action.headers
@@ -67,13 +67,13 @@ class APIKeyManager:
             else GENERAL_HEADERS,
         )
         api_key_response.raise_for_status()
-        return [TestAPIKey(**api_key) for api_key in api_key_response.json()]
+        return [DATestAPIKey(**api_key) for api_key in api_key_response.json()]
 
     @staticmethod
     def verify(
-        api_key: TestAPIKey,
+        api_key: DATestAPIKey,
         verify_deleted: bool = False,
-        user_performing_action: TestUser | None = None,
+        user_performing_action: DATestUser | None = None,
     ) -> None:
         retrieved_keys = APIKeyManager.get_all(
             user_performing_action=user_performing_action

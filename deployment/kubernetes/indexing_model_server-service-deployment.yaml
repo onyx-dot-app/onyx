@@ -39,21 +39,3 @@ spec:
         env:
           - name: INDEXING_ONLY
             value: "True"
-        volumeMounts:
-        - name: indexing-model-storage
-          mountPath: /root/.cache
-      volumes:
-      - name: indexing-model-storage
-        persistentVolumeClaim:
-          claimName: indexing-model-pvc
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: indexing-model-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 3Gi

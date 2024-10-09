@@ -91,7 +91,6 @@ export function BasicSelectable({
       className={`
         rounded
         font-medium 
-        text-emphasis 
         text-sm
         ${padding == "normal" && "p-1"}
         ${padding == "extra" && "p-1.5"}

@@ -10,6 +10,7 @@ from danswer.connectors.cross_connector_utils.miscellaneous_utils import (
     get_metadata_keys_to_ignore,
 )
 from danswer.connectors.models import Document
+from danswer.indexing.indexing_heartbeat import Heartbeat
 from danswer.indexing.models import DocAwareChunk
 from danswer.natural_language_processing.utils import BaseTokenizer
 from danswer.utils.logger import setup_logger
@@ -25,6 +26,7 @@ CHUNK_OVERLAP = 0
 # could be another 128 tokens leaving 256 for the actual contents
 MAX_METADATA_PERCENTAGE = 0.25
 CHUNK_MIN_CONTENT = 256
+
 
 logger = setup_logger()
 
@@ -123,6 +125,7 @@ class Chunker:
         chunk_token_limit: int = DOC_EMBEDDING_CONTEXT_SIZE,
         chunk_overlap: int = CHUNK_OVERLAP,
         mini_chunk_size: int = MINI_CHUNK_SIZE,
+        heartbeat: Heartbeat | None = None,
     ) -> None:
         from llama_index.text_splitter import SentenceSplitter
 
@@ -131,6 +134,7 @@ class Chunker:
         self.enable_multipass = enable_multipass
         self.enable_large_chunks = enable_large_chunks
         self.tokenizer = tokenizer
+        self.heartbeat = heartbeat
 
         self.blurb_splitter = SentenceSplitter(
             tokenizer=tokenizer.tokenize,
@@ -255,7 +259,7 @@ class Chunker:
         # If the chunk does not have any useable content, it will not be indexed
         return chunks
 
-    def chunk(self, document: Document) -> list[DocAwareChunk]:
+    def _handle_single_document(self, document: Document) -> list[DocAwareChunk]:
         # Specifically for reproducing an issue with gmail
         if document.source == DocumentSource.GMAIL:
             logger.debug(f"Chunking {document.semantic_identifier}")
@@ -302,3 +306,13 @@ class Chunker:
             normal_chunks.extend(large_chunks)
 
         return normal_chunks
+
+    def chunk(self, documents: list[Document]) -> list[DocAwareChunk]:
+        final_chunks: list[DocAwareChunk] = []
+        for document in documents:
+            final_chunks.extend(self._handle_single_document(document))
+
+            if self.heartbeat:
+                self.heartbeat.heartbeat()
+
+        return final_chunks

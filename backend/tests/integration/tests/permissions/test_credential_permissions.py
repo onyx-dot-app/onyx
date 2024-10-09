@@ -7,17 +7,17 @@ from requests.exceptions import HTTPError
 
 from danswer.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.credential import CredentialManager
-from tests.integration.common_utils.managers.user import TestUser
+from tests.integration.common_utils.managers.user import DATestUser
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 
 
 def test_credential_permissions(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
-    admin_user: TestUser = UserManager.create(name="admin_user")
+    admin_user: DATestUser = UserManager.create(name="admin_user")
 
     # Creating a curator
-    curator: TestUser = UserManager.create(name="curator")
+    curator: DATestUser = UserManager.create(name="curator")
 
     # Creating a user group
     user_group_1 = UserGroupManager.create(

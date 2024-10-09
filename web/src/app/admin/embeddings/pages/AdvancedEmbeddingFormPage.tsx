@@ -1,7 +1,6 @@
-import React, { Dispatch, forwardRef, SetStateAction } from "react";
+import React, { forwardRef } from "react";
 import { Formik, Form, FormikProps, FieldArray, Field } from "formik";
 import * as Yup from "yup";
-import CredentialSubText from "@/components/credentials/CredentialFields";
 import { TrashIcon } from "@/components/icons/icons";
 import { FaPlus } from "react-icons/fa";
 import { AdvancedSearchConfiguration } from "../interfaces";

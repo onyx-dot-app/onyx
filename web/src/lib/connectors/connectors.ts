@@ -1,6 +1,17 @@
 import * as Yup from "yup";
 import { IsPublicGroupSelectorFormType } from "@/components/IsPublicGroupSelector";
 import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
+import { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
+
+export function isLoadState(connector_name: string): boolean {
+  // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
+  const loadStateConnectors = ["web", "xenforo"];
+  if (loadStateConnectors.includes(connector_name)) {
+    return true;
+  }
+
+  return false;
+}
 
 export type InputType =
   | "list"
@@ -29,6 +40,7 @@ export interface Option {
 export interface SelectOption extends Option {
   type: "select";
   options?: StringWithDescription[];
+  default?: string;
 }
 
 export interface ListOption extends Option {
@@ -599,12 +611,12 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
           { name: "articles", value: "articles" },
           { name: "tickets", value: "tickets" },
         ],
-        default: 0,
+        default: "articles",
       },
     ],
   },
   linear: {
-    description: "Configure Dropbox connector",
+    description: "Configure Linear connector",
     values: [],
   },
   dropbox: {
@@ -762,6 +774,52 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
       },
     ],
   },
+  xenforo: {
+    description: "Configure Xenforo connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter forum or thread URL:",
+        label: "URL",
+        name: "base_url",
+        optional: false,
+        description:
+          "The XenForo v2.2 forum URL to index. Can be board or thread.",
+      },
+    ],
+  },
+  asana: {
+    description: "Configure Asana connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter your Asana workspace ID:",
+        label: "Workspace ID",
+        name: "asana_workspace_id",
+        optional: false,
+        description:
+          "The ID of the Asana workspace to index. You can find this at https://app.asana.com/api/1.0/workspaces. It's a number that looks like 1234567890123456.",
+      },
+      {
+        type: "text",
+        query: "Enter project IDs to index (optional):",
+        label: "Project IDs",
+        name: "asana_project_ids",
+        description:
+          "IDs of specific Asana projects to index, separated by commas. Leave empty to index all projects in the workspace. Example: 1234567890123456,2345678901234567",
+        optional: true,
+      },
+      {
+        type: "text",
+        query: "Enter the Team ID (optional):",
+        label: "Team ID",
+        name: "asana_team_id",
+        optional: true,
+        description:
+          "ID of a team to use for accessing team-visible tasks. This allows indexing of team-visible tasks in addition to public tasks. Leave empty if you don't want to use this feature.",
+      },
+    ],
+  },
   mediawiki: {
     description: "Configure MediaWiki connector",
     values: [
@@ -812,13 +870,13 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
 };
 export function createConnectorInitialValues(
   connector: ConfigurableSources
-): Record<string, any> & IsPublicGroupSelectorFormType {
+): Record<string, any> & AccessTypeGroupSelectorFormType {
   const configuration = connectorConfigs[connector];
 
   return {
     name: "",
     groups: [],
-    is_public: true,
+    access_type: "public",
     ...configuration.values.reduce(
       (acc, field) => {
         if (field.type === "select") {
@@ -843,6 +901,7 @@ export function createConnectorValidationSchema(
   const configuration = connectorConfigs[connector];
 
   return Yup.object().shape({
+    access_type: Yup.string().required("Access Type is required"),
     name: Yup.string().required("Connector Name is required"),
     ...configuration.values.reduce(
       (acc, field) => {
@@ -872,6 +931,9 @@ export function createConnectorValidationSchema(
     refreshFreq: Yup.number().min(0, "Refresh frequency must be non-negative"),
   });
 }
+
+export const defaultPruneFreqDays = 30; // 30 days
+export const defaultRefreshFreqMinutes = 30; // 30 minutes
 
 // CONNECTORS
 export interface ConnectorBase<T> {
@@ -1016,6 +1078,10 @@ export interface GoogleSitesConfig {
   base_url: string;
 }
 
+export interface XenforoConfig {
+  base_url: string;
+}
+
 export interface ZendeskConfig {}
 
 export interface DropboxConfig {}
@@ -1050,6 +1116,12 @@ export interface MediaWikiBaseConfig {
   categories?: string[];
   pages?: string[];
   recurse_depth?: number;
+}
+
+export interface AsanaConfig {
+  asana_workspace_id: string;
+  asana_project_ids?: string;
+  asana_team_id?: string;
 }
 
 export interface MediaWikiConfig extends MediaWikiBaseConfig {

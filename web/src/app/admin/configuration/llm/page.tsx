@@ -1,7 +1,6 @@
 "use client";
 
 import { AdminPageTitle } from "@/components/admin/Title";
-import { FiCpu } from "react-icons/fi";
 import { LLMConfiguration } from "./LLMConfiguration";
 import { CpuIcon } from "@/components/icons/icons";
 

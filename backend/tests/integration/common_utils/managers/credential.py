@@ -7,8 +7,8 @@ from danswer.server.documents.models import CredentialSnapshot
 from danswer.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.test_models import TestCredential
-from tests.integration.common_utils.test_models import TestUser
+from tests.integration.common_utils.test_models import DATestCredential
+from tests.integration.common_utils.test_models import DATestUser
 
 
 class CredentialManager:
@@ -20,8 +20,8 @@ class CredentialManager:
         source: DocumentSource = DocumentSource.FILE,
         curator_public: bool = True,
         groups: list[int] | None = None,
-        user_performing_action: TestUser | None = None,
-    ) -> TestCredential:
+        user_performing_action: DATestUser | None = None,
+    ) -> DATestCredential:
         name = f"{name}-credential" if name else f"test-credential-{uuid4()}"
 
         credential_request = {
@@ -41,7 +41,7 @@ class CredentialManager:
         )
 
         response.raise_for_status()
-        return TestCredential(
+        return DATestCredential(
             id=response.json()["id"],
             name=name,
             credential_json=credential_json or {},
@@ -53,8 +53,8 @@ class CredentialManager:
 
     @staticmethod
     def edit(
-        credential: TestCredential,
-        user_performing_action: TestUser | None = None,
+        credential: DATestCredential,
+        user_performing_action: DATestUser | None = None,
     ) -> None:
         request = credential.model_dump(include={"name", "credential_json"})
         response = requests.put(
@@ -68,8 +68,8 @@ class CredentialManager:
 
     @staticmethod
     def delete(
-        credential: TestCredential,
-        user_performing_action: TestUser | None = None,
+        credential: DATestCredential,
+        user_performing_action: DATestUser | None = None,
     ) -> None:
         response = requests.delete(
             url=f"{API_SERVER_URL}/manage/credential/{credential.id}",
@@ -81,7 +81,7 @@ class CredentialManager:
 
     @staticmethod
     def get(
-        credential_id: int, user_performing_action: TestUser | None = None
+        credential_id: int, user_performing_action: DATestUser | None = None
     ) -> CredentialSnapshot:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/credential/{credential_id}",
@@ -94,7 +94,7 @@ class CredentialManager:
 
     @staticmethod
     def get_all(
-        user_performing_action: TestUser | None = None,
+        user_performing_action: DATestUser | None = None,
     ) -> list[CredentialSnapshot]:
         response = requests.get(
             f"{API_SERVER_URL}/manage/credential",
@@ -107,9 +107,9 @@ class CredentialManager:
 
     @staticmethod
     def verify(
-        credential: TestCredential,
+        credential: DATestCredential,
         verify_deleted: bool = False,
-        user_performing_action: TestUser | None = None,
+        user_performing_action: DATestUser | None = None,
     ) -> None:
         all_credentials = CredentialManager.get_all(user_performing_action)
         for fetched_credential in all_credentials:

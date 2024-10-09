@@ -7,8 +7,9 @@ from danswer.utils.logger import setup_logger
 from danswer.auth.users import current_user, current_admin_user
 logger = setup_logger()
 
-from danswer.dynamic_configs.factory import get_dynamic_config_store
-from danswer.dynamic_configs.interface import ConfigNotFoundError
+#from danswer.dynamic_configs.factory import get_dynamic_config_store
+from danswer.key_value_store.factory import get_kv_store
+from danswer.key_value_store.interface import KvKeyNotFoundError
 from fastapi import HTTPException
 from typing import cast
 from fastapi import Request
@@ -26,10 +27,10 @@ def get_eea_config(
     try:
         return Config_EEA(
             config=cast(
-                str, get_dynamic_config_store().load(EEA_CONFIG_STORAGE_KEY)
+                str, get_kv_store().load(EEA_CONFIG_STORAGE_KEY)
             )
         )
-    except ConfigNotFoundError:
+    except KvKeyNotFoundError:
         logger.info("Config Not Found")
         return Config_EEA(config='{}')
 
@@ -39,6 +40,6 @@ def set_eea_config(
     request: Config_EEA,
     _: User | None = Depends(current_admin_user),
 ):
-    get_dynamic_config_store().store(EEA_CONFIG_STORAGE_KEY, request.config)
+    get_kv_store().store(EEA_CONFIG_STORAGE_KEY, request.config)
 
     return {"Status":"OK"}

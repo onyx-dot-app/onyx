@@ -12,8 +12,8 @@ from danswer.configs.constants import KV_CUSTOMER_UUID_KEY
 from danswer.configs.constants import KV_INSTANCE_DOMAIN_KEY
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.models import User
-from danswer.dynamic_configs.factory import get_dynamic_config_store
-from danswer.dynamic_configs.interface import ConfigNotFoundError
+from danswer.key_value_store.factory import get_kv_store
+from danswer.key_value_store.interface import KvKeyNotFoundError
 
 _DANSWER_TELEMETRY_ENDPOINT = "https://telemetry.danswer.ai/anonymous_telemetry"
 _CACHED_UUID: str | None = None
@@ -34,11 +34,11 @@ def get_or_generate_uuid() -> str:
     if _CACHED_UUID is not None:
         return _CACHED_UUID
 
-    kv_store = get_dynamic_config_store()
+    kv_store = get_kv_store()
 
     try:
         _CACHED_UUID = cast(str, kv_store.load(KV_CUSTOMER_UUID_KEY))
-    except ConfigNotFoundError:
+    except KvKeyNotFoundError:
         _CACHED_UUID = str(uuid.uuid4())
         kv_store.store(KV_CUSTOMER_UUID_KEY, _CACHED_UUID, encrypt=True)
 
@@ -51,11 +51,11 @@ def _get_or_generate_instance_domain() -> str | None:
     if _CACHED_INSTANCE_DOMAIN is not None:
         return _CACHED_INSTANCE_DOMAIN
 
-    kv_store = get_dynamic_config_store()
+    kv_store = get_kv_store()
 
     try:
         _CACHED_INSTANCE_DOMAIN = cast(str, kv_store.load(KV_INSTANCE_DOMAIN_KEY))
-    except ConfigNotFoundError:
+    except KvKeyNotFoundError:
         with Session(get_sqlalchemy_engine()) as db_session:
             first_user = db_session.query(User).first()
             if first_user:

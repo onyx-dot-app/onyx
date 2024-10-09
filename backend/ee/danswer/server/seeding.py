@@ -1,4 +1,8 @@
+import json
 import os
+from copy import deepcopy
+from typing import List
+from typing import Optional
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -6,6 +10,7 @@ from sqlalchemy.orm import Session
 from danswer.db.engine import get_session_context_manager
 from danswer.db.llm import update_default_provider
 from danswer.db.llm import upsert_llm_provider
+from danswer.db.models import Tool
 from danswer.db.persona import upsert_persona
 from danswer.search.enums import RecencyBiasSetting
 from danswer.server.features.persona.models import CreatePersonaRequest
@@ -13,17 +18,39 @@ from danswer.server.manage.llm.models import LLMProviderUpsertRequest
 from danswer.server.settings.models import Settings
 from danswer.server.settings.store import store_settings as store_base_settings
 from danswer.utils.logger import setup_logger
+from ee.danswer.db.standard_answer import (
+    create_initial_default_standard_answer_category,
+)
 from ee.danswer.server.enterprise_settings.models import AnalyticsScriptUpload
 from ee.danswer.server.enterprise_settings.models import EnterpriseSettings
+from ee.danswer.server.enterprise_settings.models import NavigationItem
 from ee.danswer.server.enterprise_settings.store import store_analytics_script
 from ee.danswer.server.enterprise_settings.store import (
     store_settings as store_ee_settings,
 )
 from ee.danswer.server.enterprise_settings.store import upload_logo
 
+
+class CustomToolSeed(BaseModel):
+    name: str
+    description: str
+    definition_path: str
+    custom_headers: Optional[List[dict]] = None
+    display_name: Optional[str] = None
+    in_code_tool_id: Optional[str] = None
+    user_id: Optional[str] = None
+
+
 logger = setup_logger()
 
 _SEED_CONFIG_ENV_VAR_NAME = "ENV_SEED_CONFIGURATION"
+
+
+class NavigationItemSeed(BaseModel):
+    link: str
+    title: str
+    # NOTE: SVG at this path must not have a width / height specified
+    svg_path: str
 
 
 class SeedConfiguration(BaseModel):
@@ -33,16 +60,58 @@ class SeedConfiguration(BaseModel):
     personas: list[CreatePersonaRequest] | None = None
     settings: Settings | None = None
     enterprise_settings: EnterpriseSettings | None = None
+
+    # allows for specifying custom navigation items that have your own custom SVG logos
+    nav_item_overrides: list[NavigationItemSeed] | None = None
+
     # Use existing `CUSTOM_ANALYTICS_SECRET_KEY` for reference
     analytics_script_path: str | None = None
+    custom_tools: List[CustomToolSeed] | None = None
 
 
 def _parse_env() -> SeedConfiguration | None:
     seed_config_str = os.getenv(_SEED_CONFIG_ENV_VAR_NAME)
     if not seed_config_str:
         return None
-    seed_config = SeedConfiguration.parse_raw(seed_config_str)
+    seed_config = SeedConfiguration.model_validate_json(seed_config_str)
     return seed_config
+
+
+def _seed_custom_tools(db_session: Session, tools: List[CustomToolSeed]) -> None:
+    if tools:
+        logger.notice("Seeding Custom Tools")
+        for tool in tools:
+            try:
+                logger.debug(f"Attempting to seed tool: {tool.name}")
+                logger.debug(f"Reading definition from: {tool.definition_path}")
+                with open(tool.definition_path, "r") as file:
+                    file_content = file.read()
+                    if not file_content.strip():
+                        raise ValueError("File is empty")
+                    openapi_schema = json.loads(file_content)
+                db_tool = Tool(
+                    name=tool.name,
+                    description=tool.description,
+                    openapi_schema=openapi_schema,
+                    custom_headers=tool.custom_headers,
+                    display_name=tool.display_name,
+                    in_code_tool_id=tool.in_code_tool_id,
+                    user_id=tool.user_id,
+                )
+                db_session.add(db_tool)
+                logger.debug(f"Successfully added tool: {tool.name}")
+            except FileNotFoundError:
+                logger.error(
+                    f"Definition file not found for tool {tool.name}: {tool.definition_path}"
+                )
+            except json.JSONDecodeError as e:
+                logger.error(
+                    f"Invalid JSON in definition file for tool {tool.name}: {str(e)}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to seed tool {tool.name}: {str(e)}")
+        db_session.commit()
+        logger.notice(f"Successfully seeded {len(tools)} Custom Tools")
 
 
 def _seed_llms(
@@ -81,6 +150,7 @@ def _seed_personas(db_session: Session, personas: list[CreatePersonaRequest]) ->
                 is_public=persona.is_public,
                 db_session=db_session,
                 tool_ids=persona.tool_ids,
+                display_priority=persona.display_priority,
             )
 
 
@@ -95,9 +165,35 @@ def _seed_settings(settings: Settings) -> None:
 
 
 def _seed_enterprise_settings(seed_config: SeedConfiguration) -> None:
-    if seed_config.enterprise_settings is not None:
+    if (
+        seed_config.enterprise_settings is not None
+        or seed_config.nav_item_overrides is not None
+    ):
+        final_enterprise_settings = (
+            deepcopy(seed_config.enterprise_settings)
+            if seed_config.enterprise_settings
+            else EnterpriseSettings()
+        )
+
+        final_nav_items = final_enterprise_settings.custom_nav_items
+        if seed_config.nav_item_overrides is not None:
+            final_nav_items = []
+            for item in seed_config.nav_item_overrides:
+                with open(item.svg_path, "r") as file:
+                    svg_content = file.read().strip()
+
+                final_nav_items.append(
+                    NavigationItem(
+                        link=item.link,
+                        title=item.title,
+                        svg_logo=svg_content,
+                    )
+                )
+
+        final_enterprise_settings.custom_nav_items = final_nav_items
+
         logger.notice("Seeding enterprise settings")
-        store_ee_settings(seed_config.enterprise_settings)
+        store_ee_settings(final_enterprise_settings)
 
 
 def _seed_logo(db_session: Session, logo_path: str | None) -> None:
@@ -142,7 +238,12 @@ def seed_db() -> None:
             _seed_personas(db_session, seed_config.personas)
         if seed_config.settings is not None:
             _seed_settings(seed_config.settings)
+        if seed_config.custom_tools is not None:
+            _seed_custom_tools(db_session, seed_config.custom_tools)
 
         _seed_logo(db_session, seed_config.seeded_logo_path)
         _seed_enterprise_settings(seed_config)
         _seed_analytics_script(seed_config)
+
+        logger.notice("Verifying default standard answer category exists.")
+        create_initial_default_standard_answer_category(db_session)

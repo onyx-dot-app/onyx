@@ -8,6 +8,9 @@ export interface ToolSnapshot {
   // the tool's API.
   definition: Record<string, any> | null;
 
+  // only specified for Custom Tools. Custom headers to add to the tool's API requests.
+  custom_headers: { key: string; value: string }[];
+
   // only specified for Custom Tools. ID of the tool in the codebase.
   in_code_tool_id: string | null;
 }
@@ -20,4 +23,5 @@ export interface MethodSpec {
   path: string;
   method: string;
   spec: Record<string, any>;
+  custom_headers: { key: string; value: string }[];
 }

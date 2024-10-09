@@ -5,7 +5,6 @@ import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ToolIcon } from "@/components/icons/icons";
 import { Card } from "@tremor/react";
-import { FiTool } from "react-icons/fi";
 
 export default function NewToolPage() {
   return (

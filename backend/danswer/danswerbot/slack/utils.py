@@ -430,35 +430,58 @@ def read_slack_thread(
     replies = cast(dict, response.data).get("messages", [])
     for reply in replies:
         if "user" in reply and "bot_id" not in reply:
-            message = remove_danswer_bot_tag(reply["text"], client=client)
-            user_sem_id = fetch_user_semantic_id_from_id(reply["user"], client)
+            message = reply["text"]
+            user_sem_id = (
+                fetch_user_semantic_id_from_id(reply.get("user"), client)
+                or "Unknown User"
+            )
             message_type = MessageType.USER
         else:
             self_app_id = get_danswer_bot_app_id(client)
 
-            # Only include bot messages from Danswer, other bots are not taken in as context
-            if self_app_id != reply.get("user"):
-                continue
+            if reply.get("user") == self_app_id:
+                # DanswerBot response
+                message_type = MessageType.ASSISTANT
+                user_sem_id = "Assistant"
 
-            blocks = reply["blocks"]
-            if len(blocks) <= 1:
-                continue
-
-            # For the old flow, the useful block is the second one after the header block that says AI Answer
-            if reply["blocks"][0]["text"]["text"] == "AI Answer":
-                message = reply["blocks"][1]["text"]["text"]
-            else:
-                # for the new flow, the answer is the first block
-                message = reply["blocks"][0]["text"]["text"]
-
-            if message.startswith("_Filters"):
-                if len(blocks) <= 2:
+                # DanswerBot responses have both text and blocks
+                # The useful content is in the blocks, specifically the first block unless there are
+                # auto-detected filters
+                blocks = reply.get("blocks")
+                if not blocks:
+                    logger.warning(f"DanswerBot response has no blocks: {reply}")
                     continue
-                message = reply["blocks"][2]["text"]["text"]
 
-            user_sem_id = "Assistant"
-            message_type = MessageType.ASSISTANT
+                message = blocks[0].get("text", {}).get("text")
 
+                # If auto-detected filters are on, use the second block for the actual answer
+                # The first block is the auto-detected filters
+                if message.startswith("_Filters"):
+                    if len(blocks) < 2:
+                        logger.warning(f"Only filter blocks found: {reply}")
+                        continue
+                    # This is the DanswerBot answer format, if there is a change to how we respond,
+                    # this will need to be updated to get the correct "answer" portion
+                    message = reply["blocks"][1].get("text", {}).get("text")
+            else:
+                # Other bots are not counted as the LLM response which only comes from Danswer
+                message_type = MessageType.USER
+                bot_user_name = fetch_user_semantic_id_from_id(
+                    reply.get("user"), client
+                )
+                user_sem_id = bot_user_name or "Unknown" + " Bot"
+
+                # For other bots, just use the text as we have no way of knowing that the
+                # useful portion is
+                message = reply.get("text")
+                if not message:
+                    message = blocks[0].get("text", {}).get("text")
+
+            if not message:
+                logger.warning("Skipping Slack thread message, no text found")
+                continue
+
+        message = remove_danswer_bot_tag(message, client=client)
         thread_messages.append(
             ThreadMessage(message=message, sender=user_sem_id, role=message_type)
         )

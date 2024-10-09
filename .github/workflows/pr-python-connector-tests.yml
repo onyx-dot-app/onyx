@@ -15,10 +15,14 @@ env:
   CONFLUENCE_TEST_PAGE_ID: ${{ secrets.CONFLUENCE_TEST_PAGE_ID }}
   CONFLUENCE_USER_NAME: ${{ secrets.CONFLUENCE_USER_NAME }}
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
+  # Jira
+  JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
 
 jobs:
   connectors-check:
-    runs-on: ubuntu-latest
+    # See https://runs-on.com/runners/linux/
+    runs-on: [runs-on,runner=8cpu-linux-x64,"run-id=${{ github.run_id }}"]
 
     env:
       PYTHONPATH: ./backend
@@ -39,8 +43,8 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/requirements/default.txt
-          pip install -r backend/requirements/dev.txt
+          pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
+          pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
 
       - name: Run Tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"

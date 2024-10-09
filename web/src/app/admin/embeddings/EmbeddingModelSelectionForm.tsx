@@ -6,7 +6,6 @@ import { Dispatch, SetStateAction, useState } from "react";
 import {
   CloudEmbeddingProvider,
   CloudEmbeddingModel,
-  AVAILABLE_CLOUD_PROVIDERS,
   AVAILABLE_MODELS,
   INVALID_OLD_MODEL,
   HostedEmbeddingModel,

@@ -44,7 +44,7 @@ export function Modal({
   return (
     <div
       onMouseDown={handleMouseDown}
-      className={`fixed inset-0 bg-black bg-opacity-25 backdrop-blur-sm 
+      className={`fixed inset-0 bg-black bg-opacity-25 backdrop-blur-sm h-full
         flex items-center justify-center z-50 transition-opacity duration-300 ease-in-out`}
     >
       <div
@@ -72,7 +72,7 @@ export function Modal({
           </div>
         )}
 
-        <div className="flex w-full flex-col justify-stretch">
+        <div className="w-full flex flex-col h-full justify-stretch">
           {title && (
             <>
               <div className="flex mb-4">

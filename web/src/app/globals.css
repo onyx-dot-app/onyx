@@ -75,8 +75,12 @@
     /* blue-700 - Dark blue */
     --error: #ef4444;
     /* red-500 - Bright red */
-    --success: #059669;
+    --undo: #ef4444;
+    /* red-500 - Bright red */
+    --success: #030706;
     /* emerald-600 - Deep green */
+    --light-success: #22c55e;
+    /* green-500 */
     --alert: #f59e0b;
     /* amber-600 - Orange */
     --accent: #6366f1;

@@ -47,7 +47,9 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-def litellm_exception_to_error_msg(e: Exception, llm: LLM) -> str:
+def litellm_exception_to_error_msg(
+    e: Exception, llm: LLM, fallback_to_error_msg: bool = False
+) -> str:
     error_msg = str(e)
 
     if isinstance(e, BadRequestError):
@@ -94,7 +96,7 @@ def litellm_exception_to_error_msg(e: Exception, llm: LLM) -> str:
         error_msg = "Request timed out: The operation took too long to complete. Please try again."
     elif isinstance(e, APIError):
         error_msg = f"API error: An error occurred while communicating with the API. Details: {str(e)}"
-    else:
+    elif not fallback_to_error_msg:
         error_msg = "An unexpected error occurred while processing your request. Please try again later."
     return error_msg
 

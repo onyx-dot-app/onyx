@@ -232,7 +232,7 @@ export default function CreateCredential({
                           setShowAdvancedOptions={setShowAdvancedOptions}
                         />
                       )}
-                      {showAdvancedOptions && (
+                      {(showAdvancedOptions || !isAdmin) && (
                         <IsPublicGroupSelector
                           formikProps={formikProps}
                           objectName="credential"

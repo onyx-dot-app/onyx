@@ -16,10 +16,10 @@ import {
   TableRow,
   Text,
   Title,
+  Table,
 } from "@tremor/react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
-import { Table } from "@tremor/react";
 import { DeleteButton } from "@/components/DeleteButton";
 import { FiCopy, FiEdit2, FiRefreshCw, FiX } from "react-icons/fi";
 import { Modal } from "@/components/Modal";

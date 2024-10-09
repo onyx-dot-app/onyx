@@ -113,6 +113,9 @@ class DocumentBase(BaseModel):
     # The default title is semantic_identifier though unless otherwise specified
     title: str | None = None
     from_ingestion_api: bool = False
+    # Anything else that may be useful that is specific to this particular connector type that other
+    # parts of the code may need. If you're unsure, this can be left as None
+    additional_info: Any = None
 
     def get_title_for_document_index(
         self,

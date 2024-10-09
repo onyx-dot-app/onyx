@@ -13,7 +13,6 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { getFinalLLM } from "@/lib/llm/utils";
@@ -26,11 +25,13 @@ export function AssistantsTab({
   availableAssistants,
   llmProviders,
   onSelect,
+  refreshUser,
 }: {
   selectedAssistant: Persona;
   availableAssistants: Persona[];
   llmProviders: LLMProviderDescriptor[];
   onSelect: (assistant: Persona) => void;
+  refreshUser: () => void;
 }) {
   const [_, llmName] = getFinalLLM(llmProviders, null, null);
   const [assistants, setAssistants] = useState(availableAssistants);
@@ -42,23 +43,21 @@ export function AssistantsTab({
     })
   );
 
-  function handleDragEnd(event: DragEndEvent) {
+  async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      setAssistants((items) => {
-        const oldIndex = items.findIndex(
-          (item) => item.id.toString() === active.id
-        );
-        const newIndex = items.findIndex(
-          (item) => item.id.toString() === over.id
-        );
-        const updatedAssistants = arrayMove(items, oldIndex, newIndex);
+      const oldIndex = assistants.findIndex(
+        (item) => item.id.toString() === active.id
+      );
+      const newIndex = assistants.findIndex(
+        (item) => item.id.toString() === over.id
+      );
+      const updatedAssistants = arrayMove(assistants, oldIndex, newIndex);
 
-        updateUserAssistantList(updatedAssistants.map((a) => a.id));
-
-        return updatedAssistants;
-      });
+      setAssistants(updatedAssistants);
+      await updateUserAssistantList(updatedAssistants.map((a) => a.id));
+      refreshUser();
     }
   }
 

@@ -5,7 +5,7 @@ import { Divider, Text, Title } from "@tremor/react";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Persona } from "./interfaces";
-import { AssistantsIcon, RobotIcon } from "@/components/icons/icons";
+import { AssistantsIcon } from "@/components/icons/icons";
 import { AdminPageTitle } from "@/components/admin/Title";
 
 export default async function Page() {

@@ -1,4 +1,3 @@
-import { BasicTable } from "@/components/admin/connectors/BasicTable";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import {

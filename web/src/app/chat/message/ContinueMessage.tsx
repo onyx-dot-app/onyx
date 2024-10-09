@@ -1,6 +1,6 @@
 import { EmphasizedClickable } from "@/components/BasicClickable";
 import { useEffect, useState } from "react";
-import { FiBook, FiPlayCircle } from "react-icons/fi";
+import { FiPlayCircle } from "react-icons/fi";
 
 export function ContinueGenerating({
   handleContinueGenerating,

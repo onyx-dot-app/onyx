@@ -1,21 +1,20 @@
 "use client";
 
-import { Dispatch, SetStateAction, useEffect, useState } from "react";
+import React, { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { MinimalUserSnapshot, User } from "@/lib/types";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { Divider, Text } from "@tremor/react";
+import { Button, Divider } from "@tremor/react";
 import {
   FiEdit2,
-  FiMenu,
+  FiList,
+  FiMinus,
   FiMoreHorizontal,
   FiPlus,
-  FiSearch,
   FiShare2,
   FiTrash,
   FiX,
 } from "react-icons/fi";
 import Link from "next/link";
-import { orderAssistantsForUser } from "@/lib/assistants/orderAssistants";
 import {
   addAssistantToList,
   removeAssistantFromList,
@@ -25,14 +24,12 @@ import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { DefaultPopover } from "@/components/popover/DefaultPopover";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
-import { NavigationButton } from "../NavigationButton";
 import { AssistantsPageTitle } from "../AssistantsPageTitle";
 import { checkUserOwnsAssistant } from "@/lib/assistants/checkOwnership";
 import { AssistantSharingModal } from "./AssistantSharingModal";
 import { AssistantSharedStatusDisplay } from "../AssistantSharedStatus";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { AssistantTools } from "../ToolsDisplay";
 
 import {
   DndContext,
@@ -48,13 +45,22 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
+  useSortable,
 } from "@dnd-kit/sortable";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 
 import { DragHandle } from "@/components/table/DragHandle";
-import { deletePersona } from "@/app/admin/assistants/lib";
+import {
+  deletePersona,
+  togglePersonaPublicStatus,
+} from "@/app/admin/assistants/lib";
 import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
+import { MakePublicAssistantModal } from "@/app/chat/modal/MakePublicAssistantModal";
+import {
+  classifyAssistants,
+  getUserCreatedAssistants,
+  orderAssistantsForUser,
+} from "@/lib/assistants/utils";
+import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 
 function DraggableAssistantListItem(props: any) {
   const {
@@ -76,12 +82,12 @@ function DraggableAssistantListItem(props: any) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center">
+    <div ref={setNodeRef} style={style} className="flex mt-2 items-center">
       <div {...attributes} {...listeners} className="mr-2 cursor-grab">
         <DragHandle />
       </div>
       <div className="flex-grow">
-        <AssistantListItem del {...props} />
+        <AssistantListItem isDragging={isDragging} {...props} />
       </div>
     </div>
   );
@@ -90,20 +96,21 @@ function DraggableAssistantListItem(props: any) {
 function AssistantListItem({
   assistant,
   user,
-  allAssistantIds,
   allUsers,
   isVisible,
   setPopup,
   deleteAssistant,
+  shareAssistant,
+  isDragging,
 }: {
   assistant: Persona;
   user: User | null;
   allUsers: MinimalUserSnapshot[];
-  allAssistantIds: string[];
   isVisible: boolean;
   deleteAssistant: Dispatch<SetStateAction<Persona | null>>;
-
+  shareAssistant: Dispatch<SetStateAction<Persona | null>>;
   setPopup: (popupSpec: PopupSpec | null) => void;
+  isDragging?: boolean;
 }) {
   const router = useRouter();
   const [showSharingModal, setShowSharingModal] = useState(false);
@@ -125,143 +132,153 @@ function AssistantListItem({
         show={showSharingModal}
       />
       <div
-        className="flex bg-background-emphasis
-          rounded-lg
-          shadow-md
-          p-4
-          mb-4 flex-col"
+        className={`rounded-lg px-4 py-6 transition-all duration-900 hover:bg-background-125 ${isDragging && "bg-background-125"}`}
       >
-        <div
-          className="
-          flex
-          justify-between
-          items-center
-        "
-        >
-          <div className="w-3/4">
-            <div className="flex items-center">
-              <AssistantIcon assistant={assistant} />
-              <h2 className="text-xl line-clamp-2 font-semibold my-auto ml-2">
-                {assistant.name}
-              </h2>
+        <div className="flex justify-between items-center">
+          <AssistantIcon assistant={assistant} />
+
+          <h2 className="ml-6 w-fit flex-grow space-y-3 text-start flex text-xl font-semibold line-clamp-2 text-gray-800">
+            {assistant.name}
+          </h2>
+
+          <div className="flex flex-none items-center space-x-4">
+            <div className="flex mr-20 flex-wrap items-center gap-x-4">
+              {assistant.tools.length > 0 && (
+                <p className="text-base flex w-fit text-subtle">
+                  {assistant.tools.length} tool
+                  {assistant.tools.length > 1 && "s"}
+                </p>
+              )}
+              <AssistantSharedStatusDisplay
+                size="md"
+                assistant={assistant}
+                user={user}
+              />
             </div>
 
-            <div className="text-sm mt-2">{assistant.description}</div>
-            <div className="mt-2 flex items-start gap-y-2 flex-col gap-x-3">
-              <AssistantSharedStatusDisplay assistant={assistant} user={user} />
-              {assistant.tools.length != 0 && (
-                <AssistantTools list assistant={assistant} />
-              )}
-            </div>
-          </div>
-
-          {isOwnedByUser && (
-            <div className="ml-auto flex items-center">
-              {!assistant.is_public && (
-                <div
-                  className="mr-4 rounded p-2 cursor-pointer hover:bg-hover"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowSharingModal(true);
-                  }}
-                >
-                  <FiShare2 size={16} />
-                </div>
-              )}
+            {isOwnedByUser ? (
               <Link
                 href={`/assistants/edit/${assistant.id}`}
-                className="mr-4 rounded p-2 cursor-pointer hover:bg-hover"
+                className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200"
+                title="Edit assistant"
               >
-                <FiEdit2 size={16} />
+                <FiEdit2 size={20} className="text-text-900" />
               </Link>
-
-              <DefaultPopover
-                content={
-                  <div className="hover:bg-hover rounded p-2 cursor-pointer">
-                    <FiMoreHorizontal size={16} />
-                  </div>
-                }
-                side="bottom"
-                align="start"
-                sideOffset={5}
+            ) : (
+              <CustomTooltip
+                showTick
+                content="You don't have permission to edit this assistant"
               >
-                {[
-                  isVisible ? (
-                    <div
-                      key="remove"
-                      className="flex items-center gap-x-2"
-                      onClick={async () => {
-                        if (
-                          currentChosenAssistants &&
-                          currentChosenAssistants.length === 1
-                        ) {
-                          setPopup({
-                            message: `Cannot remove "${assistant.name}" - you must have at least one assistant.`,
-                            type: "error",
-                          });
-                          return;
-                        }
-                        const success = await removeAssistantFromList(
-                          assistant.id,
-                          currentChosenAssistants || allAssistantIds
-                        );
-                        if (success) {
-                          setPopup({
-                            message: `"${assistant.name}" has been removed from your list.`,
-                            type: "success",
-                          });
-                          router.refresh();
-                        } else {
-                          setPopup({
-                            message: `"${assistant.name}" could not be removed from your list.`,
-                            type: "error",
-                          });
-                        }
-                      }}
-                    >
-                      <FiX /> {isOwnedByUser ? "Hide" : "Remove"}
-                    </div>
-                  ) : (
-                    <div
-                      key="add"
-                      className="flex items-center gap-x-2"
-                      onClick={async () => {
-                        const success = await addAssistantToList(
-                          assistant.id,
-                          currentChosenAssistants || allAssistantIds
-                        );
-                        if (success) {
-                          setPopup({
-                            message: `"${assistant.name}" has been added to your list.`,
-                            type: "success",
-                          });
-                          router.refresh();
-                        } else {
-                          setPopup({
-                            message: `"${assistant.name}" could not be added to your list.`,
-                            type: "error",
-                          });
-                        }
-                      }}
-                    >
-                      <FiPlus /> Add
-                    </div>
-                  ),
-                  isOwnedByUser ? (
-                    <div
-                      key="delete"
-                      className="flex items-center gap-x-2"
-                      onClick={() => deleteAssistant(assistant)}
-                    >
-                      <FiTrash /> Delete
-                    </div>
-                  ) : (
-                    <></>
-                  ),
-                ]}
-              </DefaultPopover>
-            </div>
-          )}
+                <div className="p-2 cursor-not-allowed opacity-50 rounded-full hover:bg-gray-100 transition-colors duration-200">
+                  <FiEdit2 size={20} className="text-text-900" />
+                </div>
+              </CustomTooltip>
+            )}
+
+            <DefaultPopover
+              content={
+                <div className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200 cursor-pointer">
+                  <FiMoreHorizontal size={20} className="text-text-900" />
+                </div>
+              }
+              side="bottom"
+              align="end"
+              sideOffset={5}
+            >
+              {[
+                isVisible ? (
+                  <button
+                    key="remove"
+                    className="flex items-center gap-x-2 px-4 py-2 hover:bg-gray-100 w-full text-left"
+                    onClick={async () => {
+                      if (currentChosenAssistants?.length === 1) {
+                        setPopup({
+                          message: `Cannot remove "${assistant.name}" - you must have at least one assistant.`,
+                          type: "error",
+                        });
+                        return;
+                      }
+                      const success = await removeAssistantFromList(
+                        assistant.id
+                      );
+                      if (success) {
+                        setPopup({
+                          message: `"${assistant.name}" has been removed from your list.`,
+                          type: "success",
+                        });
+                        router.refresh();
+                      } else {
+                        setPopup({
+                          message: `"${assistant.name}" could not be removed from your list.`,
+                          type: "error",
+                        });
+                      }
+                    }}
+                  >
+                    <FiX size={18} className="text-text-800" />{" "}
+                    {isOwnedByUser ? "Hide" : "Remove"}
+                  </button>
+                ) : (
+                  <button
+                    key="add"
+                    className="flex items-center gap-x-2 px-4 py-2 hover:bg-gray-100 w-full text-left"
+                    onClick={async () => {
+                      const success = await addAssistantToList(assistant.id);
+                      if (success) {
+                        setPopup({
+                          message: `"${assistant.name}" has been added to your list.`,
+                          type: "success",
+                        });
+                        router.refresh();
+                      } else {
+                        setPopup({
+                          message: `"${assistant.name}" could not be added to your list.`,
+                          type: "error",
+                        });
+                      }
+                    }}
+                  >
+                    <FiPlus size={18} className="text-text-800" /> Add
+                  </button>
+                ),
+                isOwnedByUser ? (
+                  <button
+                    key="delete"
+                    className="flex items-center gap-x-2 px-4 py-2 hover:bg-gray-100 w-full text-left text-red-600"
+                    onClick={() => deleteAssistant(assistant)}
+                  >
+                    <FiTrash size={18} /> Delete
+                  </button>
+                ) : null,
+                isOwnedByUser ? (
+                  <button
+                    key="visibility"
+                    className="flex items-center gap-x-2 px-4 py-2 hover:bg-gray-100 w-full text-left"
+                    onClick={() => shareAssistant(assistant)}
+                  >
+                    {assistant.is_public ? (
+                      <FiMinus size={18} className="text-text-800" />
+                    ) : (
+                      <FiPlus size={18} className="text-text-800" />
+                    )}{" "}
+                    Make {assistant.is_public ? "Private" : "Public"}
+                  </button>
+                ) : null,
+                !assistant.is_public ? (
+                  <button
+                    key="share"
+                    className="flex items-center gap-x-2 px-4 py-2 hover:bg-gray-100 w-full text-left"
+                    onClick={(e) => {
+                      setShowSharingModal(true);
+                    }}
+                  >
+                    <FiShare2 size={18} className="text-text-800" /> Share
+                  </button>
+                ) : null,
+              ]}
+            </DefaultPopover>
+          </div>
+          {/* )} */}
         </div>
       </div>
     </>
@@ -274,22 +291,34 @@ export function AssistantsList({
   user: User | null;
   assistants: Persona[];
 }) {
-  const [filteredAssistants, setFilteredAssistants] = useState<Persona[]>([]);
+  // Define the distinct groups of assistants
+  const { visibleAssistants, hiddenAssistants } = classifyAssistants(
+    user,
+    assistants
+  );
+
+  const [currentlyVisibleAssistants, setCurrentlyVisibleAssistants] = useState<
+    Persona[]
+  >([]);
 
   useEffect(() => {
-    setFilteredAssistants(orderAssistantsForUser(assistants, user));
-  }, [user, assistants, orderAssistantsForUser]);
+    const orderedAssistants = orderAssistantsForUser(visibleAssistants, user);
+    setCurrentlyVisibleAssistants(orderedAssistants);
+  }, [assistants, user]);
 
-  const ownedButHiddenAssistants = assistants.filter(
-    (assistant) =>
-      checkUserOwnsAssistant(user, assistant) &&
-      user?.preferences?.chosen_assistants &&
-      !user?.preferences?.chosen_assistants?.includes(assistant.id)
+  const ownedButHiddenAssistants = getUserCreatedAssistants(
+    user,
+    hiddenAssistants
   );
+
   const allAssistantIds = assistants.map((assistant) =>
     assistant.id.toString()
   );
+
   const [deletingPersona, setDeletingPersona] = useState<Persona | null>(null);
+  const [makePublicPersona, setMakePublicPersona] = useState<Persona | null>(
+    null
+  );
 
   const { popup, setPopup } = usePopup();
   const router = useRouter();
@@ -309,7 +338,7 @@ export function AssistantsList({
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      setFilteredAssistants((assistants) => {
+      setCurrentlyVisibleAssistants((assistants) => {
         const oldIndex = assistants.findIndex(
           (a) => a.id.toString() === active.id
         );
@@ -351,44 +380,50 @@ export function AssistantsList({
         />
       )}
 
-      <div className="mx-auto mobile:w-[90%] desktop:w-searchbar-xs 2xl:w-searchbar-sm 3xl:w-searchbar">
-        <AssistantsPageTitle>My Assistants</AssistantsPageTitle>
+      {makePublicPersona && (
+        <MakePublicAssistantModal
+          isPublic={makePublicPersona.is_public}
+          onClose={() => setMakePublicPersona(null)}
+          onShare={async (newPublicStatus: boolean) => {
+            await togglePersonaPublicStatus(
+              makePublicPersona.id,
+              newPublicStatus
+            );
+            router.refresh();
+          }}
+        />
+      )}
 
-        <div className="grid grid-cols-2 gap-4 mt-3">
-          <Link href="/assistants/new">
-            <NavigationButton>
-              <div className="flex justify-center">
-                <FiPlus className="mr-2 my-auto" size={20} />
-                Create New Assistant
-              </div>
-            </NavigationButton>
-          </Link>
+      <div className="mx-auto w-searchbar-xs 2xl:w-searchbar-sm 3xl:w-searchbar">
+        <AssistantsPageTitle>Your Assistants</AssistantsPageTitle>
 
-          <Link href="/assistants/gallery">
-            <NavigationButton>
-              <div className="flex justify-center">
-                <FiSearch className="mr-2 my-auto" size={20} />
-                View Available Assistants
-              </div>
-            </NavigationButton>
-          </Link>
+        <div className="grid grid-cols-2 gap-4 mt-4 mb-8">
+          <Button
+            onClick={() => router.push("/assistants/new")}
+            className="w-full py-3 text-lg rounded-full bg-background-800 text-white hover:bg-background-800 transition duration-300 ease-in-out"
+            icon={FiPlus}
+          >
+            Create New Assistant
+          </Button>
+
+          <Button
+            onClick={() => router.push("/assistants/gallery")}
+            className="w-full hover:border-border-strong py-3 text-lg rounded-full bg-white border !border-border shadow text-text-700 hover:bg-background-50 transition duration-300 ease-in-out"
+            icon={FiList}
+          >
+            Assistant Gallery
+          </Button>
         </div>
 
-        <p className="mt-6 text-center text-base">
-          Assistants allow you to customize your experience for a specific
-          purpose. Specifically, they combine instructions, extra knowledge, and
-          any combination of tools.
-        </p>
+        <h2 className="text-2xl font-semibold mb-2 text-text-900">
+          Active Assistants
+        </h2>
 
-        <Divider />
-
-        <h3 className="text-xl font-bold mb-4">Active Assistants</h3>
-
-        <Text>
+        <h3 className="text-lg text-text-500">
           The order the assistants appear below will be the order they appear in
           the Assistants dropdown. The first assistant listed will be your
           default assistant when you start a new chat. Drag and drop to reorder.
-        </Text>
+        </h3>
 
         <DndContext
           sensors={sensors}
@@ -396,13 +431,14 @@ export function AssistantsList({
           onDragEnd={handleDragEnd}
         >
           <SortableContext
-            items={filteredAssistants.map((a) => a.id.toString())}
+            items={currentlyVisibleAssistants.map((a) => a.id.toString())}
             strategy={verticalListSortingStrategy}
           >
-            <div className="w-full p-4 mt-3">
-              {filteredAssistants.map((assistant, index) => (
+            <div className="w-full items-center py-4">
+              {currentlyVisibleAssistants.map((assistant, index) => (
                 <DraggableAssistantListItem
                   deleteAssistant={setDeletingPersona}
+                  shareAssistant={setMakePublicPersona}
                   key={assistant.id}
                   assistant={assistant}
                   user={user}
@@ -422,19 +458,19 @@ export function AssistantsList({
 
             <h3 className="text-xl font-bold mb-4">Your Hidden Assistants</h3>
 
-            <Text>
+            <h3 className="text-lg text-text-500">
               Assistants you&apos;ve created that aren&apos;t currently visible
               in the Assistants selector.
-            </Text>
+            </h3>
 
             <div className="w-full p-4">
               {ownedButHiddenAssistants.map((assistant, index) => (
                 <AssistantListItem
                   deleteAssistant={setDeletingPersona}
+                  shareAssistant={setMakePublicPersona}
                   key={assistant.id}
                   assistant={assistant}
                   user={user}
-                  allAssistantIds={allAssistantIds}
                   allUsers={users || []}
                   isVisible={false}
                   setPopup={setPopup}

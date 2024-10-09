@@ -5,19 +5,19 @@ from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import TestAPIKey
-from tests.integration.common_utils.test_models import TestUser
-from tests.integration.common_utils.vespa import TestVespaClient
+from tests.integration.common_utils.test_models import DATestAPIKey
+from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.vespa import vespa_fixture
 
 
 def test_multiple_document_sets_syncing_same_connnector(
-    reset: None, vespa_client: TestVespaClient
+    reset: None, vespa_client: vespa_fixture
 ) -> None:
     # Creating an admin user (first user created is automatically an admin)
-    admin_user: TestUser = UserManager.create(name="admin_user")
+    admin_user: DATestUser = UserManager.create(name="admin_user")
 
-    # add api key to user
-    api_key: TestAPIKey = APIKeyManager.create(
+    # create api key
+    api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
     )
 
@@ -28,7 +28,7 @@ def test_multiple_document_sets_syncing_same_connnector(
     )
 
     # seed documents
-    cc_pair_1 = DocumentManager.seed_and_attach_docs(
+    cc_pair_1.documents = DocumentManager.seed_dummy_docs(
         cc_pair=cc_pair_1,
         num_docs=NUM_DOCS,
         api_key=api_key,
@@ -66,12 +66,12 @@ def test_multiple_document_sets_syncing_same_connnector(
     )
 
 
-def test_removing_connector(reset: None, vespa_client: TestVespaClient) -> None:
+def test_removing_connector(reset: None, vespa_client: vespa_fixture) -> None:
     # Creating an admin user (first user created is automatically an admin)
-    admin_user: TestUser = UserManager.create(name="admin_user")
+    admin_user: DATestUser = UserManager.create(name="admin_user")
 
-    # add api key to user
-    api_key: TestAPIKey = APIKeyManager.create(
+    # create api key
+    api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
     )
 
@@ -86,13 +86,13 @@ def test_removing_connector(reset: None, vespa_client: TestVespaClient) -> None:
     )
 
     # seed documents
-    cc_pair_1 = DocumentManager.seed_and_attach_docs(
+    cc_pair_1.documents = DocumentManager.seed_dummy_docs(
         cc_pair=cc_pair_1,
         num_docs=NUM_DOCS,
         api_key=api_key,
     )
 
-    cc_pair_2 = DocumentManager.seed_and_attach_docs(
+    cc_pair_2.documents = DocumentManager.seed_dummy_docs(
         cc_pair=cc_pair_2,
         num_docs=NUM_DOCS,
         api_key=api_key,

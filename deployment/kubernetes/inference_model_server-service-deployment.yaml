@@ -36,21 +36,3 @@ spec:
         envFrom:
         - configMapRef:
             name: env-configmap
-        volumeMounts:
-        - name: inference-model-storage
-          mountPath: /root/.cache
-      volumes:
-      - name: inference-model-storage
-        persistentVolumeClaim:
-          claimName: inference-model-pvc
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: inference-model-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 3Gi

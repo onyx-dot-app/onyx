@@ -2,13 +2,8 @@
 
 import { useState } from "react";
 import { FeedbackType } from "../types";
-import { FiThumbsDown, FiThumbsUp } from "react-icons/fi";
 import { ModalWrapper } from "@/components/modals/ModalWrapper";
-import {
-  DislikeFeedbackIcon,
-  FilledLikeIcon,
-  LikeFeedbackIcon,
-} from "@/components/icons/icons";
+import { FilledLikeIcon } from "@/components/icons/icons";
 
 const predefinedPositiveFeedbackOptions =
   process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS?.split(",") ||

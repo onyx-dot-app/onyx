@@ -99,7 +99,7 @@ export function SourceSelector({
     <div
       className={`hidden ${
         showDocSidebar ? "4xl:block" : "!block"
-      } duration-1000 flex  ease-out transition-all transform origin-top-right`}
+      } duration-1000 flex ease-out transition-all transform origin-top-right`}
     >
       <div className="mb-4 pb-2 flex border-b border-border text-emphasis">
         <h2 className="font-bold my-auto">Filters</h2>
@@ -423,97 +423,92 @@ export function HorizontalSourceSelector({
   };
 
   return (
-    <div className="flex flex-col space-y-4">
-      <div className="flex space-x-2">
-        <div className="w-24">
-          <DateRangeSelector
-            isHorizontal
-            value={timeRange}
-            onValueChange={setTimeRange}
-          />
-        </div>
+    <div className="flex flex-nowrap  space-x-2">
+      <div className="max-w-24">
+        <DateRangeSelector
+          isHorizontal
+          value={timeRange}
+          onValueChange={setTimeRange}
+        />
+      </div>
 
-        {existingSources.length > 0 && (
-          <FilterDropdown
-            options={listSourceMetadata()
-              .filter((source) => existingSources.includes(source.internalName))
-              .map((source) => ({
-                key: source.internalName,
-                display: (
-                  <>
-                    <SourceIcon
-                      sourceType={source.internalName}
-                      iconSize={16}
-                    />
-                    <span className="ml-2 text-sm">{source.displayName}</span>
-                  </>
-                ),
-              }))}
-            selected={selectedSources.map((source) => source.internalName)}
-            handleSelect={(option) =>
-              handleSourceSelect(
-                listSourceMetadata().find((s) => s.internalName === option.key)!
-              )
-            }
-            icon={<FiMap size={16} />}
-            defaultDisplay="Sources"
-            width="w-fit ellipsis truncate"
-            resetValues={resetSources}
-            dropdownWidth="w-40"
-            optionClassName="truncate w-full break-all ellipsis"
-          />
-        )}
-
-        {availableDocumentSets.length > 0 && (
-          <FilterDropdown
-            options={availableDocumentSets.map((documentSet) => ({
-              key: documentSet.name,
-              display: <>{documentSet.name}</>,
-            }))}
-            selected={selectedDocumentSets}
-            handleSelect={(option) => handleDocumentSetSelect(option.key)}
-            icon={<FiBook size={16} />}
-            defaultDisplay="Sets"
-            resetValues={resetDocuments}
-            width="w-fit max-w-24 ellipsis truncate"
-            dropdownWidth="max-w-36 w-fit"
-            optionClassName="truncate break-all ellipsis"
-          />
-        )}
-
-        {availableTags.length > 0 && (
-          <FilterDropdown
-            options={availableTags.map((tag) => ({
-              key: `${tag.tag_key}=${tag.tag_value}`,
+      {existingSources.length > 0 && (
+        <FilterDropdown
+          options={listSourceMetadata()
+            .filter((source) => existingSources.includes(source.internalName))
+            .map((source) => ({
+              key: source.internalName,
               display: (
-                <span className="text-sm">
-                  {tag.tag_key}
-                  <b>=</b>
-                  {tag.tag_value}
-                </span>
+                <>
+                  <SourceIcon sourceType={source.internalName} iconSize={16} />
+                  <span className="ml-2 text-sm">{source.displayName}</span>
+                </>
               ),
             }))}
-            selected={selectedTags.map(
-              (tag) => `${tag.tag_key}=${tag.tag_value}`
-            )}
-            handleSelect={(option) => {
-              const [tag_key, tag_value] = option.key.split("=");
-              const selectedTag = availableTags.find(
-                (tag) => tag.tag_key === tag_key && tag.tag_value === tag_value
-              );
-              if (selectedTag) {
-                handleTagSelect(selectedTag);
-              }
-            }}
-            icon={<FiTag size={16} />}
-            defaultDisplay="Tags"
-            resetValues={resetTags}
-            width="w-fit max-w-24 ellipsis truncate"
-            dropdownWidth="max-w-80 w-fit"
-            optionClassName="truncate break-all ellipsis"
-          />
-        )}
-      </div>
+          selected={selectedSources.map((source) => source.internalName)}
+          handleSelect={(option) =>
+            handleSourceSelect(
+              listSourceMetadata().find((s) => s.internalName === option.key)!
+            )
+          }
+          icon={<FiMap size={16} />}
+          defaultDisplay="Sources"
+          width="w-fit ellipsis truncate"
+          resetValues={resetSources}
+          dropdownWidth="w-40"
+          optionClassName="truncate w-full break-all ellipsis"
+        />
+      )}
+
+      {availableDocumentSets.length > 0 && (
+        <FilterDropdown
+          options={availableDocumentSets.map((documentSet) => ({
+            key: documentSet.name,
+            display: <>{documentSet.name}</>,
+          }))}
+          selected={selectedDocumentSets}
+          handleSelect={(option) => handleDocumentSetSelect(option.key)}
+          icon={<FiBook size={16} />}
+          defaultDisplay="Sets"
+          resetValues={resetDocuments}
+          width="w-fit max-w-24 ellipsis truncate"
+          dropdownWidth="max-w-36 w-fit"
+          optionClassName="truncate break-all ellipsis"
+        />
+      )}
+
+      {availableTags.length > 0 && (
+        <FilterDropdown
+          options={availableTags.map((tag) => ({
+            key: `${tag.tag_key}=${tag.tag_value}`,
+            display: (
+              <span className="text-sm">
+                {tag.tag_key}
+                <b>=</b>
+                {tag.tag_value}
+              </span>
+            ),
+          }))}
+          selected={selectedTags.map(
+            (tag) => `${tag.tag_key}=${tag.tag_value}`
+          )}
+          handleSelect={(option) => {
+            const [tag_key, tag_value] = option.key.split("=");
+            const selectedTag = availableTags.find(
+              (tag) => tag.tag_key === tag_key && tag.tag_value === tag_value
+            );
+            if (selectedTag) {
+              handleTagSelect(selectedTag);
+            }
+          }}
+          icon={<FiTag size={16} />}
+          defaultDisplay="Tags"
+          resetValues={resetTags}
+          width="w-fit max-w-24 ellipsis truncate"
+          dropdownWidth="max-w-80 w-fit"
+          optionClassName="truncate break-all ellipsis"
+        />
+      )}
     </div>
   );
 }

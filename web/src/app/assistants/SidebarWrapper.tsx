@@ -6,7 +6,14 @@ import { Folder } from "@/app/chat/folders/interfaces";
 import { User } from "@/lib/types";
 import Cookies from "js-cookie";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
-import { ReactNode, useContext, useEffect, useRef, useState } from "react";
+import {
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useSidebarVisibility } from "@/components/chat_search/hooks";
 import FunctionalHeader from "@/components/chat_search/Header";
 import { useRouter } from "next/navigation";
@@ -54,7 +61,7 @@ export default function SidebarWrapper<T extends object>({
     }, 200);
   };
 
-  const toggleSidebar = () => {
+  const toggleSidebar = useCallback(() => {
     Cookies.set(
       SIDEBAR_TOGGLED_COOKIE_NAME,
       String(!toggledSidebar).toLocaleLowerCase()
@@ -63,7 +70,7 @@ export default function SidebarWrapper<T extends object>({
         path: "/",
       };
     setToggledSidebar((toggledSidebar) => !toggledSidebar);
-  };
+  }, [toggledSidebar]);
 
   const sidebarElementRef = useRef<HTMLDivElement>(null);
 

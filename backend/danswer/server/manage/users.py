@@ -31,13 +31,18 @@ from danswer.configs.app_configs import VALID_EMAIL_DOMAINS
 from danswer.configs.constants import AuthType
 from danswer.db.engine import get_session
 from danswer.db.models import AccessToken
+from danswer.db.models import DocumentSet__User
+from danswer.db.models import Persona__User
+from danswer.db.models import SamlAccount
 from danswer.db.models import User
+from danswer.db.models import User__UserGroup
 from danswer.db.users import get_user_by_email
 from danswer.db.users import list_users
-from danswer.dynamic_configs.factory import get_dynamic_config_store
+from danswer.key_value_store.factory import get_kv_store
 from danswer.server.manage.models import AllUsersResponse
 from danswer.server.manage.models import UserByEmail
 from danswer.server.manage.models import UserInfo
+from danswer.server.manage.models import UserPreferences
 from danswer.server.manage.models import UserRoleResponse
 from danswer.server.manage.models import UserRoleUpdateRequest
 from danswer.server.models import FullUserSnapshot
@@ -45,6 +50,7 @@ from danswer.server.models import InvitedUserSnapshot
 from danswer.server.models import MinimalUserSnapshot
 from danswer.utils.logger import setup_logger
 from ee.danswer.db.api_key import is_api_key_email_address
+from ee.danswer.db.external_perm import delete_user__ext_group_for_user__no_commit
 from ee.danswer.db.user_group import remove_curator_status__no_commit
 
 logger = setup_logger()
@@ -237,10 +243,25 @@ async def delete_user(
     db_session.expunge(user_to_delete)
 
     try:
-        # Delete related OAuthAccounts first
         for oauth_account in user_to_delete.oauth_accounts:
             db_session.delete(oauth_account)
 
+        delete_user__ext_group_for_user__no_commit(
+            db_session=db_session,
+            user_id=user_to_delete.id,
+        )
+        db_session.query(SamlAccount).filter(
+            SamlAccount.user_id == user_to_delete.id
+        ).delete()
+        db_session.query(DocumentSet__User).filter(
+            DocumentSet__User.user_id == user_to_delete.id
+        ).delete()
+        db_session.query(Persona__User).filter(
+            Persona__User.user_id == user_to_delete.id
+        ).delete()
+        db_session.query(User__UserGroup).filter(
+            User__UserGroup.user_id == user_to_delete.id
+        ).delete()
         db_session.delete(user_to_delete)
         db_session.commit()
 
@@ -254,6 +275,10 @@ async def delete_user(
 
         logger.info(f"Deleted user {user_to_delete.email}")
     except Exception as e:
+        import traceback
+
+        full_traceback = traceback.format_exc()
+        logger.error(f"Full stack trace:\n{full_traceback}")
         db_session.rollback()
         logger.error(f"Error deleting user {user_to_delete.email}: {str(e)}")
         raise HTTPException(status_code=500, detail="Error deleting user")
@@ -342,7 +367,7 @@ def verify_user_logged_in(
         # if auth type is disabled, return a dummy user with preferences from
         # the key-value store
         if AUTH_TYPE == AuthType.DISABLED:
-            store = get_dynamic_config_store()
+            store = get_kv_store()
             return fetch_no_auth_user(store)
 
         raise HTTPException(
@@ -380,7 +405,7 @@ def update_user_default_model(
 ) -> None:
     if user is None:
         if AUTH_TYPE == AuthType.DISABLED:
-            store = get_dynamic_config_store()
+            store = get_kv_store()
             no_auth_user = fetch_no_auth_user(store)
             no_auth_user.preferences.default_model = request.default_model
             set_no_auth_user_preferences(store, no_auth_user.preferences)
@@ -408,7 +433,7 @@ def update_user_assistant_list(
 ) -> None:
     if user is None:
         if AUTH_TYPE == AuthType.DISABLED:
-            store = get_dynamic_config_store()
+            store = get_kv_store()
 
             no_auth_user = fetch_no_auth_user(store)
             no_auth_user.preferences.chosen_assistants = request.chosen_assistants
@@ -421,5 +446,66 @@ def update_user_assistant_list(
         update(User)
         .where(User.id == user.id)  # type: ignore
         .values(chosen_assistants=request.chosen_assistants)
+    )
+    db_session.commit()
+
+
+def update_assistant_list(
+    preferences: UserPreferences, assistant_id: int, show: bool
+) -> UserPreferences:
+    visible_assistants = preferences.visible_assistants or []
+    hidden_assistants = preferences.hidden_assistants or []
+    chosen_assistants = preferences.chosen_assistants or []
+
+    if show:
+        if assistant_id not in visible_assistants:
+            visible_assistants.append(assistant_id)
+        if assistant_id in hidden_assistants:
+            hidden_assistants.remove(assistant_id)
+        if assistant_id not in chosen_assistants:
+            chosen_assistants.append(assistant_id)
+    else:
+        if assistant_id in visible_assistants:
+            visible_assistants.remove(assistant_id)
+        if assistant_id not in hidden_assistants:
+            hidden_assistants.append(assistant_id)
+        if assistant_id in chosen_assistants:
+            chosen_assistants.remove(assistant_id)
+
+    preferences.visible_assistants = visible_assistants
+    preferences.hidden_assistants = hidden_assistants
+    preferences.chosen_assistants = chosen_assistants
+    return preferences
+
+
+@router.patch("/user/assistant-list/update/{assistant_id}")
+def update_user_assistant_visibility(
+    assistant_id: int,
+    show: bool,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            preferences = no_auth_user.preferences
+            updated_preferences = update_assistant_list(preferences, assistant_id, show)
+            set_no_auth_user_preferences(store, updated_preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    user_preferences = UserInfo.from_model(user).preferences
+    updated_preferences = update_assistant_list(user_preferences, assistant_id, show)
+
+    db_session.execute(
+        update(User)
+        .where(User.id == user.id)  # type: ignore
+        .values(
+            hidden_assistants=updated_preferences.hidden_assistants,
+            visible_assistants=updated_preferences.visible_assistants,
+            chosen_assistants=updated_preferences.chosen_assistants,
+        )
     )
     db_session.commit()

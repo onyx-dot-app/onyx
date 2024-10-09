@@ -85,6 +85,15 @@ def extract_citations_from_stream(
         curr_segment += token
         llm_out += token
 
+        # Handle code blocks without language tags
+        if "`" in curr_segment:
+            if curr_segment.endswith("`"):
+                continue
+            elif "```" in curr_segment:
+                piece_that_comes_after = curr_segment.split("```")[1][0]
+                if piece_that_comes_after == "\n" and in_code_block(llm_out):
+                    curr_segment = curr_segment.replace("```", "```plaintext")
+
         citation_pattern = r"\[(\d+)\]"
 
         citations_found = list(re.finditer(citation_pattern, curr_segment))

@@ -1,12 +1,8 @@
 from abc import ABC
 from abc import abstractmethod
 
-from sqlalchemy.orm import Session
-
-from danswer.db.models import IndexModelStatus
 from danswer.db.models import SearchSettings
-from danswer.db.search_settings import get_current_search_settings
-from danswer.db.search_settings import get_secondary_search_settings
+from danswer.indexing.indexing_heartbeat import Heartbeat
 from danswer.indexing.models import ChunkEmbedding
 from danswer.indexing.models import DocAwareChunk
 from danswer.indexing.models import IndexChunk
@@ -24,6 +20,9 @@ logger = setup_logger()
 
 
 class IndexingEmbedder(ABC):
+    """Converts chunks into chunks with embeddings. Note that one chunk may have
+    multiple embeddings associated with it."""
+
     def __init__(
         self,
         model_name: str,
@@ -33,6 +32,7 @@ class IndexingEmbedder(ABC):
         provider_type: EmbeddingProvider | None,
         api_key: str | None,
         api_url: str | None,
+        heartbeat: Heartbeat | None,
     ):
         self.model_name = model_name
         self.normalize = normalize
@@ -54,6 +54,7 @@ class IndexingEmbedder(ABC):
             server_host=INDEXING_MODEL_SERVER_HOST,
             server_port=INDEXING_MODEL_SERVER_PORT,
             retrim_content=True,
+            heartbeat=heartbeat,
         )
 
     @abstractmethod
@@ -74,6 +75,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         provider_type: EmbeddingProvider | None = None,
         api_key: str | None = None,
         api_url: str | None = None,
+        heartbeat: Heartbeat | None = None,
     ):
         super().__init__(
             model_name,
@@ -83,6 +85,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             provider_type,
             api_key,
             api_url,
+            heartbeat,
         )
 
     @log_function_time()
@@ -166,7 +169,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                     title_embed_dict[title] = title_embedding
 
             new_embedded_chunk = IndexChunk(
-                **chunk.dict(),
+                **chunk.model_dump(),
                 embeddings=ChunkEmbedding(
                     full_embedding=chunk_embeddings[0],
                     mini_chunk_embeddings=chunk_embeddings[1:],
@@ -180,7 +183,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
 
     @classmethod
     def from_db_search_settings(
-        cls, search_settings: SearchSettings
+        cls, search_settings: SearchSettings, heartbeat: Heartbeat | None = None
     ) -> "DefaultIndexingEmbedder":
         return cls(
             model_name=search_settings.model_name,
@@ -190,28 +193,5 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             provider_type=search_settings.provider_type,
             api_key=search_settings.api_key,
             api_url=search_settings.api_url,
+            heartbeat=heartbeat,
         )
-
-
-def get_embedding_model_from_search_settings(
-    db_session: Session, index_model_status: IndexModelStatus = IndexModelStatus.PRESENT
-) -> IndexingEmbedder:
-    search_settings: SearchSettings | None
-    if index_model_status == IndexModelStatus.PRESENT:
-        search_settings = get_current_search_settings(db_session)
-    elif index_model_status == IndexModelStatus.FUTURE:
-        search_settings = get_secondary_search_settings(db_session)
-        if not search_settings:
-            raise RuntimeError("No secondary index configured")
-    else:
-        raise RuntimeError("Not supporting embedding model rollbacks")
-
-    return DefaultIndexingEmbedder(
-        model_name=search_settings.model_name,
-        normalize=search_settings.normalize,
-        query_prefix=search_settings.query_prefix,
-        passage_prefix=search_settings.passage_prefix,
-        provider_type=search_settings.provider_type,
-        api_key=search_settings.api_key,
-        api_url=search_settings.api_url,
-    )

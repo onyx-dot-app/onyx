@@ -6,12 +6,10 @@ import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { Button, Divider, Text } from "@tremor/react";
-import Link from "next/link";
-import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
-import { MagnifyingGlass } from "@phosphor-icons/react";
-import { useState } from "react";
 import {
+  Button,
+  Divider,
+  Text,
   Table,
   TableHead,
   TableRow,
@@ -19,12 +17,15 @@ import {
   TableBody,
   TableCell,
 } from "@tremor/react";
+import Link from "next/link";
+import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
+import { MagnifyingGlass } from "@phosphor-icons/react";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { deleteStandardAnswer } from "./lib";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 import { FiTag } from "react-icons/fi";
-import { SelectedBubble } from "@/components/search/filtering/Filters";
 import { PageSelector } from "@/components/PageSelector";
 import { CustomCheckbox } from "@/components/CustomCheckbox";
 

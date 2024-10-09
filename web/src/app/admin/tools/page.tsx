@@ -1,6 +1,6 @@
 import { ToolsTable } from "./ToolsTable";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
-import { FiPlusSquare, FiTool } from "react-icons/fi";
+import { FiPlusSquare } from "react-icons/fi";
 import Link from "next/link";
 import { Divider, Text, Title } from "@tremor/react";
 import { fetchSS } from "@/lib/utilsSS";

@@ -10,7 +10,7 @@ from danswer.connectors.mediawiki import family
 NON_BUILTIN_WIKIS: Final[list[tuple[str, str]]] = [
     ("https://fallout.fandom.com", "falloutwiki"),
     ("https://harrypotter.fandom.com/wiki/", "harrypotterwiki"),
-    ("https://artofproblemsolving.com/wiki", "artofproblemsolving"),
+    # ("https://artofproblemsolving.com/wiki", "artofproblemsolving"),  # FLAKY
     ("https://www.bogleheads.org/wiki/Main_Page", "bogleheadswiki"),
     ("https://bogleheads.org/wiki/Main_Page", "bogleheadswiki"),
     ("https://www.dandwiki.com/wiki/", "dungeonsanddragons"),

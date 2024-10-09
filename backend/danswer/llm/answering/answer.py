@@ -1,3 +1,4 @@
+import itertools
 from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Any
@@ -179,6 +180,7 @@ class Answer:
                         if self.answer_style_config.citation_config
                         else False
                     ),
+                    history_message=self.single_message_history or "",
                 )
             )
         elif self.answer_style_config.quotes_config:
@@ -309,13 +311,15 @@ class Answer:
                     )
                 )
             yield tool_runner.tool_final_result()
+            if not self.skip_gen_ai_answer_generation:
+                prompt = prompt_builder.build(tool_call_summary=tool_call_summary)
 
-            prompt = prompt_builder.build(tool_call_summary=tool_call_summary)
-
-            yield from self._process_llm_stream(
-                prompt=prompt,
-                tools=[tool.tool_definition() for tool in self.tools],
-            )
+                yield from self._process_llm_stream(
+                    prompt=prompt,
+                    # as of now, we don't support multiple tool calls in sequence, which is why
+                    # we don't need to pass this in here
+                    # tools=[tool.tool_definition() for tool in self.tools],
+                )
 
             return
 
@@ -411,6 +415,10 @@ class Answer:
             logger.notice(f"Chosen tool: {chosen_tool_and_args}")
 
         if not chosen_tool_and_args:
+            if self.skip_gen_ai_answer_generation:
+                raise ValueError(
+                    "skip_gen_ai_answer_generation is True, but no tool was chosen; no answer will be generated"
+                )
             prompt_builder.update_system_prompt(
                 default_build_system_message(self.prompt_config)
             )
@@ -475,10 +483,10 @@ class Answer:
         final = tool_runner.tool_final_result()
 
         yield final
+        if not self.skip_gen_ai_answer_generation:
+            prompt = prompt_builder.build()
 
-        prompt = prompt_builder.build()
-
-        yield from self._process_llm_stream(prompt=prompt, tools=None)
+            yield from self._process_llm_stream(prompt=prompt, tools=None)
 
     @property
     def processed_streamed_output(self) -> AnswerStream:
@@ -553,12 +561,19 @@ class Answer:
 
                 def _stream() -> Iterator[str]:
                     nonlocal stream_stop_info
-                    yield cast(str, message)
-                    for item in stream:
+                    for item in itertools.chain([message], stream):
                         if isinstance(item, StreamStopInfo):
                             stream_stop_info = item
                             return
-                        yield cast(str, item)
+
+                        # this should never happen, but we're seeing weird behavior here so handling for now
+                        if not isinstance(item, str):
+                            logger.error(
+                                f"Received non-string item in answer stream: {item}. Skipping."
+                            )
+                            continue
+
+                        yield item
 
                 yield from process_answer_stream_fn(_stream())
 

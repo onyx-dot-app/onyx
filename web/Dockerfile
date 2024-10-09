@@ -25,10 +25,10 @@ COPY . .
 RUN npm ci
 
 # needed to get the `standalone` dir we expect later
-ENV NEXT_PRIVATE_STANDALONE true
+ENV NEXT_PRIVATE_STANDALONE=true
 
 # Disable automatic telemetry collection
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Environment variables must be present at build time
 # https://github.com/vercel/next.js/discussions/14030
@@ -77,7 +77,7 @@ RUN rm -rf /usr/local/lib/node_modules
 # ENV NODE_ENV production  
 
 # Disable automatic telemetry collection
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Don't run production as root
 RUN addgroup --system --gid 1001 nodejs

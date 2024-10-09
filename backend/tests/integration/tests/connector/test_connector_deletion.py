@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.enums import IndexingStatus
+from danswer.db.index_attempt import create_index_attempt
 from danswer.db.index_attempt import create_index_attempt_error
 from danswer.db.models import IndexAttempt
 from danswer.db.search_settings import get_current_search_settings
@@ -22,17 +23,17 @@ from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import TestAPIKey
-from tests.integration.common_utils.test_models import TestUser
-from tests.integration.common_utils.test_models import TestUserGroup
-from tests.integration.common_utils.vespa import TestVespaClient
+from tests.integration.common_utils.test_models import DATestAPIKey
+from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestUserGroup
+from tests.integration.common_utils.vespa import vespa_fixture
 
 
-def test_connector_deletion(reset: None, vespa_client: TestVespaClient) -> None:
+def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
     # Creating an admin user (first user created is automatically an admin)
-    admin_user: TestUser = UserManager.create(name="admin_user")
-    # add api key to user
-    api_key: TestAPIKey = APIKeyManager.create(
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+    # create api key
+    api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
     )
 
@@ -47,12 +48,12 @@ def test_connector_deletion(reset: None, vespa_client: TestVespaClient) -> None:
     )
 
     # seed documents
-    cc_pair_1 = DocumentManager.seed_and_attach_docs(
+    cc_pair_1.documents = DocumentManager.seed_dummy_docs(
         cc_pair=cc_pair_1,
         num_docs=NUM_DOCS,
         api_key=api_key,
     )
-    cc_pair_2 = DocumentManager.seed_and_attach_docs(
+    cc_pair_2.documents = DocumentManager.seed_dummy_docs(
         cc_pair=cc_pair_2,
         num_docs=NUM_DOCS,
         api_key=api_key,
@@ -76,11 +77,11 @@ def test_connector_deletion(reset: None, vespa_client: TestVespaClient) -> None:
     print("Document sets created and synced")
 
     # create user groups
-    user_group_1: TestUserGroup = UserGroupManager.create(
+    user_group_1: DATestUserGroup = UserGroupManager.create(
         cc_pair_ids=[cc_pair_1.id],
         user_performing_action=admin_user,
     )
-    user_group_2: TestUserGroup = UserGroupManager.create(
+    user_group_2: DATestUserGroup = UserGroupManager.create(
         cc_pair_ids=[cc_pair_1.id, cc_pair_2.id],
         user_performing_action=admin_user,
     )
@@ -117,6 +118,22 @@ def test_connector_deletion(reset: None, vespa_client: TestVespaClient) -> None:
         user_performing_action=admin_user,
     )
 
+    # inject an index attempt and index attempt error (exercises foreign key errors)
+    with Session(get_sqlalchemy_engine()) as db_session:
+        attempt_id = create_index_attempt(
+            connector_credential_pair_id=cc_pair_1.id,
+            search_settings_id=1,
+            db_session=db_session,
+        )
+        create_index_attempt_error(
+            index_attempt_id=attempt_id,
+            batch=1,
+            docs=[],
+            exception_msg="",
+            exception_traceback="",
+            db_session=db_session,
+        )
+
     # Update local records to match the database for later comparison
     user_group_1.cc_pair_ids = []
     user_group_2.cc_pair_ids = [cc_pair_2.id]
@@ -125,7 +142,9 @@ def test_connector_deletion(reset: None, vespa_client: TestVespaClient) -> None:
     cc_pair_1.groups = []
     cc_pair_2.groups = [user_group_2.id]
 
-    CCPairManager.wait_for_deletion_completion(user_performing_action=admin_user)
+    CCPairManager.wait_for_deletion_completion(
+        cc_pair_id=cc_pair_1.id, user_performing_action=admin_user
+    )
 
     # validate vespa documents
     DocumentManager.verify(
@@ -174,15 +193,15 @@ def test_connector_deletion(reset: None, vespa_client: TestVespaClient) -> None:
 
 
 def test_connector_deletion_for_overlapping_connectors(
-    reset: None, vespa_client: TestVespaClient
+    reset: None, vespa_client: vespa_fixture
 ) -> None:
     """Checks to make sure that connectors with overlapping documents work properly. Specifically, that the overlapping
     document (1) still exists and (2) has the right document set / group post-deletion of one of the connectors.
     """
     # Creating an admin user (first user created is automatically an admin)
-    admin_user: TestUser = UserManager.create(name="admin_user")
-    # add api key to user
-    api_key: TestAPIKey = APIKeyManager.create(
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+    # create api key
+    api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
     )
 
@@ -197,12 +216,12 @@ def test_connector_deletion_for_overlapping_connectors(
     )
 
     doc_ids = [str(uuid4())]
-    cc_pair_1 = DocumentManager.seed_and_attach_docs(
+    cc_pair_1.documents = DocumentManager.seed_dummy_docs(
         cc_pair=cc_pair_1,
         document_ids=doc_ids,
         api_key=api_key,
     )
-    cc_pair_2 = DocumentManager.seed_and_attach_docs(
+    cc_pair_2.documents = DocumentManager.seed_dummy_docs(
         cc_pair=cc_pair_2,
         document_ids=doc_ids,
         api_key=api_key,
@@ -251,7 +270,7 @@ def test_connector_deletion_for_overlapping_connectors(
     )
 
     # create a user group and attach it to connector 1
-    user_group_1: TestUserGroup = UserGroupManager.create(
+    user_group_1: DATestUserGroup = UserGroupManager.create(
         name="Test User Group 1",
         cc_pair_ids=[cc_pair_1.id],
         user_performing_action=admin_user,
@@ -265,7 +284,7 @@ def test_connector_deletion_for_overlapping_connectors(
     print("User group 1 created and synced")
 
     # create a user group and attach it to connector 2
-    user_group_2: TestUserGroup = UserGroupManager.create(
+    user_group_2: DATestUserGroup = UserGroupManager.create(
         name="Test User Group 2",
         cc_pair_ids=[cc_pair_2.id],
         user_performing_action=admin_user,
@@ -303,7 +322,9 @@ def test_connector_deletion_for_overlapping_connectors(
     )
 
     # wait for deletion to finish
-    CCPairManager.wait_for_deletion_completion(user_performing_action=admin_user)
+    CCPairManager.wait_for_deletion_completion(
+        cc_pair_id=cc_pair_1.id, user_performing_action=admin_user
+    )
 
     print("Connector 1 deleted")
 

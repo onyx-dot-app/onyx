@@ -28,6 +28,7 @@ import {
 import { hasCompletedWelcomeFlowSS } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { fetchAssistantsSS } from "../assistants/fetchAssistantsSS";
 import { NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN } from "../constants";
+import { checkLLMSupportsImageInput } from "../llm/utils";
 
 interface FetchChatDataResult {
   user?: User | null;
@@ -178,10 +179,13 @@ export async function fetchSomeChatData(
       );
     }
 
-    const hasOpenAIProvider =
-      result.llmProviders &&
-      result.llmProviders.some((provider) => provider.provider === "openai");
-    if (!hasOpenAIProvider) {
+    const hasImageCompatibleModel = result.llmProviders?.some(
+      (provider) =>
+        provider.provider === "openai" ||
+        provider.model_names.some((model) => checkLLMSupportsImageInput(model))
+    );
+
+    if (!hasImageCompatibleModel) {
       result.assistants = result.assistants.filter(
         (assistant) =>
           !assistant.tools.some(

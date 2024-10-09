@@ -5,7 +5,6 @@ import { Folder } from "@/app/chat/folders/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { User } from "@/lib/types";
 
-import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { AssistantsPageTitle } from "../AssistantsPageTitle";
 import { useInputPrompts } from "@/app/admin/prompt-library/hooks";
 import { PromptSection } from "@/app/admin/prompt-library/promptSection";

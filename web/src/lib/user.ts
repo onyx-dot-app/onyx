@@ -31,6 +31,7 @@ export const basicLogin = async (
     ["username", email],
     ["password", password],
   ]);
+
   const response = await fetch("/api/auth/login", {
     method: "POST",
     credentials: "include",

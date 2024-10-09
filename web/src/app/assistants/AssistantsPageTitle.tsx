@@ -6,10 +6,11 @@ export function AssistantsPageTitle({
   return (
     <h1
       className="
-      text-4xl 
+      text-5xl 
       font-bold 
       mb-4 
       text-center
+      text-text-900
     "
     >
       {children}

@@ -42,6 +42,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
     if (!results[0].ok) {
       if (results[0].status === 403) {
         settings = {
+          gpu_enabled: false,
           chat_page_enabled: true,
           search_page_enabled: true,
           default_page: "search",

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { MinimalUserSnapshot, User } from "@/lib/types";
-import { Button, Divider, Text } from "@tremor/react";
+import { Button } from "@tremor/react";
 import { FiPlus, FiX } from "react-icons/fi";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { SearchMultiSelectDropdown } from "@/components/Dropdown";
@@ -73,7 +73,11 @@ export function AssistantSharingModal({
   let sharedStatus = null;
   if (assistant.is_public || !sharedUsersWithoutOwner.length) {
     sharedStatus = (
-      <AssistantSharedStatusDisplay assistant={assistant} user={user} />
+      <AssistantSharedStatusDisplay
+        size="md"
+        assistant={assistant}
+        user={user}
+      />
     );
   } else {
     sharedStatus = (
@@ -122,27 +126,30 @@ export function AssistantSharingModal({
     <>
       {popup}
       <Modal
+        width="max-w-3xl w-full"
         title={
-          <div className="flex">
-            <AssistantIcon assistant={assistant} />{" "}
-            <div className="ml-2 my-auto">{assistantName}</div>
+          <div className="flex items-end space-x-3">
+            <AssistantIcon size="large" assistant={assistant} />
+            <h2 className="text-3xl text-text-800 font-semibold">
+              {assistantName}
+            </h2>
           </div>
         }
         onOutsideClick={onClose}
       >
-        <div className="px-4">
+        <div>
           {isUpdating && <Spinner />}
-          <Text className="mb-5">
-            Control which other users should have access to this assistant.
-          </Text>
+          <p className="text-text-600 text-lg mb-6">
+            Manage access to this assistant by sharing it with other users.
+          </p>
 
-          <div>
-            <p className="font-bold mb-2">Current status:</p>
-            {sharedStatus}
+          <div className="mb-8 flex flex-col gap-y-4">
+            <h3 className="text-lg font-semibold">Current Status</h3>
+            <div className="bg-gray-50 rounded-lg">{sharedStatus}</div>
           </div>
 
-          <h3 className="text-default font-bold mb-4 mt-3">Share Assistant:</h3>
-          <div className="mt-4">
+          <div className="mb-8 flex flex-col gap-y-4">
+            <h3 className="text-lg font-semibold">Share Assistant</h3>
             <SearchMultiSelectDropdown
               options={allUsers
                 .filter(
@@ -153,12 +160,10 @@ export function AssistantSharingModal({
                       .includes(u1.id) &&
                     u1.id !== user?.id
                 )
-                .map((user) => {
-                  return {
-                    name: user.email,
-                    value: user.id,
-                  };
-                })}
+                .map((user) => ({
+                  name: user.email,
+                  value: user.id,
+                }))}
               onSelect={(option) => {
                 setSelectedUsers([
                   ...Array.from(
@@ -170,18 +175,22 @@ export function AssistantSharingModal({
                 ]);
               }}
               itemComponent={({ option }) => (
-                <div className="flex px-4 py-2.5 cursor-pointer hover:bg-hover">
-                  <UsersIcon className="mr-2 my-auto" />
-                  {option.name}
-                  <div className="ml-auto my-auto">
-                    <FiPlus />
-                  </div>
+                <div className="flex items-center px-4 py-2.5 cursor-pointer hover:bg-gray-100">
+                  <UsersIcon className="mr-3 text-gray-500" />
+                  <span className="flex-grow">{option.name}</span>
+                  <FiPlus className="text-blue-500" />
                 </div>
               )}
             />
-            <div className="mt-2 flex flex-wrap gap-x-2">
-              {selectedUsers.length > 0 &&
-                selectedUsers.map((selectedUser) => (
+          </div>
+
+          {selectedUsers.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">
+                Selected Users:
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {selectedUsers.map((selectedUser) => (
                   <div
                     key={selectedUser.id}
                     onClick={() => {
@@ -191,35 +200,29 @@ export function AssistantSharingModal({
                         )
                       );
                     }}
-                    className={`
-                      flex 
-                      rounded-lg 
-                      px-2 
-                      py-1 
-                      border 
-                      border-border 
-                      hover:bg-hover-light 
-                      cursor-pointer`}
+                    className="flex items-center bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-sm hover:bg-blue-100 transition-colors duration-200 cursor-pointer"
                   >
-                    {selectedUser.email} <FiX className="ml-1 my-auto" />
+                    {selectedUser.email}
+                    <FiX className="ml-2 text-blue-500" />
                   </div>
                 ))}
+              </div>
             </div>
+          )}
 
-            {selectedUsers.length > 0 && (
-              <Button
-                className="mt-4"
-                onClick={() => {
-                  handleShare();
-                  setSelectedUsers([]);
-                }}
-                size="xs"
-                color="blue"
-              >
-                Add
-              </Button>
-            )}
-          </div>
+          {selectedUsers.length > 0 && (
+            <Button
+              onClick={() => {
+                handleShare();
+                setSelectedUsers([]);
+              }}
+              size="sm"
+              color="blue"
+              className="w-full"
+            >
+              Share with Selected Users
+            </Button>
+          )}
         </div>
       </Modal>
     </>

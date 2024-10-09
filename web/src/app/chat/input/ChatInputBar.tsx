@@ -63,6 +63,7 @@ export function ChatInputBar({
   alternativeAssistant,
   chatSessionId,
   inputPrompts,
+  refreshUser,
 }: {
   showConfigureAPIKey: () => void;
   openModelSettings: () => void;
@@ -86,6 +87,7 @@ export function ChatInputBar({
   handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   chatSessionId?: number;
+  refreshUser: () => void;
 }) {
   useEffect(() => {
     const textarea = textAreaRef.current;
@@ -96,7 +98,7 @@ export function ChatInputBar({
         MAX_INPUT_HEIGHT
       )}px`;
     }
-  }, [message]);
+  }, [message, textAreaRef]);
 
   const handlePaste = (event: React.ClipboardEvent) => {
     const items = event.clipboardData?.items;
@@ -382,7 +384,8 @@ export function ChatInputBar({
               border
               border-[#E5E7EB]
               rounded-lg
-              bg-background-100
+              text-text-chatbar
+              bg-background-chatbar
               [&:has(textarea:focus)]::ring-1
               [&:has(textarea:focus)]::ring-black
             "
@@ -477,7 +480,8 @@ export function ChatInputBar({
                 resize-none
                 rounded-lg
                 border-0
-                bg-background-100
+                bg-background-chatbar
+                placeholder:text-text-chatbar-subtle
                 ${
                   textAreaRef.current &&
                   textAreaRef.current.scrollHeight > MAX_INPUT_HEIGHT
@@ -530,6 +534,7 @@ export function ChatInputBar({
                       setSelectedAssistant(assistant);
                       close();
                     }}
+                    refreshUser={refreshUser}
                   />
                 )}
                 flexPriority="shrink"
@@ -549,6 +554,7 @@ export function ChatInputBar({
                 tab
                 content={(close, ref) => (
                   <LlmTab
+                    currentAssistant={alternativeAssistant || selectedAssistant}
                     openModelSettings={openModelSettings}
                     currentLlm={
                       llmOverrideManager.llmOverride.modelName ||
@@ -633,7 +639,7 @@ export function ChatInputBar({
                 >
                   <SendIcon
                     size={28}
-                    className={`text-emphasis text-white p-1 rounded-full  ${chatState == "input" && message ? "bg-background-800" : "bg-background-400"} `}
+                    className={`text-emphasis text-white p-1 rounded-full  ${chatState == "input" && message ? "bg-submit-background" : "bg-disabled-submit-background"} `}
                   />
                 </button>
               )}

@@ -4,6 +4,7 @@ from typing import Type
 from sqlalchemy.orm import Session
 
 from danswer.configs.constants import DocumentSource
+from danswer.connectors.asana.connector import AsanaConnector
 from danswer.connectors.axero.connector import AxeroConnector
 from danswer.connectors.blob.connector import BlobStorageConnector
 from danswer.connectors.bookstack.connector import BookstackConnector
@@ -41,6 +42,7 @@ from danswer.connectors.slack.load_connector import SlackLoadConnector
 from danswer.connectors.teams.connector import TeamsConnector
 from danswer.connectors.web.connector import WebConnector
 from danswer.connectors.wikipedia.connector import WikipediaConnector
+from danswer.connectors.xenforo.connector import XenforoConnector
 from danswer.connectors.zendesk.connector import ZendeskConnector
 from danswer.connectors.zulip.connector import ZulipConnector
 from danswer.db.credentials import backend_update_credential_json
@@ -61,6 +63,7 @@ def identify_connector_class(
         DocumentSource.SLACK: {
             InputType.LOAD_STATE: SlackLoadConnector,
             InputType.POLL: SlackPollConnector,
+            InputType.PRUNE: SlackPollConnector,
         },
         DocumentSource.GITHUB: GithubConnector,
         DocumentSource.GMAIL: GmailConnector,
@@ -91,10 +94,12 @@ def identify_connector_class(
         DocumentSource.CLICKUP: ClickupConnector,
         DocumentSource.MEDIAWIKI: MediaWikiConnector,
         DocumentSource.WIKIPEDIA: WikipediaConnector,
+        DocumentSource.ASANA: AsanaConnector,
         DocumentSource.S3: BlobStorageConnector,
         DocumentSource.R2: BlobStorageConnector,
         DocumentSource.GOOGLE_CLOUD_STORAGE: BlobStorageConnector,
         DocumentSource.OCI_STORAGE: BlobStorageConnector,
+        DocumentSource.XENFORO: XenforoConnector,
     }
     connector_by_source = connector_map.get(source, {})
 
@@ -124,11 +129,11 @@ def identify_connector_class(
 
 
 def instantiate_connector(
+    db_session: Session,
     source: DocumentSource,
     input_type: InputType,
     connector_specific_config: dict[str, Any],
     credential: Credential,
-    db_session: Session,
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
     connector = connector_class(**connector_specific_config)

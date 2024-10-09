@@ -21,6 +21,7 @@ import {
   AssistantsIconSkeleton,
   ClosedBookIcon,
   SearchIcon,
+  DocumentIcon2,
 } from "@/components/icons/icons";
 import { UserRole } from "@/lib/types";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
@@ -29,7 +30,6 @@ import { User } from "@/lib/types";
 import { usePathname } from "next/navigation";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { useContext } from "react";
-import { CustomTooltip } from "../tooltip/CustomTooltip";
 
 export function ClientLayout({
   user,
@@ -55,7 +55,7 @@ export function ClientLayout({
   return (
     <div className="overflow-y-hidden">
       <div className="flex h-full">
-        <div className="flex-none w-[250px] z-20 pt-4 pb-8 h-full border-r border-border miniscroll overflow-auto">
+        <div className="flex-none text-text-settings-sidebar bg-background-settings-sidebar w-[250px] z-20 pt-4 pb-8 h-full border-r border-border miniscroll overflow-auto">
           <AdminSidebar
             collections={[
               {
@@ -64,7 +64,10 @@ export function ClientLayout({
                   {
                     name: (
                       <div className="flex">
-                        <NotebookIconSkeleton size={18} />
+                        <NotebookIconSkeleton
+                          className="text-icon-settings-sidebar"
+                          size={18}
+                        />
                         <div className="ml-1">Existing Connectors</div>
                       </div>
                     ),
@@ -73,7 +76,10 @@ export function ClientLayout({
                   {
                     name: (
                       <div className="flex">
-                        <ConnectorIconSkeleton size={18} />
+                        <ConnectorIconSkeleton
+                          className="text-icon-settings-sidebar"
+                          size={18}
+                        />
                         <div className="ml-1.5">Add Connector</div>
                       </div>
                     ),
@@ -87,7 +93,10 @@ export function ClientLayout({
                   {
                     name: (
                       <div className="flex">
-                        <DocumentSetIconSkeleton size={18} />
+                        <DocumentSetIconSkeleton
+                          className="text-icon-settings-sidebar"
+                          size={18}
+                        />
                         <div className="ml-1">Document Sets</div>
                       </div>
                     ),
@@ -96,7 +105,10 @@ export function ClientLayout({
                   {
                     name: (
                       <div className="flex">
-                        <ZoomInIconSkeleton size={18} />
+                        <ZoomInIconSkeleton
+                          className="text-icon-settings-sidebar"
+                          size={18}
+                        />
                         <div className="ml-1">Explorer</div>
                       </div>
                     ),
@@ -105,7 +117,10 @@ export function ClientLayout({
                   {
                     name: (
                       <div className="flex">
-                        <ThumbsUpIconSkeleton size={18} />
+                        <ThumbsUpIconSkeleton
+                          className="text-icon-settings-sidebar"
+                          size={18}
+                        />
                         <div className="ml-1">Feedback</div>
                       </div>
                     ),
@@ -119,7 +134,10 @@ export function ClientLayout({
                   {
                     name: (
                       <div className="flex">
-                        <AssistantsIconSkeleton className="my-auto" size={18} />
+                        <AssistantsIconSkeleton
+                          className="text-icon-settings-sidebar"
+                          size={18}
+                        />
                         <div className="ml-1">Assistants</div>
                       </div>
                     ),
@@ -130,7 +148,7 @@ export function ClientLayout({
                         {
                           name: (
                             <div className="flex">
-                              <SlackIconSkeleton />
+                              <SlackIconSkeleton className="text-icon-settings-sidebar" />
                               <div className="ml-1">Slack Bots</div>
                             </div>
                           ),
@@ -139,7 +157,10 @@ export function ClientLayout({
                         {
                           name: (
                             <div className="flex">
-                              <ToolIconSkeleton size={18} />
+                              <ToolIconSkeleton
+                                className="text-icon-settings-sidebar"
+                                size={18}
+                              />
                               <div className="ml-1">Tools</div>
                             </div>
                           ),
@@ -148,7 +169,10 @@ export function ClientLayout({
                         {
                           name: (
                             <div className="flex">
-                              <ClosedBookIcon size={18} />
+                              <ClosedBookIcon
+                                className="text-icon-settings-sidebar"
+                                size={18}
+                              />
                               <div className="ml-1">Prompt Library</div>
                             </div>
                           ),
@@ -161,7 +185,10 @@ export function ClientLayout({
                         {
                           name: (
                             <div className="flex">
-                              <ClipboardIcon size={18} />
+                              <ClipboardIcon
+                                className="text-icon-settings-sidebar"
+                                size={18}
+                              />
                               <div className="ml-1">Standard Answers</div>
                             </div>
                           ),
@@ -179,7 +206,10 @@ export function ClientLayout({
                         {
                           name: (
                             <div className="flex">
-                              <GroupsIconSkeleton size={18} />
+                              <GroupsIconSkeleton
+                                className="text-icon-settings-sidebar"
+                                size={18}
+                              />
                               <div className="ml-1">Groups</div>
                             </div>
                           ),
@@ -197,7 +227,10 @@ export function ClientLayout({
                         {
                           name: (
                             <div className="flex">
-                              <CpuIconSkeleton size={18} />
+                              <CpuIconSkeleton
+                                className="text-icon-settings-sidebar"
+                                size={18}
+                              />
                               <div className="ml-1">LLM</div>
                             </div>
                           ),
@@ -207,11 +240,20 @@ export function ClientLayout({
                           error: settings?.settings.needs_reindexing,
                           name: (
                             <div className="flex">
-                              <SearchIcon />
+                              <SearchIcon className="text-icon-settings-sidebar" />
                               <div className="ml-1">Search Settings</div>
                             </div>
                           ),
                           link: "/admin/configuration/search",
+                        },
+                        {
+                          name: (
+                            <div className="flex">
+                              <DocumentIcon2 className="text-icon-settings-sidebar" />
+                              <div className="ml-1">Document Processing</div>
+                            </div>
+                          ),
+                          link: "/admin/configuration/document-processing",
                         },
                       ],
                     },
@@ -221,7 +263,10 @@ export function ClientLayout({
                         {
                           name: (
                             <div className="flex">
-                              <UsersIconSkeleton size={18} />
+                              <UsersIconSkeleton
+                                className="text-icon-settings-sidebar"
+                                size={18}
+                              />
                               <div className="ml-1">Users</div>
                             </div>
                           ),
@@ -232,7 +277,10 @@ export function ClientLayout({
                               {
                                 name: (
                                   <div className="flex">
-                                    <GroupsIconSkeleton size={18} />
+                                    <GroupsIconSkeleton
+                                      className="text-icon-settings-sidebar"
+                                      size={18}
+                                    />
                                     <div className="ml-1">Groups</div>
                                   </div>
                                 ),
@@ -241,7 +289,10 @@ export function ClientLayout({
                               {
                                 name: (
                                   <div className="flex">
-                                    <KeyIconSkeleton size={18} />
+                                    <KeyIconSkeleton
+                                      className="text-icon-settings-sidebar"
+                                      size={18}
+                                    />
                                     <div className="ml-1">API Keys</div>
                                   </div>
                                 ),
@@ -252,7 +303,10 @@ export function ClientLayout({
                         {
                           name: (
                             <div className="flex">
-                              <ShieldIconSkeleton size={18} />
+                              <ShieldIconSkeleton
+                                className="text-icon-settings-sidebar"
+                                size={18}
+                              />
                               <div className="ml-1">Token Rate Limits</div>
                             </div>
                           ),
@@ -268,7 +322,10 @@ export function ClientLayout({
                               {
                                 name: (
                                   <div className="flex">
-                                    <FiActivity size={18} />
+                                    <FiActivity
+                                      className="text-icon-settings-sidebar"
+                                      size={18}
+                                    />
                                     <div className="ml-1">Usage Statistics</div>
                                   </div>
                                 ),
@@ -277,7 +334,10 @@ export function ClientLayout({
                               {
                                 name: (
                                   <div className="flex">
-                                    <DatabaseIconSkeleton size={18} />
+                                    <DatabaseIconSkeleton
+                                      className="text-icon-settings-sidebar"
+                                      size={18}
+                                    />
                                     <div className="ml-1">Query History</div>
                                   </div>
                                 ),
@@ -286,7 +346,10 @@ export function ClientLayout({
                               {
                                 name: (
                                   <div className="flex">
-                                    <FiBarChart2 size={18} />
+                                    <FiBarChart2
+                                      className="text-icon-settings-sidebar"
+                                      size={18}
+                                    />
                                     <div className="ml-1">Custom Analytics</div>
                                   </div>
                                 ),
@@ -302,7 +365,10 @@ export function ClientLayout({
                         {
                           name: (
                             <div className="flex">
-                              <SettingsIconSkeleton size={18} />
+                              <SettingsIconSkeleton
+                                className="text-icon-settings-sidebar"
+                                size={18}
+                              />
                               <div className="ml-1">Workspace Settings</div>
                             </div>
                           ),
@@ -313,7 +379,10 @@ export function ClientLayout({
                               {
                                 name: (
                                   <div className="flex">
-                                    <PaintingIconSkeleton size={18} />
+                                    <PaintingIconSkeleton
+                                      className="text-icon-settings-sidebar"
+                                      size={18}
+                                    />
                                     <div className="ml-1">Whitelabeling</div>
                                   </div>
                                 ),

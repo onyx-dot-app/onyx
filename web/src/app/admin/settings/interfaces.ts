@@ -5,6 +5,7 @@ export interface Settings {
   maximum_chat_retention_days: number | null;
   notifications: Notification[];
   needs_reindexing: boolean;
+  gpu_enabled: boolean;
 }
 
 export interface Notification {
@@ -17,7 +18,8 @@ export interface Notification {
 
 export interface NavigationItem {
   link: string;
-  icon: string;
+  icon?: string;
+  svg_logo?: string;
   title: string;
 }
 

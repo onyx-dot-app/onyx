@@ -1,17 +1,19 @@
 import { useFormContext } from "@/components/context/FormContext";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 
-import { BackIcon, SettingsIcon } from "@/components/icons/icons";
+import { SettingsIcon } from "@/components/icons/icons";
 import { Logo } from "@/components/Logo";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import Link from "next/link";
+import { useUser } from "@/components/user/UserProvider";
 import { useContext } from "react";
 
 export default function Sidebar() {
   const { formStep, setFormStep, connector, allowAdvanced, allowCreate } =
     useFormContext();
   const combinedSettings = useContext(SettingsContext);
+  const { isLoadingUser, isAdmin } = useUser();
   if (!combinedSettings) {
     return null;
   }
@@ -59,7 +61,9 @@ export default function Sidebar() {
               className="w-full p-2 bg-white border-border border rounded items-center hover:bg-background-200 cursor-pointer transition-all duration-150 flex gap-x-2"
             >
               <SettingsIcon className="flex-none " />
-              <p className="my-auto flex items-center text-sm">Admin Page</p>
+              <p className="my-auto flex items-center text-sm">
+                {isAdmin ? "Admin Page" : "Curator Page"}
+              </p>
             </Link>
           </div>
 

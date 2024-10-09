@@ -50,6 +50,12 @@ def make_confluence_call_handle_rate_limit(confluence_call: F) -> F:
                             pass
 
                     if retry_after is not None:
+                        if retry_after > 600:
+                            logger.warning(
+                                f"Clamping retry_after from {retry_after} to {max_delay} seconds..."
+                            )
+                            retry_after = max_delay
+
                         logger.warning(
                             f"Rate limit hit. Retrying after {retry_after} seconds..."
                         )

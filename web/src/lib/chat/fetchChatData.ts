@@ -28,6 +28,7 @@ import {
 import { hasCompletedWelcomeFlowSS } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { fetchAssistantsSS } from "../assistants/fetchAssistantsSS";
 import { NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN } from "../constants";
+import { checkLLMSupportsImageInput } from "../llm/utils";
 
 interface FetchChatDataResult {
   user: User | null;
@@ -184,17 +185,10 @@ export async function fetchChatData(searchParams: {
 
   const hasAnyConnectors = ccPairs.length > 0;
   const shouldShowWelcomeModal =
+    !llmProviders.length &&
     !hasCompletedWelcomeFlowSS() &&
     !hasAnyConnectors &&
     (!user || user.role === "admin");
-
-  const shouldDisplaySourcesIncompleteModal =
-    hasAnyConnectors &&
-    !shouldShowWelcomeModal &&
-    !ccPairs.some(
-      (ccPair) => ccPair.has_successful_run && ccPair.docs_indexed > 0
-    ) &&
-    (!user || user.role == "admin");
 
   // if no connectors are setup, only show personas that are pure
   // passthrough and don't do any retrieval
@@ -202,10 +196,13 @@ export async function fetchChatData(searchParams: {
     assistants = assistants.filter((assistant) => assistant.num_chunks === 0);
   }
 
-  const hasOpenAIProvider = llmProviders.some(
-    (provider) => provider.provider === "openai"
+  const hasImageCompatibleModel = llmProviders.some(
+    (provider) =>
+      provider.provider === "openai" ||
+      provider.model_names.some((model) => checkLLMSupportsImageInput(model))
   );
-  if (!hasOpenAIProvider) {
+
+  if (!hasImageCompatibleModel) {
     assistants = assistants.filter(
       (assistant) =>
         !assistant.tools.some(

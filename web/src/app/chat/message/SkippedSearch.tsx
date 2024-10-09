@@ -1,5 +1,5 @@
 import { EmphasizedClickable } from "@/components/BasicClickable";
-import { FiArchive, FiBook, FiSearch } from "react-icons/fi";
+import { FiBook } from "react-icons/fi";
 
 function ForceSearchButton({
   messageId,

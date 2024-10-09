@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useContext, useEffect } from "react";
+import { useState, useRef, useContext, useEffect, useMemo } from "react";
 import { FiLogOut } from "react-icons/fi";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,6 +24,7 @@ interface DropdownOptionProps {
   onClick?: () => void;
   icon: React.ReactNode;
   label: string;
+  openInNewTab?: boolean;
 }
 
 const DropdownOption: React.FC<DropdownOptionProps> = ({
@@ -31,6 +32,7 @@ const DropdownOption: React.FC<DropdownOptionProps> = ({
   onClick,
   icon,
   label,
+  openInNewTab,
 }) => {
   const content = (
     <div className="flex py-3 px-4 cursor-pointer rounded hover:bg-hover-light">
@@ -39,11 +41,19 @@ const DropdownOption: React.FC<DropdownOptionProps> = ({
     </div>
   );
 
-  return href ? (
-    <Link href={href}>{content}</Link>
-  ) : (
-    <div onClick={onClick}>{content}</div>
-  );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        target={openInNewTab ? "_blank" : undefined}
+        rel={openInNewTab ? "noopener noreferrer" : undefined}
+      >
+        {content}
+      </Link>
+    );
+  } else {
+    return <div onClick={onClick}>{content}</div>;
+  }
 };
 
 export function UserDropdown({
@@ -58,11 +68,15 @@ export function UserDropdown({
   const router = useRouter();
 
   const combinedSettings = useContext(SettingsContext);
-  const customNavItems: NavigationItem[] =
-    combinedSettings?.enterpriseSettings?.custom_nav_items || [];
+  const customNavItems: NavigationItem[] = useMemo(
+    () => combinedSettings?.enterpriseSettings?.custom_nav_items || [],
+    [combinedSettings]
+  );
 
   useEffect(() => {
-    const iconNames = customNavItems.map((item) => item.icon);
+    const iconNames = customNavItems
+      .map((item) => item.icon)
+      .filter((icon) => icon) as string[];
     preloadIcons(iconNames);
   }, [customNavItems]);
 
@@ -142,12 +156,37 @@ export function UserDropdown({
                 key={i}
                 href={item.link}
                 icon={
-                  <DynamicFaIcon
-                    name={item.icon}
-                    className="h-4 w-4 my-auto mr-2"
-                  />
+                  item.svg_logo ? (
+                    <div
+                      className="
+                        h-4
+                        w-4
+                        my-auto
+                        mr-2
+                        overflow-hidden
+                        flex
+                        items-center
+                        justify-center
+                      "
+                      aria-label={item.title}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="100%"
+                        height="100%"
+                        preserveAspectRatio="xMidYMid meet"
+                        dangerouslySetInnerHTML={{ __html: item.svg_logo }}
+                      />
+                    </div>
+                  ) : (
+                    <DynamicFaIcon
+                      name={item.icon!}
+                      className="h-4 w-4 my-auto mr-2"
+                    />
+                  )
                 }
                 label={item.title}
+                openInNewTab
               />
             ))}
 

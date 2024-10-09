@@ -3,7 +3,7 @@
 import { errorHandlingFetcher, RedirectError } from "@/lib/fetcher";
 import useSWR from "swr";
 import { Modal } from "../Modal";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getSecondsUntilExpiration } from "@/lib/time";
 import { User } from "@/lib/types";
 import { mockedRefreshToken, refreshToken } from "./refreshUtils";
@@ -20,7 +20,7 @@ export const HealthCheckBanner = () => {
     errorHandlingFetcher
   );
 
-  const updateExpirationTime = async () => {
+  const updateExpirationTime = useCallback(async () => {
     const updatedUser = await mutateUser();
 
     if (updatedUser) {
@@ -28,11 +28,11 @@ export const HealthCheckBanner = () => {
       setSecondsUntilExpiration(seconds);
       console.debug(`Updated seconds until expiration:! ${seconds}`);
     }
-  };
+  }, [mutateUser]);
 
   useEffect(() => {
     updateExpirationTime();
-  }, [user]);
+  }, [user, updateExpirationTime]);
 
   useEffect(() => {
     if (CUSTOM_REFRESH_URL) {
@@ -89,7 +89,7 @@ export const HealthCheckBanner = () => {
         clearTimeout(expireTimeoutId);
       };
     }
-  }, [secondsUntilExpiration, user]);
+  }, [secondsUntilExpiration, user, mutateUser, updateExpirationTime]);
 
   if (!error && !expired) {
     return null;

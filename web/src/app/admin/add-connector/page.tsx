@@ -6,7 +6,7 @@ import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
 import { Title, Text, Button } from "@tremor/react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function SourceTile({
   sourceMetadata,
@@ -49,15 +49,18 @@ export default function Page() {
       searchInputRef.current.focus();
     }
   }, []);
-  const filterSources = (sources: SourceMetadata[]) => {
-    if (!searchTerm) return sources;
-    const lowerSearchTerm = searchTerm.toLowerCase();
-    return sources.filter(
-      (source) =>
-        source.displayName.toLowerCase().includes(lowerSearchTerm) ||
-        source.category.toLowerCase().includes(lowerSearchTerm)
-    );
-  };
+  const filterSources = useCallback(
+    (sources: SourceMetadata[]) => {
+      if (!searchTerm) return sources;
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      return sources.filter(
+        (source) =>
+          source.displayName.toLowerCase().includes(lowerSearchTerm) ||
+          source.category.toLowerCase().includes(lowerSearchTerm)
+      );
+    },
+    [searchTerm]
+  );
 
   const categorizedSources = useMemo(() => {
     const filtered = filterSources(sources);

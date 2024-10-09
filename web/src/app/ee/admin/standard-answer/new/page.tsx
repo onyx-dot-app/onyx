@@ -3,7 +3,6 @@ import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/Stand
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { BackButton } from "@/components/BackButton";
-import { Text } from "@tremor/react";
 import { ClipboardIcon } from "@/components/icons/icons";
 import { StandardAnswerCategory } from "@/lib/types";
 

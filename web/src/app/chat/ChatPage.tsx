@@ -50,6 +50,7 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -86,7 +87,6 @@ import {
 import { ChatInputBar } from "./input/ChatInputBar";
 import { useChatContext } from "@/components/context/ChatContext";
 import { v4 as uuidv4 } from "uuid";
-import { orderAssistantsForUser } from "@/lib/assistants/orderAssistants";
 import { ChatPopup } from "./ChatPopup";
 
 import FunctionalHeader from "@/components/chat_search/Header";
@@ -101,6 +101,11 @@ import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_NAME } from "./tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
+import {
+  classifyAssistants,
+  orderAssistantsForUser,
+} from "@/lib/assistants/utils";
+import BlurBackground from "./shared_chat_search/BlurBackground";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -118,7 +123,7 @@ export function ChatPage({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  let {
+  const {
     chatSessions,
     availableSources,
     availableDocumentSets,
@@ -136,7 +141,6 @@ export function ChatPage({
 
   const { user, refreshUser, isLoadingUser } = useUser();
 
-  // chat session
   const existingChatIdRaw = searchParams.get("chatId");
   const currentPersonaId = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
 
@@ -154,8 +158,17 @@ export function ChatPage({
   // Useful for determining which session has been loaded (i.e. still on `new, empty session` or `previous session`)
   const loadedIdSessionRef = useRef<number | null>(existingChatSessionId);
 
-  // Assistants
-  const filteredAssistants = orderAssistantsForUser(availableAssistants, user);
+  // Assistants in order
+  const { finalAssistants } = useMemo(() => {
+    const { visibleAssistants, hiddenAssistants: _ } = classifyAssistants(
+      user,
+      availableAssistants
+    );
+    const finalAssistants = user
+      ? orderAssistantsForUser(visibleAssistants, user)
+      : visibleAssistants;
+    return { finalAssistants };
+  }, [user, availableAssistants]);
 
   const existingChatSessionAssistantId = selectedChatSession?.persona_id;
   const [selectedAssistant, setSelectedAssistant] = useState<
@@ -199,7 +212,7 @@ export function ChatPage({
   };
 
   const llmOverrideManager = useLlmOverride(
-    user?.preferences.default_model,
+    user?.preferences.default_model ?? null,
     selectedChatSession,
     defaultTemperature
   );
@@ -210,7 +223,7 @@ export function ChatPage({
   const liveAssistant =
     alternativeAssistant ||
     selectedAssistant ||
-    filteredAssistants[0] ||
+    finalAssistants[0] ||
     availableAssistants[0];
 
   useEffect(() => {
@@ -230,7 +243,8 @@ export function ChatPage({
         destructureValue(user?.preferences.default_model)
       );
     }
-  }, [liveAssistant]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveAssistant, llmProviders, user?.preferences.default_model]);
 
   const stopGenerating = () => {
     const currentSession = currentSessionId();
@@ -423,10 +437,11 @@ export function ChatPage({
     }
 
     initialSessionFetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingChatSessionId]);
 
   const [message, setMessage] = useState(
-    searchParams.get(SEARCH_PARAM_NAMES.USER_MESSAGE) || ""
+    searchParams.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
   );
 
   const [completeMessageDetail, setCompleteMessageDetail] = useState<
@@ -680,10 +695,10 @@ export function ChatPage({
   useEffect(() => {
     if (messageHistory.length === 0 && chatSessionIdRef.current === null) {
       setSelectedAssistant(
-        filteredAssistants.find((persona) => persona.id === defaultAssistantId)
+        finalAssistants.find((persona) => persona.id === defaultAssistantId)
       );
     }
-  }, [defaultAssistantId]);
+  }, [defaultAssistantId, finalAssistants, messageHistory.length]);
 
   const [
     selectedDocuments,
@@ -746,12 +761,20 @@ export function ChatPage({
     setAboveHorizon(scrollDist.current > 500);
   };
 
-  scrollableDivRef?.current?.addEventListener("scroll", updateScrollTracking);
+  useEffect(() => {
+    const scrollableDiv = scrollableDivRef.current;
+    if (scrollableDiv) {
+      scrollableDiv.addEventListener("scroll", updateScrollTracking);
+      return () => {
+        scrollableDiv.removeEventListener("scroll", updateScrollTracking);
+      };
+    }
+  }, []);
 
   const handleInputResize = () => {
     setTimeout(() => {
       if (inputRef.current && lastMessageRef.current) {
-        let newHeight: number =
+        const newHeight: number =
           inputRef.current?.getBoundingClientRect().height!;
         const heightDifference = newHeight - previousHeight.current;
         if (
@@ -963,7 +986,7 @@ export function ChatPage({
     setAlternativeGeneratingAssistant(alternativeAssistantOverride);
     clientScrollToBottom();
     let currChatSessionId: number;
-    let isNewSession = chatSessionIdRef.current === null;
+    const isNewSession = chatSessionIdRef.current === null;
     const searchParamBasedChatSessionName =
       searchParams.get(SEARCH_PARAM_NAMES.TITLE) || null;
 
@@ -1046,7 +1069,7 @@ export function ChatPage({
 
     let answer = "";
 
-    let stopReason: StreamStopReason | null = null;
+    const stopReason: StreamStopReason | null = null;
     let query: string | null = null;
     let retrievalType: RetrievalType =
       selectedDocuments.length > 0
@@ -1124,7 +1147,9 @@ export function ChatPage({
 
       await delay(50);
       while (!stack.isComplete || !stack.isEmpty()) {
-        await delay(0.5);
+        if (stack.isEmpty()) {
+          await delay(0.5);
+        }
 
         if (!stack.isEmpty() && !controller.signal.aborted) {
           const packet = stack.nextPacket();
@@ -1645,17 +1670,22 @@ export function ChatPage({
 
   useEffect(() => {
     initializeVisibleRange();
-  }, [router, messageHistory, chatSessionIdRef.current]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router, messageHistory]);
 
   useLayoutEffect(() => {
+    const scrollableDiv = scrollableDivRef.current;
+
     const handleScroll = () => {
       updateVisibleRangeBasedOnScroll();
     };
-    scrollableDivRef.current?.addEventListener("scroll", handleScroll);
+
+    scrollableDiv?.addEventListener("scroll", handleScroll);
 
     return () => {
-      scrollableDivRef.current?.removeEventListener("scroll", handleScroll);
+      scrollableDiv?.removeEventListener("scroll", handleScroll);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messageHistory]);
 
   const currentVisibleRange = visibleRange.get(currentSessionId()) || {
@@ -1705,6 +1735,7 @@ export function ChatPage({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
   const [sharedChatSession, setSharedChatSession] =
     useState<ChatSession | null>();
@@ -1744,7 +1775,10 @@ export function ChatPage({
       <HealthCheckBanner />
 
       {showApiKeyModal && !shouldShowWelcomeModal && (
-        <ApiKeyModal hide={() => setShowApiKeyModal(false)} />
+        <ApiKeyModal
+          hide={() => setShowApiKeyModal(false)}
+          setPopup={setPopup}
+        />
       )}
 
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
@@ -1770,6 +1804,7 @@ export function ChatPage({
 
       {settingsToggled && (
         <SetDefaultModelModal
+          setPopup={setPopup}
           setLlmOverride={llmOverrideManager.setGlobalDefault}
           defaultModel={user?.preferences.default_model!}
           refreshUser={refreshUser}
@@ -1828,6 +1863,7 @@ export function ChatPage({
           onClose={() => setSharingModalVisible(false)}
         />
       )}
+
       <div className="fixed inset-0 flex flex-col text-default">
         <div className="h-[100dvh] overflow-y-hidden">
           <div className="w-full">
@@ -1837,7 +1873,7 @@ export function ChatPage({
                 flex-none
                 fixed
                 left-0
-                z-30
+                z-40
                 bg-background-100
                 h-screen
                 transition-all
@@ -1870,6 +1906,9 @@ export function ChatPage({
               </div>
             </div>
           </div>
+          <BlurBackground
+            visible={!untoggled && (showDocSidebar || toggledSidebar)}
+          />
           <div
             ref={masterFlexboxRef}
             className="flex h-full w-full overflow-x-hidden"
@@ -2378,7 +2417,7 @@ export function ChatPage({
                               showDocs={() => setDocumentSelection(true)}
                               selectedDocuments={selectedDocuments}
                               // assistant stuff
-                              assistantOptions={filteredAssistants}
+                              assistantOptions={finalAssistants}
                               selectedAssistant={liveAssistant}
                               setSelectedAssistant={onAssistantChange}
                               setAlternativeAssistant={setAlternativeAssistant}
@@ -2394,6 +2433,7 @@ export function ChatPage({
                               handleFileUpload={handleImageUpload}
                               textAreaRef={textAreaRef}
                               chatSessionId={chatSessionIdRef.current!}
+                              refreshUser={refreshUser}
                             />
 
                             {enterpriseSettings &&

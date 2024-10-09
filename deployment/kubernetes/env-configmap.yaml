@@ -13,6 +13,7 @@ data:
   SMTP_USER: ""  # 'your-email@company.com'
   SMTP_PASS: ""  # 'your-gmail-password'
   EMAIL_FROM: ""  # 'your-email@company.com' SMTP_USER missing used instead
+  CORS_ALLOWED_ORIGIN: ""
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""
   QA_TIMEOUT: "60"

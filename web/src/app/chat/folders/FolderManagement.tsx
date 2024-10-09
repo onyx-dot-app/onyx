@@ -1,5 +1,3 @@
-import { useState, useEffect, FC } from "react";
-
 // Function to create a new folder
 export async function createFolder(folderName: string): Promise<number> {
   const response = await fetch("/api/folder", {

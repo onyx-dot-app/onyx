@@ -16,9 +16,9 @@ import {
   TableRow,
   Text,
   Title,
+  Button,
 } from "@tremor/react";
 import useSWR from "swr";
-import { Button } from "@tremor/react";
 import { useState } from "react";
 import { UsageReport } from "./types";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -36,7 +36,7 @@ function GenerateReportInput() {
   const [errorOccurred, setErrorOccurred] = useState<Error | null>(null);
 
   const download = (bytes: Blob) => {
-    let elm = document.createElement("a");
+    const elm = document.createElement("a");
     elm.href = URL.createObjectURL(bytes);
     elm.setAttribute("download", "usage_reports.zip");
     elm.click();

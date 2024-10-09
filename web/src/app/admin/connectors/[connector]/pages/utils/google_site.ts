@@ -10,6 +10,7 @@ export const submitGoogleSite = async (
   refreshFreq: number,
   pruneFreq: number,
   indexingStart: Date,
+  is_public: boolean,
   name?: string
 ) => {
   const uploadCreateAndTriggerConnector = async () => {
@@ -42,6 +43,7 @@ export const submitGoogleSite = async (
           base_url: base_url,
           zip_path: filePaths[0],
         },
+        is_public: is_public,
         refresh_freq: refreshFreq,
         prune_freq: pruneFreq,
         indexing_start: indexingStart,

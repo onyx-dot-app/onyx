@@ -67,6 +67,9 @@ def retrieval_preprocessing(
         ]
 
     time_filter = preset_filters.time_cutoff
+    if time_filter is None and persona:
+        time_filter = persona.search_start_date
+
     source_filter = preset_filters.source_type
 
     auto_detect_time_filter = True
@@ -154,7 +157,7 @@ def retrieval_preprocessing(
     final_filters = IndexFilters(
         source_type=preset_filters.source_type or predicted_source_filters,
         document_set=preset_filters.document_set,
-        time_cutoff=preset_filters.time_cutoff or predicted_time_cutoff,
+        time_cutoff=time_filter or predicted_time_cutoff,
         tags=preset_filters.tags,  # Tags are never auto-extracted
         access_control_list=user_acl_filters,
     )

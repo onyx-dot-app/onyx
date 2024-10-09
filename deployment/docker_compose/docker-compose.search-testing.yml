@@ -26,6 +26,9 @@ services:
       - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
       - ENV_SEED_CONFIGURATION=${ENV_SEED_CONFIGURATION:-}
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=True
+      # To enable the LLM for testing, update the value below
+      # NOTE: this is disabled by default since this is a high volume eval that can be costly
+      - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
@@ -148,7 +151,7 @@ services:
 
   relational_db:
     image: postgres:15.2-alpine
-    command: -c 'max_connections=150'
+    command: -c 'max_connections=250'
     restart: always
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}

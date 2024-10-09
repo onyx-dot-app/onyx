@@ -136,7 +136,7 @@ class RenameChatSessionResponse(BaseModel):
 class ChatSessionDetails(BaseModel):
     id: int
     name: str
-    persona_id: int
+    persona_id: int | None = None
     time_created: str
     shared_status: ChatSessionSharedStatus
     folder_id: int | None = None
@@ -196,8 +196,8 @@ class SearchSessionDetailResponse(BaseModel):
 class ChatSessionDetailResponse(BaseModel):
     chat_session_id: int
     description: str
-    persona_id: int
-    persona_name: str
+    persona_id: int | None = None
+    persona_name: str | None
     messages: list[ChatMessageDetail]
     time_created: datetime
     shared_status: ChatSessionSharedStatus

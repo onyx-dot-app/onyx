@@ -3,9 +3,8 @@ import { CPUIcon } from "@/components/icons/icons";
 import { SlackBotCreationForm } from "../SlackBotConfigCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { DocumentSet, StandardAnswerCategory } from "@/lib/types";
+import { DocumentSet } from "@/lib/types";
 import { BackButton } from "@/components/BackButton";
-import { Text } from "@tremor/react";
 import {
   FetchAssistantsResponse,
   fetchAssistantsSS,

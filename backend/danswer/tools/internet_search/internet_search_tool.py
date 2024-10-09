@@ -10,7 +10,7 @@ from danswer.chat.chat_utils import combine_message_chain
 from danswer.chat.models import LlmDoc
 from danswer.configs.constants import DocumentSource
 from danswer.configs.model_configs import GEN_AI_HISTORY_CUTOFF
-from danswer.dynamic_configs.interface import JSON_ro
+from danswer.key_value_store.interface import JSON_ro
 from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.interfaces import LLM
 from danswer.llm.utils import message_to_string

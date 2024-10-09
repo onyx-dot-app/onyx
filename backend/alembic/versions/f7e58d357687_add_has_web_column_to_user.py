@@ -1,7 +1,7 @@
 """add has_web_login column to user
 
 Revision ID: f7e58d357687
-Revises: bceb1e139447
+Revises: ba98eba0f66a
 Create Date: 2024-09-07 20:20:54.522620
 
 """

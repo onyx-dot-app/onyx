@@ -10,6 +10,7 @@ from danswer.configs.app_configs import MASK_CREDENTIAL_PREFIX
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.models import DocumentErrorSummary
 from danswer.connectors.models import InputType
+from danswer.db.enums import AccessType
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.models import Connector
 from danswer.db.models import ConnectorCredentialPair
@@ -218,7 +219,7 @@ class CCPairFullInfo(BaseModel):
     number_of_index_attempts: int
     last_index_attempt_status: IndexingStatus | None
     latest_deletion_attempt: DeletionAttemptSnapshot | None
-    is_public: bool
+    access_type: AccessType
     is_editable_for_current_user: bool
     deletion_failure_message: str | None
 
@@ -261,10 +262,18 @@ class CCPairFullInfo(BaseModel):
             number_of_index_attempts=number_of_index_attempts,
             last_index_attempt_status=last_indexing_status,
             latest_deletion_attempt=latest_deletion_attempt,
-            is_public=cc_pair_model.is_public,
+            access_type=cc_pair_model.access_type,
             is_editable_for_current_user=is_editable_for_current_user,
             deletion_failure_message=cc_pair_model.deletion_failure_message,
         )
+
+
+class CeleryTaskStatus(BaseModel):
+    id: str
+    name: str
+    status: TaskStatus
+    start_time: datetime | None
+    register_time: datetime | None
 
 
 class FailedConnectorIndexingStatus(BaseModel):
@@ -288,7 +297,7 @@ class ConnectorIndexingStatus(BaseModel):
     credential: CredentialSnapshot
     owner: str
     groups: list[int]
-    public_doc: bool
+    access_type: AccessType
     last_finished_status: IndexingStatus | None
     last_status: IndexingStatus | None
     last_success: datetime | None
@@ -306,7 +315,8 @@ class ConnectorCredentialPairIdentifier(BaseModel):
 
 class ConnectorCredentialPairMetadata(BaseModel):
     name: str | None = None
-    is_public: bool | None = None
+    access_type: AccessType
+    auto_sync_options: dict[str, Any] | None = None
     groups: list[int] = Field(default_factory=list)
 
 

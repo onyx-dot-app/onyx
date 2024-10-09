@@ -5,22 +5,22 @@ import pytest
 from requests.exceptions import HTTPError
 
 from danswer.db.models import UserRole
-from tests.integration.common_utils.managers.user import TestUser
+from tests.integration.common_utils.managers.user import DATestUser
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 
 
 def test_user_role_setting_permissions(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
-    admin_user: TestUser = UserManager.create(name="admin_user")
+    admin_user: DATestUser = UserManager.create(name="admin_user")
     assert UserManager.verify_role(admin_user, UserRole.ADMIN)
 
     # Creating a basic user
-    basic_user: TestUser = UserManager.create(name="basic_user")
+    basic_user: DATestUser = UserManager.create(name="basic_user")
     assert UserManager.verify_role(basic_user, UserRole.BASIC)
 
     # Creating a curator
-    curator: TestUser = UserManager.create(name="curator")
+    curator: DATestUser = UserManager.create(name="curator")
     assert UserManager.verify_role(curator, UserRole.BASIC)
 
     # Creating a curator without adding to a group should not work
@@ -31,7 +31,7 @@ def test_user_role_setting_permissions(reset: None) -> None:
             user_to_perform_action=admin_user,
         )
 
-    global_curator: TestUser = UserManager.create(name="global_curator")
+    global_curator: DATestUser = UserManager.create(name="global_curator")
     assert UserManager.verify_role(global_curator, UserRole.BASIC)
 
     # Setting the role of a global curator should not work for a basic user

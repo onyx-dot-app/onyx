@@ -4,7 +4,6 @@ import { DateRangeSelector } from "../DateRangeSelector";
 import { DanswerBotChart } from "./DanswerBotChart";
 import { FeedbackChart } from "./FeedbackChart";
 import { QueryPerformanceChart } from "./QueryPerformanceChart";
-import { BarChartIcon } from "@/components/icons/icons";
 import { useTimeRange } from "../lib";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { FiActivity } from "react-icons/fi";

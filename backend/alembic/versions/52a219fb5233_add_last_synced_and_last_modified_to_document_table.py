@@ -1,7 +1,7 @@
 """Add last synced and last modified to document table
 
 Revision ID: 52a219fb5233
-Revises: f17bf3b0d9f1
+Revises: f7e58d357687
 Create Date: 2024-08-28 17:40:46.077470
 
 """

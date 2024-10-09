@@ -8,8 +8,8 @@ from danswer.server.documents.models import ConnectorUpdateRequest
 from danswer.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.test_models import TestConnector
-from tests.integration.common_utils.test_models import TestUser
+from tests.integration.common_utils.test_models import DATestConnector
+from tests.integration.common_utils.test_models import DATestUser
 
 
 class ConnectorManager:
@@ -21,8 +21,8 @@ class ConnectorManager:
         connector_specific_config: dict[str, Any] | None = None,
         is_public: bool = True,
         groups: list[int] | None = None,
-        user_performing_action: TestUser | None = None,
-    ) -> TestConnector:
+        user_performing_action: DATestUser | None = None,
+    ) -> DATestConnector:
         name = f"{name}-connector" if name else f"test-connector-{uuid4()}"
 
         connector_update_request = ConnectorUpdateRequest(
@@ -44,7 +44,7 @@ class ConnectorManager:
         response.raise_for_status()
 
         response_data = response.json()
-        return TestConnector(
+        return DATestConnector(
             id=response_data.get("id"),
             name=name,
             source=source,
@@ -56,8 +56,8 @@ class ConnectorManager:
 
     @staticmethod
     def edit(
-        connector: TestConnector,
-        user_performing_action: TestUser | None = None,
+        connector: DATestConnector,
+        user_performing_action: DATestUser | None = None,
     ) -> None:
         response = requests.patch(
             url=f"{API_SERVER_URL}/manage/admin/connector/{connector.id}",
@@ -70,8 +70,8 @@ class ConnectorManager:
 
     @staticmethod
     def delete(
-        connector: TestConnector,
-        user_performing_action: TestUser | None = None,
+        connector: DATestConnector,
+        user_performing_action: DATestUser | None = None,
     ) -> None:
         response = requests.delete(
             url=f"{API_SERVER_URL}/manage/admin/connector/{connector.id}",
@@ -83,8 +83,8 @@ class ConnectorManager:
 
     @staticmethod
     def get_all(
-        user_performing_action: TestUser | None = None,
-    ) -> list[TestConnector]:
+        user_performing_action: DATestUser | None = None,
+    ) -> list[DATestConnector]:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/connector",
             headers=user_performing_action.headers
@@ -93,7 +93,7 @@ class ConnectorManager:
         )
         response.raise_for_status()
         return [
-            TestConnector(
+            DATestConnector(
                 id=conn.get("id"),
                 name=conn.get("name", ""),
                 source=conn.get("source", DocumentSource.FILE),
@@ -105,8 +105,8 @@ class ConnectorManager:
 
     @staticmethod
     def get(
-        connector_id: int, user_performing_action: TestUser | None = None
-    ) -> TestConnector:
+        connector_id: int, user_performing_action: DATestUser | None = None
+    ) -> DATestConnector:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/connector/{connector_id}",
             headers=user_performing_action.headers
@@ -115,7 +115,7 @@ class ConnectorManager:
         )
         response.raise_for_status()
         conn = response.json()
-        return TestConnector(
+        return DATestConnector(
             id=conn.get("id"),
             name=conn.get("name", ""),
             source=conn.get("source", DocumentSource.FILE),

@@ -25,6 +25,7 @@ from model_server.constants import EmbeddingModelTextType
 from model_server.constants import EmbeddingProvider
 from model_server.utils import simple_log_function_time
 from shared_configs.configs import INDEXING_ONLY
+from shared_configs.configs import OPENAI_EMBEDDING_TIMEOUT
 from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import Embedding
@@ -56,7 +57,7 @@ def _initialize_client(
     api_key: str, provider: EmbeddingProvider, model: str | None = None
 ) -> Any:
     if provider == EmbeddingProvider.OPENAI:
-        return openai.OpenAI(api_key=api_key)
+        return openai.OpenAI(api_key=api_key, timeout=OPENAI_EMBEDDING_TIMEOUT)
     elif provider == EmbeddingProvider.COHERE:
         return CohereClient(api_key=api_key)
     elif provider == EmbeddingProvider.VOYAGE:

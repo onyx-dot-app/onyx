@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from danswer.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from danswer.db.connector_credential_pair import get_connector_credential_pairs
+from danswer.db.enums import AccessType
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import Document
@@ -180,7 +181,7 @@ def _check_if_cc_pairs_are_owned_by_groups(
             ids=missing_cc_pair_ids,
         )
         for cc_pair in cc_pairs:
-            if not cc_pair.is_public:
+            if cc_pair.access_type != AccessType.PUBLIC:
                 raise ValueError(
                     f"Connector Credential Pair with ID: '{cc_pair.id}'"
                     " is not owned by the specified groups"
@@ -569,7 +570,7 @@ def construct_document_select_by_docset(
     return stmt
 
 
-def fetch_document_set_for_document(
+def fetch_document_sets_for_document(
     document_id: str,
     db_session: Session,
 ) -> list[str]:
@@ -704,7 +705,7 @@ def check_document_sets_are_public(
             ConnectorCredentialPair.id.in_(
                 connector_credential_pair_ids  # type:ignore
             ),
-            ConnectorCredentialPair.is_public.is_(False),
+            ConnectorCredentialPair.access_type != AccessType.PUBLIC,
         )
         .limit(1)
         .first()

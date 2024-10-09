@@ -167,6 +167,7 @@ export function ProviderCreationModal({
                   className="cursor-pointer underline"
                   target="_blank"
                   href={selectedProvider.docsLink}
+                  rel="noreferrer"
                 >
                   here
                 </a>{" "}
@@ -175,6 +176,7 @@ export function ProviderCreationModal({
                   className="cursor-pointer underline"
                   target="_blank"
                   href={selectedProvider.apiLink}
+                  rel="noreferrer"
                 >
                   {isProxy ? "API URL" : "API KEY"}
                 </a>
@@ -223,6 +225,7 @@ export function ProviderCreationModal({
                   href={selectedProvider.apiLink}
                   target="_blank"
                   className="underline cursor-pointer"
+                  rel="noreferrer"
                 >
                   Learn more here
                 </a>

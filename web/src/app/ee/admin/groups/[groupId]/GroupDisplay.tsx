@@ -1,7 +1,7 @@
 "use client";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { AddMemberForm } from "./AddMemberForm";
 import { updateUserGroup, updateCuratorStatus } from "./lib";
@@ -11,6 +11,7 @@ import {
   User,
   UserGroup,
   UserRole,
+  USER_ROLE_LABELS,
 } from "@/lib/types";
 import { AddConnectorForm } from "./AddConnectorForm";
 import {
@@ -106,7 +107,7 @@ const UserRoleDropdown = ({
       </div>
     );
   } else {
-    return <div>{localRole}</div>;
+    return <div>{USER_ROLE_LABELS[localRole]}</div>;
   }
 };
 

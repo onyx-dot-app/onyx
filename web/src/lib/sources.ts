@@ -27,15 +27,16 @@ import {
   SharepointIcon,
   TeamsIcon,
   SlabIcon,
-  SlackIcon,
   ZendeskIcon,
   ZulipIcon,
   MediaWikiIcon,
   WikipediaIcon,
+  AsanaIcon,
   S3Icon,
   OCIStorageIcon,
   GoogleStorageIcon,
   ColorSlackIcon,
+  XenforoIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import {
@@ -230,6 +231,12 @@ const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Wiki,
     docs: "https://docs.danswer.dev/connectors/wikipedia",
   },
+  asana: {
+    icon: AsanaIcon,
+    displayName: "Asana",
+    category: SourceCategory.ProjectManagement,
+    docs: "https://docs.danswer.dev/connectors/asana",
+  },
   mediawiki: {
     icon: MediaWikiIcon,
     displayName: "MediaWiki",
@@ -271,6 +278,11 @@ const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Google Storage",
     category: SourceCategory.Storage,
     docs: "https://docs.danswer.dev/connectors/google_storage",
+  },
+  xenforo: {
+    icon: XenforoIcon,
+    displayName: "Xenforo",
+    category: SourceCategory.Messaging,
   },
   ingestion_api: {
     icon: GlobeIcon,
@@ -344,11 +356,4 @@ export function getSourcesForPersona(persona: Persona): ValidSources[] {
     });
   });
   return personaSources;
-}
-
-function stripTrailingSlash(str: string) {
-  if (str.substr(-1) === "/") {
-    return str.substr(0, str.length - 1);
-  }
-  return str;
 }

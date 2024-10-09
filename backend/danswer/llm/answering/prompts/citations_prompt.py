@@ -18,6 +18,7 @@ from danswer.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
 from danswer.prompts.constants import DEFAULT_IGNORE_STATEMENT
 from danswer.prompts.direct_qa_prompts import CITATIONS_PROMPT
 from danswer.prompts.direct_qa_prompts import CITATIONS_PROMPT_FOR_TOOL_CALLING
+from danswer.prompts.direct_qa_prompts import HISTORY_BLOCK
 from danswer.prompts.prompt_utils import add_date_time_to_prompt
 from danswer.prompts.prompt_utils import build_complete_context_str
 from danswer.prompts.prompt_utils import build_task_prompt_reminders
@@ -29,6 +30,9 @@ from danswer.prompts.token_counts import CITATION_REMINDER_TOKEN_CNT
 from danswer.prompts.token_counts import CITATION_STATEMENT_TOKEN_CNT
 from danswer.prompts.token_counts import LANGUAGE_HINT_TOKEN_CNT
 from danswer.search.models import InferenceChunk
+from danswer.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def get_prompt_tokens(prompt_config: PromptConfig) -> int:
@@ -140,6 +144,12 @@ def build_citations_user_message(
         prompt=prompt_config, use_language_hint=bool(multilingual_expansion)
     )
 
+    history_block = (
+        HISTORY_BLOCK.format(history_str=history_message) + "\n"
+        if history_message
+        else ""
+    )
+
     if context_docs:
         context_docs_str = build_complete_context_str(context_docs)
         optional_ignore = "" if all_doc_useful else DEFAULT_IGNORE_STATEMENT
@@ -149,13 +159,14 @@ def build_citations_user_message(
             context_docs_str=context_docs_str,
             task_prompt=task_prompt_with_reminder,
             user_query=question,
-            history_block=history_message,
+            history_block=history_block,
         )
     else:
         # if no context docs provided, assume we're in the tool calling flow
         user_prompt = CITATIONS_PROMPT_FOR_TOOL_CALLING.format(
             task_prompt=task_prompt_with_reminder,
             user_query=question,
+            history_block=history_block,
         )
 
     user_prompt = user_prompt.strip()

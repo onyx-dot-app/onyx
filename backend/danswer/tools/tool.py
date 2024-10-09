@@ -2,7 +2,7 @@ import abc
 from collections.abc import Generator
 from typing import Any
 
-from danswer.dynamic_configs.interface import JSON_ro
+from danswer.key_value_store.interface import JSON_ro
 from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.interfaces import LLM
 from danswer.tools.models import ToolResponse

@@ -7,10 +7,8 @@ import { Button, Card, Text, Title } from "@tremor/react";
 import useSWR from "swr";
 import { ModelPreview } from "../../../../components/embedding/ModelSelector";
 import {
-  AVAILABLE_CLOUD_PROVIDERS,
   HostedEmbeddingModel,
   CloudEmbeddingModel,
-  AVAILABLE_MODELS,
 } from "@/components/embedding/interfaces";
 
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -21,19 +19,24 @@ export interface EmbeddingDetails {
   default_model_id?: number;
   name: string;
 }
+
 import { EmbeddingIcon } from "@/components/icons/icons";
+import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
 
 import Link from "next/link";
-import {
-  getCurrentModelCopy,
-  SavedSearchSettings,
-} from "../../embeddings/interfaces";
+import { SavedSearchSettings } from "../../embeddings/interfaces";
 import UpgradingPage from "./UpgradingPage";
 import { useContext } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 function Main() {
   const settings = useContext(SettingsContext);
+  const { popup: searchSettingsPopup } = usePopupFromQuery({
+    "search-settings": {
+      message: `Changed search settings successfully`,
+      type: "success",
+    },
+  });
   const {
     data: currentEmeddingModel,
     isLoading: isLoadingCurrentModel,
@@ -77,10 +80,9 @@ function Main() {
     return <ErrorCallout errorTitle="Failed to fetch embedding model status" />;
   }
 
-  const currentModelName = currentEmeddingModel?.model_name;
-
   return (
     <div className="h-screen">
+      {searchSettingsPopup}
       {!futureEmbeddingModel ? (
         <>
           {settings?.settings.needs_reindexing && (

@@ -2,12 +2,7 @@
 
 import { ThreeDotsLoader } from "@/components/Loading";
 import { PageSelector } from "@/components/PageSelector";
-import {
-  CPUIcon,
-  EditIcon,
-  SlackIcon,
-  TrashIcon,
-} from "@/components/icons/icons";
+import { EditIcon, SlackIcon, TrashIcon } from "@/components/icons/icons";
 import { SlackBotConfig } from "@/lib/types";
 import { useState } from "react";
 import { useSlackBotConfigs, useSlackBotTokens } from "./hooks";
@@ -26,12 +21,7 @@ import {
   Text,
   Title,
 } from "@tremor/react";
-import {
-  FiArrowUpRight,
-  FiChevronDown,
-  FiChevronUp,
-  FiSlack,
-} from "react-icons/fi";
+import { FiArrowUpRight, FiChevronDown, FiChevronUp } from "react-icons/fi";
 import Link from "next/link";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -223,6 +213,7 @@ const Main = () => {
           className="text-blue-500"
           href="https://docs.danswer.dev/slack_bot_setup"
           target="_blank"
+          rel="noreferrer"
         >
           guide{" "}
         </a>

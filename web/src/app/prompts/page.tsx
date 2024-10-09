@@ -1,4 +1,3 @@
-import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
@@ -23,7 +22,6 @@ export default async function GalleryPage({
     assistants,
     folders,
     openedFolders,
-    shouldShowWelcomeModal,
     toggleSidebar,
   } = data;
 

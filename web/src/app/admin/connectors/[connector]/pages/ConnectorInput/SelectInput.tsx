@@ -1,9 +1,5 @@
 import CredentialSubText from "@/components/credentials/CredentialFields";
-import {
-  ListOption,
-  SelectOption,
-  StringWithDescription,
-} from "@/lib/connectors/connectors";
+import { StringWithDescription } from "@/lib/connectors/connectors";
 import { Field } from "formik";
 
 export default function SelectInput({

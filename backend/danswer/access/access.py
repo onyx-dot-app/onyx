@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from danswer.access.models import DocumentAccess
-from danswer.access.utils import prefix_user
+from danswer.access.utils import prefix_user_email
 from danswer.configs.constants import PUBLIC_DOC_PAT
 from danswer.db.document import get_access_info_for_document
 from danswer.db.document import get_access_info_for_documents
@@ -18,10 +18,13 @@ def _get_access_for_document(
         document_id=document_id,
     )
 
-    if not info:
-        return DocumentAccess.build(user_ids=[], user_groups=[], is_public=False)
-
-    return DocumentAccess.build(user_ids=info[1], user_groups=[], is_public=info[2])
+    return DocumentAccess.build(
+        user_emails=info[1] if info and info[1] else [],
+        user_groups=[],
+        external_user_emails=[],
+        external_user_group_ids=[],
+        is_public=info[2] if info else False,
+    )
 
 
 def get_access_for_document(
@@ -34,6 +37,16 @@ def get_access_for_document(
     return versioned_get_access_for_document_fn(document_id, db_session)  # type: ignore
 
 
+def get_null_document_access() -> DocumentAccess:
+    return DocumentAccess(
+        user_emails=set(),
+        user_groups=set(),
+        is_public=False,
+        external_user_emails=set(),
+        external_user_group_ids=set(),
+    )
+
+
 def _get_access_for_documents(
     document_ids: list[str],
     db_session: Session,
@@ -42,12 +55,26 @@ def _get_access_for_documents(
         db_session=db_session,
         document_ids=document_ids,
     )
-    return {
-        document_id: DocumentAccess.build(
-            user_ids=user_ids, user_groups=[], is_public=is_public
+    doc_access = {
+        document_id: DocumentAccess(
+            user_emails=set([email for email in user_emails if email]),
+            # MIT version will wipe all groups and external groups on update
+            user_groups=set(),
+            is_public=is_public,
+            external_user_emails=set(),
+            external_user_group_ids=set(),
         )
-        for document_id, user_ids, is_public in document_access_info
+        for document_id, user_emails, is_public in document_access_info
     }
+
+    # Sometimes the document has not be indexed by the indexing job yet, in those cases
+    # the document does not exist and so we use least permissive. Specifically the EE version
+    # checks the MIT version permissions and creates a superset. This ensures that this flow
+    # does not fail even if the Document has not yet been indexed.
+    for doc_id in document_ids:
+        if doc_id not in doc_access:
+            doc_access[doc_id] = get_null_document_access()
+    return doc_access
 
 
 def get_access_for_documents(
@@ -70,7 +97,7 @@ def _get_acl_for_user(user: User | None, db_session: Session) -> set[str]:
     matches one entry in the returned set.
     """
     if user:
-        return {prefix_user(str(user.id)), PUBLIC_DOC_PAT}
+        return {prefix_user_email(user.email), PUBLIC_DOC_PAT}
     return {PUBLIC_DOC_PAT}
 
 

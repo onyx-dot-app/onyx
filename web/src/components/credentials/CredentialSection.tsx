@@ -28,7 +28,6 @@ import {
   ConfluenceCredentialJson,
   Credential,
 } from "@/lib/connectors/credentials";
-import { UserGroup } from "@/lib/types"; // Added this import
 
 export default function CredentialSection({
   ccPair,

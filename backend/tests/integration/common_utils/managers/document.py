@@ -3,26 +3,27 @@ from uuid import uuid4
 import requests
 
 from danswer.configs.constants import DocumentSource
+from danswer.db.enums import AccessType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import NUM_DOCS
-from tests.integration.common_utils.managers.api_key import TestAPIKey
-from tests.integration.common_utils.managers.cc_pair import TestCCPair
+from tests.integration.common_utils.managers.api_key import DATestAPIKey
+from tests.integration.common_utils.managers.cc_pair import DATestCCPair
+from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import SimpleTestDocument
-from tests.integration.common_utils.test_models import TestUser
-from tests.integration.common_utils.vespa import TestVespaClient
+from tests.integration.common_utils.vespa import vespa_fixture
 
 
 def _verify_document_permissions(
     retrieved_doc: dict,
-    cc_pair: TestCCPair,
+    cc_pair: DATestCCPair,
     doc_set_names: list[str] | None = None,
     group_names: list[str] | None = None,
-    doc_creating_user: TestUser | None = None,
+    doc_creating_user: DATestUser | None = None,
 ) -> None:
     acl_keys = set(retrieved_doc["access_control_list"].keys())
     print(f"ACL keys: {acl_keys}")
-    if cc_pair.is_public:
+    if cc_pair.access_type == AccessType.PUBLIC:
         if "PUBLIC" not in acl_keys:
             raise ValueError(
                 f"Document {retrieved_doc['document_id']} is public but"
@@ -30,10 +31,10 @@ def _verify_document_permissions(
             )
 
     if doc_creating_user is not None:
-        if f"user_id:{doc_creating_user.id}" not in acl_keys:
+        if f"user_email:{doc_creating_user.email}" not in acl_keys:
             raise ValueError(
                 f"Document {retrieved_doc['document_id']} was created by user"
-                f" {doc_creating_user.id} but does not have the user_id:{doc_creating_user.id} ACL key"
+                f" {doc_creating_user.email} but does not have the user_email:{doc_creating_user.email} ACL key"
             )
 
     if group_names is not None:
@@ -54,13 +55,18 @@ def _verify_document_permissions(
             )
 
 
-def _generate_dummy_document(document_id: str, cc_pair_id: int) -> dict:
+def _generate_dummy_document(
+    document_id: str,
+    cc_pair_id: int,
+    content: str | None = None,
+) -> dict:
+    text = content if content else f"This is test document {document_id}"
     return {
         "document": {
             "id": document_id,
             "sections": [
                 {
-                    "text": f"This is test document {document_id}",
+                    "text": text,
                     "link": f"{document_id}",
                 }
             ],
@@ -76,12 +82,12 @@ def _generate_dummy_document(document_id: str, cc_pair_id: int) -> dict:
 
 class DocumentManager:
     @staticmethod
-    def seed_and_attach_docs(
-        cc_pair: TestCCPair,
+    def seed_dummy_docs(
+        cc_pair: DATestCCPair,
         num_docs: int = NUM_DOCS,
         document_ids: list[str] | None = None,
-        api_key: TestAPIKey | None = None,
-    ) -> TestCCPair:
+        api_key: DATestAPIKey | None = None,
+    ) -> list[SimpleTestDocument]:
         # Use provided document_ids if available, otherwise generate random UUIDs
         if document_ids is None:
             document_ids = [f"test-doc-{uuid4()}" for _ in range(num_docs)]
@@ -100,24 +106,49 @@ class DocumentManager:
             response.raise_for_status()
 
         print("Seeding completed successfully.")
-        cc_pair.documents = [
+        return [
             SimpleTestDocument(
                 id=document["document"]["id"],
                 content=document["document"]["sections"][0]["text"],
             )
             for document in documents
         ]
-        return cc_pair
+
+    @staticmethod
+    def seed_doc_with_content(
+        cc_pair: DATestCCPair,
+        content: str,
+        document_id: str | None = None,
+        api_key: DATestAPIKey | None = None,
+    ) -> SimpleTestDocument:
+        # Use provided document_ids if available, otherwise generate random UUIDs
+        if document_id is None:
+            document_id = f"test-doc-{uuid4()}"
+        # Create and ingest some documents
+        document: dict = _generate_dummy_document(document_id, cc_pair.id, content)
+        response = requests.post(
+            f"{API_SERVER_URL}/danswer-api/ingestion",
+            json=document,
+            headers=api_key.headers if api_key else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+
+        print("Seeding completed successfully.")
+
+        return SimpleTestDocument(
+            id=document["document"]["id"],
+            content=document["document"]["sections"][0]["text"],
+        )
 
     @staticmethod
     def verify(
-        vespa_client: TestVespaClient,
-        cc_pair: TestCCPair,
+        vespa_client: vespa_fixture,
+        cc_pair: DATestCCPair,
         # If None, will not check doc sets or groups
         # If empty list, will check for empty doc sets or groups
         doc_set_names: list[str] | None = None,
         group_names: list[str] | None = None,
-        doc_creating_user: TestUser | None = None,
+        doc_creating_user: DATestUser | None = None,
         verify_deleted: bool = False,
     ) -> None:
         doc_ids = [document.id for document in cc_pair.documents]

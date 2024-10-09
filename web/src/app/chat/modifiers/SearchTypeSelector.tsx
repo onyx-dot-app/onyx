@@ -1,7 +1,7 @@
 import { BasicClickable } from "@/components/BasicClickable";
 import { ControlledPopup, DefaultDropdownElement } from "@/components/Dropdown";
 import { useState } from "react";
-import { FiCpu, FiFilter, FiSearch } from "react-icons/fi";
+import { FiCpu, FiSearch } from "react-icons/fi";
 
 export const QA = "Question Answering";
 export const SEARCH = "Search Only";

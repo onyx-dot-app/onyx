@@ -62,8 +62,9 @@ from danswer.db.credentials import delete_gmail_service_account_credentials
 from danswer.db.credentials import delete_google_drive_service_account_credentials
 from danswer.db.credentials import fetch_credential_by_id
 from danswer.db.deletion_attempt import check_deletion_attempt_is_allowed
-from danswer.db.document import get_document_cnts_for_cc_pairs
+from danswer.db.document import get_document_counts_for_cc_pairs
 from danswer.db.engine import get_session
+from danswer.db.enums import AccessType
 from danswer.db.index_attempt import create_index_attempt
 from danswer.db.index_attempt import get_index_attempts_for_cc_pair
 from danswer.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
@@ -73,8 +74,8 @@ from danswer.db.models import IndexingStatus
 from danswer.db.models import User
 from danswer.db.models import UserRole
 from danswer.db.search_settings import get_current_search_settings
-from danswer.dynamic_configs.interface import ConfigNotFoundError
 from danswer.file_store.file_store import get_default_file_store
+from danswer.key_value_store.interface import KvKeyNotFoundError
 from danswer.server.documents.models import AuthStatus
 from danswer.server.documents.models import AuthUrl
 from danswer.server.documents.models import ConnectorCredentialPairIdentifier
@@ -115,7 +116,7 @@ def check_google_app_gmail_credentials_exist(
 ) -> dict[str, str]:
     try:
         return {"client_id": get_google_app_gmail_cred().web.client_id}
-    except ConfigNotFoundError:
+    except KvKeyNotFoundError:
         raise HTTPException(status_code=404, detail="Google App Credentials not found")
 
 
@@ -139,7 +140,7 @@ def delete_google_app_gmail_credentials(
 ) -> StatusResponse:
     try:
         delete_google_app_gmail_cred()
-    except ConfigNotFoundError as e:
+    except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     return StatusResponse(
@@ -153,7 +154,7 @@ def check_google_app_credentials_exist(
 ) -> dict[str, str]:
     try:
         return {"client_id": get_google_app_cred().web.client_id}
-    except ConfigNotFoundError:
+    except KvKeyNotFoundError:
         raise HTTPException(status_code=404, detail="Google App Credentials not found")
 
 
@@ -177,7 +178,7 @@ def delete_google_app_credentials(
 ) -> StatusResponse:
     try:
         delete_google_app_cred()
-    except ConfigNotFoundError as e:
+    except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     return StatusResponse(
@@ -191,7 +192,7 @@ def check_google_service_gmail_account_key_exist(
 ) -> dict[str, str]:
     try:
         return {"service_account_email": get_gmail_service_account_key().client_email}
-    except ConfigNotFoundError:
+    except KvKeyNotFoundError:
         raise HTTPException(
             status_code=404, detail="Google Service Account Key not found"
         )
@@ -217,7 +218,7 @@ def delete_google_service_gmail_account_key(
 ) -> StatusResponse:
     try:
         delete_gmail_service_account_key()
-    except ConfigNotFoundError as e:
+    except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     return StatusResponse(
@@ -231,7 +232,7 @@ def check_google_service_account_key_exist(
 ) -> dict[str, str]:
     try:
         return {"service_account_email": get_service_account_key().client_email}
-    except ConfigNotFoundError:
+    except KvKeyNotFoundError:
         raise HTTPException(
             status_code=404, detail="Google Service Account Key not found"
         )
@@ -257,7 +258,7 @@ def delete_google_service_account_key(
 ) -> StatusResponse:
     try:
         delete_service_account_key()
-    except ConfigNotFoundError as e:
+    except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     return StatusResponse(
@@ -279,7 +280,7 @@ def upsert_service_account_credential(
             DocumentSource.GOOGLE_DRIVE,
             delegated_user_email=service_account_credential_request.google_drive_delegated_user,
         )
-    except ConfigNotFoundError as e:
+    except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     # first delete all existing service account credentials
@@ -305,7 +306,7 @@ def upsert_gmail_service_account_credential(
             DocumentSource.GMAIL,
             delegated_user_email=service_account_credential_request.gmail_delegated_user,
         )
-    except ConfigNotFoundError as e:
+    except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     # first delete all existing service account credentials
@@ -511,7 +512,7 @@ def get_connector_indexing_status(
         for index_attempt in latest_index_attempts
     }
 
-    document_count_info = get_document_cnts_for_cc_pairs(
+    document_count_info = get_document_counts_for_cc_pairs(
         db_session=db_session,
         cc_pair_identifiers=cc_pair_identifiers,
     )
@@ -559,7 +560,7 @@ def get_connector_indexing_status(
                 cc_pair_status=cc_pair.status,
                 connector=ConnectorSnapshot.from_connector_db_model(connector),
                 credential=CredentialSnapshot.from_credential_db_model(credential),
-                public_doc=cc_pair.is_public,
+                access_type=cc_pair.access_type,
                 owner=credential.user.email if credential.user else "",
                 groups=group_cc_pair_relationships_dict.get(cc_pair.id, []),
                 last_finished_status=(
@@ -668,12 +669,15 @@ def create_connector_with_mock_credential(
         credential = create_credential(
             mock_credential, user=user, db_session=db_session
         )
+        access_type = (
+            AccessType.PUBLIC if connector_data.is_public else AccessType.PRIVATE
+        )
         response = add_credential_to_connector(
             db_session=db_session,
             user=user,
             connector_id=cast(int, connector_response.id),  # will aways be an int
             credential_id=credential.id,
-            is_public=connector_data.is_public or False,
+            access_type=access_type,
             cc_pair_name=connector_data.name,
             groups=connector_data.groups,
         )
@@ -777,6 +781,7 @@ def connector_run_once(
             detail="Connector has no valid credentials, cannot create index attempts.",
         )
 
+    # Prevents index attempts for cc pairs that already have an index attempt currently running
     skipped_credentials = [
         credential_id
         for credential_id in credential_ids
@@ -786,15 +791,15 @@ def connector_run_once(
                 credential_id=credential_id,
             ),
             only_current=True,
-            disinclude_finished=True,
             db_session=db_session,
+            disinclude_finished=True,
         )
     ]
 
     search_settings = get_current_search_settings(db_session)
 
     connector_credential_pairs = [
-        get_connector_credential_pair(run_info.connector_id, credential_id, db_session)
+        get_connector_credential_pair(connector_id, credential_id, db_session)
         for credential_id in credential_ids
         if credential_id not in skipped_credentials
     ]
@@ -968,7 +973,7 @@ def get_basic_connector_indexing_status(
         )
         for cc_pair in cc_pairs
     ]
-    document_count_info = get_document_cnts_for_cc_pairs(
+    document_count_info = get_document_counts_for_cc_pairs(
         db_session=db_session,
         cc_pair_identifiers=cc_pair_identifiers,
     )

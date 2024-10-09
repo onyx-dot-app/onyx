@@ -31,6 +31,8 @@ RUN apt-get update && \
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
 RUN pip install --no-cache-dir --upgrade \
+        --retries 5 \
+        --timeout 30 \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
     pip uninstall -y py && \
@@ -70,6 +72,7 @@ COPY ./danswer /app/danswer
 COPY ./shared_configs /app/shared_configs
 COPY ./alembic /app/alembic
 COPY ./alembic.ini /app/alembic.ini
+COPY ./pytest.ini /app/pytest.ini
 COPY supervisord.conf /usr/etc/supervisord.conf
 
 # Integration test stuff
@@ -78,6 +81,6 @@ RUN pip install --no-cache-dir --upgrade \
         -r /tmp/dev-requirements.txt
 COPY ./tests/integration /app/tests/integration
 
-ENV PYTHONPATH /app
+ENV PYTHONPATH=/app
 
 CMD ["pytest", "-s", "/app/tests/integration"]

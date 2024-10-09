@@ -5,23 +5,29 @@ import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
 import { CustomCheckbox } from "@/components/CustomCheckbox";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { UniqueIdentifier } from "@dnd-kit/core";
 import { DraggableTable } from "@/components/table/DraggableTable";
-import { deletePersona, personaComparator } from "./lib";
+import {
+  deletePersona,
+  personaComparator,
+  togglePersonaVisibility,
+} from "./lib";
 import { FiEdit2 } from "react-icons/fi";
 import { TrashIcon } from "@/components/icons/icons";
-import { getCurrentUser } from "@/lib/user";
-import { UserRole, User } from "@/lib/types";
 import { useUser } from "@/components/user/UserProvider";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
-  if (persona.default_persona) {
+  if (persona.builtin_persona) {
     return <Text>Built-In</Text>;
   }
 
+  if (persona.is_default_persona) {
+    return <Text>Default</Text>;
+  }
+
   if (persona.is_public) {
-    return <Text>Global</Text>;
+    return <Text>Public</Text>;
   }
 
   if (persona.groups.length > 0 || persona.users.length > 0) {
@@ -30,22 +36,6 @@ function PersonaTypeDisplay({ persona }: { persona: Persona }) {
 
   return <Text>Personal {persona.owner && <>({persona.owner.email})</>}</Text>;
 }
-
-const togglePersonaVisibility = async (
-  personaId: number,
-  isVisible: boolean
-) => {
-  const response = await fetch(`/api/admin/persona/${personaId}/visible`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      is_visible: !isVisible,
-    }),
-  });
-  return response;
-};
 
 export function PersonasTable({
   allPersonas,
@@ -59,9 +49,9 @@ export function PersonasTable({
 
   const { isLoadingUser, isAdmin } = useUser();
 
-  const editablePersonaIds = new Set(
-    editablePersonas.map((p) => p.id.toString())
-  );
+  const editablePersonaIds = useMemo(() => {
+    return new Set(editablePersonas.map((p) => p.id.toString()));
+  }, [editablePersonas]);
 
   const sortedPersonas = useMemo(() => {
     const editable = editablePersonas.sort(personaComparator);
@@ -131,7 +121,7 @@ export function PersonasTable({
             id: persona.id.toString(),
             cells: [
               <div key="name" className="flex">
-                {!persona.default_persona && (
+                {!persona.builtin_persona && (
                   <FiEdit2
                     className="mr-1 my-auto cursor-pointer"
                     onClick={() =>
@@ -184,8 +174,8 @@ export function PersonasTable({
                 </div>
               </div>,
               <div key="edit" className="flex">
-                <div className="mx-auto my-auto">
-                  {!persona.default_persona && isEditable ? (
+                <div className="mr-auto my-auto">
+                  {!persona.builtin_persona && isEditable ? (
                     <div
                       className="hover:bg-hover rounded p-1 cursor-pointer"
                       onClick={async () => {

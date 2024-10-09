@@ -7,11 +7,13 @@ export const DeleteEntityModal = ({
   onSubmit,
   entityType,
   entityName,
+  additionalDetails,
 }: {
   entityType: string;
   entityName: string;
   onClose: () => void;
   onSubmit: () => void;
+  additionalDetails?: string;
 }) => {
   return (
     <ModalWrapper onClose={onClose}>
@@ -23,6 +25,7 @@ export const DeleteEntityModal = ({
           Click below to confirm that you want to delete{" "}
           <b>&quot;{entityName}&quot;</b>
         </p>
+        {additionalDetails && <p className="mb-4">{additionalDetails}</p>}
         <div className="flex">
           <div className="mx-auto">
             <BasicClickable onClick={onSubmit}>

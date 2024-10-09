@@ -1,11 +1,11 @@
-from tests.integration.common_utils.llm import LLMProviderManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import TestUser
+from tests.integration.common_utils.test_models import DATestUser
 
 
 def test_send_message_simple_with_history(reset: None) -> None:
-    admin_user: TestUser = UserManager.create(name="admin_user")
+    admin_user: DATestUser = UserManager.create(name="admin_user")
     LLMProviderManager.create(user_performing_action=admin_user)
 
     test_chat_session = ChatSessionManager.create(user_performing_action=admin_user)

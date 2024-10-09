@@ -17,7 +17,7 @@ export function ChatPopup() {
     setCompletedFlow(
       localStorage.getItem(ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED) === "true"
     );
-  });
+  }, []);
 
   const settings = useContext(SettingsContext);
   const enterpriseSettings = settings?.enterpriseSettings;

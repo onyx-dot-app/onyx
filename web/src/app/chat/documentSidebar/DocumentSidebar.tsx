@@ -3,7 +3,7 @@ import { Divider, Text } from "@tremor/react";
 import { ChatDocumentDisplay } from "./ChatDocumentDisplay";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
-import { Message, RetrievalType } from "../interfaces";
+import { Message } from "../interfaces";
 import { ForwardedRef, forwardRef } from "react";
 
 interface DocumentSidebarProps {

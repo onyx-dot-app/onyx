@@ -211,7 +211,7 @@ def handle_message(
 
     with Session(get_sqlalchemy_engine()) as db_session:
         if message_info.email:
-            add_non_web_user_if_not_exists(message_info.email, db_session)
+            add_non_web_user_if_not_exists(db_session, message_info.email)
 
         # first check if we need to respond with a standard answer
         used_standard_answer = handle_standard_answers(

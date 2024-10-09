@@ -14,6 +14,7 @@ from danswer.configs.app_configs import POLL_CONNECTOR_OFFSET
 from danswer.connectors.connector_runner import ConnectorRunner
 from danswer.connectors.factory import instantiate_connector
 from danswer.connectors.models import IndexAttemptMetadata
+from danswer.db.connector_credential_pair import get_connector_credential_pair_from_id
 from danswer.db.connector_credential_pair import get_last_successful_attempt_time
 from danswer.db.connector_credential_pair import update_connector_credential_pair
 from danswer.db.engine import get_sqlalchemy_engine
@@ -29,6 +30,7 @@ from danswer.db.models import IndexingStatus
 from danswer.db.models import IndexModelStatus
 from danswer.document_index.factory import get_default_document_index
 from danswer.indexing.embedder import DefaultIndexingEmbedder
+from danswer.indexing.indexing_heartbeat import IndexingHeartbeat
 from danswer.indexing.indexing_pipeline import build_indexing_pipeline
 from danswer.utils.logger import IndexAttemptSingleton
 from danswer.utils.logger import setup_logger
@@ -48,7 +50,7 @@ def _get_connector_runner(
     """
     NOTE: `start_time` and `end_time` are only used for poll connectors
 
-    Returns an interator of document batches and whether the returned documents
+    Returns an iterator of document batches and whether the returned documents
     are the complete list of existing documents of the connector. If the task
     of type LOAD_STATE, the list will be considered complete and otherwise incomplete.
     """
@@ -56,22 +58,27 @@ def _get_connector_runner(
 
     try:
         runnable_connector = instantiate_connector(
-            attempt.connector_credential_pair.connector.source,
-            task,
-            attempt.connector_credential_pair.connector.connector_specific_config,
-            attempt.connector_credential_pair.credential,
-            db_session,
+            db_session=db_session,
+            source=attempt.connector_credential_pair.connector.source,
+            input_type=task,
+            connector_specific_config=attempt.connector_credential_pair.connector.connector_specific_config,
+            credential=attempt.connector_credential_pair.credential,
         )
     except Exception as e:
         logger.exception(f"Unable to instantiate connector due to {e}")
         # since we failed to even instantiate the connector, we pause the CCPair since
         # it will never succeed
-        update_connector_credential_pair(
-            db_session=db_session,
-            connector_id=attempt.connector_credential_pair.connector.id,
-            credential_id=attempt.connector_credential_pair.credential.id,
-            status=ConnectorCredentialPairStatus.PAUSED,
+
+        cc_pair = get_connector_credential_pair_from_id(
+            attempt.connector_credential_pair.id, db_session
         )
+        if cc_pair and cc_pair.status == ConnectorCredentialPairStatus.ACTIVE:
+            update_connector_credential_pair(
+                db_session=db_session,
+                connector_id=attempt.connector_credential_pair.connector.id,
+                credential_id=attempt.connector_credential_pair.credential.id,
+                status=ConnectorCredentialPairStatus.PAUSED,
+            )
         raise e
 
     return ConnectorRunner(
@@ -103,15 +110,24 @@ def _run_indexing(
     )
 
     embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
-        search_settings=search_settings
+        search_settings=search_settings,
+        heartbeat=IndexingHeartbeat(
+            index_attempt_id=index_attempt.id,
+            db_session=db_session,
+            # let the world know we're still making progress after
+            # every 10 batches
+            freq=10,
+        ),
     )
 
     indexing_pipeline = build_indexing_pipeline(
         attempt_id=index_attempt.id,
         embedder=embedding_model,
         document_index=document_index,
-        ignore_time_skip=index_attempt.from_beginning
-        or (search_settings.status == IndexModelStatus.FUTURE),
+        ignore_time_skip=(
+            index_attempt.from_beginning
+            or (search_settings.status == IndexModelStatus.FUTURE)
+        ),
         db_session=db_session,
     )
 

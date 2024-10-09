@@ -1,11 +1,24 @@
+import pytest
+
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.indexing.chunker import Chunker
 from danswer.indexing.embedder import DefaultIndexingEmbedder
+from tests.unit.danswer.indexing.conftest import MockHeartbeat
 
 
-def test_chunk_document() -> None:
+@pytest.fixture
+def embedder() -> DefaultIndexingEmbedder:
+    return DefaultIndexingEmbedder(
+        model_name="intfloat/e5-base-v2",
+        normalize=True,
+        query_prefix=None,
+        passage_prefix=None,
+    )
+
+
+def test_chunk_document(embedder: DefaultIndexingEmbedder) -> None:
     short_section_1 = "This is a short section."
     long_section = (
         "This is a long section that should be split into multiple chunks. " * 100
@@ -30,18 +43,11 @@ def test_chunk_document() -> None:
         ],
     )
 
-    embedder = DefaultIndexingEmbedder(
-        model_name="intfloat/e5-base-v2",
-        normalize=True,
-        query_prefix=None,
-        passage_prefix=None,
-    )
-
     chunker = Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
         enable_multipass=False,
     )
-    chunks = chunker.chunk(document)
+    chunks = chunker.chunk([document])
 
     assert len(chunks) == 5
     assert short_section_1 in chunks[0].content
@@ -49,3 +55,29 @@ def test_chunk_document() -> None:
     assert short_section_4 in chunks[-1].content
     assert "tag1" in chunks[0].metadata_suffix_keyword
     assert "tag2" in chunks[0].metadata_suffix_semantic
+
+
+def test_chunker_heartbeat(
+    embedder: DefaultIndexingEmbedder, mock_heartbeat: MockHeartbeat
+) -> None:
+    document = Document(
+        id="test_doc",
+        source=DocumentSource.WEB,
+        semantic_identifier="Test Document",
+        metadata={"tags": ["tag1", "tag2"]},
+        doc_updated_at=None,
+        sections=[
+            Section(text="This is a short section.", link="link1"),
+        ],
+    )
+
+    chunker = Chunker(
+        tokenizer=embedder.embedding_model.tokenizer,
+        enable_multipass=False,
+        heartbeat=mock_heartbeat,
+    )
+
+    chunks = chunker.chunk([document])
+
+    assert mock_heartbeat.call_count == 1
+    assert len(chunks) > 0

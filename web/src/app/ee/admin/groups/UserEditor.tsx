@@ -1,5 +1,4 @@
 import { User } from "@/lib/types";
-import { useState } from "react";
 import { FiPlus, FiX } from "react-icons/fi";
 import { SearchMultiSelectDropdown } from "@/components/Dropdown";
 import { UsersIcon } from "@/components/icons/icons";

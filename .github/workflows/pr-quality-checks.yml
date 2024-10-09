@@ -1,6 +1,6 @@
 name: Quality Checks PR
 concurrency:
-  group: Quality-Checks-PR-${{ github.head_ref }}
+  group: Quality-Checks-PR-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
   cancel-in-progress: true
 
 on:
@@ -9,7 +9,8 @@ on:
 
 jobs:
   quality-checks:
-    runs-on: ubuntu-latest
+    # See https://runs-on.com/runners/linux/
+    runs-on: [runs-on,runner=8cpu-linux-x64,"run-id=${{ github.run_id }}"]
     steps:
       - uses: actions/checkout@v4
         with:

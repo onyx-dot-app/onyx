@@ -80,7 +80,7 @@ export const submitFiles = async (
     connector.id,
     credentialId,
     name,
-    isPublic,
+    isPublic ? "public" : "private",
     groups
   );
   if (!credentialResponse.ok) {

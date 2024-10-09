@@ -6,19 +6,19 @@ from sqlalchemy.orm import Session
 from danswer.auth.users import current_admin_user
 from danswer.db.engine import get_session
 from danswer.db.models import User
-from danswer.db.standard_answer import fetch_standard_answer
-from danswer.db.standard_answer import fetch_standard_answer_categories
-from danswer.db.standard_answer import fetch_standard_answer_category
-from danswer.db.standard_answer import fetch_standard_answers
-from danswer.db.standard_answer import insert_standard_answer
-from danswer.db.standard_answer import insert_standard_answer_category
-from danswer.db.standard_answer import remove_standard_answer
-from danswer.db.standard_answer import update_standard_answer
-from danswer.db.standard_answer import update_standard_answer_category
-from danswer.server.manage.models import StandardAnswer
-from danswer.server.manage.models import StandardAnswerCategory
-from danswer.server.manage.models import StandardAnswerCategoryCreationRequest
-from danswer.server.manage.models import StandardAnswerCreationRequest
+from ee.danswer.db.standard_answer import fetch_standard_answer
+from ee.danswer.db.standard_answer import fetch_standard_answer_categories
+from ee.danswer.db.standard_answer import fetch_standard_answer_category
+from ee.danswer.db.standard_answer import fetch_standard_answers
+from ee.danswer.db.standard_answer import insert_standard_answer
+from ee.danswer.db.standard_answer import insert_standard_answer_category
+from ee.danswer.db.standard_answer import remove_standard_answer
+from ee.danswer.db.standard_answer import update_standard_answer
+from ee.danswer.db.standard_answer import update_standard_answer_category
+from ee.danswer.server.manage.models import StandardAnswer
+from ee.danswer.server.manage.models import StandardAnswerCategory
+from ee.danswer.server.manage.models import StandardAnswerCategoryCreationRequest
+from ee.danswer.server.manage.models import StandardAnswerCreationRequest
 
 router = APIRouter(prefix="/manage")
 

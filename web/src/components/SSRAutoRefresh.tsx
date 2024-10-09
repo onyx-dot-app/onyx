@@ -25,7 +25,7 @@ export function InstantSSRAutoRefresh() {
 
   useEffect(() => {
     router.refresh();
-  }, []);
+  }, [router]);
 
   return <></>;
 }

@@ -5,21 +5,22 @@ the permissions of the curator manipulating connector-credential pairs.
 import pytest
 from requests.exceptions import HTTPError
 
+from danswer.db.enums import AccessType
 from danswer.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
-from tests.integration.common_utils.managers.user import TestUser
+from tests.integration.common_utils.managers.user import DATestUser
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 
 
 def test_cc_pair_permissions(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
-    admin_user: TestUser = UserManager.create(name="admin_user")
+    admin_user: DATestUser = UserManager.create(name="admin_user")
 
     # Creating a curator
-    curator: TestUser = UserManager.create(name="curator")
+    curator: DATestUser = UserManager.create(name="curator")
 
     # Creating a user group
     user_group_1 = UserGroupManager.create(
@@ -91,8 +92,8 @@ def test_cc_pair_permissions(reset: None) -> None:
             connector_id=connector_1.id,
             credential_id=credential_1.id,
             name="invalid_cc_pair_1",
+            access_type=AccessType.PUBLIC,
             groups=[user_group_1.id],
-            is_public=True,
             user_performing_action=curator,
         )
 
@@ -103,8 +104,8 @@ def test_cc_pair_permissions(reset: None) -> None:
             connector_id=connector_1.id,
             credential_id=credential_1.id,
             name="invalid_cc_pair_2",
+            access_type=AccessType.PRIVATE,
             groups=[user_group_1.id, user_group_2.id],
-            is_public=False,
             user_performing_action=curator,
         )
 
@@ -115,8 +116,8 @@ def test_cc_pair_permissions(reset: None) -> None:
             connector_id=connector_1.id,
             credential_id=credential_1.id,
             name="invalid_cc_pair_2",
+            access_type=AccessType.PRIVATE,
             groups=[],
-            is_public=False,
             user_performing_action=curator,
         )
 
@@ -129,8 +130,8 @@ def test_cc_pair_permissions(reset: None) -> None:
     #         connector_id=connector_2.id,
     #         credential_id=credential_1.id,
     #         name="invalid_cc_pair_3",
+    #         access_type=AccessType.PRIVATE,
     #         groups=[user_group_1.id],
-    #         is_public=False,
     #         user_performing_action=curator,
     #     )
 
@@ -141,8 +142,8 @@ def test_cc_pair_permissions(reset: None) -> None:
             connector_id=connector_1.id,
             credential_id=credential_2.id,
             name="invalid_cc_pair_4",
+            access_type=AccessType.PRIVATE,
             groups=[user_group_1.id],
-            is_public=False,
             user_performing_action=curator,
         )
 
@@ -154,8 +155,8 @@ def test_cc_pair_permissions(reset: None) -> None:
         name="valid_cc_pair",
         connector_id=connector_1.id,
         credential_id=credential_1.id,
+        access_type=AccessType.PRIVATE,
         groups=[user_group_1.id],
-        is_public=False,
         user_performing_action=curator,
     )
 
@@ -170,7 +171,9 @@ def test_cc_pair_permissions(reset: None) -> None:
 
     # Test deleting the cc pair
     CCPairManager.delete(valid_cc_pair, user_performing_action=curator)
-    CCPairManager.wait_for_deletion_completion(user_performing_action=curator)
+    CCPairManager.wait_for_deletion_completion(
+        cc_pair_id=valid_cc_pair.id, user_performing_action=curator
+    )
 
     CCPairManager.verify(
         cc_pair=valid_cc_pair,

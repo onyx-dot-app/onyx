@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 
-from danswer.dynamic_configs.interface import JSON_ro
+from danswer.key_value_store.interface import JSON_ro
 from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.interfaces import LLM
 from danswer.tools.custom.base_tool_types import ToolResultType
@@ -46,6 +46,7 @@ class CustomTool(Tool):
         self,
         method_spec: MethodSpec,
         base_url: str,
+        custom_headers: list[dict[str, str]] | None = [],
     ) -> None:
         self._base_url = base_url
         self._method_spec = method_spec
@@ -53,6 +54,11 @@ class CustomTool(Tool):
 
         self._name = self._method_spec.name
         self._description = self._method_spec.summary
+        self.headers = (
+            {header["key"]: header["value"] for header in custom_headers}
+            if custom_headers
+            else {}
+        )
 
     @property
     def name(self) -> str:
@@ -161,8 +167,10 @@ class CustomTool(Tool):
 
         url = self._method_spec.build_url(self._base_url, path_params, query_params)
         method = self._method_spec.method
-
-        response = requests.request(method, url, json=request_body)
+        # Log request details
+        response = requests.request(
+            method, url, json=request_body, headers=self.headers
+        )
 
         yield ToolResponse(
             id=CUSTOM_TOOL_RESPONSE_ID,
@@ -175,8 +183,9 @@ class CustomTool(Tool):
         return cast(CustomToolCallSummary, args[0].response).tool_result
 
 
-def build_custom_tools_from_openapi_schema(
+def build_custom_tools_from_openapi_schema_and_headers(
     openapi_schema: dict[str, Any],
+    custom_headers: list[dict[str, str]] | None = [],
     dynamic_schema_info: DynamicSchemaInfo | None = None,
 ) -> list[CustomTool]:
     if dynamic_schema_info:
@@ -195,7 +204,9 @@ def build_custom_tools_from_openapi_schema(
 
     url = openapi_to_url(openapi_schema)
     method_specs = openapi_to_method_specs(openapi_schema)
-    return [CustomTool(method_spec, url) for method_spec in method_specs]
+    return [
+        CustomTool(method_spec, url, custom_headers) for method_spec in method_specs
+    ]
 
 
 if __name__ == "__main__":
@@ -246,7 +257,7 @@ if __name__ == "__main__":
     }
     validate_openapi_schema(openapi_schema)
 
-    tools = build_custom_tools_from_openapi_schema(
+    tools = build_custom_tools_from_openapi_schema_and_headers(
         openapi_schema, dynamic_schema_info=None
     )
 

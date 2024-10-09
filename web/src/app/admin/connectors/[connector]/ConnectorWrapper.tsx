@@ -1,6 +1,6 @@
 "use client";
 
-import { ConfigurableSources, ValidSources } from "@/lib/types";
+import { ConfigurableSources } from "@/lib/types";
 import AddConnector from "./AddConnectorPage";
 import { FormProvider } from "@/components/context/FormContext";
 import Sidebar from "./Sidebar";

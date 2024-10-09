@@ -133,6 +133,7 @@ function LLMProviderDisplay({
           </Button>
         </div>
       </div>
+
       {formIsVisible && (
         <LLMProviderUpdateModal
           llmProviderDescriptor={llmProviderDescriptor}

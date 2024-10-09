@@ -56,6 +56,21 @@ class DocumentMetadata:
 
 
 @dataclass
+class VespaDocumentFields:
+    """
+    Specifies fields in Vespa for a document.  Fields set to None will be ignored.
+    Perhaps we should name this in an implementation agnostic fashion, but it's more
+    understandable like this for now.
+    """
+
+    # all other fields except these 4 will always be left alone by the update request
+    access: DocumentAccess | None = None
+    document_sets: set[str] | None = None
+    boost: float | None = None
+    hidden: bool | None = None
+
+
+@dataclass
 class UpdateRequest:
     """
     For all document_ids, update the allowed_users and the boost to the new values
@@ -157,6 +172,16 @@ class Deletable(abc.ABC):
     """
 
     @abc.abstractmethod
+    def delete_single(self, doc_id: str) -> int:
+        """
+        Given a single document id, hard delete it from the document index
+
+        Parameters:
+        - doc_id: document id as specified by the connector
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def delete(self, doc_ids: list[str]) -> None:
         """
         Given a list of document ids, hard delete them from the document index
@@ -176,6 +201,24 @@ class Updatable(abc.ABC):
     - Boost value (learning from feedback mechanism)
     - Whether the document is hidden or not, hidden documents are not returned from search
     """
+
+    @abc.abstractmethod
+    def update_single(self, doc_id: str, fields: VespaDocumentFields) -> int:
+        """
+        Updates all chunks for a document with the specified fields.
+        None values mean that the field does not need an update.
+
+        The rationale for a single update function is that it allows retries and parallelism
+        to happen at a higher / more strategic level, is simpler to read, and allows
+        us to individually handle error conditions per document.
+
+        Parameters:
+        - fields: the fields to update in the document. Any field set to None will not be changed.
+
+        Return:
+            None
+        """
+        raise NotImplementedError
 
     @abc.abstractmethod
     def update(self, update_requests: list[UpdateRequest]) -> None:

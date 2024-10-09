@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from danswer.db.models import Tool
+from danswer.server.features.tool.models import Header
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -25,6 +26,7 @@ def create_tool(
     name: str,
     description: str | None,
     openapi_schema: dict[str, Any] | None,
+    custom_headers: list[Header] | None,
     user_id: UUID | None,
     db_session: Session,
 ) -> Tool:
@@ -33,6 +35,9 @@ def create_tool(
         description=description,
         in_code_tool_id=None,
         openapi_schema=openapi_schema,
+        custom_headers=[header.dict() for header in custom_headers]
+        if custom_headers
+        else [],
         user_id=user_id,
     )
     db_session.add(new_tool)
@@ -45,6 +50,7 @@ def update_tool(
     name: str | None,
     description: str | None,
     openapi_schema: dict[str, Any] | None,
+    custom_headers: list[Header] | None,
     user_id: UUID | None,
     db_session: Session,
 ) -> Tool:
@@ -60,6 +66,8 @@ def update_tool(
         tool.openapi_schema = openapi_schema
     if user_id is not None:
         tool.user_id = user_id
+    if custom_headers is not None:
+        tool.custom_headers = [header.dict() for header in custom_headers]
     db_session.commit()
 
     return tool

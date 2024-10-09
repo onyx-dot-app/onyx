@@ -1,20 +1,21 @@
 import pytest
 from requests.exceptions import HTTPError
 
+from danswer.db.enums import AccessType
 from danswer.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
-from tests.integration.common_utils.managers.user import TestUser
+from tests.integration.common_utils.managers.user import DATestUser
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 
 
 def test_doc_set_permissions_setup(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
-    admin_user: TestUser = UserManager.create(name="admin_user")
+    admin_user: DATestUser = UserManager.create(name="admin_user")
 
     # Creating a second user (curator)
-    curator: TestUser = UserManager.create(name="curator")
+    curator: DATestUser = UserManager.create(name="curator")
 
     # Creating the first user group
     user_group_1 = UserGroupManager.create(
@@ -47,14 +48,14 @@ def test_doc_set_permissions_setup(reset: None) -> None:
 
     # Admin creates a cc_pair
     private_cc_pair = CCPairManager.create_from_scratch(
-        is_public=False,
+        access_type=AccessType.PRIVATE,
         source=DocumentSource.INGESTION_API,
         user_performing_action=admin_user,
     )
 
     # Admin creates a public cc_pair
     public_cc_pair = CCPairManager.create_from_scratch(
-        is_public=True,
+        access_type=AccessType.PUBLIC,
         source=DocumentSource.INGESTION_API,
         user_performing_action=admin_user,
     )

@@ -18,7 +18,7 @@ from danswer.db.chat import translate_db_search_doc_to_server_search_doc
 from danswer.db.engine import get_session
 from danswer.db.models import User
 from danswer.db.search_settings import get_current_search_settings
-from danswer.db.tag import get_tags_by_value_prefix_for_source_types
+from danswer.db.tag import find_tags
 from danswer.document_index.factory import get_default_document_index
 from danswer.document_index.vespa.index import VespaIndex
 from danswer.one_shot_answer.answer_question import stream_search_answer
@@ -99,12 +99,25 @@ def get_tags(
     if not allow_prefix:
         raise NotImplementedError("Cannot disable prefix match for now")
 
-    db_tags = get_tags_by_value_prefix_for_source_types(
-        tag_key_prefix=match_pattern,
-        tag_value_prefix=match_pattern,
+    key_prefix = match_pattern
+    value_prefix = match_pattern
+    require_both_to_match = False
+
+    # split on = to allow the user to type in "author=bob"
+    EQUAL_PAT = "="
+    if match_pattern and EQUAL_PAT in match_pattern:
+        split_pattern = match_pattern.split(EQUAL_PAT)
+        key_prefix = split_pattern[0]
+        value_prefix = EQUAL_PAT.join(split_pattern[1:])
+        require_both_to_match = True
+
+    db_tags = find_tags(
+        tag_key_prefix=key_prefix,
+        tag_value_prefix=value_prefix,
         sources=sources,
         limit=limit,
         db_session=db_session,
+        require_both_to_match=require_both_to_match,
     )
     server_tags = [
         SourceTag(

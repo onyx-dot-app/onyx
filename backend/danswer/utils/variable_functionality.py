@@ -16,7 +16,7 @@ class DanswerVersion:
     def set_ee(self) -> None:
         self._is_ee = True
 
-    def get_is_ee_version(self) -> bool:
+    def is_ee_version(self) -> bool:
         return self._is_ee
 
 
@@ -24,7 +24,7 @@ global_version = DanswerVersion()
 
 
 def set_is_ee_based_on_env_variable() -> None:
-    if ENTERPRISE_EDITION_ENABLED and not global_version.get_is_ee_version():
+    if ENTERPRISE_EDITION_ENABLED and not global_version.is_ee_version():
         logger.notice("Enterprise Edition enabled")
         global_version.set_ee()
 
@@ -54,7 +54,7 @@ def fetch_versioned_implementation(module: str, attribute: str) -> Any:
         implementation cannot be found or loaded.
     """
     logger.debug("Fetching versioned implementation for %s.%s", module, attribute)
-    is_ee = global_version.get_is_ee_version()
+    is_ee = global_version.is_ee_version()
 
     module_full = f"ee.{module}" if is_ee else module
     try:

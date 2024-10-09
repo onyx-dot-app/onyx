@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Button, Text, Callout, Subtitle, Divider } from "@tremor/react";
-import { Label, TextFormField } from "@/components/admin/connectors/Field";
+import { Label } from "@/components/admin/connectors/Field";
 import { CloudEmbeddingProvider } from "../../../../components/embedding/interfaces";
 import {
   EMBEDDING_PROVIDERS_ADMIN_URL,

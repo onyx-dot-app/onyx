@@ -10,11 +10,13 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import SlackResponse
 
+from danswer.connectors.cross_connector_utils.retry_wrapper import retry_builder
 from danswer.connectors.models import BasicExpertInfo
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
 
+basic_retry_wrapper = retry_builder()
 # number of messages we request per page when fetching paginated slack messages
 _SLACK_LIMIT = 900
 
@@ -34,7 +36,7 @@ def get_message_link(
     )
 
 
-def make_slack_api_call_logged(
+def _make_slack_api_call_logged(
     call: Callable[..., SlackResponse],
 ) -> Callable[..., SlackResponse]:
     @wraps(call)
@@ -47,7 +49,7 @@ def make_slack_api_call_logged(
     return logged_call
 
 
-def make_slack_api_call_paginated(
+def _make_slack_api_call_paginated(
     call: Callable[..., SlackResponse],
 ) -> Callable[..., Generator[dict[str, Any], None, None]]:
     """Wraps calls to slack API so that they automatically handle pagination"""
@@ -114,6 +116,24 @@ def make_slack_api_rate_limited(
             raise Exception(msg)
 
     return rate_limited_call
+
+
+def make_slack_api_call_w_retries(
+    call: Callable[..., SlackResponse], **kwargs: Any
+) -> SlackResponse:
+    return basic_retry_wrapper(
+        make_slack_api_rate_limited(_make_slack_api_call_logged(call))
+    )(**kwargs)
+
+
+def make_paginated_slack_api_call_w_retries(
+    call: Callable[..., SlackResponse], **kwargs: Any
+) -> Generator[dict[str, Any], None, None]:
+    return _make_slack_api_call_paginated(
+        basic_retry_wrapper(
+            make_slack_api_rate_limited(_make_slack_api_call_logged(call))
+        )
+    )(**kwargs)
 
 
 def expert_info_from_slack_id(

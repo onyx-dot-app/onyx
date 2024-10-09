@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Table,
   TableHead,
@@ -9,10 +9,10 @@ import {
   TableBody,
   TableCell,
   Text,
+  Callout,
 } from "@tremor/react";
-import { CCPairFullInfo } from "./types";
+import { CCPairFullInfo, PaginatedIndexAttempts } from "./types";
 import { IndexAttemptStatus } from "@/components/Status";
-import { useState } from "react";
 import { PageSelector } from "@/components/PageSelector";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { buildCCPairInfoUrl } from "./lib";
@@ -22,9 +22,9 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { InfoIcon, SearchIcon } from "@/components/icons/icons";
 import Link from "next/link";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
-import { PaginatedIndexAttempts } from "./types";
 import { useRouter } from "next/navigation";
 import { Tooltip } from "@/components/tooltip/Tooltip";
+import { FiInfo } from "react-icons/fi";
 
 // This is the number of index attempts to display per page
 const NUM_IN_PAGE = 8;
@@ -61,47 +61,61 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
   // we use it to avoid duplicate requests
   const ongoingRequestsRef = useRef<Set<number>>(new Set());
 
-  const batchRetrievalUrlBuilder = (batchNum: number) =>
-    `${buildCCPairInfoUrl(ccPair.id)}/index-attempts?page=${batchNum}&page_size=${BATCH_SIZE * NUM_IN_PAGE}`;
+  const batchRetrievalUrlBuilder = useCallback(
+    (batchNum: number) => {
+      return `${buildCCPairInfoUrl(
+        ccPair.id
+      )}/index-attempts?page=${batchNum}&page_size=${BATCH_SIZE * NUM_IN_PAGE}`;
+    },
+    [ccPair.id]
+  );
 
   // This fetches and caches the data for a given batch number
-  const fetchBatchData = async (batchNum: number) => {
-    if (ongoingRequestsRef.current.has(batchNum)) return;
-    ongoingRequestsRef.current.add(batchNum);
+  const fetchBatchData = useCallback(
+    async (batchNum: number) => {
+      if (ongoingRequestsRef.current.has(batchNum)) return;
+      ongoingRequestsRef.current.add(batchNum);
 
-    try {
-      const response = await fetch(batchRetrievalUrlBuilder(batchNum + 1));
-      if (!response.ok) {
-        throw new Error("Failed to fetch data");
-      }
-      const data = await response.json();
+      try {
+        const response = await fetch(batchRetrievalUrlBuilder(batchNum + 1));
+        if (!response.ok) {
+          throw new Error("Failed to fetch data");
+        }
+        const data = await response.json();
 
-      const newBatchData: PaginatedIndexAttempts[] = [];
-      for (let i = 0; i < BATCH_SIZE; i++) {
-        const startIndex = i * NUM_IN_PAGE;
-        const endIndex = startIndex + NUM_IN_PAGE;
-        const pageIndexAttempts = data.index_attempts.slice(
-          startIndex,
-          endIndex
+        const newBatchData: PaginatedIndexAttempts[] = [];
+        for (let i = 0; i < BATCH_SIZE; i++) {
+          const startIndex = i * NUM_IN_PAGE;
+          const endIndex = startIndex + NUM_IN_PAGE;
+          const pageIndexAttempts = data.index_attempts.slice(
+            startIndex,
+            endIndex
+          );
+          newBatchData.push({
+            ...data,
+            index_attempts: pageIndexAttempts,
+          });
+        }
+
+        setCachedBatches((prev) => ({
+          ...prev,
+          [batchNum]: newBatchData,
+        }));
+      } catch (error) {
+        setCurrentPageError(
+          error instanceof Error ? error : new Error("An error occurred")
         );
-        newBatchData.push({
-          ...data,
-          index_attempts: pageIndexAttempts,
-        });
+      } finally {
+        ongoingRequestsRef.current.delete(batchNum);
       }
-
-      setCachedBatches((prev) => ({
-        ...prev,
-        [batchNum]: newBatchData,
-      }));
-    } catch (error) {
-      setCurrentPageError(
-        error instanceof Error ? error : new Error("An error occurred")
-      );
-    } finally {
-      ongoingRequestsRef.current.delete(batchNum);
-    }
-  };
+    },
+    [
+      ongoingRequestsRef,
+      setCachedBatches,
+      setCurrentPageError,
+      batchRetrievalUrlBuilder,
+    ]
+  );
 
   // This fetches and caches the data for the current batch and the next and previous batches
   useEffect(() => {
@@ -114,9 +128,9 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
       setIsCurrentPageLoading(false);
     }
 
-    const nextBatchNum = Math.min(
-      batchNum + 1,
-      Math.ceil(totalPages / BATCH_SIZE) - 1
+    const nextBatchNum = Math.max(
+      Math.min(batchNum + 1, Math.ceil(totalPages / BATCH_SIZE) - 1),
+      0
     );
     if (!cachedBatches[nextBatchNum]) {
       fetchBatchData(nextBatchNum);
@@ -169,6 +183,26 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
         errorTitle={`Failed to fetch info on Connector with ID ${ccPair.id}`}
         errorMsg={currentPageError?.toString() || "Unknown error"}
       />
+    );
+  }
+
+  // if no indexing attempts have been scheduled yet, let the user know why
+  if (
+    Object.keys(cachedBatches).length === 0 ||
+    Object.values(cachedBatches).every((batch) =>
+      batch.every((page) => page.index_attempts.length === 0)
+    )
+  ) {
+    return (
+      <Callout
+        className="mt-4"
+        title="No indexing attempts scheduled yet"
+        icon={FiInfo}
+        color="blue"
+      >
+        Index attempts are scheduled in the background, and may take some time
+        to appear. Try refreshing the page in ~30 seconds!
+      </Callout>
     );
   }
 

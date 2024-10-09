@@ -51,6 +51,7 @@ export function ChatDocumentDisplay({
             "rounded-lg flex font-bold flex-shrink truncate" +
             (document.link ? "" : "pointer-events-none")
           }
+          rel="noreferrer"
         >
           {isInternet ? (
             <InternetSearchIcon url={document.link} />

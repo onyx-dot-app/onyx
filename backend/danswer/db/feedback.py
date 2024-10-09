@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from danswer.configs.constants import MessageType
 from danswer.configs.constants import SearchFeedbackType
 from danswer.db.chat import get_chat_message
+from danswer.db.enums import AccessType
 from danswer.db.models import ChatMessageFeedback
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import Document as DbDocument
@@ -94,7 +95,7 @@ def _add_user_filters(
             .correlate(CCPair)
         )
     else:
-        where_clause |= CCPair.is_public == True  # noqa: E712
+        where_clause |= CCPair.access_type == AccessType.PUBLIC
 
     return stmt.where(where_clause)
 

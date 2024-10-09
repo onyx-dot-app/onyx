@@ -8,6 +8,7 @@ from email.mime.text import MIMEText
 from typing import Optional
 from typing import Tuple
 
+import jwt
 from email_validator import EmailNotValidError
 from email_validator import validate_email
 from fastapi import APIRouter
@@ -37,8 +38,10 @@ from danswer.auth.schemas import UserCreate
 from danswer.auth.schemas import UserRole
 from danswer.auth.schemas import UserUpdate
 from danswer.configs.app_configs import AUTH_TYPE
+from danswer.configs.app_configs import DATA_PLANE_SECRET
 from danswer.configs.app_configs import DISABLE_AUTH
 from danswer.configs.app_configs import EMAIL_FROM
+from danswer.configs.app_configs import EXPECTED_API_KEY
 from danswer.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
 from danswer.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from danswer.configs.app_configs import SMTP_PASS
@@ -301,17 +304,27 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def authenticate(
         self, credentials: OAuth2PasswordRequestForm
     ) -> Optional[User]:
-        user = await super().authenticate(credentials)
-        if user is None:
-            try:
-                user = await self.get_by_email(credentials.username)
-                if not user.has_web_login:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="NO_WEB_LOGIN_AND_HAS_NO_PASSWORD",
-                    )
-            except exceptions.UserNotExists:
-                pass
+        try:
+            user = await self.get_by_email(credentials.username)
+        except exceptions.UserNotExists:
+            self.password_helper.hash(credentials.password)
+            return None
+
+        if not user.has_web_login:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="NO_WEB_LOGIN_AND_HAS_NO_PASSWORD",
+            )
+
+        verified, updated_password_hash = self.password_helper.verify_and_update(
+            credentials.password, user.hashed_password
+        )
+        if not verified:
+            return None
+
+        if updated_password_hash is not None:
+            await self.user_db.update(user, {"hashed_password": updated_password_hash})
+
         return user
 
 
@@ -333,7 +346,6 @@ def get_database_strategy(
     strategy = DatabaseStrategy(
         access_token_db, lifetime_seconds=SESSION_EXPIRE_TIME_SECONDS  # type: ignore
     )
-
     return strategy
 
 
@@ -496,3 +508,28 @@ async def current_admin_user(user: User | None = Depends(current_user)) -> User 
 def get_default_admin_user_emails_() -> list[str]:
     # No default seeding available for Danswer MIT
     return []
+
+
+async def control_plane_dep(request: Request) -> None:
+    api_key = request.headers.get("X-API-KEY")
+    if api_key != EXPECTED_API_KEY:
+        logger.warning("Invalid API key")
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        logger.warning("Invalid authorization header")
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
+
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, DATA_PLANE_SECRET, algorithms=["HS256"])
+        if payload.get("scope") != "tenant:create":
+            logger.warning("Insufficient permissions")
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+    except jwt.ExpiredSignatureError:
+        logger.warning("Token has expired")
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        logger.warning("Invalid token")
+        raise HTTPException(status_code=401, detail="Invalid token")

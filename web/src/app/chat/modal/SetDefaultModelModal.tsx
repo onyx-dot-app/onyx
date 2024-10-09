@@ -1,28 +1,29 @@
-import { Dispatch, SetStateAction, useState, useEffect, useRef } from "react";
+import { Dispatch, SetStateAction, useEffect, useRef } from "react";
 import { ModalWrapper } from "@/components/modals/ModalWrapper";
-import { Badge, Text } from "@tremor/react";
+import { Text } from "@tremor/react";
 import { getDisplayNameForModel, LlmOverride } from "@/lib/hooks";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 
 import { destructureValue, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/users/UserSettings";
 import { useRouter } from "next/navigation";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 export function SetDefaultModelModal({
+  setPopup,
   llmProviders,
   onClose,
   setLlmOverride,
   defaultModel,
   refreshUser,
 }: {
+  setPopup: (popupSpec: PopupSpec | null) => void;
   llmProviders: LLMProviderDescriptor[];
   setLlmOverride: Dispatch<SetStateAction<LlmOverride>>;
   onClose: () => void;
   defaultModel: string | null;
   refreshUser: () => void;
 }) {
-  const { popup, setPopup } = usePopup();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
 
@@ -127,7 +128,6 @@ export function SetDefaultModelModal({
       modalClassName="rounded-lg  bg-white max-w-xl"
     >
       <>
-        {popup}
         <div className="flex mb-4">
           <h2 className="text-2xl text-emphasis font-bold flex my-auto">
             Set Default Model

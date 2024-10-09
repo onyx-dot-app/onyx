@@ -100,6 +100,38 @@ module.exports = {
         "background-emphasis": "var(--background-emphasis)",
         "background-strong": "var(--background-strong)",
         "background-search": "var(--white)",
+
+        // colors for sidebar in chat, search, and manage settings
+        "background-sidebar": "var(--background-100)",
+        "background-settings-sidebar": "var(--background-100)",
+        "background-chatbar": "var(--background-100)",
+        "text-sidebar": "var(--text-500)",
+
+        // Settings
+        "text-sidebar-subtle": "var(--text-500)",
+        "icon-settings-sidebar": "var(--text-600)",
+        "text-settings-sidebar": "var(--text-600)",
+        "text-settings-sidebar-strong": "var(--text-900)",
+        "background-settings-hover": "var(--background-200)",
+
+        // Background for chat messages (user bubbles)
+        user: "var(--user-bubble)",
+
+        // Colors for the search toggle buttons
+        "background-agentic-toggled": "var(--light-success)",
+        "background-agentic-untoggled": "var(--undo)",
+        "text-agentic-toggled": "var(--text-800)",
+        "text-agentic-untoggled": "var(--white)",
+        "text-chatbar-subtle": "var(--text-500)",
+        "text-chatbar": "var(--text-800)",
+
+        // Color for the star indicator on high quality search results.
+        "star-indicator": "var(--background-100)",
+
+        // Backgrounds for submit buttons on search and chat
+        "submit-background": "var(--background-800)",
+        "disabled-submit-background": "var(--background-400)",
+
         input: "var(--white)",
 
         "text-50": "var(--text-50)",
@@ -113,6 +145,8 @@ module.exports = {
         "text-800": "var(--text-800)",
         "text-900": "var(--text-900)",
         "text-950": "var(--text-950)",
+
+        "user-text": "var(--text-800)",
 
         description: "var(--text-400)",
         subtle: "var(--text-500)",
@@ -162,10 +196,6 @@ module.exports = {
             "thumb-hover": "var(--scrollbar-dark-thumb-hover)",
           },
         },
-
-        // bubbles in chat for each "user"
-        user: "var(--user-bubble)",
-        ai: "var(--ai-bubble)",
 
         // for display documents
         document: "var(--document-color)",

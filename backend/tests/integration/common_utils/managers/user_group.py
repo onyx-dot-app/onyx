@@ -7,8 +7,8 @@ from ee.danswer.server.user_group.models import UserGroup
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import MAX_DELAY
-from tests.integration.common_utils.test_models import TestUser
-from tests.integration.common_utils.test_models import TestUserGroup
+from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestUserGroup
 
 
 class UserGroupManager:
@@ -17,8 +17,8 @@ class UserGroupManager:
         name: str | None = None,
         user_ids: list[str] | None = None,
         cc_pair_ids: list[int] | None = None,
-        user_performing_action: TestUser | None = None,
-    ) -> TestUserGroup:
+        user_performing_action: DATestUser | None = None,
+    ) -> DATestUserGroup:
         name = f"{name}-user-group" if name else f"test-user-group-{uuid4()}"
 
         request = {
@@ -34,7 +34,7 @@ class UserGroupManager:
             else GENERAL_HEADERS,
         )
         response.raise_for_status()
-        test_user_group = TestUserGroup(
+        test_user_group = DATestUserGroup(
             id=response.json()["id"],
             name=response.json()["name"],
             user_ids=[user["id"] for user in response.json()["users"]],
@@ -44,11 +44,9 @@ class UserGroupManager:
 
     @staticmethod
     def edit(
-        user_group: TestUserGroup,
-        user_performing_action: TestUser | None = None,
+        user_group: DATestUserGroup,
+        user_performing_action: DATestUser | None = None,
     ) -> None:
-        if not user_group.id:
-            raise ValueError("User group has no ID")
         response = requests.patch(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}",
             json=user_group.model_dump(),
@@ -59,14 +57,25 @@ class UserGroupManager:
         response.raise_for_status()
 
     @staticmethod
-    def set_curator_status(
-        test_user_group: TestUserGroup,
-        user_to_set_as_curator: TestUser,
-        is_curator: bool = True,
-        user_performing_action: TestUser | None = None,
+    def delete(
+        user_group: DATestUserGroup,
+        user_performing_action: DATestUser | None = None,
     ) -> None:
-        if not user_to_set_as_curator.id:
-            raise ValueError("User has no ID")
+        response = requests.delete(
+            f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}",
+            headers=user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+
+    @staticmethod
+    def set_curator_status(
+        test_user_group: DATestUserGroup,
+        user_to_set_as_curator: DATestUser,
+        is_curator: bool = True,
+        user_performing_action: DATestUser | None = None,
+    ) -> None:
         set_curator_request = {
             "user_id": user_to_set_as_curator.id,
             "is_curator": is_curator,
@@ -82,7 +91,7 @@ class UserGroupManager:
 
     @staticmethod
     def get_all(
-        user_performing_action: TestUser | None = None,
+        user_performing_action: DATestUser | None = None,
     ) -> list[UserGroup]:
         response = requests.get(
             f"{API_SERVER_URL}/manage/admin/user-group",
@@ -95,9 +104,9 @@ class UserGroupManager:
 
     @staticmethod
     def verify(
-        user_group: TestUserGroup,
+        user_group: DATestUserGroup,
         verify_deleted: bool = False,
-        user_performing_action: TestUser | None = None,
+        user_performing_action: DATestUser | None = None,
     ) -> None:
         all_user_groups = UserGroupManager.get_all(user_performing_action)
         for fetched_user_group in all_user_groups:
@@ -120,8 +129,8 @@ class UserGroupManager:
 
     @staticmethod
     def wait_for_sync(
-        user_groups_to_check: list[TestUserGroup] | None = None,
-        user_performing_action: TestUser | None = None,
+        user_groups_to_check: list[DATestUserGroup] | None = None,
+        user_performing_action: DATestUser | None = None,
     ) -> None:
         start = time.time()
         while True:
@@ -130,7 +139,7 @@ class UserGroupManager:
                 check_ids = {user_group.id for user_group in user_groups_to_check}
                 user_group_ids = {user_group.id for user_group in user_groups}
                 if not check_ids.issubset(user_group_ids):
-                    raise RuntimeError("Document set not found")
+                    raise RuntimeError("User group not found")
                 user_groups = [
                     user_group
                     for user_group in user_groups
@@ -145,4 +154,27 @@ class UserGroupManager:
                 )
             else:
                 print("User groups were not synced yet, waiting...")
+            time.sleep(2)
+
+    @staticmethod
+    def wait_for_deletion_completion(
+        user_groups_to_check: list[DATestUserGroup],
+        user_performing_action: DATestUser | None = None,
+    ) -> None:
+        start = time.time()
+        user_group_ids_to_check = {user_group.id for user_group in user_groups_to_check}
+        while True:
+            fetched_user_groups = UserGroupManager.get_all(user_performing_action)
+            fetched_user_group_ids = {
+                user_group.id for user_group in fetched_user_groups
+            }
+            if not user_group_ids_to_check.intersection(fetched_user_group_ids):
+                return
+
+            if time.time() - start > MAX_DELAY:
+                raise TimeoutError(
+                    f"User groups deletion was not completed within the {MAX_DELAY} seconds"
+                )
+            else:
+                print("Some user groups are still being deleted, waiting...")
             time.sleep(2)

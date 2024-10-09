@@ -31,6 +31,7 @@ from danswer.document_index.interfaces import DocumentIndex
 from danswer.document_index.interfaces import DocumentMetadata
 from danswer.indexing.chunker import Chunker
 from danswer.indexing.embedder import IndexingEmbedder
+from danswer.indexing.indexing_heartbeat import IndexingHeartbeat
 from danswer.indexing.models import DocAwareChunk
 from danswer.indexing.models import DocMetadataAwareIndexChunk
 from danswer.utils.logger import setup_logger
@@ -220,8 +221,8 @@ def index_doc_batch_prepare(
 
     document_ids = [document.id for document in documents]
     db_docs: list[DBDocument] = get_documents_by_ids(
-        document_ids=document_ids,
         db_session=db_session,
+        document_ids=document_ids,
     )
 
     # Skip indexing docs that don't have a newer updated at
@@ -265,7 +266,13 @@ def index_doc_batch(
     Note that the documents should already be batched at this point so that it does not inflate the
     memory requirements"""
 
-    no_access = DocumentAccess.build(user_ids=[], user_groups=[], is_public=False)
+    no_access = DocumentAccess.build(
+        user_emails=[],
+        user_groups=[],
+        external_user_emails=[],
+        external_user_group_ids=[],
+        is_public=False,
+    )
 
     ctx = index_doc_batch_prepare(
         document_batch=document_batch,
@@ -277,18 +284,10 @@ def index_doc_batch(
         return 0, 0
 
     logger.debug("Starting chunking")
-    chunks: list[DocAwareChunk] = []
-    for document in ctx.updatable_docs:
-        chunks.extend(chunker.chunk(document=document))
+    chunks: list[DocAwareChunk] = chunker.chunk(ctx.updatable_docs)
 
     logger.debug("Starting embedding")
-    chunks_with_embeddings = (
-        embedder.embed_chunks(
-            chunks=chunks,
-        )
-        if chunks
-        else []
-    )
+    chunks_with_embeddings = embedder.embed_chunks(chunks) if chunks else []
 
     updatable_ids = [doc.id for doc in ctx.updatable_docs]
 
@@ -400,6 +399,13 @@ def build_indexing_pipeline(
         tokenizer=embedder.embedding_model.tokenizer,
         enable_multipass=multipass,
         enable_large_chunks=enable_large_chunks,
+        # after every doc, update status in case there are a bunch of
+        # really long docs
+        heartbeat=IndexingHeartbeat(
+            index_attempt_id=attempt_id, db_session=db_session, freq=1
+        )
+        if attempt_id
+        else None,
     )
 
     return partial(

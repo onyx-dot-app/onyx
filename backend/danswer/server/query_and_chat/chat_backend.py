@@ -164,7 +164,7 @@ def get_chat_session(
         chat_session_id=session_id,
         description=chat_session.description,
         persona_id=chat_session.persona_id,
-        persona_name=chat_session.persona.name,
+        persona_name=chat_session.persona.name if chat_session.persona else None,
         current_alternate_model=chat_session.current_alternate_model,
         messages=[
             translate_db_message_to_chat_message_detail(
@@ -588,7 +588,10 @@ def upload_files_for_chat(
         # if the file is a doc, extract text and store that so we don't need
         # to re-extract it every time we send a message
         if file_type == ChatFileType.DOC:
-            extracted_text = extract_file_text(file_name=file.filename, file=file.file)
+            extracted_text = extract_file_text(
+                file=file.file,
+                file_name=file.filename or "",
+            )
             text_file_id = str(uuid.uuid4())
             file_store.save_file(
                 file_name=text_file_id,

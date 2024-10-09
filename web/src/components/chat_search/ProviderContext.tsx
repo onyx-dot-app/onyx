@@ -1,6 +1,12 @@
 "use client";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
 import { useUser } from "../user/UserProvider";
 import { useRouter } from "next/navigation";
 import { checkLlmProvider } from "../initialSetup/welcome/lib";
@@ -28,16 +34,16 @@ export function ProviderContextProvider({
     WellKnownLLMProviderDescriptor[]
   >([]);
 
-  const fetchProviderInfo = async () => {
+  const fetchProviderInfo = useCallback(async () => {
     const { providers, options, defaultCheckSuccessful } =
       await checkLlmProvider(user);
     setValidProviderExists(providers.length > 0 && defaultCheckSuccessful);
     setProviderOptions(options);
-  };
+  }, [user, setValidProviderExists, setProviderOptions]);
 
   useEffect(() => {
     fetchProviderInfo();
-  }, [router, user]);
+  }, [router, user, fetchProviderInfo]);
 
   const shouldShowConfigurationNeeded =
     !validProviderExists && providerOptions.length > 0;

@@ -1,5 +1,7 @@
 import os
 import time
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -24,7 +26,13 @@ def confluence_connector() -> ConfluenceConnector:
     return connector
 
 
-def test_confluence_connector_basic(confluence_connector: ConfluenceConnector) -> None:
+@patch(
+    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+def test_confluence_connector_basic(
+    mock_get_api_key: MagicMock, confluence_connector: ConfluenceConnector
+) -> None:
     doc_batch_generator = confluence_connector.poll_source(0, time.time())
 
     doc_batch = next(doc_batch_generator)
@@ -41,7 +49,7 @@ def test_confluence_connector_basic(confluence_connector: ConfluenceConnector) -
     assert len(doc.sections) == 1
 
     section = doc.sections[0]
-    assert section.text == "test123small"
+    assert section.text == "test123\nsmall"
     assert (
         section.link
         == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/overview"

@@ -139,6 +139,7 @@ export function TextFormField({
   removeLabel,
   min,
   onChange,
+  width,
 }: {
   value?: string;
   name: string;
@@ -163,6 +164,7 @@ export function TextFormField({
   small?: boolean;
   min?: number;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  width?: string;
 }) {
   let heightString = defaultHeight || "";
   if (isTextArea && !heightString) {
@@ -182,7 +184,7 @@ export function TextFormField({
   };
 
   return (
-    <div className="w-full">
+    <div className={`w-full ${width}`}>
       <div className="flex gap-x-2 items-center">
         {!removeLabel && (
           <Label className="text-text-950" small={small}>

@@ -12,7 +12,8 @@ on:
 
 jobs:
   lint-test:
-    runs-on: Amd64
+    # See https://runs-on.com/runners/linux/
+    runs-on: [runs-on,runner=8cpu-linux-x64,hdd=256,"run-id=${{ github.run_id }}"]
 
     # fetch-depth 0 is required for helm/chart-testing-action
     steps:
@@ -37,9 +38,9 @@ jobs:
           backend/requirements/model_server.txt
     - run: |
         python -m pip install --upgrade pip
-        pip install -r backend/requirements/default.txt
-        pip install -r backend/requirements/dev.txt
-        pip install -r backend/requirements/model_server.txt
+        pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
+        pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
+        pip install --retries 5 --timeout 30 -r backend/requirements/model_server.txt
 
     - name: Set up chart-testing
       uses: helm/chart-testing-action@v2.6.1

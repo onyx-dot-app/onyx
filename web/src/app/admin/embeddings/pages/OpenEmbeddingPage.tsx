@@ -1,5 +1,5 @@
 "use client";
-import { Button, Card, Text } from "@tremor/react";
+import { Button, Card, Text, Title } from "@tremor/react";
 import { ModelSelector } from "../../../../components/embedding/ModelSelector";
 import {
   AVAILABLE_MODELS,
@@ -8,7 +8,6 @@ import {
 } from "../../../../components/embedding/interfaces";
 import { CustomModelForm } from "../../../../components/embedding/CustomModelForm";
 import { useState } from "react";
-import { Title } from "@tremor/react";
 export default function OpenEmbeddingPage({
   onSelectOpenSource,
   selectedProvider,
@@ -34,7 +33,12 @@ export default function OpenEmbeddingPage({
 
       <Text className="mt-6">
         Alternatively, (if you know what you&apos;re doing) you can specify a{" "}
-        <a target="_blank" href="https://www.sbert.net/" className="text-link">
+        <a
+          target="_blank"
+          href="https://www.sbert.net/"
+          className="text-link"
+          rel="noreferrer"
+        >
           SentenceTransformers
         </a>
         -compatible model of your choice below. The rough list of supported
@@ -43,6 +47,7 @@ export default function OpenEmbeddingPage({
           target="_blank"
           href="https://huggingface.co/models?library=sentence-transformers&sort=trending"
           className="text-link"
+          rel="noreferrer"
         >
           here
         </a>

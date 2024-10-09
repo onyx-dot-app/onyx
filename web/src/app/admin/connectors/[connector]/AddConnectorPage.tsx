@@ -12,7 +12,6 @@ import { useFormContext } from "@/components/context/FormContext";
 import { getSourceDisplayName } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useState } from "react";
-import { submitConnector } from "@/components/admin/connectors/ConnectorForm";
 import { deleteCredential, linkCredential } from "@/lib/credential";
 import { submitFiles } from "./pages/utils/files";
 import { submitGoogleSite } from "./pages/utils/google_site";
@@ -27,6 +26,11 @@ import {
   connectorConfigs,
   createConnectorInitialValues,
   createConnectorValidationSchema,
+  defaultPruneFreqDays,
+  defaultRefreshFreqMinutes,
+  isLoadState,
+  Connector,
+  ConnectorBase,
 } from "@/lib/connectors/connectors";
 import { Modal } from "@/components/Modal";
 import GDriveMain from "./pages/gdrive/GoogleDrivePage";
@@ -36,13 +40,71 @@ import {
   useGoogleDriveCredentials,
 } from "./pages/utils/hooks";
 import { Formik } from "formik";
-import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
+import { AccessTypeForm } from "@/components/admin/connectors/AccessTypeForm";
+import { AccessTypeGroupSelector } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import NavigationRow from "./NavigationRow";
-
+import { useRouter } from "next/navigation";
 export interface AdvancedConfig {
   refreshFreq: number;
   pruneFreq: number;
   indexingStart: string;
+}
+
+const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
+
+export async function submitConnector<T>(
+  connector: ConnectorBase<T>,
+  connectorId?: number,
+  fakeCredential?: boolean,
+  isPublicCcpair?: boolean // exclusively for mock credentials, when also need to specify ccpair details
+): Promise<{ message: string; isSuccess: boolean; response?: Connector<T> }> {
+  const isUpdate = connectorId !== undefined;
+  if (!connector.connector_specific_config) {
+    connector.connector_specific_config = {} as T;
+  }
+
+  try {
+    if (fakeCredential) {
+      const response = await fetch(
+        "/api/manage/admin/connector-with-mock-credential",
+        {
+          method: isUpdate ? "PATCH" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ ...connector, is_public: isPublicCcpair }),
+        }
+      );
+      if (response.ok) {
+        const responseJson = await response.json();
+        return { message: "Success!", isSuccess: true, response: responseJson };
+      } else {
+        const errorData = await response.json();
+        return { message: `Error: ${errorData.detail}`, isSuccess: false };
+      }
+    } else {
+      const response = await fetch(
+        BASE_CONNECTOR_URL + (isUpdate ? `/${connectorId}` : ""),
+        {
+          method: isUpdate ? "PATCH" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(connector),
+        }
+      );
+
+      if (response.ok) {
+        const responseJson = await response.json();
+        return { message: "Success!", isSuccess: true, response: responseJson };
+      } else {
+        const errorData = await response.json();
+        return { message: `Error: ${errorData.detail}`, isSuccess: false };
+      }
+    }
+  } catch (error) {
+    return { message: `Error: ${error}`, isSuccess: false };
+  }
 }
 
 export default function AddConnector({
@@ -50,6 +112,8 @@ export default function AddConnector({
 }: {
   connector: ConfigurableSources;
 }) {
+  const router = useRouter();
+
   // State for managing credentials and files
   const [currentCredential, setCurrentCredential] =
     useState<Credential<any> | null>(null);
@@ -140,13 +204,7 @@ export default function AddConnector({
   };
 
   const onSuccess = () => {
-    setPopup({
-      message: "Connector created! Redirecting to connector home page",
-      type: "success",
-    });
-    setTimeout(() => {
-      window.open("/admin/indexing/status", "_self");
-    }, 1000);
+    router.push("/admin/indexing/status?message=connector-created");
   };
 
   return (
@@ -154,14 +212,14 @@ export default function AddConnector({
       initialValues={createConnectorInitialValues(connector)}
       validationSchema={createConnectorValidationSchema(connector)}
       onSubmit={async (values) => {
-        console.log(" Iam submiing the connector");
         const {
           name,
           groups,
-          is_public: isPublic,
+          access_type,
           pruneFreq,
           indexingStart,
           refreshFreq,
+          auto_sync_options,
           ...connector_specific_config
         } = values;
 
@@ -189,9 +247,9 @@ export default function AddConnector({
 
         // Apply advanced configuration-specific transforms.
         const advancedConfiguration: any = {
-          pruneFreq: pruneFreq * 60 * 60 * 24,
+          pruneFreq: (pruneFreq || defaultPruneFreqDays) * 60 * 60 * 24,
           indexingStart: convertStringToDateTime(indexingStart),
-          refreshFreq: refreshFreq * 60,
+          refreshFreq: (refreshFreq || defaultRefreshFreqMinutes) * 60,
         };
 
         // Google sites-specific handling
@@ -203,6 +261,7 @@ export default function AddConnector({
             advancedConfiguration.refreshFreq,
             advancedConfiguration.pruneFreq,
             advancedConfiguration.indexingStart,
+            values.access_type == "public",
             name
           );
           if (response) {
@@ -218,7 +277,7 @@ export default function AddConnector({
             setPopup,
             setSelectedFiles,
             name,
-            isPublic,
+            access_type == "public",
             groups
           );
           if (response) {
@@ -230,18 +289,18 @@ export default function AddConnector({
         const { message, isSuccess, response } = await submitConnector<any>(
           {
             connector_specific_config: transformedConnectorSpecificConfig,
-            input_type: connector == "web" ? "load_state" : "poll", // single case
+            input_type: isLoadState(connector) ? "load_state" : "poll", // single case
             name: name,
             source: connector,
+            is_public: access_type == "public",
             refresh_freq: advancedConfiguration.refreshFreq || null,
             prune_freq: advancedConfiguration.pruneFreq || null,
             indexing_start: advancedConfiguration.indexingStart || null,
-            is_public: isPublic,
             groups: groups,
           },
           undefined,
           credentialActivated ? false : true,
-          isPublic
+          access_type == "public"
         );
         // If no credential
         if (!credentialActivated) {
@@ -260,8 +319,9 @@ export default function AddConnector({
             response.id,
             credential?.id!,
             name,
-            isPublic,
-            groups
+            access_type,
+            groups,
+            auto_sync_options
           );
           if (linkCredentialResponse.ok) {
             onSuccess();
@@ -365,11 +425,8 @@ export default function AddConnector({
                   selectedFiles={selectedFiles}
                 />
 
-                <IsPublicGroupSelector
-                  removeIndent
-                  formikProps={formikProps}
-                  objectName="Connector"
-                />
+                <AccessTypeForm connector={connector} />
+                <AccessTypeGroupSelector />
               </Card>
             )}
 

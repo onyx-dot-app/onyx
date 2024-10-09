@@ -83,7 +83,7 @@ export function SearchSummary({
     if (!isEditing) {
       setFinalQuery(query);
     }
-  }, [query]);
+  }, [query, isEditing]);
 
   const searchingForDisplay = (
     <div className={`flex p-1 rounded ${isOverflowed && "cursor-default"}`}>

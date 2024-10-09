@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { FormikProps, FieldArray, ArrayHelpers, ErrorMessage } from "formik";
 import { Text, Divider } from "@tremor/react";
 import { FiUsers } from "react-icons/fi";
-import { UserGroup, User, UserRole } from "@/lib/types";
+import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import { BooleanFormField } from "@/components/admin/connectors/Field";
 import { useUser } from "./user/UserProvider";
@@ -49,12 +49,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
         setShouldHideContent(false);
       }
     }
-  }, [
-    user,
-    userGroups,
-    formikProps.setFieldValue,
-    formikProps.values.is_public,
-  ]);
+  }, [user, userGroups, isPaidEnterpriseFeaturesEnabled]);
 
   if (isLoadingUser || userGroupsIsLoading) {
     return <div>Loading...</div>;

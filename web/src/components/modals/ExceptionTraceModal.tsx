@@ -18,7 +18,7 @@ export default function ExceptionTraceModal({
       title="Full Exception Trace"
       onOutsideClick={onOutsideClick}
     >
-      <div className="overflow-y-auto mb-6">
+      <div className="overflow-y-auto include-scrollbar pr-3 h-full mb-6">
         <div className="mb-6">
           {!copyClicked ? (
             <div

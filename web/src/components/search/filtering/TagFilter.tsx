@@ -83,7 +83,7 @@ export function TagFilter({
       />
       {selectedTags.length > 0 && (
         <div className="mt-2">
-          <div className="mt-1 flex flex-wrap gap-x-1 gap-y-1">
+          <div className="mt-1 flex bg-black flex-wrap gap-x-1 gap-y-1">
             {selectedTags.map((tag) => (
               <div
                 key={tag.tag_key + tag.tag_value}

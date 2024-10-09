@@ -1,5 +1,4 @@
 "use client";
-import { Button } from "@tremor/react";
 import React, { ReactNode, useState } from "react";
 import { FiSettings } from "react-icons/fi";
 

@@ -40,8 +40,8 @@ def _convert_driveitem_to_document(
     driveitem: DriveItem,
 ) -> Document:
     file_text = extract_file_text(
-        file_name=driveitem.name,
         file=io.BytesIO(driveitem.get_content().execute_query().value),
+        file_name=driveitem.name,
         break_on_unprocessable=False,
     )
 

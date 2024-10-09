@@ -51,3 +51,9 @@ class ConnectorCredentialPairStatus(str, PyEnum):
 
     def is_active(self) -> bool:
         return self == ConnectorCredentialPairStatus.ACTIVE
+
+
+class AccessType(str, PyEnum):
+    PUBLIC = "public"
+    PRIVATE = "private"
+    SYNC = "sync"

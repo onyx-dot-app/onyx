@@ -1,4 +1,4 @@
-import { Feedback } from "@/lib/types";
+import { Feedback, SessionType } from "@/lib/types";
 
 export interface QueryAnalytics {
   total_queries: number;
@@ -40,6 +40,7 @@ export interface ChatSessionSnapshot {
   messages: MessageSnapshot[];
   persona_name: string | null;
   time_created: string;
+  flow_type: SessionType;
 }
 
 export interface ChatSessionMinimal {
@@ -51,6 +52,7 @@ export interface ChatSessionMinimal {
   persona_name: string | null;
   time_created: string;
   feedback_type: Feedback | "mixed" | null;
+  flow_type: SessionType;
 }
 
 export interface UsageReport {

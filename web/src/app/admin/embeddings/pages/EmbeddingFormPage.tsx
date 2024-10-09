@@ -13,7 +13,7 @@ import {
 } from "@/components/embedding/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import useSWR, { mutate } from "swr";
+import useSWR from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
 import AdvancedEmbeddingFormPage from "./AdvancedEmbeddingFormPage";
 import {
@@ -25,9 +25,11 @@ import RerankingDetailsForm from "../RerankingFormPage";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
 import { Modal } from "@/components/Modal";
 
+import { useRouter } from "next/navigation";
 export default function EmbeddingForm() {
   const { formStep, nextFormStep, prevFormStep } = useEmbeddingFormContext();
   const { popup, setPopup } = usePopup();
+  const router = useRouter();
 
   const [advancedEmbeddingDetails, setAdvancedEmbeddingDetails] =
     useState<AdvancedSearchConfiguration>({
@@ -163,7 +165,7 @@ export default function EmbeddingForm() {
   }
 
   const updateSearch = async () => {
-    let values: SavedSearchSettings = {
+    const values: SavedSearchSettings = {
       ...rerankingDetails,
       ...advancedEmbeddingDetails,
       provider_type:
@@ -172,16 +174,15 @@ export default function EmbeddingForm() {
 
     const response = await updateSearchSettings(values);
     if (response.ok) {
-      setPopup({
-        message: "Updated search settings succesffuly",
-        type: "success",
-      });
-      mutate("/api/search-settings/get-current-search-settings");
       return true;
     } else {
       setPopup({ message: "Failed to update search settings", type: "error" });
       return false;
     }
+  };
+
+  const navigateToEmbeddingPage = (changedResource: string) => {
+    router.push("/admin/configuration/search?message=search-settings");
   };
 
   const onConfirm = async () => {
@@ -227,14 +228,7 @@ export default function EmbeddingForm() {
     );
 
     if (response.ok) {
-      setPopup({
-        message: "Changed provider suceessfully. Redirecing to embedding page",
-        type: "success",
-      });
-      mutate("/api/search-settings/get-secondary-search-settings");
-      setTimeout(() => {
-        window.open("/admin/configuration/search", "_self");
-      }, 2000);
+      navigateToEmbeddingPage("embedding model");
     } else {
       setPopup({ message: "Failed to update embedding model", type: "error" });
 
@@ -286,6 +280,7 @@ export default function EmbeddingForm() {
         className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-accent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
         onClick={async () => {
           updateSearch();
+          navigateToEmbeddingPage("search settings");
         }}
       >
         Update Search
@@ -405,7 +400,6 @@ export default function EmbeddingForm() {
               <div className="flex w-full justify-end">
                 <button
                   className={`enabled:cursor-pointer enabled:hover:underline disabled:cursor-not-allowed mt-auto enabled:text-text-600 disabled:text-text-400 ml-auto flex gap-x-1 items-center py-2.5 px-3.5 text-sm font-regular rounded-sm`}
-                  // disabled={!isFormValid}
                   onClick={() => {
                     nextFormStep();
                   }}

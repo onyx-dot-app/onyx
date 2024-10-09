@@ -20,7 +20,6 @@ import { Button, Card, Divider } from "@tremor/react";
 import { useRouter } from "next/navigation";
 import { Persona } from "../assistants/interfaces";
 import { useState } from "react";
-import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import CollapsibleSection from "../assistants/CollapsibleSection";
@@ -229,7 +228,7 @@ export const SlackBotCreationForm = ({
                                 const ind = values.document_sets.indexOf(
                                   documentSet.id
                                 );
-                                let isSelected = ind !== -1;
+                                const isSelected = ind !== -1;
 
                                 return (
                                   <DocumentSetSelectable

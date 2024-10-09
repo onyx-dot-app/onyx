@@ -7,11 +7,15 @@ on:
 
 env:
   REGISTRY_IMAGE: danswer/danswer-web-server
-
+  LATEST_TAG: ${{ contains(github.ref_name, 'latest') }}
+  
 jobs:
   build:
-    runs-on: 
-      group: ${{ matrix.platform == 'linux/amd64' && 'amd64-image-builders' || 'arm64-image-builders' }}
+    runs-on:
+      - runs-on
+      - runner=${{ matrix.platform == 'linux/amd64' && '8cpu-linux-x64' || '8cpu-linux-arm64' }}
+      - run-id=${{ github.run_id }}
+      - tag=platform-${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
@@ -35,7 +39,7 @@ jobs:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |
             type=raw,value=${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
-            type=raw,value=${{ env.REGISTRY_IMAGE }}:latest
+            type=raw,value=${{ env.LATEST_TAG == 'true' && format('{0}:latest', env.REGISTRY_IMAGE) || '' }}
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -112,8 +116,16 @@ jobs:
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
 
+    # trivy has their own rate limiting issues causing this action to flake
+    # we worked around it by hardcoding to different db repos in env
+    # can re-enable when they figure it out
+    # https://github.com/aquasecurity/trivy/discussions/7538
+    # https://github.com/aquasecurity/trivy-action/issues/389
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
+        env:
+          TRIVY_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-db:2'
+          TRIVY_JAVA_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-java-db:1'
         with:
           image-ref: docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
           severity: 'CRITICAL,HIGH'

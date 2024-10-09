@@ -77,14 +77,15 @@ def _initialize_files(config: dict) -> tuple[str, list[dict]]:
         "number_of_questions_in_dataset": len(questions),
     }
 
-    env_vars = get_docker_container_env_vars(config["env_name"])
-    if env_vars["ENV_SEED_CONFIGURATION"]:
-        del env_vars["ENV_SEED_CONFIGURATION"]
-    if env_vars["GPG_KEY"]:
-        del env_vars["GPG_KEY"]
-    if metadata["test_config"]["llm"]["api_key"]:
-        del metadata["test_config"]["llm"]["api_key"]
-    metadata.update(env_vars)
+    if config["env_name"]:
+        env_vars = get_docker_container_env_vars(config["env_name"])
+        if env_vars["ENV_SEED_CONFIGURATION"]:
+            del env_vars["ENV_SEED_CONFIGURATION"]
+        if env_vars["GPG_KEY"]:
+            del env_vars["GPG_KEY"]
+        if metadata["test_config"]["llm"]["api_key"]:
+            del metadata["test_config"]["llm"]["api_key"]
+        metadata.update(env_vars)
     metadata_path = os.path.join(test_output_folder, METADATA_FILENAME)
     print("saving metadata to:", metadata_path)
     with open(metadata_path, "w", encoding="utf-8") as yaml_file:
@@ -95,17 +96,18 @@ def _initialize_files(config: dict) -> tuple[str, list[dict]]:
     )
     shutil.copy2(questions_file_path, copied_questions_file_path)
 
-    zipped_files_path = config["zipped_documents_file"]
-    copied_zipped_documents_path = os.path.join(
-        test_output_folder, os.path.basename(zipped_files_path)
-    )
-    shutil.copy2(zipped_files_path, copied_zipped_documents_path)
+    if config["zipped_documents_file"]:
+        zipped_files_path = config["zipped_documents_file"]
+        copied_zipped_documents_path = os.path.join(
+            test_output_folder, os.path.basename(zipped_files_path)
+        )
+        shutil.copy2(zipped_files_path, copied_zipped_documents_path)
 
-    zipped_files_folder = os.path.dirname(zipped_files_path)
-    jsonl_file_path = os.path.join(zipped_files_folder, "target_docs.jsonl")
-    if os.path.exists(jsonl_file_path):
-        copied_jsonl_path = os.path.join(test_output_folder, "target_docs.jsonl")
-        shutil.copy2(jsonl_file_path, copied_jsonl_path)
+        zipped_files_folder = os.path.dirname(zipped_files_path)
+        jsonl_file_path = os.path.join(zipped_files_folder, "target_docs.jsonl")
+        if os.path.exists(jsonl_file_path):
+            copied_jsonl_path = os.path.join(test_output_folder, "target_docs.jsonl")
+            shutil.copy2(jsonl_file_path, copied_jsonl_path)
 
     return test_output_folder, questions
 

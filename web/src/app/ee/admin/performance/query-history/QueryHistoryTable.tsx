@@ -9,9 +9,10 @@ import {
   TableBody,
   TableCell,
   Text,
+  Divider,
+  Select,
+  SelectItem,
 } from "@tremor/react";
-import { Divider } from "@tremor/react";
-import { Select, SelectItem } from "@tremor/react";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ChatSessionMinimal } from "../usage/types";
 import { timestampToReadableDate } from "@/lib/dateUtils";

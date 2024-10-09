@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_curator_or_admin_user
+from danswer.background.celery.celery_app import celery_app
 from danswer.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
+from danswer.configs.constants import DanswerCeleryPriority
 from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import KV_GEN_AI_KEY_CHECK_TIME
 from danswer.db.connector_credential_pair import get_connector_credential_pair
@@ -27,9 +29,9 @@ from danswer.db.index_attempt import cancel_indexing_attempts_for_ccpair
 from danswer.db.models import User
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
-from danswer.dynamic_configs.factory import get_dynamic_config_store
-from danswer.dynamic_configs.interface import ConfigNotFoundError
 from danswer.file_store.file_store import get_default_file_store
+from danswer.key_value_store.factory import get_kv_store
+from danswer.key_value_store.interface import KvKeyNotFoundError
 from danswer.llm.factory import get_default_llms
 from danswer.llm.utils import test_llm
 from danswer.server.documents.models import ConnectorCredentialPairIdentifier
@@ -112,7 +114,7 @@ def validate_existing_genai_api_key(
     _: User = Depends(current_admin_user),
 ) -> None:
     # Only validate every so often
-    kv_store = get_dynamic_config_store()
+    kv_store = get_kv_store()
     curr_time = datetime.now(tz=timezone.utc)
     try:
         last_check = datetime.fromtimestamp(
@@ -121,7 +123,7 @@ def validate_existing_genai_api_key(
         check_freq_sec = timedelta(seconds=GENERATIVE_MODEL_ACCESS_CHECK_FREQ)
         if curr_time - last_check < check_freq_sec:
             return
-    except ConfigNotFoundError:
+    except KvKeyNotFoundError:
         # First time checking the key, nothing unusual
         pass
 
@@ -145,10 +147,6 @@ def create_deletion_attempt_for_connector_id(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    from danswer.background.celery.celery_app import (
-        cleanup_connector_credential_pair_task,
-    )
-
     connector_id = connector_credential_pair_identifier.connector_id
     credential_id = connector_credential_pair_identifier.credential_id
 
@@ -191,9 +189,13 @@ def create_deletion_attempt_for_connector_id(
         cc_pair_id=cc_pair.id,
         status=ConnectorCredentialPairStatus.DELETING,
     )
-    # actually kick off the deletion
-    cleanup_connector_credential_pair_task.apply_async(
-        kwargs=dict(connector_id=connector_id, credential_id=credential_id),
+
+    db_session.commit()
+
+    # run the beat task to pick up this deletion from the db immediately
+    celery_app.send_task(
+        "check_for_connector_deletion_task",
+        priority=DanswerCeleryPriority.HIGH,
     )
 
     if cc_pair.connector.source == DocumentSource.FILE:

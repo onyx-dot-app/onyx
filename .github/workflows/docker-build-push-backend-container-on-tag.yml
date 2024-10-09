@@ -7,16 +7,17 @@ on:
 
 env:
   REGISTRY_IMAGE: danswer/danswer-backend
-
+  LATEST_TAG: ${{ contains(github.ref_name, 'latest') }}
+  
 jobs:
   build-and-push:
-    # TODO: make this a matrix build like the web containers
-    runs-on: 
-      group: amd64-image-builders
+    # TODO: investigate a matrix build like the web container 
+    # See https://runs-on.com/runners/linux/
+    runs-on: [runs-on,runner=8cpu-linux-x64,"run-id=${{ github.run_id }}"]
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -27,6 +28,11 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_TOKEN }}
 
+    - name: Install build-essential
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+          
     - name: Backend Image Docker Build and Push
       uses: docker/build-push-action@v5
       with:
@@ -36,12 +42,20 @@ jobs:
         push: true
         tags: |
           ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
-          ${{ env.REGISTRY_IMAGE }}:latest
+          ${{ env.LATEST_TAG == 'true' && format('{0}:latest', env.REGISTRY_IMAGE) || '' }}
         build-args: |
           DANSWER_VERSION=${{ github.ref_name }}
 
+    # trivy has their own rate limiting issues causing this action to flake
+    # we worked around it by hardcoding to different db repos in env
+    # can re-enable when they figure it out
+    # https://github.com/aquasecurity/trivy/discussions/7538
+    # https://github.com/aquasecurity/trivy-action/issues/389
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
+      env:
+        TRIVY_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-db:2'
+        TRIVY_JAVA_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-java-db:1'
       with:
         # To run locally: trivy image --severity HIGH,CRITICAL danswer/danswer-backend
         image-ref: docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}

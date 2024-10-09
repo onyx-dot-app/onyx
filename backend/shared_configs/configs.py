@@ -1,4 +1,6 @@
 import os
+from typing import List
+from urllib.parse import urlparse
 
 # Used for logging
 SLACK_CHANNEL_ID = "channel_id"
@@ -58,6 +60,9 @@ DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true
 # notset, debug, info, notice, warning, error, or critical
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "notice")
 
+# Only used for OpenAI
+OPENAI_EMBEDDING_TIMEOUT = int(os.environ.get("OPENAI_EMBEDDING_TIMEOUT", "600"))
+
 
 # Fields which should only be set on new search setting
 PRESERVED_SEARCH_FIELDS = [
@@ -73,3 +78,34 @@ PRESERVED_SEARCH_FIELDS = [
     "passage_prefix",
     "query_prefix",
 ]
+
+
+def validate_cors_origin(origin: str) -> None:
+    parsed = urlparse(origin)
+    if parsed.scheme not in ["http", "https"] or not parsed.netloc:
+        raise ValueError(f"Invalid CORS origin: '{origin}'")
+
+
+# Examples of valid values for the environment variable:
+# - "" (allow all origins)
+# - "http://example.com" (single origin)
+# - "http://example.com,https://example.org" (multiple origins)
+# - "*" (allow all origins)
+CORS_ALLOWED_ORIGIN_ENV = os.environ.get("CORS_ALLOWED_ORIGIN", "")
+
+# Explicitly declare the type of CORS_ALLOWED_ORIGIN
+CORS_ALLOWED_ORIGIN: List[str]
+
+if CORS_ALLOWED_ORIGIN_ENV:
+    # Split the environment variable into a list of origins
+    CORS_ALLOWED_ORIGIN = [
+        origin.strip()
+        for origin in CORS_ALLOWED_ORIGIN_ENV.split(",")
+        if origin.strip()
+    ]
+    # Validate each origin in the list
+    for origin in CORS_ALLOWED_ORIGIN:
+        validate_cors_origin(origin)
+else:
+    # If the environment variable is empty, allow all origins
+    CORS_ALLOWED_ORIGIN = ["*"]

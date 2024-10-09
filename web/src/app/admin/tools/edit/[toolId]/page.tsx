@@ -3,7 +3,6 @@ import { Card, Text, Title } from "@tremor/react";
 import { ToolEditor } from "@/app/admin/tools/ToolEditor";
 import { fetchToolByIdSS } from "@/lib/tools/fetchTools";
 import { DeleteToolButton } from "./DeleteToolButton";
-import { FiTool } from "react-icons/fi";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { BackButton } from "@/components/BackButton";
 import { ToolIcon } from "@/components/icons/icons";

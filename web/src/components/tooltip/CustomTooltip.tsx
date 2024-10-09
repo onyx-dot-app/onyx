@@ -121,7 +121,7 @@ export const CustomTooltip = ({
       {isVisible &&
         createPortal(
           <div
-            className={`fixed z-[1000] ${citation ? "max-w-[350px]" : "w-40"} ${
+            className={`min-w-8 fixed z-[1000] ${citation ? "max-w-[350px]" : "w-40"} ${
               large ? (medium ? "w-88" : "w-96") : line && "max-w-64 w-auto"
             } 
             transform -translate-x-1/2 text-sm 
