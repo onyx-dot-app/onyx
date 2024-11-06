@@ -13,8 +13,8 @@ Connectors come in 3 different flows:
   documents via a connector's API or loads the documents from some sort of a dump file.
 - Poll connector:
   - Incrementally updates documents based on a provided time range. It is used by the background job to pull the latest
-  changes additions and changes since the last round of polling. This connector helps keep the document index up to date
-  without needing to fetch/embed/index every document which generally be too slow to do frequently on large sets of
+  changes and additions since the last round of polling. This connector helps keep the document index up to date
+  without needing to fetch/embed/index every document which would be too slow to do frequently on large sets of
   documents.
 - Event Based connectors:
   - Connectors that listen to events and update documents accordingly.

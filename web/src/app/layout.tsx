@@ -13,12 +13,14 @@ import { Metadata } from "next";
 import { buildClientUrl } from "@/lib/utilsSS";
 import { Inter } from "next/font/google";
 import Head from "next/head";
-import { EnterpriseSettings } from "./admin/settings/interfaces";
+import { EnterpriseSettings, GatingType } from "./admin/settings/interfaces";
 import { Card } from "@tremor/react";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { Logo } from "@/components/Logo";
 import { UserProvider } from "@/components/user/UserProvider";
 import { ProviderContextProvider } from "@/components/chat_search/ProviderContext";
+import { fetchAssistantData } from "@/lib/chat/fetchAssistantdata";
+import { AppProvider } from "@/components/context/AppProvider";
 
 
 declare global {
@@ -62,9 +64,14 @@ export default async function RootLayout({
 }) {
   const combinedSettings = await fetchSettingsSS();
 
-  if (!combinedSettings) {
-    // Just display a simple full page error if fetching fails.
+  const data = await fetchAssistantData();
 
+  const { assistants, hasAnyConnectors, hasImageCompatibleModel } = data;
+
+  const productGating =
+    combinedSettings?.settings.product_gating ?? GatingType.NONE;
+
+  if (!combinedSettings) {
     return (
       <html lang="en" className={`${inter.variable} font-sans`}>
         <Head>
@@ -116,6 +123,42 @@ export default async function RootLayout({
       </html>
     );
   }
+  if (productGating === GatingType.FULL) {
+    return (
+      <html lang="en" className={`${inter.variable} font-sans`}>
+        <Head>
+          <title>Access Restricted | Danswer</title>
+        </Head>
+        <body className="bg-background text-default">
+          <div className="flex flex-col items-center justify-center min-h-screen">
+            <div className="mb-2 flex items-center max-w-[175px]">
+              <HeaderTitle>Danswer</HeaderTitle>
+              <Logo height={40} width={40} />
+            </div>
+            <Card className="p-8 max-w-md">
+              <h1 className="text-2xl font-bold mb-4 text-error">
+                Access Restricted
+              </h1>
+              <p className="text-text-500 mb-4">
+                We regret to inform you that your access to Danswer has been
+                temporarily suspended due to a lapse in your subscription.
+              </p>
+              <p className="text-text-500 mb-4">
+                To reinstate your access and continue benefiting from
+                Danswer&apos;s powerful features, please update your payment
+                information.
+              </p>
+              <p className="text-text-500">
+                If you&apos;re an admin, you can resolve this by visiting the
+                billing section. For other users, please reach out to your
+                administrator to address this matter.
+              </p>
+            </Card>
+          </div>
+        </body>
+      </html>
+    );
+  }
 
   return (
     <html lang="en">
@@ -144,13 +187,14 @@ export default async function RootLayout({
             process.env.THEME_IS_DARK?.toLowerCase() === "true" ? "dark" : ""
           }`}
         >
-          <UserProvider>
-            <ProviderContextProvider>
-              <SettingsProvider settings={combinedSettings}>
-                {children}
-              </SettingsProvider>
-            </ProviderContextProvider>
-          </UserProvider>
+          <AppProvider
+            settings={combinedSettings}
+            assistants={assistants}
+            hasAnyConnectors={hasAnyConnectors}
+            hasImageCompatibleModel={hasImageCompatibleModel}
+          >
+            {children}
+          </AppProvider>
         </div>
       </body>
     </html>

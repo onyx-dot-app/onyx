@@ -123,14 +123,14 @@ class DATestPersona(BaseModel):
 
 #
 class DATestChatSession(BaseModel):
-    id: int
+    id: UUID
     persona_id: int
     description: str
 
 
 class DATestChatMessage(BaseModel):
     id: str | None = None
-    chat_session_id: int
+    chat_session_id: UUID
     parent_message_id: str | None
     message: str
     response: str

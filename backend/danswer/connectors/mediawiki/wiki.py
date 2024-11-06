@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import itertools
 from collections.abc import Generator
+from collections.abc import Iterator
 from typing import Any
 from typing import ClassVar
 
@@ -19,6 +20,10 @@ from danswer.connectors.interfaces import SecondsSinceUnixEpoch
 from danswer.connectors.mediawiki.family import family_class_dispatch
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
+from danswer.utils.logger import setup_logger
+
+
+logger = setup_logger()
 
 
 def pywikibot_timestamp_to_utc_datetime(
@@ -74,7 +79,7 @@ def get_doc_from_page(
         sections=sections,
         semantic_identifier=page.title(),
         metadata={"categories": [category.title() for category in page.categories()]},
-        id=page.pageid,
+        id=f"MEDIAWIKI_{page.pageid}_{page.full_url()}",
     )
 
 
@@ -117,13 +122,18 @@ class MediaWikiConnector(LoadConnector, PollConnector):
 
         # short names can only have ascii letters and digits
 
-        self.family = family_class_dispatch(hostname, "Wikipedia Connector")()
+        self.family = family_class_dispatch(hostname, "WikipediaConnector")()
         self.site = pywikibot.Site(fam=self.family, code=language_code)
         self.categories = [
             pywikibot.Category(self.site, f"Category:{category.replace(' ', '_')}")
             for category in categories
         ]
-        self.pages = [pywikibot.Page(self.site, page) for page in pages]
+
+        self.pages = []
+        for page in pages:
+            if not page:
+                continue
+            self.pages.append(pywikibot.Page(self.site, page))
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load credentials for a MediaWiki site.
@@ -169,8 +179,13 @@ class MediaWikiConnector(LoadConnector, PollConnector):
         ]
 
         # Since we can specify both individual pages and categories, we need to iterate over all of them.
-        all_pages = itertools.chain(self.pages, *category_pages)
+        all_pages: Iterator[pywikibot.Page] = itertools.chain(
+            self.pages, *category_pages
+        )
         for page in all_pages:
+            logger.info(
+                f"MediaWikiConnector: title='{page.title()}' url={page.full_url()}"
+            )
             doc_batch.append(
                 get_doc_from_page(page, self.site, self.document_source_type)
             )
@@ -216,5 +231,7 @@ if __name__ == "__main__":
     print("All docs", all_docs)
     current = datetime.datetime.now().timestamp()
     one_day_ago = current - 30 * 24 * 60 * 60  # 30 days
+
     latest_docs = list(test_connector.poll_source(one_day_ago, current))
+
     print("Latest docs", latest_docs)

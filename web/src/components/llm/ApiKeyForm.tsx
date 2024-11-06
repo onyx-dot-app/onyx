@@ -9,10 +9,12 @@ export const ApiKeyForm = ({
   onSuccess,
   providerOptions,
   setPopup,
+  hideSuccess,
 }: {
   onSuccess: () => void;
   providerOptions: WellKnownLLMProviderDescriptor[];
   setPopup: (popup: PopupSpec) => void;
+  hideSuccess?: boolean;
 }) => {
   const defaultProvider = providerOptions[0]?.name;
   const providerNameToIndexMap = new Map<string, number>();
@@ -56,6 +58,7 @@ export const ApiKeyForm = ({
                   onClose={() => onSuccess()}
                   shouldMarkAsDefault
                   setPopup={setPopup}
+                  hideSuccess={hideSuccess}
                 />
               </TabPanel>
             );
@@ -65,6 +68,7 @@ export const ApiKeyForm = ({
               onClose={() => onSuccess()}
               shouldMarkAsDefault
               setPopup={setPopup}
+              hideSuccess={hideSuccess}
             />
           </TabPanel>
         </TabPanels>

@@ -30,7 +30,7 @@ const FolderItem = ({
   initiallySelected,
 }: {
   folder: Folder;
-  currentChatId?: number;
+  currentChatId?: string;
   isInitiallyExpanded: boolean;
   initiallySelected: boolean;
 }) => {
@@ -145,10 +145,7 @@ const FolderItem = ({
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragOver(false);
-    const chatSessionId = parseInt(
-      event.dataTransfer.getData(CHAT_SESSION_ID_KEY),
-      10
-    );
+    const chatSessionId = event.dataTransfer.getData(CHAT_SESSION_ID_KEY);
     try {
       await addChatToFolder(folder.folder_id, chatSessionId);
       router.refresh(); // Refresh to show the updated folder contents
@@ -302,7 +299,7 @@ export const FolderList = ({
   newFolderId,
 }: {
   folders: Folder[];
-  currentChatId?: number;
+  currentChatId?: string;
   openedFolders?: { [key: number]: boolean };
   newFolderId: number | null;
 }) => {

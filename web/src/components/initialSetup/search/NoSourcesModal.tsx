@@ -10,7 +10,7 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 export function NoSourcesModal() {
   const settings = useContext(SettingsContext);
   const [isHidden, setIsHidden] = useState(
-    !settings?.settings.search_page_enabled ?? false
+    !settings?.settings.search_page_enabled
   );
 
   if (isHidden) {
@@ -19,7 +19,7 @@ export function NoSourcesModal() {
 
   return (
     <Modal
-      className="max-w-4xl"
+      width="max-w-3xl w-full"
       title="🧐 No sources connected"
       onOutsideClick={() => setIsHidden(true)}
     >

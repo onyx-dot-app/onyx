@@ -62,6 +62,26 @@ def test_cohere_embedding(cohere_embedding_model: EmbeddingModel) -> None:
 
 
 @pytest.fixture
+def litellm_embedding_model() -> EmbeddingModel:
+    return EmbeddingModel(
+        server_host="localhost",
+        server_port=9000,
+        model_name="text-embedding-3-small",
+        normalize=True,
+        query_prefix=None,
+        passage_prefix=None,
+        api_key=os.getenv("LITE_LLM_API_KEY"),
+        provider_type=EmbeddingProvider.LITELLM,
+        api_url=os.getenv("LITE_LLM_API_URL"),
+    )
+
+
+def test_litellm_embedding(litellm_embedding_model: EmbeddingModel) -> None:
+    _run_embeddings(VALID_SAMPLE, litellm_embedding_model, 1536)
+    _run_embeddings(TOO_LONG_SAMPLE, litellm_embedding_model, 1536)
+
+
+@pytest.fixture
 def local_nomic_embedding_model() -> EmbeddingModel:
     return EmbeddingModel(
         server_host="localhost",

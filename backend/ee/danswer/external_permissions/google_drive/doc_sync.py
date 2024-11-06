@@ -9,17 +9,16 @@ from googleapiclient.errors import HttpError  # type: ignore
 from sqlalchemy.orm import Session
 
 from danswer.access.models import ExternalAccess
-from danswer.connectors.cross_connector_utils.retry_wrapper import retry_builder
 from danswer.connectors.factory import instantiate_connector
 from danswer.connectors.google_drive.connector_auth import (
     get_google_drive_creds,
 )
-from danswer.connectors.google_drive.constants import FETCH_PERMISSIONS_SCOPES
 from danswer.connectors.interfaces import PollConnector
 from danswer.connectors.models import InputType
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.users import batch_add_non_web_user_if_not_exists__no_commit
 from danswer.utils.logger import setup_logger
+from danswer.utils.retry_wrapper import retry_builder
 from ee.danswer.db.document import upsert_document_external_perms__no_commit
 
 # Google Drive APIs are quite flakey and may 500 for an
@@ -72,25 +71,6 @@ def _fetch_permissions_paginated(
 ) -> Iterator[dict[str, Any]]:
     next_token = None
 
-    # Check if the file is trashed
-    # Returning nothing here will cause the external permissions to
-    # be empty which will get written to vespa (failing shut)
-    try:
-        file_metadata = add_retries(
-            lambda: drive_service.files()
-            .get(fileId=drive_file_id, fields="id, trashed")
-            .execute()
-        )()
-    except HttpError as e:
-        if e.resp.status == 404 or e.resp.status == 403:
-            return
-        logger.error(f"Failed to fetch permissions: {e}")
-        raise
-
-    if file_metadata.get("trashed", False):
-        logger.debug(f"File with ID {drive_file_id} is trashed")
-        return
-
     # Get paginated permissions for the file id
     while True:
         try:
@@ -99,7 +79,7 @@ def _fetch_permissions_paginated(
                     drive_service.permissions()
                     .list(
                         fileId=drive_file_id,
-                        fields="permissions(id, emailAddress, role, type, domain)",
+                        fields="permissions(emailAddress, type, domain)",
                         supportsAllDrives=True,
                         pageToken=next_token,
                     )
@@ -107,10 +87,17 @@ def _fetch_permissions_paginated(
                 )
             )()
         except HttpError as e:
-            if e.resp.status == 404 or e.resp.status == 403:
+            if e.resp.status == 404:
+                logger.warning(f"Document with id {drive_file_id} not found: {e}")
                 break
-            logger.error(f"Failed to fetch permissions: {e}")
-            raise
+            elif e.resp.status == 403:
+                logger.warning(
+                    f"Access denied for retrieving document permissions: {e}"
+                )
+                break
+            else:
+                logger.error(f"Failed to fetch permissions: {e}")
+                raise
 
         for permission in permissions_resp.get("permissions", []):
             yield permission
@@ -123,12 +110,12 @@ def _fetch_permissions_paginated(
 def _fetch_google_permissions_for_document_id(
     db_session: Session,
     drive_file_id: str,
-    raw_credentials_json: dict[str, str],
+    credentials_json: dict[str, str],
     company_google_domains: list[str],
 ) -> ExternalAccess:
     # Authenticate and construct service
     google_drive_creds, _ = get_google_drive_creds(
-        raw_credentials_json, scopes=FETCH_PERMISSIONS_SCOPES
+        credentials_json,
     )
     if not google_drive_creds.valid:
         raise ValueError("Invalid Google Drive credentials")
@@ -187,7 +174,7 @@ def gdrive_doc_sync(
         ext_access = _fetch_google_permissions_for_document_id(
             db_session=db_session,
             drive_file_id=doc_additional_info,
-            raw_credentials_json=cc_pair.credential.credential_json,
+            credentials_json=cc_pair.credential.credential_json,
             company_google_domains=[
                 cast(dict[str, str], sync_details)["company_domain"]
             ],

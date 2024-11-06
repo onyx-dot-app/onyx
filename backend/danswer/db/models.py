@@ -5,8 +5,11 @@ from typing import Any
 from typing import Literal
 from typing import NotRequired
 from typing import Optional
+from uuid import uuid4
 from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
+
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseOAuthAccountTableUUID
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
@@ -57,6 +60,7 @@ from danswer.llm.override_models import PromptOverride
 from danswer.search.enums import RecencyBiasSetting
 from danswer.utils.encryption import decrypt_bytes_to_string
 from danswer.utils.encryption import encrypt_string_to_bytes
+from danswer.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import RerankerProvider
 
@@ -231,6 +235,9 @@ class Notification(Base):
     first_shown: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship("User", back_populates="notifications")
+    additional_data: Mapped[dict | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
 
 
 """
@@ -615,6 +622,7 @@ class SearchSettings(Base):
     normalize: Mapped[bool] = mapped_column(Boolean)
     query_prefix: Mapped[str | None] = mapped_column(String, nullable=True)
     passage_prefix: Mapped[str | None] = mapped_column(String, nullable=True)
+
     status: Mapped[IndexModelStatus] = mapped_column(
         Enum(IndexModelStatus, native_enum=False)
     )
@@ -669,6 +677,20 @@ class SearchSettings(Base):
     def __repr__(self) -> str:
         return f"<EmbeddingModel(model_name='{self.model_name}', status='{self.status}',\
           cloud_provider='{self.cloud_provider.provider_type if self.cloud_provider else 'None'}')>"
+
+    @property
+    def api_version(self) -> str | None:
+        return (
+            self.cloud_provider.api_version if self.cloud_provider is not None else None
+        )
+
+    @property
+    def deployment_name(self) -> str | None:
+        return (
+            self.cloud_provider.deployment_name
+            if self.cloud_provider is not None
+            else None
+        )
 
     @property
     def api_url(self) -> str | None:
@@ -905,7 +927,9 @@ class ToolCall(Base):
 class ChatSession(Base):
     __tablename__ = "chat_session"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
     )
@@ -975,7 +999,9 @@ class ChatMessage(Base):
     __tablename__ = "chat_message"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    chat_session_id: Mapped[int] = mapped_column(ForeignKey("chat_session.id"))
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id")
+    )
 
     alternate_assistant_id = mapped_column(
         Integer, ForeignKey("persona.id"), nullable=True
@@ -1164,6 +1190,9 @@ class CloudEmbeddingProvider(Base):
     )
     api_url: Mapped[str | None] = mapped_column(String, nullable=True)
     api_key: Mapped[str | None] = mapped_column(EncryptedString())
+    api_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
     search_settings: Mapped[list["SearchSettings"]] = relationship(
         "SearchSettings",
         back_populates="cloud_provider",
@@ -1263,7 +1292,7 @@ class Tool(Base):
     openapi_schema: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
-    custom_headers: Mapped[list[dict[str, str]] | None] = mapped_column(
+    custom_headers: Mapped[list[HeaderItemDict] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
     # user who created / owns the tool. Will be None for built-in tools.
@@ -1763,3 +1792,23 @@ class UsageReport(Base):
 
     requestor = relationship("User")
     file = relationship("PGFileStore")
+
+
+"""
+Multi-tenancy related tables
+"""
+
+
+class PublicBase(DeclarativeBase):
+    __abstract__ = True
+
+
+class UserTenantMapping(Base):
+    __tablename__ = "user_tenant_mapping"
+    __table_args__ = (
+        UniqueConstraint("email", "tenant_id", name="uq_user_tenant"),
+        {"schema": "public"},
+    )
+
+    email: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)

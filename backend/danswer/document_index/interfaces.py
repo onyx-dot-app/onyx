@@ -127,6 +127,17 @@ class Verifiable(abc.ABC):
         """
         raise NotImplementedError
 
+    @staticmethod
+    @abc.abstractmethod
+    def register_multitenant_indices(
+        indices: list[str],
+        embedding_dims: list[int],
+    ) -> None:
+        """
+        Register multitenant indices with the document index.
+        """
+        raise NotImplementedError
+
 
 class Indexable(abc.ABC):
     """

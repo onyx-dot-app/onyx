@@ -40,8 +40,6 @@ import {
   useGoogleDriveCredentials,
 } from "./pages/utils/hooks";
 import { Formik } from "formik";
-import { AccessTypeForm } from "@/components/admin/connectors/AccessTypeForm";
-import { AccessTypeGroupSelector } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import NavigationRow from "./NavigationRow";
 import { useRouter } from "next/navigation";
 export interface AdvancedConfig {
@@ -209,7 +207,15 @@ export default function AddConnector({
 
   return (
     <Formik
-      initialValues={createConnectorInitialValues(connector)}
+      initialValues={{
+        ...createConnectorInitialValues(connector),
+        ...Object.fromEntries(
+          connectorConfigs[connector].advanced_values.map((field) => [
+            field.name,
+            field.default || "",
+          ])
+        ),
+      }}
       validationSchema={createConnectorValidationSchema(connector)}
       onSubmit={async (values) => {
         const {
@@ -262,6 +268,7 @@ export default function AddConnector({
             advancedConfiguration.pruneFreq,
             advancedConfiguration.indexingStart,
             values.access_type == "public",
+            groups,
             name
           );
           if (response) {
@@ -423,10 +430,8 @@ export default function AddConnector({
                   config={configuration}
                   setSelectedFiles={setSelectedFiles}
                   selectedFiles={selectedFiles}
+                  connector={connector}
                 />
-
-                <AccessTypeForm connector={connector} />
-                <AccessTypeGroupSelector />
               </Card>
             )}
 

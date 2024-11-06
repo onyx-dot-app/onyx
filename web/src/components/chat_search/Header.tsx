@@ -11,9 +11,9 @@ import { pageType } from "@/app/chat/sessionSidebar/types";
 import { useRouter } from "next/navigation";
 import { ChatBanner } from "@/app/chat/ChatBanner";
 import LogoType from "../header/LogoType";
+import { useUser } from "../user/UserProvider";
 
 export default function FunctionalHeader({
-  user,
   page,
   currentChatSession,
   setSharingModalVisible,
@@ -23,7 +23,6 @@ export default function FunctionalHeader({
 }: {
   reset?: () => void;
   page: pageType;
-  user: User | null;
   sidebarToggled?: boolean;
   currentChatSession?: ChatSession | null | undefined;
   setSharingModalVisible?: (value: SetStateAction<boolean>) => void;
@@ -111,7 +110,7 @@ export default function FunctionalHeader({
           )}
 
           <div className="mobile:hidden flex my-auto">
-            <UserDropdown user={user} />
+            <UserDropdown />
           </div>
           <Link
             className="desktop:hidden my-auto"

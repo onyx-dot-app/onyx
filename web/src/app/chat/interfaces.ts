@@ -60,7 +60,7 @@ export interface ToolCallFinalResult {
 }
 
 export interface ChatSession {
-  id: number;
+  id: string;
   name: string;
   persona_id: number;
   time_created: string;
@@ -70,7 +70,7 @@ export interface ChatSession {
 }
 
 export interface SearchSession {
-  search_session_id: number;
+  search_session_id: string;
   documents: SearchDanswerDocument[];
   messages: BackendMessage[];
   description: string;
@@ -97,7 +97,7 @@ export interface Message {
 }
 
 export interface BackendChatSession {
-  chat_session_id: number;
+  chat_session_id: string;
   description: string;
   persona_id: number;
   persona_name: string;
@@ -110,7 +110,7 @@ export interface BackendChatSession {
 export interface BackendMessage {
   message_id: number;
   comments: any;
-  chat_session_id: number;
+  chat_session_id: string;
   parent_message: number | null;
   latest_child_message: number | null;
   message: string;

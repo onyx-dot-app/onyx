@@ -341,6 +341,8 @@ def add_credential_to_connector(
     access_type: AccessType,
     groups: list[int] | None,
     auto_sync_options: dict | None = None,
+    initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
+    last_successful_index_time: datetime | None = None,
 ) -> StatusResponse:
     connector = fetch_connector_by_id(connector_id, db_session)
     credential = fetch_credential_by_id(credential_id, user, db_session)
@@ -384,12 +386,14 @@ def add_credential_to_connector(
         connector_id=connector_id,
         credential_id=credential_id,
         name=cc_pair_name,
-        status=ConnectorCredentialPairStatus.ACTIVE,
+        status=initial_status,
         access_type=access_type,
         auto_sync_options=auto_sync_options,
+        last_successful_index_time=last_successful_index_time,
     )
     db_session.add(association)
     db_session.flush()  # make sure the association has an id
+    db_session.refresh(association)
 
     if groups and access_type != AccessType.SYNC:
         _relate_groups_to_cc_pair__no_commit(

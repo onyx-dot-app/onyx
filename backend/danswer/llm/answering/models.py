@@ -116,6 +116,10 @@ class AnswerStyleConfig(BaseModel):
     document_pruning_config: DocumentPruningConfig = Field(
         default_factory=DocumentPruningConfig
     )
+    # forces the LLM to return a structured response, see
+    # https://platform.openai.com/docs/guides/structured-outputs/introduction
+    # right now, only used by the simple chat API
+    structured_response_format: dict | None = None
 
     @model_validator(mode="after")
     def check_quotes_and_citation(self) -> "AnswerStyleConfig":

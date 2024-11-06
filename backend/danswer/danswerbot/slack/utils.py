@@ -12,7 +12,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.models.blocks import Block
 from slack_sdk.models.metadata import Metadata
-from sqlalchemy.orm import Session
+from slack_sdk.socket_mode import SocketModeClient
 
 from danswer.configs.app_configs import DISABLE_TELEMETRY
 from danswer.configs.constants import ID_SEPARATOR
@@ -31,7 +31,7 @@ from danswer.connectors.slack.utils import make_slack_api_rate_limited
 from danswer.connectors.slack.utils import SlackTextCleaner
 from danswer.danswerbot.slack.constants import FeedbackVisibility
 from danswer.danswerbot.slack.tokens import fetch_tokens
-from danswer.db.engine import get_sqlalchemy_engine
+from danswer.db.engine import get_session_with_tenant
 from danswer.db.users import get_user_by_email
 from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_default_llms
@@ -489,7 +489,9 @@ def read_slack_thread(
     return thread_messages
 
 
-def slack_usage_report(action: str, sender_id: str | None, client: WebClient) -> None:
+def slack_usage_report(
+    action: str, sender_id: str | None, client: WebClient, tenant_id: str | None
+) -> None:
     if DISABLE_TELEMETRY:
         return
 
@@ -501,7 +503,7 @@ def slack_usage_report(action: str, sender_id: str | None, client: WebClient) ->
         logger.warning("Unable to find sender email")
 
     if sender_email is not None:
-        with Session(get_sqlalchemy_engine()) as db_session:
+        with get_session_with_tenant(tenant_id) as db_session:
             danswer_user = get_user_by_email(email=sender_email, db_session=db_session)
 
     optional_telemetry(
@@ -577,3 +579,9 @@ def get_feedback_visibility() -> FeedbackVisibility:
         return FeedbackVisibility(DANSWER_BOT_FEEDBACK_VISIBILITY.lower())
     except ValueError:
         return FeedbackVisibility.PRIVATE
+
+
+class TenantSocketModeClient(SocketModeClient):
+    def __init__(self, tenant_id: str | None, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.tenant_id = tenant_id

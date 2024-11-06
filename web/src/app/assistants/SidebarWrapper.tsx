@@ -26,14 +26,9 @@ interface SidebarWrapperProps<T extends object> {
   folders?: Folder[];
   initiallyToggled: boolean;
   openedFolders?: { [key: number]: boolean };
-  content: (props: T) => ReactNode;
-  headerProps: {
-    page: pageType;
-    user: User | null;
-  };
-  contentProps: T;
   page: pageType;
   size?: "sm" | "lg";
+  children: ReactNode;
 }
 
 export default function SidebarWrapper<T extends object>({
@@ -42,10 +37,8 @@ export default function SidebarWrapper<T extends object>({
   folders,
   openedFolders,
   page,
-  headerProps,
-  contentProps,
-  content,
   size = "sm",
+  children,
 }: SidebarWrapperProps<T>) {
   const [toggledSidebar, setToggledSidebar] = useState(initiallyToggled);
   const [showDocSidebar, setShowDocSidebar] = useState(false); // State to track if sidebar is open
@@ -144,7 +137,6 @@ export default function SidebarWrapper<T extends object>({
           sidebarToggled={toggledSidebar}
           toggleSidebar={toggleSidebar}
           page="assistants"
-          user={headerProps.user}
         />
         <div className="w-full flex">
           <div
@@ -163,7 +155,7 @@ export default function SidebarWrapper<T extends object>({
           <div
             className={`mt-4 w-full ${size == "lg" ? "max-w-4xl" : "max-w-3xl"} mx-auto`}
           >
-            {content(contentProps)}
+            {children}
           </div>
         </div>
       </div>

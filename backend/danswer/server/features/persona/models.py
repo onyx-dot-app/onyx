@@ -120,3 +120,7 @@ class PersonaSnapshot(BaseModel):
 
 class PromptTemplateResponse(BaseModel):
     final_prompt_template: str
+
+
+class PersonaSharedNotificationData(BaseModel):
+    persona_id: int

@@ -1,5 +1,5 @@
 import { FullLLMProvider } from "../configuration/llm/interfaces";
-import { Persona, Prompt, StarterMessage } from "./interfaces";
+import { Persona, StarterMessage } from "./interfaces";
 
 interface PersonaCreationRequest {
   name: string;
@@ -377,3 +377,26 @@ export function providersContainImageGeneratingSupport(
 ) {
   return providers.some((provider) => provider.provider === "openai");
 }
+
+// Default fallback persona for when we must display a persona
+// but assistant has access to none
+export const defaultPersona: Persona = {
+  id: 0,
+  name: "Default Assistant",
+  description: "A default assistant",
+  is_visible: true,
+  is_public: true,
+  builtin_persona: false,
+  is_default_persona: true,
+  users: [],
+  groups: [],
+  document_sets: [],
+  prompts: [],
+  tools: [],
+  starter_messages: null,
+  display_priority: null,
+  search_start_date: null,
+  owner: null,
+  icon_shape: 50910,
+  icon_color: "#FF6F6F",
+};

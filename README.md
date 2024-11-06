@@ -68,13 +68,13 @@ We also have built-in support for deployment on Kubernetes. Files for that can b
 
 ## 🚧 Roadmap
 * Chat/Prompt sharing with specific teammates and user groups.
-* Multi-Model model support, chat with images, video etc.
+* Multimodal model support, chat with images, video etc.
 * Choosing between LLMs and parameters during chat session.
 * Tool calling and agent configurations options.
 * Organizational understanding and ability to locate and suggest experts from your team.
 
 
-## Other Noteable Benefits of Danswer
+## Other Notable Benefits of Danswer
 * User Authentication with document level access management.
 * Best in class Hybrid Search across all sources (BM-25 + prefix aware embedding models).
 * Admin Dashboard to configure connectors, document-sets, access, etc.

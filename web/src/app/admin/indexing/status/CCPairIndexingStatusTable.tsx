@@ -23,6 +23,7 @@ import {
   FiSettings,
   FiLock,
   FiUnlock,
+  FiRefreshCw,
 } from "react-icons/fi";
 import { Tooltip } from "@/components/tooltip/Tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -240,6 +241,14 @@ function ConnectorRow({
             >
               Public
             </Badge>
+          ) : ccPairsIndexingStatus.access_type === "sync" ? (
+            <Badge
+              size="md"
+              color={isEditable ? "orange" : "gray"}
+              icon={FiRefreshCw}
+            >
+              Sync
+            </Badge>
           ) : (
             <Badge size="md" color={isEditable ? "blue" : "gray"} icon={FiLock}>
               Private
@@ -430,6 +439,7 @@ export function CCPairIndexingStatusTable({
             error_msg: "",
             deletion_attempt: null,
             is_deletable: true,
+            in_progress: false,
             groups: [], // Add this line
           }}
           isEditable={false}

@@ -7,9 +7,9 @@ from danswer.db.llm import fetch_provider
 from danswer.db.models import Persona
 from danswer.llm.chat_llm import DefaultMultiLLM
 from danswer.llm.exceptions import GenAIDisabledException
-from danswer.llm.headers import build_llm_extra_headers
 from danswer.llm.interfaces import LLM
 from danswer.llm.override_models import LLMOverride
+from danswer.utils.headers import build_llm_extra_headers
 
 
 def get_main_llm_from_tuple(
@@ -51,6 +51,7 @@ def get_llms_for_persona(
         return get_llm(
             provider=llm_provider.provider,
             model=model,
+            deployment_name=llm_provider.deployment_name,
             api_key=llm_provider.api_key,
             api_base=llm_provider.api_base,
             api_version=llm_provider.api_version,
@@ -104,7 +105,7 @@ def get_default_llms(
 def get_llm(
     provider: str,
     model: str,
-    deployment_name: str | None = None,
+    deployment_name: str | None,
     api_key: str | None = None,
     api_base: str | None = None,
     api_version: str | None = None,
@@ -116,6 +117,7 @@ def get_llm(
     return DefaultMultiLLM(
         model_provider=provider,
         model_name=model,
+        deployment_name=deployment_name,
         api_key=api_key,
         api_base=api_base,
         api_version=api_version,

@@ -37,7 +37,7 @@ def compute_all_tool_tokens(tools: list[Tool], llm_tokenizer: BaseTokenizer) -> 
 def is_image_generation_available(db_session: Session) -> bool:
     providers = db_session.query(LLMProvider).all()
     for provider in providers:
-        if provider.name == "OpenAI":
+        if provider.provider == "openai":
             return True
 
     return bool(AZURE_DALLE_API_KEY)

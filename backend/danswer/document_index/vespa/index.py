@@ -4,18 +4,20 @@ import logging
 import os
 import re
 import time
+import urllib
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timedelta
 from typing import BinaryIO
 from typing import cast
+from typing import List
 
-import httpx
-import requests
+import httpx  # type: ignore
+import requests  # type: ignore
 
 from danswer.configs.app_configs import DOCUMENT_INDEX_NAME
-from danswer.configs.app_configs import VESPA_REQUEST_TIMEOUT
+from danswer.configs.app_configs import MULTI_TENANT
 from danswer.configs.chat_configs import DOC_TIME_DECAY
 from danswer.configs.chat_configs import NUM_RETURNED_HITS
 from danswer.configs.chat_configs import TITLE_CONTENT_RATIO
@@ -40,6 +42,7 @@ from danswer.document_index.vespa.indexing_utils import clean_chunk_id_copy
 from danswer.document_index.vespa.indexing_utils import (
     get_existing_documents_from_chunks,
 )
+from danswer.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from danswer.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
 )
@@ -58,6 +61,8 @@ from danswer.document_index.vespa_constants import DOCUMENT_SETS
 from danswer.document_index.vespa_constants import HIDDEN
 from danswer.document_index.vespa_constants import NUM_THREADS
 from danswer.document_index.vespa_constants import SEARCH_THREAD_NUMBER_PAT
+from danswer.document_index.vespa_constants import TENANT_ID_PAT
+from danswer.document_index.vespa_constants import TENANT_ID_REPLACEMENT
 from danswer.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from danswer.document_index.vespa_constants import VESPA_DIM_REPLACEMENT_PAT
 from danswer.document_index.vespa_constants import VESPA_TIMEOUT
@@ -69,6 +74,7 @@ from danswer.search.models import InferenceChunkUncleaned
 from danswer.utils.batching import batch_generator
 from danswer.utils.logger import setup_logger
 from shared_configs.model_server_models import Embedding
+
 
 logger = setup_logger()
 
@@ -93,7 +99,7 @@ def in_memory_zip_from_file_bytes(file_contents: dict[str, bytes]) -> BinaryIO:
     return zip_buffer
 
 
-def _create_document_xml_lines(doc_names: list[str | None]) -> str:
+def _create_document_xml_lines(doc_names: list[str | None] | list[str]) -> str:
     doc_lines = [
         f'<document type="{doc_name}" mode="index" />'
         for doc_name in doc_names
@@ -118,15 +124,28 @@ def add_ngrams_to_schema(schema_content: str) -> str:
 
 
 class VespaIndex(DocumentIndex):
-    def __init__(self, index_name: str, secondary_index_name: str | None) -> None:
+    def __init__(
+        self,
+        index_name: str,
+        secondary_index_name: str | None,
+        multitenant: bool = False,
+    ) -> None:
         self.index_name = index_name
         self.secondary_index_name = secondary_index_name
+        self.multitenant = multitenant
+        self.http_client = get_vespa_http_client()
 
     def ensure_indices_exist(
         self,
         index_embedding_dim: int,
         secondary_index_embedding_dim: int | None,
     ) -> None:
+        if MULTI_TENANT:
+            logger.info(
+                "Skipping Vespa index seup for multitenant (would wipe all indices)"
+            )
+            return None
+
         deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
         logger.info(f"Deploying Vespa application package to {deploy_url}")
 
@@ -174,10 +193,14 @@ class VespaIndex(DocumentIndex):
 
         with open(schema_file, "r") as schema_f:
             schema_template = schema_f.read()
+        schema_template = schema_template.replace(TENANT_ID_PAT, "")
+
         schema = schema_template.replace(
             DANSWER_CHUNK_REPLACEMENT_PAT, self.index_name
         ).replace(VESPA_DIM_REPLACEMENT_PAT, str(index_embedding_dim))
+
         schema = add_ngrams_to_schema(schema) if needs_reindexing else schema
+        schema = schema.replace(TENANT_ID_PAT, "")
         zip_dict[f"schemas/{schema_names[0]}.sd"] = schema.encode("utf-8")
 
         if self.secondary_index_name:
@@ -193,6 +216,91 @@ class VespaIndex(DocumentIndex):
         if response.status_code != 200:
             raise RuntimeError(
                 f"Failed to prepare Vespa Danswer Index. Response: {response.text}"
+            )
+
+    @staticmethod
+    def register_multitenant_indices(
+        indices: list[str],
+        embedding_dims: list[int],
+    ) -> None:
+        if not MULTI_TENANT:
+            raise ValueError("Multi-tenant is not enabled")
+
+        deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
+        logger.info(f"Deploying Vespa application package to {deploy_url}")
+
+        vespa_schema_path = os.path.join(
+            os.getcwd(), "danswer", "document_index", "vespa", "app_config"
+        )
+        schema_file = os.path.join(vespa_schema_path, "schemas", "danswer_chunk.sd")
+        services_file = os.path.join(vespa_schema_path, "services.xml")
+        overrides_file = os.path.join(vespa_schema_path, "validation-overrides.xml")
+
+        with open(services_file, "r") as services_f:
+            services_template = services_f.read()
+
+        # Generate schema names from index settings
+        schema_names = [index_name for index_name in indices]
+
+        full_schemas = schema_names
+
+        doc_lines = _create_document_xml_lines(full_schemas)
+
+        services = services_template.replace(DOCUMENT_REPLACEMENT_PAT, doc_lines)
+        services = services.replace(
+            SEARCH_THREAD_NUMBER_PAT, str(VESPA_SEARCHER_THREADS)
+        )
+
+        kv_store = get_kv_store()
+
+        needs_reindexing = False
+        try:
+            needs_reindexing = cast(bool, kv_store.load(KV_REINDEX_KEY))
+        except Exception:
+            logger.debug("Could not load the reindexing flag. Using ngrams")
+
+        with open(overrides_file, "r") as overrides_f:
+            overrides_template = overrides_f.read()
+
+        # Vespa requires an override to erase data including the indices we're no longer using
+        # It also has a 30 day cap from current so we set it to 7 dynamically
+        now = datetime.now()
+        date_in_7_days = now + timedelta(days=7)
+        formatted_date = date_in_7_days.strftime("%Y-%m-%d")
+
+        overrides = overrides_template.replace(DATE_REPLACEMENT, formatted_date)
+
+        zip_dict = {
+            "services.xml": services.encode("utf-8"),
+            "validation-overrides.xml": overrides.encode("utf-8"),
+        }
+
+        with open(schema_file, "r") as schema_f:
+            schema_template = schema_f.read()
+
+        for i, index_name in enumerate(indices):
+            embedding_dim = embedding_dims[i]
+            logger.info(
+                f"Creating index: {index_name} with embedding dimension: {embedding_dim}"
+            )
+
+            schema = schema_template.replace(
+                DANSWER_CHUNK_REPLACEMENT_PAT, index_name
+            ).replace(VESPA_DIM_REPLACEMENT_PAT, str(embedding_dim))
+            schema = schema.replace(
+                TENANT_ID_PAT, TENANT_ID_REPLACEMENT if MULTI_TENANT else ""
+            )
+            schema = add_ngrams_to_schema(schema) if needs_reindexing else schema
+            zip_dict[f"schemas/{index_name}.sd"] = schema.encode("utf-8")
+
+        zip_file = in_memory_zip_from_file_bytes(zip_dict)
+
+        headers = {"Content-Type": "application/zip"}
+        response = requests.post(deploy_url, headers=headers, data=zip_file)
+
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Failed to prepare Vespa Danswer Indexes. Response: {response.text}"
             )
 
     def index(
@@ -212,7 +320,7 @@ class VespaIndex(DocumentIndex):
         # indexing / updates / deletes since we have to make a large volume of requests.
         with (
             concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
-            httpx.Client(http2=True, timeout=VESPA_REQUEST_TIMEOUT) as http_client,
+            get_vespa_http_client() as http_client,
         ):
             # Check for existing documents, existing documents need to have all of their chunks deleted
             # prior to indexing as the document size (num chunks) may have shrunk
@@ -240,6 +348,7 @@ class VespaIndex(DocumentIndex):
                     chunks=chunk_batch,
                     index_name=self.index_name,
                     http_client=http_client,
+                    multitenant=self.multitenant,
                     executor=executor,
                 )
 
@@ -274,9 +383,10 @@ class VespaIndex(DocumentIndex):
 
         # NOTE: using `httpx` here since `requests` doesn't support HTTP2. This is beneficient for
         # indexing / updates / deletes since we have to make a large volume of requests.
+
         with (
             concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
-            httpx.Client(http2=True, timeout=VESPA_REQUEST_TIMEOUT) as http_client,
+            get_vespa_http_client() as http_client,
         ):
             for update_batch in batch_generator(updates, batch_size):
                 future_to_document_id = {
@@ -420,7 +530,7 @@ class VespaIndex(DocumentIndex):
         if self.secondary_index_name:
             index_names.append(self.secondary_index_name)
 
-        with httpx.Client(http2=True, timeout=VESPA_REQUEST_TIMEOUT) as http_client:
+        with get_vespa_http_client() as http_client:
             for index_name in index_names:
                 params = httpx.QueryParams(
                     {
@@ -476,7 +586,7 @@ class VespaIndex(DocumentIndex):
 
         # NOTE: using `httpx` here since `requests` doesn't support HTTP2. This is beneficial for
         # indexing / updates / deletes since we have to make a large volume of requests.
-        with httpx.Client(http2=True, timeout=VESPA_REQUEST_TIMEOUT) as http_client:
+        with get_vespa_http_client() as http_client:
             index_names = [self.index_name]
             if self.secondary_index_name:
                 index_names.append(self.secondary_index_name)
@@ -504,7 +614,7 @@ class VespaIndex(DocumentIndex):
         if self.secondary_index_name:
             index_names.append(self.secondary_index_name)
 
-        with httpx.Client(http2=True, timeout=VESPA_REQUEST_TIMEOUT) as http_client:
+        with get_vespa_http_client() as http_client:
             for index_name in index_names:
                 params = httpx.QueryParams(
                     {
@@ -644,3 +754,158 @@ class VespaIndex(DocumentIndex):
         }
 
         return query_vespa(params)
+
+    @classmethod
+    def delete_entries_by_tenant_id(cls, tenant_id: str, index_name: str) -> None:
+        """
+        Deletes all entries in the specified index with the given tenant_id.
+
+        Parameters:
+            tenant_id (str): The tenant ID whose documents are to be deleted.
+            index_name (str): The name of the index from which to delete documents.
+        """
+        logger.info(
+            f"Deleting entries with tenant_id: {tenant_id} from index: {index_name}"
+        )
+
+        # Step 1: Retrieve all document IDs with the given tenant_id
+        document_ids = cls._get_all_document_ids_by_tenant_id(tenant_id, index_name)
+
+        if not document_ids:
+            logger.info(
+                f"No documents found with tenant_id: {tenant_id} in index: {index_name}"
+            )
+            return
+
+        # Step 2: Delete documents in batches
+        delete_requests = [
+            _VespaDeleteRequest(document_id=doc_id, index_name=index_name)
+            for doc_id in document_ids
+        ]
+
+        cls._apply_deletes_batched(delete_requests)
+
+    @classmethod
+    def _get_all_document_ids_by_tenant_id(
+        cls, tenant_id: str, index_name: str
+    ) -> List[str]:
+        """
+        Retrieves all document IDs with the specified tenant_id, handling pagination.
+
+        Parameters:
+            tenant_id (str): The tenant ID to search for.
+            index_name (str): The name of the index to search in.
+
+        Returns:
+            List[str]: A list of document IDs matching the tenant_id.
+        """
+        offset = 0
+        limit = 1000  # Vespa's maximum hits per query
+        document_ids = []
+
+        logger.debug(
+            f"Starting document ID retrieval for tenant_id: {tenant_id} in index: {index_name}"
+        )
+
+        while True:
+            # Construct the query to fetch document IDs
+            query_params = {
+                "yql": f'select id from sources * where tenant_id contains "{tenant_id}";',
+                "offset": str(offset),
+                "hits": str(limit),
+                "timeout": "10s",
+                "format": "json",
+                "summary": "id",
+            }
+
+            url = f"{VESPA_APPLICATION_ENDPOINT}/search/"
+
+            logger.debug(
+                f"Querying for document IDs with tenant_id: {tenant_id}, offset: {offset}"
+            )
+
+            with get_vespa_http_client(no_timeout=True) as http_client:
+                response = http_client.get(url, params=query_params)
+                response.raise_for_status()
+
+                search_result = response.json()
+                hits = search_result.get("root", {}).get("children", [])
+
+                if not hits:
+                    break
+
+                for hit in hits:
+                    doc_id = hit.get("id")
+                    if doc_id:
+                        document_ids.append(doc_id)
+
+                offset += limit  # Move to the next page
+
+        logger.debug(
+            f"Retrieved {len(document_ids)} document IDs for tenant_id: {tenant_id}"
+        )
+        return document_ids
+
+    @classmethod
+    def _apply_deletes_batched(
+        cls,
+        delete_requests: List["_VespaDeleteRequest"],
+        batch_size: int = BATCH_SIZE,
+    ) -> None:
+        """
+        Deletes documents in batches using multiple threads.
+
+        Parameters:
+            delete_requests (List[_VespaDeleteRequest]): The list of delete requests.
+            batch_size (int): The number of documents to delete in each batch.
+        """
+
+        def _delete_document(
+            delete_request: "_VespaDeleteRequest", http_client: httpx.Client
+        ) -> None:
+            logger.debug(f"Deleting document with ID {delete_request.document_id}")
+            response = http_client.delete(
+                delete_request.url,
+                headers={"Content-Type": "application/json"},
+            )
+            response.raise_for_status()
+
+        logger.debug(f"Starting batch deletion for {len(delete_requests)} documents")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
+            with get_vespa_http_client(no_timeout=True) as http_client:
+                for batch_start in range(0, len(delete_requests), batch_size):
+                    batch = delete_requests[batch_start : batch_start + batch_size]
+
+                    future_to_document_id = {
+                        executor.submit(
+                            _delete_document,
+                            delete_request,
+                            http_client,
+                        ): delete_request.document_id
+                        for delete_request in batch
+                    }
+
+                    for future in concurrent.futures.as_completed(
+                        future_to_document_id
+                    ):
+                        doc_id = future_to_document_id[future]
+                        try:
+                            future.result()
+                            logger.debug(f"Successfully deleted document: {doc_id}")
+                        except httpx.HTTPError as e:
+                            logger.error(f"Failed to delete document {doc_id}: {e}")
+                            # Optionally, implement retry logic or error handling here
+
+        logger.info("Batch deletion completed")
+
+
+class _VespaDeleteRequest:
+    def __init__(self, document_id: str, index_name: str) -> None:
+        self.document_id = document_id
+        # Encode the document ID to ensure it's safe for use in the URL
+        encoded_doc_id = urllib.parse.quote_plus(self.document_id)
+        self.url = (
+            f"{VESPA_APPLICATION_ENDPOINT}/document/v1/"
+            f"{index_name}/{index_name}/docid/{encoded_doc_id}"
+        )

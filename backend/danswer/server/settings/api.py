@@ -15,8 +15,6 @@ from danswer.db.engine import get_session
 from danswer.db.models import User
 from danswer.db.notification import create_notification
 from danswer.db.notification import dismiss_all_notifications
-from danswer.db.notification import dismiss_notification
-from danswer.db.notification import get_notification_by_id
 from danswer.db.notification import get_notifications
 from danswer.db.notification import update_notification_last_shown
 from danswer.key_value_store.factory import get_kv_store
@@ -55,7 +53,7 @@ def fetch_settings(
     """Settings and notifications are stuffed into this single endpoint to reduce number of
     Postgres calls"""
     general_settings = load_settings()
-    user_notifications = get_user_notifications(user, db_session)
+    settings_notifications = get_settings_notifications(user, db_session)
 
     try:
         kv_store = get_kv_store()
@@ -65,38 +63,29 @@ def fetch_settings(
 
     return UserSettings(
         **general_settings.model_dump(),
-        notifications=user_notifications,
+        notifications=settings_notifications,
         needs_reindexing=needs_reindexing,
     )
 
 
-@basic_router.post("/notifications/{notification_id}/dismiss")
-def dismiss_notification_endpoint(
-    notification_id: int,
-    user: User | None = Depends(current_user),
-    db_session: Session = Depends(get_session),
-) -> None:
-    try:
-        notification = get_notification_by_id(notification_id, user, db_session)
-    except PermissionError:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to dismiss this notification"
-        )
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Notification not found")
-
-    dismiss_notification(notification, db_session)
-
-
-def get_user_notifications(
+def get_settings_notifications(
     user: User | None, db_session: Session
 ) -> list[Notification]:
-    """Get notifications for the user, currently the logic is very specific to the reindexing flag"""
+    """Get notifications for settings page, including product gating and reindex notifications"""
+    # Check for product gating notification
+    product_notif = get_notifications(
+        user=None,
+        notif_type=NotificationType.TRIAL_ENDS_TWO_DAYS,
+        db_session=db_session,
+    )
+    notifications = [Notification.from_model(product_notif[0])] if product_notif else []
+
+    # Only show reindex notifications to admins
     is_admin = is_user_admin(user)
     if not is_admin:
-        # Reindexing flag should only be shown to admins, basic users can't trigger it anyway
-        return []
+        return notifications
 
+    # Check if reindexing is needed
     kv_store = get_kv_store()
     try:
         needs_index = cast(bool, kv_store.load(KV_REINDEX_KEY))
@@ -104,12 +93,12 @@ def get_user_notifications(
             dismiss_all_notifications(
                 notif_type=NotificationType.REINDEX, db_session=db_session
             )
-            return []
+            return notifications
     except KvKeyNotFoundError:
         # If something goes wrong and the flag is gone, better to not start a reindexing
         # it's a heavyweight long running job and maybe this flag is cleaned up later
         logger.warning("Could not find reindex flag")
-        return []
+        return notifications
 
     try:
         # Need a transaction in order to prevent under-counting current notifications
@@ -121,13 +110,15 @@ def get_user_notifications(
 
         if not reindex_notifs:
             notif = create_notification(
-                user=user,
+                user_id=user.id if user else None,
                 notif_type=NotificationType.REINDEX,
                 db_session=db_session,
             )
             db_session.flush()
             db_session.commit()
-            return [Notification.from_model(notif)]
+
+            notifications.append(Notification.from_model(notif))
+            return notifications
 
         if len(reindex_notifs) > 1:
             logger.error("User has multiple reindex notifications")
@@ -138,8 +129,9 @@ def get_user_notifications(
         )
 
         db_session.commit()
-        return [Notification.from_model(reindex_notif)]
+        notifications.append(Notification.from_model(reindex_notif))
+        return notifications
     except SQLAlchemyError:
         logger.exception("Error while processing notifications")
         db_session.rollback()
-        return []
+        return notifications

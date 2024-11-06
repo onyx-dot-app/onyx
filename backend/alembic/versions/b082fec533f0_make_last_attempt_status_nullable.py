@@ -31,6 +31,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # First, update any null values to a default value
+    op.execute(
+        "UPDATE connector_credential_pair SET last_attempt_status = 'NOT_STARTED' WHERE last_attempt_status IS NULL"
+    )
+
+    # Then, make the column non-nullable
     op.alter_column(
         "connector_credential_pair",
         "last_attempt_status",

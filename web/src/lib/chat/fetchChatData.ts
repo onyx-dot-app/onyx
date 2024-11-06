@@ -20,7 +20,7 @@ import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Folder } from "@/app/chat/folders/interfaces";
 import { personaComparator } from "@/app/admin/assistants/lib";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import {
   SIDEBAR_TOGGLED_COOKIE_NAME,
   DOCUMENT_SIDEBAR_WIDTH_COOKIE_NAME,
@@ -29,6 +29,7 @@ import { hasCompletedWelcomeFlowSS } from "@/components/initialSetup/welcome/Wel
 import { fetchAssistantsSS } from "../assistants/fetchAssistantsSS";
 import { NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN } from "../constants";
 import { checkLLMSupportsImageInput } from "../llm/utils";
+import { redirect } from "next/navigation";
 
 interface FetchChatDataResult {
   user: User | null;
@@ -36,7 +37,6 @@ interface FetchChatDataResult {
   ccPairs: CCPairBasicInfo[];
   availableSources: ValidSources[];
   documentSets: DocumentSet[];
-  assistants: Persona[];
   tags: Tag[];
   llmProviders: LLMProviderDescriptor[];
   folders: Folder[];
@@ -56,7 +56,6 @@ export async function fetchChatData(searchParams: {
     getCurrentUserSS(),
     fetchSS("/manage/indexing-status"),
     fetchSS("/manage/document-set"),
-    fetchAssistantsSS(),
     fetchSS("/chat/get-user-chat-sessions"),
     fetchSS("/query/valid-tags"),
     fetchLLMProvidersSS(),
@@ -73,7 +72,7 @@ export async function fetchChatData(searchParams: {
     | LLMProviderDescriptor[]
     | [Persona[], string | null]
     | null
-  )[] = [null, null, null, null, null, null, null, null, null, null];
+  )[] = [null, null, null, null, null, null, null, null, null];
   try {
     results = await Promise.all(tasks);
   } catch (e) {
@@ -84,21 +83,25 @@ export async function fetchChatData(searchParams: {
   const user = results[1] as User | null;
   const ccPairsResponse = results[2] as Response | null;
   const documentSetsResponse = results[3] as Response | null;
-  const [rawAssistantsList, assistantsFetchError] = results[4] as [
-    Persona[],
-    string | null,
-  ];
 
-  const chatSessionsResponse = results[5] as Response | null;
+  const chatSessionsResponse = results[4] as Response | null;
 
-  const tagsResponse = results[6] as Response | null;
-  const llmProviders = (results[7] || []) as LLMProviderDescriptor[];
-  const foldersResponse = results[8] as Response | null;
-  const userInputPromptsResponse = results[9] as Response | null;
+  const tagsResponse = results[5] as Response | null;
+  const llmProviders = (results[6] || []) as LLMProviderDescriptor[];
+  const foldersResponse = results[7] as Response | null;
+  const userInputPromptsResponse = results[8] as Response | null;
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
-    return { redirect: "/auth/login" };
+    const headersList = headers();
+    const fullUrl = headersList.get("x-url") || "/chat";
+    const searchParamsString = new URLSearchParams(
+      searchParams as unknown as Record<string, string>
+    ).toString();
+    const redirectUrl = searchParamsString
+      ? `${fullUrl}?${searchParamsString}`
+      : fullUrl;
+    return redirect(`/auth/login?next=${encodeURIComponent(redirectUrl)}`);
   }
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
@@ -127,8 +130,10 @@ export async function fetchChatData(searchParams: {
     );
   }
 
-  // Larger ID -> created later
-  chatSessions.sort((a, b) => (a.id > b.id ? -1 : 1));
+  chatSessions.sort(
+    (a, b) =>
+      new Date(b.time_created).getTime() - new Date(a.time_created).getTime()
+  );
 
   let documentSets: DocumentSet[] = [];
   if (documentSetsResponse?.ok) {
@@ -147,16 +152,6 @@ export async function fetchChatData(searchParams: {
       `Failed to fetch user input prompts - ${userInputPromptsResponse?.status}`
     );
   }
-
-  let assistants = rawAssistantsList;
-  if (assistantsFetchError) {
-    console.log(`Failed to fetch assistants - ${assistantsFetchError}`);
-  }
-  // remove those marked as hidden by an admin
-  assistants = assistants.filter((assistant) => assistant.is_visible);
-
-  // sort them in priority order
-  assistants.sort(personaComparator);
 
   let tags: Tag[] = [];
   if (tagsResponse?.ok) {
@@ -192,24 +187,6 @@ export async function fetchChatData(searchParams: {
 
   // if no connectors are setup, only show personas that are pure
   // passthrough and don't do any retrieval
-  if (!hasAnyConnectors) {
-    assistants = assistants.filter((assistant) => assistant.num_chunks === 0);
-  }
-
-  const hasImageCompatibleModel = llmProviders.some(
-    (provider) =>
-      provider.provider === "openai" ||
-      provider.model_names.some((model) => checkLLMSupportsImageInput(model))
-  );
-
-  if (!hasImageCompatibleModel) {
-    assistants = assistants.filter(
-      (assistant) =>
-        !assistant.tools.some(
-          (tool) => tool.in_code_tool_id === "ImageGenerationTool"
-        )
-    );
-  }
 
   let folders: Folder[] = [];
   if (foldersResponse?.ok) {
@@ -229,7 +206,6 @@ export async function fetchChatData(searchParams: {
     ccPairs,
     availableSources,
     documentSets,
-    assistants,
     tags,
     llmProviders,
     folders,

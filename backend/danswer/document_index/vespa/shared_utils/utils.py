@@ -1,4 +1,12 @@
 import re
+from typing import cast
+
+import httpx
+
+from danswer.configs.app_configs import MANAGED_VESPA
+from danswer.configs.app_configs import VESPA_CLOUD_CERT_PATH
+from danswer.configs.app_configs import VESPA_CLOUD_KEY_PATH
+from danswer.configs.app_configs import VESPA_REQUEST_TIMEOUT
 
 # NOTE: This does not seem to be used in reality despite the Vespa Docs pointing to this code
 # See here for reference: https://docs.vespa.ai/en/documents.html
@@ -45,3 +53,19 @@ def remove_invalid_unicode_chars(text: str) -> str:
         "[\x00-\x08\x0b\x0c\x0e-\x1F\uD800-\uDFFF\uFFFE\uFFFF]"
     )
     return _illegal_xml_chars_RE.sub("", text)
+
+
+def get_vespa_http_client(no_timeout: bool = False) -> httpx.Client:
+    """
+    Configure and return an HTTP client for communicating with Vespa,
+    including authentication if needed.
+    """
+
+    return httpx.Client(
+        cert=cast(tuple[str, str], (VESPA_CLOUD_CERT_PATH, VESPA_CLOUD_KEY_PATH))
+        if MANAGED_VESPA
+        else None,
+        verify=False if not MANAGED_VESPA else True,
+        timeout=None if no_timeout else VESPA_REQUEST_TIMEOUT,
+        http2=True,
+    )

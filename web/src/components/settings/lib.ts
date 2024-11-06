@@ -1,6 +1,7 @@
 import {
   CombinedSettings,
   EnterpriseSettings,
+  GatingType,
   Settings,
 } from "@/app/admin/settings/interfaces";
 import {
@@ -40,8 +41,9 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
 
     let settings: Settings;
     if (!results[0].ok) {
-      if (results[0].status === 403) {
+      if (results[0].status === 403 || results[0].status === 401) {
         settings = {
+          product_gating: GatingType.NONE,
           gpu_enabled: false,
           chat_page_enabled: true,
           search_page_enabled: true,
@@ -62,7 +64,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
     let enterpriseSettings: EnterpriseSettings | null = null;
     if (tasks.length > 1) {
       if (!results[1].ok) {
-        if (results[1].status !== 403) {
+        if (results[1].status !== 403 && results[1].status !== 401) {
           throw new Error(
             `fetchEnterpriseSettingsSS failed: status=${results[1].status} body=${await results[1].text()}`
           );

@@ -11,6 +11,7 @@ export const submitGoogleSite = async (
   pruneFreq: number,
   indexingStart: Date,
   is_public: boolean,
+  groups: number[],
   name?: string
 ) => {
   const uploadCreateAndTriggerConnector = async () => {
@@ -56,7 +57,13 @@ export const submitGoogleSite = async (
       return false;
     }
 
-    const credentialResponse = await linkCredential(connector.id, 0, base_url);
+    const credentialResponse = await linkCredential(
+      connector.id,
+      0,
+      base_url,
+      undefined,
+      groups
+    );
     if (!credentialResponse.ok) {
       const credentialResponseJson = await credentialResponse.json();
       setPopup({

@@ -10,7 +10,6 @@ from danswer.configs.constants import DocumentSource
 from danswer.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
 )
-from danswer.connectors.cross_connector_utils.retry_wrapper import retry_builder
 from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import LoadConnector
 from danswer.connectors.interfaces import PollConnector
@@ -19,6 +18,7 @@ from danswer.connectors.models import BasicExpertInfo
 from danswer.connectors.models import ConnectorMissingCredentialError
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
+from danswer.utils.retry_wrapper import retry_builder
 
 
 CLICKUP_API_BASE_URL = "https://api.clickup.com/api/v2"

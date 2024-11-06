@@ -135,6 +135,7 @@ class DocumentSetManager:
             all_up_to_date = all(doc_set.is_up_to_date for doc_set in doc_sets)
 
             if all_up_to_date:
+                print("Document sets synced successfully.")
                 break
 
             if time.time() - start > MAX_DELAY:

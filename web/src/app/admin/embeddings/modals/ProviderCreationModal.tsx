@@ -4,7 +4,10 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Label, TextFormField } from "@/components/admin/connectors/Field";
 import { LoadingAnimation } from "@/components/Loading";
-import { CloudEmbeddingProvider } from "../../../../components/embedding/interfaces";
+import {
+  CloudEmbeddingProvider,
+  EmbeddingProvider,
+} from "../../../../components/embedding/interfaces";
 import { EMBEDDING_PROVIDERS_ADMIN_URL } from "../../configuration/llm/constants";
 import { Modal } from "@/components/Modal";
 
@@ -14,12 +17,19 @@ export function ProviderCreationModal({
   onCancel,
   existingProvider,
   isProxy,
+  isAzure,
+  updateCurrentModel,
 }: {
+  updateCurrentModel: (
+    newModel: string,
+    provider_type: EmbeddingProvider
+  ) => void;
   selectedProvider: CloudEmbeddingProvider;
   onConfirm: () => void;
   onCancel: () => void;
   existingProvider?: CloudEmbeddingProvider;
   isProxy?: boolean;
+  isAzure?: boolean;
 }) {
   const useFileUpload = selectedProvider.provider_type == "Google";
 
@@ -41,16 +51,24 @@ export function ProviderCreationModal({
 
   const validationSchema = Yup.object({
     provider_type: Yup.string().required("Provider type is required"),
-    api_key: isProxy
-      ? Yup.string()
-      : useFileUpload
+    api_key:
+      isProxy || isAzure
         ? Yup.string()
-        : Yup.string().required("API Key is required"),
+        : useFileUpload
+          ? Yup.string()
+          : Yup.string().required("API Key is required"),
     model_name: isProxy
       ? Yup.string().required("Model name is required")
       : Yup.string().nullable(),
-    api_url: isProxy
-      ? Yup.string().required("API URL is required")
+    api_url:
+      isProxy || isAzure
+        ? Yup.string().required("API URL is required")
+        : Yup.string(),
+    deployment_name: isAzure
+      ? Yup.string().required("Deployment name is required")
+      : Yup.string(),
+    api_version: isAzure
+      ? Yup.string().required("API Version is required")
       : Yup.string(),
     custom_config: Yup.array().of(Yup.array().of(Yup.string()).length(2)),
   });
@@ -101,6 +119,8 @@ export function ProviderCreationModal({
             api_key: values.api_key,
             api_url: values.api_url,
             model_name: values.model_name,
+            api_version: values.api_version,
+            deployment_name: values.deployment_name,
           }),
         }
       );
@@ -118,12 +138,18 @@ export function ProviderCreationModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...values,
+          api_version: values.api_version,
+          deployment_name: values.deployment_name,
           provider_type: values.provider_type.toLowerCase().split(" ")[0],
           custom_config: customConfig,
           is_default_provider: false,
           is_configured: true,
         }),
       });
+
+      if (isAzure) {
+        updateCurrentModel(values.model_name, EmbeddingProvider.AZURE);
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -178,26 +204,45 @@ export function ProviderCreationModal({
                   href={selectedProvider.apiLink}
                   rel="noreferrer"
                 >
-                  {isProxy ? "API URL" : "API KEY"}
+                  {isProxy || isAzure ? "API URL" : "API KEY"}
                 </a>
               </Text>
 
               <div className="flex w-full flex-col gap-y-6">
+                {(isProxy || isAzure) && (
+                  <TextFormField
+                    name="api_url"
+                    label="API URL"
+                    placeholder="API URL"
+                    type="text"
+                  />
+                )}
+
                 {isProxy && (
-                  <>
-                    <TextFormField
-                      name="api_url"
-                      label="API URL"
-                      placeholder="API URL"
-                      type="text"
-                    />
-                    <TextFormField
-                      name="model_name"
-                      label="Model Name (for testing)"
-                      placeholder="Model Name"
-                      type="text"
-                    />
-                  </>
+                  <TextFormField
+                    name="model_name"
+                    label={`Model Name ${isProxy ? "(for testing)" : ""}`}
+                    placeholder="Model Name"
+                    type="text"
+                  />
+                )}
+
+                {isAzure && (
+                  <TextFormField
+                    name="deployment_name"
+                    label="Deployment Name"
+                    placeholder="Deployment Name"
+                    type="text"
+                  />
+                )}
+
+                {isAzure && (
+                  <TextFormField
+                    name="api_version"
+                    label="API Version"
+                    placeholder="API Version"
+                    type="text"
+                  />
                 )}
 
                 {useFileUpload ? (

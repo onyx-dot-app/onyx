@@ -34,6 +34,7 @@ import { Hoverable } from "@/components/Hoverable";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { ChatState } from "../types";
 import UnconfiguredProviderText from "@/components/chat_search/UnconfiguredProviderText";
+import { useAssistants } from "@/components/context/AssistantsContext";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -52,7 +53,6 @@ export function ChatInputBar({
 
   // assistants
   selectedAssistant,
-  assistantOptions,
   setSelectedAssistant,
   setAlternativeAssistant,
 
@@ -63,7 +63,6 @@ export function ChatInputBar({
   alternativeAssistant,
   chatSessionId,
   inputPrompts,
-  refreshUser,
 }: {
   showConfigureAPIKey: () => void;
   openModelSettings: () => void;
@@ -71,7 +70,6 @@ export function ChatInputBar({
   stopGenerating: () => void;
   showDocs: () => void;
   selectedDocuments: DanswerDocument[];
-  assistantOptions: Persona[];
   setAlternativeAssistant: (alternativeAssistant: Persona | null) => void;
   setSelectedAssistant: (assistant: Persona) => void;
   inputPrompts: InputPrompt[];
@@ -86,8 +84,7 @@ export function ChatInputBar({
   setFiles: (files: FileDescriptor[]) => void;
   handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
-  chatSessionId?: number;
-  refreshUser: () => void;
+  chatSessionId?: string;
 }) {
   useEffect(() => {
     const textarea = textAreaRef.current;
@@ -118,6 +115,7 @@ export function ChatInputBar({
   };
 
   const settings = useContext(SettingsContext);
+  const { finalAssistants: assistantOptions } = useAssistants();
 
   const { llmProviders } = useChatContext();
   const [_, llmName] = getFinalLLM(llmProviders, selectedAssistant, null);
@@ -527,14 +525,12 @@ export function ChatInputBar({
                 removePadding
                 content={(close) => (
                   <AssistantsTab
-                    availableAssistants={assistantOptions}
                     llmProviders={llmProviders}
                     selectedAssistant={selectedAssistant}
                     onSelect={(assistant) => {
                       setSelectedAssistant(assistant);
                       close();
                     }}
-                    refreshUser={refreshUser}
                   />
                 )}
                 flexPriority="shrink"

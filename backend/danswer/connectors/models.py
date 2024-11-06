@@ -14,7 +14,7 @@ class InputType(str, Enum):
     LOAD_STATE = "load_state"  # e.g. loading a current full state or a save state, such as from a file
     POLL = "poll"  # e.g. calling an API to get all documents in the last hour
     EVENT = "event"  # e.g. registered an endpoint as a listener, and processing connector events
-    PRUNE = "prune"
+    SLIM_RETRIEVAL = "slim_retrieval"
 
 
 class ConnectorMissingCredentialError(PermissionError):
@@ -167,6 +167,11 @@ class Document(DocumentBase):
             title=base.title,
             from_ingestion_api=base.from_ingestion_api,
         )
+
+
+class SlimDocument(BaseModel):
+    id: str
+    perm_sync_data: Any | None = None
 
 
 class DocumentErrorSummary(BaseModel):

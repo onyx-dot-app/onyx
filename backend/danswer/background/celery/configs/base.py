@@ -31,15 +31,9 @@ if REDIS_SSL:
     if REDIS_SSL_CA_CERTS:
         SSL_QUERY_PARAMS += f"&ssl_ca_certs={REDIS_SSL_CA_CERTS}"
 
+# region Broker settings
 # example celery_broker_url: "redis://:password@localhost:6379/15"
 broker_url = f"{REDIS_SCHEME}://{CELERY_PASSWORD_PART}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER_CELERY}{SSL_QUERY_PARAMS}"
-
-result_backend = f"{REDIS_SCHEME}://{CELERY_PASSWORD_PART}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER_CELERY_RESULT_BACKEND}{SSL_QUERY_PARAMS}"
-
-# NOTE: prefetch 4 is significantly faster than prefetch 1 for small tasks
-# however, prefetching is bad when tasks are lengthy as those tasks
-# can stall other tasks.
-worker_prefetch_multiplier = 4
 
 broker_connection_retry_on_startup = True
 broker_pool_limit = CELERY_BROKER_POOL_LIMIT
@@ -55,6 +49,7 @@ broker_transport_options = {
     "socket_keepalive": True,
     "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
 }
+# endregion
 
 # redis backend settings
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#redis-backend-settings
@@ -68,10 +63,19 @@ redis_backend_health_check_interval = REDIS_HEALTH_CHECK_INTERVAL
 task_default_priority = DanswerCeleryPriority.MEDIUM
 task_acks_late = True
 
+# region Task result backend settings
 # It's possible we don't even need celery's result backend, in which case all of the optimization below
 # might be irrelevant
+result_backend = f"{REDIS_SCHEME}://{CELERY_PASSWORD_PART}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER_CELERY_RESULT_BACKEND}{SSL_QUERY_PARAMS}"
 result_expires = CELERY_RESULT_EXPIRES  # 86400 seconds is the default
+# endregion
 
+# Leaving this to the default of True may cause double logging since both our own app
+# and celery think they are controlling the logger.
+# TODO: Configure celery's logger entirely manually and set this to False
+# worker_hijack_root_logger = False
+
+# region Notes on serialization performance
 # Option 0: Defaults (json serializer, no compression)
 # about 1.5 KB per queued task. 1KB in queue, 400B for result, 100 as a child entry in generator result
 
@@ -97,3 +101,4 @@ result_expires = CELERY_RESULT_EXPIRES  # 86400 seconds is the default
 # task_serializer = "pickle-bzip2"
 # result_serializer = "pickle-bzip2"
 # accept_content=["pickle", "pickle-bzip2"]
+# endregion

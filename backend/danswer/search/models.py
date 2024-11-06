@@ -102,6 +102,7 @@ class BaseFilters(BaseModel):
 
 class IndexFilters(BaseFilters):
     access_control_list: list[str] | None
+    tenant_id: str | None = None
 
 
 class ChunkMetric(BaseModel):

@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 
 from danswer.chat.load_yamls import load_chat_yamls
 from danswer.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
+from danswer.configs.app_configs import MANAGED_VESPA
+from danswer.configs.app_configs import MULTI_TENANT
 from danswer.configs.constants import KV_REINDEX_KEY
 from danswer.configs.constants import KV_SEARCH_SETTINGS
 from danswer.configs.model_configs import FAST_GEN_AI_MODEL_VERSION
@@ -29,6 +31,7 @@ from danswer.db.search_settings import update_secondary_search_settings
 from danswer.db.swap_index import check_index_swap
 from danswer.document_index.factory import get_default_document_index
 from danswer.document_index.interfaces import DocumentIndex
+from danswer.document_index.vespa.index import VespaIndex
 from danswer.indexing.models import IndexingSetting
 from danswer.key_value_store.factory import get_kv_store
 from danswer.key_value_store.interface import KvKeyNotFoundError
@@ -37,6 +40,7 @@ from danswer.natural_language_processing.search_nlp_models import warm_up_bi_enc
 from danswer.natural_language_processing.search_nlp_models import warm_up_cross_encoder
 from danswer.search.models import SavedSearchSettings
 from danswer.search.retrieval.search_runner import download_nltk_data
+from danswer.seeding.load_docs import seed_initial_documents
 from danswer.server.manage.llm.models import LLMProviderUpsertRequest
 from danswer.server.settings.store import load_settings
 from danswer.server.settings.store import store_settings
@@ -45,13 +49,22 @@ from danswer.tools.built_in_tools import load_builtin_tools
 from danswer.tools.built_in_tools import refresh_built_in_tools_cache
 from danswer.utils.gpu_utils import gpu_status_request
 from danswer.utils.logger import setup_logger
+from shared_configs.configs import ALT_INDEX_SUFFIX
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
+from shared_configs.configs import SUPPORTED_EMBEDDING_MODELS
+from shared_configs.model_server_models import SupportedEmbeddingModel
 
 logger = setup_logger()
 
 
 def setup_danswer(db_session: Session) -> None:
+    """
+    Setup Danswer for a particular tenant. In the Single Tenant case, it will set it up for the default schema
+    on server startup. In the MT case, it will be called when the tenant is created.
+
+    The Tenant Service calls the tenants/create endpoint which runs this.
+    """
     check_index_swap(db_session=db_session)
     search_settings = get_current_search_settings(db_session)
     secondary_search_settings = get_secondary_search_settings(db_session)
@@ -98,9 +111,11 @@ def setup_danswer(db_session: Session) -> None:
 
     # Does the user need to trigger a reindexing to bring the document index
     # into a good state, marked in the kv store
-    mark_reindex_flag(db_session)
+    if not MULTI_TENANT:
+        mark_reindex_flag(db_session)
 
-    # ensure Vespa is setup correctly
+    # Ensure Vespa is setup correctly, this step is relatively near the end because Vespa
+    # takes a bit of time to start up
     logger.notice("Verifying Document Index(s) is/are available.")
     document_index = get_default_document_index(
         primary_index_name=search_settings.index_name,
@@ -131,6 +146,8 @@ def setup_danswer(db_session: Session) -> None:
 
     # update multipass indexing setting based on GPU availability
     update_default_multipass_indexing(db_session)
+
+    seed_initial_documents(db_session)
 
 
 def translate_saved_search_settings(db_session: Session) -> None:
@@ -301,3 +318,40 @@ def update_default_multipass_indexing(db_session: Session) -> None:
         logger.debug(
             "Existing docs or connectors found. Skipping multipass indexing update."
         )
+
+
+def setup_multitenant_danswer() -> None:
+    # For Managed Vespa, the schema is sent over via the Vespa Console manually.
+    if not MANAGED_VESPA:
+        setup_vespa_multitenant(SUPPORTED_EMBEDDING_MODELS)
+
+
+def setup_vespa_multitenant(supported_indices: list[SupportedEmbeddingModel]) -> bool:
+    # This is for local testing
+    WAIT_SECONDS = 5
+    VESPA_ATTEMPTS = 5
+    for x in range(VESPA_ATTEMPTS):
+        try:
+            logger.notice(f"Setting up Vespa (attempt {x+1}/{VESPA_ATTEMPTS})...")
+            VespaIndex.register_multitenant_indices(
+                indices=[index.index_name for index in supported_indices]
+                + [
+                    f"{index.index_name}{ALT_INDEX_SUFFIX}"
+                    for index in supported_indices
+                ],
+                embedding_dims=[index.dim for index in supported_indices]
+                + [index.dim for index in supported_indices],
+            )
+
+            logger.notice("Vespa setup complete.")
+            return True
+        except Exception:
+            logger.notice(
+                f"Vespa setup did not succeed. The Vespa service may not be ready yet. Retrying in {WAIT_SECONDS} seconds."
+            )
+            time.sleep(WAIT_SECONDS)
+
+    logger.error(
+        f"Vespa setup did not succeed. Attempt limit reached. ({VESPA_ATTEMPTS})"
+    )
+    return False

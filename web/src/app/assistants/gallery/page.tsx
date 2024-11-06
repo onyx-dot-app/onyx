@@ -4,6 +4,7 @@ import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 import WrappedAssistantsGallery from "./WrappedAssistantsGallery";
+import { AssistantsProvider } from "@/components/context/AssistantsContext";
 
 export default async function GalleryPage({
   searchParams,
@@ -21,7 +22,6 @@ export default async function GalleryPage({
   const {
     user,
     chatSessions,
-    assistants,
     folders,
     openedFolders,
     shouldShowWelcomeModal,
@@ -39,8 +39,6 @@ export default async function GalleryPage({
         chatSessions={chatSessions}
         folders={folders}
         openedFolders={openedFolders}
-        user={user}
-        assistants={assistants}
       />
     </>
   );

@@ -8,16 +8,27 @@ export const GET = async (request: NextRequest) => {
   const url = new URL(buildUrl("/auth/oauth/callback"));
   url.search = request.nextUrl.search;
 
-  const response = await fetch(url.toString());
+  // Set 'redirect' to 'manual' to prevent automatic redirection
+  const response = await fetch(url.toString(), { redirect: "manual" });
   const setCookieHeader = response.headers.get("set-cookie");
+
+  if (response.status === 401) {
+    return NextResponse.redirect(
+      new URL("/auth/create-account", getDomain(request))
+    );
+  }
 
   if (!setCookieHeader) {
     return NextResponse.redirect(new URL("/auth/error", getDomain(request)));
   }
 
+  // Get the redirect URL from the backend's 'Location' header, or default to '/'
+  const redirectUrl = response.headers.get("location") || "/";
+
   const redirectResponse = NextResponse.redirect(
-    new URL("/", getDomain(request))
+    new URL(redirectUrl, getDomain(request))
   );
+
   redirectResponse.headers.set("set-cookie", setCookieHeader);
   return redirectResponse;
 };

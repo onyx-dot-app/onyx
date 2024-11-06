@@ -116,6 +116,7 @@ export const CodeBlock = memo(function CodeBlock({
           {codeText && <CopyButton />}
         </div>
       )}
+
       <CodeContent />
     </div>
   );

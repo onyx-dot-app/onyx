@@ -248,7 +248,7 @@ def create_initial_default_connector(db_session: Session) -> None:
             logger.warning(
                 "Default connector does not have expected values. Updating to proper state."
             )
-            # Ensure default connector has correct valuesg
+            # Ensure default connector has correct values
             default_connector.source = DocumentSource.INGESTION_API
             default_connector.input_type = InputType.LOAD_STATE
             default_connector.refresh_freq = None

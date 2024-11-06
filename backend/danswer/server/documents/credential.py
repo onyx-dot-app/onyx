@@ -8,6 +8,8 @@ from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_curator_or_admin_user
 from danswer.auth.users import current_user
 from danswer.db.credentials import alter_credential
+from danswer.db.credentials import cleanup_gmail_credentials
+from danswer.db.credentials import cleanup_google_drive_credentials
 from danswer.db.credentials import create_credential
 from danswer.db.credentials import CREDENTIAL_PERMISSIONS_TO_IGNORE
 from danswer.db.credentials import delete_credential
@@ -137,6 +139,12 @@ def create_credential_from_model(
             target_group_ids=credential_info.groups,
             object_is_public=credential_info.curator_public,
         )
+
+    # Temporary fix for empty Google App credentials
+    if credential_info.source == DocumentSource.GMAIL:
+        cleanup_gmail_credentials(db_session=db_session)
+    if credential_info.source == DocumentSource.GOOGLE_DRIVE:
+        cleanup_google_drive_credentials(db_session=db_session)
 
     credential = create_credential(credential_info, user, db_session)
     return ObjectCreationIdResponse(

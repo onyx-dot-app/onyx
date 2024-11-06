@@ -16,6 +16,7 @@ import { Bubble } from "@/components/Bubble";
 import { useRouter } from "next/navigation";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { Spinner } from "@/components/Spinner";
+import { useAssistants } from "@/components/context/AssistantsContext";
 
 interface AssistantSharingModalProps {
   assistant: Persona;
@@ -32,7 +33,7 @@ export function AssistantSharingModal({
   show,
   onClose,
 }: AssistantSharingModalProps) {
-  const router = useRouter();
+  const { refreshAssistants } = useAssistants();
   const { popup, setPopup } = usePopup();
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<MinimalUserSnapshot[]>([]);
@@ -54,7 +55,7 @@ export function AssistantSharingModal({
       assistant,
       selectedUsers.map((user) => user.id)
     );
-    router.refresh();
+    await refreshAssistants();
 
     const elapsedTime = Date.now() - startTime;
     const remainingTime = Math.max(0, 1000 - elapsedTime);
@@ -96,7 +97,7 @@ export function AssistantSharingModal({
                   assistant,
                   [u.id]
                 );
-                router.refresh();
+                await refreshAssistants();
 
                 const elapsedTime = Date.now() - startTime;
                 const remainingTime = Math.max(0, 1000 - elapsedTime);
@@ -138,7 +139,6 @@ export function AssistantSharingModal({
         onOutsideClick={onClose}
       >
         <div>
-          {isUpdating && <Spinner />}
           <p className="text-text-600 text-lg mb-6">
             Manage access to this assistant by sharing it with other users.
           </p>
@@ -225,6 +225,7 @@ export function AssistantSharingModal({
           )}
         </div>
       </Modal>
+      {isUpdating && <Spinner />}
     </>
   );
 }

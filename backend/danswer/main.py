@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 from typing import cast
 
+import sentry_sdk
 import uvicorn
 from fastapi import APIRouter
 from fastapi import FastAPI
@@ -15,6 +16,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from httpx_oauth.clients.google import GoogleOAuth2
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 from sqlalchemy.orm import Session
 
 from danswer import __version__
@@ -29,6 +32,7 @@ from danswer.configs.app_configs import APP_PORT
 from danswer.configs.app_configs import AUTH_TYPE
 from danswer.configs.app_configs import DISABLE_GENERATIVE_AI
 from danswer.configs.app_configs import LOG_ENDPOINT_LATENCY
+from danswer.configs.app_configs import MULTI_TENANT
 from danswer.configs.app_configs import OAUTH_CLIENT_ID
 from danswer.configs.app_configs import OAUTH_CLIENT_SECRET
 from danswer.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
@@ -53,6 +57,7 @@ from danswer.server.features.input_prompt.api import (
     admin_router as admin_input_prompt_router,
 )
 from danswer.server.features.input_prompt.api import basic_router as input_prompt_router
+from danswer.server.features.notifications.api import router as notification_router
 from danswer.server.features.persona.api import admin_router as admin_persona_router
 from danswer.server.features.persona.api import basic_router as persona_router
 from danswer.server.features.prompt.api import basic_router as prompt_router
@@ -80,6 +85,7 @@ from danswer.server.token_rate_limits.api import (
     router as token_rate_limit_settings_router,
 )
 from danswer.setup import setup_danswer
+from danswer.setup import setup_multitenant_danswer
 from danswer.utils.logger import setup_logger
 from danswer.utils.telemetry import get_or_generate_uuid
 from danswer.utils.telemetry import optional_telemetry
@@ -88,6 +94,7 @@ from danswer.utils.variable_functionality import fetch_versioned_implementation
 from danswer.utils.variable_functionality import global_version
 from danswer.utils.variable_functionality import set_is_ee_based_on_env_variable
 from shared_configs.configs import CORS_ALLOWED_ORIGIN
+from shared_configs.configs import SENTRY_DSN
 
 from danswer.server.eea_config.eea_config_backend import router as eea_config_router
 
@@ -159,6 +166,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     verify_auth = fetch_versioned_implementation(
         "danswer.auth.users", "verify_auth_setting"
     )
+
     # Will throw exception if an issue is found
     verify_auth()
 
@@ -171,11 +179,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     # fill up Postgres connection pools
     await warm_up_connections()
 
-    # We cache this at the beginning so there is no delay in the first telemetry
-    get_or_generate_uuid()
+    if not MULTI_TENANT:
+        # We cache this at the beginning so there is no delay in the first telemetry
+        get_or_generate_uuid()
 
-    with Session(engine) as db_session:
-        setup_danswer(db_session)
+        # If we are multi-tenant, we need to only set up initial public tables
+        with Session(engine) as db_session:
+            setup_danswer(db_session)
+    else:
+        setup_multitenant_danswer()
 
     optional_telemetry(record_type=RecordType.VERSION, data={"version": __version__})
     yield
@@ -199,6 +211,15 @@ def get_application() -> FastAPI:
     application = FastAPI(
         title="Danswer Backend", version=__version__, lifespan=lifespan
     )
+    if SENTRY_DSN:
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+            traces_sample_rate=0.5,
+        )
+        logger.info("Sentry initialized")
+    else:
+        logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 
     # Add the custom exception handler
     application.add_exception_handler(status.HTTP_400_BAD_REQUEST, log_http_error)
@@ -228,6 +249,7 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, admin_persona_router)
     include_router_with_global_prefix_prepended(application, input_prompt_router)
     include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
+    include_router_with_global_prefix_prepended(application, notification_router)
     include_router_with_global_prefix_prepended(application, prompt_router)
     include_router_with_global_prefix_prepended(application, tool_router)
     include_router_with_global_prefix_prepended(application, admin_tool_router)
@@ -251,7 +273,7 @@ def get_application() -> FastAPI:
         # Server logs this during auth setup verification step
         pass
 
-    elif AUTH_TYPE == AuthType.BASIC:
+    if AUTH_TYPE == AuthType.BASIC or AUTH_TYPE == AuthType.CLOUD:
         include_router_with_global_prefix_prepended(
             application,
             fastapi_users.get_auth_router(auth_backend),
@@ -283,7 +305,7 @@ def get_application() -> FastAPI:
             tags=["users"],
         )
 
-    elif AUTH_TYPE == AuthType.GOOGLE_OAUTH:
+    if AUTH_TYPE == AuthType.GOOGLE_OAUTH or AUTH_TYPE == AuthType.CLOUD:
         oauth_client = GoogleOAuth2(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET)
         include_router_with_global_prefix_prepended(
             application,
@@ -299,6 +321,7 @@ def get_application() -> FastAPI:
             prefix="/auth/oauth",
             tags=["auth"],
         )
+
         # Need basic auth router for `logout` endpoint
         include_router_with_global_prefix_prepended(
             application,

@@ -4,9 +4,7 @@ from typing import cast
 from slack_sdk import WebClient
 from slack_sdk.models.blocks import SectionBlock
 from slack_sdk.models.views import View
-from slack_sdk.socket_mode import SocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
-from sqlalchemy.orm import Session
 
 from danswer.configs.constants import MessageType
 from danswer.configs.constants import SearchFeedbackType
@@ -35,20 +33,22 @@ from danswer.danswerbot.slack.utils import get_channel_name_from_id
 from danswer.danswerbot.slack.utils import get_feedback_visibility
 from danswer.danswerbot.slack.utils import read_slack_thread
 from danswer.danswerbot.slack.utils import respond_in_thread
+from danswer.danswerbot.slack.utils import TenantSocketModeClient
 from danswer.danswerbot.slack.utils import update_emote_react
-from danswer.db.engine import get_sqlalchemy_engine
+from danswer.db.engine import get_session_with_tenant
 from danswer.db.feedback import create_chat_message_feedback
 from danswer.db.feedback import create_doc_retrieval_feedback
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
 from danswer.utils.logger import setup_logger
 
+
 logger = setup_logger()
 
 
 def handle_doc_feedback_button(
     req: SocketModeRequest,
-    client: SocketModeClient,
+    client: TenantSocketModeClient,
 ) -> None:
     if not (actions := req.payload.get("actions")):
         logger.error("Missing actions. Unable to build the source feedback view")
@@ -81,7 +81,7 @@ def handle_doc_feedback_button(
 
 def handle_generate_answer_button(
     req: SocketModeRequest,
-    client: SocketModeClient,
+    client: TenantSocketModeClient,
 ) -> None:
     channel_id = req.payload["channel"]["id"]
     channel_name = req.payload["channel"]["name"]
@@ -116,7 +116,7 @@ def handle_generate_answer_button(
         thread_ts=thread_ts,
     )
 
-    with Session(get_sqlalchemy_engine()) as db_session:
+    with get_session_with_tenant(client.tenant_id) as db_session:
         slack_bot_config = get_slack_bot_config_for_channel(
             channel_name=channel_name, db_session=db_session
         )
@@ -136,6 +136,7 @@ def handle_generate_answer_button(
             slack_bot_config=slack_bot_config,
             receiver_ids=None,
             client=client.web_client,
+            tenant_id=client.tenant_id,
             channel=channel_id,
             logger=logger,
             feedback_reminder_id=None,
@@ -150,12 +151,11 @@ def handle_slack_feedback(
     user_id_to_post_confirmation: str,
     channel_id_to_post_confirmation: str,
     thread_ts_to_post_confirmation: str,
+    tenant_id: str | None,
 ) -> None:
-    engine = get_sqlalchemy_engine()
-
     message_id, doc_id, doc_rank = decompose_action_id(feedback_id)
 
-    with Session(engine) as db_session:
+    with get_session_with_tenant(tenant_id) as db_session:
         if feedback_type in [LIKE_BLOCK_ACTION_ID, DISLIKE_BLOCK_ACTION_ID]:
             create_chat_message_feedback(
                 is_positive=feedback_type == LIKE_BLOCK_ACTION_ID,
@@ -232,7 +232,7 @@ def handle_slack_feedback(
 
 def handle_followup_button(
     req: SocketModeRequest,
-    client: SocketModeClient,
+    client: TenantSocketModeClient,
 ) -> None:
     action_id = None
     if actions := req.payload.get("actions"):
@@ -252,7 +252,7 @@ def handle_followup_button(
 
     tag_ids: list[str] = []
     group_ids: list[str] = []
-    with Session(get_sqlalchemy_engine()) as db_session:
+    with get_session_with_tenant(client.tenant_id) as db_session:
         channel_name, is_dm = get_channel_name_from_id(
             client=client.web_client, channel_id=channel_id
         )
@@ -295,7 +295,7 @@ def handle_followup_button(
 
 def get_clicker_name(
     req: SocketModeRequest,
-    client: SocketModeClient,
+    client: TenantSocketModeClient,
 ) -> str:
     clicker_name = req.payload.get("user", {}).get("name", "Someone")
     clicker_real_name = None
@@ -316,7 +316,7 @@ def get_clicker_name(
 
 def handle_followup_resolved_button(
     req: SocketModeRequest,
-    client: SocketModeClient,
+    client: TenantSocketModeClient,
     immediate: bool = False,
 ) -> None:
     channel_id = req.payload["container"]["channel_id"]

@@ -4,6 +4,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -19,10 +20,13 @@ from danswer.configs.constants import MessageType
 from danswer.configs.constants import QAFeedbackType
 from danswer.configs.constants import SessionType
 from danswer.db.chat import get_chat_session_by_id
+from danswer.db.chat import get_chat_sessions_by_user
 from danswer.db.engine import get_session
 from danswer.db.models import ChatMessage
 from danswer.db.models import ChatSession
 from danswer.db.models import User
+from danswer.server.query_and_chat.models import ChatSessionDetails
+from danswer.server.query_and_chat.models import ChatSessionsResponse
 from ee.danswer.db.query_history import fetch_chat_sessions_eagerly_by_time
 
 router = APIRouter()
@@ -83,7 +87,7 @@ class MessageSnapshot(BaseModel):
 
 
 class ChatSessionMinimal(BaseModel):
-    id: int
+    id: UUID
     user_email: str
     name: str | None
     first_user_message: str
@@ -95,7 +99,7 @@ class ChatSessionMinimal(BaseModel):
 
 
 class ChatSessionSnapshot(BaseModel):
-    id: int
+    id: UUID
     user_email: str
     name: str | None
     messages: list[MessageSnapshot]
@@ -105,7 +109,7 @@ class ChatSessionSnapshot(BaseModel):
 
 
 class QuestionAnswerPairSnapshot(BaseModel):
-    chat_session_id: int
+    chat_session_id: UUID
     # 1-indexed message number in the chat_session
     # e.g. the first message pair in the chat_session is 1, the second is 2, etc.
     message_pair_num: int
@@ -329,6 +333,36 @@ def snapshot_from_chat_session(
     )
 
 
+@router.get("/admin/chat-sessions")
+def get_user_chat_sessions(
+    user_id: UUID,
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> ChatSessionsResponse:
+    try:
+        chat_sessions = get_chat_sessions_by_user(
+            user_id=user_id, deleted=False, db_session=db_session, limit=0
+        )
+
+    except ValueError:
+        raise ValueError("Chat session does not exist or has been deleted")
+
+    return ChatSessionsResponse(
+        sessions=[
+            ChatSessionDetails(
+                id=chat.id,
+                name=chat.description,
+                persona_id=chat.persona_id,
+                time_created=chat.time_created.isoformat(),
+                shared_status=chat.shared_status,
+                folder_id=chat.folder_id,
+                current_alternate_model=chat.current_alternate_model,
+            )
+            for chat in chat_sessions
+        ]
+    )
+
+
 @router.get("/admin/chat-session-history")
 def get_chat_session_history(
     feedback_type: QAFeedbackType | None = None,
@@ -350,7 +384,7 @@ def get_chat_session_history(
 
 @router.get("/admin/chat-session-history/{chat_session_id}")
 def get_chat_session_admin(
-    chat_session_id: int,
+    chat_session_id: UUID,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionSnapshot:

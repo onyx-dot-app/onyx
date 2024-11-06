@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from danswer.configs.app_configs import MULTI_TENANT
 from danswer.db.search_settings import get_current_search_settings
 from danswer.document_index.interfaces import DocumentIndex
 from danswer.document_index.vespa.index import VespaIndex
@@ -14,7 +15,9 @@ def get_default_document_index(
     index both need to be updated, updates are applied to both indices"""
     # Currently only supporting Vespa
     return VespaIndex(
-        index_name=primary_index_name, secondary_index_name=secondary_index_name
+        index_name=primary_index_name,
+        secondary_index_name=secondary_index_name,
+        multitenant=MULTI_TENANT,
     )
 
 

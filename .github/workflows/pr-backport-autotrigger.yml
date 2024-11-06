@@ -1,0 +1,92 @@
+name: Backport on Merge
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  backport:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for all branches and tags
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check for Backport Checkbox
+        id: checkbox-check
+        run: |
+          PR_BODY="${{ github.event.pull_request.body }}"
+          if [[ "$PR_BODY" == *"[x] This PR should be backported"* ]]; then
+            echo "backport=true" >> $GITHUB_OUTPUT
+          else
+            echo "backport=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: List and sort release branches
+        id: list-branches
+        run: |
+          git fetch --all --tags
+          BRANCHES=$(git for-each-ref --format='%(refname:short)' refs/remotes/origin/release/* | sed 's|origin/release/||' | sort -Vr)
+          BETA=$(echo "$BRANCHES" | head -n 1)
+          STABLE=$(echo "$BRANCHES" | head -n 2 | tail -n 1)
+          echo "beta=$BETA" >> $GITHUB_OUTPUT
+          echo "stable=$STABLE" >> $GITHUB_OUTPUT
+          # Fetch latest tags for beta and stable
+          LATEST_BETA_TAG=$(git tag -l "v*.*.0-beta.*" | sort -Vr | head -n 1)
+          LATEST_STABLE_TAG=$(git tag -l "v*.*.*" | grep -v -- "-beta" | sort -Vr | head -n 1)
+          # Increment latest beta tag
+          NEW_BETA_TAG=$(echo $LATEST_BETA_TAG | awk -F '[.-]' '{print $1 "." $2 ".0-beta." ($NF+1)}')
+          # Increment latest stable tag
+          NEW_STABLE_TAG=$(echo $LATEST_STABLE_TAG | awk -F '.' '{print $1 "." $2 "." ($3+1)}')
+          echo "latest_beta_tag=$LATEST_BETA_TAG" >> $GITHUB_OUTPUT
+          echo "latest_stable_tag=$LATEST_STABLE_TAG" >> $GITHUB_OUTPUT
+          echo "new_beta_tag=$NEW_BETA_TAG" >> $GITHUB_OUTPUT
+          echo "new_stable_tag=$NEW_STABLE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Echo branch and tag information
+        run: |
+          echo "Beta branch: ${{ steps.list-branches.outputs.beta }}"
+          echo "Stable branch: ${{ steps.list-branches.outputs.stable }}"
+          echo "Latest beta tag: ${{ steps.list-branches.outputs.latest_beta_tag }}"
+          echo "Latest stable tag: ${{ steps.list-branches.outputs.latest_stable_tag }}"
+          echo "New beta tag: ${{ steps.list-branches.outputs.new_beta_tag }}"
+          echo "New stable tag: ${{ steps.list-branches.outputs.new_stable_tag }}"
+
+      - name: Trigger Backport
+        if: steps.checkbox-check.outputs.backport == 'true'
+        run: |
+          set -e
+          echo "Backporting to beta ${{ steps.list-branches.outputs.beta }} and stable ${{ steps.list-branches.outputs.stable }}"
+          # Fetch all history for all branches and tags
+          git fetch --prune --unshallow
+          # Checkout the beta branch
+          git checkout ${{ steps.list-branches.outputs.beta }}
+          # Cherry-pick the merge commit from the merged PR
+          git cherry-pick -m 1 ${{ github.event.pull_request.merge_commit_sha }} || {
+            echo "Cherry-pick to beta failed due to conflicts."
+            exit 1
+          }
+          # Create new beta tag
+          git tag ${{ steps.list-branches.outputs.new_beta_tag }}
+          # Push the changes and tag to the beta branch
+          git push origin ${{ steps.list-branches.outputs.beta }}
+          git push origin ${{ steps.list-branches.outputs.new_beta_tag }}
+          # Checkout the stable branch
+          git checkout ${{ steps.list-branches.outputs.stable }}
+          # Cherry-pick the merge commit from the merged PR
+          git cherry-pick -m 1 ${{ github.event.pull_request.merge_commit_sha }} || {
+            echo "Cherry-pick to stable failed due to conflicts."
+            exit 1
+          }
+          # Create new stable tag
+          git tag ${{ steps.list-branches.outputs.new_stable_tag }}
+          # Push the changes and tag to the stable branch
+          git push origin ${{ steps.list-branches.outputs.stable }}
+          git push origin ${{ steps.list-branches.outputs.new_stable_tag }}

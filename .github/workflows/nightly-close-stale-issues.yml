@@ -1,0 +1,23 @@
+name: 'Nightly - Close stale issues and PRs'
+on:
+  schedule:
+    - cron: '0 11 * * *' # Runs every day at 3 AM PST / 4 AM PDT / 11 AM UTC
+
+permissions:
+  # contents: write # only for delete-branch option
+  issues: write
+  pull-requests: write
+  
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          stale-issue-message: 'This issue is stale because it has been open 75 days with no activity. Remove stale label or comment or this will be closed in 15 days.'
+          stale-pr-message: 'This PR is stale because it has been open 75 days with no activity. Remove stale label or comment or this will be closed in 15 days.'
+          close-issue-message: 'This issue was closed because it has been stalled for 90 days with no activity.'
+          close-pr-message: 'This PR was closed because it has been stalled for 90 days with no activity.'
+          days-before-stale: 75
+#           days-before-close: 90  # uncomment after we test stale behavior
+          

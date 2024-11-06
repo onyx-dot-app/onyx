@@ -43,7 +43,7 @@ logger = setup_logger()
 
 
 def get_chat_session_by_id(
-    chat_session_id: int,
+    chat_session_id: UUID,
     user_id: UUID | None,
     db_session: Session,
     include_deleted: bool = False,
@@ -87,9 +87,9 @@ def get_chat_sessions_by_slack_thread_id(
 
 
 def get_valid_messages_from_query_sessions(
-    chat_session_ids: list[int],
+    chat_session_ids: list[UUID],
     db_session: Session,
-) -> dict[int, str]:
+) -> dict[UUID, str]:
     user_message_subquery = (
         select(
             ChatMessage.chat_session_id, func.min(ChatMessage.id).label("user_msg_id")
@@ -196,7 +196,7 @@ def delete_orphaned_search_docs(db_session: Session) -> None:
 
 
 def delete_messages_and_files_from_chat_session(
-    chat_session_id: int, db_session: Session
+    chat_session_id: UUID, db_session: Session
 ) -> None:
     # Select messages older than cutoff_time with files
     messages_with_files = db_session.execute(
@@ -253,7 +253,7 @@ def create_chat_session(
 def update_chat_session(
     db_session: Session,
     user_id: UUID | None,
-    chat_session_id: int,
+    chat_session_id: UUID,
     description: str | None = None,
     sharing_status: ChatSessionSharedStatus | None = None,
 ) -> ChatSession:
@@ -276,7 +276,7 @@ def update_chat_session(
 
 def delete_chat_session(
     user_id: UUID | None,
-    chat_session_id: int,
+    chat_session_id: UUID,
     db_session: Session,
     hard_delete: bool = HARD_DELETE_CHATS,
 ) -> None:
@@ -337,7 +337,7 @@ def get_chat_message(
 
 
 def get_chat_messages_by_sessions(
-    chat_session_ids: list[int],
+    chat_session_ids: list[UUID],
     user_id: UUID | None,
     db_session: Session,
     skip_permission_check: bool = False,
@@ -370,7 +370,7 @@ def get_search_docs_for_chat_message(
 
 
 def get_chat_messages_by_session(
-    chat_session_id: int,
+    chat_session_id: UUID,
     user_id: UUID | None,
     db_session: Session,
     skip_permission_check: bool = False,
@@ -397,7 +397,7 @@ def get_chat_messages_by_session(
 
 
 def get_or_create_root_message(
-    chat_session_id: int,
+    chat_session_id: UUID,
     db_session: Session,
 ) -> ChatMessage:
     try:
@@ -433,7 +433,7 @@ def get_or_create_root_message(
 
 def reserve_message_id(
     db_session: Session,
-    chat_session_id: int,
+    chat_session_id: UUID,
     parent_message: int,
     message_type: MessageType,
 ) -> int:
@@ -460,7 +460,7 @@ def reserve_message_id(
 
 
 def create_new_chat_message(
-    chat_session_id: int,
+    chat_session_id: UUID,
     parent_message: ChatMessage,
     message: str,
     prompt_id: int | None,

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_user
 from danswer.db.engine import get_session_context_manager
+from danswer.db.engine import get_session_with_tenant
 from danswer.db.models import ChatMessage
 from danswer.db.models import ChatSession
 from danswer.db.models import TokenRateLimit
@@ -20,6 +21,7 @@ from danswer.db.models import User
 from danswer.utils.logger import setup_logger
 from danswer.utils.variable_functionality import fetch_versioned_implementation
 from ee.danswer.db.token_limit import fetch_all_global_token_rate_limits
+from shared_configs.configs import CURRENT_TENANT_ID_CONTEXTVAR
 
 
 logger = setup_logger()
@@ -39,11 +41,11 @@ def check_token_rate_limits(
     versioned_rate_limit_strategy = fetch_versioned_implementation(
         "danswer.server.query_and_chat.token_limit", "_check_token_rate_limits"
     )
-    return versioned_rate_limit_strategy(user)
+    return versioned_rate_limit_strategy(user, CURRENT_TENANT_ID_CONTEXTVAR.get())
 
 
-def _check_token_rate_limits(_: User | None) -> None:
-    _user_is_rate_limited_by_global()
+def _check_token_rate_limits(_: User | None, tenant_id: str | None) -> None:
+    _user_is_rate_limited_by_global(tenant_id)
 
 
 """
@@ -51,8 +53,8 @@ Global rate limits
 """
 
 
-def _user_is_rate_limited_by_global() -> None:
-    with get_session_context_manager() as db_session:
+def _user_is_rate_limited_by_global(tenant_id: str | None) -> None:
+    with get_session_with_tenant(tenant_id) as db_session:
         global_rate_limits = fetch_all_global_token_rate_limits(
             db_session=db_session, enabled_only=True, ordered=False
         )

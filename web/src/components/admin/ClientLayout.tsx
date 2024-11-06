@@ -30,15 +30,18 @@ import { User } from "@/lib/types";
 import { usePathname } from "next/navigation";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { useContext } from "react";
+import { Cloud } from "@phosphor-icons/react";
 
 export function ClientLayout({
   user,
   children,
   enableEnterprise,
+  enableCloud,
 }: {
   user: User | null;
   children: React.ReactNode;
   enableEnterprise: boolean;
+  enableCloud: boolean;
 }) {
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
@@ -390,6 +393,22 @@ export function ClientLayout({
                               },
                             ]
                           : []),
+                        ...(enableCloud
+                          ? [
+                              {
+                                name: (
+                                  <div className="flex">
+                                    <Cloud
+                                      className="text-icon-settings-sidebar"
+                                      size={18}
+                                    />
+                                    <div className="ml-1">Cloud Settings</div>
+                                  </div>
+                                ),
+                                link: "/admin/cloud-settings",
+                              },
+                            ]
+                          : []),
                       ],
                     },
                     {
@@ -431,7 +450,7 @@ export function ClientLayout({
         </div>
         <div className="pb-8 relative h-full overflow-y-auto w-full">
           <div className="fixed bg-background left-0 gap-x-4 mb-8 px-4 py-2 w-full items-center flex justify-end">
-            <UserDropdown user={user} />
+            <UserDropdown />
           </div>
           <div className="pt-20 flex overflow-y-auto h-full px-4 md:px-12">
             {children}

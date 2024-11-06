@@ -22,18 +22,18 @@ def retry_builder(
     jitter: tuple[float, float] | float = 1,
 ) -> Callable[[F], F]:
     """Builds a generic wrapper/decorator for calls to external APIs that
-    may fail due to rate limiting, flakes, or other reasons. Applies expontential
+    may fail due to rate limiting, flakes, or other reasons. Applies exponential
     backoff with jitter to retry the call."""
 
-    @retry(
-        tries=tries,
-        delay=delay,
-        max_delay=max_delay,
-        backoff=backoff,
-        jitter=jitter,
-        logger=cast(Logger, logger),
-    )
     def retry_with_default(func: F) -> F:
+        @retry(
+            tries=tries,
+            delay=delay,
+            max_delay=max_delay,
+            backoff=backoff,
+            jitter=jitter,
+            logger=cast(Logger, logger),
+        )
         def wrapped_func(*args: list, **kwargs: dict[str, Any]) -> Any:
             return func(*args, **kwargs)
 

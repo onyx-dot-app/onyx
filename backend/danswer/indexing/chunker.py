@@ -15,7 +15,7 @@ from danswer.indexing.models import DocAwareChunk
 from danswer.natural_language_processing.utils import BaseTokenizer
 from danswer.utils.logger import setup_logger
 from danswer.utils.text_processing import shared_precompare_cleanup
-
+from shared_configs.configs import STRICT_CHUNK_TOKEN_LIMIT
 
 # Not supporting overlaps, we need a clean combination of chunks and it is unclear if overlaps
 # actually help quality at all
@@ -158,6 +158,24 @@ class Chunker:
             else None
         )
 
+    def _split_oversized_chunk(self, text: str, content_token_limit: int) -> list[str]:
+        """
+        Splits the text into smaller chunks based on token count to ensure
+        no chunk exceeds the content_token_limit.
+        """
+        tokens = self.tokenizer.tokenize(text)
+        chunks = []
+        start = 0
+        total_tokens = len(tokens)
+        while start < total_tokens:
+            end = min(start + content_token_limit, total_tokens)
+            token_chunk = tokens[start:end]
+            # Join the tokens to reconstruct the text
+            chunk_text = " ".join(token_chunk)
+            chunks.append(chunk_text)
+            start = end
+        return chunks
+
     def _extract_blurb(self, text: str) -> str:
         texts = self.blurb_splitter.split_text(text)
         if not texts:
@@ -218,14 +236,42 @@ class Chunker:
                     chunk_text = ""
 
                 split_texts = self.chunk_splitter.split_text(section_text)
+
                 for i, split_text in enumerate(split_texts):
-                    chunks.append(
-                        _create_chunk(
-                            text=split_text,
-                            links={0: section_link_text},
-                            is_continuation=(i != 0),
+                    split_token_count = len(self.tokenizer.tokenize(split_text))
+
+                    if STRICT_CHUNK_TOKEN_LIMIT:
+                        split_token_count = len(self.tokenizer.tokenize(split_text))
+                        if split_token_count > content_token_limit:
+                            # Further split the oversized chunk
+                            smaller_chunks = self._split_oversized_chunk(
+                                split_text, content_token_limit
+                            )
+                            for i, small_chunk in enumerate(smaller_chunks):
+                                chunks.append(
+                                    _create_chunk(
+                                        text=small_chunk,
+                                        links={0: section_link_text},
+                                        is_continuation=(i != 0),
+                                    )
+                                )
+                        else:
+                            chunks.append(
+                                _create_chunk(
+                                    text=split_text,
+                                    links={0: section_link_text},
+                                )
+                            )
+
+                    else:
+                        chunks.append(
+                            _create_chunk(
+                                text=split_text,
+                                links={0: section_link_text},
+                                is_continuation=(i != 0),
+                            )
                         )
-                    )
+
                 continue
 
             current_token_count = len(self.tokenizer.tokenize(chunk_text))

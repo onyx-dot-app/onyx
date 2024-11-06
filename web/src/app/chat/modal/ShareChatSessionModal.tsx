@@ -6,12 +6,12 @@ import { ChatSessionSharedStatus } from "../interfaces";
 import { FiCopy } from "react-icons/fi";
 import { CopyButton } from "@/components/CopyButton";
 
-function buildShareLink(chatSessionId: number) {
+function buildShareLink(chatSessionId: string) {
   const baseUrl = `${window.location.protocol}//${window.location.host}`;
   return `${baseUrl}/chat/shared/${chatSessionId}`;
 }
 
-async function generateShareLink(chatSessionId: number) {
+async function generateShareLink(chatSessionId: string) {
   const response = await fetch(`/api/chat/chat-session/${chatSessionId}`, {
     method: "PATCH",
     headers: {
@@ -26,7 +26,7 @@ async function generateShareLink(chatSessionId: number) {
   return null;
 }
 
-async function deleteShareLink(chatSessionId: number) {
+async function deleteShareLink(chatSessionId: string) {
   const response = await fetch(`/api/chat/chat-session/${chatSessionId}`, {
     method: "PATCH",
     headers: {
@@ -44,7 +44,7 @@ export function ShareChatSessionModal({
   onShare,
   onClose,
 }: {
-  chatSessionId: number;
+  chatSessionId: string;
   existingSharedStatus: ChatSessionSharedStatus;
   onShare?: (shared: boolean) => void;
   onClose: () => void;

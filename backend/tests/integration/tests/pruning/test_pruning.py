@@ -10,6 +10,10 @@ from datetime import timezone
 from time import sleep
 from typing import Any
 
+import uvicorn
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
 from danswer.server.documents.models import DocumentSource
 from danswer.utils.logger import setup_logger
 from tests.integration.common_utils.managers.api_key import APIKeyManager
@@ -21,10 +25,50 @@ from tests.integration.common_utils.vespa import vespa_fixture
 logger = setup_logger()
 
 
+# FastAPI server for serving files
+def create_fastapi_app(directory: str) -> FastAPI:
+    app = FastAPI()
+
+    # Mount the directory to serve static files
+    app.mount("/", StaticFiles(directory=directory, html=True), name="static")
+
+    return app
+
+
+# as far as we know, this doesn't hang when crawled. This is good.
+@contextmanager
+def fastapi_server_context(
+    directory: str, port: int = 8000
+) -> Generator[None, None, None]:
+    app = create_fastapi_app(directory)
+
+    config = uvicorn.Config(app=app, host="0.0.0.0", port=port, log_level="info")
+    server = uvicorn.Server(config)
+
+    # Create a thread to run the FastAPI server
+    server_thread = threading.Thread(target=server.run)
+    server_thread.daemon = (
+        True  # Ensures the thread will exit when the main program exits
+    )
+
+    try:
+        # Start the server in the background
+        server_thread.start()
+        sleep(5)  # Give it a few seconds to start
+        yield  # Yield control back to the calling function (context manager in use)
+    finally:
+        # Shutdown the server
+        server.should_exit = True
+        server_thread.join()
+
+
+# Leaving this here for posterity and experimentation, but the reason we're
+# not using this is python's web servers hang frequently when crawled
+# this is obviously not good for a unit test
 @contextmanager
 def http_server_context(
     directory: str, port: int = 8000
-) -> Generator[http.server.HTTPServer, None, None]:
+) -> Generator[http.server.ThreadingHTTPServer, None, None]:
     # Create a handler that serves files from the specified directory
     def handler_class(
         *args: Any, **kwargs: Any
@@ -34,7 +78,7 @@ def http_server_context(
         )
 
     # Create an HTTPServer instance
-    httpd = http.server.HTTPServer(("0.0.0.0", port), handler_class)
+    httpd = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler_class)
 
     # Define a thread that runs the server in the background
     server_thread = threading.Thread(target=httpd.serve_forever)
@@ -45,6 +89,7 @@ def http_server_context(
     try:
         # Start the server in the background
         server_thread.start()
+        sleep(5)  # give it a few seconds to start
         yield httpd
     finally:
         # Shutdown the server and wait for the thread to finish
@@ -70,7 +115,7 @@ def test_web_pruning(reset: None, vespa_client: vespa_fixture) -> None:
         website_src = os.path.join(test_directory, "website")
         website_tgt = os.path.join(temp_dir, "website")
         shutil.copytree(website_src, website_tgt)
-        with http_server_context(os.path.join(temp_dir, "website"), port):
+        with fastapi_server_context(os.path.join(temp_dir, "website"), port):
             sleep(1)  # sleep a tiny bit before starting everything
 
             hostname = os.getenv("TEST_WEB_HOSTNAME", "localhost")
@@ -105,9 +150,10 @@ def test_web_pruning(reset: None, vespa_client: vespa_fixture) -> None:
             logger.info("Removing courses.html.")
             os.remove(os.path.join(website_tgt, "courses.html"))
 
+            now = datetime.now(timezone.utc)
             CCPairManager.prune(cc_pair_1, user_performing_action=admin_user)
             CCPairManager.wait_for_prune(
-                cc_pair_1, timeout=60, user_performing_action=admin_user
+                cc_pair_1, now, timeout=60, user_performing_action=admin_user
             )
 
             selected_cc_pair = CCPairManager.get_one(

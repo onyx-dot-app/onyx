@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import BaseModel
 
 from danswer.server.query_and_chat.models import ChatSessionDetails
@@ -23,7 +25,7 @@ class FolderUpdateRequest(BaseModel):
 
 
 class FolderChatSessionRequest(BaseModel):
-    chat_session_id: int
+    chat_session_id: UUID
 
 
 class DeleteFolderOptions(BaseModel):

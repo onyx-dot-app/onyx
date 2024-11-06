@@ -15,7 +15,10 @@ from sqlalchemy.orm import Session
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_curator_or_admin_user
 from danswer.auth.users import current_user
+from danswer.background.celery.celery_redis import RedisConnectorIndexing
 from danswer.background.celery.celery_utils import get_deletion_attempt_snapshot
+from danswer.background.celery.tasks.indexing.tasks import try_creating_indexing_task
+from danswer.background.celery.versioned_apps.primary import app as primary_app
 from danswer.configs.app_configs import ENABLED_CONNECTOR_TYPES
 from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import FileOrigin
@@ -57,25 +60,30 @@ from danswer.db.connector_credential_pair import add_credential_to_connector
 from danswer.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from danswer.db.connector_credential_pair import get_connector_credential_pair
 from danswer.db.connector_credential_pair import get_connector_credential_pairs
+from danswer.db.credentials import cleanup_gmail_credentials
+from danswer.db.credentials import cleanup_google_drive_credentials
 from danswer.db.credentials import create_credential
 from danswer.db.credentials import delete_gmail_service_account_credentials
 from danswer.db.credentials import delete_google_drive_service_account_credentials
 from danswer.db.credentials import fetch_credential_by_id
 from danswer.db.deletion_attempt import check_deletion_attempt_is_allowed
 from danswer.db.document import get_document_counts_for_cc_pairs
+from danswer.db.engine import get_current_tenant_id
 from danswer.db.engine import get_session
 from danswer.db.enums import AccessType
-from danswer.db.index_attempt import create_index_attempt
 from danswer.db.index_attempt import get_index_attempts_for_cc_pair
 from danswer.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from danswer.db.index_attempt import get_latest_index_attempts
 from danswer.db.index_attempt import get_latest_index_attempts_by_status
 from danswer.db.models import IndexingStatus
+from danswer.db.models import SearchSettings
 from danswer.db.models import User
 from danswer.db.models import UserRole
 from danswer.db.search_settings import get_current_search_settings
+from danswer.db.search_settings import get_secondary_search_settings
 from danswer.file_store.file_store import get_default_file_store
 from danswer.key_value_store.interface import KvKeyNotFoundError
+from danswer.redis.redis_pool import get_redis_client
 from danswer.server.documents.models import AuthStatus
 from danswer.server.documents.models import AuthUrl
 from danswer.server.documents.models import ConnectorCredentialPairIdentifier
@@ -137,9 +145,11 @@ def upsert_google_app_gmail_credentials(
 @router.delete("/admin/connector/gmail/app-credential")
 def delete_google_app_gmail_credentials(
     _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     try:
         delete_google_app_gmail_cred()
+        cleanup_gmail_credentials(db_session=db_session)
     except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -175,9 +185,11 @@ def upsert_google_app_credentials(
 @router.delete("/admin/connector/google-drive/app-credential")
 def delete_google_app_credentials(
     _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     try:
         delete_google_app_cred()
+        cleanup_google_drive_credentials(db_session=db_session)
     except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -215,9 +227,11 @@ def upsert_google_service_gmail_account_key(
 @router.delete("/admin/connector/gmail/service-account-key")
 def delete_google_service_gmail_account_key(
     _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     try:
         delete_gmail_service_account_key()
+        cleanup_gmail_credentials(db_session=db_session)
     except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -255,9 +269,11 @@ def upsert_google_service_account_key(
 @router.delete("/admin/connector/google-drive/service-account-key")
 def delete_google_service_account_key(
     _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     try:
         delete_service_account_key()
+        cleanup_google_drive_credentials(db_session=db_session)
     except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -477,8 +493,11 @@ def get_connector_indexing_status(
     get_editable: bool = Query(
         False, description="If true, return editable document sets"
     ),
+    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> list[ConnectorIndexingStatus]:
     indexing_statuses: list[ConnectorIndexingStatus] = []
+
+    r = get_redis_client(tenant_id=tenant_id)
 
     # NOTE: If the connector is deleting behind the scenes,
     # accessing cc_pairs can be inconsistent and members like
@@ -531,6 +550,12 @@ def get_connector_indexing_status(
             relationship.user_group_id
         )
 
+    search_settings: SearchSettings | None = None
+    if not secondary_index:
+        search_settings = get_current_search_settings(db_session)
+    else:
+        search_settings = get_secondary_search_settings(db_session)
+
     for cc_pair in cc_pairs:
         # TODO remove this to enable ingestion API
         if cc_pair.name == "DefaultCCPair":
@@ -541,6 +566,12 @@ def get_connector_indexing_status(
         if not connector or not credential:
             # This may happen if background deletion is happening
             continue
+
+        in_progress = False
+        if search_settings:
+            rci = RedisConnectorIndexing(cc_pair.id, search_settings.id)
+            if r.exists(rci.fence_key):
+                in_progress = True
 
         latest_index_attempt = cc_pair_to_latest_index_attempt.get(
             (connector.id, credential.id)
@@ -587,6 +618,7 @@ def get_connector_indexing_status(
                     connector_id=connector.id,
                     credential_id=credential.id,
                     db_session=db_session,
+                    tenant_id=tenant_id,
                 ),
                 is_deletable=check_deletion_attempt_is_allowed(
                     connector_credential_pair=cc_pair,
@@ -595,6 +627,7 @@ def get_connector_indexing_status(
                     allow_scheduled=True,
                 )
                 is None,
+                in_progress=in_progress,
             )
         )
 
@@ -663,15 +696,18 @@ def create_connector_with_mock_credential(
         connector_response = create_connector(
             db_session=db_session, connector_data=connector_data
         )
+
         mock_credential = CredentialBase(
             credential_json={}, admin_public=True, source=connector_data.source
         )
         credential = create_credential(
             mock_credential, user=user, db_session=db_session
         )
+
         access_type = (
             AccessType.PUBLIC if connector_data.is_public else AccessType.PRIVATE
         )
+
         response = add_credential_to_connector(
             db_session=db_session,
             user=user,
@@ -750,7 +786,13 @@ def connector_run_once(
     run_info: RunConnectorRequest,
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse[list[int]]:
+    """Used to trigger indexing on a set of cc_pairs associated with a
+    single connector."""
+
+    r = get_redis_client(tenant_id=tenant_id)
+
     connector_id = run_info.connector_id
     specified_credential_ids = run_info.credential_ids
 
@@ -804,16 +846,25 @@ def connector_run_once(
         if credential_id not in skipped_credentials
     ]
 
-    index_attempt_ids = [
-        create_index_attempt(
-            connector_credential_pair_id=connector_credential_pair.id,
-            search_settings_id=search_settings.id,
-            from_beginning=run_info.from_beginning,
-            db_session=db_session,
-        )
-        for connector_credential_pair in connector_credential_pairs
-        if connector_credential_pair is not None
-    ]
+    index_attempt_ids = []
+    for cc_pair in connector_credential_pairs:
+        if cc_pair is not None:
+            attempt_id = try_creating_indexing_task(
+                primary_app,
+                cc_pair,
+                search_settings,
+                run_info.from_beginning,
+                db_session,
+                r,
+                tenant_id,
+            )
+            if attempt_id:
+                logger.info(
+                    f"try_creating_indexing_task succeeded: cc_pair={cc_pair.id} attempt_id={attempt_id}"
+                )
+                index_attempt_ids.append(attempt_id)
+            else:
+                logger.info(f"try_creating_indexing_task failed: cc_pair={cc_pair.id}")
 
     if not index_attempt_ids:
         raise HTTPException(

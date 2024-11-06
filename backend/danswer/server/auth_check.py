@@ -4,13 +4,13 @@ from fastapi import FastAPI
 from fastapi.dependencies.models import Dependant
 from starlette.routing import BaseRoute
 
-from danswer.auth.users import control_plane_dep
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_curator_or_admin_user
 from danswer.auth.users import current_user
 from danswer.auth.users import current_user_with_expired_token
 from danswer.configs.app_configs import APP_API_PREFIX
 from danswer.server.danswer_api.ingestion import api_key_dep
+from ee.danswer.server.tenants.access import control_plane_dep
 
 
 PUBLIC_ENDPOINT_SPECS = [

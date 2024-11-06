@@ -14,7 +14,6 @@ from danswer.connectors.cross_connector_utils.miscellaneous_utils import time_st
 from danswer.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
 )
-from danswer.connectors.cross_connector_utils.retry_wrapper import retry_builder
 from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import PollConnector
 from danswer.connectors.interfaces import SecondsSinceUnixEpoch
@@ -24,6 +23,7 @@ from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.file_processing.html_utils import parse_html_page_basic
 from danswer.utils.logger import setup_logger
+from danswer.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 

@@ -1,4 +1,5 @@
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import model_validator
@@ -40,7 +41,7 @@ class ToolCallFinalResult(ToolCallKickoff):
 
 
 class DynamicSchemaInfo(BaseModel):
-    chat_session_id: int | None
+    chat_session_id: UUID | None
     message_id: int | None
 
 

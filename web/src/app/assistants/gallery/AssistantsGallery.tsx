@@ -15,6 +15,8 @@ import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
 import { AssistantTools } from "../ToolsDisplay";
 import { classifyAssistants } from "@/lib/assistants/utils";
+import { useAssistants } from "@/components/context/AssistantsContext";
+import { useUser } from "@/components/user/UserProvider";
 export function AssistantGalleryCard({
   assistant,
   user,
@@ -26,6 +28,7 @@ export function AssistantGalleryCard({
   setPopup: (popup: PopupSpec) => void;
   selectedAssistant: boolean;
 }) {
+  const { refreshUser } = useUser();
   const router = useRouter();
   return (
     <div
@@ -80,7 +83,7 @@ export function AssistantGalleryCard({
                       message: `"${assistant.name}" has been removed from your list.`,
                       type: "success",
                     });
-                    router.refresh();
+                    await refreshUser();
                   } else {
                     setPopup({
                       message: `"${assistant.name}" could not be removed from your list.`,
@@ -108,7 +111,7 @@ export function AssistantGalleryCard({
                       message: `"${assistant.name}" has been added to your list.`,
                       type: "success",
                     });
-                    router.refresh();
+                    await refreshUser();
                   } else {
                     setPopup({
                       message: `"${assistant.name}" could not be added to your list.`,
@@ -136,14 +139,10 @@ export function AssistantGalleryCard({
     </div>
   );
 }
-export function AssistantsGallery({
-  assistants,
-  user,
-}: {
-  assistants: Persona[];
+export function AssistantsGallery() {
+  const { assistants } = useAssistants();
+  const { user } = useUser();
 
-  user: User | null;
-}) {
   const router = useRouter();
 
   const [searchQuery, setSearchQuery] = useState("");

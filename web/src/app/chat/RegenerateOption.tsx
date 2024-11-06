@@ -24,6 +24,7 @@ export function RegenerateDropdown({
   side,
   maxHeight,
   alternate,
+  onDropdownVisibleChange,
 }: {
   alternate?: string;
   options: StringOrNumberOption[];
@@ -32,8 +33,14 @@ export function RegenerateDropdown({
   includeDefault?: boolean;
   side?: "top" | "right" | "bottom" | "left";
   maxHeight?: string;
+  onDropdownVisibleChange: (isVisible: boolean) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+
+  const toggleDropdownVisible = (isVisible: boolean) => {
+    setIsOpen(isVisible);
+    onDropdownVisibleChange(isVisible);
+  };
 
   const Dropdown = (
     <div
@@ -81,9 +88,9 @@ export function RegenerateDropdown({
   return (
     <Popover
       open={isOpen}
-      onOpenChange={(open) => setIsOpen(open)}
+      onOpenChange={toggleDropdownVisible}
       content={
-        <div onClick={() => setIsOpen(!isOpen)}>
+        <div onClick={() => toggleDropdownVisible(!isOpen)}>
           {!alternate ? (
             <Hoverable size={16} icon={StarFeedback as IconType} />
           ) : (
@@ -109,11 +116,13 @@ export default function RegenerateOption({
   regenerate,
   overriddenModel,
   onHoverChange,
+  onDropdownVisibleChange,
 }: {
   selectedAssistant: Persona;
   regenerate: (modelOverRide: LlmOverride) => Promise<void>;
   overriddenModel?: string;
   onHoverChange: (isHovered: boolean) => void;
+  onDropdownVisibleChange: (isVisible: boolean) => void;
 }) {
   const llmOverrideManager = useLlmOverride();
 
@@ -164,6 +173,7 @@ export default function RegenerateOption({
       onMouseLeave={() => onHoverChange(false)}
     >
       <RegenerateDropdown
+        onDropdownVisibleChange={onDropdownVisibleChange}
         alternate={overriddenModel}
         options={llmOptions}
         selected={currentModelName}

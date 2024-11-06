@@ -1,6 +1,9 @@
+import contextvars
 import os
 from typing import List
 from urllib.parse import urlparse
+
+from shared_configs.model_server_models import SupportedEmbeddingModel
 
 # Used for logging
 SLACK_CHANNEL_ID = "channel_id"
@@ -60,8 +63,23 @@ DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true
 # notset, debug, info, notice, warning, error, or critical
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "notice")
 
+# Timeout for API-based embedding models
+# NOTE: does not apply for Google VertexAI, since the python client doesn't
+# allow us to specify a custom timeout
+API_BASED_EMBEDDING_TIMEOUT = int(os.environ.get("API_BASED_EMBEDDING_TIMEOUT", "600"))
+
 # Only used for OpenAI
-OPENAI_EMBEDDING_TIMEOUT = int(os.environ.get("OPENAI_EMBEDDING_TIMEOUT", "600"))
+OPENAI_EMBEDDING_TIMEOUT = int(
+    os.environ.get("OPENAI_EMBEDDING_TIMEOUT", API_BASED_EMBEDDING_TIMEOUT)
+)
+
+# Whether or not to strictly enforce token limit for chunking.
+STRICT_CHUNK_TOKEN_LIMIT = (
+    os.environ.get("STRICT_CHUNK_TOKEN_LIMIT", "").lower() == "true"
+)
+
+# Set up Sentry integration (for error logging)
+SENTRY_DSN = os.environ.get("SENTRY_DSN")
 
 
 # Fields which should only be set on new search setting
@@ -109,3 +127,81 @@ if CORS_ALLOWED_ORIGIN_ENV:
 else:
     # If the environment variable is empty, allow all origins
     CORS_ALLOWED_ORIGIN = ["*"]
+
+
+POSTGRES_DEFAULT_SCHEMA = os.environ.get("POSTGRES_DEFAULT_SCHEMA") or "public"
+
+CURRENT_TENANT_ID_CONTEXTVAR = contextvars.ContextVar(
+    "current_tenant_id", default=POSTGRES_DEFAULT_SCHEMA
+)
+
+
+SUPPORTED_EMBEDDING_MODELS = [
+    # Cloud-based models
+    SupportedEmbeddingModel(
+        name="cohere/embed-english-v3.0",
+        dim=1024,
+        index_name="danswer_chunk_cohere_embed_english_v3_0",
+    ),
+    SupportedEmbeddingModel(
+        name="cohere/embed-english-light-v3.0",
+        dim=384,
+        index_name="danswer_chunk_cohere_embed_english_light_v3_0",
+    ),
+    SupportedEmbeddingModel(
+        name="openai/text-embedding-3-large",
+        dim=3072,
+        index_name="danswer_chunk_openai_text_embedding_3_large",
+    ),
+    SupportedEmbeddingModel(
+        name="openai/text-embedding-3-small",
+        dim=1536,
+        index_name="danswer_chunk_openai_text_embedding_3_small",
+    ),
+    SupportedEmbeddingModel(
+        name="google/text-embedding-004",
+        dim=768,
+        index_name="danswer_chunk_google_text_embedding_004",
+    ),
+    SupportedEmbeddingModel(
+        name="google/textembedding-gecko@003",
+        dim=768,
+        index_name="danswer_chunk_google_textembedding_gecko_003",
+    ),
+    SupportedEmbeddingModel(
+        name="voyage/voyage-large-2-instruct",
+        dim=1024,
+        index_name="danswer_chunk_voyage_large_2_instruct",
+    ),
+    SupportedEmbeddingModel(
+        name="voyage/voyage-light-2-instruct",
+        dim=384,
+        index_name="danswer_chunk_voyage_light_2_instruct",
+    ),
+    # Self-hosted models
+    SupportedEmbeddingModel(
+        name="nomic-ai/nomic-embed-text-v1",
+        dim=768,
+        index_name="danswer_chunk_nomic_ai_nomic_embed_text_v1",
+    ),
+    SupportedEmbeddingModel(
+        name="intfloat/e5-base-v2",
+        dim=768,
+        index_name="danswer_chunk_intfloat_e5_base_v2",
+    ),
+    SupportedEmbeddingModel(
+        name="intfloat/e5-small-v2",
+        dim=384,
+        index_name="danswer_chunk_intfloat_e5_small_v2",
+    ),
+    SupportedEmbeddingModel(
+        name="intfloat/multilingual-e5-base",
+        dim=768,
+        index_name="danswer_chunk_intfloat_multilingual_e5_base",
+    ),
+    SupportedEmbeddingModel(
+        name="intfloat/multilingual-e5-small",
+        dim=384,
+        index_name="danswer_chunk_intfloat_multilingual_e5_small",
+    ),
+]

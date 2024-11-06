@@ -105,6 +105,7 @@ from danswer.tools.tool import ToolResponse
 from danswer.tools.tool_runner import ToolCallFinalResult
 from danswer.tools.utils import compute_all_tool_tokens
 from danswer.tools.utils import explicit_tool_calling_supported
+from danswer.utils.headers import header_dict_to_header_list
 from danswer.utils.logger import setup_logger
 from danswer.utils.timing import log_generator_function_time
 
@@ -276,6 +277,7 @@ def stream_chat_message_objects(
     # on the `new_msg_req.message`. Currently, requires a state where the last message is a
     use_existing_user_message: bool = False,
     litellm_additional_headers: dict[str, str] | None = None,
+    custom_tool_additional_headers: dict[str, str] | None = None,
     is_connected: Callable[[], bool] | None = None,
     enforce_chat_session_id_for_search_docs: bool = True,
 ) -> ChatPacketStream:
@@ -639,7 +641,12 @@ def stream_chat_message_objects(
                             chat_session_id=chat_session_id,
                             message_id=user_message.id if user_message else None,
                         ),
-                        custom_headers=db_tool_model.custom_headers,
+                        custom_headers=(db_tool_model.custom_headers or [])
+                        + (
+                            header_dict_to_header_list(
+                                custom_tool_additional_headers or {}
+                            )
+                        ),
                     ),
                 )
 
@@ -665,6 +672,7 @@ def stream_chat_message_objects(
                     all_docs_useful=selected_db_search_docs is not None
                 ),
                 document_pruning_config=document_pruning_config,
+                structured_response_format=new_msg_req.structured_response_format,
             ),
             prompt_config=prompt_config,
             llm=(
@@ -862,6 +870,7 @@ def stream_chat_message(
     user: User | None,
     use_existing_user_message: bool = False,
     litellm_additional_headers: dict[str, str] | None = None,
+    custom_tool_additional_headers: dict[str, str] | None = None,
     is_connected: Callable[[], bool] | None = None,
 ) -> Iterator[str]:
     with get_session_context_manager() as db_session:
@@ -871,6 +880,7 @@ def stream_chat_message(
             db_session=db_session,
             use_existing_user_message=use_existing_user_message,
             litellm_additional_headers=litellm_additional_headers,
+            custom_tool_additional_headers=custom_tool_additional_headers,
             is_connected=is_connected,
         )
         for obj in objects:

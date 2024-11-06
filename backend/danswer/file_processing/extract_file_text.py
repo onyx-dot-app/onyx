@@ -208,8 +208,9 @@ def read_pdf_file(
                 # By user request, keep files that are unreadable just so they
                 # can be discoverable by title.
                 return "", metadata
-        else:
-            logger.warning("No Password available to to decrypt pdf")
+        elif pdf_reader.is_encrypted:
+            logger.warning("No Password available to decrypt pdf, returning empty")
+            return "", metadata
 
         # Extract metadata from the PDF, removing leading '/' from keys if present
         # This standardizes the metadata keys for consistency

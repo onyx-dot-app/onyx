@@ -10,10 +10,12 @@ from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyAccessTokenDataba
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import Session
 
+from danswer.auth.invited_users import get_invited_users
 from danswer.auth.schemas import UserRole
 from danswer.db.engine import get_async_session
-from danswer.db.engine import get_sqlalchemy_async_engine
+from danswer.db.engine import get_async_session_with_tenant
 from danswer.db.models import AccessToken
 from danswer.db.models import OAuthAccount
 from danswer.db.models import User
@@ -33,10 +35,20 @@ def get_default_admin_user_emails() -> list[str]:
     return get_default_admin_user_emails_fn()
 
 
+def get_total_users(db_session: Session) -> int:
+    """
+    Returns the total number of users in the system.
+    This is the sum of users and invited users.
+    """
+    user_count = db_session.query(User).count()
+    invited_users = len(get_invited_users())
+    return user_count + invited_users
+
+
 async def get_user_count() -> int:
-    async with AsyncSession(get_sqlalchemy_async_engine()) as asession:
+    async with get_async_session_with_tenant() as session:
         stmt = select(func.count(User.id))
-        result = await asession.execute(stmt)
+        result = await session.execute(stmt)
         user_count = result.scalar()
         if user_count is None:
             raise RuntimeError("Was not able to fetch the user count.")

@@ -31,6 +31,9 @@ DISABLED_GEN_AI_MSG = (
     "You can still use Danswer as a search engine."
 )
 
+# Prefix used for all tenant ids
+TENANT_ID_PREFIX = "tenant_"
+
 # Postgres connection constants for application_name
 POSTGRES_WEB_APP_NAME = "web"
 POSTGRES_INDEXER_APP_NAME = "indexer"
@@ -39,9 +42,10 @@ POSTGRES_CELERY_BEAT_APP_NAME = "celery_beat"
 POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME = "celery_worker_primary"
 POSTGRES_CELERY_WORKER_LIGHT_APP_NAME = "celery_worker_light"
 POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
+POSTGRES_CELERY_WORKER_INDEXING_APP_NAME = "celery_worker_indexing"
+POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME = "celery_worker_indexing_child"
 POSTGRES_PERMISSIONS_APP_NAME = "permissions"
 POSTGRES_UNKNOWN_APP_NAME = "unknown"
-POSTGRES_DEFAULT_SCHEMA = "public"
 
 # API Keys
 DANSWER_API_KEY_PREFIX = "API_KEY__"
@@ -66,9 +70,20 @@ KV_CUSTOMER_UUID_KEY = "customer_uuid"
 KV_INSTANCE_DOMAIN_KEY = "instance_domain"
 KV_ENTERPRISE_SETTINGS_KEY = "danswer_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
+KV_DOCUMENTS_SEEDED_KEY = "documents_seeded"
 
 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 60
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
+
+# needs to be long enough to cover the maximum time it takes to download an object
+# if we can get callbacks as object bytes download, we could lower this a lot.
+CELERY_INDEXING_LOCK_TIMEOUT = 60 * 60  # 60 min
+
+# needs to be long enough to cover the maximum time it takes to download an object
+# if we can get callbacks as object bytes download, we could lower this a lot.
+CELERY_PRUNING_LOCK_TIMEOUT = 300  # 5 min
+
+DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
 
 
 class DocumentSource(str, Enum):
@@ -115,8 +130,13 @@ class DocumentSource(str, Enum):
     NOT_APPLICABLE = "not_applicable"
 
 
+DocumentSourceRequiringTenantContext: list[DocumentSource] = [DocumentSource.FILE]
+
+
 class NotificationType(str, Enum):
     REINDEX = "reindex"
+    PERSONA_SHARED = "persona_shared"
+    TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending"  # 2 days left in trial
 
 
 class BlobType(str, Enum):
@@ -140,6 +160,9 @@ class AuthType(str, Enum):
     GOOGLE_OAUTH = "google_oauth"
     OIDC = "oidc"
     SAML = "saml"
+
+    # google auth and basic
+    CLOUD = "cloud"
 
 
 class SessionType(str, Enum):
@@ -190,14 +213,19 @@ class DanswerCeleryQueues:
     VESPA_METADATA_SYNC = "vespa_metadata_sync"
     CONNECTOR_DELETION = "connector_deletion"
     CONNECTOR_PRUNING = "connector_pruning"
+    CONNECTOR_INDEXING = "connector_indexing"
 
 
 class DanswerRedisLocks:
     PRIMARY_WORKER = "da_lock:primary_worker"
     CHECK_VESPA_SYNC_BEAT_LOCK = "da_lock:check_vespa_sync_beat"
-    MONITOR_VESPA_SYNC_BEAT_LOCK = "da_lock:monitor_vespa_sync_beat"
     CHECK_CONNECTOR_DELETION_BEAT_LOCK = "da_lock:check_connector_deletion_beat"
     CHECK_PRUNE_BEAT_LOCK = "da_lock:check_prune_beat"
+    CHECK_INDEXING_BEAT_LOCK = "da_lock:check_indexing_beat"
+    MONITOR_VESPA_SYNC_BEAT_LOCK = "da_lock:monitor_vespa_sync_beat"
+
+    PRUNING_LOCK_PREFIX = "da_lock:pruning"
+    INDEXING_METADATA_PREFIX = "da_metadata:indexing"
 
 
 class DanswerCeleryPriority(int, Enum):

@@ -1,4 +1,5 @@
 import json
+from uuid import UUID
 
 import requests
 from requests.models import Response
@@ -44,7 +45,7 @@ class ChatSessionManager:
 
     @staticmethod
     def send_message(
-        chat_session_id: int,
+        chat_session_id: UUID,
         message: str,
         parent_message_id: int | None = None,
         user_performing_action: DATestUser | None = None,

@@ -3,11 +3,13 @@ export function BasicClickable({
   onClick,
   fullWidth = false,
   inset,
+  className,
 }: {
   children: string | JSX.Element;
   onClick?: () => void;
   inset?: boolean;
   fullWidth?: boolean;
+  className?: string;
 }) {
   return (
     <button
@@ -26,7 +28,9 @@ export function BasicClickable({
         select-none
         overflow-hidden
         hover:bg-hover-light
-        ${fullWidth ? "w-full" : ""}`}
+        ${fullWidth ? "w-full" : ""}
+        ${className ? className : ""}
+        `}
     >
       {children}
     </button>

@@ -10,9 +10,9 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import SlackResponse
 
-from danswer.connectors.cross_connector_utils.retry_wrapper import retry_builder
 from danswer.connectors.models import BasicExpertInfo
 from danswer.utils.logger import setup_logger
+from danswer.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 

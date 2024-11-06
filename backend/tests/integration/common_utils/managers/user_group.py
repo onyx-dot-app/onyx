@@ -146,6 +146,7 @@ class UserGroupManager:
                     if user_group.id in check_ids
                 ]
             if all(ug.is_up_to_date for ug in user_groups):
+                print("User groups synced successfully.")
                 return
 
             if time.time() - start > MAX_DELAY:

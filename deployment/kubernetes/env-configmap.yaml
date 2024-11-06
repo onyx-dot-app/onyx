@@ -2,7 +2,8 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: env-configmap
-data:
+data: 
+
   # Auth Setting, also check the secrets file
   AUTH_TYPE: "disabled"  # Change this for production uses unless Danswer is only accessible behind VPN
   ENCRYPTION_KEY_SECRET: ""  # This should not be specified directly in the yaml, this is just for reference
@@ -31,6 +32,7 @@ data:
   QA_PROMPT_OVERRIDE: ""
   # Other Services
   POSTGRES_HOST: "relational-db-service"
+  POSTGRES_DEFAULT_SCHEMA: ""
   VESPA_HOST: "document-index-service"
   REDIS_HOST: "redis-service"
   # Internet Search Tool

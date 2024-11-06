@@ -39,18 +39,33 @@ def test_confluence_connector_basic(
     with pytest.raises(StopIteration):
         next(doc_batch_generator)
 
-    assert len(doc_batch) == 1
+    assert len(doc_batch) == 2
 
-    doc = doc_batch[0]
-    assert doc.semantic_identifier == "DailyConnectorTestSpace Home"
-    assert doc.metadata["labels"] == ["testlabel"]
-    assert doc.primary_owners
-    assert doc.primary_owners[0].email == "chris@danswer.ai"
-    assert len(doc.sections) == 1
+    for doc in doc_batch:
+        if doc.semantic_identifier == "DailyConnectorTestSpace Home":
+            page_doc = doc
+        elif ".txt" in doc.semantic_identifier:
+            txt_doc = doc
 
-    section = doc.sections[0]
-    assert section.text == "test123\nsmall"
+    assert page_doc.semantic_identifier == "DailyConnectorTestSpace Home"
+    assert page_doc.metadata["labels"] == ["testlabel"]
+    assert page_doc.primary_owners
+    assert page_doc.primary_owners[0].email == "chris@danswer.ai"
+    assert len(page_doc.sections) == 1
+
+    section = page_doc.sections[0]
+    assert section.text == "test123"
     assert (
         section.link
         == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/overview"
+    )
+
+    assert txt_doc.semantic_identifier == "small-file.txt"
+    assert len(txt_doc.sections) == 1
+    assert txt_doc.sections[0].text == "small"
+    assert txt_doc.primary_owners
+    assert txt_doc.primary_owners[0].email == "chris@danswer.ai"
+    assert (
+        txt_doc.sections[0].link
+        == "https://danswerai.atlassian.net/wiki/pages/viewpageattachments.action?pageId=52494430&preview=%2F52494430%2F52527123%2Fsmall-file.txt"
     )

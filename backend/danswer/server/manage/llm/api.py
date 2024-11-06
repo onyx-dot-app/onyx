@@ -54,6 +54,7 @@ def test_llm_configuration(
         api_base=test_llm_request.api_base,
         api_version=test_llm_request.api_version,
         custom_config=test_llm_request.custom_config,
+        deployment_name=test_llm_request.deployment_name,
     )
 
     functions_with_args: list[tuple[Callable, tuple]] = [(test_llm, (llm,))]
@@ -70,6 +71,7 @@ def test_llm_configuration(
             api_base=test_llm_request.api_base,
             api_version=test_llm_request.api_version,
             custom_config=test_llm_request.custom_config,
+            deployment_name=test_llm_request.deployment_name,
         )
         functions_with_args.append((test_llm, (fast_llm,)))
 

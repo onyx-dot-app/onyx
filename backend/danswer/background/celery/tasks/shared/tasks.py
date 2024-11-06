@@ -1,21 +1,23 @@
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
-from sqlalchemy.orm import Session
 
 from danswer.access.access import get_access_for_document
-from danswer.background.celery.celery_app import task_logger
+from danswer.background.celery.apps.app_base import task_logger
 from danswer.db.document import delete_document_by_connector_credential_pair__no_commit
 from danswer.db.document import delete_documents_complete__no_commit
 from danswer.db.document import get_document
 from danswer.db.document import get_document_connector_count
+from danswer.db.document import mark_document_as_modified
 from danswer.db.document import mark_document_as_synced
 from danswer.db.document_set import fetch_document_sets_for_document
-from danswer.db.engine import get_sqlalchemy_engine
+from danswer.db.engine import get_session_with_tenant
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
 from danswer.document_index.interfaces import VespaDocumentFields
 from danswer.server.documents.models import ConnectorCredentialPairIdentifier
+
+DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES = 3
 
 
 @shared_task(
@@ -23,10 +25,14 @@ from danswer.server.documents.models import ConnectorCredentialPairIdentifier
     bind=True,
     soft_time_limit=45,
     time_limit=60,
-    max_retries=3,
+    max_retries=DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES,
 )
 def document_by_cc_pair_cleanup_task(
-    self: Task, document_id: str, connector_id: int, credential_id: int
+    self: Task,
+    document_id: str,
+    connector_id: int,
+    credential_id: int,
+    tenant_id: str | None,
 ) -> bool:
     """A lightweight subtask used to clean up document to cc pair relationships.
     Created by connection deletion and connector pruning parent tasks."""
@@ -43,8 +49,10 @@ def document_by_cc_pair_cleanup_task(
     connector / credential pair from the access list
     (6) delete all relevant entries from postgres
     """
+    task_logger.info(f"tenant_id={tenant_id} document_id={document_id}")
+
     try:
-        with Session(get_sqlalchemy_engine()) as db_session:
+        with get_session_with_tenant(tenant_id) as db_session:
             action = "skip"
             chunks_affected = 0
 
@@ -107,17 +115,36 @@ def document_by_cc_pair_cleanup_task(
             else:
                 pass
 
-            task_logger.info(
-                f"document_id={document_id} refcount={count} action={action} chunks={chunks_affected}"
-            )
             db_session.commit()
+
+            task_logger.info(
+                f"tenant_id={tenant_id} "
+                f"document_id={document_id} "
+                f"action={action} "
+                f"refcount={count} "
+                f"chunks={chunks_affected}"
+            )
     except SoftTimeLimitExceeded:
-        task_logger.info(f"SoftTimeLimitExceeded exception. doc_id={document_id}")
+        task_logger.info(
+            f"SoftTimeLimitExceeded exception. tenant_id={tenant_id} doc_id={document_id}"
+        )
+        return False
     except Exception as e:
         task_logger.exception("Unexpected exception")
 
-        # Exponential backoff from 2^4 to 2^6 ... i.e. 16, 32, 64
-        countdown = 2 ** (self.request.retries + 4)
-        self.retry(exc=e, countdown=countdown)
+        if self.request.retries < DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES:
+            # Still retrying. Exponential backoff from 2^4 to 2^6 ... i.e. 16, 32, 64
+            countdown = 2 ** (self.request.retries + 4)
+            self.retry(exc=e, countdown=countdown)
+        else:
+            # This is the last attempt! mark the document as dirty in the db so that it
+            # eventually gets fixed out of band via stale document reconciliation
+            task_logger.info(
+                f"Max retries reached. Marking doc as dirty for reconciliation: "
+                f"tenant_id={tenant_id} document_id={document_id}"
+            )
+            with get_session_with_tenant(tenant_id):
+                mark_document_as_modified(document_id, db_session)
+        return False
 
     return True

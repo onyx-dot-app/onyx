@@ -55,12 +55,9 @@ import {
 } from "@/app/admin/assistants/lib";
 import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
 import { MakePublicAssistantModal } from "@/app/chat/modal/MakePublicAssistantModal";
-import {
-  classifyAssistants,
-  getUserCreatedAssistants,
-  orderAssistantsForUser,
-} from "@/lib/assistants/utils";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
+import { useAssistants } from "@/components/context/AssistantsContext";
+import { useUser } from "@/components/user/UserProvider";
 
 function DraggableAssistantListItem(props: any) {
   const {
@@ -112,6 +109,7 @@ function AssistantListItem({
   setPopup: (popupSpec: PopupSpec | null) => void;
   isDragging?: boolean;
 }) {
+  const { refreshUser } = useUser();
   const router = useRouter();
   const [showSharingModal, setShowSharingModal] = useState(false);
 
@@ -206,7 +204,7 @@ function AssistantListItem({
                           message: `"${assistant.name}" has been removed from your list.`,
                           type: "success",
                         });
-                        router.refresh();
+                        await refreshUser();
                       } else {
                         setPopup({
                           message: `"${assistant.name}" could not be removed from your list.`,
@@ -229,7 +227,7 @@ function AssistantListItem({
                           message: `"${assistant.name}" has been added to your list.`,
                           type: "success",
                         });
-                        router.refresh();
+                        await refreshUser();
                       } else {
                         setPopup({
                           message: `"${assistant.name}" could not be added to your list.`,
@@ -284,32 +282,20 @@ function AssistantListItem({
     </>
   );
 }
-export function AssistantsList({
-  user,
-  assistants,
-}: {
-  user: User | null;
-  assistants: Persona[];
-}) {
-  // Define the distinct groups of assistants
-  const { visibleAssistants, hiddenAssistants } = classifyAssistants(
-    user,
-    assistants
-  );
+export function AssistantsList() {
+  const {
+    assistants,
+    ownedButHiddenAssistants,
+    finalAssistants,
+    refreshAssistants,
+  } = useAssistants();
 
-  const [currentlyVisibleAssistants, setCurrentlyVisibleAssistants] = useState<
-    Persona[]
-  >([]);
+  const [currentlyVisibleAssistants, setCurrentlyVisibleAssistants] =
+    useState(finalAssistants);
 
   useEffect(() => {
-    const orderedAssistants = orderAssistantsForUser(visibleAssistants, user);
-    setCurrentlyVisibleAssistants(orderedAssistants);
-  }, [assistants, user]);
-
-  const ownedButHiddenAssistants = getUserCreatedAssistants(
-    user,
-    hiddenAssistants
-  );
+    setCurrentlyVisibleAssistants(finalAssistants);
+  }, [finalAssistants]);
 
   const allAssistantIds = assistants.map((assistant) =>
     assistant.id.toString()
@@ -319,6 +305,8 @@ export function AssistantsList({
   const [makePublicPersona, setMakePublicPersona] = useState<Persona | null>(
     null
   );
+
+  const { refreshUser, user } = useUser();
 
   const { popup, setPopup } = usePopup();
   const router = useRouter();
@@ -338,18 +326,22 @@ export function AssistantsList({
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      setCurrentlyVisibleAssistants((assistants) => {
-        const oldIndex = assistants.findIndex(
-          (a) => a.id.toString() === active.id
-        );
-        const newIndex = assistants.findIndex(
-          (a) => a.id.toString() === over.id
-        );
-        const newAssistants = arrayMove(assistants, oldIndex, newIndex);
+      const oldIndex = currentlyVisibleAssistants.findIndex(
+        (item) => item.id.toString() === active.id
+      );
+      const newIndex = currentlyVisibleAssistants.findIndex(
+        (item) => item.id.toString() === over.id
+      );
+      const updatedAssistants = arrayMove(
+        currentlyVisibleAssistants,
+        oldIndex,
+        newIndex
+      );
 
-        updateUserAssistantList(newAssistants.map((a) => a.id));
-        return newAssistants;
-      });
+      setCurrentlyVisibleAssistants(updatedAssistants);
+      await updateUserAssistantList(updatedAssistants.map((a) => a.id));
+      await refreshUser();
+      await refreshAssistants();
     }
   }
 
@@ -368,7 +360,7 @@ export function AssistantsList({
                 message: `"${deletingPersona.name}" has been deleted.`,
                 type: "success",
               });
-              router.refresh();
+              await refreshUser();
             } else {
               setPopup({
                 message: `"${deletingPersona.name}" could not be deleted.`,
@@ -389,7 +381,7 @@ export function AssistantsList({
               makePublicPersona.id,
               newPublicStatus
             );
-            router.refresh();
+            await refreshAssistants();
           }}
         />
       )}

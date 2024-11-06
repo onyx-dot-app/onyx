@@ -11,16 +11,24 @@ from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from danswer.connectors.interfaces import GenerateDocumentsOutput
-from danswer.connectors.interfaces import IdConnector
+from danswer.connectors.interfaces import GenerateSlimDocumentOutput
 from danswer.connectors.interfaces import LoadConnector
 from danswer.connectors.interfaces import PollConnector
 from danswer.connectors.interfaces import SecondsSinceUnixEpoch
+from danswer.connectors.interfaces import SlimConnector
 from danswer.connectors.models import BasicExpertInfo
 from danswer.connectors.models import ConnectorMissingCredentialError
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
+from danswer.connectors.models import SlimDocument
 from danswer.connectors.salesforce.utils import extract_dict_text
 from danswer.utils.logger import setup_logger
+
+
+# TODO: this connector does not work well at large scales
+# the large query against a large Salesforce instance has been reported to take 1.5 hours.
+# Additionally it seems to eat up more memory over time if the connection is long running (again a scale issue).
+
 
 DEFAULT_PARENT_OBJECT_TYPES = ["Account"]
 MAX_QUERY_LENGTH = 10000  # max query length is 20,000 characters
@@ -29,7 +37,7 @@ ID_PREFIX = "SALESFORCE_"
 logger = setup_logger()
 
 
-class SalesforceConnector(LoadConnector, PollConnector, IdConnector):
+class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -243,19 +251,22 @@ class SalesforceConnector(LoadConnector, PollConnector, IdConnector):
         end_datetime = datetime.utcfromtimestamp(end)
         return self._fetch_from_salesforce(start=start_datetime, end=end_datetime)
 
-    def retrieve_all_source_ids(self) -> set[str]:
+    def retrieve_all_slim_documents(self) -> GenerateSlimDocumentOutput:
         if self.sf_client is None:
             raise ConnectorMissingCredentialError("Salesforce")
-        all_retrieved_ids: set[str] = set()
+        doc_metadata_list: list[SlimDocument] = []
         for parent_object_type in self.parent_object_list:
             query = f"SELECT Id FROM {parent_object_type}"
             query_result = self.sf_client.query_all(query)
-            all_retrieved_ids.update(
-                f"{ID_PREFIX}{instance_dict.get('Id', '')}"
+            doc_metadata_list.extend(
+                SlimDocument(
+                    id=f"{ID_PREFIX}{instance_dict.get('Id', '')}",
+                    perm_sync_data={},
+                )
                 for instance_dict in query_result["records"]
             )
 
-        return all_retrieved_ids
+        yield doc_metadata_list
 
 
 if __name__ == "__main__":

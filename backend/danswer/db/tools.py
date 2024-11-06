@@ -1,4 +1,5 @@
 from typing import Any
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -6,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from danswer.db.models import Tool
 from danswer.server.features.tool.models import Header
+from danswer.utils.headers import HeaderItemDict
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -67,7 +69,9 @@ def update_tool(
     if user_id is not None:
         tool.user_id = user_id
     if custom_headers is not None:
-        tool.custom_headers = [header.dict() for header in custom_headers]
+        tool.custom_headers = [
+            cast(HeaderItemDict, header.model_dump()) for header in custom_headers
+        ]
     db_session.commit()
 
     return tool

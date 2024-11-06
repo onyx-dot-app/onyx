@@ -206,6 +206,8 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
             logger.notice(f"Deleting file {file_name}")
             file_store.delete_file(file_name)
 
+    db_session.commit()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Delete a connector by its ID")

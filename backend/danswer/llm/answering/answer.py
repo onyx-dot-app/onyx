@@ -237,6 +237,7 @@ class Answer:
                 prompt=prompt,
                 tools=final_tool_definitions if final_tool_definitions else None,
                 tool_choice="required" if self.force_use_tool.force_use else None,
+                structured_response_format=self.answer_style_config.structured_response_format,
             ):
                 if isinstance(message, AIMessageChunk) and (
                     message.tool_call_chunks or message.tool_calls
@@ -331,7 +332,10 @@ class Answer:
         tool_choice: ToolChoiceOptions | None = None,
     ) -> Iterator[str | StreamStopInfo]:
         for message in self.llm.stream(
-            prompt=prompt, tools=tools, tool_choice=tool_choice
+            prompt=prompt,
+            tools=tools,
+            tool_choice=tool_choice,
+            structured_response_format=self.answer_style_config.structured_response_format,
         ):
             if isinstance(message, AIMessageChunk):
                 if message.content:

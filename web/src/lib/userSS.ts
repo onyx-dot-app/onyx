@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { User } from "./types";
 import { buildUrl } from "./utilsSS";
 import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
-import { AuthType } from "./constants";
+import { AuthType, SERVER_SIDE_ONLY__CLOUD_ENABLED } from "./constants";
 
 export interface AuthTypeMetadata {
   authType: AuthType;
@@ -18,7 +18,15 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
 
   const data: { auth_type: string; requires_verification: boolean } =
     await res.json();
-  const authType = data.auth_type as AuthType;
+
+  let authType: AuthType;
+
+  // Override fasapi users auth so we can use both
+  if (SERVER_SIDE_ONLY__CLOUD_ENABLED) {
+    authType = "cloud";
+  } else {
+    authType = data.auth_type as AuthType;
+  }
 
   // for SAML / OIDC, we auto-redirect the user to the IdP when the user visits
   // Danswer in an un-authenticated state
@@ -40,8 +48,12 @@ export const getAuthDisabledSS = async (): Promise<boolean> => {
   return (await getAuthTypeMetadataSS()).authType === "disabled";
 };
 
-const geOIDCAuthUrlSS = async (): Promise<string> => {
-  const res = await fetch(buildUrl("/auth/oidc/authorize"));
+const getOIDCAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
+  const res = await fetch(
+    buildUrl(
+      `/auth/oidc/authorize${nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ""}`
+    )
+  );
   if (!res.ok) {
     throw new Error("Failed to fetch data");
   }
@@ -51,7 +63,7 @@ const geOIDCAuthUrlSS = async (): Promise<string> => {
 };
 
 const getGoogleOAuthUrlSS = async (): Promise<string> => {
-  const res = await fetch(buildUrl("/auth/oauth/authorize"));
+  const res = await fetch(buildUrl(`/auth/oauth/authorize`));
   if (!res.ok) {
     throw new Error("Failed to fetch data");
   }
@@ -70,7 +82,10 @@ const getSAMLAuthUrlSS = async (): Promise<string> => {
   return data.authorization_url;
 };
 
-export const getAuthUrlSS = async (authType: AuthType): Promise<string> => {
+export const getAuthUrlSS = async (
+  authType: AuthType,
+  nextUrl: string | null
+): Promise<string> => {
   // Returns the auth url for the given auth type
   switch (authType) {
     case "disabled":
@@ -80,11 +95,14 @@ export const getAuthUrlSS = async (authType: AuthType): Promise<string> => {
     case "google_oauth": {
       return await getGoogleOAuthUrlSS();
     }
+    case "cloud": {
+      return await getGoogleOAuthUrlSS();
+    }
     case "saml": {
       return await getSAMLAuthUrlSS();
     }
     case "oidc": {
-      return await geOIDCAuthUrlSS();
+      return await getOIDCAuthUrlSS(nextUrl);
     }
   }
 };

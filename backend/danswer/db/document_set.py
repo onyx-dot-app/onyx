@@ -398,7 +398,7 @@ def mark_document_set_as_to_be_deleted(
 
 def delete_document_set_cc_pair_relationship__no_commit(
     connector_id: int, credential_id: int, db_session: Session
-) -> None:
+) -> int:
     """Deletes all rows from DocumentSet__ConnectorCredentialPair where the
     connector_credential_pair_id matches the given cc_pair_id."""
     delete_stmt = delete(DocumentSet__ConnectorCredentialPair).where(
@@ -409,7 +409,8 @@ def delete_document_set_cc_pair_relationship__no_commit(
             == ConnectorCredentialPair.id,
         )
     )
-    db_session.execute(delete_stmt)
+    result = db_session.execute(delete_stmt)
+    return result.rowcount  # type: ignore
 
 
 def fetch_document_sets(

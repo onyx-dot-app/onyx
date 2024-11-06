@@ -80,6 +80,7 @@ class CustomModelServer(LLM):
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
     ) -> BaseMessage:
         return self._execute(prompt)
 
@@ -88,5 +89,6 @@ class CustomModelServer(LLM):
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
     ) -> Iterator[BaseMessage]:
         yield self._execute(prompt)

@@ -101,11 +101,9 @@ import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_NAME } from "./tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
-import {
-  classifyAssistants,
-  orderAssistantsForUser,
-} from "@/lib/assistants/utils";
 import BlurBackground from "./shared_chat_search/BlurBackground";
+import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
+import { useAssistants } from "@/components/context/AssistantsContext";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -127,7 +125,6 @@ export function ChatPage({
     chatSessions,
     availableSources,
     availableDocumentSets,
-    availableAssistants,
     llmProviders,
     folders,
     openedFolders,
@@ -137,38 +134,26 @@ export function ChatPage({
     refreshChatSessions,
   } = useChatContext();
 
+  const { assistants: availableAssistants, finalAssistants } = useAssistants();
+
   const [showApiKeyModal, setShowApiKeyModal] = useState(true);
 
-  const { user, refreshUser, isLoadingUser } = useUser();
+  const { user, isAdmin, isLoadingUser } = useUser();
 
   const existingChatIdRaw = searchParams.get("chatId");
   const currentPersonaId = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
 
-  const existingChatSessionId = existingChatIdRaw
-    ? parseInt(existingChatIdRaw)
-    : null;
+  const existingChatSessionId = existingChatIdRaw ? existingChatIdRaw : null;
 
   const selectedChatSession = chatSessions.find(
     (chatSession) => chatSession.id === existingChatSessionId
   );
 
-  const chatSessionIdRef = useRef<number | null>(existingChatSessionId);
+  const chatSessionIdRef = useRef<string | null>(existingChatSessionId);
 
   // Only updates on session load (ie. rename / switching chat session)
   // Useful for determining which session has been loaded (i.e. still on `new, empty session` or `previous session`)
-  const loadedIdSessionRef = useRef<number | null>(existingChatSessionId);
-
-  // Assistants in order
-  const { finalAssistants } = useMemo(() => {
-    const { visibleAssistants, hiddenAssistants: _ } = classifyAssistants(
-      user,
-      availableAssistants
-    );
-    const finalAssistants = user
-      ? orderAssistantsForUser(visibleAssistants, user)
-      : visibleAssistants;
-    return { finalAssistants };
-  }, [user, availableAssistants]);
+  const loadedIdSessionRef = useRef<string | null>(existingChatSessionId);
 
   const existingChatSessionAssistantId = selectedChatSession?.persona_id;
   const [selectedAssistant, setSelectedAssistant] = useState<
@@ -187,11 +172,11 @@ export function ChatPage({
           )
         : undefined
   );
-
   // Gather default temperature settings
   const search_param_temperature = searchParams.get(
     SEARCH_PARAM_NAMES.TEMPERATURE
   );
+
   const defaultTemperature = search_param_temperature
     ? parseFloat(search_param_temperature)
     : selectedAssistant?.tools.some(
@@ -225,6 +210,8 @@ export function ChatPage({
     selectedAssistant ||
     finalAssistants[0] ||
     availableAssistants[0];
+
+  const noAssistants = liveAssistant == null || liveAssistant == undefined;
 
   useEffect(() => {
     if (!loadedIdSessionRef.current && !currentPersonaId) {
@@ -445,11 +432,11 @@ export function ChatPage({
   );
 
   const [completeMessageDetail, setCompleteMessageDetail] = useState<
-    Map<number | null, Map<number, Message>>
+    Map<string | null, Map<number, Message>>
   >(new Map());
 
   const updateCompleteMessageDetail = (
-    sessionId: number | null,
+    sessionId: string | null,
     messageMap: Map<number, Message>
   ) => {
     setCompleteMessageDetail((prevState) => {
@@ -460,13 +447,13 @@ export function ChatPage({
   };
 
   const currentMessageMap = (
-    messageDetail: Map<number | null, Map<number, Message>>
+    messageDetail: Map<string | null, Map<number, Message>>
   ) => {
     return (
       messageDetail.get(chatSessionIdRef.current) || new Map<number, Message>()
     );
   };
-  const currentSessionId = (): number => {
+  const currentSessionId = (): string => {
     return chatSessionIdRef.current!;
   };
 
@@ -481,7 +468,7 @@ export function ChatPage({
     // if calling this function repeatedly with short delay, stay may not update in time
     // and result in weird behavipr
     completeMessageMapOverride?: Map<number, Message> | null;
-    chatSessionId?: number;
+    chatSessionId?: string;
     replacementsMap?: Map<number, number> | null;
     makeLatestChildMessage?: boolean;
   }) => {
@@ -556,23 +543,23 @@ export function ChatPage({
 
   const [submittedMessage, setSubmittedMessage] = useState("");
 
-  const [chatState, setChatState] = useState<Map<number | null, ChatState>>(
+  const [chatState, setChatState] = useState<Map<string | null, ChatState>>(
     new Map([[chatSessionIdRef.current, "input"]])
   );
 
   const [regenerationState, setRegenerationState] = useState<
-    Map<number | null, RegenerationState | null>
+    Map<string | null, RegenerationState | null>
   >(new Map([[null, null]]));
 
   const [abortControllers, setAbortControllers] = useState<
-    Map<number | null, AbortController>
+    Map<string | null, AbortController>
   >(new Map());
 
   // Updates "null" session values to new session id for
   // regeneration, chat, and abort controller state, messagehistory
-  const updateStatesWithNewSessionId = (newSessionId: number) => {
+  const updateStatesWithNewSessionId = (newSessionId: string) => {
     const updateState = (
-      setState: Dispatch<SetStateAction<Map<number | null, any>>>,
+      setState: Dispatch<SetStateAction<Map<string | null, any>>>,
       defaultValue?: any
     ) => {
       setState((prevState) => {
@@ -607,7 +594,7 @@ export function ChatPage({
     chatSessionIdRef.current = newSessionId;
   };
 
-  const updateChatState = (newState: ChatState, sessionId?: number | null) => {
+  const updateChatState = (newState: ChatState, sessionId?: string | null) => {
     setChatState((prevState) => {
       const newChatState = new Map(prevState);
       newChatState.set(
@@ -632,7 +619,7 @@ export function ChatPage({
 
   const updateRegenerationState = (
     newState: RegenerationState | null,
-    sessionId?: number | null
+    sessionId?: string | null
   ) => {
     setRegenerationState((prevState) => {
       const newRegenerationState = new Map(prevState);
@@ -644,18 +631,18 @@ export function ChatPage({
     });
   };
 
-  const resetRegenerationState = (sessionId?: number | null) => {
+  const resetRegenerationState = (sessionId?: string | null) => {
     updateRegenerationState(null, sessionId);
   };
 
   const currentRegenerationState = (): RegenerationState | null => {
     return regenerationState.get(currentSessionId()) || null;
   };
-  const [canContinue, setCanContinue] = useState<Map<number | null, boolean>>(
+  const [canContinue, setCanContinue] = useState<Map<string | null, boolean>>(
     new Map([[null, false]])
   );
 
-  const updateCanContinue = (newState: boolean, sessionId?: number | null) => {
+  const updateCanContinue = (newState: boolean, sessionId?: string | null) => {
     setCanContinue((prevState) => {
       const newCanContinueState = new Map(prevState);
       newCanContinueState.set(
@@ -694,11 +681,12 @@ export function ChatPage({
 
   useEffect(() => {
     if (messageHistory.length === 0 && chatSessionIdRef.current === null) {
+      // Select from available assistants so shared assistants appear.
       setSelectedAssistant(
-        finalAssistants.find((persona) => persona.id === defaultAssistantId)
+        availableAssistants.find((persona) => persona.id === defaultAssistantId)
       );
     }
-  }, [defaultAssistantId, finalAssistants, messageHistory.length]);
+  }, [defaultAssistantId, availableAssistants, messageHistory.length]);
 
   const [
     selectedDocuments,
@@ -773,7 +761,11 @@ export function ChatPage({
 
   const handleInputResize = () => {
     setTimeout(() => {
-      if (inputRef.current && lastMessageRef.current) {
+      if (
+        inputRef.current &&
+        lastMessageRef.current &&
+        !waitForScrollRef.current
+      ) {
         const newHeight: number =
           inputRef.current?.getBoundingClientRect().height!;
         const heightDifference = newHeight - previousHeight.current;
@@ -802,8 +794,11 @@ export function ChatPage({
   };
 
   const clientScrollToBottom = (fast?: boolean) => {
+    waitForScrollRef.current = true;
+
     setTimeout(() => {
       if (!endDivRef.current || !scrollableDivRef.current) {
+        console.error("endDivRef or scrollableDivRef not found");
         return;
       }
 
@@ -831,8 +826,9 @@ export function ChatPage({
             behavior: fast ? "auto" : "smooth",
           });
           setHasPerformedInitialScroll(true);
-        }, 0);
+        }, 100);
       } else {
+        console.log("All messages are already rendered, scrolling immediately");
         // If all messages are already rendered, scroll immediately
         endDivRef.current.scrollIntoView({
           behavior: fast ? "auto" : "smooth",
@@ -840,6 +836,11 @@ export function ChatPage({
         setHasPerformedInitialScroll(true);
       }
     }, 50);
+
+    // Reset waitForScrollRef after 1.5 seconds
+    setTimeout(() => {
+      waitForScrollRef.current = false;
+    }, 1500);
   };
 
   const distance = 500; // distance that should "engage" the scroll
@@ -985,7 +986,7 @@ export function ChatPage({
 
     setAlternativeGeneratingAssistant(alternativeAssistantOverride);
     clientScrollToBottom();
-    let currChatSessionId: number;
+    let currChatSessionId: string;
     const isNewSession = chatSessionIdRef.current === null;
     const searchParamBasedChatSessionName =
       searchParams.get(SEARCH_PARAM_NAMES.TITLE) || null;
@@ -996,7 +997,7 @@ export function ChatPage({
         searchParamBasedChatSessionName
       );
     } else {
-      currChatSessionId = chatSessionIdRef.current as number;
+      currChatSessionId = chatSessionIdRef.current as string;
     }
     frozenSessionId = currChatSessionId;
 
@@ -1549,6 +1550,7 @@ export function ChatPage({
     toggle(false);
   };
 
+  const waitForScrollRef = useRef(false);
   const sidebarElementRef = useRef<HTMLDivElement>(null);
 
   useSidebarVisibility({
@@ -1567,6 +1569,7 @@ export function ChatPage({
     endDivRef,
     distance,
     debounceNumber,
+    waitForScrollRef,
   });
 
   // Virtualization + Scrolling related effects and functions
@@ -1578,7 +1581,7 @@ export function ChatPage({
   }
 
   const [visibleRange, setVisibleRange] = useState<
-    Map<number | null, VisibleRange>
+    Map<string | null, VisibleRange>
   >(() => {
     const initialRange: VisibleRange = {
       start: 0,
@@ -1695,6 +1698,9 @@ export function ChatPage({
   };
 
   useEffect(() => {
+    if (noAssistants) {
+      return;
+    }
     const includes = checkAnyAssistantHasSearch(
       messageHistory,
       availableAssistants,
@@ -1704,6 +1710,9 @@ export function ChatPage({
   }, [messageHistory, availableAssistants, liveAssistant]);
 
   const [retrievalEnabled, setRetrievalEnabled] = useState(() => {
+    if (noAssistants) {
+      return false;
+    }
     return checkAnyAssistantHasSearch(
       messageHistory,
       availableAssistants,
@@ -1774,11 +1783,13 @@ export function ChatPage({
     <>
       <HealthCheckBanner />
 
-      {showApiKeyModal && !shouldShowWelcomeModal && (
+      {showApiKeyModal && !shouldShowWelcomeModal ? (
         <ApiKeyModal
           hide={() => setShowApiKeyModal(false)}
           setPopup={setPopup}
         />
+      ) : (
+        noAssistants && <NoAssistantModal isAdmin={isAdmin} />
       )}
 
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
@@ -1807,7 +1818,6 @@ export function ChatPage({
           setPopup={setPopup}
           setLlmOverride={llmOverrideManager.setGlobalDefault}
           defaultModel={user?.preferences.default_model!}
-          refreshUser={refreshUser}
           llmProviders={llmProviders}
           onClose={() => setSettingsToggled(false)}
         />
@@ -1925,7 +1935,6 @@ export function ChatPage({
                       : undefined
                   }
                   toggleSidebar={toggleSidebar}
-                  user={user}
                   currentChatSession={selectedChatSession}
                 />
               )}
@@ -2155,7 +2164,6 @@ export function ChatPage({
                                       query={
                                         messageHistory[i]?.query || undefined
                                       }
-                                      personaName={liveAssistant.name}
                                       citedDocuments={getCitedDocumentsFromMessage(
                                         message
                                       )}
@@ -2217,9 +2225,6 @@ export function ChatPage({
                                             }
                                           : undefined
                                       }
-                                      isCurrentlyShowingRetrieved={
-                                        isShowingRetrieved
-                                      }
                                       handleShowRetrieved={(messageNumber) => {
                                         if (isShowingRetrieved) {
                                           setSelectedMessageForDocDisplay(null);
@@ -2269,7 +2274,6 @@ export function ChatPage({
                                     <AIMessage
                                       currentPersona={liveAssistant}
                                       messageId={message.messageId}
-                                      personaName={liveAssistant.name}
                                       content={
                                         <p className="text-red-700 text-sm my-auto">
                                           {message.message}
@@ -2317,7 +2321,6 @@ export function ChatPage({
                                     alternativeAssistant
                                   }
                                   messageId={null}
-                                  personaName={liveAssistant.name}
                                   content={
                                     <div
                                       key={"Generating"}
@@ -2337,7 +2340,6 @@ export function ChatPage({
                                 <AIMessage
                                   currentPersona={liveAssistant}
                                   messageId={-1}
-                                  personaName={liveAssistant.name}
                                   content={
                                     <p className="text-red-700 text-sm my-auto">
                                       {loadingError}
@@ -2417,7 +2419,6 @@ export function ChatPage({
                               showDocs={() => setDocumentSelection(true)}
                               selectedDocuments={selectedDocuments}
                               // assistant stuff
-                              assistantOptions={finalAssistants}
                               selectedAssistant={liveAssistant}
                               setSelectedAssistant={onAssistantChange}
                               setAlternativeAssistant={setAlternativeAssistant}
@@ -2433,7 +2434,6 @@ export function ChatPage({
                               handleFileUpload={handleImageUpload}
                               textAreaRef={textAreaRef}
                               chatSessionId={chatSessionIdRef.current!}
-                              refreshUser={refreshUser}
                             />
 
                             {enterpriseSettings &&

@@ -27,7 +27,6 @@ export function _CompletedWelcomeFlowDummyComponent() {
 export function _WelcomeModal({ user }: { user: User | null }) {
   const router = useRouter();
 
-  const [canBegin, setCanBegin] = useState(false);
   const [providerOptions, setProviderOptions] = useState<
     WellKnownLLMProviderDescriptor[]
   >([]);
@@ -75,19 +74,13 @@ export function _WelcomeModal({ user }: { user: User | null }) {
 
           <div className="max-h-[900px] overflow-y-scroll">
             <ApiKeyForm
+              // Don't show success message on initial setup
+              hideSuccess
               setPopup={setPopup}
-              onSuccess={() => {
-                router.refresh();
-                refreshProviderInfo();
-                setCanBegin(true);
-              }}
+              onSuccess={clientSetWelcomeFlowComplete}
               providerOptions={providerOptions}
             />
           </div>
-          <Divider />
-          <Button disabled={!canBegin} onClick={clientSetWelcomeFlowComplete}>
-            Get Started
-          </Button>
         </div>
       </Modal>
     </>

@@ -25,6 +25,7 @@ export interface CCPairFullInfo {
   is_public: boolean;
   is_editable_for_current_user: boolean;
   deletion_failure_message: string | null;
+  indexing: boolean;
 }
 
 export interface PaginatedIndexAttempts {

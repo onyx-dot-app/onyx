@@ -4,9 +4,12 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import sentry_sdk
 import torch
 import uvicorn
 from fastapi import FastAPI
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 from transformers import logging as transformer_logging  # type:ignore
 
 from danswer import __version__
@@ -19,6 +22,7 @@ from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import MIN_THREADS_ML_MODELS
 from shared_configs.configs import MODEL_SERVER_ALLOWED_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
+from shared_configs.configs import SENTRY_DSN
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -81,6 +85,15 @@ def get_model_app() -> FastAPI:
     application = FastAPI(
         title="Danswer Model Server", version=__version__, lifespan=lifespan
     )
+    if SENTRY_DSN:
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+            traces_sample_rate=0.5,
+        )
+        logger.info("Sentry initialized")
+    else:
+        logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 
     application.include_router(management_router)
     application.include_router(encoders_router)

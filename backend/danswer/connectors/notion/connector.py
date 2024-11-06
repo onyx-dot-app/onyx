@@ -29,6 +29,9 @@ logger = setup_logger()
 _NOTION_CALL_TIMEOUT = 30  # 30 seconds
 
 
+# TODO: Tables need to be ingested, Pages need to have their metadata ingested
+
+
 @dataclass
 class NotionPage:
     """Represents a Notion Page object"""
@@ -40,11 +43,24 @@ class NotionPage:
     properties: dict[str, Any]
     url: str
 
+    database_name: str | None  # Only applicable to the database type page (wiki)
+
     def __init__(self, **kwargs: dict[str, Any]) -> None:
         names = set([f.name for f in fields(self)])
         for k, v in kwargs.items():
             if k in names:
                 setattr(self, k, v)
+
+
+@dataclass
+class NotionBlock:
+    """Represents a Notion Block object"""
+
+    id: str  # Used for the URL
+    text: str
+    # In a plaintext representation of the page, how this block should be joined
+    # with the existing text up to this point, separated out from text for clarity
+    prefix: str
 
 
 @dataclass
@@ -62,7 +78,6 @@ class NotionSearchResponse:
                 setattr(self, k, v)
 
 
-# TODO - Add the ability to optionally limit to specific Notion databases
 class NotionConnector(LoadConnector, PollConnector):
     """Notion Page connector that reads all Notion pages
     this integration has been granted access to.
@@ -126,20 +141,46 @@ class NotionConnector(LoadConnector, PollConnector):
 
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_page(self, page_id: str) -> NotionPage:
-        """Fetch a page from it's ID via the Notion API."""
+        """Fetch a page from its ID via the Notion API, retry with database if page fetch fails."""
         logger.debug(f"Fetching page for ID '{page_id}'")
-        block_url = f"https://api.notion.com/v1/pages/{page_id}"
+        page_url = f"https://api.notion.com/v1/pages/{page_id}"
         res = rl_requests.get(
-            block_url,
+            page_url,
             headers=self.headers,
             timeout=_NOTION_CALL_TIMEOUT,
         )
         try:
             res.raise_for_status()
         except Exception as e:
-            logger.exception(f"Error fetching page - {res.json()}")
-            raise e
+            logger.warning(
+                f"Failed to fetch page, trying database for ID '{page_id}'. Exception: {e}"
+            )
+            # Try fetching as a database if page fetch fails, this happens if the page is set to a wiki
+            # it becomes a database from the notion perspective
+            return self._fetch_database_as_page(page_id)
         return NotionPage(**res.json())
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _fetch_database_as_page(self, database_id: str) -> NotionPage:
+        """Attempt to fetch a database as a page."""
+        logger.debug(f"Fetching database for ID '{database_id}' as a page")
+        database_url = f"https://api.notion.com/v1/databases/{database_id}"
+        res = rl_requests.get(
+            database_url,
+            headers=self.headers,
+            timeout=_NOTION_CALL_TIMEOUT,
+        )
+        try:
+            res.raise_for_status()
+        except Exception as e:
+            logger.exception(f"Error fetching database as page - {res.json()}")
+            raise e
+        database_name = res.json().get("title")
+        database_name = (
+            database_name[0].get("text", {}).get("content") if database_name else None
+        )
+
+        return NotionPage(**res.json(), database_name=database_name)
 
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_database(
@@ -171,8 +212,86 @@ class NotionConnector(LoadConnector, PollConnector):
             raise e
         return res.json()
 
-    def _read_pages_from_database(self, database_id: str) -> list[str]:
-        """Returns a list of all page IDs in the database"""
+    @staticmethod
+    def _properties_to_str(properties: dict[str, Any]) -> str:
+        """Converts Notion properties to a string"""
+
+        def _recurse_properties(inner_dict: dict[str, Any]) -> str | None:
+            while "type" in inner_dict:
+                type_name = inner_dict["type"]
+                inner_dict = inner_dict[type_name]
+
+                # If the innermost layer is None, the value is not set
+                if not inner_dict:
+                    return None
+
+                if isinstance(inner_dict, list):
+                    list_properties = [
+                        _recurse_properties(item) for item in inner_dict if item
+                    ]
+                    return (
+                        ", ".join(
+                            [
+                                list_property
+                                for list_property in list_properties
+                                if list_property
+                            ]
+                        )
+                        or None
+                    )
+
+            # TODO there may be more types to handle here
+            if isinstance(inner_dict, str):
+                # For some objects the innermost value could just be a string, not sure what causes this
+                return inner_dict
+
+            elif isinstance(inner_dict, dict):
+                if "name" in inner_dict:
+                    return inner_dict["name"]
+                if "content" in inner_dict:
+                    return inner_dict["content"]
+                start = inner_dict.get("start")
+                end = inner_dict.get("end")
+                if start is not None:
+                    if end is not None:
+                        return f"{start} - {end}"
+                    return start
+                elif end is not None:
+                    return f"Until {end}"
+
+                if "id" in inner_dict:
+                    # This is not useful to index, it's a reference to another Notion object
+                    # and this ID value in plaintext is useless outside of the Notion context
+                    logger.debug("Skipping Notion object id field property")
+                    return None
+
+            logger.debug(f"Unreadable property from innermost prop: {inner_dict}")
+            return None
+
+        result = ""
+        for prop_name, prop in properties.items():
+            if not prop:
+                continue
+
+            try:
+                inner_value = _recurse_properties(prop)
+            except Exception as e:
+                # This is not a critical failure, these properties are not the actual contents of the page
+                # more similar to metadata
+                logger.warning(f"Error recursing properties for {prop_name}: {e}")
+                continue
+            # Not a perfect way to format Notion database tables but there's no perfect representation
+            # since this must be represented as plaintext
+            if inner_value:
+                result += f"{prop_name}: {inner_value}\t"
+
+        return result
+
+    def _read_pages_from_database(
+        self, database_id: str
+    ) -> tuple[list[NotionBlock], list[str]]:
+        """Returns a list of top level blocks and all page IDs in the database"""
+        result_blocks: list[NotionBlock] = []
         result_pages: list[str] = []
         cursor = None
         while True:
@@ -181,29 +300,34 @@ class NotionConnector(LoadConnector, PollConnector):
             for result in data["results"]:
                 obj_id = result["id"]
                 obj_type = result["object"]
-                if obj_type == "page":
-                    logger.debug(
-                        f"Found page with ID '{obj_id}' in database '{database_id}'"
-                    )
-                    result_pages.append(result["id"])
-                elif obj_type == "database":
-                    logger.debug(
-                        f"Found database with ID '{obj_id}' in database '{database_id}'"
-                    )
-                    result_pages.extend(self._read_pages_from_database(obj_id))
+                text = self._properties_to_str(result.get("properties", {}))
+                if text:
+                    result_blocks.append(NotionBlock(id=obj_id, text=text, prefix="\n"))
+
+                if self.recursive_index_enabled:
+                    if obj_type == "page":
+                        logger.debug(
+                            f"Found page with ID '{obj_id}' in database '{database_id}'"
+                        )
+                        result_pages.append(result["id"])
+                    elif obj_type == "database":
+                        logger.debug(
+                            f"Found database with ID '{obj_id}' in database '{database_id}'"
+                        )
+                        # The inner contents are ignored at this level
+                        _, child_pages = self._read_pages_from_database(obj_id)
+                        result_pages.extend(child_pages)
 
             if data["next_cursor"] is None:
                 break
 
             cursor = data["next_cursor"]
 
-        return result_pages
+        return result_blocks, result_pages
 
-    def _read_blocks(
-        self, base_block_id: str
-    ) -> tuple[list[tuple[str, str]], list[str]]:
-        """Reads all child blocks for the specified block"""
-        result_lines: list[tuple[str, str]] = []
+    def _read_blocks(self, base_block_id: str) -> tuple[list[NotionBlock], list[str]]:
+        """Reads all child blocks for the specified block, returns a list of blocks and child page ids"""
+        result_blocks: list[NotionBlock] = []
         child_pages: list[str] = []
         cursor = None
         while True:
@@ -211,7 +335,7 @@ class NotionConnector(LoadConnector, PollConnector):
 
             # this happens when a block is not shared with the integration
             if data is None:
-                return result_lines, child_pages
+                return result_blocks, child_pages
 
             for result in data["results"]:
                 logger.debug(
@@ -255,46 +379,70 @@ class NotionConnector(LoadConnector, PollConnector):
 
                 if result["has_children"]:
                     if result_type == "child_page":
+                        # Child pages will not be included at this top level, it will be a separate document
                         child_pages.append(result_block_id)
                     else:
                         logger.debug(f"Entering sub-block: {result_block_id}")
-                        subblock_result_lines, subblock_child_pages = self._read_blocks(
+                        subblocks, subblock_child_pages = self._read_blocks(
                             result_block_id
                         )
                         logger.debug(f"Finished sub-block: {result_block_id}")
-                        result_lines.extend(subblock_result_lines)
+                        result_blocks.extend(subblocks)
                         child_pages.extend(subblock_child_pages)
 
-                if result_type == "child_database" and self.recursive_index_enabled:
-                    child_pages.extend(self._read_pages_from_database(result_block_id))
+                if result_type == "child_database":
+                    inner_blocks, inner_child_pages = self._read_pages_from_database(
+                        result_block_id
+                    )
+                    # A database on a page often looks like a table, we need to include it for the contents
+                    # of the page but the children (cells) should be processed as other Documents
+                    result_blocks.extend(inner_blocks)
 
-                cur_result_text = "\n".join(cur_result_text_arr)
-                if cur_result_text:
-                    result_lines.append((cur_result_text, result_block_id))
+                    if self.recursive_index_enabled:
+                        child_pages.extend(inner_child_pages)
+
+                if cur_result_text_arr:
+                    new_block = NotionBlock(
+                        id=result_block_id,
+                        text="\n".join(cur_result_text_arr),
+                        prefix="\n",
+                    )
+                    result_blocks.append(new_block)
 
             if data["next_cursor"] is None:
                 break
 
             cursor = data["next_cursor"]
 
-        return result_lines, child_pages
+        return result_blocks, child_pages
 
-    def _read_page_title(self, page: NotionPage) -> str:
+    def _read_page_title(self, page: NotionPage) -> str | None:
         """Extracts the title from a Notion page"""
         page_title = None
+        if hasattr(page, "database_name") and page.database_name:
+            return page.database_name
         for _, prop in page.properties.items():
             if prop["type"] == "title" and len(prop["title"]) > 0:
                 page_title = " ".join([t["plain_text"] for t in prop["title"]]).strip()
                 break
-        if page_title is None:
-            page_title = f"Untitled Page [{page.id}]"
+
         return page_title
 
     def _read_pages(
         self,
         pages: list[NotionPage],
     ) -> Generator[Document, None, None]:
-        """Reads pages for rich text content and generates Documents"""
+        """Reads pages for rich text content and generates Documents
+
+        Note that a page which is turned into a "wiki" becomes a database but both top level pages and top level databases
+        do not seem to have any properties associated with them.
+
+        Pages that are part of a database can have properties which are like the values of the row in the "database" table
+        in which they exist
+
+        This is not clearly outlined in the Notion API docs but it is observable empirically.
+        https://developers.notion.com/docs/working-with-page-content
+        """
         all_child_page_ids: list[str] = []
         for page in pages:
             if page.id in self.indexed_pages:
@@ -304,18 +452,23 @@ class NotionConnector(LoadConnector, PollConnector):
             logger.info(f"Reading page with ID '{page.id}', with url {page.url}")
             page_blocks, child_page_ids = self._read_blocks(page.id)
             all_child_page_ids.extend(child_page_ids)
-            page_title = self._read_page_title(page)
+
+            if not page_blocks:
+                continue
+
+            page_title = (
+                self._read_page_title(page) or f"Untitled Page with ID {page.id}"
+            )
+
             yield (
                 Document(
                     id=page.id,
-                    # Will add title to the first section later in processing
-                    sections=[Section(link=page.url, text="")]
-                    + [
+                    sections=[
                         Section(
-                            link=f"{page.url}#{block_id.replace('-', '')}",
-                            text=block_text,
+                            link=f"{page.url}#{block.id.replace('-', '')}",
+                            text=block.prefix + block.text,
                         )
-                        for block_text, block_id in page_blocks
+                        for block in page_blocks
                     ],
                     source=DocumentSource.NOTION,
                     semantic_identifier=page_title,

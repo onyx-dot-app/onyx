@@ -3,20 +3,15 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
-import pytest
-import requests
-
 from danswer.connectors.models import InputType
 from danswer.db.enums import AccessType
-from danswer.search.enums import LLMEvaluationType
-from danswer.search.enums import SearchType
-from danswer.search.models import RetrievalDetails
 from danswer.server.documents.models import DocumentSource
-from ee.danswer.server.query_and_chat.models import DocumentSearchRequest
-from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
+from tests.integration.common_utils.managers.document_search import (
+    DocumentSearchManager,
+)
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestCCPair
@@ -27,7 +22,7 @@ from tests.integration.common_utils.vespa import vespa_fixture
 from tests.integration.connector_job_tests.slack.slack_api_utils import SlackManager
 
 
-@pytest.mark.skip(reason="flaky - see DAN-789 for example")
+# @pytest.mark.xfail(reason="flaky - see DAN-789 for example", strict=False)
 def test_slack_permission_sync(
     reset: None,
     vespa_client: vespa_fixture,
@@ -100,6 +95,7 @@ def test_slack_permission_sync(
     public_message = "Steve's favorite number is 809752"
     private_message = "Sara's favorite number is 346794"
 
+    # Add messages to channels
     SlackManager.add_message_to_channel(
         slack_client=slack_client,
         channel=public_channel,
@@ -133,42 +129,20 @@ def test_slack_permission_sync(
     )
 
     # Search as admin with access to both channels
-    search_request = DocumentSearchRequest(
-        message="favorite number",
-        search_type=SearchType.KEYWORD,
-        retrieval_options=RetrievalDetails(),
-        evaluation_type=LLMEvaluationType.SKIP,
+    danswer_doc_message_strings = DocumentSearchManager.search_documents(
+        query="favorite number",
+        user_performing_action=admin_user,
     )
-    search_request_body = search_request.model_dump()
-    result = requests.post(
-        url=f"{API_SERVER_URL}/query/document-search",
-        json=search_request_body,
-        headers=admin_user.headers,
-    )
-    result.raise_for_status()
-    found_docs = result.json()["top_documents"]
-    danswer_doc_message_strings = [doc["content"] for doc in found_docs]
 
     # Ensure admin user can see messages from both channels
     assert public_message in danswer_doc_message_strings
     assert private_message in danswer_doc_message_strings
 
     # Search as test_user_2 with access to only the public channel
-    search_request = DocumentSearchRequest(
-        message="favorite number",
-        search_type=SearchType.KEYWORD,
-        retrieval_options=RetrievalDetails(),
-        evaluation_type=LLMEvaluationType.SKIP,
+    danswer_doc_message_strings = DocumentSearchManager.search_documents(
+        query="favorite number",
+        user_performing_action=test_user_2,
     )
-    search_request_body = search_request.model_dump()
-    result = requests.post(
-        url=f"{API_SERVER_URL}/query/document-search",
-        json=search_request_body,
-        headers=test_user_2.headers,
-    )
-    result.raise_for_status()
-    found_docs = result.json()["top_documents"]
-    danswer_doc_message_strings = [doc["content"] for doc in found_docs]
     print(
         "\ntop_documents content before removing from private channel for test_user_2: ",
         danswer_doc_message_strings,
@@ -179,21 +153,10 @@ def test_slack_permission_sync(
     assert private_message not in danswer_doc_message_strings
 
     # Search as test_user_1 with access to both channels
-    search_request = DocumentSearchRequest(
-        message="favorite number",
-        search_type=SearchType.KEYWORD,
-        retrieval_options=RetrievalDetails(),
-        evaluation_type=LLMEvaluationType.SKIP,
+    danswer_doc_message_strings = DocumentSearchManager.search_documents(
+        query="favorite number",
+        user_performing_action=test_user_1,
     )
-    search_request_body = search_request.model_dump()
-    result = requests.post(
-        url=f"{API_SERVER_URL}/query/document-search",
-        json=search_request_body,
-        headers=test_user_1.headers,
-    )
-    result.raise_for_status()
-    found_docs = result.json()["top_documents"]
-    danswer_doc_message_strings = [doc["content"] for doc in found_docs]
     print(
         "\ntop_documents content before removing from private channel for test_user_1: ",
         danswer_doc_message_strings,
@@ -228,21 +191,10 @@ def test_slack_permission_sync(
     # ----------------------------VERIFY THE CHANGES---------------------------
     # Ensure test_user_1 can no longer see messages from the private channel
     # Search as test_user_1 with access to only the public channel
-    search_request = DocumentSearchRequest(
-        message="favorite number",
-        search_type=SearchType.KEYWORD,
-        retrieval_options=RetrievalDetails(),
-        evaluation_type=LLMEvaluationType.SKIP,
+    danswer_doc_message_strings = DocumentSearchManager.search_documents(
+        query="favorite number",
+        user_performing_action=test_user_1,
     )
-    search_request_body = search_request.model_dump()
-    result = requests.post(
-        url=f"{API_SERVER_URL}/query/document-search",
-        json=search_request_body,
-        headers=test_user_1.headers,
-    )
-    result.raise_for_status()
-    found_docs = result.json()["top_documents"]
-    danswer_doc_message_strings = [doc["content"] for doc in found_docs]
     print(
         "\ntop_documents content after removing from private channel for test_user_1: ",
         danswer_doc_message_strings,

@@ -1,5 +1,6 @@
 schema DANSWER_CHUNK_NAME {
     document DANSWER_CHUNK_NAME {
+        TENANT_ID_REPLACEMENT
         # Not to be confused with the UUID generated for this chunk which is called documentid by default
         field document_id type string {
             indexing: summary | attribute

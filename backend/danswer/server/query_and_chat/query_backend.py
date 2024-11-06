@@ -1,3 +1,7 @@
+import json
+from collections.abc import Generator
+from uuid import UUID
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -186,7 +190,7 @@ def get_user_search_sessions(
 
 @basic_router.get("/search-session/{session_id}")
 def get_search_session(
-    session_id: int,
+    session_id: UUID,
     is_shared: bool = False,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -265,10 +269,17 @@ def get_answer_with_quote(
 
     logger.notice(f"Received query for one shot answer with quotes: {query}")
 
-    packets = stream_search_answer(
-        query_req=query_request,
-        user=user,
-        max_document_tokens=None,
-        max_history_tokens=0,
-    )
-    return StreamingResponse(packets, media_type="application/json")
+    def stream_generator() -> Generator[str, None, None]:
+        try:
+            for packet in stream_search_answer(
+                query_req=query_request,
+                user=user,
+                max_document_tokens=None,
+                max_history_tokens=0,
+            ):
+                yield json.dumps(packet) if isinstance(packet, dict) else packet
+        except Exception as e:
+            logger.exception(f"Error in search answer streaming: {e}")
+            yield json.dumps({"error": str(e)})
+
+    return StreamingResponse(stream_generator(), media_type="application/json")

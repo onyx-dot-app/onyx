@@ -21,6 +21,7 @@ class TestLLMRequest(BaseModel):
     # model level
     default_model_name: str
     fast_default_model_name: str | None = None
+    deployment_name: str | None = None
 
 
 class LLMProviderDescriptor(BaseModel):

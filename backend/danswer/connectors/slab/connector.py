@@ -20,10 +20,13 @@ from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.utils.logger import setup_logger
 
+
+logger = setup_logger()
+
+
 # Fairly generous retry because it's not understood why occasionally GraphQL requests fail even with timeout > 1 min
 SLAB_GRAPHQL_MAX_TRIES = 10
 SLAB_API_URL = "https://api.slab.com/v1/graphql"
-logger = setup_logger()
 
 
 def run_graphql_request(

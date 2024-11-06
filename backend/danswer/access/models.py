@@ -70,3 +70,12 @@ class DocumentAccess(ExternalAccess):
             user_groups=set(user_groups),
             is_public=is_public,
         )
+
+
+default_public_access = DocumentAccess(
+    external_user_emails=set(),
+    external_user_group_ids=set(),
+    user_emails=set(),
+    user_groups=set(),
+    is_public=True,
+)

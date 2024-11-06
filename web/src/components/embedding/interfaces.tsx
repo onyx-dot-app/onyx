@@ -1,4 +1,5 @@
 import {
+  AzureIcon,
   CohereIcon,
   GoogleIcon,
   IconProps,
@@ -16,6 +17,7 @@ export enum EmbeddingProvider {
   VOYAGE = "Voyage",
   GOOGLE = "Google",
   LITELLM = "LiteLLM",
+  AZURE = "Azure",
 }
 
 export interface CloudEmbeddingProvider {
@@ -49,22 +51,17 @@ export interface EmbeddingModelDescriptor {
   description: string;
   api_key: string | null;
   api_url: string | null;
+  api_version?: string | null;
+  deployment_name?: string | null;
   index_name: string | null;
 }
 
 export interface CloudEmbeddingModel extends EmbeddingModelDescriptor {
   pricePerMillion: number;
-  enabled?: boolean;
-  mtebScore: number;
-  maxContext: number;
 }
 
 export interface HostedEmbeddingModel extends EmbeddingModelDescriptor {
   link?: string;
-  model_dim: number;
-  normalize: boolean;
-  query_prefix: string;
-  passage_prefix: string;
   isDefault?: boolean;
 }
 
@@ -161,6 +158,20 @@ export const LITELLM_CLOUD_PROVIDER: CloudEmbeddingProvider = {
   embedding_models: [], // No default embedding models
 };
 
+export const AZURE_CLOUD_PROVIDER: CloudEmbeddingProvider = {
+  provider_type: EmbeddingProvider.AZURE,
+  website:
+    "https://azure.microsoft.com/en-us/products/cognitive-services/openai/",
+  icon: AzureIcon,
+  description:
+    "Azure OpenAI is a cloud-based AI service that provides access to OpenAI models.",
+  apiLink:
+    "https://docs.microsoft.com/en-us/azure/ai-services/openai/how-to/create-resource",
+  costslink:
+    "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai/",
+  embedding_models: [], // No default embedding models
+};
+
 export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
   {
     provider_type: EmbeddingProvider.COHERE,
@@ -179,9 +190,6 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         description:
           "Cohere's English embedding model. Good performance for English-language tasks.",
         pricePerMillion: 0.1,
-        mtebScore: 64.5,
-        maxContext: 512,
-        enabled: false,
         model_dim: 1024,
         normalize: false,
         query_prefix: "",
@@ -196,9 +204,6 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         description:
           "Cohere's lightweight English embedding model. Faster and more efficient for simpler tasks.",
         pricePerMillion: 0.1,
-        mtebScore: 62,
-        maxContext: 512,
-        enabled: false,
         model_dim: 384,
         normalize: false,
         query_prefix: "",
@@ -229,9 +234,6 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         normalize: false,
         query_prefix: "",
         passage_prefix: "",
-        mtebScore: 64.6,
-        maxContext: 8191,
-        enabled: false,
         index_name: "",
         api_key: null,
         api_url: null,
@@ -246,9 +248,6 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         description:
           "OpenAI's newer, more efficient embedding model. Good balance of performance and cost.",
         pricePerMillion: 0.02,
-        enabled: false,
-        mtebScore: 62.3,
-        maxContext: 8191,
         index_name: "",
         api_key: null,
         api_url: null,
@@ -272,9 +271,6 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         model_name: "text-embedding-004",
         description: "Google's most recent text embedding model.",
         pricePerMillion: 0.025,
-        mtebScore: 66.31,
-        maxContext: 2048,
-        enabled: false,
         model_dim: 768,
         normalize: false,
         query_prefix: "",
@@ -288,9 +284,6 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         model_name: "textembedding-gecko@003",
         description: "Google's Gecko embedding model. Powerful and efficient.",
         pricePerMillion: 0.025,
-        mtebScore: 66.31,
-        maxContext: 2048,
-        enabled: false,
         model_dim: 768,
         normalize: false,
         query_prefix: "",
@@ -317,9 +310,6 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         description:
           "Voyage's large embedding model. High performance with instruction fine-tuning.",
         pricePerMillion: 0.12,
-        mtebScore: 68.28,
-        maxContext: 4000,
-        enabled: false,
         model_dim: 1024,
         normalize: false,
         query_prefix: "",
@@ -334,9 +324,6 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
         description:
           "Voyage's lightweight embedding model. Good balance of performance and efficiency.",
         pricePerMillion: 0.12,
-        mtebScore: 67.13,
-        maxContext: 16000,
-        enabled: false,
         model_dim: 1024,
         normalize: false,
         query_prefix: "",

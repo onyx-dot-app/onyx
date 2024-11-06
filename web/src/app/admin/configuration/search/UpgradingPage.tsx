@@ -27,11 +27,11 @@ export default function UpgradingPage({
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
 
   const { setPopup, popup } = usePopup();
-  const { data: connectors } = useSWR<Connector<any>[]>(
-    "/api/manage/connector",
-    errorHandlingFetcher,
-    { refreshInterval: 5000 } // 5 seconds
-  );
+  const { data: connectors, isLoading: isLoadingConnectors } = useSWR<
+    Connector<any>[]
+  >("/api/manage/connector", errorHandlingFetcher, {
+    refreshInterval: 5000, // 5 seconds
+  });
 
   const {
     data: ongoingReIndexingStatus,
@@ -89,6 +89,10 @@ export default function UpgradingPage({
       );
     });
   }, [ongoingReIndexingStatus]);
+
+  if (isLoadingConnectors || isLoadingOngoingReIndexingStatus) {
+    return <ThreeDotsLoader />;
+  }
 
   return (
     <>
@@ -150,9 +154,7 @@ export default function UpgradingPage({
                   downtime is necessary during this transition.
                 </Text>
 
-                {isLoadingOngoingReIndexingStatus ? (
-                  <ThreeDotsLoader />
-                ) : sortedReindexingProgress ? (
+                {sortedReindexingProgress ? (
                   <ReindexingProgressTable
                     reindexingProgress={sortedReindexingProgress}
                   />

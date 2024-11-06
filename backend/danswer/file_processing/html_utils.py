@@ -4,11 +4,17 @@ from dataclasses import dataclass
 from typing import IO
 
 import bs4
+import trafilatura  # type: ignore
+from trafilatura.settings import use_config  # type: ignore
 
 from danswer.configs.app_configs import HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY
+from danswer.configs.app_configs import PARSE_WITH_TRAFILATURA
 from danswer.configs.app_configs import WEB_CONNECTOR_IGNORED_CLASSES
 from danswer.configs.app_configs import WEB_CONNECTOR_IGNORED_ELEMENTS
 from danswer.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
+from danswer.utils.logger import setup_logger
+
+logger = setup_logger()
 
 MINTLIFY_UNWANTED = ["sticky", "hidden"]
 
@@ -45,6 +51,18 @@ def format_element_text(element_text: str, link_href: str | None) -> str:
         return element_text_no_newlines
 
     return f"[{element_text_no_newlines}]({link_href})"
+
+
+def parse_html_with_trafilatura(html_content: str) -> str:
+    """Parse HTML content using trafilatura."""
+    config = use_config()
+    config.set("DEFAULT", "include_links", "True")
+    config.set("DEFAULT", "include_tables", "True")
+    config.set("DEFAULT", "include_images", "True")
+    config.set("DEFAULT", "include_formatting", "True")
+
+    extracted_text = trafilatura.extract(html_content, config=config)
+    return strip_excessive_newlines_and_spaces(extracted_text) if extracted_text else ""
 
 
 def format_document_soup(
@@ -183,7 +201,21 @@ def web_html_cleanup(
         for undesired_tag in additional_element_types_to_discard:
             [tag.extract() for tag in soup.find_all(undesired_tag)]
 
-    # 200B is ZeroWidthSpace which we don't care for
-    page_text = format_document_soup(soup).replace("\u200B", "")
+    soup_string = str(soup)
+    page_text = ""
 
-    return ParsedHTML(title=title, cleaned_text=page_text)
+    if PARSE_WITH_TRAFILATURA:
+        try:
+            page_text = parse_html_with_trafilatura(soup_string)
+            if not page_text:
+                raise ValueError("Empty content returned by trafilatura.")
+        except Exception as e:
+            logger.info(f"Trafilatura parsing failed: {e}. Falling back on bs4.")
+            page_text = format_document_soup(soup)
+    else:
+        page_text = format_document_soup(soup)
+
+    # 200B is ZeroWidthSpace which we don't care for
+    cleaned_text = page_text.replace("\u200B", "")
+
+    return ParsedHTML(title=title, cleaned_text=cleaned_text)

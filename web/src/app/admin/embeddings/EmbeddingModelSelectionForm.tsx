@@ -27,10 +27,13 @@ import {
   EMBEDDING_MODELS_ADMIN_URL,
   EMBEDDING_PROVIDERS_ADMIN_URL,
 } from "../configuration/llm/constants";
+import { AdvancedSearchConfiguration } from "./interfaces";
 
 export interface EmbeddingDetails {
   api_key?: string;
   api_url?: string;
+  api_version?: string;
+  deployment_name?: string;
   custom_config: any;
   provider_type: EmbeddingProvider;
 }
@@ -41,6 +44,8 @@ export function EmbeddingModelSelection({
   updateSelectedProvider,
   modelTab,
   setModelTab,
+  updateCurrentModel,
+  advancedEmbeddingDetails,
 }: {
   modelTab: "open" | "cloud" | null;
   setModelTab: Dispatch<SetStateAction<"open" | "cloud" | null>>;
@@ -49,6 +54,11 @@ export function EmbeddingModelSelection({
   updateSelectedProvider: (
     model: CloudEmbeddingModel | HostedEmbeddingModel
   ) => void;
+  updateCurrentModel: (
+    newModel: string,
+    provider_type: EmbeddingProvider
+  ) => void;
+  advancedEmbeddingDetails: AdvancedSearchConfiguration;
 }) {
   // Cloud Provider based modals
   const [showTentativeProvider, setShowTentativeProvider] =
@@ -72,12 +82,6 @@ export function EmbeddingModelSelection({
   const [showTentativeOpenProvider, setShowTentativeOpenProvider] =
     useState<HostedEmbeddingModel | null>(null);
 
-  // Enabled / unenabled providers
-  const [newEnabledProviders, setNewEnabledProviders] = useState<string[]>([]);
-  const [newUnenabledProviders, setNewUnenabledProviders] = useState<string[]>(
-    []
-  );
-
   const [showDeleteCredentialsModal, setShowDeleteCredentialsModal] =
     useState<boolean>(false);
 
@@ -90,7 +94,10 @@ export function EmbeddingModelSelection({
     { refreshInterval: 5000 } // 5 seconds
   );
 
-  const { data: embeddingProviderDetails } = useSWR<EmbeddingDetails[]>(
+  const {
+    data: embeddingProviderDetails,
+    mutate: mutateEmbeddingProviderDetails,
+  } = useSWR<EmbeddingDetails[]>(
     EMBEDDING_PROVIDERS_ADMIN_URL,
     errorHandlingFetcher,
     { refreshInterval: 5000 } // 5 seconds
@@ -132,32 +139,6 @@ export function EmbeddingModelSelection({
     }
   };
 
-  const clientsideAddProvider = (provider: CloudEmbeddingProvider) => {
-    const providerType = provider.provider_type;
-    setNewEnabledProviders((newEnabledProviders) => [
-      ...newEnabledProviders,
-      providerType,
-    ]);
-    setNewUnenabledProviders((newUnenabledProviders) =>
-      newUnenabledProviders.filter(
-        (givenProviderType) => givenProviderType != providerType
-      )
-    );
-  };
-
-  const clientsideRemoveProvider = (provider: CloudEmbeddingProvider) => {
-    const providerType = provider.provider_type;
-    setNewEnabledProviders((newEnabledProviders) =>
-      newEnabledProviders.filter(
-        (givenProviderType) => givenProviderType != providerType
-      )
-    );
-    setNewUnenabledProviders((newUnenabledProviders) => [
-      ...newUnenabledProviders,
-      providerType,
-    ]);
-  };
-
   return (
     <div className="p-2">
       {alreadySelectedModel && (
@@ -186,14 +167,16 @@ export function EmbeddingModelSelection({
 
       {showTentativeProvider && (
         <ProviderCreationModal
+          updateCurrentModel={updateCurrentModel}
           isProxy={showTentativeProvider.provider_type == "LiteLLM"}
+          isAzure={showTentativeProvider.provider_type == "Azure"}
           selectedProvider={showTentativeProvider}
           onConfirm={() => {
             setShowTentativeProvider(showUnconfiguredProvider);
-            clientsideAddProvider(showTentativeProvider);
             if (showModelInQueue) {
               setShowTentativeModel(showModelInQueue);
             }
+            mutateEmbeddingProviderDetails();
           }}
           onCancel={() => {
             setShowModelInQueue(null);
@@ -205,10 +188,11 @@ export function EmbeddingModelSelection({
       {changeCredentialsProvider && (
         <ChangeCredentialsModal
           isProxy={changeCredentialsProvider.provider_type == "LiteLLM"}
+          isAzure={changeCredentialsProvider.provider_type == "Azure"}
           useFileUpload={changeCredentialsProvider.provider_type == "Google"}
           onDeleted={() => {
-            clientsideRemoveProvider(changeCredentialsProvider);
             setChangeCredentialsProvider(null);
+            mutateEmbeddingProviderDetails();
           }}
           provider={changeCredentialsProvider}
           onConfirm={() => setChangeCredentialsProvider(null)}
@@ -236,12 +220,13 @@ export function EmbeddingModelSelection({
           modelProvider={showTentativeProvider!}
           onConfirm={() => {
             setShowDeleteCredentialsModal(false);
+            mutateEmbeddingProviderDetails();
           }}
           onCancel={() => setShowDeleteCredentialsModal(false)}
         />
       )}
 
-      <p className="t mb-4">
+      <p className="mb-4">
         Select from cloud, self-hosted models, or continue with your current
         embedding model.
       </p>
@@ -291,14 +276,13 @@ export function EmbeddingModelSelection({
 
       {modelTab == "cloud" && (
         <CloudEmbeddingPage
+          advancedEmbeddingDetails={advancedEmbeddingDetails}
           embeddingModelDetails={embeddingModelDetails}
           setShowModelInQueue={setShowModelInQueue}
           setShowTentativeModel={setShowTentativeModel}
           currentModel={selectedProvider || currentEmbeddingModel}
           setAlreadySelectedModel={setAlreadySelectedModel}
           embeddingProviderDetails={embeddingProviderDetails}
-          newEnabledProviders={newEnabledProviders}
-          newUnenabledProviders={newUnenabledProviders}
           setShowTentativeProvider={setShowTentativeProvider}
           setChangeCredentialsProvider={setChangeCredentialsProvider}
         />

@@ -13,8 +13,10 @@ from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_curator_or_admin_user
 from danswer.auth.users import current_user
 from danswer.configs.constants import FileOrigin
+from danswer.configs.constants import NotificationType
 from danswer.db.engine import get_session
 from danswer.db.models import User
+from danswer.db.notification import create_notification
 from danswer.db.persona import create_update_persona
 from danswer.db.persona import get_persona_by_id
 from danswer.db.persona import get_personas
@@ -28,6 +30,7 @@ from danswer.file_store.file_store import get_default_file_store
 from danswer.file_store.models import ChatFileType
 from danswer.llm.answering.prompts.utils import build_dummy_prompt
 from danswer.server.features.persona.models import CreatePersonaRequest
+from danswer.server.features.persona.models import PersonaSharedNotificationData
 from danswer.server.features.persona.models import PersonaSnapshot
 from danswer.server.features.persona.models import PromptTemplateResponse
 from danswer.server.models import DisplayPriorityRequest
@@ -183,11 +186,12 @@ class PersonaShareRequest(BaseModel):
     user_ids: list[UUID]
 
 
+# We notify each user when a user is shared with them
 @basic_router.patch("/{persona_id}/share")
 def share_persona(
     persona_id: int,
     persona_share_request: PersonaShareRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_persona_shared_users(
@@ -196,6 +200,18 @@ def share_persona(
         user=user,
         db_session=db_session,
     )
+
+    for user_id in persona_share_request.user_ids:
+        # Don't notify the user that they have access to their own persona
+        if user_id != user.id:
+            create_notification(
+                user_id=user_id,
+                notif_type=NotificationType.PERSONA_SHARED,
+                db_session=db_session,
+                additional_data=PersonaSharedNotificationData(
+                    persona_id=persona_id,
+                ).model_dump(),
+            )
 
 
 @basic_router.delete("/{persona_id}")
@@ -216,22 +232,30 @@ def list_personas(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
     include_deleted: bool = False,
+    persona_ids: list[int] = Query(None),
 ) -> list[PersonaSnapshot]:
-    return [
-        PersonaSnapshot.from_model(persona)
-        for persona in get_personas(
-            user=user,
-            include_deleted=include_deleted,
-            db_session=db_session,
-            get_editable=False,
-            joinedload_all=True,
-        )
-        # If the persona has an image generation tool and it's not available, don't include it
+    personas = get_personas(
+        user=user,
+        include_deleted=include_deleted,
+        db_session=db_session,
+        get_editable=False,
+        joinedload_all=True,
+    )
+
+    if persona_ids:
+        personas = [p for p in personas if p.id in persona_ids]
+
+    # Filter out personas with unavailable tools
+    personas = [
+        p
+        for p in personas
         if not (
-            any(tool.in_code_tool_id == "ImageGenerationTool" for tool in persona.tools)
+            any(tool.in_code_tool_id == "ImageGenerationTool" for tool in p.tools)
             and not is_image_generation_available(db_session=db_session)
         )
     ]
+
+    return [PersonaSnapshot.from_model(p) for p in personas]
 
 
 @basic_router.get("/{persona_id}")

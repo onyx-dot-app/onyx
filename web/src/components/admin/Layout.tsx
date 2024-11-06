@@ -6,7 +6,10 @@ import {
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
 import { ClientLayout } from "./ClientLayout";
-import { SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED } from "@/lib/constants";
+import {
+  SERVER_SIDE_ONLY__CLOUD_ENABLED,
+  SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
+} from "@/lib/constants";
 import { AnnouncementBanner } from "../header/AnnouncementBanner";
 
 export async function Layout({ children }: { children: React.ReactNode }) {
@@ -27,7 +30,6 @@ export async function Layout({ children }: { children: React.ReactNode }) {
 
   const authTypeMetadata = results[0] as AuthTypeMetadata | null;
   const user = results[1] as User | null;
-
   const authDisabled = authTypeMetadata?.authType === "disabled";
   const requiresVerification = authTypeMetadata?.requiresVerification;
 
@@ -47,6 +49,7 @@ export async function Layout({ children }: { children: React.ReactNode }) {
 
     <ClientLayout
       enableEnterprise={SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED}
+      enableCloud={SERVER_SIDE_ONLY__CLOUD_ENABLED}
       user={user}
     >
       <AnnouncementBanner />

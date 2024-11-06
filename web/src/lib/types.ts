@@ -111,6 +111,7 @@ export interface ConnectorIndexingStatus<
   latest_index_attempt: IndexAttemptSnapshot | null;
   deletion_attempt: DeletionAttemptSnapshot | null;
   is_deletable: boolean;
+  in_progress: boolean;
 }
 
 export interface CCPairBasicInfo {

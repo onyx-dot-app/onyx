@@ -328,7 +328,6 @@ def update_all_personas_display_priority(
 
     for persona in personas:
         persona.display_priority = display_priority_map[persona.id]
-
     db_session.commit()
 
 

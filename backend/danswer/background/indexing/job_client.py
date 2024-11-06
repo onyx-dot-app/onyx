@@ -11,7 +11,8 @@ from typing import Any
 from typing import Literal
 from typing import Optional
 
-from danswer.db.engine import get_sqlalchemy_engine
+from danswer.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME
+from danswer.db.engine import SqlEngine
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -37,7 +38,9 @@ def _initializer(
     if kwargs is None:
         kwargs = {}
 
-    get_sqlalchemy_engine().dispose(close=False)
+    logger.info("Initializing spawned worker child process.")
+    SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME)
+    SqlEngine.init_engine(pool_size=4, max_overflow=12, pool_recycle=60)
     return func(*args, **kwargs)
 
 

@@ -38,11 +38,13 @@ export function CustomLLMProviderUpdateForm({
   existingLlmProvider,
   shouldMarkAsDefault,
   setPopup,
+  hideSuccess,
 }: {
   onClose: () => void;
   existingLlmProvider?: FullLLMProvider;
   shouldMarkAsDefault?: boolean;
   setPopup?: (popup: PopupSpec) => void;
+  hideSuccess?: boolean;
 }) {
   const { mutate } = useSWRConfig();
 
@@ -107,9 +109,6 @@ export function CustomLLMProviderUpdateForm({
           setSubmitting(false);
           return;
         }
-
-        // don't set groups if marked as public
-        const groups = values.is_public ? [] : values.groups;
 
         // test the configuration
         if (!isEqual(values, initialValues)) {
@@ -190,7 +189,7 @@ export function CustomLLMProviderUpdateForm({
         const successMsg = existingLlmProvider
           ? "Provider updated successfully!"
           : "Provider enabled successfully!";
-        if (setPopup) {
+        if (!hideSuccess && setPopup) {
           setPopup({
             type: "success",
             message: successMsg,

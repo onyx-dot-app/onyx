@@ -14,7 +14,7 @@ interface LlmTabProps {
   llmOverrideManager: LlmOverrideManager;
   currentLlm: string;
   openModelSettings: () => void;
-  chatSessionId?: number;
+  chatSessionId?: string;
   close: () => void;
   currentAssistant: Persona;
 }

@@ -61,6 +61,7 @@ import {
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { buildImgUrl } from "@/app/chat/files/images/utils";
 import { LlmList } from "@/components/llm/LLMList";
+import { useAssistants } from "@/components/context/AssistantsContext";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "SearchTool");
@@ -105,6 +106,7 @@ export function AssistantEditor({
   shouldAddAssistantToUserPreferences?: boolean;
   admin?: boolean;
 }) {
+  const { refreshAssistants } = useAssistants();
   const router = useRouter();
 
   const { popup, setPopup } = usePopup();
@@ -433,6 +435,7 @@ export function AssistantEditor({
                 });
               }
             }
+            await refreshAssistants();
             router.push(
               redirectType === SuccessfulPersonaUpdateRedirectType.ADMIN
                 ? `/admin/assistants?u=${Date.now()}`

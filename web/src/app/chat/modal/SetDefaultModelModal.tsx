@@ -8,6 +8,7 @@ import { destructureValue, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/users/UserSettings";
 import { useRouter } from "next/navigation";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { useUser } from "@/components/user/UserProvider";
 
 export function SetDefaultModelModal({
   setPopup,
@@ -15,15 +16,14 @@ export function SetDefaultModelModal({
   onClose,
   setLlmOverride,
   defaultModel,
-  refreshUser,
 }: {
   setPopup: (popupSpec: PopupSpec | null) => void;
   llmProviders: LLMProviderDescriptor[];
   setLlmOverride: Dispatch<SetStateAction<LlmOverride>>;
   onClose: () => void;
   defaultModel: string | null;
-  refreshUser: () => void;
 }) {
+  const { refreshUser } = useUser();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
 

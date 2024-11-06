@@ -21,6 +21,7 @@ from danswer.indexing.models import ChunkEmbedding
 from danswer.indexing.models import DocMetadataAwareIndexChunk
 from danswer.indexing.models import IndexChunk
 from danswer.utils.timing import log_function_time
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.model_server_models import Embedding
 
 
@@ -94,6 +95,7 @@ def generate_dummy_chunk(
         ),
         document_sets={document_set for document_set in document_set_names},
         boost=random.randint(-1, 1),
+        tenant_id=POSTGRES_DEFAULT_SCHEMA,
     )
 
 

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_curator_or_admin_user
-from danswer.background.celery.celery_app import celery_app
+from danswer.background.celery.versioned_apps.primary import app as primary_app
 from danswer.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
 from danswer.configs.constants import DanswerCeleryPriority
 from danswer.configs.constants import DocumentSource
@@ -19,7 +19,7 @@ from danswer.db.connector_credential_pair import get_connector_credential_pair
 from danswer.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
 )
-from danswer.db.deletion_attempt import check_deletion_attempt_is_allowed
+from danswer.db.engine import get_current_tenant_id
 from danswer.db.engine import get_session
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.feedback import fetch_docs_ranked_by_boost
@@ -146,6 +146,7 @@ def create_deletion_attempt_for_connector_id(
     connector_credential_pair_identifier: ConnectorCredentialPairIdentifier,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant_id),
 ) -> None:
     connector_id = connector_credential_pair_identifier.connector_id
     credential_id = connector_credential_pair_identifier.credential_id
@@ -173,15 +174,19 @@ def create_deletion_attempt_for_connector_id(
         cc_pair_id=cc_pair.id, db_session=db_session, include_secondary_index=True
     )
 
+    # TODO(rkuo): 2024-10-24 - check_deletion_attempt_is_allowed shouldn't be necessary
+    # any more due to background locking improvements.
+    # Remove the below permanently if everything is behaving for 30 days.
+
     # Check if the deletion attempt should be allowed
-    deletion_attempt_disallowed_reason = check_deletion_attempt_is_allowed(
-        connector_credential_pair=cc_pair, db_session=db_session
-    )
-    if deletion_attempt_disallowed_reason:
-        raise HTTPException(
-            status_code=400,
-            detail=deletion_attempt_disallowed_reason,
-        )
+    # deletion_attempt_disallowed_reason = check_deletion_attempt_is_allowed(
+    #     connector_credential_pair=cc_pair, db_session=db_session
+    # )
+    # if deletion_attempt_disallowed_reason:
+    #     raise HTTPException(
+    #         status_code=400,
+    #         detail=deletion_attempt_disallowed_reason,
+    #     )
 
     # mark as deleting
     update_connector_credential_pair_from_id(
@@ -193,9 +198,10 @@ def create_deletion_attempt_for_connector_id(
     db_session.commit()
 
     # run the beat task to pick up this deletion from the db immediately
-    celery_app.send_task(
+    primary_app.send_task(
         "check_for_connector_deletion_task",
         priority=DanswerCeleryPriority.HIGH,
+        kwargs={"tenant_id": tenant_id},
     )
 
     if cc_pair.connector.source == DocumentSource.FILE:

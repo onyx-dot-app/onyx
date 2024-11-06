@@ -4,7 +4,11 @@ import * as Yup from "yup";
 import { TrashIcon } from "@/components/icons/icons";
 import { FaPlus } from "react-icons/fa";
 import { AdvancedSearchConfiguration } from "../interfaces";
-import { BooleanFormField } from "@/components/admin/connectors/Field";
+import {
+  BooleanFormField,
+  Label,
+  SubLabel,
+} from "@/components/admin/connectors/Field";
 import NumberInput from "../../connectors/[connector]/pages/ConnectorInput/NumberInput";
 
 interface AdvancedEmbeddingFormPageProps {
@@ -21,9 +25,6 @@ const AdvancedEmbeddingFormPage = forwardRef<
 >(({ updateAdvancedEmbeddingDetails, advancedEmbeddingDetails }, ref) => {
   return (
     <div className="py-4 rounded-lg max-w-4xl px-4 mx-auto">
-      <h2 className="text-2xl font-bold mb-4 text-text-800">
-        Advanced Configuration
-      </h2>
       <Formik
         innerRef={ref}
         initialValues={advancedEmbeddingDetails}
@@ -52,6 +53,9 @@ const AdvancedEmbeddingFormPage = forwardRef<
             <FieldArray name="multilingual_expansion">
               {({ push, remove }) => (
                 <div className="w-full">
+                  <Label>Multi-lingual Expansion</Label>
+
+                  <SubLabel>Add additional languages to the search.</SubLabel>
                   {values.multilingual_expansion.map(
                     (_: any, index: number) => (
                       <div key={index} className="w-full flex mb-4">

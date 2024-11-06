@@ -11,7 +11,6 @@ from danswer.configs.constants import DocumentSource
 from danswer.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
 )
-from danswer.connectors.cross_connector_utils.retry_wrapper import retry_builder
 from danswer.connectors.document360.utils import flatten_child_categories
 from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import LoadConnector
@@ -22,6 +21,7 @@ from danswer.connectors.models import ConnectorMissingCredentialError
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.file_processing.html_utils import parse_html_page_basic
+from danswer.utils.retry_wrapper import retry_builder
 
 # Limitations and Potential Improvements
 # 1. The "Categories themselves contain potentially relevant information" but they're not pulled in

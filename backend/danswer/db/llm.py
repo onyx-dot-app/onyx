@@ -95,10 +95,11 @@ def upsert_llm_provider(
         group_ids=llm_provider.groups,
         db_session=db_session,
     )
+    full_llm_provider = FullLLMProvider.from_model(existing_llm_provider)
 
     db_session.commit()
 
-    return FullLLMProvider.from_model(existing_llm_provider)
+    return full_llm_provider
 
 
 def fetch_existing_embedding_providers(

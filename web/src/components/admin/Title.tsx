@@ -1,3 +1,4 @@
+"use client";
 import { HealthCheckBanner } from "../health/healthcheck";
 import { Divider } from "@tremor/react";
 

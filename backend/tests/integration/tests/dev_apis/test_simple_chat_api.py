@@ -1,7 +1,10 @@
+import json
+
 import requests
 
 from danswer.configs.constants import MessageType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import NUM_DOCS
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -145,3 +148,85 @@ def test_using_reference_docs_with_simple_with_history_api_flow(reset: None) -> 
     # This ensures the the document we think we are referencing when we send the search_doc_ids in the second
     # message is the document that we expect it to be
     assert response_json["top_documents"][0]["document_id"] == cc_pair_1.documents[2].id
+
+
+def test_send_message_simple_with_history_strict_json(
+    new_admin_user: DATestUser | None,
+) -> None:
+    # create connectors
+    LLMProviderManager.create(user_performing_action=new_admin_user)
+
+    response = requests.post(
+        f"{API_SERVER_URL}/chat/send-message-simple-with-history",
+        json={
+            # intentionally not relevant prompt to ensure that the
+            # structured response format is actually used
+            "messages": [
+                {
+                    "message": "What is green?",
+                    "role": MessageType.USER.value,
+                }
+            ],
+            "persona_id": 0,
+            "prompt_id": 0,
+            "structured_response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "presidents",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "presidents": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of the first three US presidents",
+                            }
+                        },
+                        "required": ["presidents"],
+                        "additionalProperties": False,
+                    },
+                    "strict": True,
+                },
+            },
+        },
+        headers=new_admin_user.headers if new_admin_user else GENERAL_HEADERS,
+    )
+    assert response.status_code == 200
+
+    response_json = response.json()
+
+    # Check that the answer is present
+    assert "answer" in response_json
+    assert response_json["answer"] is not None
+
+    # helper
+    def clean_json_string(json_string: str) -> str:
+        return json_string.strip().removeprefix("```json").removesuffix("```").strip()
+
+    # Attempt to parse the answer as JSON
+    try:
+        clean_answer = clean_json_string(response_json["answer"])
+        parsed_answer = json.loads(clean_answer)
+
+        # NOTE: do not check content, just the structure
+        assert isinstance(parsed_answer, dict)
+        assert "presidents" in parsed_answer
+        assert isinstance(parsed_answer["presidents"], list)
+        for president in parsed_answer["presidents"]:
+            assert isinstance(president, str)
+    except json.JSONDecodeError:
+        assert (
+            False
+        ), f"The answer is not a valid JSON object - '{response_json['answer']}'"
+
+    # Check that the answer_citationless is also valid JSON
+    assert "answer_citationless" in response_json
+    assert response_json["answer_citationless"] is not None
+    try:
+        clean_answer_citationless = clean_json_string(
+            response_json["answer_citationless"]
+        )
+        parsed_answer_citationless = json.loads(clean_answer_citationless)
+        assert isinstance(parsed_answer_citationless, dict)
+    except json.JSONDecodeError:
+        assert False, "The answer_citationless is not a valid JSON object"

@@ -7,7 +7,6 @@ from googleapiclient.discovery import build  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 from sqlalchemy.orm import Session
 
-from danswer.connectors.cross_connector_utils.retry_wrapper import retry_builder
 from danswer.connectors.google_drive.connector_auth import (
     get_google_drive_creds,
 )
@@ -15,6 +14,7 @@ from danswer.connectors.google_drive.constants import FETCH_GROUPS_SCOPES
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.users import batch_add_non_web_user_if_not_exists__no_commit
 from danswer.utils.logger import setup_logger
+from danswer.utils.retry_wrapper import retry_builder
 from ee.danswer.db.external_perm import ExternalUserGroup
 from ee.danswer.db.external_perm import replace_user__ext_group_for_cc_pair__no_commit
 

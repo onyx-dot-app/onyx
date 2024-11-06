@@ -7,11 +7,12 @@ from datetime import timezone
 from typing import Any
 from typing import cast
 
-import requests
+import httpx
 from retry import retry
 
 from danswer.configs.app_configs import LOG_VESPA_TIMING_INFORMATION
 from danswer.document_index.interfaces import VespaChunkRequest
+from danswer.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from danswer.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
@@ -192,20 +193,21 @@ def _get_chunks_via_visit_api(
 
     document_chunks: list[dict] = []
     while True:
-        response = requests.get(url, params=params)
         try:
-            response.raise_for_status()
-        except requests.HTTPError as e:
-            request_info = f"Headers: {response.request.headers}\nPayload: {params}"
-            response_info = f"Status Code: {response.status_code}\nResponse Content: {response.text}"
-            error_base = f"Error occurred getting chunk by Document ID {chunk_request.document_id}"
+            filtered_params = {k: v for k, v in params.items() if v is not None}
+            with get_vespa_http_client() as http_client:
+                response = http_client.get(url, params=filtered_params)
+                response.raise_for_status()
+        except httpx.HTTPError as e:
+            error_base = "Failed to query Vespa"
             logger.error(
                 f"{error_base}:\n"
-                f"{request_info}\n"
-                f"{response_info}\n"
-                f"Exception: {e}"
+                f"Request URL: {e.request.url}\n"
+                f"Request Headers: {e.request.headers}\n"
+                f"Request Payload: {params}\n"
+                f"Exception: {str(e)}"
             )
-            raise requests.HTTPError(error_base) from e
+            raise httpx.HTTPError(error_base) from e
 
         # Check if the response contains any documents
         response_data = response.json()
@@ -293,28 +295,24 @@ def query_vespa(
         if LOG_VESPA_TIMING_INFORMATION
         else {},
     )
+
     try:
-        response = requests.post(
-            SEARCH_ENDPOINT,
-            json=params,
-        )
-        response.raise_for_status()
-    except requests.HTTPError as e:
-        request_info = f"Headers: {response.request.headers}\nPayload: {params}"
-        response_info = (
-            f"Status Code: {response.status_code}\n"
-            f"Response Content: {response.text}"
-        )
+        with get_vespa_http_client() as http_client:
+            response = http_client.post(SEARCH_ENDPOINT, json=params)
+            response.raise_for_status()
+    except httpx.HTTPError as e:
         error_base = "Failed to query Vespa"
         logger.error(
             f"{error_base}:\n"
-            f"{request_info}\n"
-            f"{response_info}\n"
-            f"Exception: {e}"
+            f"Request URL: {e.request.url}\n"
+            f"Request Headers: {e.request.headers}\n"
+            f"Request Payload: {params}\n"
+            f"Exception: {str(e)}"
         )
-        raise requests.HTTPError(error_base) from e
+        raise httpx.HTTPError(error_base) from e
 
     response_json: dict[str, Any] = response.json()
+
     if LOG_VESPA_TIMING_INFORMATION:
         logger.debug("Vespa timing info: %s", response_json.get("timing"))
     hits = response_json["root"].get("children", [])

@@ -375,6 +375,20 @@ def update_docs_last_modified__no_commit(
         doc.last_modified = now
 
 
+def mark_document_as_modified(
+    document_id: str,
+    db_session: Session,
+) -> None:
+    stmt = select(DbDocument).where(DbDocument.id == document_id)
+    doc = db_session.scalar(stmt)
+    if doc is None:
+        raise ValueError(f"No document with ID: {document_id}")
+
+    # update last_synced
+    doc.last_modified = datetime.now(timezone.utc)
+    db_session.commit()
+
+
 def mark_document_as_synced(document_id: str, db_session: Session) -> None:
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc = db_session.scalar(stmt)

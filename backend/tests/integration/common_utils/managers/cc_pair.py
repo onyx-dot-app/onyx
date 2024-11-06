@@ -239,24 +239,24 @@ class CCPairManager:
                 if fetched_cc_pair.cc_pair_id != cc_pair.id:
                     continue
 
+                if fetched_cc_pair.in_progress:
+                    continue
+
                 if (
                     fetched_cc_pair.last_success
                     and fetched_cc_pair.last_success > after
                 ):
-                    print(f"cc_pair {cc_pair.id} indexing complete.")
+                    print(f"Indexing complete: cc_pair={cc_pair.id}")
                     return
-                else:
-                    print("cc_pair found but not finished:")
-                    # print(fetched_cc_pair.__dict__)
 
             elapsed = time.monotonic() - start
             if elapsed > timeout:
                 raise TimeoutError(
-                    f"CC pair indexing was not completed within {timeout} seconds"
+                    f"Indexing wait timed out: cc_pair={cc_pair.id} timeout={timeout}s"
                 )
 
             print(
-                f"Waiting for CC indexing to complete. elapsed={elapsed:.2f} timeout={timeout}"
+                f"Indexing wait for completion: cc_pair={cc_pair.id} elapsed={elapsed:.2f} timeout={timeout}s"
             )
             time.sleep(5)
 
@@ -274,31 +274,40 @@ class CCPairManager:
         result.raise_for_status()
 
     @staticmethod
-    def is_pruning(
+    def last_pruned(
         cc_pair: DATestCCPair,
         user_performing_action: DATestUser | None = None,
-    ) -> bool:
+    ) -> datetime | None:
         response = requests.get(
-            url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/prune",
+            url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
             headers=user_performing_action.headers
             if user_performing_action
             else GENERAL_HEADERS,
         )
         response.raise_for_status()
-        response_bool = response.json()
-        return response_bool
+        response_str = response.json()
+
+        # If the response itself is a datetime string, parse it
+        if not isinstance(response_str, str):
+            return None
+
+        try:
+            return datetime.fromisoformat(response_str)
+        except ValueError:
+            return None
 
     @staticmethod
     def wait_for_prune(
         cc_pair: DATestCCPair,
+        after: datetime,
         timeout: float = MAX_DELAY,
         user_performing_action: DATestUser | None = None,
     ) -> None:
         """after: The task register time must be after this time."""
         start = time.monotonic()
         while True:
-            result = CCPairManager.is_pruning(cc_pair, user_performing_action)
-            if not result:
+            last_pruned = CCPairManager.last_pruned(cc_pair, user_performing_action)
+            if last_pruned and last_pruned > after:
                 break
 
             elapsed = time.monotonic() - start

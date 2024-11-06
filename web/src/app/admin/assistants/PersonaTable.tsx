@@ -5,7 +5,7 @@ import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
 import { CustomCheckbox } from "@/components/CustomCheckbox";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { UniqueIdentifier } from "@dnd-kit/core";
 import { DraggableTable } from "@/components/table/DraggableTable";
 import {
@@ -16,6 +16,7 @@ import {
 import { FiEdit2 } from "react-icons/fi";
 import { TrashIcon } from "@/components/icons/icons";
 import { useUser } from "@/components/user/UserProvider";
+import { useAssistants } from "@/components/context/AssistantsContext";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.builtin_persona) {
@@ -37,43 +38,36 @@ function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   return <Text>Personal {persona.owner && <>({persona.owner.email})</>}</Text>;
 }
 
-export function PersonasTable({
-  allPersonas,
-  editablePersonas,
-}: {
-  allPersonas: Persona[];
-  editablePersonas: Persona[];
-}) {
+export function PersonasTable() {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
-
-  const { isLoadingUser, isAdmin } = useUser();
+  const { refreshUser, isLoadingUser, isAdmin } = useUser();
+  const {
+    allAssistants: assistants,
+    refreshAssistants,
+    editablePersonas,
+  } = useAssistants();
 
   const editablePersonaIds = useMemo(() => {
     return new Set(editablePersonas.map((p) => p.id.toString()));
   }, [editablePersonas]);
 
-  const sortedPersonas = useMemo(() => {
+  const [finalPersonas, setFinalPersonas] = useState<Persona[]>([]);
+
+  useEffect(() => {
     const editable = editablePersonas.sort(personaComparator);
-    const nonEditable = allPersonas
+    const nonEditable = assistants
       .filter((p) => !editablePersonaIds.has(p.id.toString()))
       .sort(personaComparator);
-    return [...editable, ...nonEditable];
-  }, [allPersonas, editablePersonas]);
-
-  const [finalPersonas, setFinalPersonas] = useState<string[]>(
-    sortedPersonas.map((persona) => persona.id.toString())
-  );
-  const finalPersonaValues = finalPersonas
-    .filter((id) => new Set(allPersonas.map((p) => p.id.toString())).has(id))
-    .map((id) => {
-      return sortedPersonas.find(
-        (persona) => persona.id.toString() === id
-      ) as Persona;
-    });
+    setFinalPersonas([...editable, ...nonEditable]);
+  }, [editablePersonas, assistants, editablePersonaIds]);
 
   const updatePersonaOrder = async (orderedPersonaIds: UniqueIdentifier[]) => {
-    setFinalPersonas(orderedPersonaIds.map((id) => id.toString()));
+    const reorderedAssistants = orderedPersonaIds.map(
+      (id) => assistants.find((assistant) => assistant.id.toString() === id)!
+    );
+
+    setFinalPersonas(reorderedAssistants);
 
     const displayPriorityMap = new Map<UniqueIdentifier, number>();
     orderedPersonaIds.forEach((personaId, ind) => {
@@ -89,13 +83,19 @@ export function PersonasTable({
         display_priority_map: Object.fromEntries(displayPriorityMap),
       }),
     });
+
     if (!response.ok) {
       setPopup({
         type: "error",
         message: `Failed to update persona order - ${await response.text()}`,
       });
+      setFinalPersonas(assistants);
       router.refresh();
+      return;
     }
+
+    await refreshAssistants();
+    await refreshUser();
   };
 
   if (isLoadingUser) {
@@ -115,8 +115,8 @@ export function PersonasTable({
       <DraggableTable
         headers={["Name", "Description", "Type", "Is Visible", "Delete"]}
         isAdmin={isAdmin}
-        rows={finalPersonaValues.map((persona) => {
-          const isEditable = editablePersonaIds.has(persona.id.toString());
+        rows={finalPersonas.map((persona) => {
+          const isEditable = editablePersonas.includes(persona);
           return {
             id: persona.id.toString(),
             cells: [

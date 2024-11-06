@@ -7,6 +7,7 @@ import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
 import WrappedChat from "./WrappedChat";
+import { AssistantsProvider } from "@/components/context/AssistantsContext";
 
 export default async function Page({
   searchParams,
@@ -34,7 +35,6 @@ export default async function Page({
     chatSessions,
     availableSources,
     documentSets,
-    assistants,
     tags,
     llmProviders,
     folders,
@@ -51,13 +51,11 @@ export default async function Page({
 
       <InstantSSRAutoRefresh />
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
-
       <ChatProvider
         value={{
           chatSessions,
           availableSources,
           availableDocumentSets: documentSets,
-          availableAssistants: assistants,
           availableTags: tags,
           llmProviders,
           folders,

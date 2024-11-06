@@ -1,3 +1,9 @@
+export enum GatingType {
+  FULL = "full",
+  PARTIAL = "partial",
+  NONE = "none",
+}
+
 export interface Settings {
   chat_page_enabled: boolean;
   search_page_enabled: boolean;
@@ -6,14 +12,24 @@ export interface Settings {
   notifications: Notification[];
   needs_reindexing: boolean;
   gpu_enabled: boolean;
+  product_gating: GatingType;
+}
+
+export enum NotificationType {
+  PERSONA_SHARED = "persona_shared",
+  REINDEX_NEEDED = "reindex_needed",
+  TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending",
 }
 
 export interface Notification {
   id: number;
   notif_type: string;
+  time_created: string;
   dismissed: boolean;
-  last_shown: string;
-  first_shown: string;
+  additional_data?: {
+    persona_id?: number;
+    [key: string]: any;
+  };
 }
 
 export interface NavigationItem {

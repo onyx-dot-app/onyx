@@ -12,12 +12,16 @@ const eePaths = [
   "/admin/whitelabeling/:path*",
   "/admin/performance/custom-analytics/:path*",
   "/admin/standard-answer/:path*",
+  ...(process.env.NEXT_PUBLIC_CLOUD_ENABLED
+    ? ["/admin/cloud-settings/:path*"]
+    : []),
 ];
 
 // removes the "/:path*" from the end
-const strippedEEPaths = eePaths.map((path) =>
-  path.replace(/(.*):\path\*$/, "$1").replace(/\/$/, "")
-);
+const stripPath = (path: string) =>
+  path.replace(/(.*):\path\*$/, "$1").replace(/\/$/, "");
+
+const strippedEEPaths = eePaths.map(stripPath);
 
 export async function middleware(request: NextRequest) {
   if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {

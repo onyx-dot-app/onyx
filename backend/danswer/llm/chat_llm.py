@@ -109,7 +109,7 @@ def _convert_message_to_dict(message: BaseMessage) -> dict:
                         "arguments": json.dumps(tool_call["args"]),
                     },
                     "type": "function",
-                    "index": 0,  # only support a single tool call atm
+                    "index": tool_call.get("index", 0),
                 }
                 for tool_call in message.tool_calls
             ]
@@ -158,12 +158,13 @@ def _convert_delta_to_message_chunk(
         if tool_calls:
             tool_call = tool_calls[0]
             tool_name = tool_call.function.name or (curr_msg and curr_msg.name) or ""
+            idx = tool_call.index
 
             tool_call_chunk = ToolCallChunk(
                 name=tool_name,
                 id=tool_call.id,
                 args=tool_call.function.arguments,
-                index=0,  # only support a single tool call atm
+                index=idx,
             )
 
             return AIMessageChunk(
@@ -279,6 +280,7 @@ class DefaultMultiLLM(LLM):
         tools: list[dict] | None,
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
+        structured_response_format: dict | None = None,
     ) -> litellm.ModelResponse | litellm.CustomStreamWrapper:
         if isinstance(prompt, list):
             prompt = [
@@ -312,6 +314,11 @@ class DefaultMultiLLM(LLM):
                 # NOTE: we can't pass this in if tools are not specified
                 # or else OpenAI throws an error
                 **({"parallel_tool_calls": False} if tools else {}),
+                **(
+                    {"response_format": structured_response_format}
+                    if structured_response_format
+                    else {}
+                ),
                 **self._model_kwargs,
             )
         except Exception as e:
@@ -335,12 +342,16 @@ class DefaultMultiLLM(LLM):
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
     ) -> BaseMessage:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
 
         response = cast(
-            litellm.ModelResponse, self._completion(prompt, tools, tool_choice, False)
+            litellm.ModelResponse,
+            self._completion(
+                prompt, tools, tool_choice, False, structured_response_format
+            ),
         )
         choice = response.choices[0]
         if hasattr(choice, "message"):
@@ -353,18 +364,21 @@ class DefaultMultiLLM(LLM):
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
     ) -> Iterator[BaseMessage]:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
 
         if DISABLE_LITELLM_STREAMING:
-            yield self.invoke(prompt)
+            yield self.invoke(prompt, tools, tool_choice, structured_response_format)
             return
 
         output = None
         response = cast(
             litellm.CustomStreamWrapper,
-            self._completion(prompt, tools, tool_choice, True),
+            self._completion(
+                prompt, tools, tool_choice, True, structured_response_format
+            ),
         )
         try:
             for part in response:

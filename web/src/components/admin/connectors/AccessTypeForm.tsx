@@ -57,39 +57,30 @@ export function AccessTypeForm({
 
   return (
     <>
-      {isPaidEnterpriseEnabled && (
+      {isPaidEnterpriseEnabled && isAdmin && (
         <>
-          <div>
-            <div className="flex gap-x-2 items-center">
-              <label className="text-text-950 font-medium">
-                Document Access
-              </label>
-            </div>
-            <p className="text-sm text-text-500 mb-2">
-              Control who has access to the documents indexed by this connector.
-            </p>
-
-            {isAdmin && (
-              <>
-                <DefaultDropdown
-                  options={options}
-                  selected={access_type.value}
-                  onSelect={(selected) =>
-                    access_type_helpers.setValue(selected as AccessType)
-                  }
-                  includeDefault={false}
-                />
-
-                {access_type.value === "sync" && isAutoSyncSupported && (
-                  <div>
-                    <AutoSyncOptions
-                      connectorType={connector as ValidAutoSyncSources}
-                    />
-                  </div>
-                )}
-              </>
-            )}
+          <div className="flex gap-x-2 items-center">
+            <label className="text-text-950 font-medium">Document Access</label>
           </div>
+          <p className="text-sm text-text-500 mb-2">
+            Control who has access to the documents indexed by this connector.
+          </p>
+          <DefaultDropdown
+            options={options}
+            selected={access_type.value}
+            onSelect={(selected) =>
+              access_type_helpers.setValue(selected as AccessType)
+            }
+            includeDefault={false}
+          />
+
+          {access_type.value === "sync" && isAutoSyncSupported && (
+            <div>
+              <AutoSyncOptions
+                connectorType={connector as ValidAutoSyncSources}
+              />
+            </div>
+          )}
         </>
       )}
     </>

@@ -124,13 +124,11 @@ export const AIMessage = ({
   files,
   selectedDocuments,
   query,
-  personaName,
   citedDocuments,
   toolCall,
   isComplete,
   hasDocs,
   handleFeedback,
-  isCurrentlyShowingRetrieved,
   handleShowRetrieved,
   handleSearchQueryEdit,
   handleForceSearch,
@@ -153,13 +151,11 @@ export const AIMessage = ({
   content: string | JSX.Element;
   files?: FileDescriptor[];
   query?: string;
-  personaName?: string;
   citedDocuments?: [string, DanswerDocument][] | null;
   toolCall?: ToolCallMetadata;
   isComplete?: boolean;
   hasDocs?: boolean;
   handleFeedback?: (feedbackType: FeedbackType) => void;
-  isCurrentlyShowingRetrieved?: boolean;
   handleShowRetrieved?: (messageNumber: number | null) => void;
   handleSearchQueryEdit?: (query: string) => void;
   handleForceSearch?: () => void;
@@ -195,6 +191,8 @@ export const AIMessage = ({
   const finalContent = processContent(content as string);
 
   const [isRegenerateHovered, setIsRegenerateHovered] = useState(false);
+  const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
+    useState(false);
   const { isHovering, trackedElementRef, hoverElementRef } = useMouseTracking();
 
   const settings = useContext(SettingsContext);
@@ -258,7 +256,7 @@ export const AIMessage = ({
     () => ({
       a: MemoizedLink,
       p: MemoizedParagraph,
-      code: ({ node, inline, className, children, ...props }: any) => {
+      code: ({ node, className, children, ...props }: any) => {
         const codeText = extractCodeText(
           node,
           finalContent as string,
@@ -522,12 +520,22 @@ export const AIMessage = ({
                             />
                           </CustomTooltip>
                           {regenerate && (
-                            <RegenerateOption
-                              onHoverChange={setIsRegenerateHovered}
-                              selectedAssistant={currentPersona!}
-                              regenerate={regenerate}
-                              overriddenModel={overriddenModel}
-                            />
+                            <CustomTooltip
+                              disabled={isRegenerateDropdownVisible}
+                              showTick
+                              line
+                              content="Regenerate!"
+                            >
+                              <RegenerateOption
+                                onDropdownVisibleChange={
+                                  setIsRegenerateDropdownVisible
+                                }
+                                onHoverChange={setIsRegenerateHovered}
+                                selectedAssistant={currentPersona!}
+                                regenerate={regenerate}
+                                overriddenModel={overriddenModel}
+                              />
+                            </CustomTooltip>
                           )}
                         </TooltipGroup>
                       </div>
@@ -587,12 +595,22 @@ export const AIMessage = ({
                             />
                           </CustomTooltip>
                           {regenerate && (
-                            <RegenerateOption
-                              selectedAssistant={currentPersona!}
-                              regenerate={regenerate}
-                              overriddenModel={overriddenModel}
-                              onHoverChange={setIsRegenerateHovered}
-                            />
+                            <CustomTooltip
+                              disabled={isRegenerateDropdownVisible}
+                              showTick
+                              line
+                              content="Regenerate!"
+                            >
+                              <RegenerateOption
+                                selectedAssistant={currentPersona!}
+                                onDropdownVisibleChange={
+                                  setIsRegenerateDropdownVisible
+                                }
+                                regenerate={regenerate}
+                                overriddenModel={overriddenModel}
+                                onHoverChange={setIsRegenerateHovered}
+                              />
+                            </CustomTooltip>
                           )}
                         </TooltipGroup>
                       </div>

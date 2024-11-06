@@ -125,6 +125,7 @@ export const DocumentSetCreationForm = ({
                 placeholder="Describe what the document set represents"
                 autoCompleteDisabled={true}
               />
+
               {isPaidEnterpriseFeaturesEnabled && (
                 <IsPublicGroupSelector
                   formikProps={props}

@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 
 export default async function Page() {
   const settings = await fetchSettingsSS();
-
   if (!settings) {
     redirect("/search");
   }
