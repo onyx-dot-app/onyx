@@ -1,6 +1,11 @@
 import { FiFileText } from "react-icons/fi";
 import { useState, useRef, useEffect } from "react";
-import { Tooltip } from "@/components/tooltip/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ExpandTwoIcon } from "@/components/icons/icons";
 
 export function DocumentPreview({
@@ -52,16 +57,23 @@ export function DocumentPreview({
         </div>
       </div>
       <div className="ml-4 flex-grow">
-        <Tooltip content={fileName} side="top" align="start">
-          <div
-            ref={fileNameRef}
-            className={`font-medium text-sm line-clamp-1 break-all ellipsis ${
-              maxWidth ? maxWidth : "max-w-48"
-            }`}
-          >
-            {fileName}
-          </div>
-        </Tooltip>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                ref={fileNameRef}
+                className={`font-medium text-sm line-clamp-1 break-all ellipsis ${
+                  maxWidth ? maxWidth : "max-w-48"
+                }`}
+              >
+                {fileName}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" align="start">
+              {fileName}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <div className="text-subtle text-xs mt-1">Document</div>
       </div>
       {open && (
@@ -128,16 +140,23 @@ export function InputDocumentPreview({
         </div>
       </div>
       <div className="ml-2 relative">
-        <Tooltip content={fileName} side="top" align="start">
-          <div
-            ref={fileNameRef}
-            className={`font-medium text-sm line-clamp-1 break-all ellipses ${
-              maxWidth ? maxWidth : "max-w-48"
-            }`}
-          >
-            {fileName}
-          </div>
-        </Tooltip>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                ref={fileNameRef}
+                className={`font-medium text-sm line-clamp-1 break-all ellipses ${
+                  maxWidth ? maxWidth : "max-w-48"
+                }`}
+              >
+                {fileName}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" align="start">
+              {fileName}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     </div>
   );

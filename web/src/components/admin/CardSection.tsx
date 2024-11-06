@@ -11,7 +11,7 @@ export default function CardSection({
   return (
     <div
       className={cn(
-        "p-6  shadow-sm rounded-lg bg-white border border-border-strong/80",
+        "p-6 shadow-sm rounded-lg bg-white border border-border-strong/80",
         className
       )}
     >

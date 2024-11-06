@@ -45,7 +45,12 @@ import {
   TooltipGroup,
 } from "@/components/tooltip/CustomTooltip";
 import { ValidSources } from "@/lib/types";
-import { Tooltip } from "@/components/tooltip/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useMouseTracking } from "./hooks";
 import { InternetSearchIcon } from "@/components/InternetSearchIcon";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -895,17 +900,22 @@ export const HumanMessage = ({
                       isHovered &&
                       !isEditing &&
                       (!files || files.length === 0) ? (
-                        <Tooltip delayDuration={1000} content={"Edit message"}>
-                          <button
-                            className="hover:bg-hover p-1.5 rounded"
-                            onClick={() => {
-                              setIsEditing(true);
-                              setIsHovered(false);
-                            }}
-                          >
-                            <FiEdit2 className="!h-4 !w-4" />
-                          </button>
-                        </Tooltip>
+                        <TooltipProvider delayDuration={1000}>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <button
+                                className="hover:bg-hover p-1.5 rounded"
+                                onClick={() => {
+                                  setIsEditing(true);
+                                  setIsHovered(false);
+                                }}
+                              >
+                                <FiEdit2 className="!h-4 !w-4" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       ) : (
                         <div className="w-7" />
                       )}

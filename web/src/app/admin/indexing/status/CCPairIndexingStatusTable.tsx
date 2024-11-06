@@ -27,7 +27,12 @@ import {
   FiRefreshCw,
   FiPauseCircle,
 } from "react-icons/fi";
-import { Tooltip } from "@/components/tooltip/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getSourceDisplayName } from "@/lib/sources";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
@@ -77,21 +82,26 @@ function SummaryRow({
 
       <TableCell>
         <div className="text-sm text-gray-500">Active Connectors</div>
-        <Tooltip
-          content={`${summary.active} out of ${summary.count} connectors are active`}
-        >
-          <div className="flex items-center mt-1">
-            <div className="w-full bg-gray-200 rounded-full h-2 mr-2">
-              <div
-                className="bg-green-500 h-2 rounded-full"
-                style={{ width: `${activePercentage}%` }}
-              ></div>
-            </div>
-            <span className="text-sm font-medium whitespace-nowrap">
-              {summary.active} ({activePercentage.toFixed(0)}%)
-            </span>
-          </div>
-        </Tooltip>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center mt-1">
+                <div className="w-full bg-gray-200 rounded-full h-2 mr-2">
+                  <div
+                    className="bg-green-500 h-2 rounded-full"
+                    style={{ width: `${activePercentage}%` }}
+                  ></div>
+                </div>
+                <span className="text-sm font-medium whitespace-nowrap">
+                  {summary.active} ({activePercentage.toFixed(0)}%)
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              {summary.active} out of {summary.count} connectors are active
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </TableCell>
 
       {isPaidEnterpriseFeaturesEnabled && (

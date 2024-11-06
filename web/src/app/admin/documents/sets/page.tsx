@@ -35,6 +35,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TableHeader } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const numToDisplay = 50;
 
@@ -47,8 +53,6 @@ const EditRow = ({
 }) => {
   const router = useRouter();
 
-  const [isSyncingTooltipOpen, setIsSyncingTooltipOpen] = useState(false);
-
   if (!isEditable) {
     return (
       <div className="text-emphasis font-medium my-auto p-1">
@@ -59,37 +63,36 @@ const EditRow = ({
 
   return (
     <div className="relative flex">
-      {isSyncingTooltipOpen && (
-        <div className="flex flex-nowrap absolute w-64 top-0 left-0 mt-8 border border-border bg-background px-3 py-2 rounded shadow-lg break-words z-40">
-          <InfoIcon className="mt-1 flex flex-shrink-0 mr-2" /> Cannot update
-          while syncing! Wait for the sync to finish, then try again.
-        </div>
-      )}
-      <div
-        className={`
-          text-emphasis font-medium my-auto p-1 hover:bg-hover-light flex items-center select-none
-          ${documentSet.is_up_to_date ? "cursor-pointer" : "cursor-default"}
-        `}
-        style={{ wordBreak: "normal", overflowWrap: "break-word" }}
-        onClick={() => {
-          if (documentSet.is_up_to_date) {
-            router.push(`/admin/documents/sets/${documentSet.id}`);
-          }
-        }}
-        onMouseEnter={() => {
-          if (!documentSet.is_up_to_date) {
-            setIsSyncingTooltipOpen(true);
-          }
-        }}
-        onMouseLeave={() => {
-          if (!documentSet.is_up_to_date) {
-            setIsSyncingTooltipOpen(false);
-          }
-        }}
-      >
-        <FiEdit2 className="mr-2 flex-shrink-0" />
-        <span className="font-medium">{documentSet.name}</span>
-      </div>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              className={`
+              text-emphasis font-medium my-auto p-1 hover:bg-hover-light flex items-center select-none
+              ${documentSet.is_up_to_date ? "cursor-pointer" : "cursor-default"}
+            `}
+              style={{ wordBreak: "normal", overflowWrap: "break-word" }}
+              onClick={() => {
+                if (documentSet.is_up_to_date) {
+                  router.push(`/admin/documents/sets/${documentSet.id}`);
+                }
+              }}
+            >
+              <FiEdit2 className="mr-2 flex-shrink-0" />
+              <span className="font-medium">{documentSet.name}</span>
+            </div>
+          </TooltipTrigger>
+          {!documentSet.is_up_to_date && (
+            <TooltipContent maxWidth="max-w-sm">
+              <div className="flex break-words break-keep whitespace-pre-wrap items-start">
+                <InfoIcon className="mr-2 mt-0.5" />
+                Cannot update while syncing! Wait for the sync to finish, then
+                try again.
+              </div>
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 };

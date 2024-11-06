@@ -3,7 +3,12 @@ import { FileDescriptor } from "../interfaces";
 
 import { FiX, FiLoader, FiFileText } from "react-icons/fi";
 import { InputBarPreviewImage } from "./images/InputBarPreviewImage";
-import { Tooltip } from "@/components/tooltip/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 function DeleteButton({ onDelete }: { onDelete: () => void }) {
   return (
@@ -138,14 +143,21 @@ export function InputBarPreview({
           </div>
         </div>
         <div className="ml-2 relative">
-          <Tooltip content={file.name} side="top" align="start">
-            <div
-              ref={fileNameRef}
-              className={`font-medium text-sm line-clamp-1 break-all ellipses max-w-48`}
-            >
-              {file.name}
-            </div>
-          </Tooltip>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  ref={fileNameRef}
+                  className={`font-medium text-sm line-clamp-1 break-all ellipses max-w-48`}
+                >
+                  {file.name}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" align="start">
+                {file.name}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
         <button
           onClick={onDelete}

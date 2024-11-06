@@ -24,7 +24,6 @@ interface AreaChartProps {
   categories?: string[];
   index?: string;
   colors?: string[];
-  valueFormatter?: (value: number) => string;
   startEndOnly?: boolean;
   showXAxis?: boolean;
   showYAxis?: boolean;
@@ -42,6 +41,8 @@ interface AreaChartProps {
   className?: string;
   title?: string;
   description?: string;
+  xAxisFormatter?: (value: any) => string;
+  yAxisFormatter?: (value: any) => string;
 }
 
 export function AreaChartDisplay({
@@ -49,8 +50,6 @@ export function AreaChartDisplay({
   categories = [],
   index,
   colors = ["indigo", "fuchsia"],
-  valueFormatter = (number: number) =>
-    `${Intl.NumberFormat("us").format(number).toString()}`,
   startEndOnly = false,
   showXAxis = true,
   showYAxis = true,
@@ -68,6 +67,8 @@ export function AreaChartDisplay({
   className,
   title,
   description,
+  xAxisFormatter = (dateStr: string) => dateStr,
+  yAxisFormatter = (number: number) => number.toString(),
 }: AreaChartProps) {
   return (
     <Card className={className}>
@@ -94,7 +95,7 @@ export function AreaChartDisplay({
                   tickLine={false}
                   axisLine={false}
                   tickMargin={8}
-                  tickFormatter={(value) => value.slice(0, 3)}
+                  tickFormatter={(value) => xAxisFormatter(value)}
                 />
               )}
               {showYAxis && (
@@ -102,7 +103,7 @@ export function AreaChartDisplay({
                   width={yAxisWidth}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={valueFormatter}
+                  tickFormatter={(value) => yAxisFormatter(value)}
                   allowDecimals={allowDecimals}
                 />
               )}

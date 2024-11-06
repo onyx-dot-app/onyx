@@ -219,7 +219,7 @@ def mark_attempt_partially_succeeded(
 
 
 def mark_attempt_failed(
-    index_attempt: IndexAttempt,
+    index_attempt_id: int,
     db_session: Session,
     failure_reason: str = "Unknown",
     full_exception_trace: str | None = None,
@@ -227,7 +227,7 @@ def mark_attempt_failed(
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
-            .where(IndexAttempt.id == index_attempt.id)
+            .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
         ).scalar_one()
 

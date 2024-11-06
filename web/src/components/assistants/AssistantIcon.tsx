@@ -1,6 +1,5 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
 import React from "react";
-import { Tooltip } from "../tooltip/Tooltip";
 import { createSVG } from "@/lib/assistantIconUtils";
 import { buildImgUrl } from "@/app/chat/files/images/utils";
 import { CustomTooltip } from "../tooltip/CustomTooltip";

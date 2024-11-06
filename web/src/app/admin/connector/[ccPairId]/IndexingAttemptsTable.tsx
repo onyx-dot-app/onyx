@@ -23,7 +23,12 @@ import { InfoIcon, SearchIcon } from "@/components/icons/icons";
 import Link from "next/link";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { useRouter } from "next/navigation";
-import { Tooltip } from "@/components/tooltip/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { FiInfo } from "react-icons/fi";
 
 // This is the number of index attempts to display per page
@@ -237,15 +242,20 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
             <TableHead>New Doc Cnt</TableHead>
             <TableHead>
               <div className="w-fit">
-                <Tooltip
-                  width="max-w-sm"
-                  content="Total number of documents replaced in the index during this indexing attempt"
-                >
-                  <span className="cursor-help flex items-center">
-                    Total Doc Cnt
-                    <InfoIcon className="ml-1 w-4 h-4" />
-                  </span>
-                </Tooltip>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="cursor-help flex items-center">
+                        Total Doc Cnt
+                        <InfoIcon className="ml-1 w-4 h-4" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Total number of documents replaced in the index during
+                      this indexing attempt
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </TableHead>
             <TableHead>Error Message</TableHead>

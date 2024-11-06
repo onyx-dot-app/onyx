@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 interface CalloutProps {
-  icon?: string;
+  icon?: React.ReactNode;
   children?: React.ReactNode;
   type?: "default" | "warning" | "danger" | "notice";
   className?: string;
@@ -29,8 +29,10 @@ export function Callout({
       {...props}
     >
       {icon && <span className="mr-4 text-2xl">{icon}</span>}
-      <div>
-        {title && <div className="font-medium mb-1">{title}</div>}
+      <div className="flex-1">
+        {title && (
+          <div className="font-medium mb-1 flex items-center">{title}</div>
+        )}
         {children}
       </div>
     </div>

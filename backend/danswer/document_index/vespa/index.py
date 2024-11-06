@@ -147,7 +147,7 @@ class VespaIndex(DocumentIndex):
             return None
 
         deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
-        logger.info(f"Deploying Vespa application package to {deploy_url}")
+        logger.notice(f"Deploying Vespa application package to {deploy_url}")
 
         vespa_schema_path = os.path.join(
             os.getcwd(), "danswer", "document_index", "vespa", "app_config"

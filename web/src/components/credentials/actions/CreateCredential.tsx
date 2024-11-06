@@ -188,7 +188,7 @@ export default function CreateCredential({
       onSubmit={() => {}} // This will be overridden by our custom submit handlers
     >
       {(formikProps) => (
-        <Form>
+        <Form className="w-full flex items-stretch">
           {!hideSource && (
             <p className="text-sm">
               Check our

@@ -13,7 +13,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@radix-ui/react-tooltip";
+} from "@/components/ui/tooltip";
 
 interface Item {
   name: string | JSX.Element;
@@ -105,9 +105,7 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
                           <WarningCircle size={18} className="text-error" />
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p className="max-w-xs text-text-100 mb-1 p-2 rounded-lg bg-background-900">
-                            Navigate here to update your search settings
-                          </p>
+                          Navigate here to update your search settings
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>

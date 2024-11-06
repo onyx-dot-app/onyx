@@ -58,9 +58,6 @@ export function DanswerBotChart({
         categories={["Total Queries", "Automatically Resolved"]}
         index="Day"
         colors={["indigo", "fuchsia"]}
-        valueFormatter={(number: number) =>
-          `${Intl.NumberFormat("us").format(number).toString()}`
-        }
         yAxisWidth={60}
       />
     );

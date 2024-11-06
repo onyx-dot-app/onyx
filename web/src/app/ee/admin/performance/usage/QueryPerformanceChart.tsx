@@ -74,10 +74,21 @@ export function QueryPerformanceChart({
         categories={["Queries", "Unique Users"]}
         index="Day"
         colors={["indigo", "fuchsia"]}
-        valueFormatter={(number: number) =>
-          `${Intl.NumberFormat("us").format(number).toString()}`
+        yAxisFormatter={(number: number) =>
+          new Intl.NumberFormat("en-US", {
+            notation: "standard",
+            maximumFractionDigits: 0,
+          }).format(number)
         }
+        xAxisFormatter={(dateStr: string) => {
+          const date = new Date(dateStr);
+          return date.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          });
+        }}
         yAxisWidth={60}
+        allowDecimals={false}
       />
     );
   }
