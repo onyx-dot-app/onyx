@@ -130,7 +130,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                 }}
               >
                 <FiEdit className="flex-none " />
-                <p className="my-auto flex items-center text-sm">New Chat 2</p>
+                <p className="my-auto flex items-center text-sm">New Chat</p>
               </Link>
               <button
                 onClick={() =>
