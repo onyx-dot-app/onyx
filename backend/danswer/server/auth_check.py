@@ -45,6 +45,7 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/oauth/authorize", {"GET"}),
     ("/auth/oauth/callback", {"GET"}),
     ("/eea_config/get_eea_config", {"GET"}),
+    ("/connectors_health", {"GET"}),
 ]
 
 
