@@ -14,6 +14,7 @@ from danswer.db.engine import get_session
 from danswer.db.engine import get_current_tenant_id
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.models import IndexingStatus
+from danswer.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id
 
 router = APIRouter()
 
@@ -47,7 +48,23 @@ def connectors_healthcheck(
     for state in states:
         if state.cc_pair_status == ConnectorCredentialPairStatus.ACTIVE and \
             state.last_finished_status == IndexingStatus.FAILED:
-            error_cnt += 1
+            PAGE_SIZE = 10
+            last_attempts = get_paginated_index_attempts_for_cc_pair_id(db_session=db_session, connector_id=state.connector.id, page=1, page_size=PAGE_SIZE)
+
+            attempt_cnt = 0
+            while True:
+              attempt = last_attempts[attempt_cnt]
+              if attempt_cnt == 10:
+                break
+              attempt_cnt+=1
+              if attempt.status == IndexingStatus.SUCCESS:
+                break
+              if attempt.status == IndexingStatus.FAILED:
+                if attempt.error_msg.startswith("Unknown index attempt"):
+                  continue
+                else:
+                  error_cnt+=1
+                  break
     if error_cnt > 0:
         success = False
         message = f"{error_cnt} of {len(states)} connectors failed"
