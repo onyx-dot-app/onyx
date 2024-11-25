@@ -28,7 +28,7 @@ from danswer.server.documents.models import CredentialSwapRequest
 from danswer.server.documents.models import ObjectCreationIdResponse
 from danswer.server.models import StatusResponse
 from danswer.utils.logger import setup_logger
-from ee.danswer.db.user_group import validate_user_creation_permissions
+from danswer.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
 
@@ -81,18 +81,6 @@ def get_cc_source_full_info(
     ]
 
 
-@router.get("/credential/{id}")
-def list_credentials_by_id(
-    user: User | None = Depends(current_user),
-    db_session: Session = Depends(get_session),
-) -> list[CredentialSnapshot]:
-    credentials = fetch_credentials(db_session=db_session, user=user)
-    return [
-        CredentialSnapshot.from_credential_db_model(credential)
-        for credential in credentials
-    ]
-
-
 @router.delete("/admin/credential/{credential_id}")
 def delete_credential_by_id_admin(
     credential_id: int,
@@ -133,7 +121,9 @@ def create_credential_from_model(
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     if not _ignore_credential_permissions(credential_info.source):
-        validate_user_creation_permissions(
+        fetch_ee_implementation_or_noop(
+            "danswer.db.user_group", "validate_user_creation_permissions", None
+        )(
             db_session=db_session,
             user=user,
             target_group_ids=credential_info.groups,

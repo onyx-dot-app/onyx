@@ -1,7 +1,7 @@
 "use client";
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import { Button } from "@tremor/react";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { FiLogIn } from "react-icons/fi";
 
@@ -34,7 +34,7 @@ const Page = () => {
         </div>
 
         <Link href="/auth/login" className="w-full">
-          <Button size="lg" icon={FiLogIn} color="indigo" className="w-full">
+          <Button size="lg" icon={FiLogIn} className="w-full">
             Return to Login Page
           </Button>
         </Link>

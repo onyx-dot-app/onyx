@@ -10,10 +10,7 @@ from sqlalchemy.sql.expression import or_
 
 from danswer.auth.schemas import UserRole
 from danswer.configs.constants import DocumentSource
-from danswer.connectors.gmail.constants import (
-    GMAIL_DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
-)
-from danswer.connectors.google_drive.constants import (
+from danswer.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
 )
 from danswer.db.models import ConnectorCredentialPair
@@ -424,25 +421,15 @@ def cleanup_google_drive_credentials(db_session: Session) -> None:
     db_session.commit()
 
 
-def delete_gmail_service_account_credentials(
-    user: User | None, db_session: Session
+def delete_service_account_credentials(
+    user: User | None, db_session: Session, source: DocumentSource
 ) -> None:
     credentials = fetch_credentials(db_session=db_session, user=user)
     for credential in credentials:
-        if credential.credential_json.get(
-            GMAIL_DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY
+        if (
+            credential.credential_json.get(DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY)
+            and credential.source == source
         ):
-            db_session.delete(credential)
-
-    db_session.commit()
-
-
-def delete_google_drive_service_account_credentials(
-    user: User | None, db_session: Session
-) -> None:
-    credentials = fetch_credentials(db_session=db_session, user=user)
-    for credential in credentials:
-        if credential.credential_json.get(DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY):
             db_session.delete(credential)
 
     db_session.commit()

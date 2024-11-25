@@ -1,4 +1,5 @@
 "use client";
+import { use } from "react";
 
 import { GroupsIcon } from "@/components/icons/icons";
 import { GroupDisplay } from "./GroupDisplay";
@@ -9,7 +10,8 @@ import { useRouter } from "next/navigation";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 
-const Page = ({ params }: { params: { groupId: string } }) => {
+const Page = (props: { params: Promise<{ groupId: string }> }) => {
+  const params = use(props.params);
   const router = useRouter();
 
   const {

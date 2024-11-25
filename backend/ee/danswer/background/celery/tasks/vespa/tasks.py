@@ -4,7 +4,7 @@ from redis import Redis
 from sqlalchemy.orm import Session
 
 from danswer.background.celery.apps.app_base import task_logger
-from danswer.background.celery.celery_redis import RedisUserGroup
+from danswer.redis.redis_usergroup import RedisUserGroup
 from danswer.utils.logger import setup_logger
 from ee.danswer.db.user_group import delete_user_group
 from ee.danswer.db.user_group import fetch_user_group
@@ -13,7 +13,9 @@ from ee.danswer.db.user_group import mark_user_group_as_synced
 logger = setup_logger()
 
 
-def monitor_usergroup_taskset(key_bytes: bytes, r: Redis, db_session: Session) -> None:
+def monitor_usergroup_taskset(
+    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
+) -> None:
     """This function is likely to move in the worker refactor happening next."""
     fence_key = key_bytes.decode("utf-8")
     usergroup_id_str = RedisUserGroup.get_id_from_fence_key(fence_key)
@@ -27,15 +29,12 @@ def monitor_usergroup_taskset(key_bytes: bytes, r: Redis, db_session: Session) -
         task_logger.exception(f"usergroup_id ({usergroup_id_str}) is not an integer!")
         raise
 
-    rug = RedisUserGroup(usergroup_id)
-    fence_value = r.get(rug.fence_key)
-    if fence_value is None:
+    rug = RedisUserGroup(tenant_id, usergroup_id)
+    if not rug.fenced:
         return
 
-    try:
-        initial_count = int(cast(int, fence_value))
-    except ValueError:
-        task_logger.error("The value is not an integer.")
+    initial_count = rug.payload
+    if initial_count is None:
         return
 
     count = cast(int, r.scard(rug.taskset_key))
@@ -54,5 +53,4 @@ def monitor_usergroup_taskset(key_bytes: bytes, r: Redis, db_session: Session) -
             mark_user_group_as_synced(db_session=db_session, user_group=user_group)
             task_logger.info(f"Synced usergroup. id='{usergroup_id}'")
 
-    r.delete(rug.taskset_key)
-    r.delete(rug.fence_key)
+    rug.reset()

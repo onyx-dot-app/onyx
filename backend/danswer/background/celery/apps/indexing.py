@@ -8,18 +8,12 @@ from celery.signals import celeryd_init
 from celery.signals import worker_init
 from celery.signals import worker_ready
 from celery.signals import worker_shutdown
-from sqlalchemy.orm import Session
 
 import danswer.background.celery.apps.app_base as app_base
 from danswer.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_APP_NAME
 from danswer.db.engine import SqlEngine
-from danswer.db.search_settings import get_current_search_settings
-from danswer.db.swap_index import check_index_swap
-from danswer.natural_language_processing.search_nlp_models import EmbeddingModel
-from danswer.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from danswer.utils.logger import setup_logger
-from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
+from shared_configs.configs import MULTI_TENANT
 
 
 logger = setup_logger()
@@ -65,30 +59,15 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
     logger.info(f"Multiprocessing start method: {multiprocessing.get_start_method()}")
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_INDEXING_APP_NAME)
-    SqlEngine.init_engine(pool_size=8, max_overflow=0)
+    SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=sender.concurrency)
 
-    # TODO: why is this necessary for the indexer to do?
-    engine = SqlEngine.get_engine()
-    with Session(engine) as db_session:
-        check_index_swap(db_session=db_session)
-        search_settings = get_current_search_settings(db_session)
-
-        # So that the first time users aren't surprised by really slow speed of first
-        # batch of documents indexed
-        if search_settings.provider_type is None:
-            logger.notice("Running a first inference to warm up embedding model")
-            embedding_model = EmbeddingModel.from_db_model(
-                search_settings=search_settings,
-                server_host=INDEXING_MODEL_SERVER_HOST,
-                server_port=MODEL_SERVER_PORT,
-            )
-
-            warm_up_bi_encoder(
-                embedding_model=embedding_model,
-            )
-            logger.notice("First inference complete.")
+    # Startup checks are not needed in multi-tenant case
+    if MULTI_TENANT:
+        return
 
     app_base.wait_for_redis(sender, **kwargs)
+    app_base.wait_for_db(sender, **kwargs)
+    app_base.wait_for_vespa(sender, **kwargs)
     app_base.on_secondary_worker_init(sender, **kwargs)
 
 

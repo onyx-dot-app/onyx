@@ -4,18 +4,22 @@ import { TextArrayField } from "@/components/admin/connectors/Field";
 import { useFormikContext } from "formik";
 
 interface ListInputProps {
-  field: ListOption;
+  name: string;
+  label: string | ((credential: any) => string);
+  description: string | ((credential: any) => string);
 }
 
-const ListInput: React.FC<ListInputProps> = ({ field }) => {
+const ListInput: React.FC<ListInputProps> = ({ name, label, description }) => {
   const { values } = useFormikContext<any>();
   return (
     <TextArrayField
-      name={field.name}
-      label={field.label}
+      name={name}
+      label={typeof label === "function" ? label(null) : label}
       values={values}
-      subtext={field.description}
-      placeholder={`Enter ${field.label.toLowerCase()}`}
+      subtext={
+        typeof description === "function" ? description(null) : description
+      }
+      placeholder={`Enter ${typeof label === "function" ? label(null) : label.toLowerCase()}`}
     />
   );
 };

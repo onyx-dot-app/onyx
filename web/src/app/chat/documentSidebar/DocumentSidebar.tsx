@@ -1,10 +1,11 @@
 import { DanswerDocument } from "@/lib/search/interfaces";
-import { Divider, Text } from "@tremor/react";
+import Text from "@/components/ui/text";
 import { ChatDocumentDisplay } from "./ChatDocumentDisplay";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
 import { Message } from "../interfaces";
 import { ForwardedRef, forwardRef } from "react";
+import { Separator } from "@/components/ui/separator";
 
 interface DocumentSidebarProps {
   closeSidebar: () => void;
@@ -53,7 +54,9 @@ export const DocumentSidebar = forwardRef<HTMLDivElement, DocumentSidebarProps>(
     return (
       <div
         id="danswer-chat-sidebar"
-        className={`fixed inset-0 transition-opacity duration-300 z-50 bg-black/80 ${isOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        className={`fixed inset-0 transition-opacity duration-300 z-50 bg-black/80 ${
+          isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
         onClick={(e) => {
           if (e.target === e.currentTarget) {
             closeSidebar();
@@ -84,7 +87,7 @@ export const DocumentSidebar = forwardRef<HTMLDivElement, DocumentSidebarProps>(
               </p>
             </div>
 
-            <Divider className="mb-0 mt-4 pb-2" />
+            <Separator className="mb-0 mt-4 pb-2" />
 
             {currentDocuments ? (
               <div className="overflow-y-auto flex-grow dark-scrollbar flex relative flex-col">

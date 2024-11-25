@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { MinimalUserSnapshot, User } from "@/lib/types";
-import { Button } from "@tremor/react";
+import { Button } from "@/components/ui/button";
 import { FiPlus, FiX } from "react-icons/fi";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { SearchMultiSelectDropdown } from "@/components/Dropdown";
@@ -217,8 +217,7 @@ export function AssistantSharingModal({
                 setSelectedUsers([]);
               }}
               size="sm"
-              color="blue"
-              className="w-full"
+              variant="secondary"
             >
               Share with Selected Users
             </Button>

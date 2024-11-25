@@ -25,8 +25,8 @@ from danswer.db.models import UserGroup__ConnectorCredentialPair
 from danswer.db.models import UserRole
 from danswer.server.models import StatusResponse
 from danswer.utils.logger import setup_logger
-from ee.danswer.db.external_perm import delete_user__ext_group_for_cc_pair__no_commit
-from ee.danswer.external_permissions.sync_params import check_if_valid_sync_source
+from danswer.utils.variable_functionality import fetch_ee_implementation_or_noop
+
 
 logger = setup_logger()
 
@@ -351,7 +351,11 @@ def add_credential_to_connector(
         raise HTTPException(status_code=404, detail="Connector does not exist")
 
     if access_type == AccessType.SYNC:
-        if not check_if_valid_sync_source(connector.source):
+        if not fetch_ee_implementation_or_noop(
+            "danswer.external_permissions.sync_params",
+            "check_if_valid_sync_source",
+            noop_return_value=True,
+        )(connector.source):
             raise HTTPException(
                 status_code=400,
                 detail=f"Connector of type {connector.source} does not support SYNC access type",
@@ -438,7 +442,10 @@ def remove_credential_from_connector(
     )
 
     if association is not None:
-        delete_user__ext_group_for_cc_pair__no_commit(
+        fetch_ee_implementation_or_noop(
+            "danswer.db.external_perm",
+            "delete_user__ext_group_for_cc_pair__no_commit",
+        )(
             db_session=db_session,
             cc_pair_id=association.id,
         )

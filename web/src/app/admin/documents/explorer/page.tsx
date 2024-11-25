@@ -3,11 +3,10 @@ import { ZoomInIcon } from "@/components/icons/icons";
 import { Explorer } from "./Explorer";
 import { fetchValidFilterInfo } from "@/lib/search/utilsSS";
 
-const Page = async ({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string };
+const Page = async (props: {
+  searchParams: Promise<{ [key: string]: string }>;
 }) => {
+  const searchParams = await props.searchParams;
   const { connectors, documentSets } = await fetchValidFilterInfo();
 
   return (

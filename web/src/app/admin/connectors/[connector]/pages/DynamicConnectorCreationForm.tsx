@@ -13,6 +13,8 @@ import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { AccessTypeForm } from "@/components/admin/connectors/AccessTypeForm";
 import { AccessTypeGroupSelector } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import { ConfigurableSources } from "@/lib/types";
+import { Credential } from "@/lib/connectors/credentials";
+import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
 
 export interface DynamicConnectionFormProps {
   config: ConnectionConfiguration;
@@ -20,19 +22,44 @@ export interface DynamicConnectionFormProps {
   setSelectedFiles: Dispatch<SetStateAction<File[]>>;
   values: any;
   connector: ConfigurableSources;
+  currentCredential: Credential<any> | null;
 }
 
-const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
-  config,
+interface RenderFieldProps {
+  field: any;
+  values: any;
+  selectedFiles: File[];
+  setSelectedFiles: Dispatch<SetStateAction<File[]>>;
+  connector: ConfigurableSources;
+  currentCredential: Credential<any> | null;
+}
+
+const RenderField: FC<RenderFieldProps> = ({
+  field,
+  values,
   selectedFiles,
   setSelectedFiles,
-  values,
   connector,
+  currentCredential,
 }) => {
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  if (
+    field.visibleCondition &&
+    !field.visibleCondition(values, currentCredential)
+  ) {
+    return null;
+  }
 
-  const renderField = (field: any) => (
-    <div key={field.name}>
+  const label =
+    typeof field.label === "function"
+      ? field.label(currentCredential)
+      : field.label;
+  const description =
+    typeof field.description === "function"
+      ? field.description(currentCredential)
+      : field.description;
+
+  const fieldContent = (
+    <>
       {field.type === "file" ? (
         <FileUpload
           name={field.name}
@@ -42,45 +69,69 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
       ) : field.type === "zip" ? (
         <FileInput
           name={field.name}
-          label={field.label}
+          label={label}
           optional={field.optional}
-          description={field.description}
+          description={description}
         />
       ) : field.type === "list" ? (
-        <ListInput field={field} />
+        <ListInput name={field.name} label={label} description={description} />
       ) : field.type === "select" ? (
         <SelectInput
           name={field.name}
           optional={field.optional}
-          description={field.description}
+          description={description}
           options={field.options || []}
-          label={field.label}
+          label={label}
         />
       ) : field.type === "number" ? (
         <NumberInput
-          label={field.label}
+          label={label}
           optional={field.optional}
-          description={field.description}
+          description={description}
           name={field.name}
         />
       ) : field.type === "checkbox" ? (
         <AdminBooleanFormField
           checked={values[field.name]}
-          subtext={field.description}
+          subtext={description}
           name={field.name}
-          label={field.label}
+          label={label}
         />
       ) : (
         <TextFormField
-          subtext={field.description}
+          subtext={description}
           optional={field.optional}
           type={field.type}
-          label={field.label}
+          label={label}
           name={field.name}
         />
       )}
-    </div>
+    </>
   );
+
+  if (
+    field.visibleCondition &&
+    field.visibleCondition(values, currentCredential)
+  ) {
+    return (
+      <CollapsibleSection prompt={label} key={field.name}>
+        {fieldContent}
+      </CollapsibleSection>
+    );
+  } else {
+    return <div key={field.name}>{fieldContent}</div>;
+  }
+};
+
+const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
+  config,
+  selectedFiles,
+  setSelectedFiles,
+  values,
+  connector,
+  currentCredential,
+}) => {
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   return (
     <>
@@ -97,7 +148,20 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
         name={"name"}
       />
 
-      {config.values.map((field) => !field.hidden && renderField(field))}
+      {config.values.map(
+        (field) =>
+          !field.hidden && (
+            <RenderField
+              key={field.name}
+              field={field}
+              values={values}
+              selectedFiles={selectedFiles}
+              setSelectedFiles={setSelectedFiles}
+              connector={connector}
+              currentCredential={currentCredential}
+            />
+          )
+      )}
 
       <AccessTypeForm connector={connector} />
       <AccessTypeGroupSelector />
@@ -108,7 +172,18 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
             showAdvancedOptions={showAdvancedOptions}
             setShowAdvancedOptions={setShowAdvancedOptions}
           />
-          {showAdvancedOptions && config.advanced_values.map(renderField)}
+          {showAdvancedOptions &&
+            config.advanced_values.map((field) => (
+              <RenderField
+                key={field.name}
+                field={field}
+                values={values}
+                selectedFiles={selectedFiles}
+                setSelectedFiles={setSelectedFiles}
+                connector={connector}
+                currentCredential={currentCredential}
+              />
+            ))}
         </>
       )}
     </>

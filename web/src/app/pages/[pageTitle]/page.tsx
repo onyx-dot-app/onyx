@@ -1,3 +1,5 @@
+import { use } from "react";
+
 import { unstable_noStore as noStore } from "next/cache";
 import {
   getCurrentUserSS,
@@ -12,12 +14,14 @@ import { useRouter } from "next/navigation";
 import { BackIcon } from "@/components/icons/icons";
 import Link from "next/link";
 
-export default async function Page({
-  params,
-}: {
-  params: { pageTitle: string };
-}) {
-
+// export default async function Page({
+//   params,
+// }: {
+//   params: { pageTitle: string };
+// }) {
+export default async function Page(props: { params: Promise<{ pageTitle: string }> }) {
+  const params = use(props.params);
+  
   noStore();
   const pageTitle = params.pageTitle;
 

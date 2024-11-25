@@ -1,20 +1,19 @@
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { HidableSection } from "@/app/admin/assistants/HidableSection";
 import {
   Table,
   TableHead,
   TableRow,
-  TableHeaderCell,
   TableBody,
   TableCell,
-  Button,
-} from "@tremor/react";
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import CenteredPageSelector from "./CenteredPageSelector";
 import { type PageSelectorProps } from "@/components/PageSelector";
-import useSWR from "swr";
-import { type User, UserStatus } from "@/lib/types";
+
+import { type User } from "@/lib/types";
 import useSWRMutation from "swr/mutation";
+import { TableHeader } from "@/components/ui/table";
 
 interface Props {
   users: Array<User>;
@@ -70,14 +69,14 @@ const InvitedUserTable = ({
   return (
     <>
       <Table className="overflow-visible">
-        <TableHead>
+        <TableHeader>
           <TableRow>
-            <TableHeaderCell>Email</TableHeaderCell>
-            <TableHeaderCell>
+            <TableHead>Email</TableHead>
+            <TableHead>
               <div className="flex justify-end">Actions</div>
-            </TableHeaderCell>
+            </TableHead>
           </TableRow>
-        </TableHead>
+        </TableHeader>
         <TableBody>
           {users.map((user) => (
             <TableRow key={user.email}>

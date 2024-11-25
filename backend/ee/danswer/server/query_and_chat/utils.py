@@ -12,7 +12,7 @@ from danswer.db.models import Tool
 from danswer.db.models import User
 from danswer.db.persona import get_prompts_by_ids
 from danswer.one_shot_answer.models import PersonaConfig
-from danswer.tools.custom.custom_tool import (
+from danswer.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
 

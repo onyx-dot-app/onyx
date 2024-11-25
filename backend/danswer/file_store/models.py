@@ -13,6 +13,7 @@ class ChatFileType(str, Enum):
     DOC = "document"
     # Plain text only contain the text
     PLAIN_TEXT = "plain_text"
+    CSV = "csv"
 
 
 class FileDescriptor(TypedDict):

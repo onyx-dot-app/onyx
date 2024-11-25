@@ -10,17 +10,17 @@ import {
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
 } from "@/lib/connectors/credentials";
-import { GmailOAuthSection, GmailJsonUploadSection } from "./Credential";
+import { GmailAuthSection, GmailJsonUploadSection } from "./Credential";
 import {
   usePublicCredentials,
   useConnectorCredentialIndexingStatus,
 } from "@/lib/hooks";
-import { Title } from "@tremor/react";
+import Title from "@/components/ui/title";
 import { GmailConfig } from "@/lib/connectors/connectors";
 import { useUser } from "@/components/user/UserProvider";
 
 export const GmailMain = () => {
-  const { isLoadingUser, isAdmin } = useUser();
+  const { isLoadingUser, isAdmin, user } = useUser();
 
   const {
     data: appCredentialData,
@@ -109,12 +109,16 @@ export const GmailMain = () => {
   const gmailPublicCredential: Credential<GmailCredentialJson> | undefined =
     credentialsData.find(
       (credential) =>
-        credential.credential_json?.gmail_tokens && credential.admin_public
+        (credential.credential_json?.google_service_account_key ||
+          credential.credential_json?.google_tokens) &&
+        credential.admin_public
     );
   const gmailServiceAccountCredential:
     | Credential<GmailServiceAccountCredentialJson>
     | undefined = credentialsData.find(
-    (credential) => credential.credential_json?.gmail_service_account_key
+    (credential) =>
+      credential.credential_json?.google_service_account_key &&
+      credential.source === "gmail"
   );
   const gmailConnectorIndexingStatuses: ConnectorIndexingStatus<
     GmailConfig,
@@ -142,7 +146,7 @@ export const GmailMain = () => {
           <Title className="mb-2 mt-6 ml-auto mr-auto">
             Step 2: Authenticate with Danswer
           </Title>
-          <GmailOAuthSection
+          <GmailAuthSection
             setPopup={setPopup}
             refreshCredentials={refreshCredentials}
             gmailPublicCredential={gmailPublicCredential}
@@ -150,6 +154,7 @@ export const GmailMain = () => {
             appCredentialData={appCredentialData}
             serviceAccountKeyData={serviceAccountKeyData}
             connectorExists={gmailConnectorIndexingStatuses.length > 0}
+            user={user}
           />
         </>
       )}

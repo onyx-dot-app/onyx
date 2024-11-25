@@ -1,6 +1,5 @@
 from sqlalchemy.orm import Session
 
-from danswer.configs.app_configs import MULTI_TENANT
 from danswer.configs.constants import KV_REINDEX_KEY
 from danswer.db.connector_credential_pair import get_connector_credential_pairs
 from danswer.db.connector_credential_pair import resync_cc_pair
@@ -23,7 +22,14 @@ logger = setup_logger()
 def check_index_swap(db_session: Session) -> SearchSettings | None:
     """Get count of cc-pairs and count of successful index_attempts for the
     new model grouped by connector + credential, if it's the same, then assume
-    new index is done building. If so, swap the indices and expire the old one."""
+    new index is done building. If so, swap the indices and expire the old one.
+
+    Returns None if search settings did not change, or the old search settings if they
+    did change.
+    """
+
+    old_search_settings = None
+
     # Default CC-pair created for Ingestion API unused here
     all_cc_pairs = get_connector_credential_pairs(db_session)
     cc_pair_count = max(len(all_cc_pairs) - 1, 0)
@@ -43,9 +49,9 @@ def check_index_swap(db_session: Session) -> SearchSettings | None:
 
     if cc_pair_count == 0 or cc_pair_count == unique_cc_indexings:
         # Swap indices
-        now_old_search_settings = get_current_search_settings(db_session)
+        current_search_settings = get_current_search_settings(db_session)
         update_search_settings_status(
-            search_settings=now_old_search_settings,
+            search_settings=current_search_settings,
             new_status=IndexModelStatus.PAST,
             db_session=db_session,
         )
@@ -67,6 +73,6 @@ def check_index_swap(db_session: Session) -> SearchSettings | None:
             for cc_pair in all_cc_pairs:
                 resync_cc_pair(cc_pair, db_session=db_session)
 
-            if MULTI_TENANT:
-                return now_old_search_settings
-    return None
+            old_search_settings = current_search_settings
+
+    return old_search_settings

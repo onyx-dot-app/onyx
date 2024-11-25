@@ -10,7 +10,8 @@ import { GMAIL_AUTH_IS_ADMIN_COOKIE_NAME } from "@/lib/constants";
 import Cookies from "js-cookie";
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { Form, Formik } from "formik";
-import { Card } from "@tremor/react";
+import { User } from "@/lib/types";
+import CardSection from "@/components/admin/CardSection";
 import {
   Credential,
   GmailCredentialJson,
@@ -275,10 +276,12 @@ export const GmailJsonUploadSection = ({
         >
           here
         </a>{" "}
-        to setup a google OAuth App in your company workspace.
+        to either (1) setup a google OAuth App in your company workspace or (2)
+        create a Service Account.
         <br />
         <br />
-        Download the credentials JSON and upload it here.
+        Download the credentials JSON if choosing option (1) or the Service
+        Account key JSON if chooosing option (2), and upload it here.
       </p>
       <DriveJsonUpload setPopup={setPopup} />
     </div>
@@ -293,9 +296,10 @@ interface DriveCredentialSectionProps {
   setPopup: (popupSpec: PopupSpec | null) => void;
   refreshCredentials: () => void;
   connectorExists: boolean;
+  user: User | null;
 }
 
-export const GmailOAuthSection = ({
+export const GmailAuthSection = ({
   gmailPublicCredential,
   gmailServiceAccountCredential,
   serviceAccountKeyData,
@@ -303,6 +307,7 @@ export const GmailOAuthSection = ({
   setPopup,
   refreshCredentials,
   connectorExists,
+  user,
 }: DriveCredentialSectionProps) => {
   const router = useRouter();
 
@@ -341,25 +346,13 @@ export const GmailOAuthSection = ({
   if (serviceAccountKeyData?.service_account_email) {
     return (
       <div>
-        <p className="text-sm mb-2">
-          When using a Gmail Service Account, you can either have Danswer act as
-          the service account itself OR you can specify an account for the
-          service account to impersonate.
-          <br />
-          <br />
-          If you want to use the service account itself, leave the{" "}
-          <b>&apos;User email to impersonate&apos;</b> field blank when
-          submitting. If you do choose this option, make sure you have shared
-          the documents you want to index with the service account.
-        </p>
-
-        <Card>
+        <CardSection>
           <Formik
             initialValues={{
-              gmail_delegated_user: "",
+              google_primary_admin: user?.email || "",
             }}
             validationSchema={Yup.object().shape({
-              gmail_delegated_user: Yup.string().optional(),
+              google_primary_admin: Yup.string().required(),
             })}
             onSubmit={async (values, formikHelpers) => {
               formikHelpers.setSubmitting(true);
@@ -372,7 +365,7 @@ export const GmailOAuthSection = ({
                     "Content-Type": "application/json",
                   },
                   body: JSON.stringify({
-                    gmail_delegated_user: values.gmail_delegated_user,
+                    google_primary_admin: values.google_primary_admin,
                   }),
                 }
               );
@@ -395,9 +388,9 @@ export const GmailOAuthSection = ({
             {({ isSubmitting }) => (
               <Form>
                 <TextFormField
-                  name="gmail_delegated_user"
-                  label="[Optional] User email to impersonate:"
-                  subtext="If left blank, Danswer will use the service account itself."
+                  name="google_primary_admin"
+                  label="Primary Admin Email:"
+                  subtext="You must provide an admin/owner account to retrieve all org emails."
                 />
                 <div className="flex">
                   <button
@@ -415,7 +408,7 @@ export const GmailOAuthSection = ({
               </Form>
             )}
           </Formik>
-        </Card>
+        </CardSection>
       </div>
     );
   }
@@ -456,8 +449,8 @@ export const GmailOAuthSection = ({
   // case where no keys have been uploaded in step 1
   return (
     <p className="text-sm">
-      Please upload a OAuth Client Credential JSON in Step 1 before moving onto
-      Step 2.
+      Please upload an OAuth or Service Account Credential JSON in Step 1 before
+      moving onto Step 2.
     </p>
   );
 };

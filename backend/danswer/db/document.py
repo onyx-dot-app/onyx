@@ -169,6 +169,7 @@ def get_document_connector_counts(
 def get_document_counts_for_cc_pairs(
     db_session: Session, cc_pair_identifiers: list[ConnectorCredentialPairIdentifier]
 ) -> Sequence[tuple[int, int, int]]:
+    """Returns a sequence of tuples of (connector_id, credential_id, document count)"""
     stmt = (
         select(
             DocumentByConnectorCredentialPair.connector_id,
@@ -323,23 +324,23 @@ def upsert_documents(
 
 
 def upsert_document_by_connector_credential_pair(
-    db_session: Session, document_metadata_batch: list[DocumentMetadata]
+    db_session: Session, connector_id: int, credential_id: int, document_ids: list[str]
 ) -> None:
     """NOTE: this function is Postgres specific. Not all DBs support the ON CONFLICT clause."""
-    if not document_metadata_batch:
-        logger.info("`document_metadata_batch` is empty. Skipping.")
+    if not document_ids:
+        logger.info("`document_ids` is empty. Skipping.")
         return
 
     insert_stmt = insert(DocumentByConnectorCredentialPair).values(
         [
             model_to_dict(
                 DocumentByConnectorCredentialPair(
-                    id=document_metadata.document_id,
-                    connector_id=document_metadata.connector_id,
-                    credential_id=document_metadata.credential_id,
+                    id=doc_id,
+                    connector_id=connector_id,
+                    credential_id=credential_id,
                 )
             )
-            for document_metadata in document_metadata_batch
+            for doc_id in document_ids
         ]
     )
     # for now, there are no columns to update. If more metadata is added, then this
@@ -398,17 +399,6 @@ def mark_document_as_synced(document_id: str, db_session: Session) -> None:
     # update last_synced
     doc.last_synced = datetime.now(timezone.utc)
     db_session.commit()
-
-
-def upsert_documents_complete(
-    db_session: Session,
-    document_metadata_batch: list[DocumentMetadata],
-) -> None:
-    upsert_documents(db_session, document_metadata_batch)
-    upsert_document_by_connector_credential_pair(db_session, document_metadata_batch)
-    logger.info(
-        f"Upserted {len(document_metadata_batch)} document store entries into DB"
-    )
 
 
 def delete_document_by_connector_credential_pair__no_commit(
@@ -520,7 +510,7 @@ def prepare_to_modify_documents(
     db_session.commit()  # ensure that we're not in a transaction
 
     lock_acquired = False
-    for _ in range(_NUM_LOCK_ATTEMPTS):
+    for i in range(_NUM_LOCK_ATTEMPTS):
         try:
             with db_session.begin() as transaction:
                 lock_acquired = acquire_document_locks(
@@ -531,7 +521,7 @@ def prepare_to_modify_documents(
                     break
         except OperationalError as e:
             logger.warning(
-                f"Failed to acquire locks for documents, retrying. Error: {e}"
+                f"Failed to acquire locks for documents on attempt {i}, retrying. Error: {e}"
             )
 
         time.sleep(retry_delay)

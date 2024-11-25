@@ -59,6 +59,7 @@ def run_external_doc_permission_sync(
     source_type = cc_pair.connector.source
 
     doc_sync_func = DOC_PERMISSIONS_FUNC_MAP.get(source_type)
+    last_time_perm_sync = cc_pair.last_time_perm_sync
 
     if doc_sync_func is None:
         raise ValueError(
@@ -110,4 +111,5 @@ def run_external_doc_permission_sync(
         logger.info(f"Successfully synced docs for {source_type}")
     except Exception:
         logger.exception("Error Syncing Document Permissions")
+        cc_pair.last_time_perm_sync = last_time_perm_sync
         db_session.rollback()

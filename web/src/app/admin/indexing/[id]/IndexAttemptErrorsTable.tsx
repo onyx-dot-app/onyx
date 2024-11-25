@@ -9,12 +9,12 @@ import {
   TableBody,
   TableCell,
   TableHead,
-  TableHeaderCell,
   TableRow,
-  Text,
-} from "@tremor/react";
+} from "@/components/ui/table";
+import Text from "@/components/ui/text";
 import { useState } from "react";
 import { IndexAttemptError } from "./types";
+import { TableHeader } from "@/components/ui/table";
 
 const NUM_IN_PAGE = 8;
 
@@ -100,14 +100,14 @@ export function IndexAttemptErrorsTable({
       )}
 
       <Table>
-        <TableHead>
+        <TableHeader>
           <TableRow>
-            <TableHeaderCell>Timestamp</TableHeaderCell>
-            <TableHeaderCell>Batch Number</TableHeaderCell>
-            <TableHeaderCell>Document Summaries</TableHeaderCell>
-            <TableHeaderCell>Error Message</TableHeaderCell>
+            <TableHead>Timestamp</TableHead>
+            <TableHead>Batch Number</TableHead>
+            <TableHead>Document Summaries</TableHead>
+            <TableHead>Error Message</TableHead>
           </TableRow>
-        </TableHead>
+        </TableHeader>
         <TableBody>
           {indexAttemptErrors
             .slice(NUM_IN_PAGE * (page - 1), NUM_IN_PAGE * page)

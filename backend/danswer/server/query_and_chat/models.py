@@ -108,6 +108,9 @@ class CreateChatMessageRequest(ChunkContext):
     # used for seeded chats to kick off the generation of an AI answer
     use_existing_user_message: bool = False
 
+    # used for "OpenAI Assistants API"
+    existing_assistant_message_id: int | None = None
+
     # forces the LLM to return a structured response, see
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
@@ -188,7 +191,7 @@ class ChatMessageDetail(BaseModel):
     chat_session_id: UUID | None = None
     citations: dict[int, int] | None = None
     files: list[FileDescriptor]
-    tool_calls: list[ToolCallFinalResult]
+    tool_call: ToolCallFinalResult | None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore

@@ -83,8 +83,10 @@ def _convert_litellm_message_to_langchain_message(
                     "args": json.loads(tool_call.function.arguments),
                     "id": tool_call.id,
                 }
-                for tool_call in (tool_calls if tool_calls else [])
-            ],
+                for tool_call in tool_calls
+            ]
+            if tool_calls
+            else [],
         )
     elif role == "system":
         return SystemMessage(content=content)

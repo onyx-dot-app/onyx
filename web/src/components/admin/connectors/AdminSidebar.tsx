@@ -13,7 +13,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@radix-ui/react-tooltip";
+} from "@/components/ui/tooltip";
 
 interface Item {
   name: string | JSX.Element;
@@ -56,7 +56,7 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
                 <div className="flex-grow min-w-0 my-auto">
                   {enterpriseSettings && enterpriseSettings.application_name ? (
                     <div className="w-full">
-                      <HeaderTitle>
+                      <HeaderTitle backgroundToggled={true}>
                         {enterpriseSettings.application_name}
                       </HeaderTitle>
                       {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
@@ -66,7 +66,7 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
                       )}
                     </div>
                   ) : (
-                    <HeaderTitle>GPT Lab</HeaderTitle>
+                    <HeaderTitle backgroundToggled={true}>GPT Lab</HeaderTitle>
                   )}
                 </div>
               </div>
@@ -74,8 +74,8 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
           </div>
         </div>
         <div className="flex w-full justify-center">
-          <Link href={"/chat"}>
-            <button className="text-sm flex items-center block w-52 py-2.5 flex px-2 text-left bg-background-200 hover:bg-background-200/80 cursor-pointer rounded">
+          <Link href={settings.default_page == "chat" ? "/chat" : "/search"}>
+            <button className="text-sm flex items-center block w-52 py-2.5 flex px-2 text-left text-text-back-button bg-background-back-button hover:bg-opacity-80 cursor-pointer rounded">
               <BackIcon className="my-auto" size={18} />
               <p className="ml-1 break-words line-clamp-2 ellipsis leading-none">
                 Back to GPT Lab
@@ -104,9 +104,7 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
                           <WarningCircle size={18} className="text-error" />
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p className="max-w-xs text-text-100 mb-1 p-2 rounded-lg bg-background-900">
-                            Navigate here to update your search settings
-                          </p>
+                          Navigate here to update your search settings
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>

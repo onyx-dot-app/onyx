@@ -11,9 +11,6 @@ from redis import Redis
 from sqlalchemy.orm import Session
 
 from danswer.background.celery.apps.app_base import task_logger
-from danswer.background.celery.celery_redis import RedisConnectorDeletion
-from danswer.background.celery.celery_redis import RedisConnectorPruning
-from danswer.background.celery.celery_redis import RedisConnectorStop
 from danswer.background.celery.celery_utils import extract_ids_from_runnable_connector
 from danswer.background.celery.tasks.indexing.tasks import RunIndexingCallback
 from danswer.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING
@@ -33,7 +30,9 @@ from danswer.db.document import get_documents_for_connector_credential_pair
 from danswer.db.engine import get_session_with_tenant
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.models import ConnectorCredentialPair
+from danswer.redis.redis_connector import RedisConnector
 from danswer.redis.redis_pool import get_redis_client
+from danswer.utils.logger import pruning_ctx
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -79,13 +78,13 @@ def check_for_pruning(self: Task, *, tenant_id: str | None) -> None:
                 if not tasks_created:
                     continue
 
-                task_logger.info(f"Pruning queued: cc_pair_id={cc_pair.id}")
+                task_logger.info(f"Pruning queued: cc_pair={cc_pair.id}")
     except SoftTimeLimitExceeded:
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
         )
     except Exception:
-        task_logger.exception("Unexpected exception")
+        task_logger.exception(f"Unexpected exception: tenant={tenant_id}")
     finally:
         if lock_beat.owned():
             lock_beat.release()
@@ -146,8 +145,11 @@ def try_creating_prune_generator_task(
     is used to trigger prunes immediately, e.g. via the web ui.
     """
 
+    redis_connector = RedisConnector(tenant_id, cc_pair.id)
+
     if not ALLOW_SIMULTANEOUS_PRUNING:
-        for key in r.scan_iter(RedisConnectorPruning.FENCE_PREFIX + "*"):
+        count = redis_connector.prune.get_active_task_count()
+        if count > 0:
             return None
 
     LOCK_TIMEOUT = 30
@@ -164,15 +166,10 @@ def try_creating_prune_generator_task(
         return None
 
     try:
-        rcp = RedisConnectorPruning(cc_pair.id)
-
-        # skip pruning if already pruning
-        if r.exists(rcp.fence_key):
+        if redis_connector.prune.fenced:  # skip pruning if already pruning
             return None
 
-        # skip pruning if the cc_pair is deleting
-        rcd = RedisConnectorDeletion(cc_pair.id)
-        if r.exists(rcd.fence_key):
+        if redis_connector.delete.fenced:  # skip pruning if the cc_pair is deleting
             return None
 
         db_session.refresh(cc_pair)
@@ -180,10 +177,10 @@ def try_creating_prune_generator_task(
             return None
 
         # add a long running generator task to the queue
-        r.delete(rcp.generator_complete_key)
-        r.delete(rcp.taskset_key)
+        redis_connector.prune.generator_clear()
+        redis_connector.prune.taskset_clear()
 
-        custom_task_id = f"{rcp.generator_task_id_prefix}_{uuid4()}"
+        custom_task_id = f"{redis_connector.prune.generator_task_key}_{uuid4()}"
 
         celery_app.send_task(
             "connector_pruning_generator_task",
@@ -199,9 +196,9 @@ def try_creating_prune_generator_task(
         )
 
         # set this only after all tasks have been added
-        r.set(rcp.fence_key, 1)
+        redis_connector.prune.set_fence(True)
     except Exception:
-        task_logger.exception("Unexpected exception")
+        task_logger.exception(f"Unexpected exception: cc_pair={cc_pair.id}")
         return None
     finally:
         if lock.owned():
@@ -229,12 +226,17 @@ def connector_pruning_generator_task(
     and compares those IDs to locally stored documents and deletes all locally stored IDs missing
     from the most recently pulled document ID list"""
 
+    pruning_ctx_dict = pruning_ctx.get()
+    pruning_ctx_dict["cc_pair_id"] = cc_pair_id
+    pruning_ctx_dict["request_id"] = self.request.id
+    pruning_ctx.set(pruning_ctx_dict)
+
+    redis_connector = RedisConnector(tenant_id, cc_pair_id)
+
     r = get_redis_client(tenant_id=tenant_id)
 
-    rcp = RedisConnectorPruning(cc_pair_id)
-
     lock = r.lock(
-        DanswerRedisLocks.PRUNING_LOCK_PREFIX + f"_{rcp._id}",
+        DanswerRedisLocks.PRUNING_LOCK_PREFIX + f"_{redis_connector.id}",
         timeout=CELERY_PRUNING_LOCK_TIMEOUT,
     )
 
@@ -267,10 +269,11 @@ def connector_pruning_generator_task(
                 cc_pair.credential,
             )
 
-            rcs = RedisConnectorStop(cc_pair_id)
-
             callback = RunIndexingCallback(
-                rcs.fence_key, rcp.generator_progress_key, lock, r
+                redis_connector.stop.fence_key,
+                redis_connector.prune.generator_progress_key,
+                lock,
+                r,
             )
             # a list of docs in the source
             all_connector_doc_ids: set[str] = extract_ids_from_runnable_connector(
@@ -297,31 +300,29 @@ def connector_pruning_generator_task(
                 f"doc_source={cc_pair.connector.source}"
             )
 
-            rcp.documents_to_prune = set(doc_ids_to_remove)
-
             task_logger.info(
-                f"RedisConnectorPruning.generate_tasks starting. cc_pair_id={cc_pair_id}"
+                f"RedisConnector.prune.generate_tasks starting. cc_pair={cc_pair_id}"
             )
-            tasks_generated = rcp.generate_tasks(
-                self.app, db_session, r, None, tenant_id
+            tasks_generated = redis_connector.prune.generate_tasks(
+                set(doc_ids_to_remove), self.app, db_session, None
             )
             if tasks_generated is None:
                 return None
 
             task_logger.info(
-                f"RedisConnectorPruning.generate_tasks finished. "
+                f"RedisConnector.prune.generate_tasks finished. "
                 f"cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
             )
 
-            r.set(rcp.generator_complete_key, tasks_generated)
+            redis_connector.prune.generator_complete = tasks_generated
     except Exception as e:
         task_logger.exception(
             f"Failed to run pruning: cc_pair={cc_pair_id} connector={connector_id}"
         )
 
-        r.delete(rcp.generator_progress_key)
-        r.delete(rcp.taskset_key)
-        r.delete(rcp.fence_key)
+        redis_connector.prune.generator_clear()
+        redis_connector.prune.taskset_clear()
+        redis_connector.prune.set_fence(False)
         raise e
     finally:
         if lock.owned():

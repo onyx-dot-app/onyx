@@ -1,5 +1,6 @@
 import logging
 import time
+from types import SimpleNamespace
 
 import psycopg2
 import requests
@@ -11,7 +12,9 @@ from danswer.configs.app_configs import POSTGRES_PASSWORD
 from danswer.configs.app_configs import POSTGRES_PORT
 from danswer.configs.app_configs import POSTGRES_USER
 from danswer.db.engine import build_connection_string
+from danswer.db.engine import get_all_tenant_ids
 from danswer.db.engine import get_session_context_manager
+from danswer.db.engine import get_session_with_tenant
 from danswer.db.engine import SYNC_DB_API
 from danswer.db.search_settings import get_current_search_settings
 from danswer.db.swap_index import check_index_swap
@@ -26,7 +29,11 @@ logger = setup_logger()
 
 
 def _run_migrations(
-    database_url: str, direction: str = "upgrade", revision: str = "head"
+    database_url: str,
+    config_name: str,
+    direction: str = "upgrade",
+    revision: str = "head",
+    schema: str = "public",
 ) -> None:
     # hide info logs emitted during migration
     logging.getLogger("alembic").setLevel(logging.CRITICAL)
@@ -35,6 +42,10 @@ def _run_migrations(
     alembic_cfg = Config("alembic.ini")
     alembic_cfg.set_section_option("logger_alembic", "level", "WARN")
     alembic_cfg.attributes["configure_logger"] = False
+    alembic_cfg.config_ini_section = config_name
+
+    alembic_cfg.cmd_opts = SimpleNamespace()  # type: ignore
+    alembic_cfg.cmd_opts.x = [f"schema={schema}"]  # type: ignore
 
     # Set the SQLAlchemy URL in the Alembic configuration
     alembic_cfg.set_main_option("sqlalchemy.url", database_url)
@@ -52,7 +63,9 @@ def _run_migrations(
     logging.getLogger("alembic").setLevel(logging.INFO)
 
 
-def reset_postgres(database: str = "postgres") -> None:
+def reset_postgres(
+    database: str = "postgres", config_name: str = "alembic", setup_danswer: bool = True
+) -> None:
     """Reset the Postgres database."""
 
     # NOTE: need to delete all rows to allow migrations to be rolled back
@@ -111,14 +124,18 @@ def reset_postgres(database: str = "postgres") -> None:
     )
     _run_migrations(
         conn_str,
+        config_name,
         direction="downgrade",
         revision="base",
     )
     _run_migrations(
         conn_str,
+        config_name,
         direction="upgrade",
         revision="head",
     )
+    if not setup_danswer:
+        return
 
     # do the same thing as we do on API server startup
     with get_session_context_manager() as db_session:
@@ -127,6 +144,7 @@ def reset_postgres(database: str = "postgres") -> None:
 
 def reset_vespa() -> None:
     """Wipe all data from the Vespa index."""
+
     with get_session_context_manager() as db_session:
         # swap to the correct default model
         check_index_swap(db_session)
@@ -166,10 +184,98 @@ def reset_vespa() -> None:
             time.sleep(5)
 
 
+def reset_postgres_multitenant() -> None:
+    """Reset the Postgres database for all tenants in a multitenant setup."""
+
+    conn = psycopg2.connect(
+        dbname="postgres",
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+        host=POSTGRES_HOST,
+        port=POSTGRES_PORT,
+    )
+    conn.autocommit = True
+    cur = conn.cursor()
+
+    # Get all tenant schemas
+    cur.execute(
+        """
+        SELECT schema_name
+        FROM information_schema.schemata
+        WHERE schema_name LIKE 'tenant_%'
+        """
+    )
+    tenant_schemas = cur.fetchall()
+
+    # Drop all tenant schemas
+    for schema in tenant_schemas:
+        schema_name = schema[0]
+        cur.execute(f'DROP SCHEMA "{schema_name}" CASCADE')
+
+    cur.close()
+    conn.close()
+
+    reset_postgres(config_name="schema_private", setup_danswer=False)
+
+
+def reset_vespa_multitenant() -> None:
+    """Wipe all data from the Vespa index for all tenants."""
+
+    for tenant_id in get_all_tenant_ids():
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+            # swap to the correct default model for each tenant
+            check_index_swap(db_session)
+
+            search_settings = get_current_search_settings(db_session)
+            index_name = search_settings.index_name
+
+        success = setup_vespa(
+            document_index=VespaIndex(index_name=index_name, secondary_index_name=None),
+            index_setting=IndexingSetting.from_db_model(search_settings),
+            secondary_index_setting=None,
+        )
+
+        if not success:
+            raise RuntimeError(
+                f"Could not connect to Vespa for tenant {tenant_id} within the specified timeout."
+            )
+
+        for _ in range(5):
+            try:
+                continuation = None
+                should_continue = True
+                while should_continue:
+                    params = {"selection": "true", "cluster": "danswer_index"}
+                    if continuation:
+                        params = {**params, "continuation": continuation}
+                    response = requests.delete(
+                        DOCUMENT_ID_ENDPOINT.format(index_name=index_name),
+                        params=params,
+                    )
+                    response.raise_for_status()
+
+                    response_json = response.json()
+
+                    continuation = response_json.get("continuation")
+                    should_continue = bool(continuation)
+
+                break
+            except Exception as e:
+                print(f"Error deleting documents for tenant {tenant_id}: {e}")
+                time.sleep(5)
+
+
 def reset_all() -> None:
-    """Reset both Postgres and Vespa."""
     logger.info("Resetting Postgres...")
     reset_postgres()
     logger.info("Resetting Vespa...")
     reset_vespa()
+
+
+def reset_all_multitenant() -> None:
+    """Reset both Postgres and Vespa for all tenants."""
+    logger.info("Resetting Postgres for all tenants...")
+    reset_postgres_multitenant()
+    logger.info("Resetting Vespa for all tenants...")
+    reset_vespa_multitenant()
     logger.info("Finished resetting all.")

@@ -13,21 +13,25 @@ from celery.signals import worker_shutdown
 
 import danswer.background.celery.apps.app_base as app_base
 from danswer.background.celery.apps.app_base import task_logger
-from danswer.background.celery.celery_redis import RedisConnectorCredentialPair
-from danswer.background.celery.celery_redis import RedisConnectorDeletion
-from danswer.background.celery.celery_redis import RedisConnectorIndexing
-from danswer.background.celery.celery_redis import RedisConnectorPruning
-from danswer.background.celery.celery_redis import RedisConnectorStop
-from danswer.background.celery.celery_redis import RedisDocumentSet
-from danswer.background.celery.celery_redis import RedisUserGroup
 from danswer.background.celery.celery_utils import celery_is_worker_primary
+from danswer.background.celery.tasks.vespa.tasks import get_unfenced_index_attempt_ids
 from danswer.configs.constants import CELERY_PRIMARY_WORKER_LOCK_TIMEOUT
 from danswer.configs.constants import DanswerRedisLocks
 from danswer.configs.constants import POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME
-from danswer.db.engine import get_all_tenant_ids
+from danswer.db.engine import get_session_with_default_tenant
 from danswer.db.engine import SqlEngine
+from danswer.db.index_attempt import get_index_attempt
+from danswer.db.index_attempt import mark_attempt_failed
+from danswer.redis.redis_connector_credential_pair import RedisConnectorCredentialPair
+from danswer.redis.redis_connector_delete import RedisConnectorDelete
+from danswer.redis.redis_connector_index import RedisConnectorIndex
+from danswer.redis.redis_connector_prune import RedisConnectorPrune
+from danswer.redis.redis_connector_stop import RedisConnectorStop
+from danswer.redis.redis_document_set import RedisDocumentSet
 from danswer.redis.redis_pool import get_redis_client
+from danswer.redis.redis_usergroup import RedisUserGroup
 from danswer.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 
 logger = setup_logger()
@@ -75,95 +79,81 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME)
     SqlEngine.init_engine(pool_size=8, max_overflow=0)
 
+    # Startup checks are not needed in multi-tenant case
+    if MULTI_TENANT:
+        return
+
     app_base.wait_for_redis(sender, **kwargs)
+    app_base.wait_for_db(sender, **kwargs)
+    app_base.wait_for_vespa(sender, **kwargs)
 
     logger.info("Running as the primary celery worker.")
 
-    sender.primary_worker_locks = {}
-
     # This is singleton work that should be done on startup exactly once
-    # by the primary worker
-    tenant_ids = get_all_tenant_ids()
-    for tenant_id in tenant_ids:
-        r = get_redis_client(tenant_id=tenant_id)
+    # by the primary worker. This is unnecessary in the multi tenant scenario
+    r = get_redis_client(tenant_id=None)
 
-        # For the moment, we're assuming that we are the only primary worker
-        # that should be running.
-        # TODO: maybe check for or clean up another zombie primary worker if we detect it
-        r.delete(DanswerRedisLocks.PRIMARY_WORKER)
+    # For the moment, we're assuming that we are the only primary worker
+    # that should be running.
+    # TODO: maybe check for or clean up another zombie primary worker if we detect it
+    r.delete(DanswerRedisLocks.PRIMARY_WORKER)
 
-        # this process wide lock is taken to help other workers start up in order.
-        # it is planned to use this lock to enforce singleton behavior on the primary
-        # worker, since the primary worker does redis cleanup on startup, but this isn't
-        # implemented yet.
-        lock = r.lock(
-            DanswerRedisLocks.PRIMARY_WORKER,
-            timeout=CELERY_PRIMARY_WORKER_LOCK_TIMEOUT,
-        )
+    # this process wide lock is taken to help other workers start up in order.
+    # it is planned to use this lock to enforce singleton behavior on the primary
+    # worker, since the primary worker does redis cleanup on startup, but this isn't
+    # implemented yet.
+    lock = r.lock(
+        DanswerRedisLocks.PRIMARY_WORKER,
+        timeout=CELERY_PRIMARY_WORKER_LOCK_TIMEOUT,
+    )
 
-        logger.info("Primary worker lock: Acquire starting.")
-        acquired = lock.acquire(blocking_timeout=CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 2)
-        if acquired:
-            logger.info("Primary worker lock: Acquire succeeded.")
-        else:
-            logger.error("Primary worker lock: Acquire failed!")
-            raise WorkerShutdown("Primary worker lock could not be acquired!")
+    logger.info("Primary worker lock: Acquire starting.")
+    acquired = lock.acquire(blocking_timeout=CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 2)
+    if acquired:
+        logger.info("Primary worker lock: Acquire succeeded.")
+    else:
+        logger.error("Primary worker lock: Acquire failed!")
+        raise WorkerShutdown("Primary worker lock could not be acquired!")
 
-        # tacking on our own user data to the sender
-        sender.primary_worker_locks[tenant_id] = lock
+    # tacking on our own user data to the sender
+    sender.primary_worker_lock = lock
 
-        # As currently designed, when this worker starts as "primary", we reinitialize redis
-        # to a clean state (for our purposes, anyway)
-        r.delete(DanswerRedisLocks.CHECK_VESPA_SYNC_BEAT_LOCK)
-        r.delete(DanswerRedisLocks.MONITOR_VESPA_SYNC_BEAT_LOCK)
+    # As currently designed, when this worker starts as "primary", we reinitialize redis
+    # to a clean state (for our purposes, anyway)
+    r.delete(DanswerRedisLocks.CHECK_VESPA_SYNC_BEAT_LOCK)
+    r.delete(DanswerRedisLocks.MONITOR_VESPA_SYNC_BEAT_LOCK)
 
-        r.delete(RedisConnectorCredentialPair.get_taskset_key())
-        r.delete(RedisConnectorCredentialPair.get_fence_key())
+    r.delete(RedisConnectorCredentialPair.get_taskset_key())
+    r.delete(RedisConnectorCredentialPair.get_fence_key())
 
-        for key in r.scan_iter(RedisDocumentSet.TASKSET_PREFIX + "*"):
-            r.delete(key)
+    RedisDocumentSet.reset_all(r)
 
-        for key in r.scan_iter(RedisDocumentSet.FENCE_PREFIX + "*"):
-            r.delete(key)
+    RedisUserGroup.reset_all(r)
 
-        for key in r.scan_iter(RedisUserGroup.TASKSET_PREFIX + "*"):
-            r.delete(key)
+    RedisConnectorDelete.reset_all(r)
 
-        for key in r.scan_iter(RedisUserGroup.FENCE_PREFIX + "*"):
-            r.delete(key)
+    RedisConnectorPrune.reset_all(r)
 
-        for key in r.scan_iter(RedisConnectorDeletion.TASKSET_PREFIX + "*"):
-            r.delete(key)
+    RedisConnectorIndex.reset_all(r)
 
-        for key in r.scan_iter(RedisConnectorDeletion.FENCE_PREFIX + "*"):
-            r.delete(key)
+    RedisConnectorStop.reset_all(r)
 
-        for key in r.scan_iter(RedisConnectorPruning.TASKSET_PREFIX + "*"):
-            r.delete(key)
+    # mark orphaned index attempts as failed
+    with get_session_with_default_tenant() as db_session:
+        unfenced_attempt_ids = get_unfenced_index_attempt_ids(db_session, r)
+        for attempt_id in unfenced_attempt_ids:
+            attempt = get_index_attempt(db_session, attempt_id)
+            if not attempt:
+                continue
 
-        for key in r.scan_iter(RedisConnectorPruning.GENERATOR_COMPLETE_PREFIX + "*"):
-            r.delete(key)
-
-        for key in r.scan_iter(RedisConnectorPruning.GENERATOR_PROGRESS_PREFIX + "*"):
-            r.delete(key)
-
-        for key in r.scan_iter(RedisConnectorPruning.FENCE_PREFIX + "*"):
-            r.delete(key)
-
-        for key in r.scan_iter(RedisConnectorIndexing.TASKSET_PREFIX + "*"):
-            r.delete(key)
-
-        for key in r.scan_iter(RedisConnectorIndexing.GENERATOR_COMPLETE_PREFIX + "*"):
-            r.delete(key)
-
-        for key in r.scan_iter(RedisConnectorIndexing.GENERATOR_PROGRESS_PREFIX + "*"):
-            r.delete(key)
-
-        for key in r.scan_iter(RedisConnectorIndexing.FENCE_PREFIX + "*"):
-            r.delete(key)
-
-    for key in r.scan_iter(RedisConnectorStop.FENCE_PREFIX + "*"):
-        r.delete(key)
+            failure_reason = (
+                f"Orphaned index attempt found on startup: "
+                f"index_attempt={attempt.id} "
+                f"cc_pair={attempt.connector_credential_pair_id} "
+                f"search_settings={attempt.search_settings_id}"
+            )
+            logger.warning(failure_reason)
+            mark_attempt_failed(attempt.id, db_session, failure_reason)
 
 
 @worker_ready.connect
@@ -216,52 +206,36 @@ class HubPeriodicTask(bootsteps.StartStopStep):
             if not celery_is_worker_primary(worker):
                 return
 
-            if not hasattr(worker, "primary_worker_locks"):
+            if not hasattr(worker, "primary_worker_lock"):
                 return
 
-            # Retrieve all tenant IDs
-            tenant_ids = get_all_tenant_ids()
+            lock = worker.primary_worker_lock
 
-            for tenant_id in tenant_ids:
-                lock = worker.primary_worker_locks.get(tenant_id)
-                if not lock:
-                    continue  # Skip if no lock for this tenant
+            r = get_redis_client(tenant_id=None)
 
-                r = get_redis_client(tenant_id=tenant_id)
+            if lock.owned():
+                task_logger.debug("Reacquiring primary worker lock.")
+                lock.reacquire()
+            else:
+                task_logger.warning(
+                    "Full acquisition of primary worker lock. "
+                    "Reasons could be worker restart or lock expiration."
+                )
+                lock = r.lock(
+                    DanswerRedisLocks.PRIMARY_WORKER,
+                    timeout=CELERY_PRIMARY_WORKER_LOCK_TIMEOUT,
+                )
 
-                if lock.owned():
-                    task_logger.debug(
-                        f"Reacquiring primary worker lock for tenant {tenant_id}."
-                    )
-                    lock.reacquire()
+                task_logger.info("Primary worker lock: Acquire starting.")
+                acquired = lock.acquire(
+                    blocking_timeout=CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 2
+                )
+                if acquired:
+                    task_logger.info("Primary worker lock: Acquire succeeded.")
+                    worker.primary_worker_lock = lock
                 else:
-                    task_logger.warning(
-                        f"Full acquisition of primary worker lock for tenant {tenant_id}. "
-                        "Reasons could be worker restart or lock expiration."
-                    )
-                    lock = r.lock(
-                        DanswerRedisLocks.PRIMARY_WORKER,
-                        timeout=CELERY_PRIMARY_WORKER_LOCK_TIMEOUT,
-                    )
-
-                    task_logger.info(
-                        f"Primary worker lock for tenant {tenant_id}: Acquire starting."
-                    )
-                    acquired = lock.acquire(
-                        blocking_timeout=CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 2
-                    )
-                    if acquired:
-                        task_logger.info(
-                            f"Primary worker lock for tenant {tenant_id}: Acquire succeeded."
-                        )
-                        worker.primary_worker_locks[tenant_id] = lock
-                    else:
-                        task_logger.error(
-                            f"Primary worker lock for tenant {tenant_id}: Acquire failed!"
-                        )
-                        raise TimeoutError(
-                            f"Primary worker lock for tenant {tenant_id} could not be acquired!"
-                        )
+                    task_logger.error("Primary worker lock: Acquire failed!")
+                    raise TimeoutError("Primary worker lock could not be acquired!")
 
         except Exception:
             task_logger.exception("Periodic task failed.")

@@ -18,6 +18,7 @@ from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.utils.logger import setup_logger
 
+
 logger = setup_logger()
 
 _NUM_RETRIES = 5

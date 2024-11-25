@@ -19,9 +19,10 @@ const TooltipGroupContext = createContext<{
   hoverCountRef: { current: false },
 });
 
-export const TooltipGroup: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
+export const TooltipGroup: React.FC<{
+  children: React.ReactNode;
+  gap?: string;
+}> = ({ children, gap }) => {
   const [groupHovered, setGroupHovered] = useState(false);
   const hoverCountRef = useRef(false);
 
@@ -29,7 +30,7 @@ export const TooltipGroup: React.FC<{ children: React.ReactNode }> = ({
     <TooltipGroupContext.Provider
       value={{ groupHovered, setGroupHovered, hoverCountRef }}
     >
-      <div className="inline-flex">{children}</div>
+      <div className={`inline-flex ${gap}`}>{children}</div>
     </TooltipGroupContext.Provider>
   );
 };
@@ -124,9 +125,9 @@ export const CustomTooltip = ({
         !disabled &&
         createPortal(
           <div
-            className={`min-w-8 fixed z-[1000] ${citation ? "max-w-[350px]" : "w-40"} ${
-              large ? (medium ? "w-88" : "w-96") : line && "max-w-64 w-auto"
-            } 
+            className={`min-w-8 fixed z-[1000] ${
+              citation ? "max-w-[350px]" : "w-40"
+            } ${large ? (medium ? "w-88" : "w-96") : line && "max-w-64 w-auto"} 
             transform -translate-x-1/2 text-sm 
             ${
               light

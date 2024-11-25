@@ -7,7 +7,7 @@ from danswer.chat.models import DanswerAnswerPiece
 from danswer.chat.models import LlmDoc
 from danswer.configs.constants import DocumentSource
 from danswer.llm.answering.stream_processing.citation_processing import (
-    extract_citations_from_stream,
+    CitationProcessor,
 )
 from danswer.llm.answering.stream_processing.utils import DocumentIdOrderMapping
 
@@ -70,14 +70,16 @@ def process_text(
 ) -> tuple[str, list[CitationInfo]]:
     mock_docs, mock_doc_id_to_rank_map = mock_data
     mapping = DocumentIdOrderMapping(order_mapping=mock_doc_id_to_rank_map)
-    result = list(
-        extract_citations_from_stream(
-            tokens=iter(tokens),
-            context_docs=mock_docs,
-            doc_id_to_rank_map=mapping,
-            stop_stream=None,
-        )
+    processor = CitationProcessor(
+        context_docs=mock_docs,
+        doc_id_to_rank_map=mapping,
+        stop_stream=None,
     )
+    result: list[DanswerAnswerPiece | CitationInfo] = []
+    for token in tokens:
+        result.extend(processor.process_token(token))
+    result.extend(processor.process_token(None))
+
     final_answer_text = ""
     citations = []
     for piece in result:

@@ -9,6 +9,7 @@ import {
 import { processCookies } from "@/lib/userSS";
 
 export const GET = async (request: NextRequest) => {
+  const requestCookies = await cookies();
   const connector = request.url.includes("gmail") ? "gmail" : "google-drive";
   const callbackEndpoint = `/manage/connector/${connector}/callback`;
   const url = new URL(buildUrl(callbackEndpoint));
@@ -16,7 +17,7 @@ export const GET = async (request: NextRequest) => {
 
   const response = await fetch(url.toString(), {
     headers: {
-      cookie: processCookies(cookies()),
+      cookie: processCookies(requestCookies),
     },
   });
 
@@ -33,7 +34,7 @@ export const GET = async (request: NextRequest) => {
       ? GMAIL_AUTH_IS_ADMIN_COOKIE_NAME
       : GOOGLE_DRIVE_AUTH_IS_ADMIN_COOKIE_NAME;
 
-  if (cookies().get(authCookieName)?.value?.toLowerCase() === "true") {
+  if (requestCookies.get(authCookieName)?.value?.toLowerCase() === "true") {
     return NextResponse.redirect(
       new URL(`/admin/connectors/${connector}`, getDomain(request))
     );

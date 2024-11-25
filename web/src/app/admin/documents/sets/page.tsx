@@ -7,15 +7,13 @@ import {
   Table,
   TableHead,
   TableRow,
-  TableHeaderCell,
   TableBody,
   TableCell,
-  Title,
-  Divider,
-  Badge,
-  Button,
-  Text,
-} from "@tremor/react";
+} from "@/components/ui/table";
+import Text from "@/components/ui/text";
+import Title from "@/components/ui/title";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import { useConnectorCredentialIndexingStatus } from "@/lib/hooks";
 import { ConnectorIndexingStatus, DocumentSet } from "@/lib/types";
 import { useState } from "react";
@@ -35,6 +33,14 @@ import {
 import { DeleteButton } from "@/components/DeleteButton";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { TableHeader } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const numToDisplay = 50;
 
@@ -47,8 +53,6 @@ const EditRow = ({
 }) => {
   const router = useRouter();
 
-  const [isSyncingTooltipOpen, setIsSyncingTooltipOpen] = useState(false);
-
   if (!isEditable) {
     return (
       <div className="text-emphasis font-medium my-auto p-1">
@@ -59,37 +63,36 @@ const EditRow = ({
 
   return (
     <div className="relative flex">
-      {isSyncingTooltipOpen && (
-        <div className="flex flex-nowrap absolute w-64 top-0 left-0 mt-8 border border-border bg-background px-3 py-2 rounded shadow-lg break-words z-40">
-          <InfoIcon className="mt-1 flex flex-shrink-0 mr-2" /> Cannot update
-          while syncing! Wait for the sync to finish, then try again.
-        </div>
-      )}
-      <div
-        className={`
-          text-emphasis font-medium my-auto p-1 hover:bg-hover-light flex items-center select-none
-          ${documentSet.is_up_to_date ? "cursor-pointer" : "cursor-default"}
-        `}
-        style={{ wordBreak: "normal", overflowWrap: "break-word" }}
-        onClick={() => {
-          if (documentSet.is_up_to_date) {
-            router.push(`/admin/documents/sets/${documentSet.id}`);
-          }
-        }}
-        onMouseEnter={() => {
-          if (!documentSet.is_up_to_date) {
-            setIsSyncingTooltipOpen(true);
-          }
-        }}
-        onMouseLeave={() => {
-          if (!documentSet.is_up_to_date) {
-            setIsSyncingTooltipOpen(false);
-          }
-        }}
-      >
-        <FiEdit2 className="mr-2 flex-shrink-0" />
-        <span className="font-medium">{documentSet.name}</span>
-      </div>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              className={`
+              text-emphasis font-medium my-auto p-1 hover:bg-hover-light flex items-center select-none
+              ${documentSet.is_up_to_date ? "cursor-pointer" : "cursor-default"}
+            `}
+              style={{ wordBreak: "normal", overflowWrap: "break-word" }}
+              onClick={() => {
+                if (documentSet.is_up_to_date) {
+                  router.push(`/admin/documents/sets/${documentSet.id}`);
+                }
+              }}
+            >
+              <FiEdit2 className="mr-2 flex-shrink-0" />
+              <span className="font-medium">{documentSet.name}</span>
+            </div>
+          </TooltipTrigger>
+          {!documentSet.is_up_to_date && (
+            <TooltipContent maxWidth="max-w-sm">
+              <div className="flex break-words break-keep whitespace-pre-wrap items-start">
+                <InfoIcon className="mr-2 mt-0.5" />
+                Cannot update while syncing! Wait for the sync to finish, then
+                try again.
+              </div>
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 };
@@ -134,15 +137,15 @@ const DocumentSetTable = ({
     <div>
       <Title>Existing Document Sets</Title>
       <Table className="overflow-visible mt-2">
-        <TableHead>
+        <TableHeader>
           <TableRow>
-            <TableHeaderCell>Name</TableHeaderCell>
-            <TableHeaderCell>Connectors</TableHeaderCell>
-            <TableHeaderCell>Status</TableHeaderCell>
-            <TableHeaderCell>Public</TableHeaderCell>
-            <TableHeaderCell>Delete</TableHeaderCell>
+            <TableHead>Name</TableHead>
+            <TableHead>Connectors</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Public</TableHead>
+            <TableHead>Delete</TableHead>
           </TableRow>
-        </TableHead>
+        </TableHeader>
         <TableBody>
           {sortedDocumentSets
             .slice((page - 1) * numToDisplay, page * numToDisplay)
@@ -188,15 +191,15 @@ const DocumentSetTable = ({
                   </TableCell>
                   <TableCell>
                     {documentSet.is_up_to_date ? (
-                      <Badge size="md" color="green" icon={FiCheckCircle}>
+                      <Badge variant="success" icon={FiCheckCircle}>
                         Up to Date
                       </Badge>
                     ) : documentSet.cc_pair_descriptors.length > 0 ? (
-                      <Badge size="md" color="amber" icon={FiClock}>
+                      <Badge variant="in_progress" icon={FiClock}>
                         Syncing
                       </Badge>
                     ) : (
-                      <Badge size="md" color="red" icon={FiAlertTriangle}>
+                      <Badge variant="destructive" icon={FiAlertTriangle}>
                         Deleting
                       </Badge>
                     )}
@@ -204,16 +207,14 @@ const DocumentSetTable = ({
                   <TableCell>
                     {documentSet.is_public ? (
                       <Badge
-                        size="md"
-                        color={isEditable ? "green" : "gray"}
+                        variant={isEditable ? "success" : "default"}
                         icon={FiUnlock}
                       >
                         Public
                       </Badge>
                     ) : (
                       <Badge
-                        size="md"
-                        color={isEditable ? "blue" : "gray"}
+                        variant={isEditable ? "in_progress" : "outline"}
                         icon={FiLock}
                       >
                         Private
@@ -322,15 +323,13 @@ const Main = () => {
 
       <div className="flex mb-6">
         <Link href="/admin/documents/sets/new">
-          <Button size="xs" color="green" className="ml-2 my-auto">
-            New Document Set
-          </Button>
+          <Button variant="navigate">New Document Set</Button>
         </Link>
       </div>
 
       {documentSets.length > 0 && (
         <>
-          <Divider />
+          <Separator />
           <DocumentSetTable
             documentSets={documentSets}
             editableDocumentSets={editableDocumentSets}

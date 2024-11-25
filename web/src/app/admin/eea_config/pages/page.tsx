@@ -3,7 +3,22 @@
 import { LoadingAnimation } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { Text, Title, Button, Divider,Table,TableHead,TableRow,TableHeaderCell,TableBody,TableCell } from "@tremor/react";
+//import {TableHeaderCell } from "@tremor/react";
+
+import Text from "@/components/ui/text";
+import Title from "@/components/ui/title";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+
 import { FiCpu, FiEdit } from "react-icons/fi";
 import useSWR from "swr";
 import { Form, Formik, Field } from "formik";
@@ -77,8 +92,8 @@ const PagesTable = ({
       <Table className="overflow-visible mt-2">
         <TableHead>
           <TableRow>
-            <TableHeaderCell>Name</TableHeaderCell>
-            <TableHeaderCell>Delete</TableHeaderCell>
+            <TableHeader>Name</TableHeader>
+            <TableHeader>Delete</TableHeader>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -185,7 +200,7 @@ const Page = () => {
 
       <div className="flex mb-6">
         <Link href="/admin/eea_config/pages/new">
-          <Button size="xs" color="green" className="ml-2 my-auto">
+          <Button color="green" className="ml-2 my-auto">
             New Page
           </Button>
         </Link>
@@ -193,7 +208,7 @@ const Page = () => {
 
       {pages.length > 0 && (
         <>
-          <Divider />
+          <Separator />
           <PagesTable
             pages={pages}
             config_json={config_json}

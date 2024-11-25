@@ -24,6 +24,13 @@ def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
     return tool
 
 
+def get_tool_by_name(tool_name: str, db_session: Session) -> Tool:
+    tool = db_session.scalar(select(Tool).where(Tool.name == tool_name))
+    if not tool:
+        raise ValueError("Tool by specified name does not exist")
+    return tool
+
+
 def create_tool(
     name: str,
     description: str | None,
@@ -37,7 +44,7 @@ def create_tool(
         description=description,
         in_code_tool_id=None,
         openapi_schema=openapi_schema,
-        custom_headers=[header.dict() for header in custom_headers]
+        custom_headers=[header.model_dump() for header in custom_headers]
         if custom_headers
         else [],
         user_id=user_id,

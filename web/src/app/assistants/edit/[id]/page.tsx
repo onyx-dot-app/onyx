@@ -1,13 +1,16 @@
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { Card, Text, Title } from "@tremor/react";
+import Text from "@/components/ui/text";
+import CardSection from "@/components/admin/CardSection";
 import { HeaderWrapper } from "@/components/header/HeaderWrapper";
 import { AssistantEditor } from "@/app/admin/assistants/AssistantEditor";
 import { SuccessfulPersonaUpdateRedirectType } from "@/app/admin/assistants/enums";
 import { fetchAssistantEditorInfoSS } from "@/lib/assistants/fetchPersonaEditorInfoSS";
 import { DeletePersonaButton } from "@/app/admin/assistants/[id]/DeletePersonaButton";
 import { LargeBackButton } from "../../LargeBackButton";
+import Title from "@/components/ui/title";
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const [values, error] = await fetchAssistantEditorInfoSS(params.id);
 
   let body;
@@ -22,14 +25,14 @@ export default async function Page({ params }: { params: { id: string } }) {
       <div className="w-full my-16">
         <div className="px-32">
           <div className="mx-auto container">
-            <Card>
+            <CardSection>
               <AssistantEditor
                 {...values}
                 admin
                 defaultPublic={false}
                 redirectType={SuccessfulPersonaUpdateRedirectType.CHAT}
               />
-            </Card>
+            </CardSection>
             <Title className="mt-12">Delete Assistant</Title>
             <Text>
               Click the button below to permanently delete this assistant.

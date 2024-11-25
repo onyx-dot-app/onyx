@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 import uuid
 from collections.abc import Callable
 from collections.abc import Generator
@@ -283,13 +284,14 @@ def delete_chat_session_by_id(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-async def is_disconnected(request: Request) -> Callable[[], bool]:
+async def is_connected(request: Request) -> Callable[[], bool]:
     main_loop = asyncio.get_event_loop()
 
-    def is_disconnected_sync() -> bool:
+    def is_connected_sync() -> bool:
         future = asyncio.run_coroutine_threadsafe(request.is_disconnected(), main_loop)
         try:
-            return not future.result(timeout=0.01)
+            is_connected = not future.result(timeout=0.01)
+            return is_connected
         except asyncio.TimeoutError:
             logger.error("Asyncio timed out")
             return True
@@ -300,7 +302,7 @@ async def is_disconnected(request: Request) -> Callable[[], bool]:
             )
             return True
 
-    return is_disconnected_sync
+    return is_connected_sync
 
 
 @router.post("/send-message")
@@ -309,7 +311,7 @@ def handle_new_chat_message(
     request: Request,
     user: User | None = Depends(current_user),
     _: None = Depends(check_token_rate_limits),
-    is_disconnected_func: Callable[[], bool] = Depends(is_disconnected),
+    is_connected_func: Callable[[], bool] = Depends(is_connected),
 ) -> StreamingResponse:
     """
     This endpoint is both used for all the following purposes:
@@ -325,7 +327,7 @@ def handle_new_chat_message(
         request (Request): The current HTTP request context.
         user (User | None): The current user, obtained via dependency injection.
         _ (None): Rate limit check is run if user/group/global rate limits are enabled.
-        is_disconnected_func (Callable[[], bool]): Function to check client disconnection,
+        is_connected_func (Callable[[], bool]): Function to check client disconnection,
             used to stop the streaming response if the client disconnects.
 
     Returns:
@@ -340,27 +342,27 @@ def handle_new_chat_message(
     ):
         raise HTTPException(status_code=400, detail="Empty chat message is invalid")
 
-    import json
-
     def stream_generator() -> Generator[str, None, None]:
         try:
             for packet in stream_chat_message(
                 new_msg_req=chat_message_req,
                 user=user,
-                use_existing_user_message=chat_message_req.use_existing_user_message,
                 litellm_additional_headers=extract_headers(
                     request.headers, LITELLM_PASS_THROUGH_HEADERS
                 ),
                 custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                     request.headers
                 ),
-                is_connected=is_disconnected_func,
+                is_connected=is_connected_func,
             ):
                 yield json.dumps(packet) if isinstance(packet, dict) else packet
 
         except Exception as e:
-            logger.exception(f"Error in chat message streaming: {e}")
+            logger.exception("Error in chat message streaming")
             yield json.dumps({"error": str(e)})
+
+        finally:
+            logger.debug("Stream generator finished")
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
@@ -554,9 +556,9 @@ def upload_files_for_chat(
     _: User | None = Depends(current_user),
 ) -> dict[str, list[FileDescriptor]]:
     image_content_types = {"image/jpeg", "image/png", "image/webp"}
+    csv_content_types = {"text/csv"}
     text_content_types = {
         "text/plain",
-        "text/csv",
         "text/markdown",
         "text/x-markdown",
         "text/x-config",
@@ -575,8 +577,10 @@ def upload_files_for_chat(
         "application/epub+zip",
     }
 
-    allowed_content_types = image_content_types.union(text_content_types).union(
-        document_content_types
+    allowed_content_types = (
+        image_content_types.union(text_content_types)
+        .union(document_content_types)
+        .union(csv_content_types)
     )
 
     for file in files:
@@ -586,6 +590,10 @@ def upload_files_for_chat(
             elif file.content_type in text_content_types:
                 error_detail = "Unsupported text file type. Supported text types include .txt, .csv, .md, .mdx, .conf, "
                 ".log, .tsv."
+            elif file.content_type in csv_content_types:
+                error_detail = (
+                    "Unsupported CSV file type. Supported CSV types include .csv."
+                )
             else:
                 error_detail = (
                     "Unsupported document file type. Supported document types include .pdf, .docx, .pptx, .xlsx, "
@@ -611,6 +619,10 @@ def upload_files_for_chat(
             file_type = ChatFileType.IMAGE
             # Convert image to JPEG
             file_content, new_content_type = convert_to_jpeg(file)
+        elif file.content_type in csv_content_types:
+            file_type = ChatFileType.CSV
+            file_content = io.BytesIO(file.file.read())
+            new_content_type = file.content_type or ""
         elif file.content_type in document_content_types:
             file_type = ChatFileType.DOC
             file_content = io.BytesIO(file.file.read())

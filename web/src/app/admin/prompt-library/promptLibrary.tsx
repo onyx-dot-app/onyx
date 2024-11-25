@@ -8,15 +8,15 @@ import {
   Table,
   TableHead,
   TableRow,
-  TableHeaderCell,
   TableBody,
   TableCell,
-} from "@tremor/react";
+} from "@/components/ui/table";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 import { FiTag } from "react-icons/fi";
 import { PageSelector } from "@/components/PageSelector";
 import { InputPrompt } from "./interfaces";
 import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
+import { TableHeader } from "@/components/ui/table";
 
 const CategoryBubble = ({
   name,
@@ -174,7 +174,7 @@ export const PromptLibraryTable = ({
           icon={<FiTag size={16} />}
           defaultDisplay="All Statuses"
         />
-        <div className="flex flex-wrap pb-4 mt-3">
+        <div className="flex flex-col items-stretch w-full flex-wrap pb-4 mt-3">
           {selectedStatus.map((status) => (
             <CategoryBubble
               key={status}
@@ -186,15 +186,13 @@ export const PromptLibraryTable = ({
       </div>
       <div className="mx-auto overflow-x-auto">
         <Table>
-          <TableHead>
+          <TableHeader>
             <TableRow>
               {columns.map((column) => (
-                <TableHeaderCell key={column.key}>
-                  {column.name}
-                </TableHeaderCell>
+                <TableHead key={column.key}>{column.name}</TableHead>
               ))}
             </TableRow>
-          </TableHead>
+          </TableHeader>
           <TableBody>
             {paginatedPromptLibrary.length > 0 ? (
               paginatedPromptLibrary

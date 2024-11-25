@@ -119,6 +119,7 @@ def test_using_reference_docs_with_simple_with_history_api_flow(reset: None) -> 
     )
     assert response.status_code == 200
     response_json = response.json()
+
     # get the db_doc_id of the top document to use as a search doc id for second message
     first_db_doc_id = response_json["top_documents"][0]["db_doc_id"]
 
@@ -140,6 +141,9 @@ def test_using_reference_docs_with_simple_with_history_api_flow(reset: None) -> 
     )
     assert response.status_code == 200
     response_json = response.json()
+
+    # make sure there is an answer
+    assert response_json["answer"]
 
     # since we only gave it one search doc, all responses should only contain that doc
     assert response_json["final_context_doc_indices"] == [0]

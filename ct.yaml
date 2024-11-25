@@ -1,12 +1,18 @@
 # See https://github.com/helm/chart-testing#configuration
 
+# still have to specify this on the command line for list-changed
 chart-dirs:
   - deployment/helm/charts
 
+# must be kept in sync with Chart.yaml
 chart-repos:
-  - vespa=https://unoplat.github.io/vespa-helm-charts
+  - vespa=https://danswer-ai.github.io/vespa-helm-charts
   - postgresql=https://charts.bitnami.com/bitnami
   
-helm-extra-args: --timeout 600s
+helm-extra-args: --debug --timeout 600s
+
+# nginx appears to not work on kind, likely due to lack of loadbalancer support
+# helm-extra-set-args also only works on the command line, not in this yaml
+# helm-extra-set-args: --set=nginx.enabled=false
 
 validate-maintainers: false

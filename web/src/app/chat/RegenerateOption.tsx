@@ -16,6 +16,7 @@ import { Hoverable } from "@/components/Hoverable";
 import { Popover } from "@/components/popover/Popover";
 import { StarFeedback } from "@/components/icons/icons";
 import { IconType } from "react-icons";
+import { FiRefreshCw } from "react-icons/fi";
 
 export function RegenerateDropdown({
   options,
@@ -68,7 +69,7 @@ export function RegenerateDropdown({
                 py-1.5 
                 "
       >
-        Pick a model
+        Regenerate with
       </p>
       {options.map((option, ind) => {
         const isSelected = option.value === selected;
@@ -92,11 +93,11 @@ export function RegenerateDropdown({
       content={
         <div onClick={() => toggleDropdownVisible(!isOpen)}>
           {!alternate ? (
-            <Hoverable size={16} icon={StarFeedback as IconType} />
+            <Hoverable size={16} icon={FiRefreshCw as IconType} />
           ) : (
             <Hoverable
               size={16}
-              icon={StarFeedback as IconType}
+              icon={FiRefreshCw as IconType}
               hoverText={getDisplayNameForModel(alternate)}
             />
           )}

@@ -13,9 +13,13 @@ import { updateConnectorCredentialPairName } from "@/lib/connector";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ValidSources } from "@/lib/types";
-import { Button, Divider, Title, Badge, Text } from "@tremor/react";
+import { Button } from "@/components/ui/button";
+import Title from "@/components/ui/title";
+import Text from "@/components/ui/text";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
 import useSWR, { mutate } from "swr";
 import { AdvancedConfigDisplay, ConfigDisplay } from "./ConfigDisplay";
 import { DeletionButton } from "./DeletionButton";
@@ -132,7 +136,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
     setIsEditing(false);
     setEditableName(ccPair.name);
   };
-
   const {
     prune_freq: pruneFreq,
     refresh_freq: refreshFreq,
@@ -158,10 +161,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
               onChange={handleNameChange}
               className="text-3xl w-full ring ring-1 ring-neutral-800 text-emphasis font-bold"
             />
-            <Button onClick={handleUpdateName} className="ml-2">
+            <Button onClick={handleUpdateName}>
               <CheckmarkIcon className="text-neutral-200" />
             </Button>
-            <Button onClick={() => resetEditing()} className="ml-2">
+            <Button onClick={() => resetEditing()}>
               <XIcon className="text-neutral-200" />
             </Button>
           </div>
@@ -170,7 +173,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
             onClick={() =>
               ccPair.is_editable_for_current_user && startEditing()
             }
-            className={`group flex ${ccPair.is_editable_for_current_user ? "cursor-pointer" : ""} text-3xl text-emphasis gap-x-2 items-center font-bold`}
+            className={`group flex ${
+              ccPair.is_editable_for_current_user ? "cursor-pointer" : ""
+            } text-3xl text-emphasis gap-x-2 items-center font-bold`}
           >
             {ccPair.name}
             {ccPair.is_editable_for_current_user && (
@@ -230,7 +235,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       {credentialTemplates[ccPair.connector.source] &&
         ccPair.is_editable_for_current_user && (
           <>
-            <Divider />
+            <Separator />
 
             <Title className="mb-2">Credentials</Title>
 
@@ -241,7 +246,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             />
           </>
         )}
-      <Divider />
+      <Separator />
       <ConfigDisplay
         connectorSpecificConfig={ccPair.connector.connector_specific_config}
         sourceType={ccPair.connector.source}
@@ -263,16 +268,15 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
         <IndexingAttemptsTable ccPair={ccPair} />
       </div>
-      <Divider />
 
+      <Separator />
       <div className="mt-4">
         <Title>Delete Connector</Title>
         <Text>
           Deleting the connector will also delete all associated documents.
         </Text>
-
-      <br/>
-      {isDeleting && (
+        <br/>
+        {isDeleting && (
         <>
           <Badge size="md" color="yellow" icon={FiAlertTriangle}>
             Attention
@@ -287,19 +291,20 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </>
       )}
 
-        <div className="flex mt-16">
-          <div className="mx-auto">
-            {ccPair.is_editable_for_current_user && (
-              <DeletionButton ccPair={ccPair} />
-            )}
-          </div>
+      </div>
+      <div className="flex mt-4">
+        <div className="mx-auto">
+          {ccPair.is_editable_for_current_user && (
+            <DeletionButton ccPair={ccPair} />
+          )}
         </div>
       </div>
     </>
   );
 }
 
-export default function Page({ params }: { params: { ccPairId: string } }) {
+export default function Page(props: { params: Promise<{ ccPairId: string }> }) {
+  const params = use(props.params);
   const ccPairId = parseInt(params.ccPairId);
 
   return (

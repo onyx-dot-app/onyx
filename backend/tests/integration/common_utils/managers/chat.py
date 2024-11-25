@@ -23,7 +23,7 @@ from tests.integration.common_utils.test_models import StreamedResponse
 class ChatSessionManager:
     @staticmethod
     def create(
-        persona_id: int = -1,
+        persona_id: int = 0,
         description: str = "Test chat session",
         user_performing_action: DATestUser | None = None,
     ) -> DATestChatSession:

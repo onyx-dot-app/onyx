@@ -15,7 +15,6 @@ import {
   ArrowSquareOut,
 } from "@phosphor-icons/react";
 import {
-  FiCheck,
   FiChevronsDown,
   FiChevronsUp,
   FiEdit2,
@@ -30,17 +29,10 @@ import {
   FiChevronRight,
   FiChevronLeft,
   FiAlertTriangle,
-  FiZoomIn,
   FiCopy,
-  FiBookmark,
   FiCpu,
   FiInfo,
-  FiUploadCloud,
-  FiUser,
-  FiUsers,
   FiBarChart2,
-  FiDatabase,
-  FiSlack,
 } from "react-icons/fi";
 import { SiBookstack } from "react-icons/si";
 import Image, { StaticImageData } from "next/image";
@@ -62,7 +54,6 @@ import OCIStorageSVG from "../../../public/OCI.svg";
 import googleCloudStorageIcon from "../../../public/GoogleCloudStorage.png";
 import guruIcon from "../../../public/Guru.svg";
 import gongIcon from "../../../public/Gong.png";
-import requestTrackerIcon from "../../../public/RequestTracker.png";
 import zulipIcon from "../../../public/Zulip.png";
 import linearIcon from "../../../public/Linear.png";
 import hubSpotIcon from "../../../public/HubSpot.png";
@@ -75,6 +66,8 @@ import slackIcon from "../../../public/Slack.png";
 import s3Icon from "../../../public/S3.png";
 import r2Icon from "../../../public/r2.png";
 import salesforceIcon from "../../../public/Salesforce.png";
+import freshdeskIcon from "../../../public/Freshdesk.png";
+import firefliesIcon from "../../../public/Fireflies.png";
 
 import sharepointIcon from "../../../public/Sharepoint.png";
 import teamsIcon from "../../../public/Teams.png";
@@ -1178,13 +1171,6 @@ export const GuruIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => <LogoIcon size={size} className={className} src={guruIcon} />;
 
-export const RequestTrackerIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <LogoIcon size={size} className={className} src={requestTrackerIcon} />
-);
-
 export const SalesforceIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -1300,6 +1286,20 @@ export const AsanaIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => <LogoIcon size={size} className={className} src={asanaIcon} />;
+
+export const FreshdeskIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={freshdeskIcon} />
+);
+
+export const FirefliesIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={firefliesIcon} />
+);
 
 /* 
 EE Icons
@@ -2592,6 +2592,102 @@ export const WindowsIcon = ({
       <path
         fill="currentColor"
         d="M3 3h8v8H3V3zm10 0h8v8h-8V3zm-10 10h8v8H3v-8zm10 0h8v8h-8v-8z"
+      />
+    </svg>
+  );
+};
+
+export const OpenIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] ` + className}
+      xmlns="http://www.w3.org/2000/svg"
+      width="200"
+      height="200"
+      viewBox="0 0 14 14"
+    >
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M7 13.5a9.26 9.26 0 0 0-5.61-2.95a1 1 0 0 1-.89-1V1.5A1 1 0 0 1 1.64.51A9.3 9.3 0 0 1 7 3.43zm0 0a9.26 9.26 0 0 1 5.61-2.95a1 1 0 0 0 .89-1V1.5a1 1 0 0 0-1.14-.99A9.3 9.3 0 0 0 7 3.43z"
+      />
+    </svg>
+  );
+};
+
+export const DexpandTwoIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] ` + className}
+      xmlns="http://www.w3.org/2000/svg"
+      width="200"
+      height="200"
+      viewBox="0 0 14 14"
+    >
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="m.5 13.5l5-5m-4 0h4v4m8-12l-5 5m4 0h-4v-4"
+      />
+    </svg>
+  );
+};
+
+export const ExpandTwoIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] ` + className}
+      xmlns="http://www.w3.org/2000/svg"
+      width="200"
+      height="200"
+      viewBox="0 0 14 14"
+    >
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="m8.5 5.5l5-5m-4 0h4v4m-8 4l-5 5m4 0h-4v-4"
+      />
+    </svg>
+  );
+};
+
+export const DownloadCSVIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] ` + className}
+      xmlns="http://www.w3.org/2000/svg"
+      width="200"
+      height="200"
+      viewBox="0 0 14 14"
+    >
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M.5 10.5v1a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-1M4 6l3 3.5L10 6M7 9.5v-9"
       />
     </svg>
   );

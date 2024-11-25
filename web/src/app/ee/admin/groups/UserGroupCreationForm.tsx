@@ -7,7 +7,8 @@ import { createUserGroup } from "./lib";
 import { UserEditor } from "./UserEditor";
 import { ConnectorEditor } from "./ConnectorEditor";
 import { Modal } from "@/components/Modal";
-import { Button, Divider } from "@tremor/react";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 interface UserGroupCreationFormProps {
   onClose: () => void;
@@ -38,7 +39,7 @@ export const UserGroupCreationForm = ({
           {isUpdate ? "Update a User Group" : "Create a new User Group"}
         </h2>
 
-        <Divider />
+        <Separator />
 
         <Formik
           initialValues={{
@@ -87,7 +88,7 @@ export const UserGroupCreationForm = ({
                   autoCompleteDisabled={true}
                 />
 
-                <Divider />
+                <Separator />
 
                 <h2 className="mb-1 font-medium">
                   Select which private connectors this group has access to:
@@ -105,7 +106,7 @@ export const UserGroupCreationForm = ({
                   }
                 />
 
-                <Divider />
+                <Separator />
 
                 <h2 className="mb-1 font-medium">
                   Select which Users should be a part of this Group.
@@ -127,8 +128,8 @@ export const UserGroupCreationForm = ({
                 <div className="flex">
                   <Button
                     type="submit"
-                    size="xs"
-                    color="green"
+                    size="sm"
+                    variant="submit"
                     disabled={isSubmitting}
                     className="mx-auto w-64"
                   >

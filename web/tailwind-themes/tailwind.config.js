@@ -103,9 +103,14 @@ module.exports = {
 
         // colors for sidebar in chat, search, and manage settings
         "background-sidebar": "var(--background-100)",
-        "background-settings-sidebar": "var(--background-100)",
         "background-chatbar": "var(--background-100)",
         "text-sidebar": "var(--text-500)",
+
+        "toggled-background": "var(--background-400)",
+        "untoggled-background": "var(--background-200)",
+
+        "background-back-button": "var(--background-200)",
+        "text-back-button": "var(--text-800)",
 
         // Settings
         "text-sidebar-subtle": "var(--text-500)",
@@ -114,8 +119,13 @@ module.exports = {
         "text-settings-sidebar-strong": "var(--text-900)",
         "background-settings-hover": "var(--background-200)",
 
+        "background-chat-hover": "var(--background-200)",
+        "background-chat-selected": "var(--background-200)",
+
         // Background for chat messages (user bubbles)
         user: "var(--user-bubble)",
+
+        "background-toggle": "var(--background-100)",
 
         // Colors for the search toggle buttons
         "background-agentic-toggled": "var(--light-success)",

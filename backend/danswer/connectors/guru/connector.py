@@ -19,13 +19,14 @@ from danswer.connectors.models import Section
 from danswer.file_processing.html_utils import parse_html_page_basic
 from danswer.utils.logger import setup_logger
 
+
+logger = setup_logger()
+
 # Potential Improvements
 # 1. Support fetching per collection via collection token (configured at connector creation)
-
 GURU_API_BASE = "https://api.getguru.com/api/v1/"
 GURU_QUERY_ENDPOINT = GURU_API_BASE + "search/query"
 GURU_CARDS_URL = "https://app.getguru.com/card/"
-logger = setup_logger()
 
 
 def unixtime_to_guru_time_str(unix_time: SecondsSinceUnixEpoch) -> str:

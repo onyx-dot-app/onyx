@@ -13,6 +13,7 @@ import danswer.background.celery.apps.app_base as app_base
 from danswer.configs.constants import POSTGRES_CELERY_WORKER_LIGHT_APP_NAME
 from danswer.db.engine import SqlEngine
 from danswer.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 
 logger = setup_logger()
@@ -59,8 +60,13 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_LIGHT_APP_NAME)
     SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=8)
+    # Startup checks are not needed in multi-tenant case
+    if MULTI_TENANT:
+        return
 
     app_base.wait_for_redis(sender, **kwargs)
+    app_base.wait_for_db(sender, **kwargs)
+    app_base.wait_for_vespa(sender, **kwargs)
     app_base.on_secondary_worker_init(sender, **kwargs)
 
 
@@ -85,5 +91,6 @@ celery_app.autodiscover_tasks(
     [
         "danswer.background.celery.tasks.shared",
         "danswer.background.celery.tasks.vespa",
+        "danswer.background.celery.tasks.connector_deletion",
     ]
 )

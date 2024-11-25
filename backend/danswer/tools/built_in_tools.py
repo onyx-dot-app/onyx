@@ -9,9 +9,13 @@ from sqlalchemy.orm import Session
 
 from danswer.db.models import Persona
 from danswer.db.models import Tool as ToolDBModel
-from danswer.tools.images.image_generation_tool import ImageGenerationTool
-from danswer.tools.internet_search.internet_search_tool import InternetSearchTool
-from danswer.tools.search.search_tool import SearchTool
+from danswer.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
+from danswer.tools.tool_implementations.internet_search.internet_search_tool import (
+    InternetSearchTool,
+)
+from danswer.tools.tool_implementations.search.search_tool import SearchTool
 from danswer.tools.tool import Tool
 from danswer.utils.logger import setup_logger
 

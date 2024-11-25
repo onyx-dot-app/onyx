@@ -3,7 +3,9 @@
 import { Label, SubLabel } from "@/components/admin/connectors/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { Button, Callout, Text } from "@tremor/react";
+import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import Text from "@/components/ui/text";
 import { useContext, useState } from "react";
 
 export function CustomAnalyticsUpdateForm() {
@@ -17,7 +19,7 @@ export function CustomAnalyticsUpdateForm() {
   const { popup, setPopup } = usePopup();
 
   if (!settings) {
-    return <Callout color="red" title="Failed to fetch settings"></Callout>;
+    return <Callout type="danger" title="Failed to fetch settings"></Callout>;
   }
 
   return (

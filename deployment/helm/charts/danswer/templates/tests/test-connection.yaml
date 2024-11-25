@@ -11,5 +11,5 @@ spec:
     - name: wget
       image: busybox
       command: ['wget']
-      args: ['{{ include "danswer-stack.fullname" . }}:{{ .Values.webserver.service.port }}']
+      args: ['{{ include "danswer-stack.fullname" . }}-webserver:{{ .Values.webserver.service.port }}']
   restartPolicy: Never

@@ -29,7 +29,12 @@ import { LlmTab } from "../modal/configuration/LlmTab";
 import { AssistantsTab } from "../modal/configuration/AssistantsTab";
 import { DanswerDocument } from "@/lib/search/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { Tooltip } from "@/components/tooltip/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Hoverable } from "@/components/Hoverable";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { ChatState } from "../types";
@@ -399,17 +404,20 @@ export function ChatInputBar({
                     {alternativeAssistant.name}
                   </p>
                   <div className="flex gap-x-1 ml-auto">
-                    <Tooltip
-                      content={
-                        <p className="max-w-xs flex flex-wrap">
-                          {alternativeAssistant.description}
-                        </p>
-                      }
-                    >
-                      <button>
-                        <Hoverable icon={FiInfo} />
-                      </button>
-                    </Tooltip>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button>
+                            <Hoverable icon={FiInfo} />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-xs flex flex-wrap">
+                            {alternativeAssistant.description}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
 
                     <Hoverable
                       icon={FiX}
@@ -613,7 +621,11 @@ export function ChatInputBar({
               chatState == "toolBuilding" ||
               chatState == "loading" ? (
                 <button
-                  className={`cursor-pointer ${chatState != "streaming" ? "bg-background-400" : "bg-background-800"}  h-[28px] w-[28px] rounded-full`}
+                  className={`cursor-pointer ${
+                    chatState != "streaming"
+                      ? "bg-background-400"
+                      : "bg-background-800"
+                  }  h-[28px] w-[28px] rounded-full`}
                   onClick={stopGenerating}
                   disabled={chatState != "streaming"}
                 >
@@ -635,7 +647,11 @@ export function ChatInputBar({
                 >
                   <SendIcon
                     size={28}
-                    className={`text-emphasis text-white p-1 rounded-full  ${chatState == "input" && message ? "bg-submit-background" : "bg-disabled-submit-background"} `}
+                    className={`text-emphasis text-white p-1 rounded-full  ${
+                      chatState == "input" && message
+                        ? "bg-submit-background"
+                        : "bg-disabled-submit-background"
+                    } `}
                   />
                 </button>
               )}

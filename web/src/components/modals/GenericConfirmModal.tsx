@@ -1,5 +1,5 @@
 import { FiCheck } from "react-icons/fi";
-import { ModalWrapper } from "./ModalWrapper";
+import { Modal } from "@/components/Modal";
 import { BasicClickable } from "@/components/BasicClickable";
 
 export const GenericConfirmModal = ({
@@ -16,7 +16,7 @@ export const GenericConfirmModal = ({
   onConfirm: () => void;
 }) => {
   return (
-    <ModalWrapper onClose={onClose}>
+    <Modal onOutsideClick={onClose}>
       <div className="max-w-full">
         <div className="flex mb-4">
           <h2 className="my-auto text-2xl font-bold whitespace-normal overflow-wrap-normal">
@@ -37,6 +37,6 @@ export const GenericConfirmModal = ({
           </div>
         </div>
       </div>
-    </ModalWrapper>
+    </Modal>
   );
 };

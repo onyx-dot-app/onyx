@@ -27,7 +27,6 @@ from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
 
-
 # List of directories/Files to exclude
 exclude_patterns = [
     "logs",

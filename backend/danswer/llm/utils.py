@@ -1,3 +1,4 @@
+import io
 import json
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -7,6 +8,7 @@ from typing import TYPE_CHECKING
 from typing import Union
 
 import litellm  # type: ignore
+import pandas as pd
 import tiktoken
 from langchain.prompts.base import StringPromptValue
 from langchain.prompts.chat import ChatPromptValue
@@ -107,11 +109,10 @@ def translate_danswer_msg_to_langchain(
     files: list[InMemoryChatFile] = []
 
     # If the message is a `ChatMessage`, it doesn't have the downloaded files
-    # attached. Just ignore them for now. Also, OpenAI doesn't allow files to
-    # be attached to AI messages, so we must remove them
-    if not isinstance(msg, ChatMessage) and msg.message_type != MessageType.ASSISTANT:
+    # attached. Just ignore them for now.
+    if not isinstance(msg, ChatMessage):
         files = msg.files
-    content = build_content_with_imgs(msg.message, files)
+    content = build_content_with_imgs(msg.message, files, message_type=msg.message_type)
 
     if msg.message_type == MessageType.SYSTEM:
         raise ValueError("System messages are not currently part of history")
@@ -135,6 +136,18 @@ def translate_history_to_basemessages(
     return history_basemessages, history_token_counts
 
 
+def _process_csv_file(file: InMemoryChatFile) -> str:
+    df = pd.read_csv(io.StringIO(file.content.decode("utf-8")))
+    csv_preview = df.head().to_string()
+
+    file_name_section = (
+        f"CSV FILE NAME: {file.filename}\n"
+        if file.filename
+        else "CSV FILE (NO NAME PROVIDED):\n"
+    )
+    return f"{file_name_section}{CODE_BLOCK_PAT.format(csv_preview)}\n\n\n"
+
+
 def _build_content(
     message: str,
     files: list[InMemoryChatFile] | None = None,
@@ -145,16 +158,26 @@ def _build_content(
         if files
         else None
     )
-    if not text_files:
+
+    csv_files = (
+        [file for file in files if file.file_type == ChatFileType.CSV]
+        if files
+        else None
+    )
+
+    if not text_files and not csv_files:
         return message
 
     final_message_with_files = "FILES:\n\n"
-    for file in text_files:
+    for file in text_files or []:
         file_content = file.content.decode("utf-8")
         file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""
         final_message_with_files += (
             f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
         )
+    for file in csv_files or []:
+        final_message_with_files += _process_csv_file(file)
+
     final_message_with_files += message
 
     return final_message_with_files
@@ -164,10 +187,19 @@ def build_content_with_imgs(
     message: str,
     files: list[InMemoryChatFile] | None = None,
     img_urls: list[str] | None = None,
+    message_type: MessageType = MessageType.USER,
 ) -> str | list[str | dict[str, Any]]:  # matching Langchain's BaseMessage content type
     files = files or []
-    img_files = [file for file in files if file.file_type == ChatFileType.IMAGE]
+
+    # Only include image files for user messages
+    img_files = (
+        [file for file in files if file.file_type == ChatFileType.IMAGE]
+        if message_type == MessageType.USER
+        else []
+    )
+
     img_urls = img_urls or []
+
     message_main_content = _build_content(message, files)
 
     if not img_files and not img_urls:
@@ -201,6 +233,28 @@ def build_content_with_imgs(
             for url in img_urls
         ],
     )
+
+
+def message_to_prompt_and_imgs(message: BaseMessage) -> tuple[str, list[str]]:
+    if isinstance(message.content, str):
+        return message.content, []
+
+    imgs = []
+    texts = []
+    for part in message.content:
+        if isinstance(part, dict):
+            if part.get("type") == "image_url":
+                img_url = part.get("image_url", {}).get("url")
+                if img_url:
+                    imgs.append(img_url)
+            elif part.get("type") == "text":
+                text = part.get("text")
+                if text:
+                    texts.append(text)
+        else:
+            texts.append(part)
+
+    return "".join(texts), imgs
 
 
 def dict_based_prompt_to_langchain_prompt(

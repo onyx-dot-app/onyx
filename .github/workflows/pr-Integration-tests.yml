@@ -72,7 +72,7 @@ jobs:
           load: true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/model-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/integration-tests/model-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
-
+      
       - name: Build integration test Docker image
         uses: ./.github/actions/custom-build-and-push
         with:
@@ -85,7 +85,58 @@ jobs:
           cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/integration/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/integration-tests/integration/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
-      - name: Start Docker containers
+      # Start containers for multi-tenant tests
+      - name: Start Docker containers for multi-tenant tests
+        run: |
+          cd deployment/docker_compose
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
+          MULTI_TENANT=true \
+          AUTH_TYPE=basic \
+          REQUIRE_EMAIL_VERIFICATION=false \
+          DISABLE_TELEMETRY=true \
+          IMAGE_TAG=test \
+          docker compose -f docker-compose.dev.yml -p danswer-stack up -d
+        id: start_docker_multi_tenant
+
+      # In practice, `cloud` Auth type would require OAUTH credentials to be set.
+      - name: Run Multi-Tenant Integration Tests
+        run: |
+          echo "Running integration tests..."
+          docker run --rm --network danswer-stack_default \
+            --name test-runner \
+            -e POSTGRES_HOST=relational_db \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=password \
+            -e POSTGRES_DB=postgres \
+            -e VESPA_HOST=index \
+            -e REDIS_HOST=cache \
+            -e API_SERVER_HOST=api_server \
+            -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+            -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
+            -e TEST_WEB_HOSTNAME=test-runner \
+            -e AUTH_TYPE=cloud \
+            -e MULTI_TENANT=true \
+            danswer/danswer-integration:test \
+            /app/tests/integration/multitenant_tests
+        continue-on-error: true
+        id: run_multitenant_tests
+
+      - name: Check multi-tenant test results
+        run: |
+          if [ ${{ steps.run_tests.outcome }} == 'failure' ]; then
+            echo "Integration tests failed. Exiting with error."
+            exit 1
+          else
+            echo "All integration tests passed successfully."
+          fi 
+
+      - name: Stop multi-tenant Docker containers
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.dev.yml -p danswer-stack down -v
+
+
+      - name: Start Docker containers 
         run: |
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
@@ -130,7 +181,7 @@ jobs:
           done
           echo "Finished waiting for service."
 
-      - name: Run integration tests
+      - name: Run Standard Integration Tests
         run: |
           echo "Running integration tests..."
           docker run --rm --network danswer-stack_default \
@@ -145,7 +196,8 @@ jobs:
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
             -e TEST_WEB_HOSTNAME=test-runner \
-            danswer/danswer-integration:test
+            danswer/danswer-integration:test \
+            /app/tests/integration/tests
         continue-on-error: true
         id: run_tests
 
@@ -158,12 +210,18 @@ jobs:
             echo "All integration tests passed successfully."
           fi
 
+      # save before stopping the containers so the logs can be captured
       - name: Save Docker logs
         if: success() || failure()
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p danswer-stack logs > docker-compose.log
           mv docker-compose.log ${{ github.workspace }}/docker-compose.log
+
+      - name: Stop Docker containers
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.dev.yml -p danswer-stack down -v
       
       - name: Upload logs
         if: success() || failure()

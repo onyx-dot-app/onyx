@@ -1,0 +1,46 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: celery-worker-indexing-scaledobject
+  namespace: danswer
+  labels:
+    app: celery-worker-indexing
+spec:
+  scaleTargetRef:
+    name: celery-worker-indexing
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  triggers:
+    - type: redis
+      metadata:
+        sslEnabled: "true"
+        host: "{host}"
+        port: "6379"
+        enableTLS: "true"
+        listName: connector_indexing
+        listLength: "1"
+        databaseIndex: "15"
+      authenticationRef:
+        name: celery-worker-auth
+    - type: redis
+      metadata:
+        sslEnabled: "true"
+        host: "{host}"
+        port: "6379"
+        enableTLS: "true"
+        listName: connector_indexing:2
+        listLength: "1"
+        databaseIndex: "15"
+      authenticationRef:
+        name: celery-worker-auth
+    - type: redis
+      metadata:
+        sslEnabled: "true"
+        host: "{host}"
+        port: "6379"
+        enableTLS: "true"
+        listName: connector_indexing:3
+        listLength: "1"
+        databaseIndex: "15"
+      authenticationRef:
+        name: celery-worker-auth

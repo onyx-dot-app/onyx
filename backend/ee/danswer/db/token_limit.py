@@ -65,64 +65,6 @@ def _add_user_filters(
     return stmt.where(where_clause)
 
 
-def fetch_all_user_token_rate_limits(
-    db_session: Session,
-    enabled_only: bool = False,
-    ordered: bool = True,
-) -> Sequence[TokenRateLimit]:
-    query = select(TokenRateLimit).where(
-        TokenRateLimit.scope == TokenRateLimitScope.USER
-    )
-
-    if enabled_only:
-        query = query.where(TokenRateLimit.enabled.is_(True))
-
-    if ordered:
-        query = query.order_by(TokenRateLimit.created_at.desc())
-
-    return db_session.scalars(query).all()
-
-
-def fetch_all_global_token_rate_limits(
-    db_session: Session,
-    enabled_only: bool = False,
-    ordered: bool = True,
-) -> Sequence[TokenRateLimit]:
-    query = select(TokenRateLimit).where(
-        TokenRateLimit.scope == TokenRateLimitScope.GLOBAL
-    )
-
-    if enabled_only:
-        query = query.where(TokenRateLimit.enabled.is_(True))
-
-    if ordered:
-        query = query.order_by(TokenRateLimit.created_at.desc())
-
-    token_rate_limits = db_session.scalars(query).all()
-    return token_rate_limits
-
-
-def fetch_user_group_token_rate_limits(
-    db_session: Session,
-    group_id: int,
-    user: User | None = None,
-    enabled_only: bool = False,
-    ordered: bool = True,
-    get_editable: bool = True,
-) -> Sequence[TokenRateLimit]:
-    stmt = select(TokenRateLimit)
-    stmt = stmt.where(User__UserGroup.user_group_id == group_id)
-    stmt = _add_user_filters(stmt, user, get_editable)
-
-    if enabled_only:
-        stmt = stmt.where(TokenRateLimit.enabled.is_(True))
-
-    if ordered:
-        stmt = stmt.order_by(TokenRateLimit.created_at.desc())
-
-    return db_session.scalars(stmt).all()
-
-
 def fetch_all_user_group_token_rate_limits_by_group(
     db_session: Session,
 ) -> Sequence[Row[tuple[TokenRateLimit, str]]]:
@@ -136,38 +78,6 @@ def fetch_all_user_group_token_rate_limits_by_group(
     )
 
     return db_session.execute(query).all()
-
-
-def insert_user_token_rate_limit(
-    db_session: Session,
-    token_rate_limit_settings: TokenRateLimitArgs,
-) -> TokenRateLimit:
-    token_limit = TokenRateLimit(
-        enabled=token_rate_limit_settings.enabled,
-        token_budget=token_rate_limit_settings.token_budget,
-        period_hours=token_rate_limit_settings.period_hours,
-        scope=TokenRateLimitScope.USER,
-    )
-    db_session.add(token_limit)
-    db_session.commit()
-
-    return token_limit
-
-
-def insert_global_token_rate_limit(
-    db_session: Session,
-    token_rate_limit_settings: TokenRateLimitArgs,
-) -> TokenRateLimit:
-    token_limit = TokenRateLimit(
-        enabled=token_rate_limit_settings.enabled,
-        token_budget=token_rate_limit_settings.token_budget,
-        period_hours=token_rate_limit_settings.period_hours,
-        scope=TokenRateLimitScope.GLOBAL,
-    )
-    db_session.add(token_limit)
-    db_session.commit()
-
-    return token_limit
 
 
 def insert_user_group_token_rate_limit(
@@ -193,34 +103,22 @@ def insert_user_group_token_rate_limit(
     return token_limit
 
 
-def update_token_rate_limit(
+def fetch_user_group_token_rate_limits(
     db_session: Session,
-    token_rate_limit_id: int,
-    token_rate_limit_settings: TokenRateLimitArgs,
-) -> TokenRateLimit:
-    token_limit = db_session.get(TokenRateLimit, token_rate_limit_id)
-    if token_limit is None:
-        raise ValueError(f"TokenRateLimit with id '{token_rate_limit_id}' not found")
+    group_id: int,
+    user: User | None = None,
+    enabled_only: bool = False,
+    ordered: bool = True,
+    get_editable: bool = True,
+) -> Sequence[TokenRateLimit]:
+    stmt = select(TokenRateLimit)
+    stmt = stmt.where(User__UserGroup.user_group_id == group_id)
+    stmt = _add_user_filters(stmt, user, get_editable)
 
-    token_limit.enabled = token_rate_limit_settings.enabled
-    token_limit.token_budget = token_rate_limit_settings.token_budget
-    token_limit.period_hours = token_rate_limit_settings.period_hours
-    db_session.commit()
+    if enabled_only:
+        stmt = stmt.where(TokenRateLimit.enabled.is_(True))
 
-    return token_limit
+    if ordered:
+        stmt = stmt.order_by(TokenRateLimit.created_at.desc())
 
-
-def delete_token_rate_limit(
-    db_session: Session,
-    token_rate_limit_id: int,
-) -> None:
-    token_limit = db_session.get(TokenRateLimit, token_rate_limit_id)
-    if token_limit is None:
-        raise ValueError(f"TokenRateLimit with id '{token_rate_limit_id}' not found")
-
-    db_session.query(TokenRateLimit__UserGroup).filter(
-        TokenRateLimit__UserGroup.rate_limit_id == token_rate_limit_id
-    ).delete()
-
-    db_session.delete(token_limit)
-    db_session.commit()
+    return db_session.scalars(stmt).all()

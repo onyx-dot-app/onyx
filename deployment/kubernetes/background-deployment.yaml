@@ -13,18 +13,41 @@ spec:
         app: background
     spec:
       containers:
-      - name: background
-        image: danswer/danswer-backend:latest
-        imagePullPolicy: IfNotPresent
-        command: ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
-        # There are some extra values since this is shared between services
-        # There are no conflicts though, extra env variables are simply ignored
-        env:
-        - name: REDIS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: danswer-secrets
-              key: redis_password
-        envFrom:
-        - configMapRef:
-            name: env-configmap
+        - name: background
+          image: danswer/danswer-backend:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              if [ -f /etc/ssl/certs/custom-ca.crt ]; then
+                update-ca-certificates;
+              fi &&
+              /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: danswer-secrets
+                  key: redis_password
+          envFrom:
+            - configMapRef:
+                name: env-configmap
+      # Uncomment the following lines if you need to include a custom CA certificate
+      # This section allows for the inclusion of a custom CA certificate
+      # If a custom CA certificate is present, it updates the system's CA certificates
+      # This is useful for environments with self-signed or internal CA certificates
+      # The certificate is mounted as a volume and the container checks for its presence
+      # Optional volume mount for CA certificate
+      #   volumeMounts:
+      #     - name: my-ca-cert-volume
+      #       mountPath: /etc/ssl/certs/custom-ca.crt
+      #       subPath: my-ca.crt
+      # Optional volume for CA certificate
+      # volumes:
+      #   - name: my-cas-cert-volume
+      #     secret:
+      #       secretName: my-ca-cert
+      #       items:
+      #         - key: my-ca.crt
+      #           path: my-ca.crt

@@ -11,13 +11,14 @@ from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_curator_or_admin_user
 from danswer.auth.users import current_user
-from danswer.background.celery.celery_redis import RedisConnectorIndexing
-from danswer.background.celery.celery_redis import RedisConnectorPruning
 from danswer.background.celery.celery_utils import get_deletion_attempt_snapshot
 from danswer.background.celery.tasks.pruning.tasks import (
     try_creating_prune_generator_task,
 )
 from danswer.background.celery.versioned_apps.primary import app as primary_app
+from danswer.background.task_name_builders import (
+    name_sync_external_doc_permissions_task,
+)
 from danswer.db.connector_credential_pair import add_credential_to_connector
 from danswer.db.connector_credential_pair import get_connector_credential_pair_from_id
 from danswer.db.connector_credential_pair import remove_credential_from_connector
@@ -39,6 +40,7 @@ from danswer.db.models import User
 from danswer.db.search_settings import get_current_search_settings
 from danswer.db.tasks import check_task_is_live_and_not_timed_out
 from danswer.db.tasks import get_latest_task
+from danswer.redis.redis_connector import RedisConnector
 from danswer.redis.redis_pool import get_redis_client
 from danswer.server.documents.models import CCPairFullInfo
 from danswer.server.documents.models import CCStatusUpdateRequest
@@ -48,11 +50,7 @@ from danswer.server.documents.models import ConnectorCredentialPairMetadata
 from danswer.server.documents.models import PaginatedIndexAttempts
 from danswer.server.models import StatusResponse
 from danswer.utils.logger import setup_logger
-from ee.danswer.background.task_name_builders import (
-    name_sync_external_doc_permissions_task,
-)
-from ee.danswer.db.user_group import validate_user_creation_permissions
-
+from danswer.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
 router = APIRouter(prefix="/manage")
@@ -97,8 +95,6 @@ def get_cc_pair_full_info(
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> CCPairFullInfo:
-    r = get_redis_client(tenant_id=tenant_id)
-
     cc_pair = get_connector_credential_pair_from_id(
         cc_pair_id, db_session, user, get_editable=False
     )
@@ -134,9 +130,9 @@ def get_cc_pair_full_info(
     )
 
     search_settings = get_current_search_settings(db_session)
-    rci = RedisConnectorIndexing(
-        cc_pair_id=cc_pair_id, search_settings_id=search_settings.id
-    )
+
+    redis_connector = RedisConnector(tenant_id, cc_pair_id)
+    redis_connector_index = redis_connector.new_index(search_settings.id)
 
     return CCPairFullInfo.from_models(
         cc_pair_model=cc_pair,
@@ -153,7 +149,7 @@ def get_cc_pair_full_info(
         ),
         num_docs_indexed=documents_indexed,
         is_editable_for_current_user=is_editable_for_current_user,
-        indexing=rci.is_indexing(r),
+        indexing=redis_connector_index.fenced,
     )
 
 
@@ -263,8 +259,9 @@ def prune_cc_pair(
         )
 
     r = get_redis_client(tenant_id=tenant_id)
-    rcp = RedisConnectorPruning(cc_pair_id)
-    if rcp.is_pruning(r):
+
+    redis_connector = RedisConnector(tenant_id, cc_pair_id)
+    if redis_connector.prune.fenced:
         raise HTTPException(
             status_code=HTTPStatus.CONFLICT,
             detail="Pruning task already in progress.",
@@ -334,9 +331,6 @@ def sync_cc_pair(
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[list[int]]:
     # avoiding circular refs
-    from ee.danswer.background.celery.apps.primary import (
-        sync_external_doc_permissions_task,
-    )
 
     cc_pair = get_connector_credential_pair_from_id(
         cc_pair_id=cc_pair_id,
@@ -362,11 +356,18 @@ def sync_cc_pair(
         )
 
     logger.info(f"Syncing the {cc_pair.connector.name} connector.")
-    sync_external_doc_permissions_task.apply_async(
-        kwargs=dict(
-            cc_pair_id=cc_pair_id, tenant_id=CURRENT_TENANT_ID_CONTEXTVAR.get()
-        ),
+    sync_external_doc_permissions_task = fetch_ee_implementation_or_noop(
+        "danswer.background.celery.apps.primary",
+        "sync_external_doc_permissions_task",
+        None,
     )
+
+    if sync_external_doc_permissions_task:
+        sync_external_doc_permissions_task.apply_async(
+            kwargs=dict(
+                cc_pair_id=cc_pair_id, tenant_id=CURRENT_TENANT_ID_CONTEXTVAR.get()
+            ),
+        )
 
     return StatusResponse(
         success=True,
@@ -382,7 +383,9 @@ def associate_credential_to_connector(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
-    validate_user_creation_permissions(
+    fetch_ee_implementation_or_noop(
+        "danswer.db.user_group", "validate_user_creation_permissions", None
+    )(
         db_session=db_session,
         user=user,
         target_group_ids=metadata.groups,

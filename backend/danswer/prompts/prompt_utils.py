@@ -13,6 +13,10 @@ from danswer.prompts.chat_prompts import ADDITIONAL_INFO
 from danswer.prompts.chat_prompts import CITATION_REMINDER
 from danswer.prompts.constants import CODE_BLOCK_PAT
 from danswer.search.models import InferenceChunk
+from danswer.utils.logger import setup_logger
+
+
+logger = setup_logger()
 
 
 MOST_BASIC_PROMPT = "You are a helpful AI assistant."
@@ -134,36 +138,27 @@ _PER_MESSAGE_TOKEN_BUFFER = 7
 def find_last_index(lst: list[int], max_prompt_tokens: int) -> int:
     """From the back, find the index of the last element to include
     before the list exceeds the maximum"""
-    print("===================1")
-    print("FIND LAST INDEX")
-    print (lst)
-    print("===================2")
-    print (len(lst))
-    print("===================3")
-    print (max_prompt_tokens)
 
     running_sum = 0
 
+    if not lst:
+        logger.warning("Empty message history passed to find_last_index")
+        return 0
+
     last_ind = 0
     for i in range(len(lst) - 1, -1, -1):
-        print("===================4")
-        print (running_sum)
-        print("===================5")
-        print (last_ind)
         running_sum += lst[i] + _PER_MESSAGE_TOKEN_BUFFER
-        print("===================6")
-        print (running_sum)
         if running_sum > max_prompt_tokens:
             last_ind = i + 1
             break
 
-    print("===========================7")
-    print("here")
-    print(last_ind)
-    print(len(lst))
+
     if last_ind >= len(lst):
-        print("raise error")
+        logger.error(
+            f"Last message alone is too large! max_prompt_tokens: {max_prompt_tokens}, message_token_counts: {lst}"
+        )
         raise ValueError("Last message alone is too large!")
+
     return last_ind
 
 

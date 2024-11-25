@@ -12,7 +12,7 @@ import {
   ChatSession,
   DocumentsResponse,
   FileDescriptor,
-  ImageGenerationDisplay,
+  FileChatDisplay,
   Message,
   MessageResponseIDInfo,
   RetrievalType,
@@ -103,7 +103,7 @@ export type PacketType =
   | BackendMessage
   | AnswerPiecePacket
   | DocumentsResponse
-  | ImageGenerationDisplay
+  | FileChatDisplay
   | StreamingError
   | MessageResponseIDInfo
   | StreamStopInfo;
@@ -428,7 +428,7 @@ export function processRawChatHistory(
             citations: messageInfo?.citations || {},
           }
         : {}),
-      toolCalls: messageInfo.tool_calls,
+      toolCall: messageInfo.tool_call,
       parentMessageId: messageInfo.parent_message,
       childrenMessageIds: [],
       latestChildMessageId: messageInfo.latest_child_message,
@@ -639,19 +639,22 @@ export async function useScrollonStream({
   scrollableDivRef,
   scrollDist,
   endDivRef,
-  distance,
   debounceNumber,
-  waitForScrollRef,
+  mobile,
 }: {
   chatState: ChatState;
   scrollableDivRef: RefObject<HTMLDivElement>;
   waitForScrollRef: RefObject<boolean>;
   scrollDist: MutableRefObject<number>;
   endDivRef: RefObject<HTMLDivElement>;
-  distance: number;
   debounceNumber: number;
   mobile?: boolean;
 }) {
+  const mobileDistance = 900; // distance that should "engage" the scroll
+  const desktopDistance = 500; // distance that should "engage" the scroll
+
+  const distance = mobile ? mobileDistance : desktopDistance;
+
   const preventScrollInterference = useRef<boolean>(false);
   const preventScroll = useRef<boolean>(false);
   const blockActionRef = useRef<boolean>(false);
@@ -692,7 +695,7 @@ export async function useScrollonStream({
         endDivRef.current
       ) {
         // catch up if necessary!
-        const scrollAmount = scrollDist.current + 10000;
+        const scrollAmount = scrollDist.current + (mobile ? 1000 : 10000);
         if (scrollDist.current > 300) {
           // if (scrollDist.current > 140) {
           endDivRef.current.scrollIntoView();

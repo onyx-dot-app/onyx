@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@tremor/react";
+import { Button } from "@/components/ui/button";
 import { CCPairFullInfo, ConnectorCredentialPairStatus } from "./types";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { mutate } from "swr";
@@ -19,8 +19,7 @@ export function ModifyStatusButtonCluster({
       {popup}
       {ccPair.status === ConnectorCredentialPairStatus.PAUSED ? (
         <Button
-          color="green"
-          size="xs"
+          variant="success-reverse"
           onClick={() =>
             setCCPairStatus(
               ccPair.id,
@@ -35,8 +34,7 @@ export function ModifyStatusButtonCluster({
         </Button>
       ) : (
         <Button
-          color="red"
-          size="xs"
+          variant="default"
           onClick={() =>
             setCCPairStatus(
               ccPair.id,

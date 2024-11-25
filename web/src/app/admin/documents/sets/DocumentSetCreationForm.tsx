@@ -16,7 +16,8 @@ import {
 } from "@/lib/types";
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
-import { Button, Divider } from "@tremor/react";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import React, { useEffect, useState } from "react";
@@ -133,7 +134,7 @@ export const DocumentSetCreationForm = ({
                 />
               )}
 
-              <Divider />
+              <Separator />
 
               {user?.role === UserRole.CURATOR ? (
                 <>
@@ -238,11 +239,13 @@ export const DocumentSetCreationForm = ({
 
                         return nonVisibleCcPairs.length > 0 ? (
                           <>
-                            <Divider />
+                            <Separator />
                             <h2 className="mb-1 font-medium text-base">
                               These connectors are not available to the{" "}
                               {userGroups && userGroups.length > 1
-                                ? `group${props.values.groups.length > 1 ? "s" : ""} you have selected`
+                                ? `group${
+                                    props.values.groups.length > 1 ? "s" : ""
+                                  } you have selected`
                                 : "group you curate"}
                               :
                             </h2>
@@ -339,6 +342,7 @@ export const DocumentSetCreationForm = ({
               <div className="flex mt-6">
                 <Button
                   type="submit"
+                  variant="submit"
                   disabled={props.isSubmitting}
                   className="w-64 mx-auto"
                 >

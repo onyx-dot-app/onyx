@@ -288,6 +288,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # NOTE: you will lose all chat history. This is to satisfy the non-nullable constraints
+    # below
+    op.execute("DELETE FROM chat_feedback")
+    op.execute("DELETE FROM chat_message__search_doc")
+    op.execute("DELETE FROM document_retrieval_feedback")
+    op.execute("DELETE FROM document_retrieval_feedback")
+    op.execute("DELETE FROM chat_message")
+    op.execute("DELETE FROM chat_session")
+
     op.drop_constraint(
         "chat_feedback__chat_message_fk", "chat_feedback", type_="foreignkey"
     )

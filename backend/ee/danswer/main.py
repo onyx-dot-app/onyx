@@ -5,7 +5,6 @@ from danswer.auth.users import auth_backend
 from danswer.auth.users import create_danswer_oauth_router
 from danswer.auth.users import fastapi_users
 from danswer.configs.app_configs import AUTH_TYPE
-from danswer.configs.app_configs import MULTI_TENANT
 from danswer.configs.app_configs import OAUTH_CLIENT_ID
 from danswer.configs.app_configs import OAUTH_CLIENT_SECRET
 from danswer.configs.app_configs import USER_AUTH_SECRET
@@ -13,11 +12,11 @@ from danswer.configs.app_configs import WEB_DOMAIN
 from danswer.configs.constants import AuthType
 from danswer.main import get_application as get_application_base
 from danswer.main import include_router_with_global_prefix_prepended
+from danswer.server.api_key.api import router as api_key_router
 from danswer.utils.logger import setup_logger
 from danswer.utils.variable_functionality import global_version
 from ee.danswer.configs.app_configs import OPENID_CONFIG_URL
 from ee.danswer.server.analytics.api import router as analytics_router
-from ee.danswer.server.api_key.api import router as api_key_router
 from ee.danswer.server.auth_check import check_ee_router_auth
 from ee.danswer.server.enterprise_settings.api import (
     admin_router as enterprise_settings_admin_router,
@@ -43,6 +42,7 @@ from ee.danswer.server.token_rate_limits.api import (
 )
 from ee.danswer.server.user_group.api import router as user_group_router
 from ee.danswer.utils.encryption import test_encryption
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 

@@ -29,3 +29,12 @@ class BillingInformation(BaseModel):
 
 class CheckoutSessionCreationResponse(BaseModel):
     id: str
+
+
+class ImpersonateRequest(BaseModel):
+    email: str
+
+
+class TenantCreationPayload(BaseModel):
+    tenant_id: str
+    email: str

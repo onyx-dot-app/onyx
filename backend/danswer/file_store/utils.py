@@ -8,12 +8,13 @@ import requests
 from sqlalchemy.orm import Session
 
 from danswer.configs.constants import FileOrigin
-from danswer.db.engine import get_session_context_manager
+from danswer.db.engine import get_session_with_tenant
 from danswer.db.models import ChatMessage
 from danswer.file_store.file_store import get_default_file_store
 from danswer.file_store.models import FileDescriptor
 from danswer.file_store.models import InMemoryChatFile
 from danswer.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
 def load_chat_file(
@@ -52,11 +53,11 @@ def load_all_chat_files(
     return files
 
 
-def save_file_from_url(url: str) -> str:
+def save_file_from_url(url: str, tenant_id: str) -> str:
     """NOTE: using multiple sessions here, since this is often called
     using multithreading. In practice, sharing a session has resulted in
     weird errors."""
-    with get_session_context_manager() as db_session:
+    with get_session_with_tenant(tenant_id) as db_session:
         response = requests.get(url)
         response.raise_for_status()
 
@@ -75,7 +76,10 @@ def save_file_from_url(url: str) -> str:
 
 
 def save_files_from_urls(urls: list[str]) -> list[str]:
+    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+
     funcs: list[tuple[Callable[..., Any], tuple[Any, ...]]] = [
-        (save_file_from_url, (url,)) for url in urls
+        (save_file_from_url, (url, tenant_id)) for url in urls
     ]
+    # Must pass in tenant_id here, since this is called by multithreading
     return run_functions_tuples_in_parallel(funcs)

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getSecondsUntilExpiration } from "@/lib/time";
 import { User } from "@/lib/types";
 import { mockedRefreshToken, refreshToken } from "./refreshUtils";
-import { CUSTOM_REFRESH_URL } from "@/lib/constants";
+import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
 
 export const HealthCheckBanner = () => {
   const { error } = useSWR("/api/health", errorHandlingFetcher);
@@ -35,57 +35,89 @@ export const HealthCheckBanner = () => {
   }, [user, updateExpirationTime]);
 
   useEffect(() => {
-    if (CUSTOM_REFRESH_URL) {
-      const refreshUrl = CUSTOM_REFRESH_URL;
-      let refreshTimeoutId: NodeJS.Timeout;
+    if (NEXT_PUBLIC_CUSTOM_REFRESH_URL) {
+      const refreshUrl = NEXT_PUBLIC_CUSTOM_REFRESH_URL;
+      let refreshIntervalId: NodeJS.Timer;
       let expireTimeoutId: NodeJS.Timeout;
 
       const attemptTokenRefresh = async () => {
-        try {
-          // NOTE: This is a mocked refresh token for testing purposes.
-          // const refreshTokenData = mockedRefreshToken();
+        let retryCount = 0;
+        const maxRetries = 3;
 
-          const refreshTokenData = await refreshToken(refreshUrl);
+        while (retryCount < maxRetries) {
+          try {
+            // NOTE: This is a mocked refresh token for testing purposes.
+            // const refreshTokenData = mockedRefreshToken();
 
-          const response = await fetch(
-            "/api/enterprise-settings/refresh-token",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(refreshTokenData),
+            const refreshTokenData = await refreshToken(refreshUrl);
+            if (!refreshTokenData) {
+              throw new Error("Failed to refresh token");
             }
-          );
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          await new Promise((resolve) => setTimeout(resolve, 4000));
 
-          await mutateUser(undefined, { revalidate: true });
-          updateExpirationTime();
-        } catch (error) {
-          console.error("Error refreshing token:", error);
+            const response = await fetch(
+              "/api/enterprise-settings/refresh-token",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(refreshTokenData),
+              }
+            );
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            await new Promise((resolve) => setTimeout(resolve, 4000));
+
+            await mutateUser(undefined, { revalidate: true });
+            updateExpirationTime();
+            break; // Success - exit the retry loop
+          } catch (error) {
+            console.error(
+              `Error refreshing token (attempt ${
+                retryCount + 1
+              }/${maxRetries}):`,
+              error
+            );
+            retryCount++;
+
+            if (retryCount === maxRetries) {
+              console.error("Max retry attempts reached");
+            } else {
+              // Wait before retrying (exponential backoff)
+              await new Promise((resolve) =>
+                setTimeout(resolve, Math.pow(2, retryCount) * 1000)
+              );
+            }
+          }
         }
       };
 
       const scheduleRefreshAndExpire = () => {
         if (secondsUntilExpiration !== null) {
-          const timeUntilRefresh = (secondsUntilExpiration + 0.5) * 1000;
-          refreshTimeoutId = setTimeout(attemptTokenRefresh, timeUntilRefresh);
+          const refreshInterval = 60 * 15; // 15 mins
+          refreshIntervalId = setInterval(
+            attemptTokenRefresh,
+            refreshInterval * 1000
+          );
 
           const timeUntilExpire = (secondsUntilExpiration + 10) * 1000;
           expireTimeoutId = setTimeout(() => {
             console.debug("Session expired. Setting expired state to true.");
             setExpired(true);
           }, timeUntilExpire);
+
+          // if we're going to timeout before the next refresh, kick off a refresh now!
+          if (secondsUntilExpiration < refreshInterval) {
+            attemptTokenRefresh();
+          }
         }
       };
 
       scheduleRefreshAndExpire();
 
       return () => {
-        clearTimeout(refreshTimeoutId);
+        clearInterval(refreshIntervalId);
         clearTimeout(expireTimeoutId);
       };
     }

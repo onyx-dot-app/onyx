@@ -110,7 +110,7 @@ def test_web_pruning(reset: None, vespa_client: vespa_fixture) -> None:
     test_filename = os.path.realpath(__file__)
     test_directory = os.path.dirname(test_filename)
     with tempfile.TemporaryDirectory() as temp_dir:
-        port = 8888
+        port = 8889
 
         website_src = os.path.join(test_directory, "website")
         website_tgt = os.path.join(temp_dir, "website")

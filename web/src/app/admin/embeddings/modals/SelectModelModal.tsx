@@ -1,6 +1,7 @@
 import React from "react";
 import { Modal } from "@/components/Modal";
-import { Button, Text } from "@tremor/react";
+import { Button } from "@/components/ui/button";
+import Text from "@/components/ui/text";
 import { CloudEmbeddingModel } from "../../../../components/embedding/interfaces";
 
 export function SelectModelModal({
@@ -27,7 +28,7 @@ export function SelectModelModal({
           Are you sure?
         </Text>
         <div className="flex mt-8 justify-end">
-          <Button color="green" onClick={onConfirm}>
+          <Button variant="submit" onClick={onConfirm}>
             Yes
           </Button>
         </div>

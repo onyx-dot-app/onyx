@@ -251,7 +251,11 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         end_datetime = datetime.utcfromtimestamp(end)
         return self._fetch_from_salesforce(start=start_datetime, end=end_datetime)
 
-    def retrieve_all_slim_documents(self) -> GenerateSlimDocumentOutput:
+    def retrieve_all_slim_documents(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> GenerateSlimDocumentOutput:
         if self.sf_client is None:
             raise ConnectorMissingCredentialError("Salesforce")
         doc_metadata_list: list[SlimDocument] = []

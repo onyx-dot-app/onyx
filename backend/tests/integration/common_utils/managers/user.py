@@ -13,6 +13,14 @@ from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser
 
 
+DOMAIN = "test.com"
+DEFAULT_PASSWORD = "test"
+
+
+def build_email(name: str) -> str:
+    return f"{name}@test.com"
+
+
 class UserManager:
     @staticmethod
     def create(
@@ -23,9 +31,9 @@ class UserManager:
             name = f"test{str(uuid4())}"
 
         if email is None:
-            email = f"{name}@test.com"
+            email = build_email(name)
 
-        password = "test"
+        password = DEFAULT_PASSWORD
 
         body = {
             "email": email,
@@ -65,15 +73,19 @@ class UserManager:
             data=data,
             headers=headers,
         )
-        response.raise_for_status()
-        result_cookie = next(iter(response.cookies), None)
 
-        if not result_cookie:
+        response.raise_for_status()
+
+        cookies = response.cookies.get_dict()
+        session_cookie = cookies.get("fastapiusersauth")
+
+        if not session_cookie:
             raise Exception("Failed to login")
 
         print(f"Logged in as {test_user.email}")
-        cookie = f"{result_cookie.name}={result_cookie.value}"
-        test_user.headers["Cookie"] = cookie
+
+        # Set cookies in the headers
+        test_user.headers["Cookie"] = f"fastapiusersauth={session_cookie}; "
         return test_user
 
     @staticmethod

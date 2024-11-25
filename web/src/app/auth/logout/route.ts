@@ -14,7 +14,7 @@ export const POST = async (request: NextRequest) => {
 
   // Delete cookies only if cloud is enabled (jwt auth)
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    const cookiesToDelete = ["fastapiusersauth", "tenant_details"];
+    const cookiesToDelete = ["fastapiusersauth"];
     const cookieOptions = {
       path: "/",
       secure: process.env.NODE_ENV === "production",

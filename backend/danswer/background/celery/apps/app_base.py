@@ -3,6 +3,7 @@ import multiprocessing
 import time
 from typing import Any
 
+import requests
 import sentry_sdk
 from celery import Task
 from celery.app import trace
@@ -11,18 +12,22 @@ from celery.states import READY_STATES
 from celery.utils.log import get_task_logger
 from celery.worker import strategy  # type: ignore
 from sentry_sdk.integrations.celery import CeleryIntegration
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from danswer.background.celery.apps.task_formatters import CeleryTaskColoredFormatter
 from danswer.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
-from danswer.background.celery.celery_redis import RedisConnectorCredentialPair
-from danswer.background.celery.celery_redis import RedisConnectorDeletion
-from danswer.background.celery.celery_redis import RedisConnectorPruning
-from danswer.background.celery.celery_redis import RedisDocumentSet
-from danswer.background.celery.celery_redis import RedisUserGroup
 from danswer.background.celery.celery_utils import celery_is_worker_primary
 from danswer.configs.constants import DanswerRedisLocks
-from danswer.db.engine import get_all_tenant_ids
+from danswer.db.engine import get_sqlalchemy_engine
+from danswer.document_index.vespa_constants import VESPA_CONFIG_SERVER_URL
+from danswer.redis.redis_connector import RedisConnector
+from danswer.redis.redis_connector_credential_pair import RedisConnectorCredentialPair
+from danswer.redis.redis_connector_delete import RedisConnectorDelete
+from danswer.redis.redis_connector_prune import RedisConnectorPrune
+from danswer.redis.redis_document_set import RedisDocumentSet
 from danswer.redis.redis_pool import get_redis_client
+from danswer.redis.redis_usergroup import RedisUserGroup
 from danswer.utils.logger import ColoredFormatter
 from danswer.utils.logger import PlainFormatter
 from danswer.utils.logger import setup_logger
@@ -37,7 +42,7 @@ if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[CeleryIntegration()],
-        traces_sample_rate=0.5,
+        traces_sample_rate=0.1,
     )
     logger.info("Sentry initialized")
 else:
@@ -108,29 +113,27 @@ def on_task_postrun(
     if task_id.startswith(RedisDocumentSet.PREFIX):
         document_set_id = RedisDocumentSet.get_id_from_task_id(task_id)
         if document_set_id is not None:
-            rds = RedisDocumentSet(int(document_set_id))
+            rds = RedisDocumentSet(tenant_id, int(document_set_id))
             r.srem(rds.taskset_key, task_id)
         return
 
     if task_id.startswith(RedisUserGroup.PREFIX):
         usergroup_id = RedisUserGroup.get_id_from_task_id(task_id)
         if usergroup_id is not None:
-            rug = RedisUserGroup(int(usergroup_id))
+            rug = RedisUserGroup(tenant_id, int(usergroup_id))
             r.srem(rug.taskset_key, task_id)
         return
 
-    if task_id.startswith(RedisConnectorDeletion.PREFIX):
-        cc_pair_id = RedisConnectorDeletion.get_id_from_task_id(task_id)
+    if task_id.startswith(RedisConnectorDelete.PREFIX):
+        cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
         if cc_pair_id is not None:
-            rcd = RedisConnectorDeletion(int(cc_pair_id))
-            r.srem(rcd.taskset_key, task_id)
+            RedisConnectorDelete.remove_from_taskset(int(cc_pair_id), task_id, r)
         return
 
-    if task_id.startswith(RedisConnectorPruning.SUBTASK_PREFIX):
-        cc_pair_id = RedisConnectorPruning.get_id_from_task_id(task_id)
+    if task_id.startswith(RedisConnectorPrune.SUBTASK_PREFIX):
+        cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
         if cc_pair_id is not None:
-            rcp = RedisConnectorPruning(int(cc_pair_id))
-            r.srem(rcp.taskset_key, task_id)
+            RedisConnectorPrune.remove_from_taskset(int(cc_pair_id), task_id, r)
         return
 
 
@@ -140,77 +143,154 @@ def on_celeryd_init(sender: Any = None, conf: Any = None, **kwargs: Any) -> None
 
 
 def wait_for_redis(sender: Any, **kwargs: Any) -> None:
+    """Waits for redis to become ready subject to a hardcoded timeout.
+    Will raise WorkerShutdown to kill the celery worker if the timeout is reached."""
+
     r = get_redis_client(tenant_id=None)
 
     WAIT_INTERVAL = 5
     WAIT_LIMIT = 60
 
+    ready = False
     time_start = time.monotonic()
-    logger.info("Redis: Readiness check starting.")
+    logger.info("Redis: Readiness probe starting.")
     while True:
         try:
             if r.ping():
+                ready = True
                 break
         except Exception:
             pass
 
         time_elapsed = time.monotonic() - time_start
-        logger.info(
-            f"Redis: Ping failed. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
-        )
         if time_elapsed > WAIT_LIMIT:
-            msg = (
-                f"Redis: Readiness check did not succeed within the timeout "
-                f"({WAIT_LIMIT} seconds). Exiting..."
-            )
-            logger.error(msg)
-            raise WorkerShutdown(msg)
+            break
+
+        logger.info(
+            f"Redis: Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
+        )
 
         time.sleep(WAIT_INTERVAL)
 
-    logger.info("Redis: Readiness check succeeded. Continuing...")
+    if not ready:
+        msg = (
+            f"Redis: Readiness probe did not succeed within the timeout "
+            f"({WAIT_LIMIT} seconds). Exiting..."
+        )
+        logger.error(msg)
+        raise WorkerShutdown(msg)
+
+    logger.info("Redis: Readiness probe succeeded. Continuing...")
+    return
+
+
+def wait_for_db(sender: Any, **kwargs: Any) -> None:
+    """Waits for the db to become ready subject to a hardcoded timeout.
+    Will raise WorkerShutdown to kill the celery worker if the timeout is reached."""
+
+    WAIT_INTERVAL = 5
+    WAIT_LIMIT = 60
+
+    ready = False
+    time_start = time.monotonic()
+    logger.info("Database: Readiness probe starting.")
+    while True:
+        try:
+            with Session(get_sqlalchemy_engine()) as db_session:
+                result = db_session.execute(text("SELECT NOW()")).scalar()
+                if result:
+                    ready = True
+                    break
+        except Exception:
+            pass
+
+        time_elapsed = time.monotonic() - time_start
+        if time_elapsed > WAIT_LIMIT:
+            break
+
+        logger.info(
+            f"Database: Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
+        )
+
+        time.sleep(WAIT_INTERVAL)
+
+    if not ready:
+        msg = (
+            f"Database: Readiness probe did not succeed within the timeout "
+            f"({WAIT_LIMIT} seconds). Exiting..."
+        )
+        logger.error(msg)
+        raise WorkerShutdown(msg)
+
+    logger.info("Database: Readiness probe succeeded. Continuing...")
+    return
+
+
+def wait_for_vespa(sender: Any, **kwargs: Any) -> None:
+    """Waits for Vespa to become ready subject to a hardcoded timeout.
+    Will raise WorkerShutdown to kill the celery worker if the timeout is reached."""
+
+    WAIT_INTERVAL = 5
+    WAIT_LIMIT = 60
+
+    ready = False
+    time_start = time.monotonic()
+    logger.info("Vespa: Readiness probe starting.")
+    while True:
+        try:
+            response = requests.get(f"{VESPA_CONFIG_SERVER_URL}/state/v1/health")
+            response.raise_for_status()
+
+            response_dict = response.json()
+            if response_dict["status"]["code"] == "up":
+                ready = True
+                break
+        except Exception:
+            pass
+
+        time_elapsed = time.monotonic() - time_start
+        if time_elapsed > WAIT_LIMIT:
+            break
+
+        logger.info(
+            f"Vespa: Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
+        )
+
+        time.sleep(WAIT_INTERVAL)
+
+    if not ready:
+        msg = (
+            f"Vespa: Readiness probe did not succeed within the timeout "
+            f"({WAIT_LIMIT} seconds). Exiting..."
+        )
+        logger.error(msg)
+        raise WorkerShutdown(msg)
+
+    logger.info("Vespa: Readiness probe succeeded. Continuing...")
     return
 
 
 def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:
+    logger.info("Running as a secondary celery worker.")
+
+    # Set up variables for waiting on primary worker
     WAIT_INTERVAL = 5
     WAIT_LIMIT = 60
-
-    logger.info("Running as a secondary celery worker.")
-    logger.info("Waiting for all tenant primary workers to be ready...")
+    r = get_redis_client(tenant_id=None)
     time_start = time.monotonic()
 
+    logger.info("Waiting for primary worker to be ready...")
     while True:
-        tenant_ids = get_all_tenant_ids()
-        # Check if we have a primary worker lock for each tenant
-        all_tenants_ready = all(
-            get_redis_client(tenant_id=tenant_id).exists(
-                DanswerRedisLocks.PRIMARY_WORKER
-            )
-            for tenant_id in tenant_ids
-        )
-
-        if all_tenants_ready:
+        if r.exists(DanswerRedisLocks.PRIMARY_WORKER):
             break
 
         time_elapsed = time.monotonic() - time_start
-        ready_tenants = sum(
-            1
-            for tenant_id in tenant_ids
-            if get_redis_client(tenant_id=tenant_id).exists(
-                DanswerRedisLocks.PRIMARY_WORKER
-            )
-        )
-
         logger.info(
-            f"Not all tenant primary workers are ready yet. "
-            f"Ready tenants: {ready_tenants}/{len(tenant_ids)} "
-            f"elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
+            f"Primary worker is not ready yet. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
         )
-
         if time_elapsed > WAIT_LIMIT:
             msg = (
-                f"Not all tenant primary workers were ready within the timeout "
+                f"Primary worker was not ready within the timeout. "
                 f"({WAIT_LIMIT} seconds). Exiting..."
             )
             logger.error(msg)
@@ -218,7 +298,7 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:
 
         time.sleep(WAIT_INTERVAL)
 
-    logger.info("All tenant primary workers are ready. Continuing...")
+    logger.info("Wait for primary worker completed successfully. Continuing...")
     return
 
 
@@ -230,26 +310,20 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
     if not celery_is_worker_primary(sender):
         return
 
-    if not hasattr(sender, "primary_worker_locks"):
+    if not sender.primary_worker_lock:
         return
 
-    for tenant_id, lock in sender.primary_worker_locks.items():
-        try:
-            if lock and lock.owned():
-                logger.debug(f"Attempting to release lock for tenant {tenant_id}")
-                try:
-                    lock.release()
-                    logger.debug(f"Successfully released lock for tenant {tenant_id}")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to release lock for tenant {tenant_id}. Error: {str(e)}"
-                    )
-                finally:
-                    sender.primary_worker_locks[tenant_id] = None
-        except Exception as e:
-            logger.error(
-                f"Error checking lock status for tenant {tenant_id}. Error: {str(e)}"
-            )
+    logger.info("Releasing primary worker lock.")
+    lock = sender.primary_worker_lock
+    try:
+        if lock.owned():
+            try:
+                lock.release()
+                sender.primary_worker_lock = None
+            except Exception as e:
+                logger.error(f"Failed to release primary worker lock: {e}")
+    except Exception as e:
+        logger.error(f"Failed to check if primary worker lock is owned: {e}")
 
 
 def on_setup_logging(

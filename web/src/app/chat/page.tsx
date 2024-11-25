@@ -7,15 +7,14 @@ import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
 import WrappedChat from "./WrappedChat";
-import { AssistantsProvider } from "@/components/context/AssistantsContext";
+import { cookies } from "next/headers";
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string };
+export default async function Page(props: {
+  searchParams: Promise<{ [key: string]: string }>;
 }) {
+  const searchParams = await props.searchParams;
   noStore();
-
+  const requestCookies = await cookies();
   const data = await fetchChatData(searchParams);
 
 
@@ -50,7 +49,9 @@ export default async function Page({
       <UserDisclaimerModal disclaimerText={disclaimerText} disclaimerTitle={disclaimerTitle}/>
 
       <InstantSSRAutoRefresh />
-      {shouldShowWelcomeModal && <WelcomeModal user={user} />}
+      {shouldShowWelcomeModal && (
+        <WelcomeModal user={user} requestCookies={requestCookies} />
+      )}
       <ChatProvider
         value={{
           chatSessions,

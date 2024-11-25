@@ -19,7 +19,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import { DateRangeSelector } from "../DateRangeSelector";
-import { DateRangePickerValue } from "@tremor/react";
+import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 import { FilterDropdown } from "./FilterDropdown";
 import { listSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -471,9 +471,9 @@ export function HorizontalSourceSelector({
           icon={<FiBook size={16} />}
           defaultDisplay="Sets"
           resetValues={resetDocuments}
-          width="w-fit max-w-24 ellipsis truncate"
+          width="w-fit max-w-24 etext-llipsis truncate"
           dropdownWidth="max-w-36 w-fit"
-          optionClassName="truncate break-all ellipsis"
+          optionClassName="truncate w-full break-all"
         />
       )}
 
@@ -506,7 +506,7 @@ export function HorizontalSourceSelector({
           resetValues={resetTags}
           width="w-fit max-w-24 ellipsis truncate"
           dropdownWidth="max-w-80 w-fit"
-          optionClassName="truncate break-all ellipsis"
+          optionClassName="truncate w-full break-all ellipsis"
         />
       )}
     </div>

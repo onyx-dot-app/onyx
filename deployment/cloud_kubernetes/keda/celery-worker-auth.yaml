@@ -1,0 +1,13 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: celery-worker-auth
+  namespace: danswer
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: keda-redis-secret
+      key: host
+    - parameter: password
+      name: keda-redis-secret
+      key: password

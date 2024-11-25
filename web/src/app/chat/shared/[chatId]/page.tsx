@@ -26,7 +26,10 @@ async function getSharedChat(chatId: string) {
   return null;
 }
 
-export default async function Page({ params }: { params: { chatId: string } }) {
+export default async function Page(props: {
+  params: Promise<{ chatId: string }>;
+}) {
+  const params = await props.params;
   const tasks = [
     getAuthTypeMetadataSS(),
     getCurrentUserSS(),
@@ -58,6 +61,7 @@ export default async function Page({ params }: { params: { chatId: string } }) {
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
     return redirect("/auth/waiting-on-verification");
   }
+  // prettier-ignore
   const persona: Persona =
     chatSession?.persona_id && availableAssistants?.length
       ? (availableAssistants.find((p) => p.id === chatSession.persona_id) ??

@@ -89,7 +89,7 @@ def get_model_app() -> FastAPI:
         sentry_sdk.init(
             dsn=SENTRY_DSN,
             integrations=[StarletteIntegration(), FastApiIntegration()],
-            traces_sample_rate=0.5,
+            traces_sample_rate=0.1,
         )
         logger.info("Sentry initialized")
     else:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import tempfile
 from collections.abc import Iterable
 
 import pytest
@@ -9,7 +10,10 @@ from pytest_mock import MockFixture
 
 from danswer.connectors.mediawiki import wiki
 
-# These tests are disabled for now
+
+# Some of these tests are disabled for now due to flakiness with wikipedia as the backend
+
+pywikibot.config.base_dir = tempfile.TemporaryDirectory().name
 
 
 @pytest.fixture

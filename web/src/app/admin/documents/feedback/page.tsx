@@ -6,7 +6,7 @@ import { useMostReactedToDocuments } from "@/lib/hooks";
 import { DocumentFeedbackTable } from "./DocumentFeedbackTable";
 import { numPages, numToDisplay } from "./constants";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { Title } from "@tremor/react";
+import Title from "@/components/ui/title";
 
 const Main = () => {
   const {

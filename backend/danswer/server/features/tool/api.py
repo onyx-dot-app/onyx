@@ -18,10 +18,16 @@ from danswer.db.tools import update_tool
 from danswer.server.features.tool.models import CustomToolCreate
 from danswer.server.features.tool.models import CustomToolUpdate
 from danswer.server.features.tool.models import ToolSnapshot
-from danswer.tools.custom.openapi_parsing import MethodSpec
-from danswer.tools.custom.openapi_parsing import openapi_to_method_specs
-from danswer.tools.custom.openapi_parsing import validate_openapi_schema
-from danswer.tools.images.image_generation_tool import ImageGenerationTool
+from danswer.tools.tool_implementations.custom.openapi_parsing import MethodSpec
+from danswer.tools.tool_implementations.custom.openapi_parsing import (
+    openapi_to_method_specs,
+)
+from danswer.tools.tool_implementations.custom.openapi_parsing import (
+    validate_openapi_schema,
+)
+from danswer.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from danswer.tools.utils import is_image_generation_available
 
 router = APIRouter(prefix="/tool")

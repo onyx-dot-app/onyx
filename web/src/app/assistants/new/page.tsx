@@ -1,4 +1,4 @@
-import { Card } from "@tremor/react";
+import CardSection from "@/components/admin/CardSection";
 import { HeaderWrapper } from "@/components/header/HeaderWrapper";
 import { AssistantEditor } from "@/app/admin/assistants/AssistantEditor";
 import { SuccessfulPersonaUpdateRedirectType } from "@/app/admin/assistants/enums";
@@ -21,14 +21,14 @@ export default async function Page() {
       <div className="w-full my-16">
         <div className="px-32">
           <div className="mx-auto container">
-            <Card>
+            <CardSection>
               <AssistantEditor
                 {...values}
                 defaultPublic={false}
                 redirectType={SuccessfulPersonaUpdateRedirectType.CHAT}
                 shouldAddAssistantToUserPreferences={true}
               />
-            </Card>
+            </CardSection>
           </div>
         </div>
       </div>

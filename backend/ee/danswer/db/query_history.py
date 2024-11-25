@@ -29,6 +29,7 @@ def fetch_chat_sessions_eagerly_by_time(
     filters: list[ColumnElement | BinaryExpression] = [
         ChatSession.time_created.between(start, end)
     ]
+
     if initial_id:
         filters.append(ChatSession.id < initial_id)
     subquery = (

@@ -1,143 +1,122 @@
-from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
-from typing import cast
 
-from googleapiclient.discovery import build  # type: ignore
-from googleapiclient.errors import HttpError  # type: ignore
 from sqlalchemy.orm import Session
 
 from danswer.access.models import ExternalAccess
-from danswer.connectors.factory import instantiate_connector
-from danswer.connectors.google_drive.connector_auth import (
-    get_google_drive_creds,
-)
-from danswer.connectors.interfaces import PollConnector
-from danswer.connectors.models import InputType
+from danswer.connectors.google_drive.connector import GoogleDriveConnector
+from danswer.connectors.google_utils.google_utils import execute_paginated_retrieval
+from danswer.connectors.google_utils.resources import get_drive_service
+from danswer.connectors.interfaces import GenerateSlimDocumentOutput
+from danswer.connectors.models import SlimDocument
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.users import batch_add_non_web_user_if_not_exists__no_commit
 from danswer.utils.logger import setup_logger
-from danswer.utils.retry_wrapper import retry_builder
 from ee.danswer.db.document import upsert_document_external_perms__no_commit
-
-# Google Drive APIs are quite flakey and may 500 for an
-# extended period of time. Trying to combat here by adding a very
-# long retry period (~20 minutes of trying every minute)
-add_retries = retry_builder(tries=5, delay=5, max_delay=30)
-
 
 logger = setup_logger()
 
+_PERMISSION_ID_PERMISSION_MAP: dict[str, dict[str, Any]] = {}
 
-def _get_docs_with_additional_info(
-    db_session: Session,
+
+def _get_slim_doc_generator(
     cc_pair: ConnectorCredentialPair,
-) -> dict[str, Any]:
-    # Get all document ids that need their permissions updated
-    runnable_connector = instantiate_connector(
-        db_session=db_session,
-        source=cc_pair.connector.source,
-        input_type=InputType.POLL,
-        connector_specific_config=cc_pair.connector.connector_specific_config,
-        credential=cc_pair.credential,
-    )
-
-    assert isinstance(runnable_connector, PollConnector)
-
+    google_drive_connector: GoogleDriveConnector,
+) -> GenerateSlimDocumentOutput:
     current_time = datetime.now(timezone.utc)
     start_time = (
         cc_pair.last_time_perm_sync.replace(tzinfo=timezone.utc).timestamp()
         if cc_pair.last_time_perm_sync
         else 0.0
     )
-    cc_pair.last_time_perm_sync = current_time
 
-    doc_batch_generator = runnable_connector.poll_source(
+    return google_drive_connector.retrieve_all_slim_documents(
         start=start_time, end=current_time.timestamp()
     )
 
-    docs_with_additional_info = {
-        doc.id: doc.additional_info
-        for doc_batch in doc_batch_generator
-        for doc in doc_batch
-    }
 
-    return docs_with_additional_info
+def _fetch_permissions_for_permission_ids(
+    google_drive_connector: GoogleDriveConnector,
+    permission_ids: list[str],
+    permission_info: dict[str, Any],
+) -> list[dict[str, Any]]:
+    doc_id = permission_info.get("doc_id")
+    if not permission_info or not doc_id:
+        return []
 
+    # Check cache first for all permission IDs
+    permissions = [
+        _PERMISSION_ID_PERMISSION_MAP[pid]
+        for pid in permission_ids
+        if pid in _PERMISSION_ID_PERMISSION_MAP
+    ]
 
-def _fetch_permissions_paginated(
-    drive_service: Any, drive_file_id: str
-) -> Iterator[dict[str, Any]]:
-    next_token = None
+    # If we found all permissions in cache, return them
+    if len(permissions) == len(permission_ids):
+        return permissions
 
-    # Get paginated permissions for the file id
-    while True:
-        try:
-            permissions_resp: dict[str, Any] = add_retries(
-                lambda: (
-                    drive_service.permissions()
-                    .list(
-                        fileId=drive_file_id,
-                        fields="permissions(emailAddress, type, domain)",
-                        supportsAllDrives=True,
-                        pageToken=next_token,
-                    )
-                    .execute()
-                )
-            )()
-        except HttpError as e:
-            if e.resp.status == 404:
-                logger.warning(f"Document with id {drive_file_id} not found: {e}")
-                break
-            elif e.resp.status == 403:
-                logger.warning(
-                    f"Access denied for retrieving document permissions: {e}"
-                )
-                break
-            else:
-                logger.error(f"Failed to fetch permissions: {e}")
-                raise
-
-        for permission in permissions_resp.get("permissions", []):
-            yield permission
-
-        next_token = permissions_resp.get("nextPageToken")
-        if not next_token:
-            break
-
-
-def _fetch_google_permissions_for_document_id(
-    db_session: Session,
-    drive_file_id: str,
-    credentials_json: dict[str, str],
-    company_google_domains: list[str],
-) -> ExternalAccess:
-    # Authenticate and construct service
-    google_drive_creds, _ = get_google_drive_creds(
-        credentials_json,
+    owner_email = permission_info.get("owner_email")
+    drive_service = get_drive_service(
+        creds=google_drive_connector.creds,
+        user_email=(owner_email or google_drive_connector.primary_admin_email),
     )
-    if not google_drive_creds.valid:
-        raise ValueError("Invalid Google Drive credentials")
 
-    drive_service = build("drive", "v3", credentials=google_drive_creds)
+    # Otherwise, fetch all permissions and update cache
+    fetched_permissions = execute_paginated_retrieval(
+        retrieval_function=drive_service.permissions().list,
+        list_key="permissions",
+        fileId=doc_id,
+        fields="permissions(id, emailAddress, type, domain)",
+        supportsAllDrives=True,
+    )
 
+    permissions_for_doc_id = []
+    # Update cache and return all permissions
+    for permission in fetched_permissions:
+        permissions_for_doc_id.append(permission)
+        _PERMISSION_ID_PERMISSION_MAP[permission["id"]] = permission
+
+    return permissions_for_doc_id
+
+
+def _get_permissions_from_slim_doc(
+    google_drive_connector: GoogleDriveConnector,
+    slim_doc: SlimDocument,
+) -> ExternalAccess:
+    permission_info = slim_doc.perm_sync_data or {}
+
+    permissions_list = permission_info.get("permissions", [])
+    if not permissions_list:
+        if permission_ids := permission_info.get("permission_ids"):
+            permissions_list = _fetch_permissions_for_permission_ids(
+                google_drive_connector=google_drive_connector,
+                permission_ids=permission_ids,
+                permission_info=permission_info,
+            )
+        if not permissions_list:
+            logger.warning(f"No permissions found for document {slim_doc.id}")
+            return ExternalAccess(
+                external_user_emails=set(),
+                external_user_group_ids=set(),
+                is_public=False,
+            )
+
+    company_domain = google_drive_connector.google_domain
     user_emails: set[str] = set()
     group_emails: set[str] = set()
     public = False
-    for permission in _fetch_permissions_paginated(drive_service, drive_file_id):
+    for permission in permissions_list:
         permission_type = permission["type"]
         if permission_type == "user":
             user_emails.add(permission["emailAddress"])
         elif permission_type == "group":
             group_emails.add(permission["emailAddress"])
-        elif permission_type == "domain":
-            if permission["domain"] in company_google_domains:
+        elif permission_type == "domain" and company_domain:
+            if permission["domain"] == company_domain:
                 public = True
         elif permission_type == "anyone":
             public = True
-
-    batch_add_non_web_user_if_not_exists__no_commit(db_session, list(user_emails))
 
     return ExternalAccess(
         external_user_emails=user_emails,
@@ -156,32 +135,26 @@ def gdrive_doc_sync(
     it in postgres so that when it gets created later, the permissions are
     already populated
     """
-    sync_details = cc_pair.auto_sync_options
-    if sync_details is None:
-        logger.error("Sync details not found for Google Drive")
-        raise ValueError("Sync details not found for Google Drive")
-
-    # Here we run the connector to grab all the ids
-    # this may grab ids before they are indexed but that is fine because
-    # we create a document in postgres to hold the permissions info
-    # until the indexing job has a chance to run
-    docs_with_additional_info = _get_docs_with_additional_info(
-        db_session=db_session,
-        cc_pair=cc_pair,
+    google_drive_connector = GoogleDriveConnector(
+        **cc_pair.connector.connector_specific_config
     )
+    google_drive_connector.load_credentials(cc_pair.credential.credential_json)
 
-    for doc_id, doc_additional_info in docs_with_additional_info.items():
-        ext_access = _fetch_google_permissions_for_document_id(
-            db_session=db_session,
-            drive_file_id=doc_additional_info,
-            credentials_json=cc_pair.credential.credential_json,
-            company_google_domains=[
-                cast(dict[str, str], sync_details)["company_domain"]
-            ],
-        )
-        upsert_document_external_perms__no_commit(
-            db_session=db_session,
-            doc_id=doc_id,
-            external_access=ext_access,
-            source_type=cc_pair.connector.source,
-        )
+    slim_doc_generator = _get_slim_doc_generator(cc_pair, google_drive_connector)
+
+    for slim_doc_batch in slim_doc_generator:
+        for slim_doc in slim_doc_batch:
+            ext_access = _get_permissions_from_slim_doc(
+                google_drive_connector=google_drive_connector,
+                slim_doc=slim_doc,
+            )
+            batch_add_non_web_user_if_not_exists__no_commit(
+                db_session=db_session,
+                emails=list(ext_access.external_user_emails),
+            )
+            upsert_document_external_perms__no_commit(
+                db_session=db_session,
+                doc_id=slim_doc.id,
+                external_access=ext_access,
+                source_type=cc_pair.connector.source,
+            )

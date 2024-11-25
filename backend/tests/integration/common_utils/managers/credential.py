@@ -32,6 +32,7 @@ class CredentialManager:
             "curator_public": curator_public,
             "groups": groups or [],
         }
+
         response = requests.post(
             url=f"{API_SERVER_URL}/manage/credential",
             json=credential_request,

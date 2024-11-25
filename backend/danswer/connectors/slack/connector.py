@@ -391,7 +391,11 @@ class SlackPollConnector(PollConnector, SlimConnector):
         self.client = WebClient(token=bot_token)
         return None
 
-    def retrieve_all_slim_documents(self) -> GenerateSlimDocumentOutput:
+    def retrieve_all_slim_documents(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> GenerateSlimDocumentOutput:
         if self.client is None:
             raise ConnectorMissingCredentialError("Slack")
 

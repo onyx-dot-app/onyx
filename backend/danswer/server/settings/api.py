@@ -102,8 +102,6 @@ def get_settings_notifications(
 
     try:
         # Need a transaction in order to prevent under-counting current notifications
-        db_session.begin()
-
         reindex_notifs = get_notifications(
             user=user, notif_type=NotificationType.REINDEX, db_session=db_session
         )

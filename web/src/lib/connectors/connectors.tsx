@@ -2,6 +2,7 @@ import * as Yup from "yup";
 import { IsPublicGroupSelectorFormType } from "@/components/IsPublicGroupSelector";
 import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
 import { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
+import { Credential } from "@/lib/connectors/credentials"; // Import Credential type
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
@@ -29,12 +30,18 @@ export type StringWithDescription = {
 };
 
 export interface Option {
-  label: string;
+  label: string | ((currentCredential: Credential<any> | null) => string);
   name: string;
-  description?: string;
+  description?:
+    | string
+    | ((currentCredential: Credential<any> | null) => string);
   query?: string;
   optional?: boolean;
   hidden?: boolean;
+  visibleCondition?: (
+    values: any,
+    currentCredential: Credential<any> | null
+  ) => boolean;
 }
 
 export interface SelectOption extends Option {
@@ -204,38 +211,59 @@ export const connectorConfigs: Record<
     description: "Configure Google Drive connector",
     values: [
       {
-        type: "list",
-        query: "Enter folder paths:",
-        label: "Folder Paths",
-        name: "folder_paths",
+        type: "checkbox",
+        label: "Include shared drives?",
+        description:
+          "This will allow Danswer to index everything in your shared drives.",
+        name: "include_shared_drives",
+        optional: true,
+        default: true,
+      },
+      {
+        type: "text",
+        description:
+          "Enter a comma separated list of the URLs of the shared drives to index. Leave blank to index all shared drives.",
+        label: "Shared Drive URLs",
+        name: "shared_drive_urls",
+        visibleCondition: (values) => values.include_shared_drives,
         optional: true,
       },
       {
         type: "checkbox",
-        query: "Include shared files?",
-        label: "Include Shared",
-        name: "include_shared",
-        optional: false,
-        default: false,
+        label: (currentCredential) =>
+          currentCredential?.credential_json?.google_drive_tokens
+            ? "Include My Drive?"
+            : "Include Everyone's My Drive?",
+        description: (currentCredential) =>
+          currentCredential?.credential_json?.google_drive_tokens
+            ? "This will allow Danswer to index everything in your My Drive."
+            : "This will allow Danswer to index everything in everyone's My Drives.",
+        name: "include_my_drives",
+        optional: true,
+        default: true,
       },
       {
-        type: "checkbox",
-        query: "Follow shortcuts?",
-        label: "Follow Shortcuts",
-        name: "follow_shortcuts",
-        optional: false,
-        default: false,
-      },
-      {
-        type: "checkbox",
-        query: "Only include organization public files?",
-        label: "Only Org Public",
-        name: "only_org_public",
-        optional: false,
-        default: false,
+        type: "text",
+        description:
+          "Enter a comma separated list of the emails of the users whose MyDrive you want to index. Leave blank to index all MyDrives.",
+        label: "My Drive Emails",
+        name: "my_drive_emails",
+        visibleCondition: (values, currentCredential) =>
+          values.include_my_drives &&
+          !currentCredential?.credential_json?.google_drive_tokens,
+        optional: true,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "text",
+        description:
+          "Enter a comma separated list of the URLs of the folders located in Shared Drives to index. The files located in these folders (and all subfolders) will be indexed. Note: This will be in addition to the 'Include Shared Drives' and 'Shared Drive URLs' settings, so leave those blank if you only want to index the folders specified here.",
+        label: "Folder URLs",
+        name: "shared_folder_urls",
+        optional: true,
+      },
+    ],
   },
   gmail: {
     description: "Configure Gmail connector",
@@ -550,11 +578,6 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
           "If specified, will only index the specified page + all of its child pages. If left blank, will index all pages the integration has been given access to.",
       },
     ],
-    advanced_values: [],
-  },
-  requesttracker: {
-    description: "Configure HubSpot connector",
-    values: [],
     advanced_values: [],
   },
   hubspot: {
@@ -922,6 +945,16 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  freshdesk: {
+    description: "Configure Freshdesk connector",
+    values: [],
+    advanced_values: [],
+  },
+  fireflies: {
+    description: "Configure Fireflies connector",
+    values: [],
+    advanced_values: [],
+  },
 };
 export function createConnectorInitialValues(
   connector: ConfigurableSources
@@ -1030,10 +1063,11 @@ export interface GitlabConfig {
 }
 
 export interface GoogleDriveConfig {
-  folder_paths?: string[];
-  include_shared?: boolean;
-  follow_shortcuts?: boolean;
-  only_org_public?: boolean;
+  include_shared_drives?: boolean;
+  shared_drive_urls?: string;
+  include_my_drives?: boolean;
+  my_drive_emails?: string;
+  shared_folder_urls?: string;
 }
 
 export interface GmailConfig {}
@@ -1116,8 +1150,6 @@ export interface NotionConfig {
 
 export interface HubSpotConfig {}
 
-export interface RequestTrackerConfig {}
-
 export interface Document360Config {
   workspace: string;
   categories?: string[];
@@ -1179,6 +1211,10 @@ export interface AsanaConfig {
   asana_project_ids?: string;
   asana_team_id?: string;
 }
+
+export interface FreshdeskConfig {}
+
+export interface FirefliesConfig {}
 
 export interface MediaWikiConfig extends MediaWikiBaseConfig {
   hostname: string;

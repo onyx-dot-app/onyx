@@ -9,7 +9,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.sql import text
 
-from danswer.configs.app_configs import MULTI_TENANT
+from shared_configs.configs import MULTI_TENANT
 from danswer.db.engine import build_connection_string
 from danswer.db.models import Base
 from celery.backends.database.session import ResultModelBase  # type: ignore

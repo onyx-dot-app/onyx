@@ -64,21 +64,6 @@ export const ConnectorTitle = ({
       "Jira Project URL",
       typedConnector.connector_specific_config.jira_project_url
     );
-  } else if (connector.source === "google_drive") {
-    const typedConnector = connector as Connector<GoogleDriveConfig>;
-    if (
-      typedConnector.connector_specific_config?.folder_paths &&
-      typedConnector.connector_specific_config?.folder_paths.length > 0
-    ) {
-      additionalMetadata.set(
-        "Folders",
-        typedConnector.connector_specific_config.folder_paths.join(", ")
-      );
-    }
-
-    if (!isPublic && owner) {
-      additionalMetadata.set("Owner", owner);
-    }
   } else if (connector.source === "slack") {
     const typedConnector = connector as Connector<SlackConfig>;
     if (

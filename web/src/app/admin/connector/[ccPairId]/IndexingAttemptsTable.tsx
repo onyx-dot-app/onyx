@@ -5,12 +5,12 @@ import {
   Table,
   TableHead,
   TableRow,
-  TableHeaderCell,
   TableBody,
   TableCell,
-  Text,
-  Callout,
-} from "@tremor/react";
+  TableHeader,
+} from "@/components/ui/table";
+import Text from "@/components/ui/text";
+import { Callout } from "@/components/ui/callout";
 import { CCPairFullInfo, PaginatedIndexAttempts } from "./types";
 import { IndexAttemptStatus } from "@/components/Status";
 import { PageSelector } from "@/components/PageSelector";
@@ -23,7 +23,12 @@ import { InfoIcon, SearchIcon } from "@/components/icons/icons";
 import Link from "next/link";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { useRouter } from "next/navigation";
-import { Tooltip } from "@/components/tooltip/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { FiInfo } from "react-icons/fi";
 
 // This is the number of index attempts to display per page
@@ -206,8 +211,7 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
       <Callout
         className="mt-4"
         title="No indexing attempts scheduled yet"
-        icon={FiInfo}
-        color="blue"
+        type="notice"
       >
         Index attempts are scheduled in the background, and may take some time
         to appear. Try refreshing the page in ~30 seconds!
@@ -231,27 +235,32 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
         )}
 
       <Table>
-        <TableHead>
+        <TableHeader>
           <TableRow>
-            <TableHeaderCell>Time Started</TableHeaderCell>
-            <TableHeaderCell>Status</TableHeaderCell>
-            <TableHeaderCell>New Doc Cnt</TableHeaderCell>
-            <TableHeaderCell>
+            <TableHead>Time Started</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>New Doc Cnt</TableHead>
+            <TableHead>
               <div className="w-fit">
-                <Tooltip
-                  width="max-w-sm"
-                  content="Total number of documents replaced in the index during this indexing attempt"
-                >
-                  <span className="cursor-help flex items-center">
-                    Total Doc Cnt
-                    <InfoIcon className="ml-1 w-4 h-4" />
-                  </span>
-                </Tooltip>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="cursor-help flex items-center">
+                        Total Doc Cnt
+                        <InfoIcon className="ml-1 w-4 h-4" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Total number of documents replaced in the index during
+                      this indexing attempt
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
-            </TableHeaderCell>
-            <TableHeaderCell>Error Message</TableHeaderCell>
+            </TableHead>
+            <TableHead>Error Message</TableHead>
           </TableRow>
-        </TableHead>
+        </TableHeader>
         <TableBody>
           {currentPageData.index_attempts.map((indexAttempt) => {
             const docsPerMinute =
@@ -266,7 +275,6 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
                 <TableCell>
                   <IndexAttemptStatus
                     status={indexAttempt.status || "not_started"}
-                    size="xs"
                   />
                   {docsPerMinute ? (
                     <div className="text-xs mt-1">

@@ -18,10 +18,10 @@ from danswer.db.models import ChatMessage
 from danswer.db.models import ChatSession
 from danswer.db.models import TokenRateLimit
 from danswer.db.models import User
+from danswer.db.token_limit import fetch_all_global_token_rate_limits
 from danswer.utils.logger import setup_logger
 from danswer.utils.variable_functionality import fetch_versioned_implementation
-from ee.danswer.db.token_limit import fetch_all_global_token_rate_limits
-from shared_configs.configs import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
 logger = setup_logger()

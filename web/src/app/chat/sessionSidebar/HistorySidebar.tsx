@@ -94,7 +94,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             bg-background-sidebar
             w-full
             border-r 
-            border-border 
+            border-sidebar-border 
             flex 
             flex-col relative
             h-screen

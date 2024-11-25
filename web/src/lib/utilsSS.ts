@@ -15,12 +15,12 @@ export function buildUrl(path: string) {
   return `${INTERNAL_URL}/${path}`;
 }
 
-export function fetchSS(url: string, options?: RequestInit) {
+export async function fetchSS(url: string, options?: RequestInit) {
   const init = options || {
     credentials: "include",
     cache: "no-store",
     headers: {
-      cookie: cookies()
+      cookie: (await cookies())
         .getAll()
         .map((cookie) => `${cookie.name}=${cookie.value}`)
         .join("; "),

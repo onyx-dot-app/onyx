@@ -3,7 +3,8 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { TextFormField, BooleanFormField } from "../admin/connectors/Field";
 import { Dispatch, SetStateAction } from "react";
-import { Button, Text } from "@tremor/react";
+import Text from "@/components/ui/text";
+import { Button } from "@/components/ui/button";
 import { EmbeddingDetails } from "@/app/admin/embeddings/EmbeddingModelSelectionForm";
 
 export function CustomEmbeddingModelForm({
@@ -62,7 +63,9 @@ export function CustomEmbeddingModelForm({
             <TextFormField
               name="model_name"
               label="Model Name:"
-              subtext={`The name of the ${embeddingType === EmbeddingProvider.AZURE ? "Azure" : "LiteLLM"} model`}
+              subtext={`The name of the ${
+                embeddingType === EmbeddingProvider.AZURE ? "Azure" : "LiteLLM"
+              } model`}
               placeholder="e.g. 'all-MiniLM-L6-v2'"
               autoCompleteDisabled={true}
             />

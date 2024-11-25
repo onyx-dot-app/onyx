@@ -10,7 +10,7 @@ from danswer.auth.users import current_user
 from danswer.auth.users import current_user_with_expired_token
 from danswer.configs.app_configs import APP_API_PREFIX
 from danswer.server.danswer_api.ingestion import api_key_dep
-from ee.danswer.server.tenants.access import control_plane_dep
+from danswer.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
 PUBLIC_ENDPOINT_SPECS = [
@@ -82,6 +82,14 @@ def check_router_auth(
     (1) have auth enabled OR
     (2) are explicitly marked as a public endpoint
     """
+
+    control_plane_dep = fetch_ee_implementation_or_noop(
+        "danswer.server.tenants.access", "control_plane_dep"
+    )
+    current_cloud_superuser = fetch_ee_implementation_or_noop(
+        "danswer.auth.users", "current_cloud_superuser"
+    )
+
     for route in application.routes:
         # explicitly marked as public
         if is_route_in_spec_list(route, public_endpoint_specs):
@@ -102,6 +110,7 @@ def check_router_auth(
                     or depends_fn == api_key_dep
                     or depends_fn == current_user_with_expired_token
                     or depends_fn == control_plane_dep
+                    or depends_fn == current_cloud_superuser
                 ):
                     found_auth = True
                     break

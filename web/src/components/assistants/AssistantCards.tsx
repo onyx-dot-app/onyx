@@ -1,5 +1,3 @@
-import { CSS } from "@dnd-kit/utilities";
-
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { AssistantTools } from "@/app/assistants/ToolsDisplay";
 import { Bubble } from "@/components/Bubble";

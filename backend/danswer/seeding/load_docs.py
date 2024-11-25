@@ -39,6 +39,7 @@ logger = setup_logger()
 
 def _create_indexable_chunks(
     preprocessed_docs: list[dict],
+    tenant_id: str | None,
 ) -> tuple[list[Document], list[DocMetadataAwareIndexChunk]]:
     ids_to_documents = {}
     chunks = []
@@ -80,7 +81,7 @@ def _create_indexable_chunks(
                 mini_chunk_embeddings=[],
             ),
             title_embedding=preprocessed_doc["title_embedding"],
-            tenant_id=None,
+            tenant_id=tenant_id,
             access=default_public_access,
             document_sets=set(),
             boost=DEFAULT_BOOST,
@@ -90,7 +91,7 @@ def _create_indexable_chunks(
     return list(ids_to_documents.values()), chunks
 
 
-def seed_initial_documents(db_session: Session) -> None:
+def seed_initial_documents(db_session: Session, tenant_id: str | None) -> None:
     """
     Seed initial documents so users don't have an empty index to start
 
@@ -177,7 +178,7 @@ def seed_initial_documents(db_session: Session) -> None:
     )
     processed_docs = json.load(open(initial_docs_path))
 
-    docs, chunks = _create_indexable_chunks(processed_docs)
+    docs, chunks = _create_indexable_chunks(processed_docs, tenant_id)
 
     index_doc_batch_prepare(
         document_batch=docs,
@@ -198,6 +199,7 @@ def seed_initial_documents(db_session: Session) -> None:
 
     # Retries here because the index may take a few seconds to become ready
     # as we just sent over the Vespa schema and there is a slight delay
+
     index_with_retries = retry_builder()(document_index.index)
     index_with_retries(chunks=chunks)
 

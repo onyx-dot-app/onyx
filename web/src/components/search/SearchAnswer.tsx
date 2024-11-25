@@ -70,7 +70,11 @@ export default function SearchAnswer({
   return (
     <div
       ref={answerContainerRef}
-      className={`my-4 ${searchAnswerExpanded ? "min-h-[16rem]" : "h-[16rem]"} ${!searchAnswerExpanded && searchAnswerOverflowing && "overflow-y-hidden"} p-4 border-2 border-border rounded-lg relative`}
+      className={`my-4 ${
+        searchAnswerExpanded ? "min-h-[16rem]" : "h-[16rem]"
+      } ${
+        !searchAnswerExpanded && searchAnswerOverflowing && "overflow-y-hidden"
+      } p-4 border-2 border-search-answer-border rounded-lg relative`}
     >
       <div>
         <div className="flex gap-x-2">

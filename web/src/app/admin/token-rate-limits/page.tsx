@@ -1,15 +1,9 @@
 "use client";
 
 import { AdminPageTitle } from "@/components/admin/Title";
-import {
-  Button,
-  Tab,
-  TabGroup,
-  TabList,
-  TabPanel,
-  TabPanels,
-  Text,
-} from "@tremor/react";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import Text from "@/components/ui/text";
 import { useState } from "react";
 import { FiGlobe, FiUser, FiUsers } from "react-icons/fi";
 import {
@@ -145,53 +139,63 @@ function Main() {
       </ul>
 
       <Button
-        color="green"
-        size="xs"
-        className="mt-3"
+        variant="navigate"
+        size="sm"
+        className="my-4"
         onClick={() => setModalIsOpen(true)}
       >
         Create a Token Rate Limit
       </Button>
 
       {isPaidEnterpriseFeaturesEnabled && (
-        <TabGroup className="mt-6" index={tabIndex} onIndexChange={setTabIndex}>
-          <TabList variant="line">
-            <Tab icon={FiGlobe}>Global</Tab>
-            <Tab icon={FiUser}>User</Tab>
-            <Tab icon={FiUsers}>User Groups</Tab>
-          </TabList>
-          <TabPanels className="mt-6">
-            <TabPanel>
-              <GenericTokenRateLimitTable
-                fetchUrl={GLOBAL_TOKEN_FETCH_URL}
-                title={"Global Token Rate Limits"}
-                description={GLOBAL_DESCRIPTION}
-              />
-            </TabPanel>
-            <TabPanel>
-              <GenericTokenRateLimitTable
-                fetchUrl={USER_TOKEN_FETCH_URL}
-                title={"User Token Rate Limits"}
-                description={USER_DESCRIPTION}
-              />
-            </TabPanel>
-            <TabPanel>
-              <GenericTokenRateLimitTable
-                fetchUrl={USER_GROUP_FETCH_URL}
-                title={"User Group Token Rate Limits"}
-                description={USER_GROUP_DESCRIPTION}
-                responseMapper={(data: Record<string, TokenRateLimit[]>) =>
-                  Object.entries(data).flatMap(([group_name, elements]) =>
-                    elements.map((element) => ({
-                      ...element,
-                      group_name,
-                    }))
-                  )
-                }
-              />
-            </TabPanel>
-          </TabPanels>
-        </TabGroup>
+        <Tabs
+          value={tabIndex.toString()}
+          onValueChange={(val) => setTabIndex(parseInt(val))}
+        >
+          <TabsList>
+            <TabsTrigger value="0" className="flex items-center gap-2">
+              <FiGlobe />
+              Global
+            </TabsTrigger>
+            <TabsTrigger value="1" className="flex items-center gap-2">
+              <FiUser />
+              User
+            </TabsTrigger>
+            <TabsTrigger value="2" className="flex items-center gap-2">
+              <FiUsers />
+              User Groups
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="0">
+            <GenericTokenRateLimitTable
+              fetchUrl={GLOBAL_TOKEN_FETCH_URL}
+              title={"Global Token Rate Limits"}
+              description={GLOBAL_DESCRIPTION}
+            />
+          </TabsContent>
+          <TabsContent value="1">
+            <GenericTokenRateLimitTable
+              fetchUrl={USER_TOKEN_FETCH_URL}
+              title={"User Token Rate Limits"}
+              description={USER_DESCRIPTION}
+            />
+          </TabsContent>
+          <TabsContent value="2">
+            <GenericTokenRateLimitTable
+              fetchUrl={USER_GROUP_FETCH_URL}
+              title={"User Group Token Rate Limits"}
+              description={USER_GROUP_DESCRIPTION}
+              responseMapper={(data: Record<string, TokenRateLimit[]>) =>
+                Object.entries(data).flatMap(([group_name, elements]) =>
+                  elements.map((element) => ({
+                    ...element,
+                    group_name,
+                  }))
+                )
+              }
+            />
+          </TabsContent>
+        </Tabs>
       )}
 
       {!isPaidEnterpriseFeaturesEnabled && (

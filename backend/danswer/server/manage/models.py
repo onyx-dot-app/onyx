@@ -42,7 +42,7 @@ class UserPreferences(BaseModel):
     chosen_assistants: list[int] | None = None
     hidden_assistants: list[int] = []
     visible_assistants: list[int] = []
-
+    recent_assistants: list[int] | None = None
     default_model: str | None = None
 
 
@@ -57,6 +57,8 @@ class UserInfo(BaseModel):
     oidc_expiry: datetime | None = None
     current_token_created_at: datetime | None = None
     current_token_expiry_length: int | None = None
+    is_cloud_superuser: bool = False
+    organization_name: str | None = None
 
     @classmethod
     def from_model(
@@ -64,6 +66,8 @@ class UserInfo(BaseModel):
         user: User,
         current_token_created_at: datetime | None = None,
         expiry_length: int | None = None,
+        is_cloud_superuser: bool = False,
+        organization_name: str | None = None,
     ) -> "UserInfo":
         return cls(
             id=str(user.id),
@@ -80,6 +84,7 @@ class UserInfo(BaseModel):
                     visible_assistants=user.visible_assistants,
                 )
             ),
+            organization_name=organization_name,
             # set to None if TRACK_EXTERNAL_IDP_EXPIRY is False so that we avoid cases
             # where they previously had this set + used OIDC, and now they switched to
             # basic auth are now constantly getting redirected back to the login page
@@ -87,6 +92,7 @@ class UserInfo(BaseModel):
             oidc_expiry=user.oidc_expiry if TRACK_EXTERNAL_IDP_EXPIRY else None,
             current_token_created_at=current_token_created_at,
             current_token_expiry_length=expiry_length,
+            is_cloud_superuser=is_cloud_superuser,
         )
 
 

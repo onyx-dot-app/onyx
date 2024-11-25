@@ -16,7 +16,9 @@ from danswer.db.search_settings import get_current_search_settings
 from danswer.db.search_settings import get_secondary_search_settings
 from danswer.server.documents.models import ConnectorSnapshot
 
-from danswer.background.celery.celery_redis import RedisConnectorIndexing
+#from danswer.background.celery.celery_redis import RedisConnectorIndexing
+from danswer.redis.redis_connector import RedisConnector
+
 from danswer.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from danswer.server.documents.models import CredentialSnapshot
 from danswer.db.models import SearchSettings
@@ -103,9 +105,15 @@ def get_connectors_state(
 
         in_progress = False
         if search_settings:
-            rci = RedisConnectorIndexing(cc_pair.id, search_settings.id)
-            if r.exists(rci.fence_key):
+            redis_connector = RedisConnector(tenant_id, cc_pair.id)
+            redis_connector_index = redis_connector.new_index(search_settings.id)
+            if redis_connector_index.fenced:
                 in_progress = True
+
+#        if search_settings:
+#            rci = RedisConnectorIndexing(cc_pair.id, search_settings.id)
+#            if r.exists(rci.fence_key):
+#                in_progress = True
 
         latest_index_attempt = cc_pair_to_latest_index_attempt.get(
             (connector.id, credential.id)

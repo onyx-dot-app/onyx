@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from danswer.auth.invited_users import get_invited_users
 from danswer.auth.schemas import UserRole
+from danswer.db.api_key import get_api_key_email_pattern
 from danswer.db.engine import get_async_session
 from danswer.db.engine import get_async_session_with_tenant
 from danswer.db.models import AccessToken
@@ -35,12 +36,16 @@ def get_default_admin_user_emails() -> list[str]:
     return get_default_admin_user_emails_fn()
 
 
-def get_total_users(db_session: Session) -> int:
+def get_total_users_count(db_session: Session) -> int:
     """
     Returns the total number of users in the system.
     This is the sum of users and invited users.
     """
-    user_count = db_session.query(User).count()
+    user_count = (
+        db_session.query(User)
+        .filter(~User.email.endswith(get_api_key_email_pattern()))  # type: ignore
+        .count()
+    )
     invited_users = len(get_invited_users())
     return user_count + invited_users
 
@@ -57,7 +62,10 @@ async def get_user_count() -> int:
 
 # Need to override this because FastAPI Users doesn't give flexibility for backend field creation logic in OAuth flow
 class SQLAlchemyUserAdminDB(SQLAlchemyUserDatabase):
-    async def create(self, create_dict: Dict[str, Any]) -> UP:
+    async def create(
+        self,
+        create_dict: Dict[str, Any],
+    ) -> UP:
         user_count = await get_user_count()
         if user_count == 0 or create_dict["email"] in get_default_admin_user_emails():
             create_dict["role"] = UserRole.ADMIN

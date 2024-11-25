@@ -4,10 +4,12 @@ if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
-    // Set tracesSampleRate to 1.0 to capture 100%
-    // of transactions for tracing.
-    // We recommend adjusting this value in production
-    tracesSampleRate: 1.0,
+    // Only capture unhandled exceptions and errors
+    tracesSampleRate: 0,
+    enableTracing: false,
+
+    // Disable performance monitoring and only capture errors
+    profilesSampleRate: 0,
 
     // Note: if you want to override the automatic release value, do not set a
     // `release` value here - use the environment variable `SENTRY_RELEASE`, so

@@ -25,6 +25,7 @@ from danswer.connectors.models import Section
 from danswer.file_processing.extract_file_text import extract_file_text
 from danswer.utils.logger import setup_logger
 
+
 logger = setup_logger()
 
 

@@ -118,7 +118,13 @@ def _run_indexing(
     """
     start_time = time.time()
 
+    if index_attempt.search_settings is None:
+        raise ValueError(
+            "Search settings must be set for indexing. This should not be possible."
+        )
+
     search_settings = index_attempt.search_settings
+
     index_name = search_settings.index_name
 
     # Only update cc-pair status for primary index jobs
@@ -331,7 +337,7 @@ def _run_indexing(
                 or index_attempt.status != IndexingStatus.IN_PROGRESS
             ):
                 mark_attempt_failed(
-                    index_attempt,
+                    index_attempt.id,
                     db_session,
                     failure_reason=str(e),
                     full_exception_trace=traceback.format_exc(),
@@ -366,7 +372,7 @@ def _run_indexing(
         and index_attempt_md.num_exceptions >= batch_num
     ):
         mark_attempt_failed(
-            index_attempt,
+            index_attempt.id,
             db_session,
             failure_reason="All batches exceptioned.",
         )
@@ -427,11 +433,13 @@ def run_indexing_entrypoint(
         with get_session_with_tenant(tenant_id) as db_session:
             attempt = transition_attempt_to_in_progress(index_attempt_id, db_session)
 
+            tenant_str = ""
+            if tenant_id is not None:
+                tenant_str = f" for tenant {tenant_id}"
+
             logger.info(
-                f"Indexing starting for tenant {tenant_id}: "
-                if tenant_id is not None
-                else ""
-                + f"connector='{attempt.connector_credential_pair.connector.name}' "
+                f"Indexing starting{tenant_str}: "
+                f"connector='{attempt.connector_credential_pair.connector.name}' "
                 f"config='{attempt.connector_credential_pair.connector.connector_specific_config}' "
                 f"credentials='{attempt.connector_credential_pair.connector_id}'"
             )
@@ -439,10 +447,8 @@ def run_indexing_entrypoint(
             _run_indexing(db_session, attempt, tenant_id, callback)
 
             logger.info(
-                f"Indexing finished for tenant {tenant_id}: "
-                if tenant_id is not None
-                else ""
-                + f"connector='{attempt.connector_credential_pair.connector.name}' "
+                f"Indexing finished{tenant_str}: "
+                f"connector='{attempt.connector_credential_pair.connector.name}' "
                 f"config='{attempt.connector_credential_pair.connector.connector_specific_config}' "
                 f"credentials='{attempt.connector_credential_pair.connector_id}'"
             )

@@ -1,5 +1,5 @@
+import { Badge } from "@/components/ui/badge";
 import { Feedback } from "@/lib/types";
-import { Badge } from "@tremor/react";
 
 export function FeedbackBadge({
   feedback,
@@ -10,28 +10,28 @@ export function FeedbackBadge({
   switch (feedback) {
     case "like":
       feedbackBadge = (
-        <Badge color="green" className="text-sm">
+        <Badge variant="success" className="text-sm">
           Like
         </Badge>
       );
       break;
     case "dislike":
       feedbackBadge = (
-        <Badge color="red" className="text-sm">
+        <Badge variant="destructive" className="text-sm">
           Dislike
         </Badge>
       );
       break;
     case "mixed":
       feedbackBadge = (
-        <Badge color="purple" className="text-sm">
+        <Badge variant="purple" className="text-sm">
           Mixed
         </Badge>
       );
       break;
     default:
       feedbackBadge = (
-        <Badge color="gray" className="text-sm">
+        <Badge variant="outline" className="text-sm">
           N/A
         </Badge>
       );

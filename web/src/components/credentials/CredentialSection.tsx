@@ -16,7 +16,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import CreateCredential from "./actions/CreateCredential";
 import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
 import ModifyCredential from "./actions/ModifyCredential";
-import { Text } from "@tremor/react";
+import Text from "@/components/ui/text";
 import {
   buildCCPairInfoUrl,
   buildSimilarCredentialInfoURL,

@@ -8,14 +8,14 @@ from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_curator_or_admin_user
 from danswer.db.engine import get_session
 from danswer.db.models import User
+from danswer.db.token_limit import fetch_all_user_token_rate_limits
+from danswer.db.token_limit import insert_user_token_rate_limit
 from danswer.server.query_and_chat.token_limit import any_rate_limit_exists
 from danswer.server.token_rate_limits.models import TokenRateLimitArgs
 from danswer.server.token_rate_limits.models import TokenRateLimitDisplay
 from ee.danswer.db.token_limit import fetch_all_user_group_token_rate_limits_by_group
-from ee.danswer.db.token_limit import fetch_all_user_token_rate_limits
 from ee.danswer.db.token_limit import fetch_user_group_token_rate_limits
 from ee.danswer.db.token_limit import insert_user_group_token_rate_limit
-from ee.danswer.db.token_limit import insert_user_token_rate_limit
 
 router = APIRouter(prefix="/admin/token-rate-limits")
 

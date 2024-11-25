@@ -7,7 +7,12 @@ import {
   NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA,
 } from "@/lib/constants";
 import { LeftToLineIcon, NewChatIcon, RightToLineIcon } from "../icons/icons";
-import { Tooltip } from "../tooltip/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { pageType } from "@/app/chat/sessionSidebar/types";
 import { Logo } from "../Logo";
 import { HeaderTitle } from "./HeaderTitle";
@@ -37,7 +42,9 @@ export default function LogoType({
 
   return (
     <div
-      className={`${hideOnMobile && "mobile:hidden"} z-[100] mb-auto shrink-0 flex items-center text-xl font-bold`}
+      className={`${
+        hideOnMobile && "mobile:hidden"
+      } z-[100] mb-auto shrink-0 flex items-center text-xl`}
     >
       {toggleSidebar && page == "chat" ? (
         <button
@@ -55,7 +62,9 @@ export default function LogoType({
         </div>
       )}
       <div
-        className={`cursor-pointer ${showArrow ? "desktop:invisible" : "invisible"} break-words inline-block w-fit ml-2 text-text-700 text-xl`}
+        className={`cursor-pointer ${
+          showArrow ? "desktop:invisible" : "invisible"
+        } break-words inline-block w-fit ml-2 text-text-700 text-xl`}
       >
         <div className="max-w-[175px] min-w-[140px]">
           {enterpriseSettings && enterpriseSettings.application_name ? (
@@ -72,51 +81,60 @@ export default function LogoType({
       </div>
 
       {page == "chat" && !showArrow && (
-        <Tooltip delayDuration={1000} content="New Chat">
-          <Link
-            className="my-auto mobile:hidden"
-            href={
-              `/${page}` +
-              (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA && assistantId
-                ? `?assistantId=${assistantId}`
-                : "")
-            }
-            onClick={(e) => {
-              if (e.metaKey || e.ctrlKey) {
-                return;
-              }
-              if (handleNewChat) {
-                handleNewChat();
-              }
-            }}
-          >
-            <div className="cursor-pointer ml-2 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
-              <NewChatIcon size={20} />
-            </div>
-          </Link>
-        </Tooltip>
+        <TooltipProvider delayDuration={1000}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                className="my-auto mobile:hidden"
+                href={
+                  `/${page}` +
+                  (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA && assistantId
+                    ? `?assistantId=${assistantId}`
+                    : "")
+                }
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey) {
+                    return;
+                  }
+                  if (handleNewChat) {
+                    handleNewChat();
+                  }
+                }}
+              >
+                <div className="cursor-pointer ml-2 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
+                  <NewChatIcon size={20} />
+                </div>
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent>New Chat</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
       {showArrow && toggleSidebar && (
-        <Tooltip
-          delayDuration={0}
-          content={toggled ? `Unpin sidebar` : "Pin sidebar"}
-        >
-          <button
-            className="mr-3 my-auto ml-auto"
-            onClick={() => {
-              toggleSidebar();
-              if (toggled) {
-                explicitlyUntoggle();
-              }
-            }}
-          >
-            {!toggled && !combinedSettings?.isMobile ? (
-              <RightToLineIcon />
-            ) : (
-              <LeftToLineIcon />
-            )}
-          </button>
-        </Tooltip>
+        <TooltipProvider delayDuration={0}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                className="mr-3 my-auto ml-auto"
+                onClick={() => {
+                  toggleSidebar();
+                  if (toggled) {
+                    explicitlyUntoggle();
+                  }
+                }}
+              >
+                {!toggled && !combinedSettings?.isMobile ? (
+                  <RightToLineIcon className="text-sidebar-toggle" />
+                ) : (
+                  <LeftToLineIcon className="text-sidebar-toggle" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {toggled ? `Unpin sidebar` : "Pin sidebar"}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
     </div>
   );

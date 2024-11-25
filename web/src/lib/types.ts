@@ -8,6 +8,7 @@ interface UserPreferences {
   visible_assistants: number[];
   hidden_assistants: number[];
   default_model: string | null;
+  recent_assistants: number[];
 }
 
 export enum UserStatus {
@@ -42,6 +43,8 @@ export interface User {
   current_token_created_at?: Date;
   current_token_expiry_length?: number;
   oidc_expiry?: Date;
+  is_cloud_superuser?: boolean;
+  organization_name: string | null;
 }
 
 export interface MinimalUserSnapshot {
@@ -241,7 +244,6 @@ const validSources = [
   "linear",
   "hubspot",
   "document360",
-  "requesttracker",
   "file",
   "google_sites",
   "loopio",
@@ -263,6 +265,8 @@ const validSources = [
   "oci_storage",
   "not_applicable",
   "ingestion_api",
+  "freshdesk",
+  "fireflies",
 ] as const;
 
 export type ValidSources = (typeof validSources)[number];
@@ -276,6 +280,7 @@ export type ConfigurableSources = Exclude<
 export const validAutoSyncSources = [
   "confluence",
   "google_drive",
+  "gmail",
   "slack",
 ] as const;
 export type ValidAutoSyncSources = (typeof validAutoSyncSources)[number];

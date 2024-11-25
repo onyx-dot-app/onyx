@@ -1,6 +1,6 @@
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { ValidAutoSyncSources } from "@/lib/types";
-import { Divider } from "@tremor/react";
+import { Separator } from "@/components/ui/separator";
 import { autoSyncConfigBySource } from "@/lib/connectors/AutoSyncOptionFields";
 
 export function AutoSyncOptions({
@@ -16,7 +16,7 @@ export function AutoSyncOptions({
 
   return (
     <div>
-      <Divider />
+      <Separator />
       {Object.entries(autoSyncConfig).map(([key, config]) => (
         <div key={key} className="mb-4">
           <TextFormField

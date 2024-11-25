@@ -279,7 +279,7 @@ def get_answer_with_quote(
             ):
                 yield json.dumps(packet) if isinstance(packet, dict) else packet
         except Exception as e:
-            logger.exception(f"Error in search answer streaming: {e}")
+            logger.exception("Error in search answer streaming")
             yield json.dumps({"error": str(e)})
 
     return StreamingResponse(stream_generator(), media_type="application/json")

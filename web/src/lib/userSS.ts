@@ -143,7 +143,7 @@ export const getCurrentUserSS = async (): Promise<User | null> => {
       credentials: "include",
       next: { revalidate: 0 },
       headers: {
-        cookie: cookies()
+        cookie: (await cookies())
           .getAll()
           .map((cookie) => `${cookie.name}=${cookie.value}`)
           .join("; "),

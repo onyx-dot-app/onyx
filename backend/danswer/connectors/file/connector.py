@@ -27,8 +27,8 @@ from danswer.file_processing.extract_file_text import read_pdf_file
 from danswer.file_processing.extract_file_text import read_text_file
 from danswer.file_store.file_store import get_default_file_store
 from danswer.utils.logger import setup_logger
-from shared_configs.configs import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -123,8 +123,12 @@ def _process_file(
             "filename",
             "file_display_name",
             "title",
+            "connector_type",
         ]
     }
+
+    source_type_str = all_metadata.get("connector_type")
+    source_type = DocumentSource(source_type_str) if source_type_str else None
 
     p_owner_names = all_metadata.get("primary_owners")
     s_owner_names = all_metadata.get("secondary_owners")
@@ -145,7 +149,7 @@ def _process_file(
             sections=[
                 Section(link=all_metadata.get("link"), text=file_content_raw.strip())
             ],
-            source=DocumentSource.FILE,
+            source=source_type or DocumentSource.FILE,
             semantic_identifier=file_display_name,
             title=title,
             doc_updated_at=final_time_updated,

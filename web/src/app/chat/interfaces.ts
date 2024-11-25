@@ -32,6 +32,7 @@ export enum ChatFileType {
   IMAGE = "image",
   DOCUMENT = "document",
   PLAIN_TEXT = "plain_text",
+  CSV = "csv",
 }
 
 export interface FileDescriptor {
@@ -85,7 +86,7 @@ export interface Message {
   documents?: DanswerDocument[] | null;
   citations?: CitationMap;
   files: FileDescriptor[];
-  toolCalls: ToolCallMetadata[];
+  toolCall: ToolCallMetadata | null;
   // for rebuilding the message tree
   parentMessageId: number | null;
   childrenMessageIds?: number[];
@@ -120,7 +121,7 @@ export interface BackendMessage {
   time_sent: string;
   citations: CitationMap;
   files: FileDescriptor[];
-  tool_calls: ToolCallFinalResult[];
+  tool_call: ToolCallFinalResult | null;
   alternate_assistant_id?: number | null;
   overridden_model?: string;
 }
@@ -135,7 +136,7 @@ export interface DocumentsResponse {
   rephrased_query: string | null;
 }
 
-export interface ImageGenerationDisplay {
+export interface FileChatDisplay {
   file_ids: string[];
 }
 

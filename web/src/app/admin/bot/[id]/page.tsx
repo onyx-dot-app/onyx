@@ -4,7 +4,7 @@ import { SlackBotCreationForm } from "../SlackBotConfigCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { DocumentSet, SlackBotConfig } from "@/lib/types";
-import { Text } from "@tremor/react";
+import Text from "@/components/ui/text";
 import { BackButton } from "@/components/BackButton";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import {
@@ -13,7 +13,8 @@ import {
 } from "@/lib/assistants/fetchAssistantsSS";
 import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
-async function Page({ params }: { params: { id: string } }) {
+async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const tasks = [
     fetchSS("/manage/admin/slack-bot/config"),
     fetchSS("/manage/document-set"),

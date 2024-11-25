@@ -3,7 +3,14 @@
 import { LoadingAnimation } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { Text, Title, Button } from "@tremor/react";
+
+
+// import { Text, Title, Button } from "@tremor/react";
+import { Button } from "@/components/ui/button";
+import Text from "@/components/ui/text";
+import Title from "@/components/ui/title";
+
+
 import { FiCpu } from "react-icons/fi";
 import useSWR from "swr";
 import { Form, Formik, Field } from "formik";
@@ -76,7 +83,7 @@ const Page = () => {
                 isTextArea={true}
               />
               <div className="flex">
-                <Button size="xs" type="submit" className="w-48 mx-auto">
+                <Button type="submit" className="w-48 mx-auto">
                   Submit
                 </Button>
               </div>

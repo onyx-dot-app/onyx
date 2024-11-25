@@ -1,7 +1,7 @@
 "use client";
 
-import { Card, Text, Title } from "@tremor/react";
-
+import Text from "@/components/ui/text";
+import Title from "@/components/ui/title";
 import {
   CloudEmbeddingProvider,
   CloudEmbeddingModel,
@@ -21,6 +21,7 @@ import { deleteSearchSettings } from "./utils";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
 import { AdvancedSearchConfiguration } from "../interfaces";
+import CardSection from "@/components/admin/CardSection";
 
 export default function CloudEmbeddingPage({
   currentModel,
@@ -209,7 +210,7 @@ export default function CloudEmbeddingPage({
             )}
 
             {!liteLLMProvider && (
-              <Card className="mt-2 w-full max-w-4xl bg-gray-50 border border-gray-200">
+              <CardSection className="mt-2 w-full max-w-4xl bg-gray-50 border border-gray-200">
                 <div className="p-4">
                   <Text className="text-lg font-semibold mb-2">
                     API URL Required
@@ -227,7 +228,7 @@ export default function CloudEmbeddingPage({
                     </Text>
                   </div>
                 </div>
-              </Card>
+              </CardSection>
             )}
             {liteLLMProvider && (
               <>
@@ -252,7 +253,7 @@ export default function CloudEmbeddingPage({
                     ))}
                 </div>
 
-                <Card
+                <CardSection
                   className={`mt-2 w-full max-w-4xl ${
                     currentModel.provider_type === EmbeddingProvider.LITELLM
                       ? "border-2 border-blue-500"
@@ -269,7 +270,7 @@ export default function CloudEmbeddingPage({
                     }
                     setShowTentativeModel={setShowTentativeModel}
                   />
-                </Card>
+                </CardSection>
               </>
             )}
           </div>
@@ -312,7 +313,7 @@ export default function CloudEmbeddingPage({
                 Configure Azure OpenAI
               </button>
               <div className="mt-2 w-full max-w-4xl">
-                <Card className="p-4 border border-gray-200 rounded-lg shadow-sm">
+                <CardSection className="p-4 border border-gray-200 rounded-lg shadow-sm">
                   <Text className="text-base font-medium mb-2">
                     Configure Azure OpenAI for Embeddings
                   </Text>
@@ -327,7 +328,7 @@ export default function CloudEmbeddingPage({
                       name, and deployment name.
                     </Text>
                   </div>
-                </Card>
+                </CardSection>
               </div>
             </>
           ) : (
@@ -338,7 +339,7 @@ export default function CloudEmbeddingPage({
                 </Text>
 
                 {azureProviderDetails ? (
-                  <Card className="bg-white shadow-sm border border-gray-200 rounded-lg">
+                  <CardSection className="bg-white shadow-sm border border-gray-200 rounded-lg">
                     <div className="p-4 space-y-3">
                       <div className="flex justify-between">
                         <span className="font-medium">API Version:</span>
@@ -361,17 +362,17 @@ export default function CloudEmbeddingPage({
                     >
                       Delete Current Azure Provider
                     </button>
-                  </Card>
+                  </CardSection>
                 ) : (
-                  <Card className="bg-gray-50 border border-gray-200 rounded-lg">
+                  <CardSection className="bg-gray-50 border border-gray-200 rounded-lg">
                     <div className="p-4 text-gray-500 text-center">
                       No Azure provider has been configured yet.
                     </div>
-                  </Card>
+                  </CardSection>
                 )}
               </div>
 
-              <Card
+              <CardSection
                 className={`mt-2 w-full max-w-4xl ${
                   currentModel.provider_type === EmbeddingProvider.AZURE
                     ? "border-2 border-blue-500"
@@ -390,7 +391,7 @@ export default function CloudEmbeddingPage({
                     setShowTentativeModel={setShowTentativeModel}
                   />
                 )}
-              </Card>
+              </CardSection>
             </>
           )}
         </div>

@@ -13,7 +13,7 @@ import {
 import * as Yup from "yup";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import { TextFormField } from "@/components/admin/connectors/Field";
-import { Button, Divider } from "@tremor/react";
+import { Button } from "@/components/ui/button";
 import {
   createCustomTool,
   updateCustomTool,
@@ -23,6 +23,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import debounce from "lodash/debounce";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Link from "next/link";
+import { Separator } from "@/components/ui/separator";
 
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
@@ -244,7 +245,7 @@ function ToolForm({
                           <Button
                             type="button"
                             onClick={() => arrayHelpers.remove(index)}
-                            color="red"
+                            variant="destructive"
                             size="sm"
                             className="transition-colors duration-200 hover:bg-red-600"
                           >
@@ -259,8 +260,8 @@ function ToolForm({
                 <Button
                   type="button"
                   onClick={() => arrayHelpers.push({ key: "", value: "" })}
-                  color="blue"
-                  size="md"
+                  variant="secondary"
+                  size="sm"
                   className="transition-colors duration-200"
                 >
                   Add New Header
@@ -271,13 +272,13 @@ function ToolForm({
         </div>
       )}
 
-      <Divider />
+      <Separator />
 
       <div className="flex">
         <Button
           className="mx-auto"
-          color="green"
-          size="md"
+          variant="submit"
+          size="sm"
           type="submit"
           disabled={isSubmitting || !!definitionError}
         >

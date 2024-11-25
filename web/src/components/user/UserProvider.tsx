@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, UserRole } from "@/lib/types";
 import { getCurrentUser } from "@/lib/user";
+import { usePostHog } from "posthog-js/react";
 
 interface UserContextType {
   user: User | null;
@@ -10,24 +11,44 @@ interface UserContextType {
   isAdmin: boolean;
   isCurator: boolean;
   refreshUser: () => Promise<void>;
+  isCloudSuperuser: boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoadingUser, setIsLoadingUser] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isCurator, setIsCurator] = useState(false);
+export function UserProvider({
+  children,
+  user,
+}: {
+  children: React.ReactNode;
+  user: User | null;
+}) {
+  const [upToDateUser, setUpToDateUser] = useState<User | null>(user);
+  const [isLoadingUser, setIsLoadingUser] = useState(false);
+
+  const posthog = usePostHog();
+
+  useEffect(() => {
+    if (!posthog) return;
+
+    if (user?.id) {
+      const identifyData: Record<string, any> = {
+        email: user.email,
+      };
+      if (user.organization_name) {
+        identifyData.organization_name = user.organization_name;
+      }
+      posthog.identify(user.id, identifyData);
+    } else {
+      posthog.reset();
+    }
+  }, [posthog, user]);
 
   const fetchUser = async () => {
     try {
-      const user = await getCurrentUser();
-      setUser(user);
-      setIsAdmin(user?.role === UserRole.ADMIN);
-      setIsCurator(
-        user?.role === UserRole.CURATOR || user?.role == UserRole.GLOBAL_CURATOR
-      );
+      setIsLoadingUser(true);
+      const currentUser = await getCurrentUser();
+      setUpToDateUser(currentUser);
     } catch (error) {
       console.error("Error fetching current user:", error);
     } finally {
@@ -35,17 +56,20 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  useEffect(() => {
-    fetchUser();
-  }, []);
-
   const refreshUser = async () => {
     await fetchUser();
   };
 
   return (
     <UserContext.Provider
-      value={{ user, isLoadingUser, isAdmin, refreshUser, isCurator }}
+      value={{
+        user: upToDateUser,
+        isLoadingUser,
+        refreshUser,
+        isAdmin: upToDateUser?.role === UserRole.ADMIN,
+        isCurator: upToDateUser?.role === UserRole.CURATOR,
+        isCloudSuperuser: upToDateUser?.is_cloud_superuser ?? false,
+      }}
     >
       {children}
     </UserContext.Provider>

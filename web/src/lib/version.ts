@@ -23,5 +23,10 @@ export const getBackendVersion = async (): Promise<string | null> => {
 
 // Frontend?
 export const getWebVersion = (): string | null => {
+
+  if (process.env.APP_VERSION) {
+    return process.env.APP_VERSION;
+  }
+
   return version;
 };

@@ -3,7 +3,7 @@
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Text } from "@tremor/react";
+import Text from "@/components/ui/text";
 import { RequestNewVerificationEmail } from "../waiting-on-verification/RequestNewVerificationEmail";
 import { User } from "@/lib/types";
 import { Logo } from "@/components/Logo";

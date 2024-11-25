@@ -19,7 +19,7 @@ from danswer.natural_language_processing.utils import tokenizer_trim_content
 from danswer.prompts.prompt_utils import build_doc_context_str
 from danswer.search.models import InferenceChunk
 from danswer.search.models import InferenceSection
-from danswer.tools.search.search_utils import section_to_dict
+from danswer.tools.tool_implementations.search.search_utils import section_to_dict
 from danswer.utils.logger import setup_logger
 
 

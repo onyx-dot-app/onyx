@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Modal } from "@/components/Modal";
-import { Button, Text, Badge } from "@tremor/react";
+import { Button } from "@/components/ui/button";
+import Text from "@/components/ui/text";
+import { Badge } from "@/components/ui/badge";
 import { ValidSources } from "@/lib/types";
 import {
   EditIcon,

@@ -100,7 +100,11 @@ export function BasicSelectable({
         ${padding == "extra" && "p-1.5"}
         select-none
         ${hasBorder ? "border border-border" : ""}
-        ${selected ? "bg-hover" : "hover:bg-hover"}
+        ${
+          selected
+            ? "bg-background-chat-selected"
+            : "hover:bg-background-chat-hover"
+        }
         ${fullWidth ? "w-full" : ""}`}
     >
       {children}

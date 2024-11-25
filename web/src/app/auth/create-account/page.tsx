@@ -2,7 +2,7 @@
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { REGISTRATION_URL } from "@/lib/constants";
-import { Button } from "@tremor/react";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { FiLogIn } from "react-icons/fi";
 
@@ -26,7 +26,7 @@ const Page = () => {
             href={`${REGISTRATION_URL}/register`}
             className="w-full max-w-xs"
           >
-            <Button size="lg" icon={FiLogIn} color="indigo" className="w-full">
+            <Button size="lg" icon={FiLogIn} className="w-full">
               Create New Organization
             </Button>
           </Link>

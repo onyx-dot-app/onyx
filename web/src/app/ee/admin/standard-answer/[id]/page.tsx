@@ -6,7 +6,8 @@ import { BackButton } from "@/components/BackButton";
 import { ClipboardIcon } from "@/components/icons/icons";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 
-async function Page({ params }: { params: { id: string } }) {
+async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const tasks = [
     fetchSS("/manage/admin/standard-answer"),
     fetchSS(`/manage/admin/standard-answer/category`),

@@ -1,4 +1,4 @@
-import { FiCheck, FiChevronDown, FiX, FiXCircle } from "react-icons/fi";
+import { FiCheck, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../../Dropdown";
 
 interface Option {

@@ -1,4 +1,3 @@
-import { Button } from "@tremor/react";
 import {
   ArrayHelpers,
   ErrorMessage,
@@ -9,19 +8,27 @@ import {
 } from "formik";
 import * as Yup from "yup";
 import { FormBodyBuilder } from "./types";
-import { DefaultDropdown, StringOrNumberOption } from "@/components/Dropdown";
+import { StringOrNumberOption } from "@/components/Dropdown";
+import {
+  Select,
+  SelectItem,
+  SelectContent,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FiInfo, FiPlus, FiX } from "react-icons/fi";
 import {
   TooltipProvider,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@radix-ui/react-tooltip";
+} from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import remarkGfm from "remark-gfm";
 import { EditIcon } from "@/components/icons/icons";
+import { Button } from "@/components/ui/button";
 
 export function SectionHeader({
   children,
@@ -100,15 +107,13 @@ export function ToolTipDetails({
   children: string | JSX.Element;
 }) {
   return (
-    <TooltipProvider delayDuration={50}>
+    <TooltipProvider>
       <Tooltip>
         <TooltipTrigger>
           <FiInfo size={12} />
         </TooltipTrigger>
         <TooltipContent side="top" align="center">
-          <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-inverted">
-            {children}
-          </p>
+          {children}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -219,7 +224,7 @@ export function TextFormField({
             ${small && "text-sm"}
             border 
             border-border 
-            rounded-lg
+            rounded-md
             w-full 
             py-2 
             px-3 
@@ -538,8 +543,8 @@ export function TextArrayField<T extends Yup.AnyObject>({
                 arrayHelpers.push("");
               }}
               className="mt-3"
-              color="green"
-              size="xs"
+              variant="update"
+              size="sm"
               type="button"
               icon={FiPlus}
             >
@@ -587,7 +592,6 @@ export function SelectorFormField({
   label,
   options,
   subtext,
-  includeDefault = false,
   side = "bottom",
   maxHeight,
   onSelect,
@@ -596,6 +600,11 @@ export function SelectorFormField({
 }: SelectorFormFieldProps) {
   const [field] = useField<string>(name);
   const { setFieldValue } = useFormikContext();
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+
+  const currentlySelected = options.find(
+    (option) => option.value?.toString() === field.value?.toString()
+  );
 
   return (
     <div>
@@ -606,16 +615,43 @@ export function SelectorFormField({
         </div>
       )}
       {subtext && <SubLabel>{subtext}</SubLabel>}
-      <div className="mt-2">
-        <DefaultDropdown
-          options={options}
-          selected={field.value}
-          onSelect={onSelect || ((selected) => setFieldValue(name, selected))}
-          includeDefault={includeDefault}
-          side={side}
-          maxHeight={maxHeight}
+      <div className="mt-2" ref={setContainer}>
+        <Select
+          value={field.value || defaultValue}
+          onValueChange={
+            onSelect || ((selected) => setFieldValue(name, selected))
+          }
           defaultValue={defaultValue}
-        />
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select...">
+              {currentlySelected?.name || defaultValue || ""}
+            </SelectValue>
+          </SelectTrigger>
+
+          {container && (
+            <SelectContent
+              side={side}
+              className={maxHeight ? `max-h-[${maxHeight}]` : undefined}
+              container={container}
+            >
+              {options.length === 0 ? (
+                <SelectItem value="default">Select...</SelectItem>
+              ) : (
+                options.map((option) => (
+                  <SelectItem
+                    icon={option.icon}
+                    key={option.value}
+                    value={String(option.value)}
+                    selected={field.value === option.value}
+                  >
+                    {option.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          )}
+        </Select>
       </div>
 
       <ErrorMessage

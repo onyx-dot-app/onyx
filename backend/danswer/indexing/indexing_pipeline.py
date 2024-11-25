@@ -20,7 +20,8 @@ from danswer.db.document import get_documents_by_ids
 from danswer.db.document import prepare_to_modify_documents
 from danswer.db.document import update_docs_last_modified__no_commit
 from danswer.db.document import update_docs_updated_at__no_commit
-from danswer.db.document import upsert_documents_complete
+from danswer.db.document import upsert_document_by_connector_credential_pair
+from danswer.db.document import upsert_documents
 from danswer.db.document_set import fetch_document_sets_for_documents
 from danswer.db.index_attempt import create_index_attempt_error
 from danswer.db.models import Document as DBDocument
@@ -56,13 +57,13 @@ class IndexingPipelineProtocol(Protocol):
         ...
 
 
-def upsert_documents_in_db(
+def _upsert_documents_in_db(
     documents: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
 ) -> None:
     # Metadata here refers to basic document info, not metadata about the actual content
-    doc_m_batch: list[DocumentMetadata] = []
+    document_metadata_list: list[DocumentMetadata] = []
     for doc in documents:
         first_link = next(
             (section.link for section in doc.sections if section.link), ""
@@ -77,12 +78,9 @@ def upsert_documents_in_db(
             secondary_owners=get_experts_stores_representations(doc.secondary_owners),
             from_ingestion_api=doc.from_ingestion_api,
         )
-        doc_m_batch.append(db_doc_metadata)
+        document_metadata_list.append(db_doc_metadata)
 
-    upsert_documents_complete(
-        db_session=db_session,
-        document_metadata_batch=doc_m_batch,
-    )
+    upsert_documents(db_session, document_metadata_list)
 
     # Insert document content metadata
     for doc in documents:
@@ -95,21 +93,25 @@ def upsert_documents_in_db(
                     document_id=doc.id,
                     db_session=db_session,
                 )
-            else:
-                create_or_add_document_tag(
-                    tag_key=k,
-                    tag_value=v,
-                    source=doc.source,
-                    document_id=doc.id,
-                    db_session=db_session,
-                )
+                continue
+
+            create_or_add_document_tag(
+                tag_key=k,
+                tag_value=v,
+                source=doc.source,
+                document_id=doc.id,
+                db_session=db_session,
+            )
 
 
 def get_doc_ids_to_update(
     documents: list[Document], db_docs: list[DBDocument]
 ) -> list[Document]:
     """Figures out which documents actually need to be updated. If a document is already present
-    and the `updated_at` hasn't changed, we shouldn't need to do anything with it."""
+    and the `updated_at` hasn't changed, we shouldn't need to do anything with it.
+
+    NB: Still need to associate the document in the DB if multiple connectors are
+    indexing the same doc."""
     id_update_time_map = {
         doc.id: doc.doc_updated_at for doc in db_docs if doc.doc_updated_at
     }
@@ -195,9 +197,9 @@ def index_doc_batch_prepare(
     db_session: Session,
     ignore_time_skip: bool = False,
 ) -> DocumentBatchPrepareContext | None:
-    """This sets up the documents in the relational DB (source of truth) for permissions, metadata, etc.
+    """Sets up the documents in the relational DB (source of truth) for permissions, metadata, etc.
     This preceeds indexing it into the actual document index."""
-    documents = []
+    documents: list[Document] = []
     for document in document_batch:
         empty_contents = not any(section.text.strip() for section in document.sections)
         if (
@@ -212,42 +214,57 @@ def index_doc_batch_prepare(
             logger.warning(
                 f"Skipping document with ID {document.id} as it has neither title nor content."
             )
-        elif (
-            document.title is not None and not document.title.strip() and empty_contents
-        ):
+            continue
+
+        if document.title is not None and not document.title.strip() and empty_contents:
             # The title is explicitly empty ("" and not None) and the document is empty
             # so when building the chunk text representation, it will be empty and unuseable
             logger.warning(
                 f"Skipping document with ID {document.id} as the chunks will be empty."
             )
-        else:
-            documents.append(document)
+            continue
 
-    document_ids = [document.id for document in documents]
+        documents.append(document)
+
+    # Create a trimmed list of docs that don't have a newer updated at
+    # Shortcuts the time-consuming flow on connector index retries
+    document_ids: list[str] = [document.id for document in documents]
     db_docs: list[DBDocument] = get_documents_by_ids(
         db_session=db_session,
         document_ids=document_ids,
     )
 
-    # Skip indexing docs that don't have a newer updated at
-    # Shortcuts the time-consuming flow on connector index retries
     updatable_docs = (
         get_doc_ids_to_update(documents=documents, db_docs=db_docs)
         if not ignore_time_skip
         else documents
     )
 
-    # No docs to update either because the batch is empty or every doc was already indexed
+    # for all updatable docs, upsert into the DB
+    # Does not include doc_updated_at which is also used to indicate a successful update
+    if updatable_docs:
+        _upsert_documents_in_db(
+            documents=updatable_docs,
+            index_attempt_metadata=index_attempt_metadata,
+            db_session=db_session,
+        )
+
+    logger.info(
+        f"Upserted {len(updatable_docs)} changed docs out of "
+        f"{len(documents)} total docs into the DB"
+    )
+
+    # for all docs, upsert the document to cc pair relationship
+    upsert_document_by_connector_credential_pair(
+        db_session,
+        index_attempt_metadata.connector_id,
+        index_attempt_metadata.credential_id,
+        document_ids,
+    )
+
+    # No docs to process because the batch is empty or every doc was already indexed
     if not updatable_docs:
         return None
-
-    # Create records in the source of truth about these documents,
-    # does not include doc_updated_at which is also used to indicate a successful update
-    upsert_documents_in_db(
-        documents=documents,
-        index_attempt_metadata=index_attempt_metadata,
-        db_session=db_session,
-    )
 
     id_to_db_doc_map = {doc.id: doc for doc in db_docs}
     return DocumentBatchPrepareContext(
@@ -269,7 +286,10 @@ def index_doc_batch(
 ) -> tuple[int, int]:
     """Takes different pieces of the indexing pipeline and applies it to a batch of documents
     Note that the documents should already be batched at this point so that it does not inflate the
-    memory requirements"""
+    memory requirements
+
+    Returns a tuple where the first element is the number of new docs and the
+    second element is the number of chunks."""
 
     no_access = DocumentAccess.build(
         user_emails=[],
@@ -312,9 +332,9 @@ def index_doc_batch(
 
         # we're concerned about race conditions where multiple simultaneous indexings might result
         # in one set of metadata overwriting another one in vespa.
-        # we still write data here for immediate and most likely correct sync, but
+        # we still write data here for the immediate and most likely correct sync, but
         # to resolve this, an update of the last modified field at the end of this loop
-        # always triggers a final metadata sync
+        # always triggers a final metadata sync via the celery queue
         access_aware_chunks = [
             DocMetadataAwareIndexChunk.from_index_chunk(
                 index_chunk=chunk,
@@ -351,7 +371,8 @@ def index_doc_batch(
         ids_to_new_updated_at = {}
         for doc in successful_docs:
             last_modified_ids.append(doc.id)
-            # doc_updated_at is the connector source's idea of when the doc was last modified
+            # doc_updated_at is the source's idea (on the other end of the connector)
+            # of when the doc was last modified
             if doc.doc_updated_at is None:
                 continue
             ids_to_new_updated_at[doc.id] = doc.doc_updated_at
@@ -366,9 +387,12 @@ def index_doc_batch(
 
         db_session.commit()
 
-    return len([r for r in insertion_records if r.already_existed is False]), len(
-        access_aware_chunks
+    result = (
+        len([r for r in insertion_records if r.already_existed is False]),
+        len(access_aware_chunks),
     )
+
+    return result
 
 
 def build_indexing_pipeline(

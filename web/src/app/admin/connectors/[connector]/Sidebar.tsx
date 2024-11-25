@@ -8,12 +8,47 @@ import { credentialTemplates } from "@/lib/connectors/credentials";
 import Link from "next/link";
 import { useUser } from "@/components/user/UserProvider";
 import { useContext } from "react";
+import { User } from "@/lib/types";
+
+function BackButton({
+  isAdmin,
+  isCurator,
+  user,
+}: {
+  isAdmin: boolean;
+  isCurator: boolean;
+  user: User | null;
+}) {
+  const buttonText = isAdmin ? "Admin Page" : "Curator Page";
+
+  if (!isAdmin && !isCurator) {
+    console.error(
+      `User is neither admin nor curator, defaulting to curator view. Found user:\n ${JSON.stringify(
+        user,
+        null,
+        2
+      )}`
+    );
+  }
+
+  return (
+    <div className="mx-3 mt-6 flex-col flex items-center">
+      <Link
+        href={"/admin/add-connector"}
+        className="w-full p-2 bg-white border-border border rounded items-center hover:bg-background-200 cursor-pointer transition-all duration-150 flex gap-x-2"
+      >
+        <SettingsIcon className="flex-none " />
+        <p className="my-auto flex items-center text-sm">{buttonText}</p>
+      </Link>
+    </div>
+  );
+}
 
 export default function Sidebar() {
   const { formStep, setFormStep, connector, allowAdvanced, allowCreate } =
     useFormContext();
   const combinedSettings = useContext(SettingsContext);
-  const { isLoadingUser, isAdmin } = useUser();
+  const { isCurator, isAdmin, user } = useUser();
   if (!combinedSettings) {
     return null;
   }
@@ -55,17 +90,7 @@ export default function Sidebar() {
             </div>
           </div>
 
-          <div className="mx-3 mt-6 gap-y-1 flex-col flex gap-x-1.5 items-center items-center">
-            <Link
-              href={"/admin/add-connector"}
-              className="w-full p-2 bg-white border-border border rounded items-center hover:bg-background-200 cursor-pointer transition-all duration-150 flex gap-x-2"
-            >
-              <SettingsIcon className="flex-none " />
-              <p className="my-auto flex items-center text-sm">
-                {isAdmin ? "Admin Page" : "Curator Page"}
-              </p>
-            </Link>
-          </div>
+          <BackButton isAdmin={isAdmin} isCurator={isCurator} user={user} />
 
           <div className="h-full flex">
             <div className="mx-auto w-full max-w-2xl px-4 py-8">

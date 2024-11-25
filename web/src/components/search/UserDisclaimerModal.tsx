@@ -1,6 +1,8 @@
 "use client";
 
-import { Button, Divider } from "@tremor/react";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+
 import { Modal } from "../Modal";
 import { useState, useEffect } from "react";
 
@@ -25,7 +27,7 @@ export function UserDisclaimerModal(props: any) {
         <div>
           <p dangerouslySetInnerHTML={{ __html: disclaimerText }} />
         </div>
-        <Divider />
+        <Separator />
         <Button className="mx-auto w-full" onClick={() => setShow(false)}>
           OK
         </Button>

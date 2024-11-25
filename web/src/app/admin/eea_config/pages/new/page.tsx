@@ -1,4 +1,5 @@
 "use client";
+import { use } from "react";
 
 import { ErrorCallout } from "@/components/ErrorCallout";
 //import { useDocumentSets } from "../hooks";
@@ -10,7 +11,6 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { BookmarkIcon } from "@/components/icons/icons";
 import { BackButton } from "@/components/BackButton";
-import { Card } from "@tremor/react";
 //import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -19,18 +19,19 @@ import useSWR from "swr";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { LoadingAnimation } from "@/components/Loading";
 import { FiCpu } from "react-icons/fi";
-import { Text, Title, Button } from "@tremor/react";
+// import { Text, Title, Button } from "@tremor/react";
+import { Button } from "@/components/ui/button";
+import Text from "@/components/ui/text";
+import Title from "@/components/ui/title";
+
 import { Form, Formik, Field } from "formik";
 import { TextFormField } from "@/components/admin/connectors/Field";
 
 const GET_EEA_CONFIG_URL = "/api/eea_config/get_eea_config";
 const SET_EEA_CONFIG_URL = "/api/eea_config/set_eea_config";
 
-export default function Page({
-  params,
-}: {
-  params: { pageTitle: string };
-}) {
+export default function Page(props: { params: Promise<{ pageTitle: string }> }) {
+  const params = use(props.params);
   const { data, isLoading, error } = useSWR<{ config: string }>(
     GET_EEA_CONFIG_URL,
     errorHandlingFetcher
@@ -119,7 +120,7 @@ export default function Page({
               />
 
               <div className="flex">
-                <Button size="xs" type="submit" className="w-48 mx-auto">
+                <Button type="submit" className="w-48 mx-auto">
                   Submit
                 </Button>
               </div>

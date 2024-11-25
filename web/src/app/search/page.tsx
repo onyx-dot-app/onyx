@@ -10,16 +10,10 @@ import { CCPairBasicInfo, DocumentSet, Tag, User } from "@/lib/types";
 import { cookies } from "next/headers";
 import { SearchType } from "@/lib/search/interfaces";
 import { Persona } from "../admin/assistants/interfaces";
-import {
-  WelcomeModal,
-  hasCompletedWelcomeFlowSS,
-} from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { unstable_noStore as noStore } from "next/cache";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { personaComparator } from "../admin/assistants/lib";
 import { FullEmbeddingModelResponse } from "@/components/embedding/interfaces";
-import { NoSourcesModal } from "@/components/initialSetup/search/NoSourcesModal";
-import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
 import { UserDisclaimerModal } from "@/components/search/UserDisclaimerModal";
 import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 
@@ -39,19 +33,21 @@ import WrappedSearch from "./WrappedSearch";
 import { SearchProvider } from "@/components/context/SearchContext";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { LLMProviderDescriptor } from "../admin/configuration/llm/interfaces";
-import { AssistantsProvider } from "@/components/context/AssistantsContext";
 import { headers } from "next/headers";
+import {
+  hasCompletedWelcomeFlowSS,
+  WelcomeModal,
+} from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
+export default async function Home(props: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const searchParams = await props.searchParams;
   // Disable caching so we always get the up to date connector / document set / persona info
   // importantly, this prevents users from adding a connector, going back to the main page,
   // and then getting hit with a "No Connectors" popup
   noStore();
-
+  const requestCookies = await cookies();
   const tasks = [
     getAuthTypeMetadataSS(),
     getCurrentUserSS(),
@@ -100,7 +96,7 @@ export default async function Home({
   const authDisabled = authTypeMetadata?.authType === "disabled";
 
   if (!authDisabled && !user) {
-    const headersList = headers();
+    const headersList = await headers();
     const fullUrl = headersList.get("x-url") || "/search";
     const searchParamsString = new URLSearchParams(
       searchParams as unknown as Record<string, string>
@@ -158,7 +154,7 @@ export default async function Home({
   }
 
   // needs to be done in a non-client side component due to nextjs
-  const storedSearchType = cookies().get("searchType")?.value as
+  const storedSearchType = requestCookies.get("searchType")?.value as
     | string
     | undefined;
   const searchTypeDefault: SearchType =
@@ -171,7 +167,7 @@ export default async function Home({
 
   const shouldShowWelcomeModal =
     !llmProviders.length &&
-    !hasCompletedWelcomeFlowSS() &&
+    !hasCompletedWelcomeFlowSS(requestCookies) &&
     !hasAnyConnectors &&
     (!user || user.role === "admin");
 
@@ -180,16 +176,10 @@ export default async function Home({
     ccPairs.length === 0 &&
     !shouldShowWelcomeModal;
 
-  const shouldDisplaySourcesIncompleteModal =
-    !ccPairs.some(
-      (ccPair) => ccPair.has_successful_run && ccPair.docs_indexed > 0
-    ) &&
-    !shouldDisplayNoSourcesModal &&
-    !shouldShowWelcomeModal &&
-    (!user || user.role == "admin");
-
-  const sidebarToggled = cookies().get(SIDEBAR_TOGGLED_COOKIE_NAME);
-  const agenticSearchToggle = cookies().get(AGENTIC_SEARCH_TYPE_COOKIE_NAME);
+  const sidebarToggled = requestCookies.get(SIDEBAR_TOGGLED_COOKIE_NAME);
+  const agenticSearchToggle = requestCookies.get(
+    AGENTIC_SEARCH_TYPE_COOKIE_NAME
+  );
 
   const toggleSidebar = sidebarToggled
     ? sidebarToggled.value.toLocaleLowerCase() == "true" || false
@@ -202,11 +192,9 @@ export default async function Home({
   return (
     <>
       <HealthCheckBanner />
-      {shouldShowWelcomeModal && <WelcomeModal user={user} />}
       <InstantSSRAutoRefresh />
-      {shouldDisplayNoSourcesModal && <NoSourcesModal />}
-      {shouldDisplaySourcesIncompleteModal && (
-        <NoCompleteSourcesModal ccPairs={ccPairs} />
+      {shouldShowWelcomeModal && (
+        <WelcomeModal user={user} requestCookies={requestCookies} />
       )}
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
       Only used in the EE version of the app. */}

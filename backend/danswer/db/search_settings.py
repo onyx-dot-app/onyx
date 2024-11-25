@@ -12,7 +12,7 @@ from danswer.configs.model_configs import NORMALIZE_EMBEDDINGS
 from danswer.configs.model_configs import OLD_DEFAULT_DOCUMENT_ENCODER_MODEL
 from danswer.configs.model_configs import OLD_DEFAULT_MODEL_DOC_EMBEDDING_DIM
 from danswer.configs.model_configs import OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS
-from danswer.db.engine import get_session_with_tenant
+from danswer.db.engine import get_session_with_default_tenant
 from danswer.db.llm import fetch_embedding_provider
 from danswer.db.models import CloudEmbeddingProvider
 from danswer.db.models import IndexAttempt
@@ -152,7 +152,7 @@ def get_all_search_settings(db_session: Session) -> list[SearchSettings]:
 
 def get_multilingual_expansion(db_session: Session | None = None) -> list[str]:
     if db_session is None:
-        with get_session_with_tenant() as db_session:
+        with get_session_with_default_tenant() as db_session:
             search_settings = get_current_search_settings(db_session)
     else:
         search_settings = get_current_search_settings(db_session)

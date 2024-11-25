@@ -16,6 +16,7 @@ from danswer.connectors.slack.connector import filter_channels
 from danswer.connectors.slack.utils import get_message_link
 from danswer.utils.logger import setup_logger
 
+
 logger = setup_logger()
 
 

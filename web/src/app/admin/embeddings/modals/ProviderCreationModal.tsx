@@ -1,5 +1,7 @@
 import React, { useRef, useState } from "react";
-import { Text, Button, Callout } from "@tremor/react";
+import Text from "@/components/ui/text";
+import { Callout } from "@/components/ui/callout";
+import { Button } from "@/components/ui/button";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Label, TextFormField } from "@/components/admin/connectors/Field";
@@ -108,20 +110,27 @@ export function ProviderCreationModal({
     setErrorMsg("");
     try {
       const customConfig = Object.fromEntries(values.custom_config);
+      const providerType = values.provider_type.toLowerCase().split(" ")[0];
+      const isOpenAI = providerType === "openai";
+
+      const testModelName =
+        isOpenAI || isAzure ? "text-embedding-3-small" : values.model_name;
+
+      const testEmbeddingPayload = {
+        provider_type: providerType,
+        api_key: values.api_key,
+        api_url: values.api_url,
+        model_name: testModelName,
+        api_version: values.api_version,
+        deployment_name: values.deployment_name,
+      };
 
       const initialResponse = await fetch(
         "/api/admin/embedding/test-embedding",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider_type: values.provider_type.toLowerCase().split(" ")[0],
-            api_key: values.api_key,
-            api_url: values.api_url,
-            model_name: values.model_name,
-            api_version: values.api_version,
-            deployment_name: values.deployment_name,
-          }),
+          body: JSON.stringify(testEmbeddingPayload),
         }
       );
 
@@ -173,7 +182,6 @@ export function ProviderCreationModal({
 
   return (
     <Modal
-      width="max-w-3xl"
       title={`Configure ${selectedProvider.provider_type}`}
       onOutsideClick={onCancel}
       icon={selectedProvider.icon}
@@ -260,7 +268,9 @@ export function ProviderCreationModal({
                 ) : (
                   <TextFormField
                     name="api_key"
-                    label={`API Key ${isProxy ? "(for non-local deployments)" : ""}`}
+                    label={`API Key ${
+                      isProxy ? "(for non-local deployments)" : ""
+                    }`}
                     placeholder="API Key"
                     type="password"
                   />
@@ -277,14 +287,14 @@ export function ProviderCreationModal({
               </div>
 
               {errorMsg && (
-                <Callout title="Error" color="red">
+                <Callout title="Error" type="danger">
                   {errorMsg}
                 </Callout>
               )}
 
               <Button
                 type="submit"
-                color="blue"
+                variant="submit"
                 className="w-full"
                 disabled={isSubmitting}
               >

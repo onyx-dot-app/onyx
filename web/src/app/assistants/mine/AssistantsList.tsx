@@ -3,7 +3,8 @@
 import React, { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { MinimalUserSnapshot, User } from "@/lib/types";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { Button, Divider } from "@tremor/react";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
   FiEdit2,
   FiList,
@@ -130,7 +131,9 @@ function AssistantListItem({
         show={showSharingModal}
       />
       <div
-        className={`rounded-lg px-4 py-6 transition-all duration-900 hover:bg-background-125 ${isDragging && "bg-background-125"}`}
+        className={`rounded-lg px-4 py-6 transition-all duration-900 hover:bg-background-125 ${
+          isDragging && "bg-background-125"
+        }`}
       >
         <div className="flex justify-between items-center">
           <AssistantIcon assistant={assistant} />
@@ -391,8 +394,9 @@ export function AssistantsList() {
 
         <div className="grid grid-cols-2 gap-4 mt-4 mb-8">
           <Button
+            variant="default"
+            className="p-6 text-base"
             onClick={() => router.push("/assistants/new")}
-            className="w-full py-3 text-lg rounded-full bg-background-800 text-white hover:bg-background-800 transition duration-300 ease-in-out"
             icon={FiPlus}
           >
             Create New Assistant
@@ -400,7 +404,8 @@ export function AssistantsList() {
 
           <Button
             onClick={() => router.push("/assistants/gallery")}
-            className="w-full hover:border-border-strong py-3 text-lg rounded-full bg-white border !border-border shadow text-text-700 hover:bg-background-50 transition duration-300 ease-in-out"
+            variant="outline"
+            className="text-base py-6"
             icon={FiList}
           >
             Assistant Gallery
@@ -446,7 +451,7 @@ export function AssistantsList() {
 
         {ownedButHiddenAssistants.length > 0 && (
           <>
-            <Divider />
+            <Separator />
 
             <h3 className="text-xl font-bold mb-4">Your Hidden Assistants</h3>
 

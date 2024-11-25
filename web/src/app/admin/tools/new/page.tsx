@@ -4,7 +4,7 @@ import { ToolEditor } from "@/app/admin/tools/ToolEditor";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ToolIcon } from "@/components/icons/icons";
-import { Card } from "@tremor/react";
+import CardSection from "@/components/admin/CardSection";
 
 export default function NewToolPage() {
   return (
@@ -16,9 +16,9 @@ export default function NewToolPage() {
         icon={<ToolIcon size={32} className="my-auto" />}
       />
 
-      <Card>
+      <CardSection>
         <ToolEditor />
-      </Card>
+      </CardSection>
     </div>
   );
 }

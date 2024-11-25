@@ -20,7 +20,7 @@ import {
   MixedBreadIcon,
 } from "@/components/icons/icons";
 import { Modal } from "@/components/Modal";
-import { Button } from "@tremor/react";
+import { Button } from "@/components/ui/button";
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
@@ -108,7 +108,9 @@ const RerankingDetailsForm = forwardRef<
                   </button>
                 )}
                 <div
-                  className={`${originalRerankingDetails.rerank_model_name && "px-2 ml-2"}`}
+                  className={`${
+                    originalRerankingDetails.rerank_model_name && "px-2 ml-2"
+                  }`}
                 >
                   <button
                     onClick={() => setModelTab("cloud")}
@@ -267,8 +269,7 @@ const RerankingDetailsForm = forwardRef<
                       <div className="flex justify-end">
                         <Button
                           onClick={() => setShowGpuWarningModalModel(null)}
-                          color="blue"
-                          size="xs"
+                          variant="submit"
                         >
                           Understood
                         </Button>
@@ -348,8 +349,7 @@ const RerankingDetailsForm = forwardRef<
                           onClick={() => {
                             setShowLiteLLMConfigurationModal(false);
                           }}
-                          color="blue"
-                          size="xs"
+                          variant="submit"
                         >
                           Update
                         </Button>
@@ -397,8 +397,7 @@ const RerankingDetailsForm = forwardRef<
                       <div className="flex w-full justify-end mt-4">
                         <Button
                           onClick={() => setIsApiKeyModalOpen(false)}
-                          color="blue"
-                          size="xs"
+                          variant="submit"
                         >
                           Update
                         </Button>

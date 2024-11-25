@@ -1,9 +1,14 @@
+from http import HTTPStatus
+
+import httpx
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
+from tenacity import RetryError
 
 from danswer.access.access import get_access_for_document
 from danswer.background.celery.apps.app_base import task_logger
+from danswer.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from danswer.db.document import delete_document_by_connector_credential_pair__no_commit
 from danswer.db.document import delete_documents_complete__no_commit
 from danswer.db.document import get_document
@@ -20,12 +25,17 @@ from danswer.server.documents.models import ConnectorCredentialPairIdentifier
 DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES = 3
 
 
+# 5 seconds more than RetryDocumentIndex STOP_AFTER+MAX_WAIT
+LIGHT_SOFT_TIME_LIMIT = 105
+LIGHT_TIME_LIMIT = LIGHT_SOFT_TIME_LIMIT + 15
+
+
 @shared_task(
     name="document_by_cc_pair_cleanup_task",
-    bind=True,
-    soft_time_limit=45,
-    time_limit=60,
+    soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
+    time_limit=LIGHT_TIME_LIMIT,
     max_retries=DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES,
+    bind=True,
 )
 def document_by_cc_pair_cleanup_task(
     self: Task,
@@ -49,7 +59,7 @@ def document_by_cc_pair_cleanup_task(
     connector / credential pair from the access list
     (6) delete all relevant entries from postgres
     """
-    task_logger.info(f"tenant_id={tenant_id} document_id={document_id}")
+    task_logger.info(f"tenant={tenant_id} doc={document_id}")
 
     try:
         with get_session_with_tenant(tenant_id) as db_session:
@@ -57,9 +67,11 @@ def document_by_cc_pair_cleanup_task(
             chunks_affected = 0
 
             curr_ind_name, sec_ind_name = get_both_index_names(db_session)
-            document_index = get_default_document_index(
+            doc_index = get_default_document_index(
                 primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
             )
+
+            retry_index = RetryDocumentIndex(doc_index)
 
             count = get_document_connector_count(db_session, document_id)
             if count == 1:
@@ -67,7 +79,7 @@ def document_by_cc_pair_cleanup_task(
                 # delete it from vespa and the db
                 action = "delete"
 
-                chunks_affected = document_index.delete_single(document_id)
+                chunks_affected = retry_index.delete_single(document_id)
                 delete_documents_complete__no_commit(
                     db_session=db_session,
                     document_ids=[document_id],
@@ -97,9 +109,7 @@ def document_by_cc_pair_cleanup_task(
                 )
 
                 # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
-                chunks_affected = document_index.update_single(
-                    document_id, fields=fields
-                )
+                chunks_affected = retry_index.update_single(document_id, fields=fields)
 
                 # there are still other cc_pair references to the doc, so just resync to Vespa
                 delete_document_by_connector_credential_pair__no_commit(
@@ -118,19 +128,41 @@ def document_by_cc_pair_cleanup_task(
             db_session.commit()
 
             task_logger.info(
-                f"tenant_id={tenant_id} "
-                f"document_id={document_id} "
+                f"tenant={tenant_id} "
+                f"doc={document_id} "
                 f"action={action} "
                 f"refcount={count} "
                 f"chunks={chunks_affected}"
             )
     except SoftTimeLimitExceeded:
         task_logger.info(
-            f"SoftTimeLimitExceeded exception. tenant_id={tenant_id} doc_id={document_id}"
+            f"SoftTimeLimitExceeded exception. tenant={tenant_id} doc={document_id}"
         )
         return False
-    except Exception as e:
-        task_logger.exception("Unexpected exception")
+    except Exception as ex:
+        if isinstance(ex, RetryError):
+            task_logger.info(f"Retry failed: {ex.last_attempt.attempt_number}")
+
+            # only set the inner exception if it is of type Exception
+            e_temp = ex.last_attempt.exception()
+            if isinstance(e_temp, Exception):
+                e = e_temp
+        else:
+            e = ex
+
+        if isinstance(e, httpx.HTTPStatusError):
+            if e.response.status_code == HTTPStatus.BAD_REQUEST:
+                task_logger.exception(
+                    f"Non-retryable HTTPStatusError: "
+                    f"tenant={tenant_id} "
+                    f"doc={document_id} "
+                    f"status={e.response.status_code}"
+                )
+            return False
+
+        task_logger.exception(
+            f"Unexpected exception: tenant={tenant_id} doc={document_id}"
+        )
 
         if self.request.retries < DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES:
             # Still retrying. Exponential backoff from 2^4 to 2^6 ... i.e. 16, 32, 64
@@ -141,7 +173,7 @@ def document_by_cc_pair_cleanup_task(
             # eventually gets fixed out of band via stale document reconciliation
             task_logger.info(
                 f"Max retries reached. Marking doc as dirty for reconciliation: "
-                f"tenant_id={tenant_id} document_id={document_id}"
+                f"tenant={tenant_id} doc={document_id}"
             )
             with get_session_with_tenant(tenant_id):
                 mark_document_as_modified(document_id, db_session)

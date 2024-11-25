@@ -1,9 +1,9 @@
 from sqlalchemy.orm import Session
 
-from danswer.configs.app_configs import MULTI_TENANT
 from danswer.db.search_settings import get_current_search_settings
 from danswer.document_index.interfaces import DocumentIndex
 from danswer.document_index.vespa.index import VespaIndex
+from shared_configs.configs import MULTI_TENANT
 
 
 def get_default_document_index(

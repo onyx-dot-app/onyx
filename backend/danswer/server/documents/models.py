@@ -4,7 +4,6 @@ from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import Field
-from pydantic import model_validator
 
 from danswer.configs.app_configs import MASK_CREDENTIAL_PREFIX
 from danswer.configs.constants import DocumentSource
@@ -377,18 +376,7 @@ class GoogleServiceAccountKey(BaseModel):
 
 
 class GoogleServiceAccountCredentialRequest(BaseModel):
-    google_drive_delegated_user: str | None = None  # email of user to impersonate
-    gmail_delegated_user: str | None = None  # email of user to impersonate
-
-    @model_validator(mode="after")
-    def check_user_delegation(self) -> "GoogleServiceAccountCredentialRequest":
-        if (self.google_drive_delegated_user is None) == (
-            self.gmail_delegated_user is None
-        ):
-            raise ValueError(
-                "Exactly one of google_drive_delegated_user or gmail_delegated_user must be set"
-            )
-        return self
+    google_primary_admin: str | None = None  # email of user to impersonate
 
 
 class FileUploadResponse(BaseModel):

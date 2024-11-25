@@ -308,6 +308,7 @@ class CCPairManager:
         while True:
             last_pruned = CCPairManager.last_pruned(cc_pair, user_performing_action)
             if last_pruned and last_pruned > after:
+                print(f"Pruning complete: cc_pair={cc_pair.id}")
                 break
 
             elapsed = time.monotonic() - start

@@ -1,10 +1,11 @@
 "use client";
+import { use } from "react";
 
 import { BackButton } from "@/components/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { Title } from "@tremor/react";
+import Title from "@/components/ui/title";
 import useSWR from "swr";
 import { IndexAttemptErrorsTable } from "./IndexAttemptErrorsTable";
 import { buildIndexingErrorsUrl } from "./lib";
@@ -46,7 +47,8 @@ function Main({ id }: { id: number }) {
   );
 }
 
-export default function Page({ params }: { params: { id: string } }) {
+export default function Page(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   const id = parseInt(params.id);
 
   return (

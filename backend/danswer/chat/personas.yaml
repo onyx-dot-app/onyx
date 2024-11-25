@@ -41,6 +41,15 @@ personas:
     icon_color: "#6FB1FF"
     display_priority: 1
     is_visible: true
+    starter_messages:
+      - name: "Give me an overview of what's here"
+        message: "Sample some documents and tell me what you find."
+      - name: "Use AI to solve a work related problem"
+        message: "Ask me what problem I would like to solve, then search the knowledge base to help me find a solution."
+      - name: "Find updates on a topic of interest"
+        message: "Once I provide a topic, retrieve related documents and tell me when there was last activity on the topic if available."
+      - name: "Surface contradictions"
+        message: "Have me choose a subject. Once I have provided it, check against the knowledge base and point out any inconsistencies. For all your following responses, focus on identifying contradictions."
 
   - id: 1
     name: "General"
@@ -57,6 +66,15 @@ personas:
     icon_color: "#FF6F6F"
     display_priority: 0
     is_visible: true
+    starter_messages:
+      - name: "Summarize a document"
+        message: "If I have provided a document please summarize it for me. If not, please ask me to upload a document either by dragging it into the input bar or clicking the +file icon."
+      - name: "Help me with coding"
+        message: 'Write me a "Hello World" script in 5 random languages to show off the functionality.'
+      - name: "Draft a professional email"
+        message: "Help me craft a professional email. Let's establish the context and the anticipated outcomes of the email before proposing a draft."
+      - name: "Learn something new"
+        message: "What is the difference between a Gantt chart, a Burndown chart and a Kanban board?"
 
   - id: 2
     name: "Paraphrase"
@@ -73,7 +91,15 @@ personas:
     icon_color: "#6FFF8D"
     display_priority: 2
     is_visible: false
-
+    starter_messages:
+      - name: "Document Search"
+        message: "Hi! Could you help me find information about our team structure and reporting lines from our internal documents?"
+      - name: "Process Verification"
+        message: "Hello! I need to understand our project approval process. Could you find the exact steps from our documentation?"
+      - name: "Technical Documentation"
+        message: "Hi there! I'm looking for information about our deployment procedures. Can you find the specific steps from our technical guides?"
+      - name: "Policy Reference"
+        message: "Hello! Could you help me find our official guidelines about client communication? I need the exact wording from our documentation."
 
   - id: 3
     name: "Art"
@@ -86,8 +112,17 @@ personas:
     llm_filter_extraction: false
     recency_bias: "no_decay"
     document_sets: []
-    icon_shape: 234124 
+    icon_shape: 234124
     icon_color: "#9B59B6"
-    image_generation: true 
+    image_generation: true
     display_priority: 3
     is_visible: true
+    starter_messages:
+      - name: "Create visuals for a presentation"
+        message: "Generate someone presenting a graph which clearly demonstrates an upwards trajectory."
+      - name: "Find inspiration for a marketing campaign"
+        message: "Generate an image of two happy individuals sipping on a soda drink in a glass bottle."
+      - name: "Visualize a product design"
+        message: "I want to add a search bar to my Iphone app. Generate me generic examples of how other apps implement this."
+      - name: "Generate a humorous image response"
+        message: "My teammate just made a silly mistake and I want to respond with a facepalm. Can you generate me one?"

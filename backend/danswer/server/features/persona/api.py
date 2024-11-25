@@ -30,6 +30,7 @@ from danswer.file_store.file_store import get_default_file_store
 from danswer.file_store.models import ChatFileType
 from danswer.llm.answering.prompts.utils import build_dummy_prompt
 from danswer.server.features.persona.models import CreatePersonaRequest
+from danswer.server.features.persona.models import ImageGenerationToolStatus
 from danswer.server.features.persona.models import PersonaSharedNotificationData
 from danswer.server.features.persona.models import PersonaSnapshot
 from danswer.server.features.persona.models import PromptTemplateResponse
@@ -225,6 +226,16 @@ def delete_persona(
         user=user,
         db_session=db_session,
     )
+
+
+@basic_router.get("/image-generation-tool")
+def get_image_generation_tool(
+    _: User
+    | None = Depends(current_user),  # User param not used but kept for consistency
+    db_session: Session = Depends(get_session),
+) -> ImageGenerationToolStatus:  # Use bool instead of str for boolean values
+    is_available = is_image_generation_available(db_session=db_session)
+    return ImageGenerationToolStatus(is_available=is_available)
 
 
 @basic_router.get("")

@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from danswer.chat.load_yamls import load_chat_yamls
 from danswer.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from danswer.configs.app_configs import MANAGED_VESPA
-from danswer.configs.app_configs import MULTI_TENANT
 from danswer.configs.constants import KV_REINDEX_KEY
 from danswer.configs.constants import KV_SEARCH_SETTINGS
 from danswer.configs.model_configs import FAST_GEN_AI_MODEL_VERSION
@@ -52,13 +51,15 @@ from danswer.utils.logger import setup_logger
 from shared_configs.configs import ALT_INDEX_SUFFIX
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import SUPPORTED_EMBEDDING_MODELS
 from shared_configs.model_server_models import SupportedEmbeddingModel
+
 
 logger = setup_logger()
 
 
-def setup_danswer(db_session: Session) -> None:
+def setup_danswer(db_session: Session, tenant_id: str | None) -> None:
     """
     Setup Danswer for a particular tenant. In the Single Tenant case, it will set it up for the default schema
     on server startup. In the MT case, it will be called when the tenant is created.
@@ -147,7 +148,7 @@ def setup_danswer(db_session: Session) -> None:
     # update multipass indexing setting based on GPU availability
     update_default_multipass_indexing(db_session)
 
-    seed_initial_documents(db_session)
+    seed_initial_documents(db_session, tenant_id)
 
 
 def translate_saved_search_settings(db_session: Session) -> None:

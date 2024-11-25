@@ -9,18 +9,19 @@ import {
 import { redirect } from "next/navigation";
 import { SignInButton } from "./SignInButton";
 import { EmailPasswordForm } from "./EmailPasswordForm";
-import { Card, Title, Text } from "@tremor/react";
+import Title from "@/components/ui/title";
+import Text from "@/components/ui/text";
 import Link from "next/link";
 import { LoginText } from "./LoginText";
 import Image from "next/image";
 import { getSecondsUntilExpiration } from "@/lib/time";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
+import CardSection from "@/components/admin/CardSection";
 
-const Page = async ({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
+const Page = async (props: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) => {
+  const searchParams = await props.searchParams;
   const autoRedirectDisabled = searchParams?.disableAutoRedirect === "true";
 
   // catch cases where the backend is completely unreachable here
@@ -115,7 +116,7 @@ const Page = async ({
         )}
 
         {authTypeMetadata?.authType === "basic" && (
-          <Card className="mt-4 w-96">
+          <CardSection className="mt-4 w-96">
             <div className="flex">
               <Title className="mb-2 mx-auto font-bold">
                 <LoginText />
@@ -130,7 +131,7 @@ const Page = async ({
                 </Link>
               </Text>
             </div>
-          </Card>
+          </CardSection>
         )}
       </div>
     </AuthFlowContainer>

@@ -6,7 +6,7 @@ from danswer.chat.models import DanswerQuotes
 from danswer.chat.models import LlmDoc
 from danswer.configs.constants import DocumentSource
 from danswer.llm.answering.stream_processing.quotes_processing import (
-    process_model_tokens,
+    QuotesProcessor,
 )
 
 mock_docs = [
@@ -25,179 +25,202 @@ mock_docs = [
 ]
 
 
-tokens_with_quotes = [
-    "{",
-    "\n  ",
-    '"answer": "Yes',
-    ", Danswer allows",
-    " customized prompts. This",
-    " feature",
-    " is currently being",
-    " developed and implemente",
-    "d to",
-    " improve",
-    " the accuracy",
-    " of",
-    " Language",
-    " Models (",
-    "LL",
-    "Ms) for",
-    " different",
-    " companies",
-    ".",
-    " The custom",
-    "ized prompts feature",
-    " woul",
-    "d allow users to ad",
-    "d person",
-    "alized prom",
-    "pts through",
-    " an",
-    " interface or",
-    " metho",
-    "d,",
-    " which would then be used to",
-    " train",
-    " the LLM.",
-    " This enhancement",
-    " aims to make",
-    " Danswer more",
-    " adaptable to",
-    " different",
-    " business",
-    " contexts",
-    " by",
-    " tail",
-    "oring it",
-    " to the specific language",
-    " an",
-    "d terminology",
-    " used within",
-    " a",
-    " company.",
-    " Additionally",
-    ",",
-    " Danswer already",
-    " supports creating",
-    " custom AI",
-    " Assistants with",
-    " different",
-    " prom",
-    "pts and backing",
-    " knowledge",
-    " sets",
-    ",",
-    " which",
-    " is",
-    " a form",
-    " of prompt",
-    " customization. However, it",
-    "'s important to nLogging Details LiteLLM-Success Call: Noneote that some",
-    " aspects",
-    " of prompt",
-    " customization,",
-    " such as for",
-    " Sl",
-    "ack",
-    "b",
-    "ots, may",
-    " still",
-    " be in",
-    " development or have",
-    ' limitations.",',
-    '\n  "quotes": [',
-    '\n    "We',
-    " woul",
-    "d like to ad",
-    "d customized prompts for",
-    " different",
-    " companies to improve the accuracy of",
-    " Language",
-    " Model",
-    " (LLM)",
-    '.",\n    "A',
-    " new",
-    " feature that",
-    " allows users to add personalize",
-    "d prompts.",
-    " This would involve",
-    " creating",
-    " an interface or method for",
-    " users to input",
-    " their",
-    " own",
-    " prom",
-    "pts,",
-    " which would then be used to",
-    ' train the LLM.",',
-    '\n    "Create',
-    " custom AI Assistants with",
-    " different prompts and backing knowledge",
-    ' sets.",',
-    '\n    "This',
-    " PR",
-    " fixes",
-    " https",
-    "://github.com/dan",
-    "swer-ai/dan",
-    "swer/issues/1",
-    "584",
-    " by",
-    " setting",
-    " the system",
-    " default",
-    " prompt for",
-    " sl",
-    "ackbots const",
-    "rained by",
-    " ",
-    "document sets",
-    ".",
-    " It",
-    " probably",
-    " isn",
-    "'t ideal",
-    " -",
-    " it",
-    " might",
-    " be pref",
-    "erable to be",
-    " able to select",
-    " a prompt for",
-    " the",
-    " slackbot from",
-    " the",
-    " admin",
-    " panel",
-    " -",
-    " but it sol",
-    "ves the immediate problem",
-    " of",
-    " the slack",
-    " listener",
-    " cr",
-    "ashing when",
-    " configure",
-    "d this",
-    ' way."\n  ]',
-    "\n}",
-    "",
-]
+def _process_tokens(
+    processor: QuotesProcessor, tokens: list[str]
+) -> tuple[str, list[str]]:
+    """Process a list of tokens and return the answer and quotes.
+
+    Args:
+        processor: QuotesProcessor instance
+        tokens: List of tokens to process
+
+    Returns:
+        Tuple of (answer_text, list_of_quotes)
+    """
+    answer = ""
+    quotes: list[str] = []
+
+    # need to add a None to the end to simulate the end of the stream
+    for token in tokens + [None]:
+        for output in processor.process_token(token):
+            if isinstance(output, DanswerAnswerPiece):
+                if output.answer_piece:
+                    answer += output.answer_piece
+            elif isinstance(output, DanswerQuotes):
+                quotes.extend(q.quote for q in output.quotes)
+
+    return answer, quotes
 
 
 def test_process_model_tokens_answer() -> None:
-    gen = process_model_tokens(tokens=iter(tokens_with_quotes), context_docs=mock_docs)
+    tokens_with_quotes = [
+        "{",
+        "\n  ",
+        '"answer": "Yes',
+        ", Danswer allows",
+        " customized prompts. This",
+        " feature",
+        " is currently being",
+        " developed and implemente",
+        "d to",
+        " improve",
+        " the accuracy",
+        " of",
+        " Language",
+        " Models (",
+        "LL",
+        "Ms) for",
+        " different",
+        " companies",
+        ".",
+        " The custom",
+        "ized prompts feature",
+        " woul",
+        "d allow users to ad",
+        "d person",
+        "alized prom",
+        "pts through",
+        " an",
+        " interface or",
+        " metho",
+        "d,",
+        " which would then be used to",
+        " train",
+        " the LLM.",
+        " This enhancement",
+        " aims to make",
+        " Danswer more",
+        " adaptable to",
+        " different",
+        " business",
+        " contexts",
+        " by",
+        " tail",
+        "oring it",
+        " to the specific language",
+        " an",
+        "d terminology",
+        " used within",
+        " a",
+        " company.",
+        " Additionally",
+        ",",
+        " Danswer already",
+        " supports creating",
+        " custom AI",
+        " Assistants with",
+        " different",
+        " prom",
+        "pts and backing",
+        " knowledge",
+        " sets",
+        ",",
+        " which",
+        " is",
+        " a form",
+        " of prompt",
+        " customization. However, it",
+        "'s important to nLogging Details LiteLLM-Success Call: Noneote that some",
+        " aspects",
+        " of prompt",
+        " customization,",
+        " such as for",
+        " Sl",
+        "ack",
+        "b",
+        "ots, may",
+        " still",
+        " be in",
+        " development or have",
+        ' limitations.",',
+        '\n  "quotes": [',
+        '\n    "We',
+        " woul",
+        "d like to ad",
+        "d customized prompts for",
+        " different",
+        " companies to improve the accuracy of",
+        " Language",
+        " Model",
+        " (LLM)",
+        '.",\n    "A',
+        " new",
+        " feature that",
+        " allows users to add personalize",
+        "d prompts.",
+        " This would involve",
+        " creating",
+        " an interface or method for",
+        " users to input",
+        " their",
+        " own",
+        " prom",
+        "pts,",
+        " which would then be used to",
+        ' train the LLM.",',
+        '\n    "Create',
+        " custom AI Assistants with",
+        " different prompts and backing knowledge",
+        ' sets.",',
+        '\n    "This',
+        " PR",
+        " fixes",
+        " https",
+        "://github.com/dan",
+        "swer-ai/dan",
+        "swer/issues/1",
+        "584",
+        " by",
+        " setting",
+        " the system",
+        " default",
+        " prompt for",
+        " sl",
+        "ackbots const",
+        "rained by",
+        " ",
+        "document sets",
+        ".",
+        " It",
+        " probably",
+        " isn",
+        "'t ideal",
+        " -",
+        " it",
+        " might",
+        " be pref",
+        "erable to be",
+        " able to select",
+        " a prompt for",
+        " the",
+        " slackbot from",
+        " the",
+        " admin",
+        " panel",
+        " -",
+        " but it sol",
+        "ves the immediate problem",
+        " of",
+        " the slack",
+        " listener",
+        " cr",
+        "ashing when",
+        " configure",
+        "d this",
+        ' way."\n  ]',
+        "\n}",
+        "",
+    ]
+
+    processor = QuotesProcessor(context_docs=mock_docs)
+    answer, quotes = _process_tokens(processor, tokens_with_quotes)
 
     s_json = "".join(tokens_with_quotes)
     j = json.loads(s_json)
     expected_answer = j["answer"]
-    actual = ""
-    for o in gen:
-        if isinstance(o, DanswerAnswerPiece):
-            if o.answer_piece:
-                actual += o.answer_piece
-
-    assert expected_answer == actual
+    assert expected_answer == answer
+    # NOTE: no quotes, since the docs don't match the quotes
+    assert len(quotes) == 0
 
 
 def test_simple_json_answer() -> None:
@@ -214,16 +237,11 @@ def test_simple_json_answer() -> None:
         "\n",
         "```",
     ]
-    gen = process_model_tokens(tokens=iter(tokens), context_docs=mock_docs)
+    processor = QuotesProcessor(context_docs=mock_docs)
+    answer, quotes = _process_tokens(processor, tokens)
 
-    expected_answer = "This is a simple answer."
-    actual = "".join(
-        o.answer_piece
-        for o in gen
-        if isinstance(o, DanswerAnswerPiece) and o.answer_piece
-    )
-
-    assert expected_answer == actual
+    assert "This is a simple answer." == answer
+    assert len(quotes) == 0
 
 
 def test_json_answer_with_quotes() -> None:
@@ -242,16 +260,21 @@ def test_json_answer_with_quotes() -> None:
         "\n",
         "```",
     ]
-    gen = process_model_tokens(tokens=iter(tokens), context_docs=mock_docs)
+    processor = QuotesProcessor(context_docs=mock_docs)
+    answer, quotes = _process_tokens(processor, tokens)
 
-    expected_answer = "This is a split answer."
-    actual = "".join(
-        o.answer_piece
-        for o in gen
-        if isinstance(o, DanswerAnswerPiece) and o.answer_piece
-    )
+    assert "This is a split answer." == answer
+    assert len(quotes) == 0
 
-    assert expected_answer == actual
+
+def test_json_answer_with_quotes_one_chunk() -> None:
+    tokens = ['```json\n{"answer": "z",\n"quotes": ["Document"]\n}\n```']
+    processor = QuotesProcessor(context_docs=mock_docs)
+    answer, quotes = _process_tokens(processor, tokens)
+
+    assert "z" == answer
+    assert len(quotes) == 1
+    assert quotes[0] == "Document"
 
 
 def test_json_answer_split_tokens() -> None:
@@ -271,16 +294,11 @@ def test_json_answer_split_tokens() -> None:
         "\n",
         "```",
     ]
-    gen = process_model_tokens(tokens=iter(tokens), context_docs=mock_docs)
+    processor = QuotesProcessor(context_docs=mock_docs)
+    answer, quotes = _process_tokens(processor, tokens)
 
-    expected_answer = "This is a split answer."
-    actual = "".join(
-        o.answer_piece
-        for o in gen
-        if isinstance(o, DanswerAnswerPiece) and o.answer_piece
-    )
-
-    assert expected_answer == actual
+    assert "This is a split answer." == answer
+    assert len(quotes) == 0
 
 
 def test_lengthy_prefixed_json_with_quotes() -> None:
@@ -298,23 +316,12 @@ def test_lengthy_prefixed_json_with_quotes() -> None:
         "\n",
         "```",
     ]
+    processor = QuotesProcessor(context_docs=mock_docs)
+    answer, quotes = _process_tokens(processor, tokens)
 
-    gen = process_model_tokens(tokens=iter(tokens), context_docs=mock_docs)
-
-    actual_answer = ""
-    actual_count = 0
-    for o in gen:
-        if isinstance(o, DanswerAnswerPiece):
-            if o.answer_piece:
-                actual_answer += o.answer_piece
-            continue
-
-        if isinstance(o, DanswerQuotes):
-            for q in o.quotes:
-                assert q.quote == "Document"
-                actual_count += 1
-    assert "This is a simple answer." == actual_answer
-    assert 1 == actual_count
+    assert "This is a simple answer." == answer
+    assert len(quotes) == 1
+    assert quotes[0] == "Document"
 
 
 def test_prefixed_json_with_quotes() -> None:
@@ -331,21 +338,9 @@ def test_prefixed_json_with_quotes() -> None:
         "\n",
         "```",
     ]
+    processor = QuotesProcessor(context_docs=mock_docs)
+    answer, quotes = _process_tokens(processor, tokens)
 
-    gen = process_model_tokens(tokens=iter(tokens), context_docs=mock_docs)
-
-    actual_answer = ""
-    actual_count = 0
-    for o in gen:
-        if isinstance(o, DanswerAnswerPiece):
-            if o.answer_piece:
-                actual_answer += o.answer_piece
-            continue
-
-        if isinstance(o, DanswerQuotes):
-            for q in o.quotes:
-                assert q.quote == "Document"
-                actual_count += 1
-
-    assert "This is a simple answer." == actual_answer
-    assert 1 == actual_count
+    assert "This is a simple answer." == answer
+    assert len(quotes) == 1
+    assert quotes[0] == "Document"

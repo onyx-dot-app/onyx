@@ -210,6 +210,7 @@ if __name__ == "__main__":
             "clickup_team_id": os.environ["clickup_team_id"],
         }
     )
+
     latest_docs = clickup_connector.load_from_state()
 
     for doc in latest_docs:

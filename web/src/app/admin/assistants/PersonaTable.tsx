@@ -1,6 +1,6 @@
 "use client";
 
-import { Text } from "@tremor/react";
+import Text from "@/components/ui/text";
 import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
 import { CustomCheckbox } from "@/components/CustomCheckbox";
@@ -160,7 +160,9 @@ export function PersonasTable() {
                     }
                   }
                 }}
-                className={`px-1 py-0.5 rounded flex ${isEditable ? "hover:bg-hover cursor-pointer" : ""} select-none w-fit`}
+                className={`px-1 py-0.5 rounded flex ${
+                  isEditable ? "hover:bg-hover cursor-pointer" : ""
+                } select-none w-fit`}
               >
                 <div className="my-auto w-12">
                   {!persona.is_visible ? (

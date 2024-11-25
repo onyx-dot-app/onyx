@@ -1,6 +1,6 @@
 import { FiTrash, FiX } from "react-icons/fi";
-import { ModalWrapper } from "@/components/modals/ModalWrapper";
 import { BasicClickable } from "@/components/BasicClickable";
+import { Modal } from "../Modal";
 
 export const DeleteEntityModal = ({
   onClose,
@@ -16,7 +16,7 @@ export const DeleteEntityModal = ({
   additionalDetails?: string;
 }) => {
   return (
-    <ModalWrapper onClose={onClose}>
+    <Modal onOutsideClick={onClose}>
       <>
         <div className="flex mb-4">
           <h2 className="my-auto text-2xl font-bold">Delete {entityType}?</h2>
@@ -37,6 +37,6 @@ export const DeleteEntityModal = ({
           </div>
         </div>
       </>
-    </ModalWrapper>
+    </Modal>
   );
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@tremor/react";
+import { Button } from "@/components/ui/button";
 import { FiTrash } from "react-icons/fi";
 import { deleteCustomTool } from "@/lib/tools/edit";
 import { useRouter } from "next/navigation";
@@ -10,8 +10,8 @@ export function DeleteToolButton({ toolId }: { toolId: number }) {
 
   return (
     <Button
-      size="xs"
-      color="red"
+      variant="destructive"
+      size="sm"
       onClick={async () => {
         const response = await deleteCustomTool(toolId);
         if (response.data) {

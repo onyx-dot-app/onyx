@@ -1,6 +1,6 @@
 import { PopupSpec } from "../admin/connectors/Popup";
 import { useState } from "react";
-import { TabGroup, TabList, Tab, TabPanels, TabPanel } from "@tremor/react";
+import { Tabs, TabsList, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { LLMProviderUpdateForm } from "@/app/admin/configuration/llm/LLMProviderUpdateForm";
 import { CustomLLMProviderUpdateForm } from "@/app/admin/configuration/llm/CustomLLMProviderUpdateForm";
@@ -32,47 +32,53 @@ export const ApiKeyForm = ({
 
   return (
     <div>
-      <TabGroup
-        index={providerNameToIndexMap.get(providerName) || 0}
-        onIndexChange={(index) =>
-          setProviderName(providerIndexToNameMap.get(index) || defaultProvider)
+      <Tabs
+        defaultValue={String(providerNameToIndexMap.get(providerName) || 0)}
+        onValueChange={(value) =>
+          setProviderName(
+            providerIndexToNameMap.get(Number(value)) || defaultProvider
+          )
         }
       >
-        <TabList className="mt-3 mb-4">
-          <>
-            {providerOptions.map((provider) => (
-              <Tab key={provider.name}>
-                {provider.display_name || provider.name}
-              </Tab>
-            ))}
-            <Tab key="custom">Custom</Tab>
-          </>
-        </TabList>
-        <TabPanels>
-          {providerOptions.map((provider) => {
-            return (
-              <TabPanel key={provider.name}>
-                <LLMProviderUpdateForm
-                  hideAdvanced
-                  llmProviderDescriptor={provider}
-                  onClose={() => onSuccess()}
-                  shouldMarkAsDefault
-                  setPopup={setPopup}
-                  hideSuccess={hideSuccess}
-                />
-              </TabPanel>
-            );
-          })}
-          <TabPanel key="custom">
-            <CustomLLMProviderUpdateForm
+        <TabsList className="mt-3 mb-4">
+          {providerOptions.map((provider) => (
+            <TabsTrigger
+              key={provider.name}
+              value={String(providerNameToIndexMap.get(provider.name))}
+            >
+              {provider.display_name || provider.name}
+            </TabsTrigger>
+          ))}
+          <TabsTrigger value={String(providerOptions.length)}>
+            Custom
+          </TabsTrigger>
+        </TabsList>
+
+        {providerOptions.map((provider) => (
+          <TabsContent
+            key={provider.name}
+            value={String(providerNameToIndexMap.get(provider.name))}
+          >
+            <LLMProviderUpdateForm
+              hideAdvanced
+              llmProviderDescriptor={provider}
               onClose={() => onSuccess()}
               shouldMarkAsDefault
               setPopup={setPopup}
               hideSuccess={hideSuccess}
             />
-          </TabPanel>
-        </TabPanels>
-      </TabGroup>
+          </TabsContent>
+        ))}
+
+        <TabsContent value={String(providerOptions.length)}>
+          <CustomLLMProviderUpdateForm
+            onClose={() => onSuccess()}
+            shouldMarkAsDefault
+            setPopup={setPopup}
+            hideSuccess={hideSuccess}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

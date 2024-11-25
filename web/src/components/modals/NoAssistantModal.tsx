@@ -1,8 +1,8 @@
-import { ModalWrapper } from "@/components/modals/ModalWrapper";
+import { Modal } from "@/components/Modal";
 
 export const NoAssistantModal = ({ isAdmin }: { isAdmin: boolean }) => {
   return (
-    <ModalWrapper modalClassName="bg-white max-w-2xl rounded-lg shadow-xl text-center">
+    <Modal width="bg-white max-w-2xl rounded-lg shadow-xl text-center">
       <>
         <h2 className="text-3xl font-bold text-gray-800 mb-4">
           No Assistant Available
@@ -32,6 +32,6 @@ export const NoAssistantModal = ({ isAdmin }: { isAdmin: boolean }) => {
           </p>
         )}
       </>
-    </ModalWrapper>
+    </Modal>
   );
 };

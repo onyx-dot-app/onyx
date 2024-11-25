@@ -1,6 +1,9 @@
 import React, { useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
-import { Button, Text, Callout, Subtitle, Divider } from "@tremor/react";
+import { Callout } from "@/components/ui/callout";
+import Text from "@/components/ui/text";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/admin/connectors/Field";
 import { CloudEmbeddingProvider } from "../../../../components/embedding/interfaces";
 import {
@@ -8,6 +11,7 @@ import {
   LLM_PROVIDERS_ADMIN_URL,
 } from "../../configuration/llm/constants";
 import { mutate } from "swr";
+import { testEmbedding } from "../pages/utils";
 
 export function ChangeCredentialsModal({
   provider,
@@ -109,16 +113,15 @@ export function ChangeCredentialsModal({
     const normalizedProviderType = provider.provider_type
       .toLowerCase()
       .split(" ")[0];
+
     try {
-      const testResponse = await fetch("/api/admin/embedding/test-embedding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider_type: normalizedProviderType,
-          api_key: apiKey,
-          api_url: apiUrl,
-          model_name: modelName,
-        }),
+      const testResponse = await testEmbedding({
+        provider_type: normalizedProviderType,
+        modelName,
+        apiKey,
+        apiUrl,
+        apiVersion: null,
+        deploymentName: null,
       });
 
       if (!testResponse.ok) {
@@ -142,7 +145,9 @@ export function ChangeCredentialsModal({
         const errorData = await updateResponse.json();
         throw new Error(
           errorData.detail ||
-            `Failed to update provider- check your ${isProxy ? "API URL" : "API key"}`
+            `Failed to update provider- check your ${
+              isProxy ? "API URL" : "API key"
+            }`
         );
       }
 
@@ -157,7 +162,9 @@ export function ChangeCredentialsModal({
     <Modal
       width="max-w-3xl"
       icon={provider.icon}
-      title={`Modify your ${provider.provider_type} ${isProxy ? "Configuration" : "key"}`}
+      title={`Modify your ${provider.provider_type} ${
+        isProxy ? "Configuration" : "key"
+      }`}
       onOutsideClick={onCancel}
     >
       <>
@@ -221,7 +228,7 @@ export function ChangeCredentialsModal({
                   />
 
                   {deletionError && (
-                    <Callout title="Error" color="red" className="mt-4">
+                    <Callout type="danger" title="Error" className="mt-4">
                       {deletionError}
                     </Callout>
                   )}
@@ -251,38 +258,42 @@ export function ChangeCredentialsModal({
               )}
 
               {testError && (
-                <Callout title="Error" color="red" className="my-4">
+                <Callout type="danger" title="Error" className="my-4">
                   {testError}
                 </Callout>
               )}
 
               <Button
                 className="mr-auto mt-4"
-                color="blue"
+                variant="submit"
                 onClick={() => handleSubmit()}
                 disabled={!apiKey}
               >
                 Update Configuration
               </Button>
 
-              <Divider />
+              <Separator />
             </div>
           </>
         )}
 
-        <Subtitle className="mt-4 font-bold text-lg mb-2">
+        <Text className="mt-4 font-bold text-lg mb-2">
           You can delete your configuration.
-        </Subtitle>
+        </Text>
         <Text className="mb-2">
           This is only possible if you have already switched to a different
           embedding type!
         </Text>
 
-        <Button className="mr-auto" onClick={handleDelete} color="red">
+        <Button
+          className="mr-auto"
+          onClick={handleDelete}
+          variant="destructive"
+        >
           Delete Configuration
         </Button>
         {deletionError && (
-          <Callout title="Error" color="red" className="mt-4">
+          <Callout type="danger" title="Error" className="mt-4">
             {deletionError}
           </Callout>
         )}

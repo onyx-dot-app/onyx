@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Button, Card } from "@tremor/react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { ValidSources } from "@/lib/types";
 import { FaAccusoft } from "react-icons/fa";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
@@ -27,6 +28,7 @@ import {
   IsPublicGroupSelector,
 } from "@/components/IsPublicGroupSelector";
 import { useUser } from "@/components/user/UserProvider";
+import CardSection from "@/components/admin/CardSection";
 
 const CreateButton = ({
   onClick,
@@ -186,7 +188,7 @@ export default function CreateCredential({
       onSubmit={() => {}} // This will be overridden by our custom submit handlers
     >
       {(formikProps) => (
-        <Form>
+        <Form className="w-full flex items-stretch">
           {!hideSource && (
             <p className="text-sm">
               Check our
@@ -201,7 +203,7 @@ export default function CreateCredential({
               for information on setting up this connector.
             </p>
           )}
-          <Card className="!border-0 mt-4 flex flex-col gap-y-6">
+          <CardSection className="w-full  !border-0 mt-4 flex flex-col gap-y-6">
             <TextFormField
               name="name"
               placeholder="(Optional) credential name.."
@@ -254,7 +256,7 @@ export default function CreateCredential({
                 </div>
               </div>
             )}
-          </Card>
+          </CardSection>
           {swapConnector && (
             <div className="flex gap-x-4 w-full mt-8 justify-end">
               <Button

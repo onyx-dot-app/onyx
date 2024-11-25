@@ -1,3 +1,4 @@
+import contextvars
 import logging
 import os
 from collections.abc import MutableMapping
@@ -7,10 +8,18 @@ from typing import Any
 from shared_configs.configs import DEV_LOGGING_ENABLED
 from shared_configs.configs import LOG_FILE_NAME
 from shared_configs.configs import LOG_LEVEL
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import SLACK_CHANNEL_ID
+from shared_configs.configs import TENANT_ID_PREFIX
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
 logging.addLevelName(logging.INFO + 5, "NOTICE")
+
+pruning_ctx: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
+    "pruning_ctx", default=dict()
+)
 
 
 class IndexAttemptSingleton:
@@ -57,14 +66,34 @@ class DanswerLoggingAdapter(logging.LoggerAdapter):
     ) -> tuple[str, MutableMapping[str, Any]]:
         # If this is an indexing job, add the attempt ID to the log message
         # This helps filter the logs for this specific indexing
-        attempt_id = IndexAttemptSingleton.get_index_attempt_id()
+        index_attempt_id = IndexAttemptSingleton.get_index_attempt_id()
         cc_pair_id = IndexAttemptSingleton.get_connector_credential_pair_id()
 
-        if attempt_id is not None:
-            msg = f"[Attempt: {attempt_id}] {msg}"
+        pruning_ctx_dict = pruning_ctx.get()
+        if len(pruning_ctx_dict) > 0:
+            if "request_id" in pruning_ctx_dict:
+                msg = f"[Prune: {pruning_ctx_dict['request_id']}] {msg}"
 
-        if cc_pair_id is not None:
-            msg = f"[CC Pair: {cc_pair_id}] {msg}"
+            if "cc_pair_id" in pruning_ctx_dict:
+                msg = f"[CC Pair: {pruning_ctx_dict['cc_pair_id']}] {msg}"
+        else:
+            if index_attempt_id is not None:
+                msg = f"[Index Attempt: {index_attempt_id}] {msg}"
+
+            if cc_pair_id is not None:
+                msg = f"[CC Pair: {cc_pair_id}] {msg}"
+
+        # Add tenant information if it differs from default
+        # This will always be the case for authenticated API requests
+        if MULTI_TENANT:
+            tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+            if tenant_id != POSTGRES_DEFAULT_SCHEMA:
+                # Strip tenant_ prefix and take first 8 chars for cleaner logs
+                tenant_display = tenant_id.removeprefix(TENANT_ID_PREFIX)
+                short_tenant = (
+                    tenant_display[:8] if len(tenant_display) > 8 else tenant_display
+                )
+                msg = f"[t:{short_tenant}] {msg}"
 
         # For Slack Bot, logs the channel relevant to the request
         channel_id = self.extra.get(SLACK_CHANNEL_ID) if self.extra else None

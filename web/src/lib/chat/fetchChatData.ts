@@ -19,16 +19,13 @@ import { Settings } from "@/app/admin/settings/interfaces";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Folder } from "@/app/chat/folders/interfaces";
-import { personaComparator } from "@/app/admin/assistants/lib";
 import { cookies, headers } from "next/headers";
 import {
   SIDEBAR_TOGGLED_COOKIE_NAME,
   DOCUMENT_SIDEBAR_WIDTH_COOKIE_NAME,
 } from "@/components/resizable/constants";
 import { hasCompletedWelcomeFlowSS } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
-import { fetchAssistantsSS } from "../assistants/fetchAssistantsSS";
 import { NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN } from "../constants";
-import { checkLLMSupportsImageInput } from "../llm/utils";
 import { redirect } from "next/navigation";
 
 interface FetchChatDataResult {
@@ -51,6 +48,7 @@ interface FetchChatDataResult {
 export async function fetchChatData(searchParams: {
   [key: string]: string;
 }): Promise<FetchChatDataResult | { redirect: string }> {
+  const requestCookies = await cookies();
   const tasks = [
     getAuthTypeMetadataSS(),
     getCurrentUserSS(),
@@ -93,7 +91,7 @@ export async function fetchChatData(searchParams: {
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
-    const headersList = headers();
+    const headersList = await headers();
     const fullUrl = headersList.get("x-url") || "/chat";
     const searchParamsString = new URLSearchParams(
       searchParams as unknown as Record<string, string>
@@ -165,10 +163,10 @@ export async function fetchChatData(searchParams: {
     ? parseInt(defaultAssistantIdRaw)
     : undefined;
 
-  const documentSidebarCookieInitialWidth = cookies().get(
+  const documentSidebarCookieInitialWidth = requestCookies.get(
     DOCUMENT_SIDEBAR_WIDTH_COOKIE_NAME
   );
-  const sidebarToggled = cookies().get(SIDEBAR_TOGGLED_COOKIE_NAME);
+  const sidebarToggled = requestCookies.get(SIDEBAR_TOGGLED_COOKIE_NAME);
 
   const toggleSidebar = sidebarToggled
     ? sidebarToggled.value.toLocaleLowerCase() == "true" || false
@@ -181,7 +179,7 @@ export async function fetchChatData(searchParams: {
   const hasAnyConnectors = ccPairs.length > 0;
   const shouldShowWelcomeModal =
     !llmProviders.length &&
-    !hasCompletedWelcomeFlowSS() &&
+    !hasCompletedWelcomeFlowSS(requestCookies) &&
     !hasAnyConnectors &&
     (!user || user.role === "admin");
 
@@ -195,7 +193,7 @@ export async function fetchChatData(searchParams: {
     console.log(`Failed to fetch folders - ${foldersResponse?.status}`);
   }
 
-  const openedFoldersCookie = cookies().get("openedFolders");
+  const openedFoldersCookie = requestCookies.get("openedFolders");
   const openedFolders = openedFoldersCookie
     ? JSON.parse(openedFoldersCookie.value)
     : {};

@@ -2,7 +2,7 @@
 
 import { withFormik, FormikProps, FormikErrors, Form, Field } from "formik";
 
-import { Button } from "@tremor/react";
+import { Button } from "@/components/ui/button";
 
 const WHITESPACE_SPLIT = /\s+/;
 const EMAIL_REGEX = /[^@]+@[^.]+\.[^.]/;
@@ -38,8 +38,8 @@ const AddUserFormRenderer = ({
     )}
     <Button
       className="mx-auto"
-      color="green"
-      size="md"
+      variant="submit"
+      size="sm"
       type="submit"
       disabled={isSubmitting}
     >

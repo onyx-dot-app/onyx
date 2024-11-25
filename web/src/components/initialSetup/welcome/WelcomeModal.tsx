@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { Button, Divider, Text } from "@tremor/react";
+import Text from "@/components/ui/text";
+import { Button } from "@/components/ui/button";
 import { Modal } from "../../Modal";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
@@ -58,6 +59,10 @@ export function _WelcomeModal({ user }: { user: User | null }) {
       {popup}
 
       <Modal
+        onOutsideClick={() => {
+          setWelcomeFlowComplete();
+          router.refresh();
+        }}
         title={"Welcome to Danswer!"}
         width="w-full max-h-[900px] overflow-y-scroll max-w-3xl"
       >

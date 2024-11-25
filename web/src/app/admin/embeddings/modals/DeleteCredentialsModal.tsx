@@ -1,6 +1,8 @@
 import React from "react";
 import { Modal } from "@/components/Modal";
-import { Button, Text, Callout } from "@tremor/react";
+import Text from "@/components/ui/text";
+import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { CloudEmbeddingProvider } from "../../../../components/embedding/interfaces";
 
 export function DeleteCredentialsModal({
@@ -23,16 +25,12 @@ export function DeleteCredentialsModal({
           You&apos;re about to delete your {modelProvider.provider_type}{" "}
           credentials. Are you sure?
         </Text>
-        <Callout
-          title="Point of No Return"
-          color="red"
-          className="mt-4"
-        ></Callout>
+        <Callout type="danger" title="Point of No Return" className="mt-4" />
         <div className="flex mt-8 justify-between">
-          <Button color="gray" onClick={onCancel}>
-            Keep Credentaisl
+          <Button variant="secondary" onClick={onCancel}>
+            Keep Credentials
           </Button>
-          <Button color="red" onClick={onConfirm}>
+          <Button variant="destructive" onClick={onConfirm}>
             Delete Credentials
           </Button>
         </div>
