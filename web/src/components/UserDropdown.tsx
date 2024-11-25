@@ -114,6 +114,7 @@ export function UserDropdown({ page }: { page?: pageType }) {
   const showLogout =
     user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
   const showPrivacy = true;
+  const showChangelog = true;
 
   const onOpenChange = (open: boolean) => {
     setUserInfoVisible(open);
@@ -258,6 +259,18 @@ export function UserDropdown({ page }: { page?: pageType }) {
                     >
                       <FileIcon className="h-5 w-5 my-auto mr-2" />
                       Privacy Architecture
+                    </Link>
+                  </>
+                )}
+                {showPrivacy && (
+                  <>
+                    <Link
+                      href="/pages/whats-new"
+                      className="flex py-3 px-4 cursor-pointer !
+                      rounded hover:bg-hover-light"
+                    >
+                      <FileIcon className="h-5 w-5 my-auto mr-2" />
+                      What&apos;s new
                     </Link>
                   </>
                 )}

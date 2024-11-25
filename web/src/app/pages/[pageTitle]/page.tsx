@@ -10,7 +10,7 @@ import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { notFound } from 'next/navigation'
 import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
 import FixedLogo from "@/app/chat/shared_chat_search/FixedLogo";
-import { useRouter } from "next/navigation";
+//import { useRouter } from "next/navigation";
 import { BackIcon } from "@/components/icons/icons";
 import Link from "next/link";
 
@@ -20,8 +20,8 @@ import Link from "next/link";
 //   params: { pageTitle: string };
 // }) {
 export default async function Page(props: { params: Promise<{ pageTitle: string }> }) {
-  const params = use(props.params);
-  
+  const params = await props.params;
+
   noStore();
   const pageTitle = params.pageTitle;
 
