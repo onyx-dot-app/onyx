@@ -44,7 +44,10 @@ class TiktokenTokenizer(BaseTokenizer):
         if not hasattr(self, "encoder"):
             import tiktoken
 
-            self.encoder = tiktoken.encoding_for_model(model_name)
+            try:
+              self.encoder = tiktoken.encoding_for_model(model_name)
+            except KeyError:
+              self.encoder = tiktoken.get_encoding("cl100k_base")
 
     def encode(self, string: str) -> list[int]:
         # this ignores special tokens that the model is trained on, see encode_ordinary for details
