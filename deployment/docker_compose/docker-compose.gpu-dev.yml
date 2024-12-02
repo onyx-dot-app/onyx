@@ -347,6 +347,7 @@ services:
       - "3000:80"  # allow for localhost:3000 usage, since that is the norm
     volumes:
       - ../data/nginx:/etc/nginx/conf.d
+      - /etc/letsencrypt:/etc/letsencrypt  # Mount host certificates
     logging:
       driver: json-file
       options:
