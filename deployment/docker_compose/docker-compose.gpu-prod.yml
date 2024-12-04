@@ -26,10 +26,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
-      driver: json-file
+      driver: awslogs
       options:
-        max-size: "50m"
-        max-file: "6"
+        awslogs-region: us-east-1              # Replace with your AWS region if different
+        awslogs-group: danswer-dev             # CloudWatch Log Group name
+        awslogs-stream: api_server             # Log Stream name for this service
+        awslogs-create-group: "true"
 
   background:
     image: danswer/danswer-backend:${IMAGE_TAG:-latest}
@@ -61,10 +63,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
-      driver: json-file
+      driver: awslogs
       options:
-        max-size: "50m"
-        max-file: "6"
+        awslogs-region: us-east-1
+        awslogs-group: danswer-dev
+        awslogs-stream: background
+        awslogs-create-group: "true"
     # Uncomment the following lines if you need to include a custom CA certificate
     # volumes:
     #   - ${CA_CERT_PATH:-./custom-ca.crt}:/etc/ssl/certs/custom-ca.crt:ro
@@ -89,10 +93,12 @@ services:
     environment:
       - INTERNAL_URL=http://api_server:8080
     logging:
-      driver: json-file
+      driver: awslogs
       options:
-        max-size: "50m"
-        max-file: "6"
+        awslogs-region: us-east-1
+        awslogs-group: danswer-dev
+        awslogs-stream: web_server
+        awslogs-create-group: "true"
 
   inference_model_server:
     image: danswer/danswer-model-server:${IMAGE_TAG:-latest}
@@ -120,10 +126,12 @@ services:
     volumes:
       - model_cache_huggingface:/root/.cache/huggingface/
     logging:
-      driver: json-file
+      driver: awslogs
       options:
-        max-size: "50m"
-        max-file: "6"
+        awslogs-region: us-east-1
+        awslogs-group: danswer-dev
+        awslogs-stream: inference_model_server
+        awslogs-create-group: "true"
 
   indexing_model_server:
     image: danswer/danswer-model-server:${IMAGE_TAG:-latest}
@@ -153,10 +161,12 @@ services:
     volumes:
       - indexing_huggingface_model_cache:/root/.cache/huggingface/
     logging:
-      driver: json-file
+      driver: awslogs
       options:
-        max-size: "50m"
-        max-file: "6"
+        awslogs-region: us-east-1
+        awslogs-group: danswer-dev
+        awslogs-stream: indexing_model_server
+        awslogs-create-group: "true"
 
   relational_db:
     image: postgres:15.2-alpine
@@ -167,10 +177,12 @@ services:
     volumes:
       - db_volume:/var/lib/postgresql/data
     logging:
-      driver: json-file
+      driver: awslogs
       options:
-        max-size: "50m"
-        max-file: "6"
+        awslogs-region: us-east-1
+        awslogs-group: danswer-dev
+        awslogs-stream: relational_db
+        awslogs-create-group: "true"
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
@@ -182,10 +194,12 @@ services:
     volumes:
       - vespa_volume:/opt/vespa/var
     logging:
-      driver: json-file
+      driver: awslogs
       options:
-        max-size: "50m"
-        max-file: "6"
+        awslogs-region: us-east-1
+        awslogs-group: danswer-dev
+        awslogs-stream: index
+        awslogs-create-group: "true"
 
   nginx:
     image: nginx:1.23.4-alpine
@@ -201,10 +215,12 @@ services:
       - ../data/certbot/conf:/etc/letsencrypt
       - ../data/certbot/www:/var/www/certbot
     logging:
-      driver: json-file
+      driver: awslogs
       options:
-        max-size: "50m"
-        max-file: "6"
+        awslogs-region: us-east-1
+        awslogs-group: danswer-dev
+        awslogs-stream: nginx
+        awslogs-create-group: "true"
     command: >
       /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
       && /etc/nginx/conf.d/run-nginx.sh app.conf.template"
@@ -218,10 +234,12 @@ services:
       - ../data/certbot/conf:/etc/letsencrypt
       - ../data/certbot/www:/var/www/certbot
     logging:
-      driver: json-file
+      driver: awslogs
       options:
-        max-size: "50m"
-        max-file: "6"
+        awslogs-region: us-east-1
+        awslogs-group: danswer-dev
+        awslogs-stream: certbot
+        awslogs-create-group: "true"
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
   cache:
@@ -230,6 +248,13 @@ services:
     ports:
       - "6379:6379"
     command: redis-server --save "" --appendonly no
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: us-east-1
+        awslogs-group: danswer-dev
+        awslogs-stream: cache
+        awslogs-create-group: "true"
 
 volumes:
   db_volume:
