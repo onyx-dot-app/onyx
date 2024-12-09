@@ -2,6 +2,7 @@ import { Form, Formik } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
   BooleanFormField,
+  SelectorFormField,
   TextFormField,
 } from "@/components/admin/connectors/Field";
 import { createApiKey, updateApiKey } from "./lib";
@@ -9,7 +10,7 @@ import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import Text from "@/components/ui/text";
-import { UserRole } from "@/lib/types";
+import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { APIKey } from "./types";
 
 interface DanswerApiKeyFormProps {
@@ -39,20 +40,15 @@ export const DanswerApiKeyForm = ({
         <Formik
           initialValues={{
             name: apiKey?.api_key_name || "",
-            is_admin: apiKey?.api_key_role === "admin",
+            role: apiKey?.api_key_role || UserRole.BASIC.toString(),
           }}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
-            // Map the boolean to a UserRole string
-            const role: UserRole = values.is_admin
-              ? UserRole.ADMIN
-              : UserRole.BASIC;
-
             // Prepare the payload with the UserRole
             const payload = {
               ...values,
-              role, // Assign the role directly as a UserRole type
+              role: values.role as UserRole, // Assign the role directly as a UserRole type
             };
 
             let response;
@@ -98,13 +94,28 @@ export const DanswerApiKeyForm = ({
                 autoCompleteDisabled={true}
               />
 
-              <BooleanFormField
-                small
-                removeIndent
-                alignTop
-                name="is_admin"
-                label="Is Admin?"
-                subtext="If set, this API key will have access to admin level server API's."
+              <SelectorFormField
+                // defaultValue is managed by Formik
+                label="Role:"
+                subtext="Select the role for this API key.
+                         Limited has access to simple public API's.
+                         Basic has access to regular user API's.
+                         Admin has access to admin level APIs."
+                name="role"
+                options={[
+                  {
+                    name: USER_ROLE_LABELS[UserRole.LIMITED],
+                    value: UserRole.LIMITED.toString(),
+                  },
+                  {
+                    name: USER_ROLE_LABELS[UserRole.BASIC],
+                    value: UserRole.BASIC.toString(),
+                  },
+                  {
+                    name: USER_ROLE_LABELS[UserRole.ADMIN],
+                    value: UserRole.ADMIN.toString(),
+                  },
+                ]}
               />
 
               <Button

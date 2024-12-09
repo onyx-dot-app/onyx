@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from danswer.background.celery.apps.app_base import task_logger
 from danswer.background.celery.celery_utils import extract_ids_from_runnable_connector
-from danswer.background.celery.tasks.indexing.tasks import RunIndexingCallback
+from danswer.background.celery.tasks.indexing.tasks import IndexingCallback
 from danswer.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING
 from danswer.configs.app_configs import JOB_TIMEOUT
 from danswer.configs.constants import CELERY_PRUNING_LOCK_TIMEOUT
@@ -36,6 +36,42 @@ from danswer.utils.logger import pruning_ctx
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
+    """Returns boolean indicating if pruning is due.
+
+    Next pruning time is calculated as a delta from the last successful prune, or the
+    last successful indexing if pruning has never succeeded.
+
+    TODO(rkuo): consider whether we should allow pruning to be immediately rescheduled
+    if pruning fails (which is what it does now). A backoff could be reasonable.
+    """
+
+    # skip pruning if no prune frequency is set
+    # pruning can still be forced via the API which will run a pruning task directly
+    if not cc_pair.connector.prune_freq:
+        return False
+
+    # skip pruning if not active
+    if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
+        return False
+
+    # skip pruning if the next scheduled prune time hasn't been reached yet
+    last_pruned = cc_pair.last_pruned
+    if not last_pruned:
+        if not cc_pair.last_successful_index_time:
+            # if we've never indexed, we can't prune
+            return False
+
+        # if never pruned, use the last time the connector indexed successfully
+        last_pruned = cc_pair.last_successful_index_time
+
+    next_prune = last_pruned + timedelta(seconds=cc_pair.connector.prune_freq)
+    if datetime.now(timezone.utc) < next_prune:
+        return False
+
+    return True
 
 
 @shared_task(
@@ -69,7 +105,7 @@ def check_for_pruning(self: Task, *, tenant_id: str | None) -> None:
                 if not cc_pair:
                     continue
 
-                if not is_pruning_due(cc_pair, db_session, r):
+                if not _is_pruning_due(cc_pair):
                     continue
 
                 tasks_created = try_creating_prune_generator_task(
@@ -88,47 +124,6 @@ def check_for_pruning(self: Task, *, tenant_id: str | None) -> None:
     finally:
         if lock_beat.owned():
             lock_beat.release()
-
-
-def is_pruning_due(
-    cc_pair: ConnectorCredentialPair,
-    db_session: Session,
-    r: Redis,
-) -> bool:
-    """Returns an int if pruning is triggered.
-    The int represents the number of prune tasks generated (in this case, only one
-    because the task is a long running generator task.)
-    Returns None if no pruning is triggered (due to not being needed or
-    other reasons such as simultaneous pruning restrictions.
-
-    Checks for scheduling related conditions, then delegates the rest of the checks to
-    try_creating_prune_generator_task.
-    """
-
-    # skip pruning if no prune frequency is set
-    # pruning can still be forced via the API which will run a pruning task directly
-    if not cc_pair.connector.prune_freq:
-        return False
-
-    # skip pruning if not active
-    if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
-        return False
-
-    # skip pruning if the next scheduled prune time hasn't been reached yet
-    last_pruned = cc_pair.last_pruned
-    if not last_pruned:
-        if not cc_pair.last_successful_index_time:
-            # if we've never indexed, we can't prune
-            return False
-
-        # if never pruned, use the last time the connector indexed successfully
-        last_pruned = cc_pair.last_successful_index_time
-
-    next_prune = last_pruned + timedelta(seconds=cc_pair.connector.prune_freq)
-    if datetime.now(timezone.utc) < next_prune:
-        return False
-
-    return True
 
 
 def try_creating_prune_generator_task(
@@ -166,10 +161,16 @@ def try_creating_prune_generator_task(
         return None
 
     try:
-        if redis_connector.prune.fenced:  # skip pruning if already pruning
+        # skip pruning if already pruning
+        if redis_connector.prune.fenced:
             return None
 
-        if redis_connector.delete.fenced:  # skip pruning if the cc_pair is deleting
+        # skip pruning if the cc_pair is deleting
+        if redis_connector.delete.fenced:
+            return None
+
+        # skip pruning if doc permissions sync is running
+        if redis_connector.permissions.fenced:
             return None
 
         db_session.refresh(cc_pair)
@@ -231,6 +232,8 @@ def connector_pruning_generator_task(
     pruning_ctx_dict["request_id"] = self.request.id
     pruning_ctx.set(pruning_ctx_dict)
 
+    task_logger.info(f"Pruning generator starting: cc_pair={cc_pair_id}")
+
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -261,6 +264,11 @@ def connector_pruning_generator_task(
                 )
                 return
 
+            task_logger.info(
+                f"Pruning generator running connector: "
+                f"cc_pair={cc_pair_id} "
+                f"connector_source={cc_pair.connector.source}"
+            )
             runnable_connector = instantiate_connector(
                 db_session,
                 cc_pair.connector.source,
@@ -269,12 +277,13 @@ def connector_pruning_generator_task(
                 cc_pair.credential,
             )
 
-            callback = RunIndexingCallback(
+            callback = IndexingCallback(
                 redis_connector.stop.fence_key,
                 redis_connector.prune.generator_progress_key,
                 lock,
                 r,
             )
+
             # a list of docs in the source
             all_connector_doc_ids: set[str] = extract_ids_from_runnable_connector(
                 runnable_connector, callback
@@ -296,8 +305,8 @@ def connector_pruning_generator_task(
             task_logger.info(
                 f"Pruning set collected: "
                 f"cc_pair={cc_pair_id} "
-                f"docs_to_remove={len(doc_ids_to_remove)} "
-                f"doc_source={cc_pair.connector.source}"
+                f"connector_source={cc_pair.connector.source} "
+                f"docs_to_remove={len(doc_ids_to_remove)}"
             )
 
             task_logger.info(
@@ -320,10 +329,10 @@ def connector_pruning_generator_task(
             f"Failed to run pruning: cc_pair={cc_pair_id} connector={connector_id}"
         )
 
-        redis_connector.prune.generator_clear()
-        redis_connector.prune.taskset_clear()
-        redis_connector.prune.set_fence(False)
+        redis_connector.prune.reset()
         raise e
     finally:
         if lock.owned():
             lock.release()
+
+        task_logger.info(f"Pruning generator finished: cc_pair={cc_pair_id}")

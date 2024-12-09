@@ -38,3 +38,4 @@ class ImpersonateRequest(BaseModel):
 class TenantCreationPayload(BaseModel):
     tenant_id: str
     email: str
+    referral_source: str | None = None

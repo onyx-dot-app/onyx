@@ -1,5 +1,7 @@
 from typing import cast
 
+from langchain_core.messages import HumanMessage
+
 from danswer.chat.models import LlmDoc
 from danswer.llm.answering.models import AnswerStyleConfig
 from danswer.llm.answering.models import PromptConfig
@@ -55,9 +57,14 @@ def build_next_prompt_for_search_like_tool(
             )
         )
     elif answer_style_config.quotes_config:
+        # For Quotes, the system prompt is included in the user prompt
+        prompt_builder.update_system_prompt(None)
+
+        human_message = HumanMessage(content=prompt_builder.raw_user_message)
+
         prompt_builder.update_user_prompt(
             build_quotes_user_message(
-                message=prompt_builder.user_message_and_token_cnt[0],
+                message=human_message,
                 context_docs=final_context_documents,
                 history_str=prompt_builder.single_message_history or "",
                 prompt=prompt_config,

@@ -1,6 +1,8 @@
 import redis
 
 from danswer.redis.redis_connector_delete import RedisConnectorDelete
+from danswer.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
+from danswer.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
 from danswer.redis.redis_connector_index import RedisConnectorIndex
 from danswer.redis.redis_connector_prune import RedisConnectorPrune
 from danswer.redis.redis_connector_stop import RedisConnectorStop
@@ -19,6 +21,10 @@ class RedisConnector:
         self.stop = RedisConnectorStop(tenant_id, id, self.redis)
         self.prune = RedisConnectorPrune(tenant_id, id, self.redis)
         self.delete = RedisConnectorDelete(tenant_id, id, self.redis)
+        self.permissions = RedisConnectorPermissionSync(tenant_id, id, self.redis)
+        self.external_group_sync = RedisConnectorExternalGroupSync(
+            tenant_id, id, self.redis
+        )
 
     def new_index(self, search_settings_id: int) -> RedisConnectorIndex:
         return RedisConnectorIndex(

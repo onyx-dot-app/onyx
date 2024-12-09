@@ -39,6 +39,7 @@ import Image, { StaticImageData } from "next/image";
 import jiraSVG from "../../../public/Jira.svg";
 import confluenceSVG from "../../../public/Confluence.svg";
 import openAISVG from "../../../public/Openai.svg";
+import geminiSVG from "../../../public/Gemini.svg";
 import openSourceIcon from "../../../public/OpenSource.png";
 import litellmIcon from "../../../public/LiteLLM.jpg";
 
@@ -1095,6 +1096,11 @@ export const OpenAIIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => <LogoIcon size={size} className={className} src={openAISVG} />;
+
+export const GeminiIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => <LogoIcon size={size} className={className} src={geminiSVG} />;
 
 export const VoyageIcon = ({
   size = 16,

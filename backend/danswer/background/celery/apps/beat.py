@@ -12,6 +12,7 @@ from danswer.db.engine import get_all_tenant_ids
 from danswer.db.engine import SqlEngine
 from danswer.utils.logger import setup_logger
 from danswer.utils.variable_functionality import fetch_versioned_implementation
+from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger(__name__)
@@ -72,6 +73,15 @@ class DynamicTenantScheduler(PersistentScheduler):
             logger.info(f"Found {len(existing_tenants)} existing tenants in schedule")
 
             for tenant_id in tenant_ids:
+                if (
+                    IGNORED_SYNCING_TENANT_LIST
+                    and tenant_id in IGNORED_SYNCING_TENANT_LIST
+                ):
+                    logger.info(
+                        f"Skipping tenant {tenant_id} as it is in the ignored syncing list"
+                    )
+                    continue
+
                 if tenant_id not in existing_tenants:
                     logger.info(f"Processing new tenant: {tenant_id}")
 

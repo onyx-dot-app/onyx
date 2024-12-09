@@ -14,9 +14,10 @@ from danswer.configs.constants import DanswerCeleryPriority
 from danswer.configs.constants import DanswerCeleryQueues
 from danswer.db.connector_credential_pair import get_connector_credential_pair_from_id
 from danswer.db.document import construct_document_select_for_connector_credential_pair
+from danswer.db.models import Document as DbDocument
 
 
-class RedisConnectorDeletionFenceData(BaseModel):
+class RedisConnectorDeletePayload(BaseModel):
     num_tasks: int | None
     submitted: datetime
 
@@ -53,20 +54,18 @@ class RedisConnectorDelete:
         return False
 
     @property
-    def payload(self) -> RedisConnectorDeletionFenceData | None:
+    def payload(self) -> RedisConnectorDeletePayload | None:
         # read related data and evaluate/print task progress
         fence_bytes = cast(bytes, self.redis.get(self.fence_key))
         if fence_bytes is None:
             return None
 
         fence_str = fence_bytes.decode("utf-8")
-        payload = RedisConnectorDeletionFenceData.model_validate_json(
-            cast(str, fence_str)
-        )
+        payload = RedisConnectorDeletePayload.model_validate_json(cast(str, fence_str))
 
         return payload
 
-    def set_fence(self, payload: RedisConnectorDeletionFenceData | None) -> None:
+    def set_fence(self, payload: RedisConnectorDeletePayload | None) -> None:
         if not payload:
             self.redis.delete(self.fence_key)
             return
@@ -98,7 +97,8 @@ class RedisConnectorDelete:
         stmt = construct_document_select_for_connector_credential_pair(
             cc_pair.connector_id, cc_pair.credential_id
         )
-        for doc in db_session.scalars(stmt).yield_per(1):
+        for doc_temp in db_session.scalars(stmt).yield_per(1):
+            doc: DbDocument = doc_temp
             current_time = time.monotonic()
             if current_time - last_lock_time >= (
                 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4
@@ -129,6 +129,10 @@ class RedisConnectorDelete:
             async_results.append(result)
 
         return len(async_results)
+
+    def reset(self) -> None:
+        self.redis.delete(self.taskset_key)
+        self.redis.delete(self.fence_key)
 
     @staticmethod
     def remove_from_taskset(id: int, task_id: str, r: redis.Redis) -> None:

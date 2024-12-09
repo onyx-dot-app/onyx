@@ -11,7 +11,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 # Test flow from creating tenant to registering as a user
 def test_tenant_creation(reset_multitenant: None) -> None:
-    TenantManager.create("tenant_dev", "test@test.com")
+    TenantManager.create("tenant_dev", "test@test.com", "Data Plane Registration")
     test_user: DATestUser = UserManager.create(name="test", email="test@test.com")
 
     assert UserManager.verify_role(test_user, UserRole.ADMIN)
@@ -26,7 +26,7 @@ def test_tenant_creation(reset_multitenant: None) -> None:
     test_connector = ConnectorManager.create(
         name="admin_test_connector",
         source=DocumentSource.FILE,
-        is_public=False,
+        access_type=AccessType.PRIVATE,
         user_performing_action=test_user,
     )
 

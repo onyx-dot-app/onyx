@@ -105,7 +105,7 @@ def execute_paginated_retrieval(
                 )()
             elif e.resp.status == 404 or e.resp.status == 403:
                 if continue_on_404_or_403:
-                    logger.warning(f"Error executing request: {e}")
+                    logger.debug(f"Error executing request: {e}")
                     results = {}
                 else:
                     raise e

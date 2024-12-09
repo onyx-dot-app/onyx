@@ -12,6 +12,7 @@ from fastapi_users import exceptions
 from fastapi_users.password import PasswordHelper
 from onelogin.saml2.auth import OneLogin_Saml2_Auth  # type: ignore
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from danswer.auth.schemas import UserCreate
@@ -64,7 +65,6 @@ async def upsert_saml_user(email: str) -> User:
                         password=hashed_pass,
                         is_verified=True,
                         role=role,
-                        has_web_login=True,
                     )
                 )
 
@@ -171,15 +171,19 @@ async def saml_login_callback(
 
 
 @router.post("/logout")
-def saml_logout(
+async def saml_logout(
     request: Request,
-    db_session: Session = Depends(get_session),
+    async_db_session: AsyncSession = Depends(get_async_session),
 ) -> None:
     saved_cookie = extract_hashed_cookie(request)
 
     if saved_cookie:
-        saml_account = get_saml_account(cookie=saved_cookie, db_session=db_session)
+        saml_account = await get_saml_account(
+            cookie=saved_cookie, async_db_session=async_db_session
+        )
         if saml_account:
-            expire_saml_account(saml_account, db_session)
+            await expire_saml_account(
+                saml_account=saml_account, async_db_session=async_db_session
+            )
 
     return

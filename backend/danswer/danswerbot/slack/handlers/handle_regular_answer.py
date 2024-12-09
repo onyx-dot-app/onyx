@@ -21,6 +21,10 @@ from danswer.configs.danswerbot_configs import DANSWER_BOT_USE_QUOTES
 from danswer.configs.danswerbot_configs import DANSWER_FOLLOWUP_EMOJI
 from danswer.configs.danswerbot_configs import DANSWER_REACT_EMOJI
 from danswer.configs.danswerbot_configs import ENABLE_DANSWERBOT_REFLEXION
+from danswer.context.search.enums import OptionalSearchSetting
+from danswer.context.search.models import BaseFilters
+from danswer.context.search.models import RerankingDetails
+from danswer.context.search.models import RetrievalDetails
 from danswer.danswerbot.slack.blocks import build_documents_blocks
 from danswer.danswerbot.slack.blocks import build_follow_up_block
 from danswer.danswerbot.slack.blocks import build_qa_response_blocks
@@ -34,8 +38,8 @@ from danswer.danswerbot.slack.utils import SlackRateLimiter
 from danswer.danswerbot.slack.utils import update_emote_react
 from danswer.db.engine import get_session_with_tenant
 from danswer.db.models import Persona
-from danswer.db.models import SlackBotConfig
 from danswer.db.models import SlackBotResponseType
+from danswer.db.models import SlackChannelConfig
 from danswer.db.persona import fetch_persona_by_id
 from danswer.db.search_settings import get_current_search_settings
 from danswer.db.users import get_user_by_email
@@ -48,10 +52,6 @@ from danswer.llm.utils import get_max_input_tokens
 from danswer.one_shot_answer.answer_question import get_search_answer
 from danswer.one_shot_answer.models import DirectQARequest
 from danswer.one_shot_answer.models import OneShotQAResponse
-from danswer.search.enums import OptionalSearchSetting
-from danswer.search.models import BaseFilters
-from danswer.search.models import RerankingDetails
-from danswer.search.models import RetrievalDetails
 from danswer.utils.logger import DanswerLoggingAdapter
 
 
@@ -81,7 +81,7 @@ def rate_limits(
 
 def handle_regular_answer(
     message_info: SlackMessageInfo,
-    slack_bot_config: SlackBotConfig | None,
+    slack_channel_config: SlackChannelConfig | None,
     receiver_ids: list[str] | None,
     client: WebClient,
     channel: str,
@@ -96,7 +96,7 @@ def handle_regular_answer(
     disable_cot: bool = DANSWER_BOT_DISABLE_COT,
     reflexion: bool = ENABLE_DANSWERBOT_REFLEXION,
 ) -> bool:
-    channel_conf = slack_bot_config.channel_config if slack_bot_config else None
+    channel_conf = slack_channel_config.channel_config if slack_channel_config else None
 
     messages = message_info.thread_messages
     message_ts_to_respond_to = message_info.msg_to_respond
@@ -108,7 +108,7 @@ def handle_regular_answer(
                 user = get_user_by_email(message_info.email, db_session)
 
     document_set_names: list[str] | None = None
-    persona = slack_bot_config.persona if slack_bot_config else None
+    persona = slack_channel_config.persona if slack_channel_config else None
     prompt = None
     if persona:
         document_set_names = [
@@ -120,9 +120,9 @@ def handle_regular_answer(
 
     bypass_acl = False
     if (
-        slack_bot_config
-        and slack_bot_config.persona
-        and slack_bot_config.persona.document_sets
+        slack_channel_config
+        and slack_channel_config.persona
+        and slack_channel_config.persona.document_sets
     ):
         # For Slack channels, use the full document set, admin will be warned when configuring it
         # with non-public document sets
@@ -131,8 +131,8 @@ def handle_regular_answer(
     # figure out if we want to use citations or quotes
     use_citations = (
         not DANSWER_BOT_USE_QUOTES
-        if slack_bot_config is None
-        else slack_bot_config.response_type == SlackBotResponseType.CITATIONS
+        if slack_channel_config is None
+        else slack_channel_config.response_type == SlackBotResponseType.CITATIONS
     )
 
     if not message_ts_to_respond_to and not is_bot_msg:
@@ -234,8 +234,8 @@ def handle_regular_answer(
         #     persona.llm_filter_extraction if persona is not None else True
         # )
         auto_detect_filters = (
-            slack_bot_config.enable_auto_filters
-            if slack_bot_config is not None
+            slack_channel_config.enable_auto_filters
+            if slack_channel_config is not None
             else False
         )
         retrieval_details = RetrievalDetails(

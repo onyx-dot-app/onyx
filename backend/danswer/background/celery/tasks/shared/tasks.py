@@ -59,7 +59,7 @@ def document_by_cc_pair_cleanup_task(
     connector / credential pair from the access list
     (6) delete all relevant entries from postgres
     """
-    task_logger.info(f"tenant={tenant_id} doc={document_id}")
+    task_logger.debug(f"Task start: tenant={tenant_id} doc={document_id}")
 
     try:
         with get_session_with_tenant(tenant_id) as db_session:
@@ -141,7 +141,9 @@ def document_by_cc_pair_cleanup_task(
         return False
     except Exception as ex:
         if isinstance(ex, RetryError):
-            task_logger.info(f"Retry failed: {ex.last_attempt.attempt_number}")
+            task_logger.warning(
+                f"Tenacity retry failed: num_attempts={ex.last_attempt.attempt_number}"
+            )
 
             # only set the inner exception if it is of type Exception
             e_temp = ex.last_attempt.exception()
@@ -171,11 +173,21 @@ def document_by_cc_pair_cleanup_task(
         else:
             # This is the last attempt! mark the document as dirty in the db so that it
             # eventually gets fixed out of band via stale document reconciliation
-            task_logger.info(
-                f"Max retries reached. Marking doc as dirty for reconciliation: "
+            task_logger.warning(
+                f"Max celery task retries reached. Marking doc as dirty for reconciliation: "
                 f"tenant={tenant_id} doc={document_id}"
             )
-            with get_session_with_tenant(tenant_id):
+            with get_session_with_tenant(tenant_id) as db_session:
+                # delete the cc pair relationship now and let reconciliation clean it up
+                # in vespa
+                delete_document_by_connector_credential_pair__no_commit(
+                    db_session=db_session,
+                    document_id=document_id,
+                    connector_credential_pair_identifier=ConnectorCredentialPairIdentifier(
+                        connector_id=connector_id,
+                        credential_id=credential_id,
+                    ),
+                )
                 mark_document_as_modified(document_id, db_session)
         return False
 

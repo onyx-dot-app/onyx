@@ -1,7 +1,5 @@
 import time
 import traceback
-from abc import ABC
-from abc import abstractmethod
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -31,28 +29,15 @@ from danswer.db.models import IndexingStatus
 from danswer.db.models import IndexModelStatus
 from danswer.document_index.factory import get_default_document_index
 from danswer.indexing.embedder import DefaultIndexingEmbedder
-from danswer.indexing.indexing_heartbeat import IndexingHeartbeat
+from danswer.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from danswer.indexing.indexing_pipeline import build_indexing_pipeline
-from danswer.utils.logger import IndexAttemptSingleton
 from danswer.utils.logger import setup_logger
+from danswer.utils.logger import TaskAttemptSingleton
 from danswer.utils.variable_functionality import global_version
 
 logger = setup_logger()
 
 INDEXING_TRACER_NUM_PRINT_ENTRIES = 5
-
-
-class RunIndexingCallbackInterface(ABC):
-    """Defines a callback interface to be passed to
-    to run_indexing_entrypoint."""
-
-    @abstractmethod
-    def should_stop(self) -> bool:
-        """Signal to stop the looping function in flight."""
-
-    @abstractmethod
-    def progress(self, amount: int) -> None:
-        """Send progress updates to the caller."""
 
 
 def _get_connector_runner(
@@ -106,7 +91,7 @@ def _run_indexing(
     db_session: Session,
     index_attempt: IndexAttempt,
     tenant_id: str | None,
-    callback: RunIndexingCallbackInterface | None = None,
+    callback: IndexingHeartbeatInterface | None = None,
 ) -> None:
     """
     1. Get documents which are either new or updated from specified application
@@ -138,13 +123,7 @@ def _run_indexing(
 
     embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
         search_settings=search_settings,
-        heartbeat=IndexingHeartbeat(
-            index_attempt_id=index_attempt.id,
-            db_session=db_session,
-            # let the world know we're still making progress after
-            # every 10 batches
-            freq=10,
-        ),
+        callback=callback,
     )
 
     indexing_pipeline = build_indexing_pipeline(
@@ -157,6 +136,7 @@ def _run_indexing(
         ),
         db_session=db_session,
         tenant_id=tenant_id,
+        callback=callback,
     )
 
     db_cc_pair = index_attempt.connector_credential_pair
@@ -228,7 +208,9 @@ def _run_indexing(
                 # contents still need to be initially pulled.
                 if callback:
                     if callback.should_stop():
-                        raise RuntimeError("Connector stop signal detected")
+                        raise RuntimeError(
+                            "_run_indexing: Connector stop signal detected"
+                        )
 
                 # TODO: should we move this into the above callback instead?
                 db_session.refresh(db_cc_pair)
@@ -289,7 +271,7 @@ def _run_indexing(
                 db_session.commit()
 
                 if callback:
-                    callback.progress(len(doc_batch))
+                    callback.progress("_run_indexing", len(doc_batch))
 
                 # This new value is updated every batch, so UI can refresh per batch update
                 update_docs_indexed(
@@ -419,7 +401,7 @@ def run_indexing_entrypoint(
     tenant_id: str | None,
     connector_credential_pair_id: int,
     is_ee: bool = False,
-    callback: RunIndexingCallbackInterface | None = None,
+    callback: IndexingHeartbeatInterface | None = None,
 ) -> None:
     try:
         if is_ee:
@@ -427,7 +409,7 @@ def run_indexing_entrypoint(
 
         # set the indexing attempt ID so that all log messages from this process
         # will have it added as a prefix
-        IndexAttemptSingleton.set_cc_and_index_id(
+        TaskAttemptSingleton.set_cc_and_index_id(
             index_attempt_id, connector_credential_pair_id
         )
         with get_session_with_tenant(tenant_id) as db_session:

@@ -8,6 +8,8 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
+        canceled:
+          "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-75 dark:bg-gray-900 dark:text-neutral-50 dark:hover:bg-gray-850",
         orange:
           "border-orange-200 bg-orange-50 text-orange-600 hover:bg-orange-75 dark:bg-orange-900 dark:text-neutral-50 dark:hover:bg-orange-850",
         paused:

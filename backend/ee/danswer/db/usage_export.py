@@ -2,6 +2,7 @@ import uuid
 from collections.abc import Generator
 from datetime import datetime
 from typing import IO
+from typing import Optional
 
 from fastapi_users_db_sqlalchemy import UUID_ID
 from sqlalchemy.orm import Session
@@ -19,11 +20,15 @@ from ee.danswer.server.reporting.usage_export_models import UsageReportMetadata
 def get_empty_chat_messages_entries__paginated(
     db_session: Session,
     period: tuple[datetime, datetime],
-    limit: int | None = 1,
-    initial_id: int | None = None,
-) -> list[ChatMessageSkeleton]:
+    limit: int | None = 500,
+    initial_time: datetime | None = None,
+) -> tuple[Optional[datetime], list[ChatMessageSkeleton]]:
     chat_sessions = fetch_chat_sessions_eagerly_by_time(
-        period[0], period[1], db_session, limit=limit, initial_id=initial_id
+        start=period[0],
+        end=period[1],
+        db_session=db_session,
+        limit=limit,
+        initial_time=initial_time,
     )
 
     message_skeletons: list[ChatMessageSkeleton] = []
@@ -36,7 +41,7 @@ def get_empty_chat_messages_entries__paginated(
             flow_type = FlowType.CHAT
 
         for message in chat_session.messages:
-            # only count user messages
+            # Only count user messages
             if message.message_type != MessageType.USER:
                 continue
 
@@ -49,24 +54,34 @@ def get_empty_chat_messages_entries__paginated(
                     time_sent=message.time_sent,
                 )
             )
+    if len(chat_sessions) == 0:
+        return None, []
 
-    return message_skeletons
+    return chat_sessions[0].time_created, message_skeletons
 
 
 def get_all_empty_chat_message_entries(
     db_session: Session,
     period: tuple[datetime, datetime],
 ) -> Generator[list[ChatMessageSkeleton], None, None]:
-    initial_id = None
+    initial_time: Optional[datetime] = period[0]
+    ind = 0
     while True:
-        message_skeletons = get_empty_chat_messages_entries__paginated(
-            db_session, period, initial_id=initial_id
+        ind += 1
+
+        time_created, message_skeletons = get_empty_chat_messages_entries__paginated(
+            db_session,
+            period,
+            initial_time=initial_time,
         )
+
         if not message_skeletons:
             return
 
         yield message_skeletons
-        initial_id = message_skeletons[-1].chat_session_id
+
+        # Update initial_time for the next iteration
+        initial_time = time_created
 
 
 def get_all_usage_reports(db_session: Session) -> list[UsageReportMetadata]:

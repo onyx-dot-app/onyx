@@ -1,4 +1,3 @@
-import re
 import threading
 import time
 from collections.abc import Callable
@@ -16,7 +15,7 @@ from danswer.configs.model_configs import (
 )
 from danswer.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from danswer.db.models import SearchSettings
-from danswer.indexing.indexing_heartbeat import Heartbeat
+from danswer.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.natural_language_processing.utils import tokenizer_trim_content
 from danswer.utils.logger import setup_logger
@@ -52,28 +51,6 @@ def clean_model_name(model_str: str) -> str:
     return model_str.replace("/", "_").replace("-", "_").replace(".", "_")
 
 
-_INITIAL_FILTER = re.compile(
-    "["
-    "\U0000FFF0-\U0000FFFF"  # Specials
-    "\U0001F000-\U0001F9FF"  # Emoticons
-    "\U00002000-\U0000206F"  # General Punctuation
-    "\U00002190-\U000021FF"  # Arrows
-    "\U00002700-\U000027BF"  # Dingbats
-    "]+",
-    flags=re.UNICODE,
-)
-
-
-def clean_openai_text(text: str) -> str:
-    # Remove specific Unicode ranges that might cause issues
-    cleaned = _INITIAL_FILTER.sub("", text)
-
-    # Remove any control characters except for newline and tab
-    cleaned = "".join(ch for ch in cleaned if ch >= " " or ch in "\n\t")
-
-    return cleaned
-
-
 def build_model_server_url(
     model_server_host: str,
     model_server_port: int,
@@ -101,7 +78,7 @@ class EmbeddingModel:
         api_url: str | None,
         provider_type: EmbeddingProvider | None,
         retrim_content: bool = False,
-        heartbeat: Heartbeat | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
     ) -> None:
@@ -118,7 +95,7 @@ class EmbeddingModel:
         self.tokenizer = get_tokenizer(
             model_name=model_name, provider_type=provider_type
         )
-        self.heartbeat = heartbeat
+        self.callback = callback
 
         model_server_url = build_model_server_url(server_host, server_port)
         self.embed_server_endpoint = f"{model_server_url}/encoder/bi-encoder-embed"
@@ -162,6 +139,10 @@ class EmbeddingModel:
 
         embeddings: list[Embedding] = []
         for idx, text_batch in enumerate(text_batches, start=1):
+            if self.callback:
+                if self.callback.should_stop():
+                    raise RuntimeError("_batch_encode_texts detected stop signal")
+
             logger.debug(f"Encoding batch {idx} of {len(text_batches)}")
             embed_request = EmbedRequest(
                 model_name=self.model_name,
@@ -181,8 +162,8 @@ class EmbeddingModel:
             response = self._make_model_server_request(embed_request)
             embeddings.extend(response.embeddings)
 
-            if self.heartbeat:
-                self.heartbeat.heartbeat()
+            if self.callback:
+                self.callback.progress("_batch_encode_texts", 1)
         return embeddings
 
 #    @retry(wait=wait_exponential(), stop=stop_after_attempt(3))
@@ -213,11 +194,6 @@ class EmbeddingModel:
                 )
                 for text in texts
             ]
-
-        if self.provider_type == EmbeddingProvider.OPENAI:
-            # If the provider is openai, we need to clean the text
-            # as a temporary workaround for the openai API
-            texts = [clean_openai_text(text) for text in texts]
 
         batch_size = (
             api_embedding_batch_size

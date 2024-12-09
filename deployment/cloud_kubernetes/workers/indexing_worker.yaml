@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
         - name: celery-worker-indexing
-          image: danswer/danswer-backend-cloud:v0.12.0-cloud.beta.2
-          imagePullPolicy: Always
+          image: danswer/danswer-backend-cloud:v0.12.0-cloud.beta.12
+          imagePullPolicy: IfNotPresent
           command:
             [
               "celery",
@@ -47,10 +47,10 @@ spec:
           resources:
             requests:
               cpu: "500m"
-              memory: "1Gi"
+              memory: "4Gi"
             limits:
               cpu: "1000m"
-              memory: "2Gi"
+              memory: "8Gi"
       volumes:
         - name: vespa-certificates
           secret:

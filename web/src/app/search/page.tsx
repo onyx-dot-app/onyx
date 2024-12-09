@@ -51,7 +51,7 @@ export default async function Home(props: {
   const tasks = [
     getAuthTypeMetadataSS(),
     getCurrentUserSS(),
-    fetchSS("/manage/indexing-status"),
+    fetchSS("/manage/connector-status"),
     fetchSS("/manage/document-set"),
     fetchAssistantsSS(),
     fetchSS("/query/valid-tags"),

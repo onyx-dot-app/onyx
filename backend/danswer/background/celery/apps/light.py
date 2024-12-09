@@ -92,5 +92,6 @@ celery_app.autodiscover_tasks(
         "danswer.background.celery.tasks.shared",
         "danswer.background.celery.tasks.vespa",
         "danswer.background.celery.tasks.connector_deletion",
+        "danswer.background.celery.tasks.doc_permission_syncing",
     ]
 )

@@ -1,6 +1,9 @@
 "use client";
 
-import { Persona } from "@/app/admin/assistants/interfaces";
+import {
+  Persona,
+  PersonaCategory as PersonaCategoryType,
+} from "@/app/admin/assistants/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { User } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -17,19 +20,34 @@ import { AssistantTools } from "../ToolsDisplay";
 import { classifyAssistants } from "@/lib/assistants/utils";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { useUser } from "@/components/user/UserProvider";
+import PersonaCategory from "../PersonaCategory";
+import { useCategories } from "@/lib/hooks";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 export function AssistantGalleryCard({
+  onlyAssistant,
   assistant,
   user,
   setPopup,
   selectedAssistant,
 }: {
+  onlyAssistant: boolean;
   assistant: Persona;
   user: User | null;
   setPopup: (popup: PopupSpec) => void;
   selectedAssistant: boolean;
 }) {
+  const { data: categories } = useCategories();
   const { refreshUser } = useUser();
-  const router = useRouter();
+
   return (
     <div
       key={assistant.id}
@@ -66,10 +84,7 @@ export function AssistantGalleryCard({
 								"
                 icon={FiMinus}
                 onClick={async () => {
-                  if (
-                    user.preferences?.chosen_assistants &&
-                    user.preferences?.chosen_assistants.length === 1
-                  ) {
+                  if (onlyAssistant) {
                     setPopup({
                       message: `Cannot remove "${assistant.name}" - you must have at least one assistant.`,
                       type: "error",
@@ -129,13 +144,22 @@ export function AssistantGalleryCard({
           </div>
         )}
       </div>
-
       <p className="text-sm mt-2">{assistant.description}</p>
       <p className="text-subtle text-sm my-2">
         Author: {assistant.owner?.email || "Danswer"}
       </p>
       {assistant.tools.length > 0 && (
         <AssistantTools list assistant={assistant} />
+      )}
+      {assistant.category_id && categories && (
+        <PersonaCategory
+          personaCategory={
+            categories?.find(
+              (category: PersonaCategoryType) =>
+                category.id === assistant.category_id
+            )!
+          }
+        />
       )}
     </div>
   );
@@ -144,10 +168,12 @@ export function AssistantsGallery() {
   const { assistants } = useAssistants();
   const { user } = useUser();
 
+  const { data: categories } = useCategories();
   const router = useRouter();
 
   const [searchQuery, setSearchQuery] = useState("");
   const { popup, setPopup } = usePopup();
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
   const { visibleAssistants, hiddenAssistants: _ } = classifyAssistants(
     user,
@@ -158,16 +184,24 @@ export function AssistantsGallery() {
     .filter((assistant) => assistant.is_default_persona)
     .filter(
       (assistant) =>
-        assistant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        assistant.description.toLowerCase().includes(searchQuery.toLowerCase())
+        (assistant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          assistant.description
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())) &&
+        (selectedCategory === null ||
+          selectedCategory === assistant.category_id)
     );
 
   const nonDefaultAssistants = assistants
     .filter((assistant) => !assistant.is_default_persona)
     .filter(
       (assistant) =>
-        assistant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        assistant.description.toLowerCase().includes(searchQuery.toLowerCase())
+        (assistant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          assistant.description
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())) &&
+        (selectedCategory === null ||
+          selectedCategory === assistant.category_id)
     );
 
   return (
@@ -196,7 +230,7 @@ export function AssistantsGallery() {
           </Button>
         </div>
 
-        <div className="mt-4 mb-12">
+        <div className="mt-4 mb-6">
           <div className="relative">
             <input
               type="text"
@@ -238,6 +272,58 @@ export function AssistantsGallery() {
           </div>
         </div>
 
+        {categories && categories?.length > 0 && (
+          <div className="mb-8">
+            <Select
+              value={selectedCategory?.toString() || "all"}
+              onValueChange={(value) =>
+                setSelectedCategory(value === "all" ? null : parseInt(value))
+              }
+            >
+              <SelectTrigger
+                className="
+                w-[240px]
+                bg-background 
+                border-2
+                border-background-strong
+                text-text-500
+                rounded-lg
+                shadow-sm
+                hover:bg-background-emphasis
+                hover:border-primary-500/50
+                hover:text-primary-500
+                transition-all
+                duration-200
+              "
+              >
+                <SelectValue placeholder="Filter by category..." />
+              </SelectTrigger>
+              <SelectContent className="bg-background border-background-strong">
+                <SelectGroup>
+                  <SelectLabel className="text-sm font-medium text-text-400">
+                    Categories
+                  </SelectLabel>
+                  <SelectItem
+                    value="all"
+                    className="cursor-pointer hover:bg-background-emphasis"
+                  >
+                    All Categories
+                  </SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem
+                      key={category.id}
+                      value={category.id.toString()}
+                      className="cursor-pointer hover:bg-background-emphasis"
+                    >
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {defaultAssistants.length == 0 &&
           nonDefaultAssistants.length == 0 &&
           assistants.length != 0 && (
@@ -268,6 +354,7 @@ export function AssistantsGallery() {
             >
               {defaultAssistants.map((assistant) => (
                 <AssistantGalleryCard
+                  onlyAssistant={visibleAssistants.length === 1}
                   selectedAssistant={visibleAssistants.includes(assistant)}
                   key={assistant.id}
                   assistant={assistant}
@@ -301,6 +388,7 @@ export function AssistantsGallery() {
             >
               {nonDefaultAssistants.map((assistant) => (
                 <AssistantGalleryCard
+                  onlyAssistant={visibleAssistants.length === 1}
                   selectedAssistant={visibleAssistants.includes(assistant)}
                   key={assistant.id}
                   assistant={assistant}

@@ -1,1 +1,2 @@
 python3-saml==1.15.0
+cohere==5.6.1

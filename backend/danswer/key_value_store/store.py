@@ -11,11 +11,11 @@ from sqlalchemy.orm import Session
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.engine import is_valid_schema_name
 from danswer.db.models import KVStore
-from danswer.key_value_store.interface import JSON_ro
 from danswer.key_value_store.interface import KeyValueStore
 from danswer.key_value_store.interface import KvKeyNotFoundError
 from danswer.redis.redis_pool import get_redis_client
 from danswer.utils.logger import setup_logger
+from danswer.utils.special_types import JSON_ro
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

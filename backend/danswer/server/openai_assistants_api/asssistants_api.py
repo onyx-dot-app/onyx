@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_user
+from danswer.context.search.enums import RecencyBiasSetting
 from danswer.db.engine import get_session
 from danswer.db.models import Persona
 from danswer.db.models import User
@@ -19,7 +20,6 @@ from danswer.db.persona import mark_persona_as_deleted
 from danswer.db.persona import upsert_persona
 from danswer.db.persona import upsert_prompt
 from danswer.db.tools import get_tool_by_name
-from danswer.search.enums import RecencyBiasSetting
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()

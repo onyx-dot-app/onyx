@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from pydantic import BaseModel
 
 from danswer.chat.models import LlmDoc
-from danswer.search.models import InferenceChunk
+from danswer.context.search.models import InferenceChunk
 
 
 class DocumentIdOrderMapping(BaseModel):

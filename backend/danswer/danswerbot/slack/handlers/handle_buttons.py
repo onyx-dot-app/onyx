@@ -13,7 +13,7 @@ from danswer.connectors.slack.utils import expert_info_from_slack_id
 from danswer.connectors.slack.utils import make_slack_api_rate_limited
 from danswer.danswerbot.slack.blocks import build_follow_up_resolved_blocks
 from danswer.danswerbot.slack.blocks import get_document_feedback_blocks
-from danswer.danswerbot.slack.config import get_slack_bot_config_for_channel
+from danswer.danswerbot.slack.config import get_slack_channel_config_for_bot_and_channel
 from danswer.danswerbot.slack.constants import DISLIKE_BLOCK_ACTION_ID
 from danswer.danswerbot.slack.constants import FeedbackVisibility
 from danswer.danswerbot.slack.constants import LIKE_BLOCK_ACTION_ID
@@ -117,8 +117,10 @@ def handle_generate_answer_button(
     )
 
     with get_session_with_tenant(client.tenant_id) as db_session:
-        slack_bot_config = get_slack_bot_config_for_channel(
-            channel_name=channel_name, db_session=db_session
+        slack_channel_config = get_slack_channel_config_for_bot_and_channel(
+            db_session=db_session,
+            slack_bot_id=client.slack_bot_id,
+            channel_name=channel_name,
         )
 
         handle_regular_answer(
@@ -133,7 +135,7 @@ def handle_generate_answer_button(
                 is_bot_msg=False,
                 is_bot_dm=False,
             ),
-            slack_bot_config=slack_bot_config,
+            slack_channel_config=slack_channel_config,
             receiver_ids=None,
             client=client.web_client,
             tenant_id=client.tenant_id,
@@ -256,11 +258,13 @@ def handle_followup_button(
         channel_name, is_dm = get_channel_name_from_id(
             client=client.web_client, channel_id=channel_id
         )
-        slack_bot_config = get_slack_bot_config_for_channel(
-            channel_name=channel_name, db_session=db_session
+        slack_channel_config = get_slack_channel_config_for_bot_and_channel(
+            db_session=db_session,
+            slack_bot_id=client.slack_bot_id,
+            channel_name=channel_name,
         )
-        if slack_bot_config:
-            tag_names = slack_bot_config.channel_config.get("follow_up_tags")
+        if slack_channel_config:
+            tag_names = slack_channel_config.channel_config.get("follow_up_tags")
             remaining = None
             if tag_names:
                 tag_ids, remaining = fetch_user_ids_from_emails(

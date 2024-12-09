@@ -51,7 +51,7 @@ def test_whole_curator_flow(reset: None) -> None:
     test_connector = ConnectorManager.create(
         name="curator_test_connector",
         source=DocumentSource.FILE,
-        is_public=False,
+        access_type=AccessType.PRIVATE,
         groups=[user_group_1.id],
         user_performing_action=curator,
     )
@@ -130,7 +130,7 @@ def test_global_curator_flow(reset: None) -> None:
     test_connector = ConnectorManager.create(
         name="curator_test_connector",
         source=DocumentSource.FILE,
-        is_public=False,
+        access_type=AccessType.PRIVATE,
         groups=[user_group_1.id],
         user_performing_action=global_curator,
     )

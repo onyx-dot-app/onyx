@@ -2,6 +2,7 @@ import concurrent.futures
 import json
 from datetime import datetime
 from datetime import timezone
+from http import HTTPStatus
 
 import httpx
 from retry import retry
@@ -194,6 +195,14 @@ def _index_vespa_chunk(
         logger.exception(
             f"Failed to index document: '{document.id}'. Got response: '{res.text}'"
         )
+        if isinstance(e, httpx.HTTPStatusError):
+            if e.response.status_code == HTTPStatus.INSUFFICIENT_STORAGE:
+                logger.error(
+                    "NOTE: HTTP Status 507 Insufficient Storage usually means "
+                    "you need to allocate more memory or disk space to the "
+                    "Vespa/index container."
+                )
+
         raise e
 
 

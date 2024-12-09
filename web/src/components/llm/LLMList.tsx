@@ -49,7 +49,7 @@ export const LlmList: React.FC<LlmListProps> = ({
               llmProvider.provider,
               modelName
             ),
-            icon: getProviderIcon(llmProvider.provider),
+            icon: getProviderIcon(llmProvider.provider, modelName),
           });
         }
       }
@@ -62,7 +62,11 @@ export const LlmList: React.FC<LlmListProps> = ({
 
   return (
     <div
-      className={`${scrollable ? "max-h-[200px] include-scrollbar" : "max-h-[300px]"} bg-background-175 flex flex-col gap-y-1 overflow-y-scroll`}
+      className={`${
+        scrollable
+          ? "max-h-[200px] default-scrollbar overflow-x-hidden"
+          : "max-h-[300px]"
+      } bg-background-175 flex flex-col gap-y-1 overflow-y-scroll`}
     >
       {userDefault && (
         <button

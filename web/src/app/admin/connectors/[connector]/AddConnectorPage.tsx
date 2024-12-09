@@ -54,8 +54,7 @@ const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 export async function submitConnector<T>(
   connector: ConnectorBase<T>,
   connectorId?: number,
-  fakeCredential?: boolean,
-  isPublicCcpair?: boolean // exclusively for mock credentials, when also need to specify ccpair details
+  fakeCredential?: boolean
 ): Promise<{ message: string; isSuccess: boolean; response?: Connector<T> }> {
   const isUpdate = connectorId !== undefined;
   if (!connector.connector_specific_config) {
@@ -71,7 +70,7 @@ export async function submitConnector<T>(
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ ...connector, is_public: isPublicCcpair }),
+          body: JSON.stringify({ ...connector }),
         }
       );
       if (response.ok) {
@@ -116,7 +115,6 @@ export default function AddConnector({
   // State for managing credentials and files
   const [currentCredential, setCurrentCredential] =
     useState<Credential<any> | null>(null);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [createConnectorToggle, setCreateConnectorToggle] = useState(false);
 
   // Fetch credentials data
@@ -259,6 +257,13 @@ export default function AddConnector({
           refreshFreq: (refreshFreq ?? defaultRefreshFreqMinutes) * 60,
         };
 
+        // File-specific handling
+        const selectedFiles = Array.isArray(values.file_locations)
+          ? values.file_locations
+          : values.file_locations
+            ? [values.file_locations]
+            : [];
+
         // Google sites-specific handling
         if (connector == "google_sites") {
           const response = await submitGoogleSite(
@@ -268,7 +273,7 @@ export default function AddConnector({
             advancedConfiguration.refreshFreq,
             advancedConfiguration.pruneFreq,
             advancedConfiguration.indexingStart,
-            values.access_type == "public",
+            values.access_type,
             groups,
             name
           );
@@ -277,15 +282,13 @@ export default function AddConnector({
           }
           return;
         }
-
         // File-specific handling
-        if (connector == "file" && selectedFiles.length > 0) {
+        if (connector == "file") {
           const response = await submitFiles(
             selectedFiles,
             setPopup,
-            setSelectedFiles,
             name,
-            access_type == "public",
+            access_type,
             groups
           );
           if (response) {
@@ -300,15 +303,14 @@ export default function AddConnector({
             input_type: isLoadState(connector) ? "load_state" : "poll", // single case
             name: name,
             source: connector,
-            is_public: access_type == "public",
+            access_type: access_type,
             refresh_freq: advancedConfiguration.refreshFreq || null,
             prune_freq: advancedConfiguration.pruneFreq || null,
             indexing_start: advancedConfiguration.indexingStart || null,
             groups: groups,
           },
           undefined,
-          credentialActivated ? false : true,
-          access_type == "public"
+          credentialActivated ? false : true
         );
         // If no credential
         if (!credentialActivated) {
@@ -429,8 +431,6 @@ export default function AddConnector({
                 <DynamicConnectionForm
                   values={formikProps.values}
                   config={configuration}
-                  setSelectedFiles={setSelectedFiles}
-                  selectedFiles={selectedFiles}
                   connector={connector}
                   currentCredential={
                     currentCredential ||

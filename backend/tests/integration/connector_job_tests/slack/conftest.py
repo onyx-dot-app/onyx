@@ -6,6 +6,10 @@ import pytest
 
 from tests.integration.connector_job_tests.slack.slack_api_utils import SlackManager
 
+# from tests.load_env_vars import load_env_vars
+
+# load_env_vars()
+
 
 @pytest.fixture()
 def slack_test_setup() -> Generator[tuple[dict[str, Any], dict[str, Any]], None, None]:

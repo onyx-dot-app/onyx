@@ -14,15 +14,6 @@ from danswer.db.tasks import mark_task_start
 from danswer.db.tasks import register_task
 
 
-def name_cc_prune_task(
-    connector_id: int | None = None, credential_id: int | None = None
-) -> str:
-    task_name = f"prune_connector_credential_pair_{connector_id}_{credential_id}"
-    if not connector_id or not credential_id:
-        task_name = "prune_connector_credential_pair"
-    return task_name
-
-
 T = TypeVar("T", bound=Callable)
 
 

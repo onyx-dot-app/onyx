@@ -15,7 +15,7 @@ import {
   convertDateToStartOfDay,
   getXDaysAgo,
 } from "./dateUtils";
-import { THIRTY_DAYS } from "./DateRangeSelector";
+import { DateRange, THIRTY_DAYS } from "./DateRangeSelector";
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 
 export const useTimeRange = () => {
@@ -65,25 +65,23 @@ export const useDanswerBotAnalytics = (timeRange: DateRangePickerValue) => {
   };
 };
 
-export const useQueryHistory = () => {
-  const [selectedFeedbackType, setSelectedFeedbackType] =
-    useState<Feedback | null>(null);
-  const [timeRange, setTimeRange] = useTimeRange();
-
+export const useQueryHistory = ({
+  selectedFeedbackType,
+  timeRange,
+}: {
+  selectedFeedbackType: Feedback | null;
+  timeRange: DateRange;
+}) => {
   const url = buildApiPath("/api/admin/chat-session-history", {
     feedback_type: selectedFeedbackType,
-    start: convertDateToStartOfDay(timeRange.from)?.toISOString(),
-    end: convertDateToEndOfDay(timeRange.to)?.toISOString(),
+    start: convertDateToStartOfDay(timeRange?.from)?.toISOString(),
+    end: convertDateToEndOfDay(timeRange?.to)?.toISOString(),
   });
+
   const swrResponse = useSWR<ChatSessionMinimal[]>(url, errorHandlingFetcher);
 
   return {
     ...swrResponse,
-    selectedFeedbackType,
-    setSelectedFeedbackType: (feedbackType: Feedback | "all") =>
-      setSelectedFeedbackType(feedbackType === "all" ? null : feedbackType),
-    timeRange,
-    setTimeRange,
     refreshQueryHistory: () => mutate(url),
   };
 };

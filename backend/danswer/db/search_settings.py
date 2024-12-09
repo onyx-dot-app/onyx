@@ -12,6 +12,7 @@ from danswer.configs.model_configs import NORMALIZE_EMBEDDINGS
 from danswer.configs.model_configs import OLD_DEFAULT_DOCUMENT_ENCODER_MODEL
 from danswer.configs.model_configs import OLD_DEFAULT_MODEL_DOC_EMBEDDING_DIM
 from danswer.configs.model_configs import OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS
+from danswer.context.search.models import SavedSearchSettings
 from danswer.db.engine import get_session_with_default_tenant
 from danswer.db.llm import fetch_embedding_provider
 from danswer.db.models import CloudEmbeddingProvider
@@ -21,7 +22,6 @@ from danswer.db.models import SearchSettings
 from danswer.indexing.models import IndexingSetting
 from danswer.natural_language_processing.search_nlp_models import clean_model_name
 from danswer.natural_language_processing.search_nlp_models import warm_up_cross_encoder
-from danswer.search.models import SavedSearchSettings
 from danswer.server.manage.embedding.models import (
     CloudEmbeddingProvider as ServerCloudEmbeddingProvider,
 )

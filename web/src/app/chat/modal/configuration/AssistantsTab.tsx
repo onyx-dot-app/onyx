@@ -61,8 +61,6 @@ export function AssistantsTab({
 
       setAssistants(updatedAssistants);
       await updateUserAssistantList(updatedAssistants.map((a) => a.id));
-      await refreshUser();
-      await refreshAssistants();
     }
   }
 
@@ -78,7 +76,7 @@ export function AssistantsTab({
           items={assistants.map((a) => a.id.toString())}
           strategy={verticalListSortingStrategy}
         >
-          <div className="px-4 pb-2  max-h-[500px] include-scrollbar overflow-y-scroll my-3 grid grid-cols-1 gap-4">
+          <div className="px-4 pb-2  max-h-[500px] default-scrollbar overflow-y-scroll overflow-x-hidden my-3 grid grid-cols-1 gap-4">
             {assistants.map((assistant) => (
               <DraggableAssistantCard
                 key={assistant.id.toString()}

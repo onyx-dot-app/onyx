@@ -23,6 +23,16 @@ from danswer.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from danswer.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from danswer.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from danswer.configs.constants import MessageType
+from danswer.context.search.enums import OptionalSearchSetting
+from danswer.context.search.enums import QueryFlow
+from danswer.context.search.enums import SearchType
+from danswer.context.search.models import InferenceSection
+from danswer.context.search.models import RetrievalDetails
+from danswer.context.search.retrieval.search_runner import inference_sections_from_ids
+from danswer.context.search.utils import chunks_or_sections_to_search_docs
+from danswer.context.search.utils import dedupe_documents
+from danswer.context.search.utils import drop_llm_indices
+from danswer.context.search.utils import relevant_sections_to_indices
 from danswer.db.chat import attach_files_to_chat_message
 from danswer.db.chat import create_db_search_doc
 from danswer.db.chat import create_new_chat_message
@@ -56,16 +66,6 @@ from danswer.llm.factory import get_llms_for_persona
 from danswer.llm.factory import get_main_llm_from_tuple
 from danswer.llm.utils import litellm_exception_to_error_msg
 from danswer.natural_language_processing.utils import get_tokenizer
-from danswer.search.enums import OptionalSearchSetting
-from danswer.search.enums import QueryFlow
-from danswer.search.enums import SearchType
-from danswer.search.models import InferenceSection
-from danswer.search.models import RetrievalDetails
-from danswer.search.retrieval.search_runner import inference_sections_from_ids
-from danswer.search.utils import chunks_or_sections_to_search_docs
-from danswer.search.utils import dedupe_documents
-from danswer.search.utils import drop_llm_indices
-from danswer.search.utils import relevant_sections_to_indices
 from danswer.server.query_and_chat.models import ChatMessageDetail
 from danswer.server.query_and_chat.models import CreateChatMessageRequest
 from danswer.server.utils import get_json_line
@@ -112,6 +112,7 @@ from danswer.tools.tool_implementations.search.search_tool import (
 )
 from danswer.tools.tool_runner import ToolCallFinalResult
 from danswer.utils.logger import setup_logger
+from danswer.utils.long_term_log import LongTermLogger
 from danswer.utils.timing import log_generator_function_time
 
 logger = setup_logger()
@@ -316,6 +317,11 @@ def stream_chat_message_objects(
         retrieval_options = new_msg_req.retrieval_options
         alternate_assistant_id = new_msg_req.alternate_assistant_id
 
+        # permanent "log" store, used primarily for debugging
+        long_term_logger = LongTermLogger(
+            metadata={"user_id": str(user_id), "chat_session_id": str(chat_session_id)}
+        )
+
         # use alternate persona if alternative assistant id is passed in
         if alternate_assistant_id is not None:
             persona = get_persona_by_id(
@@ -341,6 +347,7 @@ def stream_chat_message_objects(
                 persona=persona,
                 llm_override=new_msg_req.llm_override or chat_session.llm_override,
                 additional_headers=litellm_additional_headers,
+                long_term_logger=long_term_logger,
             )
         except GenAIDisabledException:
             raise RuntimeError("LLM is disabled. Can't use chat flow without LLM.")

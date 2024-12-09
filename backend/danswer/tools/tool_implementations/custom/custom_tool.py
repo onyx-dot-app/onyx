@@ -13,13 +13,13 @@ import requests
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
+from requests import JSONDecodeError
 
 from danswer.configs.constants import FileOrigin
 from danswer.db.engine import get_session_with_default_tenant
 from danswer.file_store.file_store import get_default_file_store
 from danswer.file_store.models import ChatFileType
 from danswer.file_store.models import InMemoryChatFile
-from danswer.key_value_store.interface import JSON_ro
 from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.answering.prompts.build import AnswerPromptBuilder
 from danswer.llm.interfaces import LLM
@@ -57,6 +57,7 @@ from danswer.tools.tool_implementations.custom.prompt import (
 from danswer.utils.headers import header_list_to_header_dict
 from danswer.utils.headers import HeaderItemDict
 from danswer.utils.logger import setup_logger
+from danswer.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
@@ -241,6 +242,8 @@ class CustomTool(BaseTool):
         )
         content_type = response.headers.get("Content-Type", "")
 
+        tool_result: Any
+        response_type: str
         if "text/csv" in content_type:
             file_ids = self._save_and_get_file_references(
                 response.content, content_type
@@ -256,8 +259,15 @@ class CustomTool(BaseTool):
             response_type = "image"
 
         else:
-            tool_result = response.json()
-            response_type = "json"
+            try:
+                tool_result = response.json()
+                response_type = "json"
+            except JSONDecodeError:
+                logger.exception(
+                    f"Failed to parse response as JSON for tool '{self._name}'"
+                )
+                tool_result = response.text
+                response_type = "text"
 
         logger.info(
             f"Returning tool response for {self._name} with type {response_type}"

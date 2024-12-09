@@ -5,6 +5,10 @@ from fastapi import Query
 from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_user
+from danswer.context.search.models import IndexFilters
+from danswer.context.search.preprocessing.access_filters import (
+    build_access_filters_for_user,
+)
 from danswer.db.engine import get_session
 from danswer.db.models import User
 from danswer.db.search_settings import get_current_search_settings
@@ -12,8 +16,6 @@ from danswer.document_index.factory import get_default_document_index
 from danswer.document_index.interfaces import VespaChunkRequest
 from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.prompts.prompt_utils import build_doc_context_str
-from danswer.search.models import IndexFilters
-from danswer.search.preprocessing.access_filters import build_access_filters_for_user
 from danswer.server.documents.models import ChunkInfo
 from danswer.server.documents.models import DocumentInfo
 

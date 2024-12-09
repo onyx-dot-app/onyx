@@ -2,13 +2,13 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { createConnector, runConnector } from "@/lib/connector";
 import { createCredential, linkCredential } from "@/lib/credential";
 import { FileConfig } from "@/lib/connectors/connectors";
+import { AccessType } from "@/lib/types";
 
 export const submitFiles = async (
   selectedFiles: File[],
   setPopup: (popup: PopupSpec) => void,
-  setSelectedFiles: (files: File[]) => void,
   name: string,
-  isPublic: boolean,
+  access_type: string,
   groups?: number[]
 ) => {
   const formData = new FormData();
@@ -42,7 +42,7 @@ export const submitFiles = async (
     refresh_freq: null,
     prune_freq: null,
     indexing_start: null,
-    is_public: isPublic,
+    access_type: access_type,
     groups: groups,
   });
   if (connectorErrorMsg || !connector) {
@@ -61,7 +61,7 @@ export const submitFiles = async (
     credential_json: {},
     admin_public: true,
     source: "file",
-    curator_public: isPublic,
+    curator_public: true,
     groups: groups,
     name,
   });
@@ -80,7 +80,7 @@ export const submitFiles = async (
     connector.id,
     credentialId,
     name,
-    isPublic ? "public" : "private",
+    access_type as AccessType,
     groups
   );
   if (!credentialResponse.ok) {
@@ -101,7 +101,6 @@ export const submitFiles = async (
     return false;
   }
 
-  setSelectedFiles([]);
   setPopup({
     type: "success",
     message: "Successfully uploaded files!",

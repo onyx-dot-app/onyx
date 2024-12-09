@@ -32,7 +32,7 @@ from danswer.key_value_store.interface import KvKeyNotFoundError
 from danswer.server.documents.models import ConnectorBase
 from danswer.utils.logger import setup_logger
 from danswer.utils.retry_wrapper import retry_builder
-
+from danswer.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
 
@@ -91,7 +91,21 @@ def _create_indexable_chunks(
     return list(ids_to_documents.values()), chunks
 
 
-def seed_initial_documents(db_session: Session, tenant_id: str | None) -> None:
+# Cohere is used in EE version
+def load_processed_docs(cohere_enabled: bool) -> list[dict]:
+    initial_docs_path = os.path.join(
+        os.getcwd(),
+        "danswer",
+        "seeding",
+        "initial_docs.json",
+    )
+    processed_docs = json.load(open(initial_docs_path))
+    return processed_docs
+
+
+def seed_initial_documents(
+    db_session: Session, tenant_id: str | None, cohere_enabled: bool = False
+) -> None:
     """
     Seed initial documents so users don't have an empty index to start
 
@@ -132,7 +146,9 @@ def seed_initial_documents(db_session: Session, tenant_id: str | None) -> None:
         return
 
     search_settings = get_current_search_settings(db_session)
-    if search_settings.model_name != DEFAULT_DOCUMENT_ENCODER_MODEL:
+    if search_settings.model_name != DEFAULT_DOCUMENT_ENCODER_MODEL and not (
+        search_settings.model_name == "embed-english-v3.0" and cohere_enabled
+    ):
         logger.info("Embedding model has been updated, skipping")
         return
 
@@ -172,11 +188,10 @@ def seed_initial_documents(db_session: Session, tenant_id: str | None) -> None:
         last_successful_index_time=last_index_time,
     )
     cc_pair_id = cast(int, result.data)
-
-    initial_docs_path = os.path.join(
-        os.getcwd(), "danswer", "seeding", "initial_docs.json"
-    )
-    processed_docs = json.load(open(initial_docs_path))
+    processed_docs = fetch_versioned_implementation(
+        "danswer.seeding.load_docs",
+        "load_processed_docs",
+    )(cohere_enabled)
 
     docs, chunks = _create_indexable_chunks(processed_docs, tenant_id)
 

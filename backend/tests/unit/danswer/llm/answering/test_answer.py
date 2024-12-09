@@ -277,7 +277,7 @@ def test_answer_with_search_no_tool_calling(
 
     # Verify that get_args_for_non_tool_calling_llm was called on the mock_search_tool
     mock_search_tool.get_args_for_non_tool_calling_llm.assert_called_once_with(
-        f"Task prompt\n\nQUERY:\n{QUERY}", [], answer_instance.llm
+        QUERY, [], answer_instance.llm
     )
 
     # Verify that the search tool's run method was called

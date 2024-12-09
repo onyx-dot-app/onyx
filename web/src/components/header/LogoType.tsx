@@ -51,7 +51,7 @@ export default function LogoType({
           onClick={() => toggleSidebar()}
           className="pt-[2px] flex  gap-x-2 items-center ml-4 desktop:invisible mb-auto"
         >
-          <FiSidebar size={20} />
+          <FiSidebar size={20} className="text-text-mobile-sidebar" />
           {!showArrow && (
             <Logo className="desktop:hidden -my-2" height={24} width={24} />
           )}
@@ -69,13 +69,16 @@ export default function LogoType({
         <div className="max-w-[175px] min-w-[140px]">
           {enterpriseSettings && enterpriseSettings.application_name ? (
             <div className="w-full">
-              <HeaderTitle>{enterpriseSettings.application_name}</HeaderTitle>
+              <HeaderTitle backgroundToggled={toggled}>
+                {enterpriseSettings.application_name}
+              </HeaderTitle>
               {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
                 <p className="text-xs text-subtle">Powered by Danswer</p>
               )}
             </div>
           ) : (
-            <HeaderTitle>GPT Lab</HeaderTitle>
+
+            <HeaderTitle backgroundToggled={toggled}>GPT Lab</HeaderTitle>
           )}
         </div>
       </div>

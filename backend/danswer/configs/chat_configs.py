@@ -1,9 +1,9 @@
 import os
 
 
-PROMPTS_YAML = "./danswer/chat/prompts.yaml"
-PERSONAS_YAML = "./danswer/chat/personas.yaml"
-INPUT_PROMPT_YAML = "./danswer/chat/input_prompts.yaml"
+PROMPTS_YAML = "./danswer/seeding/prompts.yaml"
+PERSONAS_YAML = "./danswer/seeding/personas.yaml"
+INPUT_PROMPT_YAML = "./danswer/seeding/input_prompts.yaml"
 
 NUM_RETURNED_HITS = 50
 # Used for LLM filtering and reranking
@@ -17,9 +17,6 @@ MAX_CHUNKS_FED_TO_CHAT = float(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 10.0)
 # ~3k input, half for docs, half for chat history + prompts
 CHAT_TARGET_CHUNK_PERCENTAGE = 512 * 3 / 3072
 
-# For selecting a different LLM question-answering prompt format
-# Valid values: default, cot, weak
-QA_PROMPT_OVERRIDE = os.environ.get("QA_PROMPT_OVERRIDE") or None
 # 1 / (1 + DOC_TIME_DECAY * doc-age-in-years), set to 0 to have no decay
 # Capped in Vespa at 0.5
 DOC_TIME_DECAY = float(
@@ -27,8 +24,6 @@ DOC_TIME_DECAY = float(
 )
 BASE_RECENCY_DECAY = 0.5
 FAVOR_RECENT_DECAY_MULTIPLIER = 2.0
-# Currently this next one is not configurable via env
-DISABLE_LLM_QUERY_ANSWERABILITY = QA_PROMPT_OVERRIDE == "weak"
 # For the highest matching base size chunk, how many chunks above and below do we pull in by default
 # Note this is not in any of the deployment configs yet
 # Currently only applies to search flow not chat

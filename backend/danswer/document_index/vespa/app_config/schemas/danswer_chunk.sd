@@ -15,7 +15,7 @@ schema DANSWER_CHUNK_NAME {
         # Must have an additional field for whether to skip title embeddings
         # This information cannot be extracted from either the title field nor title embedding
         field skip_title type bool {
-            indexing: attribute
+            indexing: attribute 
         }
         # May not always match the `semantic_identifier` e.g. for Slack docs the
         # `semantic_identifier` will be the channel name, but the `title` will be empty
@@ -36,7 +36,7 @@ schema DANSWER_CHUNK_NAME {
         }
         # Title embedding (x1)
         field title_embedding type tensor<float>(x[VARIABLE_DIM]) {
-            indexing: attribute
+            indexing: attribute | index
             attribute {
                 distance-metric: angular
             }
@@ -44,7 +44,7 @@ schema DANSWER_CHUNK_NAME {
         # Content embeddings (chunk + optional mini chunks embeddings)
         # "t" and "x" are arbitrary names, not special keywords
         field embeddings type tensor<float>(t{},x[VARIABLE_DIM]) {
-            indexing: attribute
+            indexing: attribute | index
             attribute {
                 distance-metric: angular
             }

@@ -7,3 +7,4 @@
 .vscode/
 *.sw?
 /backend/tests/regression/answer_quality/search_test_config.yaml
+/web/test-results/

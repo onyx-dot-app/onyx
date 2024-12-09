@@ -1,21 +1,16 @@
-from sqlalchemy.orm import Session
-
 from danswer.connectors.google_drive.connector import GoogleDriveConnector
 from danswer.connectors.google_utils.google_utils import execute_paginated_retrieval
 from danswer.connectors.google_utils.resources import get_admin_service
 from danswer.db.models import ConnectorCredentialPair
-from danswer.db.users import batch_add_non_web_user_if_not_exists__no_commit
 from danswer.utils.logger import setup_logger
 from ee.danswer.db.external_perm import ExternalUserGroup
-from ee.danswer.db.external_perm import replace_user__ext_group_for_cc_pair__no_commit
 
 logger = setup_logger()
 
 
 def gdrive_group_sync(
-    db_session: Session,
     cc_pair: ConnectorCredentialPair,
-) -> None:
+) -> list[ExternalUserGroup]:
     google_drive_connector = GoogleDriveConnector(
         **cc_pair.connector.connector_specific_config
     )
@@ -44,20 +39,14 @@ def gdrive_group_sync(
         ):
             group_member_emails.append(member["email"])
 
-        # Add group members to DB and get their IDs
-        group_members = batch_add_non_web_user_if_not_exists__no_commit(
-            db_session=db_session, emails=group_member_emails
-        )
-        if group_members:
-            danswer_groups.append(
-                ExternalUserGroup(
-                    id=group_email, user_ids=[user.id for user in group_members]
-                )
-            )
+        if not group_member_emails:
+            continue
 
-    replace_user__ext_group_for_cc_pair__no_commit(
-        db_session=db_session,
-        cc_pair_id=cc_pair.id,
-        group_defs=danswer_groups,
-        source=cc_pair.connector.source,
-    )
+        danswer_groups.append(
+            ExternalUserGroup(
+                id=group_email,
+                user_emails=list(group_member_emails),
+            )
+        )
+
+    return danswer_groups

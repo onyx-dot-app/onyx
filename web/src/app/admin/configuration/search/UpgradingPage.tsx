@@ -68,10 +68,11 @@ export default function UpgradingPage({
   const statusOrder: Record<ValidStatuses, number> = useMemo(
     () => ({
       failed: 0,
-      completed_with_errors: 1,
-      not_started: 2,
-      in_progress: 3,
-      success: 4,
+      canceled: 1,
+      completed_with_errors: 2,
+      not_started: 3,
+      in_progress: 4,
+      success: 5,
     }),
     []
   );

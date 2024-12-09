@@ -394,6 +394,7 @@ export function CCPairIndexingStatusTable({
               indexing_start: new Date("2023-07-01T12:00:00Z"),
               id: 1,
               credential_ids: [],
+              access_type: "public",
               time_created: "2023-07-01T12:00:00Z",
               time_updated: "2023-07-01T12:00:00Z",
             },

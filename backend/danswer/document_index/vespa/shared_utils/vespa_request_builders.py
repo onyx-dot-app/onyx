@@ -3,6 +3,7 @@ from datetime import timedelta
 from datetime import timezone
 
 from danswer.configs.constants import INDEX_SEPARATOR
+from danswer.context.search.models import IndexFilters
 from danswer.document_index.interfaces import VespaChunkRequest
 from danswer.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from danswer.document_index.vespa_constants import CHUNK_ID
@@ -13,7 +14,6 @@ from danswer.document_index.vespa_constants import HIDDEN
 from danswer.document_index.vespa_constants import METADATA_LIST
 from danswer.document_index.vespa_constants import SOURCE_TYPE
 from danswer.document_index.vespa_constants import TENANT_ID
-from danswer.search.models import IndexFilters
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -9,15 +9,15 @@ from danswer.chat.models import RetrievalDocs
 from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import MessageType
 from danswer.configs.constants import SearchFeedbackType
+from danswer.context.search.models import BaseFilters
+from danswer.context.search.models import ChunkContext
+from danswer.context.search.models import RetrievalDetails
+from danswer.context.search.models import SearchDoc
+from danswer.context.search.models import Tag
 from danswer.db.enums import ChatSessionSharedStatus
 from danswer.file_store.models import FileDescriptor
 from danswer.llm.override_models import LLMOverride
 from danswer.llm.override_models import PromptOverride
-from danswer.search.models import BaseFilters
-from danswer.search.models import ChunkContext
-from danswer.search.models import RetrievalDetails
-from danswer.search.models import SearchDoc
-from danswer.search.models import Tag
 from danswer.tools.models import ToolCallFinalResult
 
 
@@ -27,10 +27,6 @@ class SourceTag(Tag):
 
 class TagResponse(BaseModel):
     tags: list[SourceTag]
-
-
-class SimpleQueryRequest(BaseModel):
-    query: str
 
 
 class UpdateChatSessionThreadRequest(BaseModel):
@@ -217,6 +213,7 @@ class ChatSessionDetailResponse(BaseModel):
     current_alternate_model: str | None
 
 
+# This one is not used anymore
 class QueryValidationResponse(BaseModel):
     reasoning: str
     answerable: bool

@@ -305,6 +305,7 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
         query = _build_time_range_query(time_range_start, time_range_end)
         doc_batch = []
         for user_email in self._get_all_user_emails():
+            logger.info(f"Fetching slim threads for user: {user_email}")
             gmail_service = get_gmail_service(self.creds, user_email)
             for thread in execute_paginated_retrieval(
                 retrieval_function=gmail_service.users().threads().list,

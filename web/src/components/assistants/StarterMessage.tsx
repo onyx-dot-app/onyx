@@ -37,7 +37,7 @@ export function StarterMessages({
                     onClick={() => onSubmit(starterMessage.message)}
                     className={`relative flex ${
                       !isMobile && "w-40"
-                    } flex-col gap-2 rounded-2xl shadow-sm border border-border px-3 py-2 text-start align-to text-wrap text-[15px] shadow-xs transition enabled:hover:bg-background-100 disabled:cursor-not-allowed line-clamp-3`}
+                    } flex-col gap-2 rounded-2xl shadow-sm border border-border bg-background-starter-message px-3 py-2 text-start align-to text-wrap text-[15px] shadow-xs transition enabled:hover:bg-background-starter-message-hover disabled:cursor-not-allowed line-clamp-3`}
                     style={{ height: `5.2rem` }}
                   >
                     {starterMessage.name}

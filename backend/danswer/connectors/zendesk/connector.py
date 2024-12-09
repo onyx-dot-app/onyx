@@ -102,13 +102,21 @@ def _get_tickets(
 
 
 def _fetch_author(client: ZendeskClient, author_id: str) -> BasicExpertInfo | None:
-    author_data = client.make_request(f"users/{author_id}", {})
-    user = author_data.get("user")
-    return (
-        BasicExpertInfo(display_name=user.get("name"), email=user.get("email"))
-        if user and user.get("name") and user.get("email")
-        else None
-    )
+    # Skip fetching if author_id is invalid
+    if not author_id or author_id == "-1":
+        return None
+
+    try:
+        author_data = client.make_request(f"users/{author_id}", {})
+        user = author_data.get("user")
+        return (
+            BasicExpertInfo(display_name=user.get("name"), email=user.get("email"))
+            if user and user.get("name") and user.get("email")
+            else None
+        )
+    except requests.exceptions.HTTPError:
+        # Handle any API errors gracefully
+        return None
 
 
 def _article_to_document(

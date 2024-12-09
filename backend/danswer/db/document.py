@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import null
 
 from danswer.configs.constants import DEFAULT_BOOST
+from danswer.db.connector_credential_pair import get_connector_credential_pair_from_id
 from danswer.db.enums import AccessType
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.feedback import delete_document_feedback_for_documents__no_commit
@@ -46,13 +47,21 @@ def count_documents_by_needs_sync(session: Session) -> int:
     """Get the count of all documents where:
     1. last_modified is newer than last_synced
     2. last_synced is null (meaning we've never synced)
+    AND the document has a relationship with a connector/credential pair
+
+    TODO: The documents without a relationship with a connector/credential pair
+    should be cleaned up somehow eventually.
 
     This function executes the query and returns the count of
     documents matching the criteria."""
 
     count = (
-        session.query(func.count())
+        session.query(func.count(DbDocument.id.distinct()))
         .select_from(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
+        )
         .filter(
             or_(
                 DbDocument.last_modified > DbDocument.last_synced,
@@ -91,6 +100,22 @@ def construct_document_select_for_connector_credential_pair_by_needs_sync(
     return stmt
 
 
+def get_all_documents_needing_vespa_sync_for_cc_pair(
+    db_session: Session, cc_pair_id: int
+) -> list[DbDocument]:
+    cc_pair = get_connector_credential_pair_from_id(
+        cc_pair_id=cc_pair_id, db_session=db_session
+    )
+    if not cc_pair:
+        raise ValueError(f"No CC pair found with ID: {cc_pair_id}")
+
+    stmt = construct_document_select_for_connector_credential_pair_by_needs_sync(
+        cc_pair.connector_id, cc_pair.credential_id
+    )
+
+    return list(db_session.scalars(stmt).all())
+
+
 def construct_document_select_for_connector_credential_pair(
     connector_id: int, credential_id: int | None = None
 ) -> Select:
@@ -102,6 +127,21 @@ def construct_document_select_for_connector_credential_pair(
     )
     stmt = select(DbDocument).where(DbDocument.id.in_(initial_doc_ids_stmt)).distinct()
     return stmt
+
+
+def get_documents_for_cc_pair(
+    db_session: Session,
+    cc_pair_id: int,
+) -> list[DbDocument]:
+    cc_pair = get_connector_credential_pair_from_id(
+        cc_pair_id=cc_pair_id, db_session=db_session
+    )
+    if not cc_pair:
+        raise ValueError(f"No CC pair found with ID: {cc_pair_id}")
+    stmt = construct_document_select_for_connector_credential_pair(
+        connector_id=cc_pair.connector_id, credential_id=cc_pair.credential_id
+    )
+    return list(db_session.scalars(stmt).all())
 
 
 def get_document_ids_for_connector_credential_pair(
@@ -307,6 +347,8 @@ def upsert_documents(
         ]
     )
 
+    # This does not update the permissions of the document if
+    # the document already exists.
     on_conflict_stmt = insert_stmt.on_conflict_do_update(
         index_elements=["id"],  # Conflict target
         set_={
@@ -453,7 +495,6 @@ def delete_documents_complete__no_commit(
     db_session: Session, document_ids: list[str]
 ) -> None:
     """This completely deletes the documents from the db, including all foreign key relationships"""
-    logger.info(f"Deleting {len(document_ids)} documents from the DB")
     delete_documents_by_connector_credential_pair__no_commit(db_session, document_ids)
     delete_document_feedback_for_documents__no_commit(
         document_ids=document_ids, db_session=db_session

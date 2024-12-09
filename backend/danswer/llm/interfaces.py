@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from danswer.configs.app_configs import DISABLE_GENERATIVE_AI
 from danswer.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
+from danswer.configs.app_configs import LOG_INDIVIDUAL_MODEL_TOKENS
 from danswer.utils.logger import setup_logger
 
 
@@ -117,9 +118,18 @@ class LLM(abc.ABC):
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
         # implementation
-        return self._stream_implementation(
+        messages = self._stream_implementation(
             prompt, tools, tool_choice, structured_response_format
         )
+
+        tokens = []
+        for message in messages:
+            if LOG_INDIVIDUAL_MODEL_TOKENS:
+                tokens.append(message.content)
+            yield message
+
+        if LOG_INDIVIDUAL_MODEL_TOKENS and tokens:
+            logger.debug(f"Model Tokens: {tokens}")
 
     @abc.abstractmethod
     def _stream_implementation(

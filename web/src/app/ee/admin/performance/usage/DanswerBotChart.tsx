@@ -65,7 +65,7 @@ export function DanswerBotChart({
 
   return (
     <CardSection className="mt-8">
-      <Title>Slack Bot</Title>
+      <Title>Slack Channel</Title>
       <Text>Total Queries vs Auto Resolved</Text>
       {chart}
     </CardSection>

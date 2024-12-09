@@ -3,10 +3,10 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from danswer.context.search.models import InferenceChunk
 from danswer.db.search_settings import get_current_search_settings
 from danswer.db.search_settings import get_secondary_search_settings
 from danswer.indexing.models import IndexChunk
-from danswer.search.models import InferenceChunk
 
 
 DEFAULT_BATCH_SIZE = 30

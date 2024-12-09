@@ -67,7 +67,7 @@ def test_slack_permission_sync(
             "workspace": "onyx-test-workspace",
             "channels": [public_channel["name"], private_channel["name"]],
         },
-        is_public=True,
+        access_type=AccessType.SYNC,
         groups=[],
         user_performing_action=admin_user,
     )
@@ -96,11 +96,13 @@ def test_slack_permission_sync(
     private_message = "Sara's favorite number is 346794"
 
     # Add messages to channels
+    print(f"\n Adding public message to channel: {public_message}")
     SlackManager.add_message_to_channel(
         slack_client=slack_client,
         channel=public_channel,
         message=public_message,
     )
+    print(f"\n Adding private message to channel: {private_message}")
     SlackManager.add_message_to_channel(
         slack_client=slack_client,
         channel=private_channel,
@@ -117,7 +119,6 @@ def test_slack_permission_sync(
     )
 
     # Run permission sync
-    before = datetime.now(timezone.utc)
     CCPairManager.sync(
         cc_pair=cc_pair,
         user_performing_action=admin_user,
@@ -125,13 +126,19 @@ def test_slack_permission_sync(
     CCPairManager.wait_for_sync(
         cc_pair=cc_pair,
         after=before,
+        number_of_updated_docs=2,
         user_performing_action=admin_user,
     )
 
     # Search as admin with access to both channels
+    print("\nSearching as admin user")
     danswer_doc_message_strings = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=admin_user,
+    )
+    print(
+        "\n documents retrieved by admin user: ",
+        danswer_doc_message_strings,
     )
 
     # Ensure admin user can see messages from both channels
@@ -139,12 +146,13 @@ def test_slack_permission_sync(
     assert private_message in danswer_doc_message_strings
 
     # Search as test_user_2 with access to only the public channel
+    print("\n Searching as test_user_2")
     danswer_doc_message_strings = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=test_user_2,
     )
     print(
-        "\ntop_documents content before removing from private channel for test_user_2: ",
+        "\n documents retrieved by test_user_2: ",
         danswer_doc_message_strings,
     )
 
@@ -153,12 +161,13 @@ def test_slack_permission_sync(
     assert private_message not in danswer_doc_message_strings
 
     # Search as test_user_1 with access to both channels
+    print("\n Searching as test_user_1")
     danswer_doc_message_strings = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=test_user_1,
     )
     print(
-        "\ntop_documents content before removing from private channel for test_user_1: ",
+        "\n documents retrieved by test_user_1 before being removed from private channel: ",
         danswer_doc_message_strings,
     )
 
@@ -167,7 +176,8 @@ def test_slack_permission_sync(
     assert private_message in danswer_doc_message_strings
 
     # ----------------------MAKE THE CHANGES--------------------------
-    print("\nRemoving test_user_1 from the private channel")
+    print("\n Removing test_user_1 from the private channel")
+    before = datetime.now(timezone.utc)
     # Remove test_user_1 from the private channel
     desired_channel_members = [admin_user]
     SlackManager.set_channel_members(
@@ -185,18 +195,20 @@ def test_slack_permission_sync(
     CCPairManager.wait_for_sync(
         cc_pair=cc_pair,
         after=before,
+        number_of_updated_docs=1,
         user_performing_action=admin_user,
     )
 
     # ----------------------------VERIFY THE CHANGES---------------------------
     # Ensure test_user_1 can no longer see messages from the private channel
     # Search as test_user_1 with access to only the public channel
+
     danswer_doc_message_strings = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=test_user_1,
     )
     print(
-        "\ntop_documents content after removing from private channel for test_user_1: ",
+        "\n documents retrieved by test_user_1 after being removed from private channel: ",
         danswer_doc_message_strings,
     )
 

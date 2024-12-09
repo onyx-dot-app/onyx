@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import OpenID
 
 from danswer.auth.users import auth_backend
@@ -59,6 +60,31 @@ def get_application() -> FastAPI:
     if MULTI_TENANT:
         add_tenant_id_middleware(application, logger)
 
+    if AUTH_TYPE == AuthType.CLOUD:
+        oauth_client = GoogleOAuth2(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET)
+        include_router_with_global_prefix_prepended(
+            application,
+            create_danswer_oauth_router(
+                oauth_client,
+                auth_backend,
+                USER_AUTH_SECRET,
+                associate_by_email=True,
+                is_verified_by_default=True,
+                # Points the user back to the login page
+                redirect_url=f"{WEB_DOMAIN}/auth/oauth/callback",
+            ),
+            prefix="/auth/oauth",
+            tags=["auth"],
+        )
+
+        # Need basic auth router for `logout` endpoint
+        include_router_with_global_prefix_prepended(
+            application,
+            fastapi_users.get_logout_router(auth_backend),
+            prefix="/auth",
+            tags=["auth"],
+        )
+
     if AUTH_TYPE == AuthType.OIDC:
         include_router_with_global_prefix_prepended(
             application,
@@ -73,6 +99,7 @@ def get_application() -> FastAPI:
             prefix="/auth/oidc",
             tags=["auth"],
         )
+
         # need basic auth router for `logout` endpoint
         include_router_with_global_prefix_prepended(
             application,

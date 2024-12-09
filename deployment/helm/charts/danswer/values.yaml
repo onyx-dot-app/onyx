@@ -387,8 +387,6 @@ auth:
     oauth_client_id: ""
     oauth_client_secret: ""
     oauth_cookie_secret: ""
-    danswer_bot_slack_app_token: ""
-    danswer_bot_slack_bot_token: ""
     redis_password: "redis_password"
   # will be overridden by the existingSecret if set
   secretName: "danswer-secrets"
@@ -400,8 +398,6 @@ auth:
     oauth_client_id: ""
     oauth_client_secret: ""
     oauth_cookie_secret: ""
-    danswer_bot_slack_app_token: ""
-    danswer_bot_slack_bot_token: ""
     redis_password: "password"
 
 configMap:
@@ -451,8 +447,6 @@ configMap:
   GONG_CONNECTOR_START_TIME: ""
   NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP: ""
   # DanswerBot SlackBot Configs
-  # DANSWER_BOT_SLACK_APP_TOKEN: ""
-  # DANSWER_BOT_SLACK_BOT_TOKEN: ""
   DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   DANSWER_BOT_DISPLAY_ERROR_MSGS: ""
   DANSWER_BOT_RESPOND_EVERY_CHANNEL: ""

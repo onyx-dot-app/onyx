@@ -13,6 +13,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { SignInButton } from "../login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
+import ReferralSourceSelector from "./ReferralSourceSelector";
+import { Separator } from "@/components/ui/separator";
 
 const Page = async () => {
   // catch cases where the backend is completely unreachable here
@@ -64,6 +66,13 @@ const Page = async () => {
           <h2 className="text-center text-xl text-strong font-bold">
             {cloud ? "Complete your sign up" : "Sign Up for Danswer"}
           </h2>
+          {cloud && (
+            <>
+              <div className="w-full flex flex-col items-center space-y-4 mb-4 mt-4">
+                <ReferralSourceSelector />
+              </div>
+            </>
+          )}
 
           {cloud && authUrl && (
             <div className="w-full justify-center">

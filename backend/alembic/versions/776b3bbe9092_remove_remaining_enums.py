@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 from danswer.db.models import IndexModelStatus
-from danswer.search.enums import RecencyBiasSetting
-from danswer.search.enums import SearchType
+from danswer.context.search.enums import RecencyBiasSetting
+from danswer.context.search.enums import SearchType
 
 # revision identifiers, used by Alembic.
 revision = "776b3bbe9092"

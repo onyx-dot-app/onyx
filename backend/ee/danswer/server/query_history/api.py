@@ -92,10 +92,12 @@ class ChatSessionMinimal(BaseModel):
     name: str | None
     first_user_message: str
     first_ai_message: str
-    persona_name: str | None
+    assistant_id: int | None
+    assistant_name: str | None
     time_created: datetime
     feedback_type: QAFeedbackType | Literal["mixed"] | None
     flow_type: SessionType
+    conversation_length: int
 
 
 class ChatSessionSnapshot(BaseModel):
@@ -103,7 +105,8 @@ class ChatSessionSnapshot(BaseModel):
     user_email: str
     name: str | None
     messages: list[MessageSnapshot]
-    persona_name: str | None
+    assistant_id: int | None
+    assistant_name: str | None
     time_created: datetime
     flow_type: SessionType
 
@@ -146,7 +149,7 @@ class QuestionAnswerPairSnapshot(BaseModel):
                 retrieved_documents=ai_message.documents,
                 feedback_type=ai_message.feedback_type,
                 feedback_text=ai_message.feedback_text,
-                persona_name=chat_session_snapshot.persona_name,
+                persona_name=chat_session_snapshot.assistant_name,
                 user_email=get_display_email(chat_session_snapshot.user_email),
                 time_created=user_message.time_created,
                 flow_type=chat_session_snapshot.flow_type,
@@ -257,12 +260,20 @@ def fetch_and_process_chat_session_history_minimal(
                 name=chat_session.description,
                 first_user_message=first_user_message,
                 first_ai_message=first_ai_message,
-                persona_name=chat_session.persona.name
-                if chat_session.persona
-                else None,
+                assistant_id=chat_session.persona_id,
+                assistant_name=(
+                    chat_session.persona.name if chat_session.persona else None
+                ),
                 time_created=chat_session.time_created,
                 feedback_type=feedback_type,
                 flow_type=flow_type,
+                conversation_length=len(
+                    [
+                        m
+                        for m in chat_session.messages
+                        if m.message_type != MessageType.SYSTEM
+                    ]
+                ),
             )
         )
 
@@ -327,7 +338,8 @@ def snapshot_from_chat_session(
             for message in messages
             if message.message_type != MessageType.SYSTEM
         ],
-        persona_name=chat_session.persona.name if chat_session.persona else None,
+        assistant_id=chat_session.persona_id,
+        assistant_name=chat_session.persona.name if chat_session.persona else None,
         time_created=chat_session.time_created,
         flow_type=flow_type,
     )
@@ -415,12 +427,14 @@ def get_chat_session_admin(
 @router.get("/admin/query-history-csv")
 def get_query_history_as_csv(
     _: User | None = Depends(current_admin_user),
+    start: datetime | None = None,
+    end: datetime | None = None,
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     complete_chat_session_history = fetch_and_process_chat_session_history(
         db_session=db_session,
-        start=datetime.fromtimestamp(0, tz=timezone.utc),
-        end=datetime.now(tz=timezone.utc),
+        start=start or datetime.fromtimestamp(0, tz=timezone.utc),
+        end=end or datetime.now(tz=timezone.utc),
         feedback_type=None,
         limit=None,
     )

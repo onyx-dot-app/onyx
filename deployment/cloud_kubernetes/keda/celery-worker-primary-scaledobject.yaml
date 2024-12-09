@@ -10,12 +10,11 @@ spec:
     name: celery-worker-primary
   pollingInterval: 15 # Check every 15 seconds
   cooldownPeriod: 30 # Wait 30 seconds before scaling down
-  minReplicaCount: 1
-  maxReplicaCount: 1
+  minReplicaCount: 4
+  maxReplicaCount: 4
   triggers:
     - type: redis
       metadata:
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: celery
@@ -26,7 +25,6 @@ spec:
 
     - type: redis
       metadata:
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: celery:1
@@ -36,7 +34,6 @@ spec:
         name: celery-worker-auth
     - type: redis
       metadata:
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: celery:2
@@ -46,7 +43,6 @@ spec:
         name: celery-worker-auth
     - type: redis
       metadata:
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: celery:3
@@ -56,7 +52,6 @@ spec:
         name: celery-worker-auth
     - type: redis
       metadata:
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: periodic_tasks
@@ -66,7 +61,6 @@ spec:
         name: celery-worker-auth
     - type: redis
       metadata:
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: periodic_tasks:2

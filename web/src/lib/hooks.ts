@@ -15,6 +15,7 @@ import { ChatSession } from "@/app/chat/interfaces";
 import { UsersResponse } from "./users/interfaces";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { PersonaCategory } from "@/app/admin/assistants/interfaces";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -80,6 +81,19 @@ export const useConnectorCredentialIndexingStatus = (
   return {
     ...swrResponse,
     refreshIndexingStatus: () => mutate(url),
+  };
+};
+
+export const useCategories = () => {
+  const { mutate } = useSWRConfig();
+  const swrResponse = useSWR<PersonaCategory[]>(
+    "/api/persona/categories",
+    errorHandlingFetcher
+  );
+
+  return {
+    ...swrResponse,
+    refreshCategories: () => mutate("/api/persona/categories"),
   };
 };
 
@@ -160,7 +174,6 @@ export function useLlmOverride(
           modelName: "",
         }
   );
-
   const [llmOverride, setLlmOverride] = useState<LlmOverride>(
     currentChatSession && currentChatSession.current_alternate_model
       ? destructureValue(currentChatSession.current_alternate_model)
@@ -279,6 +292,16 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-instant-1.2": "Claude Instant 1.2",
   "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet",
   "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet (New)",
+  "claude-3-5-sonnet-v2@20241022": "Claude 3.5 Sonnet (New)",
+  "claude-3.5-sonnet-v2@20241022": "Claude 3.5 Sonnet (New)",
+
+  // Google Models
+  "gemini-1.5-pro": "Gemini 1.5 Pro",
+  "gemini-1.5-flash": "Gemini 1.5 Flash",
+  "gemini-1.5-pro-001": "Gemini 1.5 Pro",
+  "gemini-1.5-flash-001": "Gemini 1.5 Flash",
+  "gemini-1.5-pro-002": "Gemini 1.5 Pro (v2)",
+  "gemini-1.5-flash-002": "Gemini 1.5 Flash (v2)",
 
   // Bedrock models
   "meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B",

@@ -374,6 +374,17 @@ def process_text(
             "The code demonstrates variable assignment.",
             [],
         ),
+        (
+            "Citation as a single token",
+            [
+                "Here is some text",
+                "[1]",
+                ".",
+                " Some other text",
+            ],
+            "Here is some text[[1]](https://0.com). Some other text",
+            ["doc_0"],
+        ),
     ],
 )
 def test_citation_extraction(

@@ -28,7 +28,7 @@ If there is no relevant information, just say "No relevant information found."
 """
 
 
-def wait_on_run(client: OpenAI, run, thread):
+def wait_on_run(client: OpenAI, run, thread):  # type: ignore
     while run.status == "queued" or run.status == "in_progress":
         run = client.beta.threads.runs.retrieve(
             thread_id=thread.id,
@@ -38,7 +38,7 @@ def wait_on_run(client: OpenAI, run, thread):
     return run
 
 
-def show_response(messages) -> None:
+def show_response(messages) -> None:  # type: ignore
     # Get only the assistant's response text
     for message in messages.data[::-1]:
         if message.role == "assistant":

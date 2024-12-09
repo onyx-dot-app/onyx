@@ -9,9 +9,16 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_curator_or_admin_user
+from danswer.auth.users import current_limited_user
 from danswer.auth.users import current_user
 from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import MessageType
+from danswer.context.search.models import IndexFilters
+from danswer.context.search.models import SearchDoc
+from danswer.context.search.preprocessing.access_filters import (
+    build_access_filters_for_user,
+)
+from danswer.context.search.utils import chunks_or_sections_to_search_docs
 from danswer.db.chat import get_chat_messages_by_session
 from danswer.db.chat import get_chat_session_by_id
 from danswer.db.chat import get_chat_sessions_by_user
@@ -27,19 +34,11 @@ from danswer.document_index.factory import get_default_document_index
 from danswer.document_index.vespa.index import VespaIndex
 from danswer.one_shot_answer.answer_question import stream_search_answer
 from danswer.one_shot_answer.models import DirectQARequest
-from danswer.search.models import IndexFilters
-from danswer.search.models import SearchDoc
-from danswer.search.preprocessing.access_filters import build_access_filters_for_user
-from danswer.search.utils import chunks_or_sections_to_search_docs
-from danswer.secondary_llm_flows.query_validation import get_query_answerability
-from danswer.secondary_llm_flows.query_validation import stream_query_answerability
 from danswer.server.query_and_chat.models import AdminSearchRequest
 from danswer.server.query_and_chat.models import AdminSearchResponse
 from danswer.server.query_and_chat.models import ChatSessionDetails
 from danswer.server.query_and_chat.models import ChatSessionsResponse
-from danswer.server.query_and_chat.models import QueryValidationResponse
 from danswer.server.query_and_chat.models import SearchSessionDetailResponse
-from danswer.server.query_and_chat.models import SimpleQueryRequest
 from danswer.server.query_and_chat.models import SourceTag
 from danswer.server.query_and_chat.models import TagResponse
 from danswer.server.query_and_chat.token_limit import check_token_rate_limits
@@ -130,18 +129,6 @@ def get_tags(
         for db_tag in db_tags
     ]
     return TagResponse(tags=server_tags)
-
-
-@basic_router.post("/query-validation")
-def query_validation(
-    simple_query: SimpleQueryRequest, _: User = Depends(current_user)
-) -> QueryValidationResponse:
-    # Note if weak model prompt is chosen, this check does not occur and will simply return that
-    # the query is valid, this is because weaker models cannot really handle this task well.
-    # Additionally, some weak model servers cannot handle concurrent inferences.
-    logger.notice(f"Validating query: {simple_query.query}")
-    reasoning, answerable = get_query_answerability(simple_query.query)
-    return QueryValidationResponse(reasoning=reasoning, answerable=answerable)
 
 
 @basic_router.get("/user-searches")
@@ -244,25 +231,10 @@ def get_search_session(
     return response
 
 
-# NOTE No longer used, after search/chat redesign.
-# No search responses are answered with a conversational generative AI response
-@basic_router.post("/stream-query-validation")
-def stream_query_validation(
-    simple_query: SimpleQueryRequest, _: User = Depends(current_user)
-) -> StreamingResponse:
-    # Note if weak model prompt is chosen, this check does not occur and will simply return that
-    # the query is valid, this is because weaker models cannot really handle this task well.
-    # Additionally, some weak model servers cannot handle concurrent inferences.
-    logger.notice(f"Validating query: {simple_query.query}")
-    return StreamingResponse(
-        stream_query_answerability(simple_query.query), media_type="application/json"
-    )
-
-
 @basic_router.post("/stream-answer-with-quote")
 def get_answer_with_quote(
     query_request: DirectQARequest,
-    user: User = Depends(current_user),
+    user: User = Depends(current_limited_user),
     _: None = Depends(check_token_rate_limits),
 ) -> StreamingResponse:
     query = query_request.messages[0].message

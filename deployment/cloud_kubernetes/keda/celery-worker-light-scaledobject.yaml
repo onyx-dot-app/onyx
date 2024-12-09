@@ -8,12 +8,11 @@ metadata:
 spec:
   scaleTargetRef:
     name: celery-worker-light
-  minReplicaCount: 1
+  minReplicaCount: 5
   maxReplicaCount: 20
   triggers:
     - type: redis
       metadata:
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: vespa_metadata_sync
@@ -23,7 +22,6 @@ spec:
         name: celery-worker-auth
     - type: redis
       metadata:
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: vespa_metadata_sync:2
@@ -33,7 +31,6 @@ spec:
         name: celery-worker-auth
     - type: redis
       metadata:
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: vespa_metadata_sync:3
@@ -43,7 +40,6 @@ spec:
         name: celery-worker-auth
     - type: redis
       metadata:
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: connector_deletion
@@ -53,7 +49,6 @@ spec:
         name: celery-worker-auth
     - type: redis
       metadata:
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: connector_deletion:2

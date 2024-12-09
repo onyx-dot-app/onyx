@@ -17,24 +17,12 @@ import { useEffect } from "react";
 export default function BillingInformationPage() {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
-  const stripePromise = loadStripe(
-    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
-  );
 
   const {
     data: billingInformation,
     error,
     isLoading,
-    refreshBillingInformation,
   } = useBillingInformation();
-
-  const [seats, setSeats] = useState<number>(1);
-
-  useEffect(() => {
-    if (billingInformation?.seats) {
-      setSeats(billingInformation.seats);
-    }
-  }, [billingInformation?.seats]);
 
   if (error) {
     console.error("Failed to fetch billing information:", error);
@@ -66,7 +54,9 @@ export default function BillingInformationPage() {
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(
-          `Failed to create customer portal session: ${errorData.message || response.statusText}`
+          `Failed to create customer portal session: ${
+            errorData.message || response.statusText
+          }`
         );
       }
 

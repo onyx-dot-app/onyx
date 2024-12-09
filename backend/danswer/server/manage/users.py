@@ -49,6 +49,7 @@ from danswer.db.models import User
 from danswer.db.models import User__UserGroup
 from danswer.db.users import get_user_by_email
 from danswer.db.users import list_users
+from danswer.db.users import validate_user_role_update
 from danswer.key_value_store.factory import get_kv_store
 from danswer.server.manage.models import AllUsersResponse
 from danswer.server.manage.models import UserByEmail
@@ -84,28 +85,31 @@ def set_user_role(
     if not user_to_update:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if user_role_update_request.new_role == UserRole.CURATOR:
-        raise HTTPException(
-            status_code=400,
-            detail="Curator role must be set via the User Group Menu",
-        )
-
-    if user_to_update.role == user_role_update_request.new_role:
+    current_role = user_to_update.role
+    requested_role = user_role_update_request.new_role
+    if requested_role == current_role:
         return
 
-    if current_user.id == user_to_update.id:
+    # This will raise an exception if the role update is invalid
+    validate_user_role_update(
+        requested_role=requested_role,
+        current_role=current_role,
+    )
+
+    if user_to_update.id == current_user.id:
         raise HTTPException(
             status_code=400,
             detail="An admin cannot demote themselves from admin role!",
         )
 
-    if user_to_update.role == UserRole.CURATOR:
+    if requested_role == UserRole.CURATOR:
+        # Remove all curator db relationships before changing role
         fetch_ee_implementation_or_noop(
             "danswer.db.user_group",
             "remove_curator_status__no_commit",
         )(db_session, user_to_update)
 
-    user_to_update.role = user_role_update_request.new_role.value
+    user_to_update.role = user_role_update_request.new_role
 
     db_session.commit()
 
@@ -123,7 +127,7 @@ def list_all_users(
 
     users = [
         user
-        for user in list_users(db_session, email_filter_string=q, user=user)
+        for user in list_users(db_session, email_filter_string=q)
         if not is_api_key_email_address(user.email)
     ]
     accepted_emails = {user.email for user in users}
@@ -614,7 +618,6 @@ def update_user_assistant_list(
     if user is None:
         if AUTH_TYPE == AuthType.DISABLED:
             store = get_kv_store()
-
             no_auth_user = fetch_no_auth_user(store)
             no_auth_user.preferences.chosen_assistants = request.chosen_assistants
             set_no_auth_user_preferences(store, no_auth_user.preferences)
@@ -630,31 +633,25 @@ def update_user_assistant_list(
     db_session.commit()
 
 
-def update_assistant_list(
+def update_assistant_visibility(
     preferences: UserPreferences, assistant_id: int, show: bool
 ) -> UserPreferences:
     visible_assistants = preferences.visible_assistants or []
     hidden_assistants = preferences.hidden_assistants or []
-    chosen_assistants = preferences.chosen_assistants or []
 
     if show:
         if assistant_id not in visible_assistants:
             visible_assistants.append(assistant_id)
         if assistant_id in hidden_assistants:
             hidden_assistants.remove(assistant_id)
-        if assistant_id not in chosen_assistants:
-            chosen_assistants.append(assistant_id)
     else:
         if assistant_id in visible_assistants:
             visible_assistants.remove(assistant_id)
         if assistant_id not in hidden_assistants:
             hidden_assistants.append(assistant_id)
-        if assistant_id in chosen_assistants:
-            chosen_assistants.remove(assistant_id)
 
     preferences.visible_assistants = visible_assistants
     preferences.hidden_assistants = hidden_assistants
-    preferences.chosen_assistants = chosen_assistants
     return preferences
 
 
@@ -670,15 +667,23 @@ def update_user_assistant_visibility(
             store = get_kv_store()
             no_auth_user = fetch_no_auth_user(store)
             preferences = no_auth_user.preferences
-            updated_preferences = update_assistant_list(preferences, assistant_id, show)
+            updated_preferences = update_assistant_visibility(
+                preferences, assistant_id, show
+            )
+            if updated_preferences.chosen_assistants is not None:
+                updated_preferences.chosen_assistants.append(assistant_id)
+
             set_no_auth_user_preferences(store, updated_preferences)
             return
         else:
             raise RuntimeError("This should never happen")
 
     user_preferences = UserInfo.from_model(user).preferences
-    updated_preferences = update_assistant_list(user_preferences, assistant_id, show)
-
+    updated_preferences = update_assistant_visibility(
+        user_preferences, assistant_id, show
+    )
+    if updated_preferences.chosen_assistants is not None:
+        updated_preferences.chosen_assistants.append(assistant_id)
     db_session.execute(
         update(User)
         .where(User.id == user.id)  # type: ignore

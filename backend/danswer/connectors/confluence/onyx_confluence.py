@@ -230,7 +230,6 @@ class OnyxConfluence(Confluence):
 
     def paginated_cql_user_retrieval(
         self,
-        cql: str,
         expand: str | None = None,
         limit: int | None = None,
     ) -> Iterator[dict[str, Any]]:
@@ -239,10 +238,28 @@ class OnyxConfluence(Confluence):
         It's a seperate endpoint from the content/search endpoint used only for users.
         Otherwise it's very similar to the content/search endpoint.
         """
+        cql = "type=user"
+        url = "rest/api/search/user" if self.cloud else "rest/api/search"
         expand_string = f"&expand={expand}" if expand else ""
-        yield from self._paginate_url(
-            f"rest/api/search/user?cql={cql}{expand_string}", limit
-        )
+        url += f"?cql={cql}{expand_string}"
+        yield from self._paginate_url(url, limit)
+
+    def paginated_groups_by_user_retrieval(
+        self,
+        user: dict[str, Any],
+        limit: int | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        """
+        This is not an SQL like query.
+        It's a confluence specific endpoint that can be used to fetch groups.
+        """
+        user_field = "accountId" if self.cloud else "key"
+        user_value = user["accountId"] if self.cloud else user["userKey"]
+        # Server uses userKey (but calls it key during the API call), Cloud uses accountId
+        user_query = f"{user_field}={quote(user_value)}"
+
+        url = f"rest/api/user/memberof?{user_query}"
+        yield from self._paginate_url(url, limit)
 
     def paginated_groups_retrieval(
         self,
@@ -262,6 +279,60 @@ class OnyxConfluence(Confluence):
         """
         This is not an SQL like query.
         It's a confluence specific endpoint that can be used to fetch the members of a group.
+
+        THIS DOESN'T WORK FOR SERVER because it breaks when there is a slash in the group name.
+        E.g. neither "test/group" nor "test%2Fgroup" works for confluence.
         """
         group_name = quote(group_name)
         yield from self._paginate_url(f"rest/api/group/{group_name}/member", limit)
+
+
+def _validate_connector_configuration(
+    credentials: dict[str, Any],
+    is_cloud: bool,
+    wiki_base: str,
+) -> None:
+    # test connection with direct client, no retries
+    confluence_client_with_minimal_retries = Confluence(
+        api_version="cloud" if is_cloud else "latest",
+        url=wiki_base.rstrip("/"),
+        username=credentials["confluence_username"] if is_cloud else None,
+        password=credentials["confluence_access_token"] if is_cloud else None,
+        token=credentials["confluence_access_token"] if not is_cloud else None,
+        backoff_and_retry=True,
+        max_backoff_retries=6,
+        max_backoff_seconds=10,
+    )
+    spaces = confluence_client_with_minimal_retries.get_all_spaces(limit=1)
+
+    if not spaces:
+        raise RuntimeError(
+            f"No spaces found at {wiki_base}! "
+            "Check your credentials and wiki_base and make sure "
+            "is_cloud is set correctly."
+        )
+
+
+def build_confluence_client(
+    credentials: dict[str, Any],
+    is_cloud: bool,
+    wiki_base: str,
+) -> OnyxConfluence:
+    _validate_connector_configuration(
+        credentials=credentials,
+        is_cloud=is_cloud,
+        wiki_base=wiki_base,
+    )
+    return OnyxConfluence(
+        api_version="cloud" if is_cloud else "latest",
+        # Remove trailing slash from wiki_base if present
+        url=wiki_base.rstrip("/"),
+        # passing in username causes issues for Confluence data center
+        username=credentials["confluence_username"] if is_cloud else None,
+        password=credentials["confluence_access_token"] if is_cloud else None,
+        token=credentials["confluence_access_token"] if not is_cloud else None,
+        backoff_and_retry=True,
+        max_backoff_retries=10,
+        max_backoff_seconds=60,
+        cloud=is_cloud,
+    )

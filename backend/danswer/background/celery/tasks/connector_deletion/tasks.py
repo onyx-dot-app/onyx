@@ -19,7 +19,7 @@ from danswer.db.engine import get_session_with_tenant
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.search_settings import get_all_search_settings
 from danswer.redis.redis_connector import RedisConnector
-from danswer.redis.redis_connector_delete import RedisConnectorDeletionFenceData
+from danswer.redis.redis_connector_delete import RedisConnectorDeletePayload
 from danswer.redis.redis_pool import get_redis_client
 
 
@@ -118,7 +118,7 @@ def try_generate_document_cc_pair_cleanup_tasks(
         return None
 
     # set a basic fence to start
-    fence_payload = RedisConnectorDeletionFenceData(
+    fence_payload = RedisConnectorDeletePayload(
         num_tasks=None,
         submitted=datetime.now(timezone.utc),
     )
@@ -140,6 +140,12 @@ def try_generate_document_cc_pair_cleanup_tasks(
         if redis_connector.prune.fenced:
             raise TaskDependencyError(
                 f"Connector deletion - Delayed (pruning in progress): "
+                f"cc_pair={cc_pair_id}"
+            )
+
+        if redis_connector.permissions.fenced:
+            raise TaskDependencyError(
+                f"Connector deletion - Delayed (permissions in progress): "
                 f"cc_pair={cc_pair_id}"
             )
 

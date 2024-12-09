@@ -9,12 +9,11 @@ spec:
   scaleTargetRef:
     name: celery-worker-indexing
   minReplicaCount: 1
-  maxReplicaCount: 10
+  maxReplicaCount: 30
   triggers:
     - type: redis
       metadata:
         sslEnabled: "true"
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: connector_indexing
@@ -22,10 +21,10 @@ spec:
         databaseIndex: "15"
       authenticationRef:
         name: celery-worker-auth
+
     - type: redis
       metadata:
         sslEnabled: "true"
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: connector_indexing:2
@@ -36,7 +35,6 @@ spec:
     - type: redis
       metadata:
         sslEnabled: "true"
-        host: "{host}"
         port: "6379"
         enableTLS: "true"
         listName: connector_indexing:3
@@ -44,3 +42,12 @@ spec:
         databaseIndex: "15"
       authenticationRef:
         name: celery-worker-auth
+    - type: cpu
+      metadata:
+        type: Utilization
+        value: "70"
+
+    - type: memory
+      metadata:
+        type: Utilization
+        value: "70"

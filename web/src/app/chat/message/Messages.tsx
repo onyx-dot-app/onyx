@@ -482,9 +482,10 @@ export const AIMessage = ({
                               ))}
                             <div
                               onClick={() => {
-                                if (toggleDocumentSelection) {
-                                  toggleDocumentSelection();
+                                if (messageId) {
+                                  onMessageSelection?.(messageId);
                                 }
+                                toggleDocumentSelection?.();
                               }}
                               key={-1}
                               className="cursor-pointer w-[200px] rounded-lg flex-none transition-all duration-500 hover:bg-background-125 bg-text-100 px-4 py-2 border-b"

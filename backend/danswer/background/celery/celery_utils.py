@@ -4,7 +4,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from danswer.background.indexing.run_indexing import RunIndexingCallbackInterface
 from danswer.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
 from danswer.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
@@ -17,6 +16,7 @@ from danswer.connectors.models import Document
 from danswer.db.connector_credential_pair import get_connector_credential_pair
 from danswer.db.enums import TaskStatus
 from danswer.db.models import TaskQueueState
+from danswer.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from danswer.redis.redis_connector import RedisConnector
 from danswer.server.documents.models import DeletionAttemptSnapshot
 from danswer.utils.logger import setup_logger
@@ -78,10 +78,10 @@ def document_batch_to_ids(
 
 def extract_ids_from_runnable_connector(
     runnable_connector: BaseConnector,
-    callback: RunIndexingCallbackInterface | None = None,
+    callback: IndexingHeartbeatInterface | None = None,
 ) -> set[str]:
     """
-    If the PruneConnector hasnt been implemented for the given connector, just pull
+    If the SlimConnector hasnt been implemented for the given connector, just pull
     all docs using the load_from_state and grab out the IDs.
 
     Optionally, a callback can be passed to handle the length of each document batch.
@@ -111,9 +111,14 @@ def extract_ids_from_runnable_connector(
     for doc_batch in doc_batch_generator:
         if callback:
             if callback.should_stop():
-                raise RuntimeError("Stop signal received")
-            callback.progress(len(doc_batch))
+                raise RuntimeError(
+                    "extract_ids_from_runnable_connector: Stop signal detected"
+                )
+
         all_connector_doc_ids.update(doc_batch_processing_func(doc_batch))
+
+        if callback:
+            callback.progress("extract_ids_from_runnable_connector", len(doc_batch))
 
     return all_connector_doc_ids
 

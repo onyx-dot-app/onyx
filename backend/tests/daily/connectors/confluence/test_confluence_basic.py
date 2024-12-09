@@ -39,24 +39,39 @@ def test_confluence_connector_basic(
     with pytest.raises(StopIteration):
         next(doc_batch_generator)
 
-    assert len(doc_batch) == 2
+    assert len(doc_batch) == 3
 
     for doc in doc_batch:
         if doc.semantic_identifier == "DailyConnectorTestSpace Home":
             page_doc = doc
         elif ".txt" in doc.semantic_identifier:
             txt_doc = doc
+        elif doc.semantic_identifier == "Page Within A Page":
+            page_within_a_page_doc = doc
+
+    assert page_within_a_page_doc.semantic_identifier == "Page Within A Page"
+    assert page_within_a_page_doc.primary_owners
+    assert page_within_a_page_doc.primary_owners[0].email == "hagen@danswer.ai"
+    assert len(page_within_a_page_doc.sections) == 1
+
+    page_within_a_page_section = page_within_a_page_doc.sections[0]
+    page_within_a_page_text = "@Chris Weaver loves cherry pie"
+    assert page_within_a_page_section.text == page_within_a_page_text
+    assert (
+        page_within_a_page_section.link
+        == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/pages/200769540/Page+Within+A+Page"
+    )
 
     assert page_doc.semantic_identifier == "DailyConnectorTestSpace Home"
     assert page_doc.metadata["labels"] == ["testlabel"]
     assert page_doc.primary_owners
-    assert page_doc.primary_owners[0].email == "chris@danswer.ai"
+    assert page_doc.primary_owners[0].email == "hagen@danswer.ai"
     assert len(page_doc.sections) == 1
 
-    section = page_doc.sections[0]
-    assert section.text == "test123"
+    page_section = page_doc.sections[0]
+    assert page_section.text == "test123 " + page_within_a_page_text
     assert (
-        section.link
+        page_section.link
         == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/overview"
     )
 

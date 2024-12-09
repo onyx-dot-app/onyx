@@ -101,6 +101,13 @@ module.exports = {
         "background-strong": "var(--background-strong)",
         "background-search": "var(--white)",
 
+        "background-history-sidebar-button-hover": "var(--background-200)",
+        "text-history-sidebar-button": "var(--text-800)",
+        "divider-history-sidebar-bar": "var(--border)",
+        "text-mobile-sidebar": "var(--text-800)",
+        "background-search-filter": "var(--background-100)",
+        "background-search-filter-dropdown": "var(--background-100)",
+
         // colors for sidebar in chat, search, and manage settings
         "background-sidebar": "var(--background-100)",
         "background-chatbar": "var(--background-100)",
@@ -108,6 +115,11 @@ module.exports = {
 
         "toggled-background": "var(--background-400)",
         "untoggled-background": "var(--background-200)",
+        "background-starter-message": "var(--background)",
+        "background-starter-message-hover": "var(--background-100)",
+
+        "text-sidebar-toggled-header": "var(--text-800)",
+        "text-sidebar-header": "var(--text-800)",
 
         "background-back-button": "var(--background-200)",
         "text-back-button": "var(--text-800)",
@@ -118,6 +130,10 @@ module.exports = {
         "text-settings-sidebar": "var(--text-600)",
         "text-settings-sidebar-strong": "var(--text-900)",
         "background-settings-hover": "var(--background-200)",
+
+        "text-application-toggled": "var(--text-800)",
+        "text-application-untoggled": "var(--text-500)",
+        "text-application-untoggled-hover": "var(--text-700)",
 
         "background-chat-hover": "var(--background-200)",
         "background-chat-selected": "var(--background-200)",
@@ -155,6 +171,35 @@ module.exports = {
         "text-800": "var(--text-800)",
         "text-900": "var(--text-900)",
         "text-950": "var(--text-950)",
+        // Light mode
+        // Light mode
+        "calendar-bg-selected": "var(--background-800)",
+        "calendar-bg-outside-selected": "var(--background-200)",
+        "calendar-text-muted": "var(--text-400)",
+        "calendar-text-selected": "var(--white)",
+        "calendar-range-middle": "var(--neutral-800)",
+        "calendar-range-end": "var(--white)",
+        "calendar-text-in-range": "var(--text-200)",
+        "calendar-text-end": "var(--text-900)",
+
+        // Dark mode
+        "calendar-bg-outside-selected-dark": "var(--background-700)",
+        "calendar-text-muted-dark": "var(--text-500)",
+        "calendar-text-selected-dark": "var(--white)",
+        "calendar-range-middle-dark": "var(--background-800)",
+        "calendar-text-in-range-dark": "var(--text-200)",
+
+        // Hover effects
+        "calendar-hover-bg": "var(--background-200)",
+        "calendar-hover-bg-dark": "var(--background-700)",
+        "calendar-hover-text": "var(--text-800)",
+        "calendar-hover-text-dark": "var(--text-200)",
+
+        // Today's date
+        "calendar-today-bg": "var(--background-100)",
+        "calendar-today-bg-dark": "var(--background-800)",
+        "calendar-today-text": "var(--text-800)",
+        "calendar-today-text-dark": "var(--text-200)",
 
         "user-text": "var(--text-800)",
 

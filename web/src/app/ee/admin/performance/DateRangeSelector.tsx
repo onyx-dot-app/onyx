@@ -1,4 +1,4 @@
-import * as React from "react";
+import React, { memo, useMemo, useState } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -11,7 +11,6 @@ import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { getXDaysAgo } from "./dateUtils";
 import { Separator } from "@/components/ui/separator";
-import { useState } from "react";
 
 export const THIRTY_DAYS = "30d";
 
@@ -26,7 +25,7 @@ export type DateRange =
     }
   | undefined;
 
-export function DateRangeSelector({
+export const DateRangeSelector = memo(function DateRangeSelector({
   value,
   onValueChange,
 }: {
@@ -99,7 +98,6 @@ export function DateRangeSelector({
                 className="w-full justify-start"
                 onClick={() => {
                   onValueChange(preset.value);
-                  setIsOpen(false);
                 }}
               >
                 {preset.label}
@@ -110,4 +108,4 @@ export function DateRangeSelector({
       </Popover>
     </div>
   );
-}
+});

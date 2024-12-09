@@ -35,16 +35,14 @@ export function classifyAssistants(user: User | null, assistants: Persona[]) {
     const isNotHidden = !user.preferences?.hidden_assistants?.includes(
       assistant.id
     );
-    const isSelected = user.preferences?.chosen_assistants?.includes(
-      assistant.id
-    );
+
     const isBuiltIn = assistant.builtin_persona;
     const isDefault = assistant.is_default_persona;
 
     const isOwnedByUser = checkUserOwnsAssistant(user, assistant);
 
     const isShown =
-      (isVisible && isNotHidden && isSelected) ||
+      (isVisible && isNotHidden) ||
       (isNotHidden && (isBuiltIn || isDefault || isOwnedByUser));
     return isShown;
   });
@@ -100,6 +98,7 @@ export function orderAssistantsForUser(
   const remainingAssistants = assistants.filter(
     (assistant) => !orderedAssistants.includes(assistant)
   );
+
   remainingAssistants.sort((a, b) => {
     const priorityA = a.display_priority ?? Number.MAX_SAFE_INTEGER;
     const priorityB = b.display_priority ?? Number.MAX_SAFE_INTEGER;

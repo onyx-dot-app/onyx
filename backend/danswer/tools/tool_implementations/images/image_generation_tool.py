@@ -9,7 +9,6 @@ from pydantic import BaseModel
 
 from danswer.chat.chat_utils import combine_message_chain
 from danswer.configs.model_configs import GEN_AI_HISTORY_CUTOFF
-from danswer.key_value_store.interface import JSON_ro
 from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.answering.prompts.build import AnswerPromptBuilder
 from danswer.llm.interfaces import LLM
@@ -24,6 +23,7 @@ from danswer.tools.tool_implementations.images.prompt import (
 )
 from danswer.utils.headers import build_llm_extra_headers
 from danswer.utils.logger import setup_logger
+from danswer.utils.special_types import JSON_ro
 from danswer.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 

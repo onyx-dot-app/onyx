@@ -189,6 +189,13 @@ class SqlEngine:
             return ""
         return cls._app_name
 
+    @classmethod
+    def reset_engine(cls) -> None:
+        with cls._lock:
+            if cls._engine:
+                cls._engine.dispose()
+                cls._engine = None
+
 
 def get_all_tenant_ids() -> list[str] | list[None]:
     if not MULTI_TENANT:

@@ -28,10 +28,12 @@ class TenantManager:
     def create(
         tenant_id: str | None = None,
         initial_admin_email: str | None = None,
+        referral_source: str | None = None,
     ) -> dict[str, str]:
         body = {
             "tenant_id": tenant_id,
             "initial_admin_email": initial_admin_email,
+            "referral_source": referral_source,
         }
 
         token = generate_auth_token()

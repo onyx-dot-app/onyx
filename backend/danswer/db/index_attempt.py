@@ -67,6 +67,13 @@ def create_index_attempt(
     return new_attempt.id
 
 
+def delete_index_attempt(db_session: Session, index_attempt_id: int) -> None:
+    index_attempt = get_index_attempt(db_session, index_attempt_id)
+    if index_attempt:
+        db_session.delete(index_attempt)
+        db_session.commit()
+
+
 def mock_successful_index_attempt(
     connector_credential_pair_id: int,
     search_settings_id: int,
@@ -212,6 +219,28 @@ def mark_attempt_partially_succeeded(
         ).scalar_one()
 
         attempt.status = IndexingStatus.COMPLETED_WITH_ERRORS
+        db_session.commit()
+    except Exception:
+        db_session.rollback()
+        raise
+
+
+def mark_attempt_canceled(
+    index_attempt_id: int,
+    db_session: Session,
+    reason: str = "Unknown",
+) -> None:
+    try:
+        attempt = db_session.execute(
+            select(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+        ).scalar_one()
+
+        if not attempt.time_started:
+            attempt.time_started = datetime.now(timezone.utc)
+        attempt.status = IndexingStatus.CANCELED
+        attempt.error_msg = reason
         db_session.commit()
     except Exception:
         db_session.rollback()

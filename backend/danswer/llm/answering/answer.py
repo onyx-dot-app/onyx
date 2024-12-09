@@ -234,6 +234,8 @@ class Answer:
 
         # DEBUG: good breakpoint
         stream = self.llm.stream(
+            # For tool calling LLMs, we want to insert the task prompt as part of this flow, this is because the LLM
+            # may choose to not call any tools and just generate the answer, in which case the task prompt is needed.
             prompt=current_llm_call.prompt_builder.build(),
             tools=[tool.tool_definition() for tool in current_llm_call.tools] or None,
             tool_choice=(
@@ -264,6 +266,7 @@ class Answer:
             message_history=self.message_history,
             llm_config=self.llm.config,
             single_message_history=self.single_message_history,
+            raw_user_text=self.question,
         )
         prompt_builder.update_system_prompt(
             default_build_system_message(self.prompt_config)

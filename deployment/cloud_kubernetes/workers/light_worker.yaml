@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
         - name: celery-worker-light
-          image: danswer/danswer-backend-cloud:v0.12.0-cloud.beta.2
-          imagePullPolicy: Always
+          image: danswer/danswer-backend-cloud:v0.12.0-cloud.beta.12
+          imagePullPolicy: IfNotPresent
           command:
             [
               "celery",
@@ -25,7 +25,7 @@ spec:
               "--loglevel=INFO",
               "--hostname=light@%n",
               "-Q",
-              "vespa_metadata_sync,connector_deletion",
+              "vespa_metadata_sync,connector_deletion,doc_permissions_upsert",
               "--prefetch-multiplier=1",
               "--concurrency=10",
             ]

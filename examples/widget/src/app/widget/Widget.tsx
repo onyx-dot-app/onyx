@@ -128,7 +128,7 @@ async function* sendMessage({
     },
     body: JSON.stringify({
       chat_session_id: chatSessionId,
-      parent_message_id: parentMessageId,
+      parent_message_id: parentMessageId || null,
       message: message,
       prompt_id: null,
       search_doc_ids: null,

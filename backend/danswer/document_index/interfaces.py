@@ -4,9 +4,9 @@ from datetime import datetime
 from typing import Any
 
 from danswer.access.models import DocumentAccess
+from danswer.context.search.models import IndexFilters
+from danswer.context.search.models import InferenceChunkUncleaned
 from danswer.indexing.models import DocMetadataAwareIndexChunk
-from danswer.search.models import IndexFilters
-from danswer.search.models import InferenceChunkUncleaned
 from shared_configs.model_server_models import Embedding
 
 

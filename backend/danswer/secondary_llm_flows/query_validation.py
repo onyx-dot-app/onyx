@@ -1,9 +1,9 @@
+# NOTE No longer used. This needs to be revisited later.
 import re
 from collections.abc import Iterator
 
 from danswer.chat.models import DanswerAnswerPiece
 from danswer.chat.models import StreamingError
-from danswer.configs.chat_configs import DISABLE_LLM_QUERY_ANSWERABILITY
 from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_default_llms
 from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
@@ -46,7 +46,7 @@ def extract_answerability_bool(model_raw: str) -> bool:
 
 
 def get_query_answerability(
-    user_query: str, skip_check: bool = DISABLE_LLM_QUERY_ANSWERABILITY
+    user_query: str, skip_check: bool = False
 ) -> tuple[str, bool]:
     if skip_check:
         return "Query Answerability Evaluation feature is turned off", True
@@ -67,7 +67,7 @@ def get_query_answerability(
 
 
 def stream_query_answerability(
-    user_query: str, skip_check: bool = DISABLE_LLM_QUERY_ANSWERABILITY
+    user_query: str, skip_check: bool = False
 ) -> Iterator[str]:
     if skip_check:
         yield get_json_line(

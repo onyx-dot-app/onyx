@@ -269,20 +269,3 @@ def datetime_from_string(datetime_string: str) -> datetime:
         datetime_object = datetime_object.astimezone(timezone.utc)
 
     return datetime_object
-
-
-def build_confluence_client(
-    credentials_json: dict[str, Any], is_cloud: bool, wiki_base: str
-) -> OnyxConfluence:
-    return OnyxConfluence(
-        api_version="cloud" if is_cloud else "latest",
-        # Remove trailing slash from wiki_base if present
-        url=wiki_base.rstrip("/"),
-        # passing in username causes issues for Confluence data center
-        username=credentials_json["confluence_username"] if is_cloud else None,
-        password=credentials_json["confluence_access_token"] if is_cloud else None,
-        token=credentials_json["confluence_access_token"] if not is_cloud else None,
-        backoff_and_retry=True,
-        max_backoff_retries=10,
-        max_backoff_seconds=60,
-    )

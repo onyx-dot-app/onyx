@@ -7,12 +7,12 @@ from typing import Optional
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from danswer.context.search.enums import RecencyBiasSetting
 from danswer.db.engine import get_session_context_manager
 from danswer.db.llm import update_default_provider
 from danswer.db.llm import upsert_llm_provider
 from danswer.db.models import Tool
 from danswer.db.persona import upsert_persona
-from danswer.search.enums import RecencyBiasSetting
 from danswer.server.features.persona.models import CreatePersonaRequest
 from danswer.server.manage.llm.models import LLMProviderUpsertRequest
 from danswer.server.settings.models import Settings

@@ -3,9 +3,9 @@ from collections.abc import Generator
 from typing import Any
 from typing import TYPE_CHECKING
 
-from danswer.key_value_store.interface import JSON_ro
 from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.interfaces import LLM
+from danswer.utils.special_types import JSON_ro
 
 
 if TYPE_CHECKING:

@@ -10,13 +10,14 @@ from pydantic import model_validator
 from danswer.auth.schemas import UserRole
 from danswer.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from danswer.configs.constants import AuthType
+from danswer.context.search.models import SavedSearchSettings
 from danswer.danswerbot.slack.config import VALID_SLACK_FILTERS
 from danswer.db.models import AllowedAnswerFilters
 from danswer.db.models import ChannelConfig
-from danswer.db.models import SlackBotConfig as SlackBotConfigModel
+from danswer.db.models import SlackBot as SlackAppModel
 from danswer.db.models import SlackBotResponseType
+from danswer.db.models import SlackChannelConfig as SlackChannelConfigModel
 from danswer.db.models import User
-from danswer.search.models import SavedSearchSettings
 from danswer.server.features.persona.models import PersonaSnapshot
 from danswer.server.models import FullUserSnapshot
 from danswer.server.models import InvitedUserSnapshot
@@ -127,22 +128,32 @@ class HiddenUpdateRequest(BaseModel):
     hidden: bool
 
 
+class SlackBotCreationRequest(BaseModel):
+    name: str
+    enabled: bool
+
+    bot_token: str
+    app_token: str
+
+
 class SlackBotTokens(BaseModel):
     bot_token: str
     app_token: str
     model_config = ConfigDict(frozen=True)
 
 
-class SlackBotConfigCreationRequest(BaseModel):
-    # currently, a persona is created for each slack bot config
+class SlackChannelConfigCreationRequest(BaseModel):
+    slack_bot_id: int
+    # currently, a persona is created for each Slack channel config
     # in the future, `document_sets` will probably be replaced
     # by an optional `PersonaSnapshot` object. Keeping it like this
     # for now for simplicity / speed of development
     document_sets: list[int] | None = None
-    persona_id: (
-        int | None
-    ) = None  # NOTE: only one of `document_sets` / `persona_id` should be set
-    channel_names: list[str]
+
+    # NOTE: only one of `document_sets` / `persona_id` should be set
+    persona_id: int | None = None
+
+    channel_name: str
     respond_tag_only: bool = False
     respond_to_bots: bool = False
     enable_auto_filters: bool = False
@@ -165,14 +176,17 @@ class SlackBotConfigCreationRequest(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_document_sets_and_persona_id(self) -> "SlackBotConfigCreationRequest":
+    def validate_document_sets_and_persona_id(
+        self,
+    ) -> "SlackChannelConfigCreationRequest":
         if self.document_sets and self.persona_id:
             raise ValueError("Only one of `document_sets` / `persona_id` should be set")
 
         return self
 
 
-class SlackBotConfig(BaseModel):
+class SlackChannelConfig(BaseModel):
+    slack_bot_id: int
     id: int
     persona: PersonaSnapshot | None
     channel_config: ChannelConfig
@@ -183,25 +197,53 @@ class SlackBotConfig(BaseModel):
 
     @classmethod
     def from_model(
-        cls, slack_bot_config_model: SlackBotConfigModel
-    ) -> "SlackBotConfig":
+        cls, slack_channel_config_model: SlackChannelConfigModel
+    ) -> "SlackChannelConfig":
         return cls(
-            id=slack_bot_config_model.id,
+            id=slack_channel_config_model.id,
+            slack_bot_id=slack_channel_config_model.slack_bot_id,
             persona=(
                 PersonaSnapshot.from_model(
-                    slack_bot_config_model.persona, allow_deleted=True
+                    slack_channel_config_model.persona, allow_deleted=True
                 )
-                if slack_bot_config_model.persona
+                if slack_channel_config_model.persona
                 else None
             ),
-            channel_config=slack_bot_config_model.channel_config,
-            response_type=slack_bot_config_model.response_type,
+            channel_config=slack_channel_config_model.channel_config,
+            response_type=slack_channel_config_model.response_type,
             # XXX this is going away soon
             standard_answer_categories=[
                 StandardAnswerCategory.from_model(standard_answer_category_model)
-                for standard_answer_category_model in slack_bot_config_model.standard_answer_categories
+                for standard_answer_category_model in slack_channel_config_model.standard_answer_categories
             ],
-            enable_auto_filters=slack_bot_config_model.enable_auto_filters,
+            enable_auto_filters=slack_channel_config_model.enable_auto_filters,
+        )
+
+
+class SlackBot(BaseModel):
+    """
+    This model is identical to the SlackAppModel, but it contains
+    a `configs_count` field to make it easier to fetch the number
+    of SlackChannelConfigs associated with a SlackBot.
+    """
+
+    id: int
+    name: str
+    enabled: bool
+    configs_count: int
+
+    bot_token: str
+    app_token: str
+
+    @classmethod
+    def from_model(cls, slack_bot_model: SlackAppModel) -> "SlackBot":
+        return cls(
+            id=slack_bot_model.id,
+            name=slack_bot_model.name,
+            enabled=slack_bot_model.enabled,
+            bot_token=slack_bot_model.bot_token,
+            app_token=slack_bot_model.app_token,
+            configs_count=len(slack_bot_model.slack_channel_configs),
         )
 
 

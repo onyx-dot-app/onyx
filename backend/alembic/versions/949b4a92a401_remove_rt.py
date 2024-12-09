@@ -7,6 +7,7 @@ Create Date: 2024-10-26 13:06:06.937969
 """
 from alembic import op
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 # Import your models and constants
 from danswer.db.models import (
@@ -15,7 +16,6 @@ from danswer.db.models import (
     Credential,
     IndexAttempt,
 )
-from danswer.configs.constants import DocumentSource
 
 
 # revision identifiers, used by Alembic.
@@ -30,13 +30,11 @@ def upgrade() -> None:
     bind = op.get_bind()
     session = Session(bind=bind)
 
-    connectors_to_delete = (
-        session.query(Connector)
-        .filter(Connector.source == DocumentSource.REQUESTTRACKER)
-        .all()
+    # Get connectors using raw SQL
+    result = bind.execute(
+        text("SELECT id FROM connector WHERE source = 'requesttracker'")
     )
-
-    connector_ids = [connector.id for connector in connectors_to_delete]
+    connector_ids = [row[0] for row in result]
 
     if connector_ids:
         cc_pairs_to_delete = (

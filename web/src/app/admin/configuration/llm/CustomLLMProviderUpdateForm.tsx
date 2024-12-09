@@ -142,6 +142,8 @@ export function CustomLLMProviderUpdateForm({
           },
           body: JSON.stringify({
             ...values,
+            // For custom llm providers, all model names are displayed
+            display_model_names: values.model_names,
             custom_config: customConfigProcessing(values.custom_config_list),
           }),
         });

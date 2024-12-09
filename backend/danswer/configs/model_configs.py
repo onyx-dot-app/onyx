@@ -119,3 +119,14 @@ if _LITELLM_PASS_THROUGH_HEADERS_RAW:
         logger.error(
             "Failed to parse LITELLM_PASS_THROUGH_HEADERS, must be a valid JSON object"
         )
+
+
+# if specified, will merge the specified JSON with the existing body of the
+# request before sending it to the LLM
+LITELLM_EXTRA_BODY: dict | None = None
+_LITELLM_EXTRA_BODY_RAW = os.environ.get("LITELLM_EXTRA_BODY")
+if _LITELLM_EXTRA_BODY_RAW:
+    try:
+        LITELLM_EXTRA_BODY = json.loads(_LITELLM_EXTRA_BODY_RAW)
+    except Exception:
+        pass

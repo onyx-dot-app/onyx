@@ -13,6 +13,9 @@ from danswer.llm.answering.stream_processing.quotes_processing import (
     QuotesProcessor,
 )
 from danswer.llm.answering.stream_processing.utils import DocumentIdOrderMapping
+from danswer.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class AnswerResponseHandler(abc.ABC):
@@ -47,6 +50,9 @@ class CitationResponseHandler(AnswerResponseHandler):
         )
         self.processed_text = ""
         self.citations: list[CitationInfo] = []
+
+        # TODO remove this after citation issue is resolved
+        logger.debug(f"Document to ranking map {self.doc_id_to_rank_map}")
 
     def handle_response_part(
         self,

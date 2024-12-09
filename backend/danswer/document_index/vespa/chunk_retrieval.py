@@ -11,6 +11,8 @@ import httpx
 from retry import retry
 
 from danswer.configs.app_configs import LOG_VESPA_TIMING_INFORMATION
+from danswer.context.search.models import IndexFilters
+from danswer.context.search.models import InferenceChunkUncleaned
 from danswer.document_index.interfaces import VespaChunkRequest
 from danswer.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from danswer.document_index.vespa.shared_utils.vespa_request_builders import (
@@ -44,8 +46,6 @@ from danswer.document_index.vespa_constants import SOURCE_LINKS
 from danswer.document_index.vespa_constants import SOURCE_TYPE
 from danswer.document_index.vespa_constants import TITLE
 from danswer.document_index.vespa_constants import YQL_BASE
-from danswer.search.models import IndexFilters
-from danswer.search.models import InferenceChunkUncleaned
 from danswer.utils.logger import setup_logger
 from danswer.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 

@@ -3,6 +3,7 @@ from langchain.schema.messages import SystemMessage
 
 from danswer.chat.models import LlmDoc
 from danswer.configs.model_configs import GEN_AI_SINGLE_USER_MESSAGE_EXPECTED_MAX_TOKENS
+from danswer.context.search.models import InferenceChunk
 from danswer.db.models import Persona
 from danswer.db.persona import get_default_prompt__read_only
 from danswer.db.search_settings import get_multilingual_expansion
@@ -29,7 +30,6 @@ from danswer.prompts.token_counts import (
 from danswer.prompts.token_counts import CITATION_REMINDER_TOKEN_CNT
 from danswer.prompts.token_counts import CITATION_STATEMENT_TOKEN_CNT
 from danswer.prompts.token_counts import LANGUAGE_HINT_TOKEN_CNT
-from danswer.search.models import InferenceChunk
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()

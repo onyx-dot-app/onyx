@@ -22,6 +22,8 @@ from danswer.configs.chat_configs import NUM_RETURNED_HITS
 from danswer.configs.chat_configs import TITLE_CONTENT_RATIO
 from danswer.configs.chat_configs import VESPA_SEARCHER_THREADS
 from danswer.configs.constants import KV_REINDEX_KEY
+from danswer.context.search.models import IndexFilters
+from danswer.context.search.models import InferenceChunkUncleaned
 from danswer.document_index.interfaces import DocumentIndex
 from danswer.document_index.interfaces import DocumentInsertionRecord
 from danswer.document_index.interfaces import UpdateRequest
@@ -68,8 +70,6 @@ from danswer.document_index.vespa_constants import VESPA_TIMEOUT
 from danswer.document_index.vespa_constants import YQL_BASE
 from danswer.indexing.models import DocMetadataAwareIndexChunk
 from danswer.key_value_store.factory import get_kv_store
-from danswer.search.models import IndexFilters
-from danswer.search.models import InferenceChunkUncleaned
 from danswer.utils.batching import batch_generator
 from danswer.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT

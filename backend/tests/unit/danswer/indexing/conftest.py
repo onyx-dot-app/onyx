@@ -1,15 +1,16 @@
-from typing import Any
-
 import pytest
 
-from danswer.indexing.indexing_heartbeat import Heartbeat
+from danswer.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 
 
-class MockHeartbeat(Heartbeat):
+class MockHeartbeat(IndexingHeartbeatInterface):
     def __init__(self) -> None:
         self.call_count = 0
 
-    def heartbeat(self, metadata: Any = None) -> None:
+    def should_stop(self) -> bool:
+        return False
+
+    def progress(self, tag: str, amount: int) -> None:
         self.call_count += 1
 
 

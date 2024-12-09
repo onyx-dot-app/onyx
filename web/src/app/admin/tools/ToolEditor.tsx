@@ -108,7 +108,7 @@ function ToolForm({
           placeholder="Enter your OpenAPI schema here"
           isTextArea={true}
           defaultHeight="h-96"
-          fontSize="text-sm"
+          fontSize="sm"
           isCode
           hideError
         />

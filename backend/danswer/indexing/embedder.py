@@ -2,7 +2,7 @@ from abc import ABC
 from abc import abstractmethod
 
 from danswer.db.models import SearchSettings
-from danswer.indexing.indexing_heartbeat import Heartbeat
+from danswer.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from danswer.indexing.models import ChunkEmbedding
 from danswer.indexing.models import DocAwareChunk
 from danswer.indexing.models import IndexChunk
@@ -34,7 +34,7 @@ class IndexingEmbedder(ABC):
         api_url: str | None,
         api_version: str | None,
         deployment_name: str | None,
-        heartbeat: Heartbeat | None,
+        callback: IndexingHeartbeatInterface | None,
     ):
         self.model_name = model_name
         self.normalize = normalize
@@ -60,7 +60,7 @@ class IndexingEmbedder(ABC):
             server_host=INDEXING_MODEL_SERVER_HOST,
             server_port=INDEXING_MODEL_SERVER_PORT,
             retrim_content=True,
-            heartbeat=heartbeat,
+            callback=callback,
         )
 
     @abstractmethod
@@ -83,7 +83,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         api_url: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
-        heartbeat: Heartbeat | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ):
         super().__init__(
             model_name,
@@ -95,7 +95,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             api_url,
             api_version,
             deployment_name,
-            heartbeat,
+            callback,
         )
 
     @log_function_time()
@@ -201,7 +201,9 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
 
     @classmethod
     def from_db_search_settings(
-        cls, search_settings: SearchSettings, heartbeat: Heartbeat | None = None
+        cls,
+        search_settings: SearchSettings,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> "DefaultIndexingEmbedder":
         return cls(
             model_name=search_settings.model_name,
@@ -213,5 +215,5 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             api_url=search_settings.api_url,
             api_version=search_settings.api_version,
             deployment_name=search_settings.deployment_name,
-            heartbeat=heartbeat,
+            callback=callback,
         )

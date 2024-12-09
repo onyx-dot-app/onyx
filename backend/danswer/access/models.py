@@ -17,6 +17,41 @@ class ExternalAccess:
 
 
 @dataclass(frozen=True)
+class DocExternalAccess:
+    external_access: ExternalAccess
+    # The document ID
+    doc_id: str
+
+    def to_dict(self) -> dict:
+        return {
+            "external_access": {
+                "external_user_emails": list(self.external_access.external_user_emails),
+                "external_user_group_ids": list(
+                    self.external_access.external_user_group_ids
+                ),
+                "is_public": self.external_access.is_public,
+            },
+            "doc_id": self.doc_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "DocExternalAccess":
+        external_access = ExternalAccess(
+            external_user_emails=set(
+                data["external_access"].get("external_user_emails", [])
+            ),
+            external_user_group_ids=set(
+                data["external_access"].get("external_user_group_ids", [])
+            ),
+            is_public=data["external_access"]["is_public"],
+        )
+        return cls(
+            external_access=external_access,
+            doc_id=data["doc_id"],
+        )
+
+
+@dataclass(frozen=True)
 class DocumentAccess(ExternalAccess):
     # User emails for Danswer users, None indicates admin
     user_emails: set[str | None]

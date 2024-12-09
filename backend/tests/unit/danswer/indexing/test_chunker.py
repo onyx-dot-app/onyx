@@ -74,7 +74,7 @@ def test_chunker_heartbeat(
     chunker = Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
         enable_multipass=False,
-        heartbeat=mock_heartbeat,
+        callback=mock_heartbeat,
     )
 
     chunks = chunker.chunk([document])

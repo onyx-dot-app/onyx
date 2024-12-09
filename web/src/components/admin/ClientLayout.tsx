@@ -155,7 +155,7 @@ export function ClientLayout({
                               <div className="ml-1">Slack Bots</div>
                             </div>
                           ),
-                          link: "/admin/bot",
+                          link: "/admin/bots",
                         },
                         {
                           name: (

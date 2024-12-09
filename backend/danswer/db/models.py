@@ -42,7 +42,7 @@ from danswer.configs.constants import DEFAULT_BOOST
 from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import FileOrigin
 from danswer.configs.constants import MessageType
-from danswer.db.enums import AccessType
+from danswer.db.enums import AccessType, IndexingMode
 from danswer.configs.constants import NotificationType
 from danswer.configs.constants import SearchFeedbackType
 from danswer.configs.constants import TokenRateLimitScope
@@ -53,11 +53,11 @@ from danswer.db.enums import IndexingStatus
 from danswer.db.enums import IndexModelStatus
 from danswer.db.enums import TaskStatus
 from danswer.db.pydantic_type import PydanticType
-from danswer.key_value_store.interface import JSON_ro
+from danswer.utils.special_types import JSON_ro
 from danswer.file_store.models import FileDescriptor
 from danswer.llm.override_models import LLMOverride
 from danswer.llm.override_models import PromptOverride
-from danswer.search.enums import RecencyBiasSetting
+from danswer.context.search.enums import RecencyBiasSetting
 from danswer.utils.encryption import decrypt_bytes_to_string
 from danswer.utils.encryption import encrypt_string_to_bytes
 from danswer.utils.headers import HeaderItemDict
@@ -126,8 +126,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # if specified, controls the assistants that are shown to the user + their order
     # if not specified, all assistants are shown
-    chosen_assistants: Mapped[list[int]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=[-2, -1, 0]
+    chosen_assistants: Mapped[list[int] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True, default=None
     )
     visible_assistants: Mapped[list[int]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=[]
@@ -171,8 +171,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     notifications: Mapped[list["Notification"]] = relationship(
         "Notification", back_populates="user"
     )
-    # Whether the user has logged in via web. False if user has only used Danswer through Slack bot
-    has_web_login: Mapped[bool] = mapped_column(Boolean, default=True)
+    cc_pairs: Mapped[list["ConnectorCredentialPair"]] = relationship(
+        "ConnectorCredentialPair",
+        back_populates="creator",
+        primaryjoin="User.id == foreign(ConnectorCredentialPair.creator_id)",
+    )
 
 
 class InputPrompt(Base):
@@ -347,11 +350,11 @@ class StandardAnswer__StandardAnswerCategory(Base):
     )
 
 
-class SlackBotConfig__StandardAnswerCategory(Base):
-    __tablename__ = "slack_bot_config__standard_answer_category"
+class SlackChannelConfig__StandardAnswerCategory(Base):
+    __tablename__ = "slack_channel_config__standard_answer_category"
 
-    slack_bot_config_id: Mapped[int] = mapped_column(
-        ForeignKey("slack_bot_config.id"), primary_key=True
+    slack_channel_config_id: Mapped[int] = mapped_column(
+        ForeignKey("slack_channel_config.id"), primary_key=True
     )
     standard_answer_category_id: Mapped[int] = mapped_column(
         ForeignKey("standard_answer_category.id"), primary_key=True
@@ -420,6 +423,9 @@ class ConnectorCredentialPair(Base):
     last_time_perm_sync: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    last_time_external_group_sync: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Time finished, not used for calculating backend jobs which uses time started (created)
     last_successful_index_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
@@ -431,6 +437,10 @@ class ConnectorCredentialPair(Base):
     )
 
     total_docs_indexed: Mapped[int] = mapped_column(Integer, default=0)
+
+    indexing_trigger: Mapped[IndexingMode | None] = mapped_column(
+        Enum(IndexingMode, native_enum=False), nullable=True
+    )
 
     connector: Mapped["Connector"] = relationship(
         "Connector", back_populates="credentials"
@@ -450,6 +460,14 @@ class ConnectorCredentialPair(Base):
     )
     index_attempts: Mapped[list["IndexAttempt"]] = relationship(
         "IndexAttempt", back_populates="connector_credential_pair"
+    )
+
+    # the user id of the user that created this cc pair
+    creator_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    creator: Mapped["User"] = relationship(
+        "User",
+        back_populates="cc_pairs",
+        primaryjoin="foreign(ConnectorCredentialPair.creator_id) == remote(User.id)",
     )
 
 
@@ -1167,7 +1185,7 @@ class LLMProvider(Base):
     default_model_name: Mapped[str] = mapped_column(String)
     fast_default_model_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Models to actually disp;aly to users
+    # Models to actually display to users
     # If nulled out, we assume in the application logic we should present all
     display_model_names: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True
@@ -1349,6 +1367,9 @@ class Persona(Base):
     recency_bias: Mapped[RecencyBiasSetting] = mapped_column(
         Enum(RecencyBiasSetting, native_enum=False)
     )
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona_category.id"), nullable=True
+    )
     # Allows the Persona to specify a different LLM version than is controlled
     # globablly via env variables. For flexibility, validity is not currently enforced
     # NOTE: only is applied on the actual response generation - is not used for things like
@@ -1420,6 +1441,9 @@ class Persona(Base):
         secondary="persona__user_group",
         viewonly=True,
     )
+    category: Mapped["PersonaCategory"] = relationship(
+        "PersonaCategory", back_populates="personas"
+    )
 
     # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
@@ -1432,6 +1456,17 @@ class Persona(Base):
     )
 
 
+class PersonaCategory(Base):
+    __tablename__ = "persona_category"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    personas: Mapped[list["Persona"]] = relationship(
+        "Persona", back_populates="category"
+    )
+
+
 AllowedAnswerFilters = (
     Literal["well_answered_postfilter"] | Literal["questionmark_prefilter"]
 )
@@ -1441,7 +1476,7 @@ class ChannelConfig(TypedDict):
     """NOTE: is a `TypedDict` so it can be used as a type hint for a JSONB column
     in Postgres"""
 
-    channel_names: list[str]
+    channel_name: str
     respond_tag_only: NotRequired[bool]  # defaults to False
     respond_to_bots: NotRequired[bool]  # defaults to False
     respond_member_group_list: NotRequired[list[str]]
@@ -1456,10 +1491,11 @@ class SlackBotResponseType(str, PyEnum):
     CITATIONS = "citations"
 
 
-class SlackBotConfig(Base):
-    __tablename__ = "slack_bot_config"
+class SlackChannelConfig(Base):
+    __tablename__ = "slack_channel_config"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    slack_bot_id: Mapped[int] = mapped_column(ForeignKey("slack_bot.id"), nullable=True)
     persona_id: Mapped[int | None] = mapped_column(
         ForeignKey("persona.id"), nullable=True
     )
@@ -1476,10 +1512,30 @@ class SlackBotConfig(Base):
     )
 
     persona: Mapped[Persona | None] = relationship("Persona")
+    slack_bot: Mapped["SlackBot"] = relationship(
+        "SlackBot",
+        back_populates="slack_channel_configs",
+    )
     standard_answer_categories: Mapped[list["StandardAnswerCategory"]] = relationship(
         "StandardAnswerCategory",
-        secondary=SlackBotConfig__StandardAnswerCategory.__table__,
-        back_populates="slack_bot_configs",
+        secondary=SlackChannelConfig__StandardAnswerCategory.__table__,
+        back_populates="slack_channel_configs",
+    )
+
+
+class SlackBot(Base):
+    __tablename__ = "slack_bot"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    bot_token: Mapped[str] = mapped_column(EncryptedString(), unique=True)
+    app_token: Mapped[str] = mapped_column(EncryptedString(), unique=True)
+
+    slack_channel_configs: Mapped[list[SlackChannelConfig]] = relationship(
+        "SlackChannelConfig",
+        back_populates="slack_bot",
     )
 
 
@@ -1718,9 +1774,9 @@ class StandardAnswerCategory(Base):
         secondary=StandardAnswer__StandardAnswerCategory.__table__,
         back_populates="categories",
     )
-    slack_bot_configs: Mapped[list["SlackBotConfig"]] = relationship(
-        "SlackBotConfig",
-        secondary=SlackBotConfig__StandardAnswerCategory.__table__,
+    slack_channel_configs: Mapped[list["SlackChannelConfig"]] = relationship(
+        "SlackChannelConfig",
+        secondary=SlackChannelConfig__StandardAnswerCategory.__table__,
         back_populates="standard_answer_categories",
     )
 

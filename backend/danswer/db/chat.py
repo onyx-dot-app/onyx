@@ -18,6 +18,9 @@ from danswer.auth.schemas import UserRole
 from danswer.chat.models import DocumentRelevance
 from danswer.configs.chat_configs import HARD_DELETE_CHATS
 from danswer.configs.constants import MessageType
+from danswer.context.search.models import RetrievalDocs
+from danswer.context.search.models import SavedSearchDoc
+from danswer.context.search.models import SearchDoc as ServerSearchDoc
 from danswer.db.models import ChatMessage
 from danswer.db.models import ChatMessage__SearchDoc
 from danswer.db.models import ChatSession
@@ -31,9 +34,6 @@ from danswer.db.pg_file_store import delete_lobj_by_name
 from danswer.file_store.models import FileDescriptor
 from danswer.llm.override_models import LLMOverride
 from danswer.llm.override_models import PromptOverride
-from danswer.search.models import RetrievalDocs
-from danswer.search.models import SavedSearchDoc
-from danswer.search.models import SearchDoc as ServerSearchDoc
 from danswer.server.query_and_chat.models import ChatMessageDetail
 from danswer.tools.tool_runner import ToolCallFinalResult
 from danswer.utils.logger import setup_logger

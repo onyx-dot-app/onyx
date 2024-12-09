@@ -19,7 +19,7 @@ from danswer.db.chat import get_chat_messages_by_sessions
 from danswer.db.chat import get_chat_sessions_by_slack_thread_id
 from danswer.db.chat import get_or_create_root_message
 from danswer.db.models import Prompt
-from danswer.db.models import SlackBotConfig
+from danswer.db.models import SlackChannelConfig
 from danswer.db.models import StandardAnswer as StandardAnswerModel
 from danswer.utils.logger import DanswerLoggingAdapter
 from danswer.utils.logger import setup_logger
@@ -80,7 +80,7 @@ def oneoff_standard_answers(
 def _handle_standard_answers(
     message_info: SlackMessageInfo,
     receiver_ids: list[str] | None,
-    slack_bot_config: SlackBotConfig | None,
+    slack_channel_config: SlackChannelConfig | None,
     prompt: Prompt | None,
     logger: DanswerLoggingAdapter,
     client: WebClient,
@@ -95,12 +95,12 @@ def _handle_standard_answers(
     we still need to respond to the users.
     """
     # if no channel config, then no standard answers are configured
-    if not slack_bot_config:
+    if not slack_channel_config:
         return False
 
     slack_thread_id = message_info.thread_to_respond
     configured_standard_answer_categories = (
-        slack_bot_config.standard_answer_categories if slack_bot_config else []
+        slack_channel_config.standard_answer_categories if slack_channel_config else []
     )
     configured_standard_answers = set(
         [
@@ -150,7 +150,9 @@ def _handle_standard_answers(
             db_session=db_session,
             description="",
             user_id=None,
-            persona_id=slack_bot_config.persona.id if slack_bot_config.persona else 0,
+            persona_id=slack_channel_config.persona.id
+            if slack_channel_config.persona
+            else 0,
             danswerbot_flow=True,
             slack_thread_id=slack_thread_id,
             one_shot=True,

@@ -7,12 +7,12 @@ from langchain_core.messages import BaseMessage
 from danswer.chat.models import LlmDoc
 from danswer.configs.chat_configs import LANGUAGE_HINT
 from danswer.configs.constants import DocumentSource
+from danswer.context.search.models import InferenceChunk
 from danswer.db.models import Prompt
 from danswer.llm.answering.models import PromptConfig
 from danswer.prompts.chat_prompts import ADDITIONAL_INFO
 from danswer.prompts.chat_prompts import CITATION_REMINDER
 from danswer.prompts.constants import CODE_BLOCK_PAT
-from danswer.search.models import InferenceChunk
 from danswer.utils.logger import setup_logger
 
 

@@ -52,7 +52,7 @@ export async function fetchChatData(searchParams: {
   const tasks = [
     getAuthTypeMetadataSS(),
     getCurrentUserSS(),
-    fetchSS("/manage/indexing-status"),
+    fetchSS("/manage/connector-status"),
     fetchSS("/manage/document-set"),
     fetchSS("/chat/get-user-chat-sessions"),
     fetchSS("/query/valid-tags"),

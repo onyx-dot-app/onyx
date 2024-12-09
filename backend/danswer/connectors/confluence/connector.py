@@ -9,9 +9,9 @@ from danswer.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
 from danswer.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.constants import DocumentSource
+from danswer.connectors.confluence.onyx_confluence import build_confluence_client
 from danswer.connectors.confluence.onyx_confluence import OnyxConfluence
 from danswer.connectors.confluence.utils import attachment_to_content
-from danswer.connectors.confluence.utils import build_confluence_client
 from danswer.connectors.confluence.utils import build_confluence_document_id
 from danswer.connectors.confluence.utils import datetime_from_string
 from danswer.connectors.confluence.utils import extract_text_from_confluence_html
@@ -53,6 +53,8 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
     "restrictions.read.restrictions.group",
 ]
 
+_SLIM_DOC_BATCH_SIZE = 1000
+
 
 class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
     def __init__(
@@ -83,15 +85,15 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         if cql_query:
             # if a cql_query is provided, we will use it to fetch the pages
             cql_page_query = cql_query
-        elif space:
-            # if no cql_query is provided, we will use the space to fetch the pages
-            cql_page_query += f" and space='{quote(space)}'"
         elif page_id:
+            # if a cql_query is not provided, we will use the page_id to fetch the page
             if index_recursively:
                 cql_page_query += f" and ancestor='{page_id}'"
             else:
-                # if neither a space nor a cql_query is provided, we will use the page_id to fetch the page
                 cql_page_query += f" and id='{page_id}'"
+        elif space:
+            # if no cql_query or page_id is provided, we will use the space to fetch the pages
+            cql_page_query += f" and space='{quote(space)}'"
 
         self.cql_page_query = cql_page_query
         self.cql_time_filter = ""
@@ -114,7 +116,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         # see https://github.com/atlassian-api/atlassian-python-api/blob/master/atlassian/rest_client.py
         # for a list of other hidden constructor args
         self._confluence_client = build_confluence_client(
-            credentials_json=credentials,
+            credentials=credentials,
             is_cloud=self.is_cloud,
             wiki_base=self.wiki_base,
         )
@@ -165,9 +167,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         """
         # The url and the id are the same
         object_url = build_confluence_document_id(
-            base_url=self.wiki_base,
-            content_url=confluence_object["_links"]["webui"],
-            is_cloud=self.is_cloud,
+            self.wiki_base, confluence_object["_links"]["webui"], self.is_cloud
         )
 
         object_text = None
@@ -282,6 +282,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         for page in self.confluence_client.cql_paginate_all_expansions(
             cql=page_query,
             expand=restrictions_expand,
+            limit=_SLIM_DOC_BATCH_SIZE,
         ):
             # If the page has restrictions, add them to the perm_sync_data
             # These will be used by doc_sync.py to sync permissions
@@ -305,6 +306,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             for attachment in self.confluence_client.cql_paginate_all_expansions(
                 cql=attachment_cql,
                 expand=restrictions_expand,
+                limit=_SLIM_DOC_BATCH_SIZE,
             ):
                 doc_metadata_list.append(
                     SlimDocument(

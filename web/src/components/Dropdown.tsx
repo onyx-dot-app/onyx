@@ -264,9 +264,9 @@ export function DefaultDropdownElement({
         my-1
         select-none 
         cursor-pointer 
-        bg-background
+        bg-transparent 
         rounded
-        hover:bg-hover-light
+        hover:bg-hover
       `}
       onClick={onSelect}
       title={title}

@@ -58,8 +58,8 @@ const DropdownOption: React.FC<DropdownOptionProps> = ({
 };
 
 export function UserDropdown({ page }: { page?: pageType }) {
-  debugger;
-  const { user } = useUser();
+
+  const { user, isCurator } = useUser();
   const [userInfoVisible, setUserInfoVisible] = useState(false);
   const userInfoRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -97,7 +97,9 @@ export function UserDropdown({ page }: { page?: pageType }) {
       }
 
       // Construct the current URL
-      const currentUrl = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+      const currentUrl = `${pathname}${
+        searchParams.toString() ? `?${searchParams.toString()}` : ""
+      }`;
 
       // Encode the current URL to use as a redirect parameter
       const encodedRedirect = encodeURIComponent(currentUrl);
@@ -108,9 +110,7 @@ export function UserDropdown({ page }: { page?: pageType }) {
   };
 
   const showAdminPanel = !user || user.role === UserRole.ADMIN;
-  const showCuratorPanel =
-    user &&
-    (user.role === UserRole.CURATOR || user.role === UserRole.GLOBAL_CURATOR);
+  const showCuratorPanel = user && isCurator;
   const showLogout =
     user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
   const showPrivacy = true;
@@ -248,7 +248,11 @@ export function UserDropdown({ page }: { page?: pageType }) {
                     setShowNotifications(true);
                   }}
                   icon={<BellIcon className="h-5 w-5 my-auto mr-2" />}
-                  label={`Notifications ${notifications && notifications.length > 0 ? `(${notifications.length})` : ""}`}
+                  label={`Notifications ${
+                    notifications && notifications.length > 0
+                      ? `(${notifications.length})`
+                      : ""
+                  }`}
                 />
                 {showPrivacy && (
                   <>

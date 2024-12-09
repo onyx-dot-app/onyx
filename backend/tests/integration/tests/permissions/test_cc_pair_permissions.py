@@ -50,12 +50,11 @@ def test_cc_pair_permissions(reset: None) -> None:
         user_groups_to_check=[user_group_1], user_performing_action=admin_user
     )
 
-    # Create a credentials that the curator is and is not curator of
     connector_1 = ConnectorManager.create(
-        name="curator_owned_connector",
+        name="admin_owned_connector",
         source=DocumentSource.CONFLUENCE,
         groups=[user_group_1.id],
-        is_public=False,
+        access_type=AccessType.PRIVATE,
         user_performing_action=admin_user,
     )
     # currently we dont enforce permissions at the connector level
@@ -67,6 +66,7 @@ def test_cc_pair_permissions(reset: None) -> None:
     #     is_public=False,
     #     user_performing_action=admin_user,
     # )
+    # Create a credentials that the curator is and is not curator of
     credential_1 = CredentialManager.create(
         name="curator_owned_credential",
         source=DocumentSource.CONFLUENCE,

@@ -8,13 +8,6 @@ import {
 } from "@/app/admin/configuration/llm/interfaces";
 import { ToolSnapshot } from "../tools/interfaces";
 import { fetchToolsSS } from "../tools/fetchTools";
-import {
-  OpenAIIcon,
-  AnthropicIcon,
-  AWSIcon,
-  AzureIcon,
-  OpenSourceIcon,
-} from "@/components/icons/icons";
 
 export async function fetchAssistantEditorInfoSS(
   personaId?: number | string
@@ -33,7 +26,7 @@ export async function fetchAssistantEditorInfoSS(
   | [null, string]
 > {
   const tasks = [
-    fetchSS("/manage/indexing-status"),
+    fetchSS("/manage/connector-status"),
     fetchSS("/manage/document-set"),
     fetchSS("/llm/provider"),
     // duplicate fetch, but shouldn't be too big of a deal
@@ -104,15 +97,22 @@ export async function fetchAssistantEditorInfoSS(
     ? ((await personaResponse.json()) as Persona)
     : null;
 
-  return [
-    {
-      ccPairs,
-      documentSets,
-      llmProviders,
-      user,
-      existingPersona,
-      tools: toolsResponse,
-    },
-    null,
-  ];
+  let error: string | null = null;
+  if (existingPersona?.builtin_persona) {
+    return [null, "cannot update builtin persona"];
+  }
+
+  return (
+    error || [
+      {
+        ccPairs,
+        documentSets,
+        llmProviders,
+        user,
+        existingPersona,
+        tools: toolsResponse,
+      },
+      null,
+    ]
+  );
 }

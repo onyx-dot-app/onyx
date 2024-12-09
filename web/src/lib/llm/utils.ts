@@ -86,6 +86,13 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "anthropic.claude-3-haiku-20240307-v1:0",
   "anthropic.claude-3-5-sonnet-20240620-v1:0",
   "anthropic.claude-3-5-sonnet-20241022-v2:0",
+  // google gemini model names
+  "gemini-1.5-pro",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro-001",
+  "gemini-1.5-flash-001",
+  "gemini-1.5-pro-002",
+  "gemini-1.5-flash-002",
 ];
 
 export function checkLLMSupportsImageInput(model: string) {

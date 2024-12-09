@@ -6,10 +6,10 @@ from typing import Any
 from pydantic import BaseModel
 
 from danswer.configs.constants import DocumentSource
-from danswer.search.enums import QueryFlow
-from danswer.search.enums import SearchType
-from danswer.search.models import RetrievalDocs
-from danswer.search.models import SearchResponse
+from danswer.context.search.enums import QueryFlow
+from danswer.context.search.enums import SearchType
+from danswer.context.search.models import RetrievalDocs
+from danswer.context.search.models import SearchResponse
 from danswer.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
 

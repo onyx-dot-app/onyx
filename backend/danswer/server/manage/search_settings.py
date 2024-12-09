@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
 from danswer.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
+from danswer.context.search.models import SavedSearchSettings
+from danswer.context.search.models import SearchSettingsCreationRequest
 from danswer.db.connector_credential_pair import get_connector_credential_pairs
 from danswer.db.connector_credential_pair import resync_cc_pair
 from danswer.db.engine import get_session
@@ -25,8 +27,6 @@ from danswer.file_processing.unstructured import delete_unstructured_api_key
 from danswer.file_processing.unstructured import get_unstructured_api_key
 from danswer.file_processing.unstructured import update_unstructured_api_key
 from danswer.natural_language_processing.search_nlp_models import clean_model_name
-from danswer.search.models import SavedSearchSettings
-from danswer.search.models import SearchSettingsCreationRequest
 from danswer.server.manage.embedding.models import SearchSettingsDeleteRequest
 from danswer.server.manage.models import FullModelVersionResponse
 from danswer.server.models import IdReturn

@@ -29,18 +29,26 @@ JobStatusType = (
 def _initializer(
     func: Callable, args: list | tuple, kwargs: dict[str, Any] | None = None
 ) -> Any:
-    """Ensure the parent proc's database connections are not touched
-    in the new connection pool
+    """Initialize the child process with a fresh SQLAlchemy Engine.
 
-    Based on the recommended approach in the SQLAlchemy docs found:
+    Based on SQLAlchemy's recommendations to handle multiprocessing:
     https://docs.sqlalchemy.org/en/20/core/pooling.html#using-connection-pools-with-multiprocessing-or-os-fork
     """
     if kwargs is None:
         kwargs = {}
 
     logger.info("Initializing spawned worker child process.")
+
+    # Reset the engine in the child process
+    SqlEngine.reset_engine()
+
+    # Optionally set a custom app name for database logging purposes
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME)
+
+    # Initialize a new engine with desired parameters
     SqlEngine.init_engine(pool_size=4, max_overflow=12, pool_recycle=60)
+
+    # Proceed with executing the target function
     return func(*args, **kwargs)
 
 

@@ -118,18 +118,6 @@ You should always get right to the point, and never use extraneous language.
 """
 
 
-# For weak LLM which only takes one chunk and cannot output json
-# Also not requiring quotes as it tends to not work
-WEAK_LLM_PROMPT = f"""
-{{system_prompt}}
-{{context_block}}
-{{task_prompt}}
-
-{QUESTION_PAT.upper()}
-{{user_query}}
-""".strip()
-
-
 # This is only for visualization for the users to specify their own prompts
 # The actual flow does not work like this
 PARAMATERIZED_PROMPT = f"""

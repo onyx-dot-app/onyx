@@ -6,6 +6,12 @@ from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_user
 from danswer.configs.danswerbot_configs import DANSWER_BOT_TARGET_CHUNK_PERCENTAGE
+from danswer.context.search.models import SavedSearchDocWithContent
+from danswer.context.search.models import SearchRequest
+from danswer.context.search.pipeline import SearchPipeline
+from danswer.context.search.utils import dedupe_documents
+from danswer.context.search.utils import drop_llm_indices
+from danswer.context.search.utils import relevant_sections_to_indices
 from danswer.db.engine import get_session
 from danswer.db.models import User
 from danswer.db.persona import get_persona_by_id
@@ -19,12 +25,6 @@ from danswer.llm.utils import get_max_input_tokens
 from danswer.one_shot_answer.answer_question import get_search_answer
 from danswer.one_shot_answer.models import DirectQARequest
 from danswer.one_shot_answer.models import OneShotQAResponse
-from danswer.search.models import SavedSearchDocWithContent
-from danswer.search.models import SearchRequest
-from danswer.search.pipeline import SearchPipeline
-from danswer.search.utils import dedupe_documents
-from danswer.search.utils import drop_llm_indices
-from danswer.search.utils import relevant_sections_to_indices
 from danswer.utils.logger import setup_logger
 from ee.danswer.danswerbot.slack.handlers.handle_standard_answers import (
     oneoff_standard_answers,

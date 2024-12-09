@@ -9,12 +9,12 @@ from danswer.chat.models import DanswerContexts
 from danswer.chat.models import DanswerQuotes
 from danswer.chat.models import QADocsResponse
 from danswer.configs.constants import MessageType
-from danswer.search.enums import LLMEvaluationType
-from danswer.search.enums import RecencyBiasSetting
-from danswer.search.enums import SearchType
-from danswer.search.models import ChunkContext
-from danswer.search.models import RerankingDetails
-from danswer.search.models import RetrievalDetails
+from danswer.context.search.enums import LLMEvaluationType
+from danswer.context.search.enums import RecencyBiasSetting
+from danswer.context.search.enums import SearchType
+from danswer.context.search.models import ChunkContext
+from danswer.context.search.models import RerankingDetails
+from danswer.context.search.models import RetrievalDetails
 
 
 class QueryRephrase(BaseModel):
@@ -34,10 +34,6 @@ class PromptConfig(BaseModel):
     task_prompt: str = ""
     include_citations: bool = True
     datetime_aware: bool = True
-
-
-class DocumentSetConfig(BaseModel):
-    id: int
 
 
 class ToolConfig(BaseModel):

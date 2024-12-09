@@ -8,11 +8,11 @@ import requests
 from danswer.connectors.models import InputType
 from danswer.db.enums import AccessType
 from danswer.db.enums import ConnectorCredentialPairStatus
-from danswer.db.enums import TaskStatus
-from danswer.server.documents.models import CeleryTaskStatus
+from danswer.server.documents.models import CCPairFullInfo
 from danswer.server.documents.models import ConnectorCredentialPairIdentifier
 from danswer.server.documents.models import ConnectorIndexingStatus
 from danswer.server.documents.models import DocumentSource
+from danswer.server.documents.models import DocumentSyncStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import MAX_DELAY
@@ -73,7 +73,7 @@ class CCPairManager:
             source=source,
             input_type=input_type,
             connector_specific_config=connector_specific_config,
-            is_public=(access_type == AccessType.PUBLIC),
+            access_type=access_type,
             groups=groups,
             user_performing_action=user_performing_action,
         )
@@ -147,7 +147,22 @@ class CCPairManager:
         result.raise_for_status()
 
     @staticmethod
-    def get_one(
+    def get_single(
+        cc_pair_id: int,
+        user_performing_action: DATestUser | None = None,
+    ) -> CCPairFullInfo | None:
+        response = requests.get(
+            f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}",
+            headers=user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+        cc_pair_json = response.json()
+        return CCPairFullInfo(**cc_pair_json)
+
+    @staticmethod
+    def get_indexing_status_by_id(
         cc_pair_id: int,
         user_performing_action: DATestUser | None = None,
     ) -> ConnectorIndexingStatus | None:
@@ -166,7 +181,7 @@ class CCPairManager:
         return None
 
     @staticmethod
-    def get_all(
+    def get_indexing_statuses(
         user_performing_action: DATestUser | None = None,
     ) -> list[ConnectorIndexingStatus]:
         response = requests.get(
@@ -184,7 +199,7 @@ class CCPairManager:
         verify_deleted: bool = False,
         user_performing_action: DATestUser | None = None,
     ) -> None:
-        all_cc_pairs = CCPairManager.get_all(user_performing_action)
+        all_cc_pairs = CCPairManager.get_indexing_statuses(user_performing_action)
         for retrieved_cc_pair in all_cc_pairs:
             if retrieved_cc_pair.cc_pair_id == cc_pair.id:
                 if verify_deleted:
@@ -234,7 +249,9 @@ class CCPairManager:
         """after: Wait for an indexing success time after this time"""
         start = time.monotonic()
         while True:
-            fetched_cc_pairs = CCPairManager.get_all(user_performing_action)
+            fetched_cc_pairs = CCPairManager.get_indexing_statuses(
+                user_performing_action
+            )
             for fetched_cc_pair in fetched_cc_pairs:
                 if fetched_cc_pair.cc_pair_id != cc_pair.id:
                     continue
@@ -327,57 +344,139 @@ class CCPairManager:
         cc_pair: DATestCCPair,
         user_performing_action: DATestUser | None = None,
     ) -> None:
+        """This function triggers a permission sync.
+        Naming / intent of this function probably could use improvement, but currently it's letting
+        409 Conflict pass through since if it's running that's what we were trying to do anyway.
+        """
         result = requests.post(
-            url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync",
+            url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-permissions",
             headers=user_performing_action.headers
             if user_performing_action
             else GENERAL_HEADERS,
         )
-        result.raise_for_status()
+        #
+        if result.status_code != 409:
+            result.raise_for_status()
 
     @staticmethod
     def get_sync_task(
         cc_pair: DATestCCPair,
         user_performing_action: DATestUser | None = None,
-    ) -> CeleryTaskStatus:
+    ) -> datetime | None:
         response = requests.get(
-            url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync",
+            url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-permissions",
             headers=user_performing_action.headers
             if user_performing_action
             else GENERAL_HEADERS,
         )
         response.raise_for_status()
-        return CeleryTaskStatus(**response.json())
+        response_str = response.json()
+
+        # If the response itself is a datetime string, parse it
+        if not isinstance(response_str, str):
+            return None
+
+        try:
+            return datetime.fromisoformat(response_str)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def get_doc_sync_statuses(
+        cc_pair: DATestCCPair,
+        user_performing_action: DATestUser | None = None,
+    ) -> list[DocumentSyncStatus]:
+        response = requests.get(
+            url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/get-docs-sync-status",
+            headers=user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+        doc_sync_statuses: list[DocumentSyncStatus] = []
+        for doc_sync_status in response.json():
+            last_synced = doc_sync_status.get("last_synced")
+            if last_synced:
+                last_synced = datetime.fromisoformat(last_synced)
+
+            last_modified = doc_sync_status.get("last_modified")
+            if last_modified:
+                last_modified = datetime.fromisoformat(last_modified)
+
+            doc_sync_statuses.append(
+                DocumentSyncStatus(
+                    doc_id=doc_sync_status["doc_id"],
+                    last_synced=last_synced,
+                    last_modified=last_modified,
+                )
+            )
+
+        return doc_sync_statuses
 
     @staticmethod
     def wait_for_sync(
         cc_pair: DATestCCPair,
         after: datetime,
         timeout: float = MAX_DELAY,
+        number_of_updated_docs: int = 0,
         user_performing_action: DATestUser | None = None,
     ) -> None:
         """after: The task register time must be after this time."""
         start = time.monotonic()
         while True:
-            task = CCPairManager.get_sync_task(cc_pair, user_performing_action)
-            if not task:
-                raise ValueError("Sync task not found.")
-
-            if not task.register_time or task.register_time < after:
-                raise ValueError("Sync task register time is too early.")
-
-            if task.status == TaskStatus.SUCCESS:
-                # Sync succeeded
-                return
+            last_synced = CCPairManager.get_sync_task(cc_pair, user_performing_action)
+            if last_synced and last_synced > after:
+                print(f"last_synced: {last_synced}")
+                print(f"sync command start time: {after}")
+                print(f"permission sync complete: cc_pair={cc_pair.id}")
+                break
 
             elapsed = time.monotonic() - start
             if elapsed > timeout:
                 raise TimeoutError(
-                    f"CC pair syncing was not completed within {timeout} seconds"
+                    f"Permission sync was not completed within {timeout} seconds"
                 )
 
             print(
-                f"Waiting for CC syncing to complete. elapsed={elapsed:.2f} timeout={timeout}"
+                f"Waiting for CC sync to complete. elapsed={elapsed:.2f} timeout={timeout}"
+            )
+            time.sleep(5)
+
+        # TODO: remove this sleep,
+        # this shouldnt be necessary but something is off with the timing for the sync jobs
+        time.sleep(5)
+
+        print("waiting for vespa sync")
+        # wait for the vespa sync to complete once the permission sync is complete
+        start = time.monotonic()
+        while True:
+            doc_sync_statuses = CCPairManager.get_doc_sync_statuses(
+                cc_pair=cc_pair,
+                user_performing_action=user_performing_action,
+            )
+            synced_docs = 0
+            for doc_sync_status in doc_sync_statuses:
+                if (
+                    doc_sync_status.last_synced is not None
+                    and doc_sync_status.last_modified is not None
+                    and doc_sync_status.last_synced >= doc_sync_status.last_modified
+                    and doc_sync_status.last_synced >= after
+                    and doc_sync_status.last_modified >= after
+                ):
+                    synced_docs += 1
+
+            if synced_docs >= number_of_updated_docs:
+                print(f"all docs synced: cc_pair={cc_pair.id}")
+                break
+
+            elapsed = time.monotonic() - start
+            if elapsed > timeout:
+                raise TimeoutError(
+                    f"Vespa sync was not completed within {timeout} seconds"
+                )
+
+            print(
+                f"Waiting for vespa sync to complete. elapsed={elapsed:.2f} timeout={timeout}"
             )
             time.sleep(5)
 
@@ -392,7 +491,7 @@ class CCPairManager:
         cc_pair_id is good to do."""
         start = time.monotonic()
         while True:
-            cc_pairs = CCPairManager.get_all(user_performing_action)
+            cc_pairs = CCPairManager.get_indexing_statuses(user_performing_action)
             if cc_pair_id:
                 found = False
                 for cc_pair in cc_pairs:

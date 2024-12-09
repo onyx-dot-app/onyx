@@ -5,6 +5,7 @@ class IndexingStatus(str, PyEnum):
     NOT_STARTED = "not_started"
     IN_PROGRESS = "in_progress"
     SUCCESS = "success"
+    CANCELED = "canceled"
     FAILED = "failed"
     COMPLETED_WITH_ERRORS = "completed_with_errors"
 
@@ -12,9 +13,15 @@ class IndexingStatus(str, PyEnum):
         terminal_states = {
             IndexingStatus.SUCCESS,
             IndexingStatus.COMPLETED_WITH_ERRORS,
+            IndexingStatus.CANCELED,
             IndexingStatus.FAILED,
         }
         return self in terminal_states
+
+
+class IndexingMode(str, PyEnum):
+    UPDATE = "update"
+    REINDEX = "reindex"
 
 
 # these may differ in the future, which is why we're okay with this duplication

@@ -74,6 +74,8 @@ export function PagesTab({
             folders={folders}
             currentChatId={currentChatId}
             openedFolders={openedFolders}
+            showShareModal={showShareModal}
+            showDeleteModal={showDeleteModal}
           />
         </div>
       )}

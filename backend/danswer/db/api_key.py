@@ -2,6 +2,7 @@ import uuid
 
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
@@ -45,14 +46,16 @@ def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
     ]
 
 
-def fetch_user_for_api_key(hashed_api_key: str, db_session: Session) -> User | None:
-    api_key = db_session.scalar(
-        select(ApiKey).where(ApiKey.hashed_api_key == hashed_api_key)
+async def fetch_user_for_api_key(
+    hashed_api_key: str, async_db_session: AsyncSession
+) -> User | None:
+    """NOTE: this is async, since it's used during auth
+    (which is necessarily async due to FastAPI Users)"""
+    return await async_db_session.scalar(
+        select(User)
+        .join(ApiKey, ApiKey.user_id == User.id)
+        .where(ApiKey.hashed_api_key == hashed_api_key)
     )
-    if api_key is None:
-        return None
-
-    return db_session.scalar(select(User).where(User.id == api_key.user_id))  # type: ignore
 
 
 def get_api_key_fake_email(

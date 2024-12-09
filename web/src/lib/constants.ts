@@ -36,8 +36,10 @@ export const SIDEBAR_WIDTH = `w-[350px]`;
 export const LOGOUT_DISABLED =
   process.env.NEXT_PUBLIC_DISABLE_LOGOUT?.toLowerCase() === "true";
 
+// Default sidebar open is true if the environment variable is not set
 export const NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN =
-  process.env.NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN?.toLowerCase() === "true";
+  process.env.NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN?.toLowerCase() === "true" ??
+  true;
 
 export const TOGGLED_CONNECTORS_COOKIE_NAME = "toggled_connectors";
 
@@ -59,6 +61,9 @@ export const EE_ENABLED =
 export const CUSTOM_ANALYTICS_ENABLED = process.env.CUSTOM_ANALYTICS_SECRET_KEY
   ? true
   : false;
+
+export const GTM_ENABLED =
+  process.env.NEXT_PUBLIC_GTM_ENABLED?.toLowerCase() === "true";
 
 export const DISABLE_LLM_DOC_RELEVANCE =
   process.env.DISABLE_LLM_DOC_RELEVANCE?.toLowerCase() === "true";

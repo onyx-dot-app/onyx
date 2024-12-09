@@ -32,7 +32,7 @@ To contribute to this project, please follow the
 When opening a pull request, mention related issues and feel free to tag relevant maintainers.
 
 Before creating a pull request please make sure that the new changes conform to the formatting and linting requirements.
-See the [Formatting and Linting](#-formatting-and-linting) section for how to run these checks locally.
+See the [Formatting and Linting](#formatting-and-linting) section for how to run these checks locally.
 
 
 ### Getting Help 🙋

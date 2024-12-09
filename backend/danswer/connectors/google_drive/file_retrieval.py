@@ -140,8 +140,8 @@ def get_files_in_shared_drive(
 ) -> Iterator[GoogleDriveFileType]:
     # If we know we are going to folder crawl later, we can cache the folders here
     # Get all folders being queried and add them to the traversed set
-    query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
-    query += " and trashed = false"
+    folder_query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
+    folder_query += " and trashed = false"
     found_folders = False
     for file in execute_paginated_retrieval(
         retrieval_function=service.files().list,
@@ -152,7 +152,7 @@ def get_files_in_shared_drive(
         supportsAllDrives=True,
         includeItemsFromAllDrives=True,
         fields="nextPageToken, files(id)",
-        q=query,
+        q=folder_query,
     ):
         update_traversed_ids_func(file["id"])
         found_folders = True
@@ -160,9 +160,9 @@ def get_files_in_shared_drive(
         update_traversed_ids_func(drive_id)
 
     # Get all files in the shared drive
-    query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
-    query += " and trashed = false"
-    query += _generate_time_range_filter(start, end)
+    file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
+    file_query += " and trashed = false"
+    file_query += _generate_time_range_filter(start, end)
     yield from execute_paginated_retrieval(
         retrieval_function=service.files().list,
         list_key="files",
@@ -172,7 +172,7 @@ def get_files_in_shared_drive(
         supportsAllDrives=True,
         includeItemsFromAllDrives=True,
         fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
-        q=query,
+        q=file_query,
     )
 
 
@@ -185,14 +185,16 @@ def get_all_files_in_my_drive(
 ) -> Iterator[GoogleDriveFileType]:
     # If we know we are going to folder crawl later, we can cache the folders here
     # Get all folders being queried and add them to the traversed set
-    query = "trashed = false and 'me' in owners"
+    folder_query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
+    folder_query += " and trashed = false"
+    folder_query += " and 'me' in owners"
     found_folders = False
     for file in execute_paginated_retrieval(
         retrieval_function=service.files().list,
         list_key="files",
         corpora="user",
         fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
-        q=query,
+        q=folder_query,
     ):
         update_traversed_ids_func(file["id"])
         found_folders = True
@@ -200,18 +202,52 @@ def get_all_files_in_my_drive(
         update_traversed_ids_func(get_root_folder_id(service))
 
     # Then get the files
-    query = "trashed = false and 'me' in owners"
-    query += _generate_time_range_filter(start, end)
-    fields = "files(id, name, mimeType, webViewLink, modifiedTime, createdTime)"
-    if not is_slim:
-        fields += ", files(permissions, permissionIds, owners)"
-
+    file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
+    file_query += " and trashed = false"
+    file_query += " and 'me' in owners"
+    file_query += _generate_time_range_filter(start, end)
     yield from execute_paginated_retrieval(
         retrieval_function=service.files().list,
         list_key="files",
         corpora="user",
         fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
-        q=query,
+        q=file_query,
+    )
+
+
+def get_all_files_for_oauth(
+    service: Any,
+    include_files_shared_with_me: bool,
+    include_my_drives: bool,
+    # One of the above 2 should be true
+    include_shared_drives: bool,
+    is_slim: bool = False,
+    start: SecondsSinceUnixEpoch | None = None,
+    end: SecondsSinceUnixEpoch | None = None,
+) -> Iterator[GoogleDriveFileType]:
+    should_get_all = (
+        include_shared_drives and include_my_drives and include_files_shared_with_me
+    )
+    corpora = "allDrives" if should_get_all else "user"
+
+    file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
+    file_query += " and trashed = false"
+    file_query += _generate_time_range_filter(start, end)
+
+    if not should_get_all:
+        if include_files_shared_with_me and not include_my_drives:
+            file_query += " and not 'me' in owners"
+        if not include_files_shared_with_me and include_my_drives:
+            file_query += " and 'me' in owners"
+
+    yield from execute_paginated_retrieval(
+        retrieval_function=service.files().list,
+        list_key="files",
+        corpora=corpora,
+        includeItemsFromAllDrives=should_get_all,
+        supportsAllDrives=should_get_all,
+        fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
+        q=file_query,
     )
 
 

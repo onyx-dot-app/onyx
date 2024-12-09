@@ -62,7 +62,7 @@ class ToolResponseHandler:
                 llm_call.force_use_tool.args
                 if llm_call.force_use_tool.args is not None
                 else tool.get_args_for_non_tool_calling_llm(
-                    query=llm_call.prompt_builder.get_user_message_content(),
+                    query=llm_call.prompt_builder.raw_user_message,
                     history=llm_call.prompt_builder.raw_message_history,
                     llm=llm,
                     force_run=True,
@@ -76,7 +76,7 @@ class ToolResponseHandler:
         else:
             tool_options = check_which_tools_should_run_for_non_tool_calling_llm(
                 tools=llm_call.tools,
-                query=llm_call.prompt_builder.get_user_message_content(),
+                query=llm_call.prompt_builder.raw_user_message,
                 history=llm_call.prompt_builder.raw_message_history,
                 llm=llm,
             )
@@ -95,7 +95,7 @@ class ToolResponseHandler:
                 select_single_tool_for_non_tool_calling_llm(
                     tools_and_args=available_tools_and_args,
                     history=llm_call.prompt_builder.raw_message_history,
-                    query=llm_call.prompt_builder.get_user_message_content(),
+                    query=llm_call.prompt_builder.raw_user_message,
                     llm=llm,
                 )
                 if available_tools_and_args

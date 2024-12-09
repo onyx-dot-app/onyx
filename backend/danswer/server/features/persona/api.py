@@ -11,18 +11,23 @@ from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_curator_or_admin_user
+from danswer.auth.users import current_limited_user
 from danswer.auth.users import current_user
 from danswer.configs.constants import FileOrigin
 from danswer.configs.constants import NotificationType
 from danswer.db.engine import get_session
 from danswer.db.models import User
 from danswer.db.notification import create_notification
+from danswer.db.persona import create_assistant_category
 from danswer.db.persona import create_update_persona
+from danswer.db.persona import delete_persona_category
+from danswer.db.persona import get_assistant_categories
 from danswer.db.persona import get_persona_by_id
 from danswer.db.persona import get_personas
 from danswer.db.persona import mark_persona_as_deleted
 from danswer.db.persona import mark_persona_as_not_deleted
 from danswer.db.persona import update_all_personas_display_priority
+from danswer.db.persona import update_persona_category
 from danswer.db.persona import update_persona_public_status
 from danswer.db.persona import update_persona_shared_users
 from danswer.db.persona import update_persona_visibility
@@ -31,12 +36,15 @@ from danswer.file_store.models import ChatFileType
 from danswer.llm.answering.prompts.utils import build_dummy_prompt
 from danswer.server.features.persona.models import CreatePersonaRequest
 from danswer.server.features.persona.models import ImageGenerationToolStatus
+from danswer.server.features.persona.models import PersonaCategoryCreate
+from danswer.server.features.persona.models import PersonaCategoryResponse
 from danswer.server.features.persona.models import PersonaSharedNotificationData
 from danswer.server.features.persona.models import PersonaSnapshot
 from danswer.server.features.persona.models import PromptTemplateResponse
 from danswer.server.models import DisplayPriorityRequest
 from danswer.tools.utils import is_image_generation_available
 from danswer.utils.logger import setup_logger
+
 
 logger = setup_logger()
 
@@ -168,6 +176,9 @@ def create_persona(
     )
 
 
+# NOTE: This endpoint cannot update persona configuration options that
+# are core to the persona, such as its display priority and
+# whether or not the assistant is a built-in / default assistant
 @basic_router.patch("/{persona_id}")
 def update_persona(
     persona_id: int,
@@ -181,6 +192,59 @@ def update_persona(
         user=user,
         db_session=db_session,
     )
+
+
+class PersonaCategoryPatchRequest(BaseModel):
+    category_description: str
+    category_name: str
+
+
+@basic_router.get("/categories")
+def get_categories(
+    db: Session = Depends(get_session),
+    _: User | None = Depends(current_user),
+) -> list[PersonaCategoryResponse]:
+    return [
+        PersonaCategoryResponse.from_model(category)
+        for category in get_assistant_categories(db_session=db)
+    ]
+
+
+@admin_router.post("/categories")
+def create_category(
+    category: PersonaCategoryCreate,
+    db: Session = Depends(get_session),
+    _: User | None = Depends(current_admin_user),
+) -> PersonaCategoryResponse:
+    """Create a new assistant category"""
+    category_model = create_assistant_category(
+        name=category.name, description=category.description, db_session=db
+    )
+    return PersonaCategoryResponse.from_model(category_model)
+
+
+@admin_router.patch("/category/{category_id}")
+def patch_persona_category(
+    category_id: int,
+    persona_category_patch_request: PersonaCategoryPatchRequest,
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_persona_category(
+        category_id=category_id,
+        category_description=persona_category_patch_request.category_description,
+        category_name=persona_category_patch_request.category_name,
+        db_session=db_session,
+    )
+
+
+@admin_router.delete("/category/{category_id}")
+def delete_category(
+    category_id: int,
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    delete_persona_category(category_id=category_id, db_session=db_session)
 
 
 class PersonaShareRequest(BaseModel):
@@ -272,7 +336,7 @@ def list_personas(
 @basic_router.get("/{persona_id}")
 def get_persona(
     persona_id: int,
-    user: User | None = Depends(current_user),
+    user: User | None = Depends(current_limited_user),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     return PersonaSnapshot.from_model(

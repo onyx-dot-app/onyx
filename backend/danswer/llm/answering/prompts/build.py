@@ -58,6 +58,7 @@ class AnswerPromptBuilder:
         user_message: HumanMessage,
         message_history: list[PreviousMessage],
         llm_config: LLMConfig,
+        raw_user_text: str,
         single_message_history: str | None = None,
     ) -> None:
 #        import pdb; pdb.set_trace()
@@ -89,6 +90,8 @@ class AnswerPromptBuilder:
         )
 
         self.new_messages_and_token_cnts: list[tuple[BaseMessage, int]] = []
+
+        self.raw_user_message = raw_user_text
 
     def update_system_prompt(self, system_message: SystemMessage | None) -> None:
         if not system_message:

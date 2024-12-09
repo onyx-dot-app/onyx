@@ -322,7 +322,8 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
                       </Text>
                     )}
 
-                    {indexAttempt.status === "failed" &&
+                    {(indexAttempt.status === "failed" ||
+                      indexAttempt.status === "canceled") &&
                       indexAttempt.error_msg && (
                         <Text className="flex flex-wrap whitespace-normal">
                           {indexAttempt.error_msg}

@@ -136,9 +136,11 @@ def translate_history_to_basemessages(
     return history_basemessages, history_token_counts
 
 
-def _process_csv_file(file: InMemoryChatFile) -> str:
+#  Processes CSV files to show the first 5 rows and max_columns (default 40) columns
+def _process_csv_file(file: InMemoryChatFile, max_columns: int = 40) -> str:
     df = pd.read_csv(io.StringIO(file.content.decode("utf-8")))
-    csv_preview = df.head().to_string()
+
+    csv_preview = df.head().to_string(max_cols=max_columns)
 
     file_name_section = (
         f"CSV FILE NAME: {file.filename}\n"

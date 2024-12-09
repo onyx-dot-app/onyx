@@ -60,7 +60,7 @@ import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { useUser } from "@/components/user/UserProvider";
 
-function DraggableAssistantListItem(props: any) {
+function DraggableAssistantListItem({ ...props }: any) {
   const {
     attributes,
     listeners,
@@ -100,6 +100,7 @@ function AssistantListItem({
   deleteAssistant,
   shareAssistant,
   isDragging,
+  onlyAssistant,
 }: {
   assistant: Persona;
   user: User | null;
@@ -109,14 +110,13 @@ function AssistantListItem({
   shareAssistant: Dispatch<SetStateAction<Persona | null>>;
   setPopup: (popupSpec: PopupSpec | null) => void;
   isDragging?: boolean;
+  onlyAssistant: boolean;
 }) {
   const { refreshUser } = useUser();
   const router = useRouter();
   const [showSharingModal, setShowSharingModal] = useState(false);
 
   const isOwnedByUser = checkUserOwnsAssistant(user, assistant);
-  const currentChosenAssistants = user?.preferences
-    ?.chosen_assistants as number[];
 
   return (
     <>
@@ -192,13 +192,14 @@ function AssistantListItem({
                     key="remove"
                     className="flex items-center gap-x-2 px-4 py-2 hover:bg-gray-100 w-full text-left"
                     onClick={async () => {
-                      if (currentChosenAssistants?.length === 1) {
+                      if (onlyAssistant) {
                         setPopup({
                           message: `Cannot remove "${assistant.name}" - you must have at least one assistant.`,
                           type: "error",
                         });
                         return;
                       }
+
                       const success = await removeAssistantFromList(
                         assistant.id
                       );
@@ -343,8 +344,6 @@ export function AssistantsList() {
 
       setCurrentlyVisibleAssistants(updatedAssistants);
       await updateUserAssistantList(updatedAssistants.map((a) => a.id));
-      await refreshUser();
-      await refreshAssistants();
     }
   }
 
@@ -434,6 +433,7 @@ export function AssistantsList() {
             <div className="w-full items-center py-4">
               {currentlyVisibleAssistants.map((assistant, index) => (
                 <DraggableAssistantListItem
+                  onlyAssistant={currentlyVisibleAssistants.length === 1}
                   deleteAssistant={setDeletingPersona}
                   shareAssistant={setMakePublicPersona}
                   key={assistant.id}
@@ -463,6 +463,7 @@ export function AssistantsList() {
             <div className="w-full p-4">
               {ownedButHiddenAssistants.map((assistant, index) => (
                 <AssistantListItem
+                  onlyAssistant={currentlyVisibleAssistants.length === 1}
                   deleteAssistant={setDeletingPersona}
                   shareAssistant={setMakePublicPersona}
                   key={assistant.id}

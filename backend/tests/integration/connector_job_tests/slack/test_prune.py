@@ -3,6 +3,8 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
+import pytest
+
 from danswer.connectors.models import InputType
 from danswer.db.enums import AccessType
 from danswer.server.documents.models import DocumentSource
@@ -22,7 +24,7 @@ from tests.integration.common_utils.vespa import vespa_fixture
 from tests.integration.connector_job_tests.slack.slack_api_utils import SlackManager
 
 
-# @pytest.mark.xfail(reason="flaky - see DAN-835 for example", strict=False)
+@pytest.mark.xfail(reason="flaky - see DAN-986 for details", strict=False)
 def test_slack_prune(
     reset: None,
     vespa_client: vespa_fixture,
@@ -62,7 +64,7 @@ def test_slack_prune(
             "workspace": "onyx-test-workspace",
             "channels": [public_channel["name"], private_channel["name"]],
         },
-        is_public=True,
+        access_type=AccessType.PUBLIC,
         groups=[],
         user_performing_action=admin_user,
     )

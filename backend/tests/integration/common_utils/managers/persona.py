@@ -2,11 +2,12 @@ from uuid import uuid4
 
 import requests
 
-from danswer.search.enums import RecencyBiasSetting
+from danswer.context.search.enums import RecencyBiasSetting
 from danswer.server.features.persona.models import PersonaSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestPersona
+from tests.integration.common_utils.test_models import DATestPersonaCategory
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -27,6 +28,7 @@ class PersonaManager:
         llm_model_version_override: str | None = None,
         users: list[str] | None = None,
         groups: list[int] | None = None,
+        category_id: int | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> DATestPersona:
         name = name or f"test-persona-{uuid4()}"
@@ -212,3 +214,83 @@ class PersonaManager:
             else GENERAL_HEADERS,
         )
         return response.ok
+
+
+class PersonaCategoryManager:
+    @staticmethod
+    def create(
+        category: DATestPersonaCategory,
+        user_performing_action: DATestUser | None = None,
+    ) -> DATestPersonaCategory:
+        response = requests.post(
+            f"{API_SERVER_URL}/admin/persona/categories",
+            json={
+                "name": category.name,
+                "description": category.description,
+            },
+            headers=user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+        response_data = response.json()
+        category.id = response_data["id"]
+        return category
+
+    @staticmethod
+    def get_all(
+        user_performing_action: DATestUser | None = None,
+    ) -> list[DATestPersonaCategory]:
+        response = requests.get(
+            f"{API_SERVER_URL}/persona/categories",
+            headers=user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+        return [DATestPersonaCategory(**category) for category in response.json()]
+
+    @staticmethod
+    def update(
+        category: DATestPersonaCategory,
+        user_performing_action: DATestUser | None = None,
+    ) -> DATestPersonaCategory:
+        response = requests.patch(
+            f"{API_SERVER_URL}/admin/persona/category/{category.id}",
+            json={
+                "category_name": category.name,
+                "category_description": category.description,
+            },
+            headers=user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+        return category
+
+    @staticmethod
+    def delete(
+        category: DATestPersonaCategory,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        response = requests.delete(
+            f"{API_SERVER_URL}/admin/persona/category/{category.id}",
+            headers=user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS,
+        )
+        return response.ok
+
+    @staticmethod
+    def verify(
+        category: DATestPersonaCategory,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        all_categories = PersonaCategoryManager.get_all(user_performing_action)
+        for fetched_category in all_categories:
+            if fetched_category.id == category.id:
+                return (
+                    fetched_category.name == category.name
+                    and fetched_category.description == category.description
+                )
+        return False

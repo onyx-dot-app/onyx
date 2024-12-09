@@ -1,15 +1,12 @@
 from datetime import datetime
 from datetime import timezone
 
-from sqlalchemy.orm import Session
-
+from danswer.access.models import DocExternalAccess
 from danswer.access.models import ExternalAccess
 from danswer.connectors.gmail.connector import GmailConnector
 from danswer.connectors.interfaces import GenerateSlimDocumentOutput
 from danswer.db.models import ConnectorCredentialPair
-from danswer.db.users import batch_add_non_web_user_if_not_exists__no_commit
 from danswer.utils.logger import setup_logger
-from ee.danswer.db.document import upsert_document_external_perms__no_commit
 
 logger = setup_logger()
 
@@ -31,9 +28,8 @@ def _get_slim_doc_generator(
 
 
 def gmail_doc_sync(
-    db_session: Session,
     cc_pair: ConnectorCredentialPair,
-) -> None:
+) -> list[DocExternalAccess]:
     """
     Adds the external permissions to the documents in postgres
     if the document doesn't already exists in postgres, we create
@@ -45,6 +41,7 @@ def gmail_doc_sync(
 
     slim_doc_generator = _get_slim_doc_generator(cc_pair, gmail_connector)
 
+    document_external_access: list[DocExternalAccess] = []
     for slim_doc_batch in slim_doc_generator:
         for slim_doc in slim_doc_batch:
             if slim_doc.perm_sync_data is None:
@@ -56,13 +53,11 @@ def gmail_doc_sync(
                     external_user_group_ids=set(),
                     is_public=False,
                 )
-                batch_add_non_web_user_if_not_exists__no_commit(
-                    db_session=db_session,
-                    emails=list(ext_access.external_user_emails),
+                document_external_access.append(
+                    DocExternalAccess(
+                        doc_id=slim_doc.id,
+                        external_access=ext_access,
+                    )
                 )
-                upsert_document_external_perms__no_commit(
-                    db_session=db_session,
-                    doc_id=slim_doc.id,
-                    external_access=ext_access,
-                    source_type=cc_pair.connector.source,
-                )
+
+    return document_external_access

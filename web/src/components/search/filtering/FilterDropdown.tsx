@@ -16,6 +16,8 @@ export function FilterDropdown({
   dropdownWidth,
   optionClassName,
   resetValues,
+  backgroundColor,
+  dropdownColor,
 }: {
   options: Option[];
   selected: string[];
@@ -26,6 +28,8 @@ export function FilterDropdown({
   dropdownWidth?: string;
   optionClassName?: string;
   resetValues?: () => void;
+  backgroundColor?: string;
+  dropdownColor?: string;
 }) {
   return (
     <div>
@@ -36,7 +40,7 @@ export function FilterDropdown({
               border 
               border-border 
               rounded-lg 
-              bg-background
+              ${backgroundColor || "bg-background"}
               flex 
               flex-col 
               ${dropdownWidth || width}
@@ -62,7 +66,8 @@ export function FilterDropdown({
                       w-fit
                       text-emphasis
                       gap-x-1
-                      hover:bg-hover-light
+                      ${dropdownColor || "bg-background"}
+                      hover:bg-hover
                       ${
                         ind === options.length - 1
                           ? ""
@@ -99,6 +104,7 @@ export function FilterDropdown({
             gap-x-2
             border-border
             cursor-pointer 
+            ${backgroundColor || "bg-background"}
             hover:bg-hover-light`}
         >
           <div className="flex-none my-auto">{icon}</div>

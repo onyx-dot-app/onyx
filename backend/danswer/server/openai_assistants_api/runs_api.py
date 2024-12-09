@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from danswer.auth.users import current_user
 from danswer.chat.process_message import stream_chat_message_objects
 from danswer.configs.constants import MessageType
+from danswer.context.search.models import RetrievalDetails
 from danswer.db.chat import create_new_chat_message
 from danswer.db.chat import get_chat_message
 from danswer.db.chat import get_chat_messages_by_session
@@ -20,7 +21,6 @@ from danswer.db.chat import get_or_create_root_message
 from danswer.db.engine import get_session
 from danswer.db.models import ChatMessage
 from danswer.db.models import User
-from danswer.search.models import RetrievalDetails
 from danswer.server.query_and_chat.models import ChatMessageDetail
 from danswer.server.query_and_chat.models import CreateChatMessageRequest
 from danswer.tools.tool_implementations.search.search_tool import SearchTool

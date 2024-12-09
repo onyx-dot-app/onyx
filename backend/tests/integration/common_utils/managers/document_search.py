@@ -1,9 +1,9 @@
 import requests
 
-from danswer.search.enums import LLMEvaluationType
-from danswer.search.enums import SearchType
-from danswer.search.models import RetrievalDetails
-from danswer.search.models import SavedSearchDocWithContent
+from danswer.context.search.enums import LLMEvaluationType
+from danswer.context.search.enums import SearchType
+from danswer.context.search.models import RetrievalDetails
+from danswer.context.search.models import SavedSearchDocWithContent
 from ee.danswer.server.query_and_chat.models import DocumentSearchRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS

@@ -47,8 +47,8 @@ const ToggleSwitch = () => {
       <button
         className={`px-4 py-2 rounded-full text-sm font-medium transition-colors duration-300 ease-in-out flex items-center relative z-10 ${
           activeTab === "search"
-            ? "text-gray-800"
-            : "text-gray-500 hover:text-gray-700"
+            ? "text-text-application-toggled"
+            : "text-text-application-untoggled hover:text-text-application-untoggled-hover"
         }`}
         onClick={() => handleTabChange("search")}
       >
@@ -66,8 +66,8 @@ const ToggleSwitch = () => {
       <button
         className={`px-4 py-2 rounded-full text-sm font-medium transition-colors duration-300 ease-in-out flex items-center relative z-10 ${
           activeTab === "chat"
-            ? "text-gray-800"
-            : "text-gray-500 hover:text-gray-700"
+            ? "text-text-application-toggled"
+            : "text-text-application-untoggled hover:text-text-application-untoggled-hover"
         }`}
         onClick={() => handleTabChange("chat")}
       >

@@ -139,7 +139,7 @@ def test_web_pruning(reset: None, vespa_client: vespa_fixture) -> None:
                 cc_pair_1, now, timeout=60, user_performing_action=admin_user
             )
 
-            selected_cc_pair = CCPairManager.get_one(
+            selected_cc_pair = CCPairManager.get_indexing_status_by_id(
                 cc_pair_1.id, user_performing_action=admin_user
             )
             assert selected_cc_pair is not None, "cc_pair not found after indexing!"
@@ -156,7 +156,7 @@ def test_web_pruning(reset: None, vespa_client: vespa_fixture) -> None:
                 cc_pair_1, now, timeout=60, user_performing_action=admin_user
             )
 
-            selected_cc_pair = CCPairManager.get_one(
+            selected_cc_pair = CCPairManager.get_indexing_status_by_id(
                 cc_pair_1.id, user_performing_action=admin_user
             )
             assert selected_cc_pair is not None, "cc_pair not found after pruning!"

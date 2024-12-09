@@ -70,7 +70,7 @@ export async function fetchSomeChatData(
   const taskMap: Record<FetchOption, () => Promise<any>> = {
     user: getCurrentUserSS,
     chatSessions: () => fetchSS("/chat/get-user-chat-sessions"),
-    ccPairs: () => fetchSS("/manage/indexing-status"),
+    ccPairs: () => fetchSS("/manage/connector-status"),
     documentSets: () => fetchSS("/manage/document-set"),
     assistants: fetchAssistantsSS,
     tags: () => fetchSS("/query/valid-tags"),
@@ -229,9 +229,7 @@ export async function fetchSomeChatData(
     result.shouldDisplaySourcesIncompleteModal =
       hasAnyConnectors &&
       !result.shouldShowWelcomeModal &&
-      !result.ccPairs.some(
-        (ccPair) => ccPair.has_successful_run && ccPair.docs_indexed > 0
-      ) &&
+      !result.ccPairs.some((ccPair) => ccPair.has_successful_run) &&
       (!user || user.role === "admin");
   }
 

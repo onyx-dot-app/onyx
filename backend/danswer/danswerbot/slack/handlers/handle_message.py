@@ -19,8 +19,8 @@ from danswer.danswerbot.slack.utils import respond_in_thread
 from danswer.danswerbot.slack.utils import slack_usage_report
 from danswer.danswerbot.slack.utils import update_emote_react
 from danswer.db.engine import get_session_with_tenant
-from danswer.db.models import SlackBotConfig
-from danswer.db.users import add_non_web_user_if_not_exists
+from danswer.db.models import SlackChannelConfig
+from danswer.db.users import add_slack_user_if_not_exists
 from danswer.utils.logger import setup_logger
 from shared_configs.configs import SLACK_CHANNEL_ID
 
@@ -106,7 +106,7 @@ def remove_scheduled_feedback_reminder(
 
 def handle_message(
     message_info: SlackMessageInfo,
-    slack_bot_config: SlackBotConfig | None,
+    slack_channel_config: SlackChannelConfig | None,
     client: WebClient,
     feedback_reminder_id: str | None,
     tenant_id: str | None,
@@ -140,7 +140,7 @@ def handle_message(
     )
 
     document_set_names: list[str] | None = None
-    persona = slack_bot_config.persona if slack_bot_config else None
+    persona = slack_channel_config.persona if slack_channel_config else None
     prompt = None
     if persona:
         document_set_names = [
@@ -152,8 +152,8 @@ def handle_message(
     respond_member_group_list = None
 
     channel_conf = None
-    if slack_bot_config and slack_bot_config.channel_config:
-        channel_conf = slack_bot_config.channel_config
+    if slack_channel_config and slack_channel_config.channel_config:
+        channel_conf = slack_channel_config.channel_config
         if not bypass_filters and "answer_filters" in channel_conf:
             if (
                 "questionmark_prefilter" in channel_conf["answer_filters"]
@@ -213,13 +213,13 @@ def handle_message(
 
     with get_session_with_tenant(tenant_id) as db_session:
         if message_info.email:
-            add_non_web_user_if_not_exists(db_session, message_info.email)
+            add_slack_user_if_not_exists(db_session, message_info.email)
 
         # first check if we need to respond with a standard answer
         used_standard_answer = handle_standard_answers(
             message_info=message_info,
             receiver_ids=send_to,
-            slack_bot_config=slack_bot_config,
+            slack_channel_config=slack_channel_config,
             prompt=prompt,
             logger=logger,
             client=client,
@@ -231,7 +231,7 @@ def handle_message(
         # if no standard answer applies, try a regular answer
         issue_with_regular_answer = handle_regular_answer(
             message_info=message_info,
-            slack_bot_config=slack_bot_config,
+            slack_channel_config=slack_channel_config,
             receiver_ids=send_to,
             client=client,
             channel=channel,

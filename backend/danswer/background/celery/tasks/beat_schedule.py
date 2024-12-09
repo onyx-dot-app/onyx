@@ -8,7 +8,7 @@ tasks_to_schedule = [
     {
         "name": "check-for-vespa-sync",
         "task": "check_for_vespa_sync_task",
-        "schedule": timedelta(seconds=5),
+        "schedule": timedelta(seconds=20),
         "options": {"priority": DanswerCeleryPriority.HIGH},
     },
     {
@@ -20,13 +20,13 @@ tasks_to_schedule = [
     {
         "name": "check-for-indexing",
         "task": "check_for_indexing",
-        "schedule": timedelta(seconds=10),
+        "schedule": timedelta(seconds=15),
         "options": {"priority": DanswerCeleryPriority.HIGH},
     },
     {
         "name": "check-for-prune",
         "task": "check_for_pruning",
-        "schedule": timedelta(seconds=10),
+        "schedule": timedelta(seconds=15),
         "options": {"priority": DanswerCeleryPriority.HIGH},
     },
     {
@@ -39,6 +39,18 @@ tasks_to_schedule = [
         "name": "monitor-vespa-sync",
         "task": "monitor_vespa_sync",
         "schedule": timedelta(seconds=5),
+        "options": {"priority": DanswerCeleryPriority.HIGH},
+    },
+    {
+        "name": "check-for-doc-permissions-sync",
+        "task": "check_for_doc_permissions_sync",
+        "schedule": timedelta(seconds=30),
+        "options": {"priority": DanswerCeleryPriority.HIGH},
+    },
+    {
+        "name": "check-for-external-group-sync",
+        "task": "check_for_external_group_sync",
+        "schedule": timedelta(seconds=20),
         "options": {"priority": DanswerCeleryPriority.HIGH},
     },
 ]

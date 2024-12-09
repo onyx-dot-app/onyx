@@ -142,6 +142,20 @@ async def async_return_default_schema(*args: Any, **kwargs: Any) -> str:
 # Prefix used for all tenant ids
 TENANT_ID_PREFIX = "tenant_"
 
+DISALLOWED_SLACK_BOT_TENANT_IDS = os.environ.get("DISALLOWED_SLACK_BOT_TENANT_IDS")
+DISALLOWED_SLACK_BOT_TENANT_LIST = (
+    [tenant.strip() for tenant in DISALLOWED_SLACK_BOT_TENANT_IDS.split(",")]
+    if DISALLOWED_SLACK_BOT_TENANT_IDS
+    else None
+)
+
+IGNORED_SYNCING_TENANT_IDS = os.environ.get("IGNORED_SYNCING_TENANT_IDS")
+IGNORED_SYNCING_TENANT_LIST = (
+    [tenant.strip() for tenant in IGNORED_SYNCING_TENANT_IDS.split(",")]
+    if IGNORED_SYNCING_TENANT_IDS
+    else None
+)
+
 SUPPORTED_EMBEDDING_MODELS = [
     # Cloud-based models
     SupportedEmbeddingModel(

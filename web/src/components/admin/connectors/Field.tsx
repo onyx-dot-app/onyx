@@ -161,7 +161,7 @@ export function TextFormField({
   error?: string;
   defaultHeight?: string;
   isCode?: boolean;
-  fontSize?: "text-sm" | "text-base" | "text-lg";
+  fontSize?: "sm" | "md" | "lg";
   hideError?: boolean;
   tooltip?: string;
   explanationText?: string;
@@ -187,12 +187,31 @@ export function TextFormField({
       onChange(e as React.ChangeEvent<HTMLInputElement>);
     }
   };
+  const textSizeClasses = {
+    sm: {
+      label: "text-sm",
+      input: "text-sm",
+      placeholder: "text-sm",
+    },
+    md: {
+      label: "text-base",
+      input: "text-base",
+      placeholder: "text-base",
+    },
+    lg: {
+      label: "text-lg",
+      input: "text-lg",
+      placeholder: "text-lg",
+    },
+  };
+
+  const sizeClass = textSizeClasses[fontSize || "md"];
 
   return (
     <div className={`w-full ${width}`}>
       <div className="flex gap-x-2 items-center">
         {!removeLabel && (
-          <Label className="text-text-950" small={small}>
+          <Label className={sizeClass.label} small={small}>
             {label}
           </Label>
         )}
@@ -221,7 +240,7 @@ export function TextFormField({
           name={name}
           id={name}
           className={`
-            ${small && "text-sm"}
+            ${small && sizeClass.input}
             border 
             border-border 
             rounded-md
@@ -230,10 +249,10 @@ export function TextFormField({
             px-3 
             mt-1
             placeholder:font-description 
-            placeholder:text-base 
+            placeholder:${sizeClass.placeholder}
             placeholder:text-text-400
             ${heightString}
-            ${fontSize}
+            ${sizeClass.input}
             ${disabled ? " bg-background-strong" : " bg-white"}
             ${isCode ? " font-mono" : ""}
           `}
@@ -585,6 +604,7 @@ interface SelectorFormFieldProps {
   onSelect?: (selected: string | number | null) => void;
   defaultValue?: string;
   tooltip?: string;
+  includeReset?: boolean;
 }
 
 export function SelectorFormField({
@@ -597,6 +617,7 @@ export function SelectorFormField({
   onSelect,
   defaultValue,
   tooltip,
+  includeReset = false,
 }: SelectorFormFieldProps) {
   const [field] = useField<string>(name);
   const { setFieldValue } = useFormikContext();
@@ -619,7 +640,11 @@ export function SelectorFormField({
         <Select
           value={field.value || defaultValue}
           onValueChange={
-            onSelect || ((selected) => setFieldValue(name, selected))
+            onSelect ||
+            ((selected) =>
+              selected == "__none__"
+                ? setFieldValue(name, null)
+                : setFieldValue(name, selected))
           }
           defaultValue={defaultValue}
         >
@@ -632,7 +657,10 @@ export function SelectorFormField({
           {container && (
             <SelectContent
               side={side}
-              className={maxHeight ? `max-h-[${maxHeight}]` : undefined}
+              className={`
+               ${maxHeight ? `${maxHeight}` : "max-h-72"}
+               overflow-y-scroll
+              `}
               container={container}
             >
               {options.length === 0 ? (
@@ -648,6 +676,14 @@ export function SelectorFormField({
                     {option.name}
                   </SelectItem>
                 ))
+              )}
+              {includeReset && (
+                <SelectItem
+                  value={"__none__"}
+                  onSelect={() => setFieldValue(name, null)}
+                >
+                  None
+                </SelectItem>
               )}
             </SelectContent>
           )}

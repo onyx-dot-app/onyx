@@ -2,15 +2,13 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from danswer.auth.api_key import get_hashed_api_key_from_request
 from danswer.auth.users import current_admin_user
 from danswer.configs.app_configs import AUTH_TYPE
 from danswer.configs.app_configs import SUPER_CLOUD_API_KEY
 from danswer.configs.app_configs import SUPER_USERS
 from danswer.configs.constants import AuthType
-from danswer.db.api_key import fetch_user_for_api_key
 from danswer.db.models import User
 from danswer.utils.logger import setup_logger
 from ee.danswer.db.saml import get_saml_account
@@ -28,21 +26,17 @@ def verify_auth_setting() -> None:
 async def optional_user_(
     request: Request,
     user: User | None,
-    db_session: Session,
+    async_db_session: AsyncSession,
 ) -> User | None:
     # Check if the user has a session cookie from SAML
     if AUTH_TYPE == AuthType.SAML:
         saved_cookie = extract_hashed_cookie(request)
 
         if saved_cookie:
-            saml_account = get_saml_account(cookie=saved_cookie, db_session=db_session)
+            saml_account = await get_saml_account(
+                cookie=saved_cookie, async_db_session=async_db_session
+            )
             user = saml_account.user if saml_account else None
-
-    # check if an API key is present
-    if user is None:
-        hashed_api_key = get_hashed_api_key_from_request(request)
-        if hashed_api_key:
-            user = fetch_user_for_api_key(hashed_api_key, db_session)
 
     return user
 

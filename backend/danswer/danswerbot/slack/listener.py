@@ -4,6 +4,7 @@ import signal
 import sys
 import threading
 import time
+from collections.abc import Callable
 from threading import Event
 from types import FrameType
 from typing import Any
@@ -16,14 +17,18 @@ from prometheus_client import start_http_server
 from slack_sdk import WebClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
+from sqlalchemy.orm import Session
 
+from danswer.configs.app_configs import POD_NAME
+from danswer.configs.app_configs import POD_NAMESPACE
 from danswer.configs.constants import DanswerRedisLocks
 from danswer.configs.constants import MessageType
 from danswer.configs.danswerbot_configs import DANSWER_BOT_REPHRASE_MESSAGE
 from danswer.configs.danswerbot_configs import DANSWER_BOT_RESPOND_EVERY_CHANNEL
 from danswer.configs.danswerbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
 from danswer.connectors.slack.utils import expert_info_from_slack_id
-from danswer.danswerbot.slack.config import get_slack_bot_config_for_channel
+from danswer.context.search.retrieval.search_runner import download_nltk_data
+from danswer.danswerbot.slack.config import get_slack_channel_config_for_bot_and_channel
 from danswer.danswerbot.slack.config import MAX_TENANTS_PER_POD
 from danswer.danswerbot.slack.config import TENANT_ACQUISITION_INTERVAL
 from danswer.danswerbot.slack.config import TENANT_HEARTBEAT_EXPIRATION
@@ -52,39 +57,43 @@ from danswer.danswerbot.slack.handlers.handle_message import (
 )
 from danswer.danswerbot.slack.handlers.handle_message import schedule_feedback_reminder
 from danswer.danswerbot.slack.models import SlackMessageInfo
-from danswer.danswerbot.slack.tokens import fetch_tokens
 from danswer.danswerbot.slack.utils import check_message_limit
 from danswer.danswerbot.slack.utils import decompose_action_id
 from danswer.danswerbot.slack.utils import get_channel_name_from_id
-from danswer.danswerbot.slack.utils import get_danswer_bot_app_id
+from danswer.danswerbot.slack.utils import get_danswer_bot_slack_bot_id
 from danswer.danswerbot.slack.utils import read_slack_thread
 from danswer.danswerbot.slack.utils import remove_danswer_bot_tag
 from danswer.danswerbot.slack.utils import rephrase_slack_message
 from danswer.danswerbot.slack.utils import respond_in_thread
 from danswer.danswerbot.slack.utils import TenantSocketModeClient
-from danswer.db.engine import CURRENT_TENANT_ID_CONTEXTVAR
 from danswer.db.engine import get_all_tenant_ids
 from danswer.db.engine import get_session_with_tenant
+from danswer.db.models import SlackBot
 from danswer.db.search_settings import get_current_search_settings
+from danswer.db.slack_bot import fetch_slack_bots
 from danswer.key_value_store.interface import KvKeyNotFoundError
 from danswer.natural_language_processing.search_nlp_models import EmbeddingModel
 from danswer.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from danswer.one_shot_answer.models import ThreadMessage
 from danswer.redis.redis_pool import get_redis_client
-from danswer.search.retrieval.search_runner import download_nltk_data
 from danswer.server.manage.models import SlackBotTokens
 from danswer.utils.logger import setup_logger
 from danswer.utils.variable_functionality import set_is_ee_based_on_env_variable
+from shared_configs.configs import DISALLOWED_SLACK_BOT_TENANT_LIST
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import SLACK_CHANNEL_ID
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
 
 logger = setup_logger()
 
 # Prometheus metric for HPA
 active_tenants_gauge = Gauge(
-    "active_tenants", "Number of active tenants handled by this pod"
+    "active_tenants",
+    "Number of active tenants handled by this pod",
+    ["namespace", "pod"],
 )
 
 # In rare cases, some users have been experiencing a massive amount of trivial messages coming through
@@ -108,8 +117,10 @@ class SlackbotHandler:
     def __init__(self) -> None:
         logger.info("Initializing SlackbotHandler")
         self.tenant_ids: Set[str | None] = set()
-        self.socket_clients: Dict[str | None, TenantSocketModeClient] = {}
-        self.slack_bot_tokens: Dict[str | None, SlackBotTokens] = {}
+        # The keys for these dictionaries are tuples of (tenant_id, slack_bot_id)
+        self.socket_clients: Dict[tuple[str | None, int], TenantSocketModeClient] = {}
+        self.slack_bot_tokens: Dict[tuple[str | None, int], SlackBotTokens] = {}
+
         self.running = True
         self.pod_id = self.get_pod_id()
         self._shutdown_event = Event()
@@ -147,7 +158,9 @@ class SlackbotHandler:
         while not self._shutdown_event.is_set():
             try:
                 self.acquire_tenants()
-                active_tenants_gauge.set(len(self.tenant_ids))
+                active_tenants_gauge.labels(namespace=POD_NAMESPACE, pod=POD_NAME).set(
+                    len(self.tenant_ids)
+                )
                 logger.debug(f"Current active tenants: {len(self.tenant_ids)}")
             except Exception as e:
                 logger.exception(f"Error in Slack acquisition: {e}")
@@ -162,11 +175,63 @@ class SlackbotHandler:
                 logger.exception(f"Error in heartbeat loop: {e}")
             self._shutdown_event.wait(timeout=TENANT_HEARTBEAT_INTERVAL)
 
+    def _manage_clients_per_tenant(
+        self, db_session: Session, tenant_id: str | None, bot: SlackBot
+    ) -> None:
+        slack_bot_tokens = SlackBotTokens(
+            bot_token=bot.bot_token,
+            app_token=bot.app_token,
+        )
+        tenant_bot_pair = (tenant_id, bot.id)
+
+        # If the tokens are not set, we need to close the socket client and delete the tokens
+        # for the tenant and app
+        if not slack_bot_tokens:
+            logger.debug(
+                f"No Slack bot token found for tenant {tenant_id}, bot {bot.id}"
+            )
+            if tenant_bot_pair in self.socket_clients:
+                asyncio.run(self.socket_clients[tenant_bot_pair].close())
+                del self.socket_clients[tenant_bot_pair]
+                del self.slack_bot_tokens[tenant_bot_pair]
+            return
+
+        tokens_exist = tenant_bot_pair in self.slack_bot_tokens
+        tokens_changed = (
+            tokens_exist and slack_bot_tokens != self.slack_bot_tokens[tenant_bot_pair]
+        )
+        if not tokens_exist or tokens_changed:
+            if tokens_exist:
+                logger.info(
+                    f"Slack Bot tokens have changed for tenant {tenant_id}, bot {bot.id} - reconnecting"
+                )
+            else:
+                search_settings = get_current_search_settings(db_session)
+                embedding_model = EmbeddingModel.from_db_model(
+                    search_settings=search_settings,
+                    server_host=MODEL_SERVER_HOST,
+                    server_port=MODEL_SERVER_PORT,
+                )
+                warm_up_bi_encoder(embedding_model=embedding_model)
+
+            self.slack_bot_tokens[tenant_bot_pair] = slack_bot_tokens
+
+            if tenant_bot_pair in self.socket_clients:
+                asyncio.run(self.socket_clients[tenant_bot_pair].close())
+
+            self.start_socket_client(bot.id, tenant_id, slack_bot_tokens)
+
     def acquire_tenants(self) -> None:
         tenant_ids = get_all_tenant_ids()
-        logger.debug(f"Found {len(tenant_ids)} total tenants in Postgres")
 
         for tenant_id in tenant_ids:
+            if (
+                DISALLOWED_SLACK_BOT_TENANT_LIST is not None
+                and tenant_id in DISALLOWED_SLACK_BOT_TENANT_LIST
+            ):
+                logger.debug(f"Tenant {tenant_id} is in the disallowed list, skipping")
+                continue
+
             if tenant_id in self.tenant_ids:
                 logger.debug(f"Tenant {tenant_id} already in self.tenant_ids")
                 continue
@@ -190,63 +255,30 @@ class SlackbotHandler:
                 continue
 
             logger.debug(f"Acquired lock for tenant {tenant_id}")
+
+            self.tenant_ids.add(tenant_id)
+
+        for tenant_id in self.tenant_ids:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(
                 tenant_id or POSTGRES_DEFAULT_SCHEMA
             )
             try:
                 with get_session_with_tenant(tenant_id) as db_session:
                     try:
-                        logger.debug(
-                            f"Setting tenant ID context variable for tenant {tenant_id}"
-                        )
-                        slack_bot_tokens = fetch_tokens()
-                        logger.debug(f"Fetched Slack bot tokens for tenant {tenant_id}")
-                        logger.debug(
-                            f"Reset tenant ID context variable for tenant {tenant_id}"
-                        )
-
-                        if not slack_bot_tokens:
-                            logger.debug(
-                                f"No Slack bot token found for tenant {tenant_id}"
+                        bots = fetch_slack_bots(db_session=db_session)
+                        for bot in bots:
+                            self._manage_clients_per_tenant(
+                                db_session=db_session,
+                                tenant_id=tenant_id,
+                                bot=bot,
                             )
-                            if tenant_id in self.socket_clients:
-                                asyncio.run(self.socket_clients[tenant_id].close())
-                                del self.socket_clients[tenant_id]
-                                del self.slack_bot_tokens[tenant_id]
-                            continue
-
-                        if (
-                            tenant_id not in self.slack_bot_tokens
-                            or slack_bot_tokens != self.slack_bot_tokens[tenant_id]
-                        ):
-                            if tenant_id in self.slack_bot_tokens:
-                                logger.info(
-                                    f"Slack Bot tokens have changed for tenant {tenant_id} - reconnecting"
-                                )
-                            else:
-                                search_settings = get_current_search_settings(
-                                    db_session
-                                )
-                                embedding_model = EmbeddingModel.from_db_model(
-                                    search_settings=search_settings,
-                                    server_host=MODEL_SERVER_HOST,
-                                    server_port=MODEL_SERVER_PORT,
-                                )
-                                warm_up_bi_encoder(embedding_model=embedding_model)
-
-                            self.slack_bot_tokens[tenant_id] = slack_bot_tokens
-
-                            if tenant_id in self.socket_clients:
-                                asyncio.run(self.socket_clients[tenant_id].close())
-
-                            self.start_socket_client(tenant_id, slack_bot_tokens)
 
                     except KvKeyNotFoundError:
                         logger.debug(f"Missing Slack Bot tokens for tenant {tenant_id}")
-                        if tenant_id in self.socket_clients:
-                            asyncio.run(self.socket_clients[tenant_id].close())
-                            del self.socket_clients[tenant_id]
-                            del self.slack_bot_tokens[tenant_id]
+                        if (tenant_id, bot.id) in self.socket_clients:
+                            asyncio.run(self.socket_clients[tenant_id, bot.id].close())
+                            del self.socket_clients[tenant_id, bot.id]
+                            del self.slack_bot_tokens[tenant_id, bot.id]
                     except Exception as e:
                         logger.exception(f"Error handling tenant {tenant_id}: {e}")
             finally:
@@ -265,26 +297,37 @@ class SlackbotHandler:
             )
 
     def start_socket_client(
-        self, tenant_id: str | None, slack_bot_tokens: SlackBotTokens
+        self, slack_bot_id: int, tenant_id: str | None, slack_bot_tokens: SlackBotTokens
     ) -> None:
-        logger.info(f"Starting socket client for tenant {tenant_id}")
-        socket_client = _get_socket_client(slack_bot_tokens, tenant_id)
+        logger.info(
+            f"Starting socket client for tenant: {tenant_id}, app: {slack_bot_id}"
+        )
+        socket_client: TenantSocketModeClient = _get_socket_client(
+            slack_bot_tokens, tenant_id, slack_bot_id
+        )
 
         # Append the event handler
+        process_slack_event = create_process_slack_event()
         socket_client.socket_mode_request_listeners.append(process_slack_event)  # type: ignore
 
         # Establish a WebSocket connection to the Socket Mode servers
-        logger.info(f"Connecting socket client for tenant {tenant_id}")
+        logger.info(
+            f"Connecting socket client for tenant: {tenant_id}, app: {slack_bot_id}"
+        )
         socket_client.connect()
-        self.socket_clients[tenant_id] = socket_client
+        self.socket_clients[tenant_id, slack_bot_id] = socket_client
         self.tenant_ids.add(tenant_id)
-        logger.info(f"Started SocketModeClient for tenant {tenant_id}")
+        logger.info(
+            f"Started SocketModeClient for tenant: {tenant_id}, app: {slack_bot_id}"
+        )
 
     def stop_socket_clients(self) -> None:
         logger.info(f"Stopping {len(self.socket_clients)} socket clients")
-        for tenant_id, client in self.socket_clients.items():
+        for (tenant_id, slack_bot_id), client in self.socket_clients.items():
             asyncio.run(client.close())
-            logger.info(f"Stopped SocketModeClient for tenant {tenant_id}")
+            logger.info(
+                f"Stopped SocketModeClient for tenant: {tenant_id}, app: {slack_bot_id}"
+            )
 
     def shutdown(self, signum: int | None, frame: FrameType | None) -> None:
         if not self.running:
@@ -297,6 +340,16 @@ class SlackbotHandler:
         # Stop all socket clients
         logger.info(f"Stopping {len(self.socket_clients)} socket clients")
         self.stop_socket_clients()
+
+        # Release locks for all tenants
+        logger.info(f"Releasing locks for {len(self.tenant_ids)} tenants")
+        for tenant_id in self.tenant_ids:
+            try:
+                redis_client = get_redis_client(tenant_id=tenant_id)
+                redis_client.delete(DanswerRedisLocks.SLACK_BOT_LOCK)
+                logger.info(f"Released lock for tenant {tenant_id}")
+            except Exception as e:
+                logger.error(f"Error releasing lock for tenant {tenant_id}: {e}")
 
         # Wait for background threads to finish (with timeout)
         logger.info("Waiting for background threads to finish...")
@@ -358,7 +411,7 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
             )
             return False
 
-        bot_tag_id = get_danswer_bot_app_id(client.web_client)
+        bot_tag_id = get_danswer_bot_slack_bot_id(client.web_client)
         if event_type == "message":
             is_dm = event.get("channel_type") == "im"
             is_tagged = bot_tag_id and bot_tag_id in msg
@@ -381,13 +434,15 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
             )
 
             with get_session_with_tenant(client.tenant_id) as db_session:
-                slack_bot_config = get_slack_bot_config_for_channel(
-                    channel_name=channel_name, db_session=db_session
+                slack_channel_config = get_slack_channel_config_for_bot_and_channel(
+                    db_session=db_session,
+                    slack_bot_id=client.slack_bot_id,
+                    channel_name=channel_name,
                 )
             # If DanswerBot is not specifically tagged and the channel is not set to respond to bots, ignore the message
             if (not bot_tag_id or bot_tag_id not in msg) and (
-                not slack_bot_config
-                or not slack_bot_config.channel_config.get("respond_to_bots")
+                not slack_channel_config
+                or not slack_channel_config.channel_config.get("respond_to_bots")
             ):
                 channel_specific_logger.info("Ignoring message from bot")
                 return False
@@ -592,14 +647,16 @@ def process_message(
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(client.tenant_id)
     try:
         with get_session_with_tenant(client.tenant_id) as db_session:
-            slack_bot_config = get_slack_bot_config_for_channel(
-                channel_name=channel_name, db_session=db_session
+            slack_channel_config = get_slack_channel_config_for_bot_and_channel(
+                db_session=db_session,
+                slack_bot_id=client.slack_bot_id,
+                channel_name=channel_name,
             )
 
             # Be careful about this default, don't want to accidentally spam every channel
             # Users should be able to DM slack bot in their private channels though
             if (
-                slack_bot_config is None
+                slack_channel_config is None
                 and not respond_every_channel
                 # Can't have configs for DMs so don't toss them out
                 and not is_dm
@@ -610,9 +667,10 @@ def process_message(
                 return
 
             follow_up = bool(
-                slack_bot_config
-                and slack_bot_config.channel_config
-                and slack_bot_config.channel_config.get("follow_up_tags") is not None
+                slack_channel_config
+                and slack_channel_config.channel_config
+                and slack_channel_config.channel_config.get("follow_up_tags")
+                is not None
             )
             feedback_reminder_id = schedule_feedback_reminder(
                 details=details, client=client.web_client, include_followup=follow_up
@@ -620,7 +678,7 @@ def process_message(
 
             failed = handle_message(
                 message_info=details,
-                slack_bot_config=slack_bot_config,
+                slack_channel_config=slack_channel_config,
                 client=client.web_client,
                 feedback_reminder_id=feedback_reminder_id,
                 tenant_id=client.tenant_id,
@@ -672,26 +730,32 @@ def view_routing(req: SocketModeRequest, client: TenantSocketModeClient) -> None
             return process_feedback(req, client)
 
 
-def process_slack_event(client: TenantSocketModeClient, req: SocketModeRequest) -> None:
-    # Always respond right away, if Slack doesn't receive these frequently enough
-    # it will assume the Bot is DEAD!!! :(
-    acknowledge_message(req, client)
+def create_process_slack_event() -> (
+    Callable[[TenantSocketModeClient, SocketModeRequest], None]
+):
+    def process_slack_event(
+        client: TenantSocketModeClient, req: SocketModeRequest
+    ) -> None:
+        # Always respond right away, if Slack doesn't receive these frequently enough
+        # it will assume the Bot is DEAD!!! :(
+        acknowledge_message(req, client)
 
-    try:
-        if req.type == "interactive":
-            if req.payload.get("type") == "block_actions":
-                return action_routing(req, client)
-            elif req.payload.get("type") == "view_submission":
-                return view_routing(req, client)
-        elif req.type == "events_api" or req.type == "slash_commands":
-            return process_message(req, client)
-    except Exception as e:
-        logger.exception(f"Failed to process slack event. Error: {e}")
-        logger.error(f"Slack request payload: {req.payload}")
+        try:
+            if req.type == "interactive":
+                if req.payload.get("type") == "block_actions":
+                    return action_routing(req, client)
+                elif req.payload.get("type") == "view_submission":
+                    return view_routing(req, client)
+            elif req.type == "events_api" or req.type == "slash_commands":
+                return process_message(req, client)
+        except Exception:
+            logger.exception("Failed to process slack event")
+
+    return process_slack_event
 
 
 def _get_socket_client(
-    slack_bot_tokens: SlackBotTokens, tenant_id: str | None
+    slack_bot_tokens: SlackBotTokens, tenant_id: str | None, slack_bot_id: int
 ) -> TenantSocketModeClient:
     # For more info on how to set this up, checkout the docs:
     # https://docs.danswer.dev/slack_bot_setup
@@ -700,6 +764,7 @@ def _get_socket_client(
         app_token=slack_bot_tokens.app_token,
         web_client=WebClient(token=slack_bot_tokens.bot_token),
         tenant_id=tenant_id,
+        slack_bot_id=slack_bot_id,
     )
 
 

@@ -2,8 +2,7 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
-from sqlalchemy.orm import Session
-
+from danswer.access.models import DocExternalAccess
 from danswer.access.models import ExternalAccess
 from danswer.connectors.google_drive.connector import GoogleDriveConnector
 from danswer.connectors.google_utils.google_utils import execute_paginated_retrieval
@@ -11,9 +10,7 @@ from danswer.connectors.google_utils.resources import get_drive_service
 from danswer.connectors.interfaces import GenerateSlimDocumentOutput
 from danswer.connectors.models import SlimDocument
 from danswer.db.models import ConnectorCredentialPair
-from danswer.db.users import batch_add_non_web_user_if_not_exists__no_commit
 from danswer.utils.logger import setup_logger
-from ee.danswer.db.document import upsert_document_external_perms__no_commit
 
 logger = setup_logger()
 
@@ -113,8 +110,13 @@ def _get_permissions_from_slim_doc(
         elif permission_type == "group":
             group_emails.add(permission["emailAddress"])
         elif permission_type == "domain" and company_domain:
-            if permission["domain"] == company_domain:
+            if permission.get("domain") == company_domain:
                 public = True
+            else:
+                logger.warning(
+                    "Permission is type domain but does not match company domain:"
+                    f"\n {permission}"
+                )
         elif permission_type == "anyone":
             public = True
 
@@ -126,9 +128,8 @@ def _get_permissions_from_slim_doc(
 
 
 def gdrive_doc_sync(
-    db_session: Session,
     cc_pair: ConnectorCredentialPair,
-) -> None:
+) -> list[DocExternalAccess]:
     """
     Adds the external permissions to the documents in postgres
     if the document doesn't already exists in postgres, we create
@@ -142,19 +143,17 @@ def gdrive_doc_sync(
 
     slim_doc_generator = _get_slim_doc_generator(cc_pair, google_drive_connector)
 
+    document_external_accesses = []
     for slim_doc_batch in slim_doc_generator:
         for slim_doc in slim_doc_batch:
             ext_access = _get_permissions_from_slim_doc(
                 google_drive_connector=google_drive_connector,
                 slim_doc=slim_doc,
             )
-            batch_add_non_web_user_if_not_exists__no_commit(
-                db_session=db_session,
-                emails=list(ext_access.external_user_emails),
+            document_external_accesses.append(
+                DocExternalAccess(
+                    external_access=ext_access,
+                    doc_id=slim_doc.id,
+                )
             )
-            upsert_document_external_perms__no_commit(
-                db_session=db_session,
-                doc_id=slim_doc.id,
-                external_access=ext_access,
-                source_type=cc_pair.connector.source,
-            )
+    return document_external_accesses

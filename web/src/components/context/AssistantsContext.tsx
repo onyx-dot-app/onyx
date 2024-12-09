@@ -47,7 +47,7 @@ export const AssistantsProvider: React.FC<{
   const [assistants, setAssistants] = useState<Persona[]>(
     initialAssistants || []
   );
-  const { user, isLoadingUser, refreshUser, isAdmin } = useUser();
+  const { user, isLoadingUser, isAdmin, isCurator } = useUser();
   const [editablePersonas, setEditablePersonas] = useState<Persona[]>([]);
   const [allAssistants, setAllAssistants] = useState<Persona[]>([]);
 
@@ -81,34 +81,36 @@ export const AssistantsProvider: React.FC<{
     checkImageGenerationAvailability();
   }, []);
 
+  const fetchPersonas = async () => {
+    if (!isAdmin && !isCurator) {
+      return;
+    }
+
+    try {
+      const [editableResponse, allResponse] = await Promise.all([
+        fetch("/api/admin/persona?get_editable=true"),
+        fetch("/api/admin/persona"),
+      ]);
+
+      if (editableResponse.ok) {
+        const editablePersonas = await editableResponse.json();
+        setEditablePersonas(editablePersonas);
+      }
+
+      if (allResponse.ok) {
+        const allPersonas = await allResponse.json();
+        setAllAssistants(allPersonas);
+      } else {
+        console.error("Error fetching personas:", allResponse);
+      }
+    } catch (error) {
+      console.error("Error fetching personas:", error);
+    }
+  };
+
   useEffect(() => {
-    const fetchPersonas = async () => {
-      if (!isAdmin) {
-        return;
-      }
-
-      try {
-        const [editableResponse, allResponse] = await Promise.all([
-          fetch("/api/admin/persona?get_editable=true"),
-          fetch("/api/admin/persona"),
-        ]);
-
-        if (editableResponse.ok) {
-          const editablePersonas = await editableResponse.json();
-          setEditablePersonas(editablePersonas);
-        }
-
-        if (allResponse.ok) {
-          const allPersonas = await allResponse.json();
-          setAllAssistants(allPersonas);
-        }
-      } catch (error) {
-        console.error("Error fetching personas:", error);
-      }
-    };
-
     fetchPersonas();
-  }, [isAdmin]);
+  }, [isAdmin, isCurator]);
 
   const refreshRecentAssistants = async (currentAssistant: number) => {
     const response = await fetch("/api/user/recent-assistants", {
@@ -142,6 +144,7 @@ export const AssistantsProvider: React.FC<{
       });
       if (!response.ok) throw new Error("Failed to fetch assistants");
       let assistants: Persona[] = await response.json();
+
       if (!hasImageCompatibleModel) {
         assistants = assistants.filter(
           (assistant) =>
@@ -150,15 +153,21 @@ export const AssistantsProvider: React.FC<{
             )
         );
       }
+
       if (!hasAnyConnectors) {
         assistants = assistants.filter(
           (assistant) => assistant.num_chunks === 0
         );
       }
+
       setAssistants(assistants);
+
+      // Fetch and update allAssistants for admins and curators
+      await fetchPersonas();
     } catch (error) {
       console.error("Error refreshing assistants:", error);
     }
+
     setRecentAssistants(
       assistants.filter(
         (assistant) =>

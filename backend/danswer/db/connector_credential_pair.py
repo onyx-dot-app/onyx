@@ -76,8 +76,10 @@ def _add_user_filters(
             .where(~UG__CCpair.user_group_id.in_(user_groups))
             .correlate(ConnectorCredentialPair)
         )
+        where_clause |= ConnectorCredentialPair.creator_id == user.id
     else:
         where_clause |= ConnectorCredentialPair.access_type == AccessType.PUBLIC
+        where_clause |= ConnectorCredentialPair.access_type == AccessType.SYNC
 
     return stmt.where(where_clause)
 
@@ -387,6 +389,7 @@ def add_credential_to_connector(
         )
 
     association = ConnectorCredentialPair(
+        creator_id=user.id if user else None,
         connector_id=connector_id,
         credential_id=credential_id,
         name=cc_pair_name,

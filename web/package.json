@@ -1,6 +1,7 @@
 {
   "name": "qa",
-  "version": "0.2-dev",
+  "version": "0.2.0-dev",
+  "version-comment": "version field must be SemVer or chromatic will barf",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -69,7 +70,9 @@
     "yup": "^1.4.0"
   },
   "devDependencies": {
+    "@chromatic-com/playwright": "^0.10.0",
     "@tailwindcss/typography": "^0.5.10",
+    "chromatic": "^11.18.1",
     "eslint": "^8.48.0",
     "eslint-config-next": "^14.1.0",
     "prettier": "2.8.8"

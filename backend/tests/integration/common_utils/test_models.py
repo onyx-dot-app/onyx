@@ -5,8 +5,8 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from danswer.auth.schemas import UserRole
+from danswer.context.search.enums import RecencyBiasSetting
 from danswer.db.enums import AccessType
-from danswer.search.enums import RecencyBiasSetting
 from danswer.server.documents.models import DocumentSource
 from danswer.server.documents.models import InputType
 
@@ -38,6 +38,12 @@ class DATestUser(BaseModel):
     headers: dict
 
 
+class DATestPersonaCategory(BaseModel):
+    id: int | None = None
+    name: str
+    description: str | None
+
+
 class DATestCredential(BaseModel):
     id: int
     name: str
@@ -55,7 +61,7 @@ class DATestConnector(BaseModel):
     input_type: InputType
     connector_specific_config: dict[str, Any]
     groups: list[int] | None = None
-    is_public: bool | None = None
+    access_type: AccessType | None = None
 
 
 class SimpleTestDocument(BaseModel):
@@ -119,6 +125,7 @@ class DATestPersona(BaseModel):
     llm_model_version_override: str | None
     users: list[str]
     groups: list[int]
+    category_id: int | None = None
 
 
 #
@@ -129,11 +136,10 @@ class DATestChatSession(BaseModel):
 
 
 class DATestChatMessage(BaseModel):
-    id: str | None = None
+    id: int
     chat_session_id: UUID
-    parent_message_id: str | None
+    parent_message_id: int | None
     message: str
-    response: str
 
 
 class StreamedResponse(BaseModel):

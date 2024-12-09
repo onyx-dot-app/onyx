@@ -3,15 +3,18 @@ import { FiCalendar, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../Dropdown";
 import { timeRangeValues } from "@/app/config/timeRange";
 import { TimeRangeSelector } from "@/components/filters/TimeRangeSelector";
+import { cn } from "@/lib/utils";
 
 export function DateRangeSelector({
   value,
   onValueChange,
   isHorizontal,
+  className,
 }: {
   value: DateRangePickerValue | null;
   onValueChange: (value: DateRangePickerValue | null) => void;
   isHorizontal?: boolean;
+  className?: string;
 }) {
   return (
     <div>
@@ -19,18 +22,10 @@ export function DateRangeSelector({
         dropdown={
           <TimeRangeSelector
             value={value}
-            className={`
-            border
-            border-border
-            bg-background
-            rounded-lg
-            flex
-            flex-col
-            w-64
-            max-h-96
-            overflow-y-auto
-            flex
-            overscroll-contain`}
+            className={cn(
+              "border border-border bg-background rounded-lg flex flex-col w-64 max-h-96 overflow-y-auto flex overscroll-contain",
+              className
+            )}
             timeRangeValues={timeRangeValues}
             onValueChange={onValueChange}
           />
