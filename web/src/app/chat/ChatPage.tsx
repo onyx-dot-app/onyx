@@ -1993,6 +1993,7 @@ export function ChatPage({
         <div className="md:hidden">
           <Modal noPadding noScroll>
             <ChatFilters
+              // toggledFiles={toggledFiles}
               setPresentingDocument={setPresentingDocument}
               modal={true}
               filterManager={filterManager}

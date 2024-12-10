@@ -1,5 +1,5 @@
 import { DanswerDocument } from "@/lib/search/interfaces";
-import { ChatDocumentDisplay } from "./ChatDocumentDisplay";
+import { ChatDocumentDisplay, ChatFileDisplay } from "./ChatDocumentDisplay";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
 import { FileDescriptor, Message } from "../interfaces";
@@ -35,6 +35,7 @@ interface ChatFiltersProps {
   showFilters: boolean;
   setPresentingDocument: Dispatch<SetStateAction<DanswerDocument | null>>;
   selectedFiles: FileDescriptor[];
+  toggledFiles?: FileDescriptor[];
 }
 
 export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
@@ -55,6 +56,7 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
       tags,
       setPresentingDocument,
       selectedFiles,
+      toggledFiles = [],
       documentSets,
       showFilters,
     },
@@ -75,8 +77,9 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
       return () => clearTimeout(timer);
     }, [selectedDocuments]);
 
-    const selectedDocumentIds =
-      selectedDocuments?.map((document) => document.document_id) || [];
+    const selectedDocumentIds = (
+      selectedDocuments?.map((document) => document.document_id) || []
+    ).concat(toggledFiles.map((file) => file.id));
 
     const currentDocuments = selectedMessage?.documents || null;
     const dedupedDocuments = removeDuplicateDocs(currentDocuments || []);
@@ -165,7 +168,16 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
                         </div>
                       ))
                     : selectedFiles.map((file) => (
-                        <FileSourceCard file={file} key={file.id} />
+                        <ChatFileDisplay
+                          file={file}
+                          key={file.id}
+                          closeSidebar={closeSidebar}
+                          modal={modal}
+                          isSelected={selectedDocumentIds.includes(file.id)}
+                          handleSelect={(d: any) => toggleDocumentSelection(d)}
+                          tokenLimitReached={tokenLimitReached}
+                          setPresentingDocument={setPresentingDocument}
+                        />
                       ))}
                 </>
               )}
@@ -187,7 +199,10 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
                   delayedSelectedDocumentCount > 0
                     ? delayedSelectedDocumentCount
                     : ""
-                } Source${delayedSelectedDocumentCount > 1 ? "s" : ""}`}
+                } 
+                ${selectedFiles ? "Document" : "Source"}${
+                  delayedSelectedDocumentCount > 1 ? "s" : ""
+                }`}
               </button>
             </div>
           )}
