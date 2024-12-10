@@ -30,7 +30,7 @@ export default function FileSourceCard({
     >
       <div className="line-clamp-1 font-semibold text-ellipsis text-text-900 flex h-6 items-center gap-2 text-sm">
         <SourceIcon sourceType={ValidSources.File} iconSize={18} />
-        <p>{truncateString(file.name || file.id, 12)}</p>
+        <p>{truncateString(file.name || file.id || "", 12)}</p>
       </div>
       <div className="line-clamp-2 text-sm font-semibold"></div>
       <div className="line-clamp-2 text-sm font-normal leading-snug text-text-700">
