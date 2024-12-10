@@ -72,6 +72,8 @@ import CsvContent from "../../../components/tools/CSVContent";
 import SourceCard, {
   SeeMoreBlock,
 } from "@/components/chat_search/sources/SourceCard";
+import { FileSeeMoreBlock } from "@/components/chat_search/sources/FileSource";
+import FileSourceCard from "@/components/chat_search/sources/FileSource";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -163,10 +165,12 @@ function FileDisplay({
 }
 
 export const AIMessage = ({
+  setSelectedFiles = () => {},
   regenerate,
   overriddenModel,
   selectedMessageForDocDisplay,
   continueGenerating,
+  userFiles,
   shared,
   isActive,
   toggleDocumentSelection,
@@ -193,6 +197,8 @@ export const AIMessage = ({
   setPresentingDocument,
   index,
 }: {
+  setSelectedFiles?: (files: FileDescriptor[]) => void;
+  userFiles?: FileDescriptor[];
   index?: number;
   selectedMessageForDocDisplay?: number | null;
   shared?: boolean;
@@ -458,6 +464,43 @@ export const AIMessage = ({
                           isRunning={!toolCall.tool_result}
                         />
                       )}
+
+                    {userFiles && userFiles.length > 0 && (
+                      <div>
+                        <p>Used context from the following files:</p>
+                        <div className=" -mx-8 w-full mb-4 flex relative">
+                          <div className="w-full">
+                            <div className="px-8 flex gap-x-2">
+                              {!settings?.isMobile &&
+                                userFiles.length > 0 &&
+                                userFiles
+                                  .slice(0, 2)
+                                  .map((doc, ind) => (
+                                    <FileSourceCard
+                                      file={doc}
+                                      key={ind}
+                                      setPresentingDocument={
+                                        setPresentingDocument
+                                      }
+                                    />
+                                  ))}
+                              <FileSeeMoreBlock
+                                documentSelectionToggled={
+                                  (documentSelectionToggled &&
+                                    selectedMessageForDocDisplay ===
+                                      messageId) ||
+                                  false
+                                }
+                                toggleDocumentSelection={
+                                  toggleDocumentSelection
+                                }
+                                uniqueSources={uniqueSources}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {docs && docs.length > 0 && (
                       <div className="mt-2 -mx-8 w-full mb-4 flex relative">

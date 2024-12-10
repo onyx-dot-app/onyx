@@ -2,7 +2,7 @@ import { DanswerDocument } from "@/lib/search/interfaces";
 import { ChatDocumentDisplay } from "./ChatDocumentDisplay";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
-import { Message } from "../interfaces";
+import { FileDescriptor, Message } from "../interfaces";
 import {
   Dispatch,
   ForwardedRef,
@@ -15,6 +15,7 @@ import { FilterManager } from "@/lib/hooks";
 import { CCPairBasicInfo, DocumentSet, Tag } from "@/lib/types";
 import { SourceSelector } from "../shared_chat_search/SearchFilters";
 import { XIcon } from "@/components/icons/icons";
+import FileSourceCard from "@/components/chat_search/sources/FileSource";
 
 interface ChatFiltersProps {
   filterManager: FilterManager;
@@ -33,6 +34,7 @@ interface ChatFiltersProps {
   documentSets: DocumentSet[];
   showFilters: boolean;
   setPresentingDocument: Dispatch<SetStateAction<DanswerDocument | null>>;
+  selectedFiles: FileDescriptor[];
 }
 
 export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
@@ -52,6 +54,7 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
       ccPairs,
       tags,
       setPresentingDocument,
+      selectedFiles,
       documentSets,
       showFilters,
     },
@@ -132,38 +135,38 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
                 />
               ) : (
                 <>
-                  {dedupedDocuments.length > 0 ? (
-                    dedupedDocuments.map((document, ind) => (
-                      <div
-                        key={document.document_id}
-                        className={`${
-                          ind === dedupedDocuments.length - 1
-                            ? ""
-                            : "border-b border-border-light w-full"
-                        }`}
-                      >
-                        <ChatDocumentDisplay
-                          setPresentingDocument={setPresentingDocument}
-                          closeSidebar={closeSidebar}
-                          modal={modal}
-                          document={document}
-                          isSelected={selectedDocumentIds.includes(
-                            document.document_id
-                          )}
-                          handleSelect={(documentId) => {
-                            toggleDocumentSelection(
-                              dedupedDocuments.find(
-                                (doc) => doc.document_id === documentId
-                              )!
-                            );
-                          }}
-                          tokenLimitReached={tokenLimitReached}
-                        />
-                      </div>
-                    ))
-                  ) : (
-                    <div className="mx-3" />
-                  )}
+                  {dedupedDocuments.length > 0
+                    ? dedupedDocuments.map((document, ind) => (
+                        <div
+                          key={document.document_id}
+                          className={`${
+                            ind === dedupedDocuments.length - 1
+                              ? ""
+                              : "border-b border-border-light w-full"
+                          }`}
+                        >
+                          <ChatDocumentDisplay
+                            setPresentingDocument={setPresentingDocument}
+                            closeSidebar={closeSidebar}
+                            modal={modal}
+                            document={document}
+                            isSelected={selectedDocumentIds.includes(
+                              document.document_id
+                            )}
+                            handleSelect={(documentId) => {
+                              toggleDocumentSelection(
+                                dedupedDocuments.find(
+                                  (doc) => doc.document_id === documentId
+                                )!
+                              );
+                            }}
+                            tokenLimitReached={tokenLimitReached}
+                          />
+                        </div>
+                      ))
+                    : selectedFiles.map((file) => (
+                        <FileSourceCard file={file} key={file.id} />
+                      ))}
                 </>
               )}
             </div>
