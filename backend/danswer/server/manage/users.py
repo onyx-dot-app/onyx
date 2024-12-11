@@ -13,8 +13,6 @@ from fastapi import HTTPException
 from fastapi import Request
 from psycopg2.errors import UniqueViolation
 from pydantic import BaseModel
-from sqlalchemy import Column
-from sqlalchemy import desc
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
@@ -465,7 +463,7 @@ def get_current_token_creation(
         result = db_session.execute(
             select(AccessToken)
             .where(AccessToken.user_id == user.id)  # type: ignore
-            .order_by(desc(Column("created_at")))
+            .order_by(AccessToken.created_at.desc())
             .limit(1)
         )
         access_token = result.scalar_one_or_none()
@@ -473,7 +471,7 @@ def get_current_token_creation(
         if access_token:
             return access_token.created_at
         else:
-            logger.error("No AccessToken found for user")
+            logger.warning("No AccessToken found for user")
             return None
 
     except Exception as e:
