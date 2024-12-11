@@ -1,5 +1,4 @@
 import copy
-import io
 import json
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -7,7 +6,6 @@ from typing import Any
 from typing import cast
 
 import litellm  # type: ignore
-import pandas as pd
 import tiktoken
 from langchain.prompts.base import StringPromptValue
 from langchain.prompts.chat import ChatPromptValue
@@ -100,53 +98,32 @@ def litellm_exception_to_error_msg(
     return error_msg
 
 
-#  Processes CSV files to show the first 5 rows and max_columns (default 40) columns
-def _process_csv_file(file: InMemoryChatFile, max_columns: int = 40) -> str:
-    df = pd.read_csv(io.StringIO(file.content.decode("utf-8")))
-
-    csv_preview = df.head().to_string(max_cols=max_columns)
-
-    file_name_section = (
-        f"CSV FILE NAME: {file.filename}\n"
-        if file.filename
-        else "CSV FILE (NO NAME PROVIDED):\n"
-    )
-    return f"{file_name_section}{CODE_BLOCK_PAT.format(csv_preview)}\n\n\n"
-
-
 def _build_content(
     message: str,
     files: list[InMemoryChatFile] | None = None,
 ) -> str:
     """Applies all non-image files."""
-    text_files = (
-        [file for file in files if file.file_type == ChatFileType.PLAIN_TEXT]
-        if files
-        else None
-    )
+    if not files:
+        return message
 
-    csv_files = (
-        [file for file in files if file.file_type == ChatFileType.CSV]
-        if files
-        else None
-    )
+    text_files = [
+        file
+        for file in files
+        if file.file_type in (ChatFileType.PLAIN_TEXT, ChatFileType.CSV)
+    ]
 
-    if not text_files and not csv_files:
+    if not text_files:
         return message
 
     final_message_with_files = "FILES:\n\n"
-    for file in text_files or []:
+    for file in text_files:
         file_content = file.content.decode("utf-8")
         file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""
         final_message_with_files += (
             f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
         )
-    for file in csv_files or []:
-        final_message_with_files += _process_csv_file(file)
 
-    final_message_with_files += message
-
-    return final_message_with_files
+    return final_message_with_files + message
 
 
 def build_content_with_imgs(
