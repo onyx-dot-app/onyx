@@ -1,3 +1,5 @@
+from enum import Enum as PyEnum
+
 from danswer.configs.constants import DocumentSource
 
 # NOTE: do not need https://www.googleapis.com/auth/documents.readonly
@@ -22,6 +24,19 @@ DB_CREDENTIALS_DICT_TOKEN_KEY = "google_tokens"
 DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY = "google_service_account_key"
 # The email saved for both auth types
 DB_CREDENTIALS_PRIMARY_ADMIN_KEY = "google_primary_admin"
+
+# https://developers.google.com/workspace/guides/create-credentials
+# Internally defined authentication method type.
+# The value must be one of "oauth_interactive" or "uploaded"
+# Used to disambiguate whether credentials have already been created via
+# certain methods and what actions we allow users to take
+DB_CREDENTIALS_AUTHENTICATION_METHOD = "authentication_method"
+
+
+class GoogleOAuthAuthenticationMethod(str, PyEnum):
+    OAUTH_INTERACTIVE = "oauth_interactive"
+    UPLOADED = "uploaded"
+
 
 USER_FIELDS = "nextPageToken, users(primaryEmail)"
 

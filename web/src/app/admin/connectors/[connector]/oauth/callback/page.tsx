@@ -34,6 +34,10 @@ export default function OAuthCallbackPage() {
 
   useEffect(() => {
     const handleOAuthCallback = async () => {
+      // Examples
+      // connector (url segment)= "google-drive"
+      // sourceType (for looking up metadata) = "google_drive"
+
       if (!code || !state) {
         setStatusMessage("Improperly formed OAuth authorization request.");
         setStatusDetails(
@@ -43,7 +47,7 @@ export default function OAuthCallbackPage() {
         return;
       }
 
-      if (!connector || !isValidSource(connector)) {
+      if (!connector) {
         setStatusMessage(
           `The specified connector source type ${connector} does not exist.`
         );
@@ -52,7 +56,17 @@ export default function OAuthCallbackPage() {
         return;
       }
 
-      const sourceMetadata = getSourceMetadata(connector as ValidSources);
+      const sourceType = connector.replaceAll("-", "_");
+      if (!isValidSource(sourceType)) {
+        setStatusMessage(
+          `The specified connector source type ${sourceType} does not exist.`
+        );
+        setStatusDetails(`${sourceType} is not a valid source type.`);
+        setIsError(true);
+        return;
+      }
+
+      const sourceMetadata = getSourceMetadata(sourceType as ValidSources);
       setPageTitle(`Authorize with ${sourceMetadata.displayName}`);
 
       setStatusMessage("Processing...");
@@ -60,7 +74,11 @@ export default function OAuthCallbackPage() {
       setIsError(false); // Ensure no error state during loading
 
       try {
-        const response = await handleOAuthAuthorizationResponse(code, state);
+        const response = await handleOAuthAuthorizationResponse(
+          connector,
+          code,
+          state
+        );
 
         if (!response) {
           throw new Error("Empty response from OAuth server.");

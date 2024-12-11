@@ -2,8 +2,10 @@ import { Credential } from "./connectors/credentials";
 
 export const setupGoogleDriveOAuth = async ({
   isAdmin,
+  name,
 }: {
   isAdmin: boolean;
+  name: string;
 }): Promise<[string | null, string]> => {
   const credentialCreationResponse = await fetch("/api/manage/credential", {
     method: "POST",
@@ -14,6 +16,7 @@ export const setupGoogleDriveOAuth = async ({
       admin_public: isAdmin,
       credential_json: {},
       source: "google_drive",
+      name: name,
     }),
   });
 

@@ -55,6 +55,9 @@ from danswer.connectors.google_utils.google_kv import verify_csrf
 from danswer.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_TOKEN_KEY,
 )
+from danswer.connectors.google_utils.shared_constants import (
+    GoogleOAuthAuthenticationMethod,
+)
 from danswer.db.connector import create_connector
 from danswer.db.connector import delete_connector
 from danswer.db.connector import fetch_connector_by_id
@@ -311,6 +314,7 @@ def upsert_service_account_credential(
         credential_base = build_service_account_creds(
             DocumentSource.GOOGLE_DRIVE,
             primary_admin_email=service_account_credential_request.google_primary_admin,
+            name="Service Account (uploaded)",
         )
     except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -319,7 +323,9 @@ def upsert_service_account_credential(
     delete_service_account_credentials(user, db_session, DocumentSource.GOOGLE_DRIVE)
     # `user=None` since this credential is not a personal credential
     credential = create_credential(
-        credential_data=credential_base, user=user, db_session=db_session
+        credential_data=credential_base,
+        user=user,
+        db_session=db_session,
     )
     return ObjectCreationIdResponse(id=credential.id)
 
@@ -492,6 +498,38 @@ def get_currently_failed_indexing_status(
         )
 
     return indexing_statuses
+
+
+@router.get("/admin/connector")
+def get_connectors_by_credential(
+    _: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+    credential: int | None = None,
+) -> list[ConnectorSnapshot]:
+    """Get a list of connectors. Allow filtering by a specific credential id."""
+
+    connectors = fetch_connectors(db_session)
+
+    filtered_connectors = []
+    for connector in connectors:
+        if connector.source == DocumentSource.INGESTION_API:
+            # don't include INGESTION_API, as it's a system level
+            # connector not manageable by the user
+            continue
+
+        if credential is not None:
+            found = False
+            for cc_pair in connector.credentials:
+                if credential == cc_pair.credential_id:
+                    found = True
+                    break
+
+            if not found:
+                continue
+
+        filtered_connectors.append(ConnectorSnapshot.from_connector_db_model(connector))
+
+    return filtered_connectors
 
 
 @router.get("/admin/connector/indexing-status")
@@ -936,7 +974,12 @@ def gmail_callback(
     credential_id = int(credential_id_cookie)
     verify_csrf(credential_id, callback.state)
     credentials: Credentials | None = update_credential_access_tokens(
-        callback.code, credential_id, user, db_session, DocumentSource.GMAIL
+        callback.code,
+        credential_id,
+        user,
+        db_session,
+        DocumentSource.GMAIL,
+        GoogleOAuthAuthenticationMethod.UPLOADED,
     )
     if credentials is None:
         raise HTTPException(
@@ -962,7 +1005,12 @@ def google_drive_callback(
     verify_csrf(credential_id, callback.state)
 
     credentials: Credentials | None = update_credential_access_tokens(
-        callback.code, credential_id, user, db_session, DocumentSource.GOOGLE_DRIVE
+        callback.code,
+        credential_id,
+        user,
+        db_session,
+        DocumentSource.GOOGLE_DRIVE,
+        GoogleOAuthAuthenticationMethod.UPLOADED,
     )
     if credentials is None:
         raise HTTPException(

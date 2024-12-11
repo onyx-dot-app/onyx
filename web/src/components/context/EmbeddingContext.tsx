@@ -19,7 +19,7 @@ interface EmbeddingFormContextType {
   allowAdvanced: boolean;
   setAllowAdvanced: React.Dispatch<React.SetStateAction<boolean>>;
   allowCreate: boolean;
-  setAlowCreate: React.Dispatch<React.SetStateAction<boolean>>;
+  setAllowCreate: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const EmbeddingFormContext = createContext<
@@ -39,7 +39,7 @@ export const EmbeddingFormProvider: React.FC<{
   const [formValues, setFormValues] = useState<Record<string, any>>({});
 
   const [allowAdvanced, setAllowAdvanced] = useState(false);
-  const [allowCreate, setAlowCreate] = useState(false);
+  const [allowCreate, setAllowCreate] = useState(false);
 
   const nextFormStep = (values = "") => {
     setFormStep((prevStep) => prevStep + 1);
@@ -88,7 +88,7 @@ export const EmbeddingFormProvider: React.FC<{
     allowAdvanced,
     setAllowAdvanced,
     allowCreate,
-    setAlowCreate,
+    setAllowCreate: setAllowCreate,
   };
 
   return (

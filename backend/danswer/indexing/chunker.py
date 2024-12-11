@@ -232,7 +232,7 @@ class Chunker:
                 logger.warning(
                     f"Skipping section {section.text} from document "
                     f"{document.semantic_identifier} due to empty text after cleaning "
-                    f" with link {section_link_text}"
+                    f"with link {section_link_text}"
                 )
                 continue
 

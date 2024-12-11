@@ -25,10 +25,10 @@ from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FIL
 )
 def test_all(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_all")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=TEST_USER_1_EMAIL,
         include_files_shared_with_me=True,
         include_shared_drives=True,
@@ -65,10 +65,10 @@ def test_all(
 )
 def test_shared_drives_only(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_drives_only")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=TEST_USER_1_EMAIL,
         include_files_shared_with_me=False,
         include_shared_drives=True,
@@ -100,10 +100,10 @@ def test_shared_drives_only(
 )
 def test_shared_with_me_only(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_with_me_only")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=TEST_USER_1_EMAIL,
         include_files_shared_with_me=True,
         include_shared_drives=False,
@@ -133,10 +133,10 @@ def test_shared_with_me_only(
 )
 def test_my_drive_only(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_my_drive_only")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=TEST_USER_1_EMAIL,
         include_files_shared_with_me=False,
         include_shared_drives=False,
@@ -163,10 +163,10 @@ def test_my_drive_only(
 )
 def test_shared_my_drive_folder(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_my_drive_folder")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=TEST_USER_1_EMAIL,
         include_files_shared_with_me=False,
         include_shared_drives=False,
@@ -195,10 +195,10 @@ def test_shared_my_drive_folder(
 )
 def test_shared_drive_folder(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_drive_folder")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=TEST_USER_1_EMAIL,
         include_files_shared_with_me=False,
         include_shared_drives=False,

@@ -81,12 +81,6 @@ OAUTH_CLIENT_SECRET = (
     or ""
 )
 
-# for future OAuth connector support
-# OAUTH_CONFLUENCE_CLIENT_ID = os.environ.get("OAUTH_CONFLUENCE_CLIENT_ID", "")
-# OAUTH_CONFLUENCE_CLIENT_SECRET = os.environ.get("OAUTH_CONFLUENCE_CLIENT_SECRET", "")
-# OAUTH_JIRA_CLIENT_ID = os.environ.get("OAUTH_JIRA_CLIENT_ID", "")
-# OAUTH_JIRA_CLIENT_SECRET = os.environ.get("OAUTH_JIRA_CLIENT_SECRET", "")
-
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
 # for basic auth

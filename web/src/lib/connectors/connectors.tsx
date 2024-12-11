@@ -1153,6 +1153,20 @@ export interface Connector<T> extends ConnectorBase<T> {
   time_updated: string;
 }
 
+export interface ConnectorSnapshot {
+  id: number;
+  name: string;
+  source: ValidSources;
+  input_type: ValidInputTypes;
+  // connector_specific_config
+  refresh_freq: number | null;
+  prune_freq: number | null;
+  credential_ids: number[];
+  indexing_start: number | null;
+  time_created: string;
+  time_updated: string;
+}
+
 export interface WebConfig {
   base_url: string;
   web_connector_type?: "recursive" | "single" | "sitemap";

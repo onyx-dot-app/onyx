@@ -43,7 +43,7 @@ test(
     );
 
     await expect(page.locator("p.text-text-500")).toHaveText(
-      "invalid-connector is not a valid source type."
+      "invalid_connector is not a valid source type."
     );
   }
 );

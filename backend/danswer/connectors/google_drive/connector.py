@@ -216,8 +216,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
         return self._creds
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, str] | None:
-        primary_admin_email = credentials[DB_CREDENTIALS_PRIMARY_ADMIN_KEY]
-        self._primary_admin_email = primary_admin_email
+        self._primary_admin_email = credentials[DB_CREDENTIALS_PRIMARY_ADMIN_KEY]
 
         self._creds, new_creds_dict = get_google_creds(
             credentials=credentials,

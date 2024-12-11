@@ -35,10 +35,10 @@ from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_
 )
 def test_include_all(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_include_all")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=ADMIN_EMAIL,
         include_shared_drives=True,
         include_my_drives=True,
@@ -77,10 +77,10 @@ def test_include_all(
 )
 def test_include_shared_drives_only(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_include_shared_drives_only")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=ADMIN_EMAIL,
         include_shared_drives=True,
         include_my_drives=False,
@@ -117,10 +117,10 @@ def test_include_shared_drives_only(
 )
 def test_include_my_drives_only(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_include_my_drives_only")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=ADMIN_EMAIL,
         include_shared_drives=False,
         include_my_drives=True,
@@ -147,11 +147,11 @@ def test_include_my_drives_only(
 )
 def test_drive_one_only(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_drive_one_only")
     drive_urls = [SHARED_DRIVE_1_URL]
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=ADMIN_EMAIL,
         include_shared_drives=True,
         include_my_drives=False,
@@ -182,12 +182,12 @@ def test_drive_one_only(
 )
 def test_folder_and_shared_drive(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_folder_and_shared_drive")
     drive_urls = [SHARED_DRIVE_1_URL]
     folder_urls = [FOLDER_2_URL]
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=ADMIN_EMAIL,
         include_shared_drives=True,
         include_my_drives=False,
@@ -221,7 +221,7 @@ def test_folder_and_shared_drive(
 )
 def test_folders_only(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_folders_only")
     folder_urls = [
@@ -234,7 +234,7 @@ def test_folders_only(
     shared_drive_urls = [
         FOLDER_1_1_URL,
     ]
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=ADMIN_EMAIL,
         include_shared_drives=True,
         include_my_drives=False,
@@ -266,13 +266,13 @@ def test_folders_only(
 )
 def test_personal_folders_only(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_personal_folders_only")
     folder_urls = [
         FOLDER_3_URL,
     ]
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=ADMIN_EMAIL,
         include_shared_drives=True,
         include_my_drives=False,

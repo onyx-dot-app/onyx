@@ -90,6 +90,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Google Drive",
     category: SourceCategory.Storage,
     docs: "https://docs.danswer.dev/connectors/google_drive/overview",
+    oauthSupported: true,
   },
   github: {
     icon: GithubIcon,
