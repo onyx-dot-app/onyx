@@ -26,6 +26,11 @@ env:
   GOOGLE_GMAIL_OAUTH_CREDENTIALS_JSON_STR: ${{ secrets.GOOGLE_GMAIL_OAUTH_CREDENTIALS_JSON_STR }}
   # Slab
   SLAB_BOT_TOKEN: ${{ secrets.SLAB_BOT_TOKEN }}
+  #ZenDesk
+  ZENDESK_SUBDOMAIN: ${{ secrets.ZENDESK_SUBDOMAIN }}
+  ZENDESK_EMAIL: ${{ secrets.ZENDESK_EMAIL }}
+  ZENDESK_TOKEN: ${{ secrets.ZENDESK_TOKEN }}
+
 
 jobs:
   connectors-check:

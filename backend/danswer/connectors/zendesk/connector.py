@@ -10,17 +10,21 @@ from danswer.connectors.cross_connector_utils.miscellaneous_utils import (
     time_str_to_utc,
 )
 from danswer.connectors.interfaces import GenerateDocumentsOutput
+from danswer.connectors.interfaces import GenerateSlimDocumentOutput
 from danswer.connectors.interfaces import LoadConnector
 from danswer.connectors.interfaces import PollConnector
 from danswer.connectors.interfaces import SecondsSinceUnixEpoch
+from danswer.connectors.interfaces import SlimConnector
 from danswer.connectors.models import BasicExpertInfo
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
+from danswer.connectors.models import SlimDocument
 from danswer.file_processing.html_utils import parse_html_page_basic
 from danswer.utils.retry_wrapper import retry_builder
 
 
 MAX_PAGE_SIZE = 30  # Zendesk API maximum
+_SLIM_BATCH_SIZE = 1000
 
 
 class ZendeskCredentialsNotSetUpError(PermissionError):
@@ -265,7 +269,7 @@ def _ticket_to_document(
     )
 
 
-class ZendeskConnector(LoadConnector, PollConnector):
+class ZendeskConnector(LoadConnector, PollConnector, SlimConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -389,6 +393,43 @@ class ZendeskConnector(LoadConnector, PollConnector):
 
             if doc_batch:
                 yield doc_batch
+
+    def retrieve_all_slim_documents(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        slim_doc_batch: list[SlimDocument] = []
+        if self.content_type == "articles":
+            articles = _get_articles(
+                self.client, start_time=int(start) if start else None
+            )
+            for article in articles:
+                slim_doc_batch.append(
+                    SlimDocument(
+                        id=f"article:{article['id']}",
+                    )
+                )
+                if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:
+                    yield slim_doc_batch
+                    slim_doc_batch = []
+        elif self.content_type == "tickets":
+            tickets = _get_tickets(
+                self.client, start_time=int(start) if start else None
+            )
+            for ticket in tickets:
+                slim_doc_batch.append(
+                    SlimDocument(
+                        id=f"zendesk_ticket_{ticket['id']}",
+                    )
+                )
+                if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:
+                    yield slim_doc_batch
+                    slim_doc_batch = []
+        else:
+            raise ValueError(f"Unsupported content_type: {self.content_type}")
+        if slim_doc_batch:
+            yield slim_doc_batch
 
 
 if __name__ == "__main__":
