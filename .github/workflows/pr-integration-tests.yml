@@ -8,7 +8,7 @@ on:
   pull_request:
     branches:
       - main
-      - 'release/**'
+      - "release/**"
 
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -16,11 +16,12 @@ env:
   CONFLUENCE_TEST_SPACE_URL: ${{ secrets.CONFLUENCE_TEST_SPACE_URL }}
   CONFLUENCE_USER_NAME: ${{ secrets.CONFLUENCE_USER_NAME }}
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
-  
+
 jobs:
   integration-tests:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=8cpu-linux-x64,ram=16,"run-id=${{ github.run_id }}"]
+    runs-on:
+      [runs-on, runner=8cpu-linux-x64, ram=16, "run-id=${{ github.run_id }}"]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,9 +37,9 @@ jobs:
 
       # tag every docker image with "test" so that we can spin up the correct set
       # of images during testing
-      
+
       # We don't need to build the Web Docker image since it's not yet used
-      # in the integration tests. We have a separate action to verify that it builds 
+      # in the integration tests. We have a separate action to verify that it builds
       # successfully.
       - name: Pull Web Docker image
         run: |
@@ -50,7 +51,7 @@ jobs:
       # https://runs-on.com/caching/s3-cache-for-github-actions/
       # https://runs-on.com/caching/docker/
       # https://github.com/moby/buildkit#s3-cache-experimental
-      
+
       # images are built and run locally for testing purposes. Not pushed.
       - name: Build Backend Docker image
         uses: ./.github/actions/custom-build-and-push
@@ -75,7 +76,7 @@ jobs:
           load: true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/model-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/integration-tests/model-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
-      
+
       - name: Build integration test Docker image
         uses: ./.github/actions/custom-build-and-push
         with:
@@ -121,25 +122,25 @@ jobs:
             -e MULTI_TENANT=true \
             danswer/danswer-integration:test \
             /app/tests/integration/multitenant_tests
+
         continue-on-error: true
         id: run_multitenant_tests
 
       - name: Check multi-tenant test results
         run: |
-          if [ ${{ steps.run_tests.outcome }} == 'failure' ]; then
+          if [ ${{ steps.run_multitenant_tests.outcome }} == 'failure' ]; then
             echo "Integration tests failed. Exiting with error."
             exit 1
           else
             echo "All integration tests passed successfully."
-          fi 
+          fi
 
       - name: Stop multi-tenant Docker containers
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p danswer-stack down -v
 
-
-      - name: Start Docker containers 
+      - name: Start Docker containers
         run: |
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
@@ -153,12 +154,12 @@ jobs:
       - name: Wait for service to be ready
         run: |
           echo "Starting wait-for-service script..."
-          
+
           docker logs -f danswer-stack-api_server-1 &
 
           start_time=$(date +%s)
           timeout=300  # 5 minutes in seconds
-          
+
           while true; do
             current_time=$(date +%s)
             elapsed_time=$((current_time - start_time))
@@ -229,7 +230,7 @@ jobs:
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p danswer-stack down -v
-      
+
       - name: Upload logs
         if: success() || failure()
         uses: actions/upload-artifact@v4

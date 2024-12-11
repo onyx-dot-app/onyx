@@ -1,0 +1,116 @@
+name: Integration Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - "**"
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_TAG: "latest"
+    steps:
+      - name: Checkout Data Plane Repository
+        uses: actions/checkout@v4
+        with:
+          path: data-plane
+
+      - name: Checkout Control Plane Repository
+        uses: actions/checkout@v4
+        with:
+          repository: danswer/control-plane-repo
+          path: control-plane
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Start Data Plane Services
+        working-directory: data-plane/deployment/docker_compose
+        env:
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        run: |
+          # Set any additional environment variables as needed
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
+          AUTH_TYPE=basic \
+          REQUIRE_EMAIL_VERIFICATION=false \
+          DISABLE_TELEMETRY=true \
+          MULTI_TENANT=true \
+          IMAGE_TAG=${IMAGE_TAG} \
+          docker-compose -f docker-compose.dev.yml -p danswer-stack up -d
+
+      - name: Start Control Plane Services
+        working-directory: control-plane/deployment
+        env:
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        run: |
+          # Set any additional environment variables as needed
+          IMAGE_TAG=${IMAGE_TAG} \
+          docker-compose up -d
+
+      - name: Wait for Data Plane Services to be Ready
+        run: |
+          echo "Waiting for Data Plane API server..."
+          until curl -s http://localhost:8080/health; do
+            sleep 5
+          done
+          echo "Data Plane API server is ready."
+
+      - name: Wait for Control Plane Services to be Ready
+        run: |
+          echo "Waiting for Control Plane API server..."
+          until curl -s http://localhost:8082/health; do
+            sleep 5
+          done
+          echo "Control Plane API server is ready."
+
+      - name: Run Integration Tests from Data Plane Backend
+        working-directory: data-plane/backend
+        run: |
+          # Install dependencies if needed
+          pip install -r requirements.txt
+
+          # Run the integration tests
+          pytest tests/integration
+
+      - name: Collect Data Plane Docker Logs
+        if: always()
+        run: |
+          cd data-plane/deployment/docker_compose
+          docker-compose -f docker-compose.dev.yml -p danswer-stack logs > $GITHUB_WORKSPACE/data-plane-docker-compose.log
+
+      - name: Collect Control Plane Docker Logs
+        if: always()
+        run: |
+          cd control-plane/deployment
+          docker-compose logs > $GITHUB_WORKSPACE/control-plane-docker-compose.log
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: docker-logs
+          path: |
+            $GITHUB_WORKSPACE/data-plane-docker-compose.log
+            $GITHUB_WORKSPACE/control-plane-docker-compose.log
+
+      - name: Tear Down Data Plane Services
+        if: always()
+        working-directory: data-plane/deployment/docker_compose
+        run: |
+          docker-compose -f docker-compose.dev.yml -p danswer-stack down -v
+
+      - name: Tear Down Control Plane Services
+        if: always()
+        working-directory: control-plane/deployment
+        run: |
+          docker-compose down -v

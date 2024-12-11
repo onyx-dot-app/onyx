@@ -222,6 +222,7 @@ def reset_vespa_multitenant() -> None:
     """Wipe all data from the Vespa index for all tenants."""
 
     for tenant_id in get_all_tenant_ids():
+        print(f"Resetting Vespa for tenant {tenant_id}")
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             # swap to the correct default model for each tenant
             check_index_swap(db_session)
