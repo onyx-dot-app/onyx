@@ -266,5 +266,7 @@ class FullModelVersionResponse(BaseModel):
 class AllUsersResponse(BaseModel):
     accepted: list[FullUserSnapshot]
     invited: list[InvitedUserSnapshot]
+    slack_users: list[FullUserSnapshot]
     accepted_pages: int
     invited_pages: int
+    slack_users_pages: int

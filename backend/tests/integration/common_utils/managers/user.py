@@ -130,8 +130,10 @@ class UserManager:
         all_users = AllUsersResponse(
             accepted=[FullUserSnapshot(**user) for user in data["accepted"]],
             invited=[InvitedUserSnapshot(**user) for user in data["invited"]],
+            slack_users=[FullUserSnapshot(**user) for user in data["slack_users"]],
             accepted_pages=data["accepted_pages"],
             invited_pages=data["invited_pages"],
+            slack_users_pages=data["slack_users_pages"],
         )
         for accepted_user in all_users.accepted:
             if accepted_user.email == user.email and accepted_user.id == user.id:

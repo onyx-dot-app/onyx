@@ -119,6 +119,7 @@ def set_user_role(
 def list_all_users(
     q: str | None = None,
     accepted_page: int | None = None,
+    slack_users_page: int | None = None,
     invited_page: int | None = None,
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
@@ -131,7 +132,12 @@ def list_all_users(
         for user in list_users(db_session, email_filter_string=q)
         if not is_api_key_email_address(user.email)
     ]
-    accepted_emails = {user.email for user in users}
+
+    slack_users = [user for user in users if user.role == UserRole.SLACK_USER]
+    accepted_users = [user for user in users if user.role != UserRole.SLACK_USER]
+
+    accepted_emails = {user.email for user in accepted_users}
+    slack_users_emails = {user.email for user in slack_users}
     invited_emails = get_invited_users()
     if q:
         invited_emails = [
@@ -139,10 +145,11 @@ def list_all_users(
         ]
 
     accepted_count = len(accepted_emails)
+    slack_users_count = len(slack_users_emails)
     invited_count = len(invited_emails)
 
     # If any of q, accepted_page, or invited_page is None, return all users
-    if accepted_page is None or invited_page is None:
+    if accepted_page is None or invited_page is None or slack_users_page is None:
         return AllUsersResponse(
             accepted=[
                 FullUserSnapshot(
@@ -153,11 +160,23 @@ def list_all_users(
                         UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED
                     ),
                 )
-                for user in users
+                for user in accepted_users
+            ],
+            slack_users=[
+                FullUserSnapshot(
+                    id=user.id,
+                    email=user.email,
+                    role=user.role,
+                    status=(
+                        UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED
+                    ),
+                )
+                for user in slack_users
             ],
             invited=[InvitedUserSnapshot(email=email) for email in invited_emails],
             accepted_pages=1,
             invited_pages=1,
+            slack_users_pages=1,
         )
 
     # Otherwise, return paginated results
@@ -169,13 +188,27 @@ def list_all_users(
                 role=user.role,
                 status=UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED,
             )
-            for user in users
+            for user in accepted_users
         ][accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE],
+        slack_users=[
+            FullUserSnapshot(
+                id=user.id,
+                email=user.email,
+                role=user.role,
+                status=UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED,
+            )
+            for user in slack_users
+        ][
+            slack_users_page
+            * USERS_PAGE_SIZE : (slack_users_page + 1)
+            * USERS_PAGE_SIZE
+        ],
         invited=[InvitedUserSnapshot(email=email) for email in invited_emails][
             invited_page * USERS_PAGE_SIZE : (invited_page + 1) * USERS_PAGE_SIZE
         ],
         accepted_pages=accepted_count // USERS_PAGE_SIZE + 1,
         invited_pages=invited_count // USERS_PAGE_SIZE + 1,
+        slack_users_pages=slack_users_count // USERS_PAGE_SIZE + 1,
     )
 
 
