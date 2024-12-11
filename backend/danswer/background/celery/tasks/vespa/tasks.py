@@ -156,7 +156,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> None:
             "Soft time limit exceeded, task is being terminated gracefully."
         )
     except Exception:
-        task_logger.exception(f"Unexpected exception: tenant={tenant_id}")
+        task_logger.exception("Unexpected exception during vespa metadata sync")
     finally:
         if lock_beat.owned():
             lock_beat.release()
@@ -864,13 +864,9 @@ def vespa_metadata_sync_task(
             # the sync might repeat again later
             mark_document_as_synced(document_id, db_session)
 
-            task_logger.info(
-                f"tenant={tenant_id} doc={document_id} action=sync chunks={chunks_affected}"
-            )
+            task_logger.info(f"doc={document_id} action=sync chunks={chunks_affected}")
     except SoftTimeLimitExceeded:
-        task_logger.info(
-            f"SoftTimeLimitExceeded exception. tenant={tenant_id} doc={document_id}"
-        )
+        task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
     except Exception as ex:
         if isinstance(ex, RetryError):
             task_logger.warning(
@@ -888,14 +884,13 @@ def vespa_metadata_sync_task(
             if e.response.status_code == HTTPStatus.BAD_REQUEST:
                 task_logger.exception(
                     f"Non-retryable HTTPStatusError: "
-                    f"tenant={tenant_id} "
                     f"doc={document_id} "
                     f"status={e.response.status_code}"
                 )
             return False
 
         task_logger.exception(
-            f"Unexpected exception: tenant={tenant_id} doc={document_id}"
+            f"Unexpected exception during vespa metadata sync: doc={document_id}"
         )
 
         # Exponential backoff from 2^4 to 2^6 ... i.e. 16, 32, 64

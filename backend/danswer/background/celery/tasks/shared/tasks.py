@@ -60,7 +60,7 @@ def document_by_cc_pair_cleanup_task(
     connector / credential pair from the access list
     (6) delete all relevant entries from postgres
     """
-    task_logger.debug(f"Task start: tenant={tenant_id} doc={document_id}")
+    task_logger.debug(f"Task start: doc={document_id}")
 
     try:
         with get_session_with_tenant(tenant_id) as db_session:
@@ -129,16 +129,13 @@ def document_by_cc_pair_cleanup_task(
             db_session.commit()
 
             task_logger.info(
-                f"tenant={tenant_id} "
                 f"doc={document_id} "
                 f"action={action} "
                 f"refcount={count} "
                 f"chunks={chunks_affected}"
             )
     except SoftTimeLimitExceeded:
-        task_logger.info(
-            f"SoftTimeLimitExceeded exception. tenant={tenant_id} doc={document_id}"
-        )
+        task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
         return False
     except Exception as ex:
         if isinstance(ex, RetryError):
@@ -157,15 +154,12 @@ def document_by_cc_pair_cleanup_task(
             if e.response.status_code == HTTPStatus.BAD_REQUEST:
                 task_logger.exception(
                     f"Non-retryable HTTPStatusError: "
-                    f"tenant={tenant_id} "
                     f"doc={document_id} "
                     f"status={e.response.status_code}"
                 )
             return False
 
-        task_logger.exception(
-            f"Unexpected exception: tenant={tenant_id} doc={document_id}"
-        )
+        task_logger.exception(f"Unexpected exception: doc={document_id}")
 
         if self.request.retries < DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES:
             # Still retrying. Exponential backoff from 2^4 to 2^6 ... i.e. 16, 32, 64
@@ -176,7 +170,7 @@ def document_by_cc_pair_cleanup_task(
             # eventually gets fixed out of band via stale document reconciliation
             task_logger.warning(
                 f"Max celery task retries reached. Marking doc as dirty for reconciliation: "
-                f"tenant={tenant_id} doc={document_id}"
+                f"doc={document_id}"
             )
             with get_session_with_tenant(tenant_id) as db_session:
                 # delete the cc pair relationship now and let reconciliation clean it up

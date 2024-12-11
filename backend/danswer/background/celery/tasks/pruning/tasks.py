@@ -122,7 +122,7 @@ def check_for_pruning(self: Task, *, tenant_id: str | None) -> None:
             "Soft time limit exceeded, task is being terminated gracefully."
         )
     except Exception:
-        task_logger.exception(f"Unexpected exception: tenant={tenant_id}")
+        task_logger.exception("Unexpected exception during pruning check")
     finally:
         if lock_beat.owned():
             lock_beat.release()
@@ -308,7 +308,7 @@ def connector_pruning_generator_task(
             doc_ids_to_remove = list(all_indexed_document_ids - all_connector_doc_ids)
 
             task_logger.info(
-                f"Pruning set collected: "
+                "Pruning set collected: "
                 f"cc_pair={cc_pair_id} "
                 f"connector_source={cc_pair.connector.source} "
                 f"docs_to_remove={len(doc_ids_to_remove)}"
@@ -324,7 +324,7 @@ def connector_pruning_generator_task(
                 return None
 
             task_logger.info(
-                f"RedisConnector.prune.generate_tasks finished. "
+                "RedisConnector.prune.generate_tasks finished. "
                 f"cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
             )
 
