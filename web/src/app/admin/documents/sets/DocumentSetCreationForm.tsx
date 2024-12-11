@@ -65,9 +65,7 @@ export const DocumentSetCreationForm = ({
         }}
         validationSchema={Yup.object().shape({
           name: Yup.string().required("Please enter a name for the set"),
-          description: Yup.string().required(
-            "Please enter a description for the set"
-          ),
+          description: Yup.string().default(""),
           cc_pair_ids: Yup.array()
             .of(Yup.number().required())
             .required("Please select at least one connector"),
