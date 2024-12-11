@@ -45,9 +45,6 @@ function NewApiKeyModal({
       <div className="px-8 py-8">
         <div className="flex w-full border-b border-border mb-4 pb-4">
           <Title>New API Key</Title>
-          <div onClick={onClose} className="ml-auto p-1 rounded hover:bg-hover">
-            <FiX size={18} />
-          </div>
         </div>
         <div className="h-32">
           <Text className="mb-4">
