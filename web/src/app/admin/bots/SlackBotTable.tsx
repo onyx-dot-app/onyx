@@ -96,6 +96,16 @@ export function SlackBotTable({ slackBots }: { slackBots: SlackBot[] }) {
               </ClickableTableRow>
             );
           })}
+          {slackBots.length === 0 && (
+            <TableRow>
+              <TableCell
+                colSpan={4}
+                className="text-center text-muted-foreground"
+              >
+                Please add a New Slack Bot to begin chatting with Danswer!
+              </TableCell>
+            </TableRow>
+          )}
         </TableBody>
       </Table>
       {slackBots.length > NUM_IN_PAGE && (
