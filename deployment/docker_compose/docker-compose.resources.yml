@@ -1,0 +1,73 @@
+# Refer to the docs for more information: https://docs.onyx.app/resourcing
+# Some resonable defaults are provided below, but you can override them as needed.
+# Uncomment the services you want to override.
+
+services:
+  index:
+    deploy:
+      resources:
+        limits:
+          cpus: ${VESPA_CPU_LIMIT:-4}
+          memory: ${VESPA_MEM_LIMIT:-4g}
+  #       reservations:
+  #         cpus: ${VESPA_CPU_RESERVATION:-4.0}
+  #         memory: ${VESPA_MEM_RESERVATION:-8g}
+
+  # nginx:
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: ${NGINX_CPU_LIMIT:-0.25}
+  #         memory: ${NGINX_MEM_LIMIT:-128m}
+  #       reservations:
+  #         cpus: ${NGINX_CPU_RESERVATION:-0.1}
+  #         memory: ${NGINX_MEM_RESERVATION:-64m}
+  # api_server:
+  #     deploy:
+  #       resources:
+  #         limits:
+  #           cpus: ${API_SERVER_CPU_LIMIT}
+  #           memory: ${API_SERVER_MEM_LIMIT}
+  #         reservations:
+  #           cpus: ${API_SERVER_CPU_RESERVATION}
+  #           memory: ${API_SERVER_MEM_RESERVATION}
+
+  #   background:
+  #     deploy:
+  #       resources:
+  #         limits:
+  #           cpus: ${BACKGROUND_CPU_LIMIT}
+  #           memory: ${BACKGROUND_MEM_LIMIT}
+  #         reservations:
+  #           cpus: ${BACKGROUND_CPU_RESERVATION}
+  #           memory: ${BACKGROUND_MEM_RESERVATION}
+
+  #   inference_model_server:
+  #     deploy:
+  #       resources:
+  #         limits:
+  #           cpus: ${INFERENCE_CPU_LIMIT}
+  #           memory: ${INFERENCE_MEM_LIMIT}
+  #         reservations:
+  #           cpus: ${INFERENCE_CPU_RESERVATION}
+  #           memory: ${INFERENCE_MEM_RESERVATION}
+
+  #   indexing_model_server:
+  #     deploy:
+  #       resources:
+  #         limits:
+  #           cpus: ${INDEXING_CPU_LIMIT}
+  #           memory: ${INDEXING_MEM_LIMIT}
+  #         reservations:
+  #           cpus: ${INDEXING_CPU_RESERVATION}
+  #           memory: ${INDEXING_MEM_RESERVATION}
+
+  #   relational_db:
+  #     deploy:
+  #       resources:
+  #         limits:
+  #           cpus: ${POSTGRES_CPU_LIMIT}
+  #           memory: ${POSTGRES_MEM_LIMIT}
+  #         reservations:
+  #           cpus: ${POSTGRES_CPU_RESERVATION}
+  #           memory: ${POSTGRES_MEM_RESERVATION}
