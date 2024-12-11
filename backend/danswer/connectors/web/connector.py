@@ -286,6 +286,8 @@ class WebConnector(LoadConnector):
             except Exception as e:
                 last_error = f"Invalid URL {current_url} due to {e}"
                 logger.warning(last_error)
+                playwright.stop()
+                restart_playwright = True
                 continue
 
             logger.info(f"Visiting {current_url}")
