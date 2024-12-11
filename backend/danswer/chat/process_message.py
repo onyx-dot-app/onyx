@@ -142,7 +142,7 @@ def _translate_citations(
                 citation.citation_num
             ] = doc_id_to_saved_doc_id_map[citation.document_id]
 
-    return MessageSpecificCitations(citation_map=citation_to_saved_doc_id_map)
+        return MessageSpecificCitations(citation_map=citation_to_saved_doc_id_map)
 
 
 def _handle_search_tool_response_summary(

@@ -15,6 +15,7 @@ from danswer.tools.message import ToolCallSummary
 from danswer.tools.models import ToolResponse
 
 
+ORIGINAL_CONTEXT_DOCUMENTS_ID = "search_doc_content"
 FINAL_CONTEXT_DOCUMENTS_ID = "final_context_documents"
 
 

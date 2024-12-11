@@ -206,7 +206,7 @@ class Answer:
         # + figure out what the next LLM call should be
         tool_call_handler = ToolResponseHandler(current_llm_call.tools)
 
-        search_result = SearchTool.get_search_result(current_llm_call) or []
+        search_result, displayed_search_results_map = SearchTool.get_search_result(current_llm_call) or ([], {})
 
         # Quotes are no longer supported
         # answer_handler: AnswerResponseHandler
@@ -224,6 +224,7 @@ class Answer:
         answer_handler = CitationResponseHandler(
             context_docs=search_result,
             doc_id_to_rank_map=map_document_id_order(search_result),
+            display_doc_order_dict=displayed_search_results_map,
         )
 
         response_handler_manager = LLMResponseHandlerManager(

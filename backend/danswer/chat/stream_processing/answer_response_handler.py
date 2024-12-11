@@ -35,13 +35,18 @@ class DummyAnswerResponseHandler(AnswerResponseHandler):
 
 class CitationResponseHandler(AnswerResponseHandler):
     def __init__(
-        self, context_docs: list[LlmDoc], doc_id_to_rank_map: DocumentIdOrderMapping
+        self, 
+        context_docs: list[LlmDoc], 
+        doc_id_to_rank_map: DocumentIdOrderMapping,
+        display_doc_order_dict: dict[str, int],
     ):
         self.context_docs = context_docs
         self.doc_id_to_rank_map = doc_id_to_rank_map
+        self.display_doc_order_dict = display_doc_order_dict
         self.citation_processor = CitationProcessor(
             context_docs=self.context_docs,
             doc_id_to_rank_map=self.doc_id_to_rank_map,
+            display_doc_order_dict=self.display_doc_order_dict,
         )
         self.processed_text = ""
         self.citations: list[CitationInfo] = []
