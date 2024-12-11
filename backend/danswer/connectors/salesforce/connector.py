@@ -199,6 +199,23 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
         yield query
 
+    def _build_all_queries(
+        self, start: datetime | None = None, end: datetime | None = None
+    ) -> list[str]:
+        time_filter_query = ""
+        if start is not None and end is not None:
+            if start and start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+            if end and end.tzinfo is None:
+                end = end.replace(tzinfo=timezone.utc)
+            time_filter_query = f" WHERE LastModifiedDate > {start.isoformat()} AND LastModifiedDate < {end.isoformat()}"
+        queries = []
+        for parent_object_type in self.parent_object_list:
+            logger.debug(f"Processing: {parent_object_type}")
+            for query in self._generate_query_per_parent_type(parent_object_type):
+                queries.append(query + time_filter_query)
+        return queries
+
     def _fetch_from_salesforce(
         self,
         start: datetime | None = None,
@@ -207,36 +224,24 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         if self.sf_client is None:
             raise ConnectorMissingCredentialError("Salesforce")
 
+        queries = self._build_all_queries(start=start, end=end)
+
         doc_batch: list[Document] = []
-        for parent_object_type in self.parent_object_list:
-            logger.debug(f"Processing: {parent_object_type}")
 
-            query_results: dict = {}
-            for query in self._generate_query_per_parent_type(parent_object_type):
-                if start is not None and end is not None:
-                    if start and start.tzinfo is None:
-                        start = start.replace(tzinfo=timezone.utc)
-                    if end and end.tzinfo is None:
-                        end = end.replace(tzinfo=timezone.utc)
-                    query += f" WHERE LastModifiedDate > {start.isoformat()} AND LastModifiedDate < {end.isoformat()}"
-
-                query_result = self.sf_client.query_all(query)
-
+        query_results: dict = {}
+        for query in queries:
+            for query_result in self.sf_client.query_all_iter(query):
                 for record_dict in query_result["records"]:
                     query_results.setdefault(record_dict["Id"], {}).update(record_dict)
 
-            logger.info(
-                f"Number of {parent_object_type} Objects processed: {len(query_results)}"
+        for combined_object_dict in query_results.values():
+            doc_batch.append(
+                self._convert_object_instance_to_document(combined_object_dict)
             )
 
-            for combined_object_dict in query_results.values():
-                doc_batch.append(
-                    self._convert_object_instance_to_document(combined_object_dict)
-                )
-
-                if len(doc_batch) > self.batch_size:
-                    yield doc_batch
-                    doc_batch = []
+            if len(doc_batch) > self.batch_size:
+                yield doc_batch
+                doc_batch = []
         yield doc_batch
 
     def load_from_state(self) -> GenerateDocumentsOutput:
