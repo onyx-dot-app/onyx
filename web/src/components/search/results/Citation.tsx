@@ -51,7 +51,12 @@ export function Citation({
             </div>
           </TooltipTrigger>
           <TooltipContent width="mb-2 max-w-lg" className="bg-background">
-            <CompactDocumentCard url={url} icon={icon} document={document} />
+            <CompactDocumentCard
+              updatePresentingDocument={updatePresentingDocument}
+              url={url}
+              icon={icon}
+              document={document}
+            />
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -77,7 +82,12 @@ export function Citation({
             </div>
           </TooltipTrigger>
           <TooltipContent width="mb-2 max-w-lg" backgroundColor="bg-background">
-            <CompactDocumentCard url={url} icon={icon} document={document} />
+            <CompactDocumentCard
+              updatePresentingDocument={updatePresentingDocument}
+              url={url}
+              icon={icon}
+              document={document}
+            />
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
