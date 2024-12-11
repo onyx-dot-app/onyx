@@ -6,7 +6,7 @@ chart-dirs:
 
 # must be kept in sync with Chart.yaml
 chart-repos:
-  - vespa=https://danswer-ai.github.io/vespa-helm-charts
+  - vespa=https://onyx-dot-app.github.io/vespa-helm-charts
   - postgresql=https://charts.bitnami.com/bitnami
   
 helm-extra-args: --debug --timeout 600s
