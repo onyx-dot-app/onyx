@@ -62,7 +62,7 @@ export default function LogoType({
         </div>
       )}
       <div
-        className={`cursor-pointer ${
+        className={`${
           showArrow ? "desktop:invisible" : "invisible"
         } break-words inline-block w-fit ml-2 text-text-700 text-xl`}
       >
@@ -103,9 +103,10 @@ export default function LogoType({
                   }
                 }}
               >
-                <div className="cursor-pointer ml-2 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
-                  <NewChatIcon size={20} />
-                </div>
+                <NewChatIcon
+                  className="ml-2 flex-none text-text-700 hover:text-text-600 transition-colors duration-300"
+                  size={20}
+                />
               </Link>
             </TooltipTrigger>
             <TooltipContent>New Chat</TooltipContent>

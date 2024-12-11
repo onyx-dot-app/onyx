@@ -74,8 +74,8 @@ export default function FunctionalHeader({
     router.push(newChatUrl);
   };
   return (
-    <div className="left-0  sticky top-0 z-20 w-full relative flex">
-      <div className="mt-2 cursor-pointer text-text-700 relative flex w-full">
+    <div className="left-0 sticky top-0 z-20 w-full relative flex">
+      <div className="mt-2 text-text-700 relative flex w-full">
         <LogoType
           assistantId={currentChatSession?.persona_id}
           page={page}
@@ -132,9 +132,10 @@ export default function FunctionalHeader({
                 : "")
             }
           >
-            <div className="cursor-pointer mr-4 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
-              <NewChatIcon size={20} />
-            </div>
+            <NewChatIcon
+              size={20}
+              className="cursor-pointer mr-4 flex-none text-text-700 hover:text-text-600 transition-colors duration-300"
+            />
           </Link>
         </div>
         <div
