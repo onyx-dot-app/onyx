@@ -86,17 +86,17 @@ def _convert_issue_to_document(issue: Any) -> Document:
 
 
 def _convert_code_to_document(
-    project: Project, file: Any, url: str, projectName: str, projectOwner: str
+    project: Project, file: Any, url: str, projectName: str, projectOwner: str, branch: str
 ) -> Document:
     file_content_obj = project.files.get(
-        file_path=file["path"], ref="master"
+        file_path=file["path"], ref=branch
     )  # Replace 'master' with your branch name if needed
     try:
         file_content = file_content_obj.decode().decode("utf-8")
     except UnicodeDecodeError:
         file_content = file_content_obj.decode().decode("latin-1")
 
-    file_url = f"{url}/{projectOwner}/{projectName}/-/blob/master/{file['path']}"  # Construct the file URL
+    file_url = f"{url}/{projectOwner}/{projectName}/-/blob/{branch}/{file['path']}"  # Construct the file URL
     doc = Document(
         id=file["id"],
         sections=[Section(link=file_url, text=file_content)],
@@ -121,14 +121,19 @@ class GitlabConnector(LoadConnector, PollConnector):
         self,
         project_owner: str,
         project_name: str,
+        branch: str = "main",
+        subdirectory: str = "",
         batch_size: int = INDEX_BATCH_SIZE,
         state_filter: str = "all",
         include_mrs: bool = True,
         include_issues: bool = True,
-        include_code_files: bool = GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
+        include_code_files: bool = False,
     ) -> None:
+        project_meta = project_name.split(':')
         self.project_owner = project_owner
-        self.project_name = project_name
+        self.branch = project_meta[1] if len(project_meta) > 1 else 'main'
+        self.subdirectory = project_meta[2] if len(project_meta) > 2 else ''
+        self.project_name = project_meta[0]
         self.batch_size = batch_size
         self.state_filter = state_filter
         self.include_mrs = include_mrs
@@ -182,7 +187,7 @@ class GitlabConnector(LoadConnector, PollConnector):
 
         if self.include_mrs:
             merge_requests = project.mergerequests.list(
-                state=self.state_filter, order_by="updated_at", sort="desc"
+                state=self.state_filter, order_by="updated_at", sort="desc", iterator=True,
             )
 
             for mr_batch in _batch_gitlab_objects(merge_requests, self.batch_size):
@@ -244,7 +249,7 @@ if __name__ == "__main__":
         state_filter="all",
         include_mrs=True,
         include_issues=True,
-        include_code_files=GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
+        include_code_files=True,
     )
 
     connector.load_credentials(

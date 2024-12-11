@@ -205,6 +205,7 @@ export const connectorConfigs: Record<
       {
         type: "text",
         query: "Enter the project name:",
+        description: "Please provide the project name in format project_name:branch_name:[subfolder] e.g., danswer:main or dmain:backend/danswer/connectors",
         label: "Project Name",
         name: "project_name",
         optional: false,
@@ -224,6 +225,15 @@ export const connectorConfigs: Record<
         name: "include_issues",
         optional: true,
         hidden: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include Code Files?",
+        description: "Selecting this will index the Entire code in the repository. So use it with caution!",
+        label: "Include Code Files",
+        name: "include_code_files",
+        default: false,
+        hidden: false,
       },
     ],
     advanced_values: [],
@@ -1170,6 +1180,7 @@ export interface GitlabConfig {
   project_name: string;
   include_mrs: boolean;
   include_issues: boolean;
+  include_code_files: boolean;
 }
 
 export interface GoogleDriveConfig {
