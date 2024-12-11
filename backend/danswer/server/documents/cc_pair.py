@@ -33,8 +33,6 @@ from danswer.db.engine import get_current_tenant_id
 from danswer.db.engine import get_session
 from danswer.db.enums import AccessType
 from danswer.db.enums import ConnectorCredentialPairStatus
-from danswer.db.index_attempt import cancel_indexing_attempts_for_ccpair
-from danswer.db.index_attempt import cancel_indexing_attempts_past_model
 from danswer.db.index_attempt import count_index_attempts_for_connector
 from danswer.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from danswer.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id
@@ -191,9 +189,6 @@ def update_cc_pair_status(
         search_settings_list: list[SearchSettings] = get_active_search_settings(
             db_session
         )
-
-        cancel_indexing_attempts_for_ccpair(cc_pair_id, db_session)
-        cancel_indexing_attempts_past_model(db_session)
 
         redis_connector = RedisConnector(tenant_id, cc_pair_id)
 

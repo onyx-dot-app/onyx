@@ -522,12 +522,16 @@ def expire_index_attempts(
     search_settings_id: int,
     db_session: Session,
 ) -> None:
-    delete_query = (
-        delete(IndexAttempt)
+    not_started_query = (
+        update(IndexAttempt)
         .where(IndexAttempt.search_settings_id == search_settings_id)
         .where(IndexAttempt.status == IndexingStatus.NOT_STARTED)
+        .values(
+            status=IndexingStatus.CANCELED,
+            error_msg="Canceled, likely due to model swap",
+        )
     )
-    db_session.execute(delete_query)
+    db_session.execute(not_started_query)
 
     update_query = (
         update(IndexAttempt)
@@ -549,9 +553,14 @@ def cancel_indexing_attempts_for_ccpair(
     include_secondary_index: bool = False,
 ) -> None:
     stmt = (
-        delete(IndexAttempt)
+        update(IndexAttempt)
         .where(IndexAttempt.connector_credential_pair_id == cc_pair_id)
         .where(IndexAttempt.status == IndexingStatus.NOT_STARTED)
+        .values(
+            status=IndexingStatus.CANCELED,
+            error_msg="Canceled by user",
+            time_started=datetime.now(timezone.utc),
+        )
     )
 
     if not include_secondary_index:

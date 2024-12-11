@@ -598,7 +598,7 @@ def connector_indexing_proxy_task(
                         db_session,
                         "Connector termination signal detected",
                     )
-            finally:
+            except Exception:
                 # if the DB exceptions, we'll just get an unfriendly failure message
                 # in the UI instead of the cancellation message
                 logger.exception(

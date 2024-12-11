@@ -680,17 +680,28 @@ def monitor_ccpair_indexing_taskset(
                 )
                 task_logger.warning(msg)
 
-                index_attempt = get_index_attempt(db_session, payload.index_attempt_id)
-                if index_attempt:
-                    if (
-                        index_attempt.status != IndexingStatus.CANCELED
-                        and index_attempt.status != IndexingStatus.FAILED
-                    ):
-                        mark_attempt_failed(
-                            index_attempt_id=payload.index_attempt_id,
-                            db_session=db_session,
-                            failure_reason=msg,
-                        )
+                try:
+                    index_attempt = get_index_attempt(
+                        db_session, payload.index_attempt_id
+                    )
+                    if index_attempt:
+                        if (
+                            index_attempt.status != IndexingStatus.CANCELED
+                            and index_attempt.status != IndexingStatus.FAILED
+                        ):
+                            mark_attempt_failed(
+                                index_attempt_id=payload.index_attempt_id,
+                                db_session=db_session,
+                                failure_reason=msg,
+                            )
+                except Exception:
+                    task_logger.exception(
+                        "monitor_ccpair_indexing_taskset - transient exception marking index attempt as failed: "
+                        f"attempt={payload.index_attempt_id} "
+                        f"tenant={tenant_id} "
+                        f"cc_pair={cc_pair_id} "
+                        f"search_settings={search_settings_id}"
+                    )
 
                 redis_connector_index.reset()
         return
