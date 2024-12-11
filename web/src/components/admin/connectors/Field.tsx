@@ -237,6 +237,7 @@ export function TextFormField({
           as={isTextArea ? "textarea" : "input"}
           type={type}
           defaultValue={value}
+          data-testid={name}
           name={name}
           id={name}
           className={`

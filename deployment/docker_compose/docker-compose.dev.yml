@@ -47,6 +47,7 @@ services:
       - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
       - BING_API_KEY=${BING_API_KEY:-}
       - DISABLE_LLM_DOC_RELEVANCE=${DISABLE_LLM_DOC_RELEVANCE:-}
+      - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
       # if set, allows for the use of the token budget system
       - TOKEN_BUDGET_GLOBALLY_ENABLED=${TOKEN_BUDGET_GLOBALLY_ENABLED:-}
       # Enables the use of bedrock models
@@ -141,6 +142,7 @@ services:
       - GENERATIVE_MODEL_ACCESS_CHECK_FREQ=${GENERATIVE_MODEL_ACCESS_CHECK_FREQ:-}
       - DISABLE_LITELLM_STREAMING=${DISABLE_LITELLM_STREAMING:-}
       - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
+      - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
       - BING_API_KEY=${BING_API_KEY:-}
       # Query Options
       - DOC_TIME_DECAY=${DOC_TIME_DECAY:-} # Recency Bias for search results, decay at 1 / (1 + DOC_TIME_DECAY * x years)
