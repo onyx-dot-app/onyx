@@ -44,12 +44,12 @@ export default function LogoType({
     <div
       className={`${
         hideOnMobile && "mobile:hidden"
-      } z-[100] mb-auto shrink-0 flex items-center text-xl`}
+      } z-[100] mt-2 h-8 mb-auto shrink-0 flex items-center text-xl`}
     >
       {toggleSidebar && page == "chat" ? (
         <button
           onClick={() => toggleSidebar()}
-          className="pt-[2px] flex  gap-x-2 items-center ml-4 desktop:invisible mb-auto"
+          className="flex gap-x-2 items-center ml-4 desktop:invisible "
         >
           <FiSidebar size={20} className="text-text-mobile-sidebar" />
           {!showArrow && (
@@ -87,7 +87,7 @@ export default function LogoType({
           <Tooltip>
             <TooltipTrigger asChild>
               <Link
-                className="my-auto mobile:hidden"
+                className="my-auto pt-1 mobile:hidden"
                 href={
                   `/${page}` +
                   (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA && assistantId
@@ -103,7 +103,7 @@ export default function LogoType({
                   }
                 }}
               >
-                <div className="cursor-pointer ml-2 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
+                <div className="cursor-pointer ml-2 my-auto  text-text-700 hover:text-text-600 transition-colors duration-300">
                   <NewChatIcon size={20} />
                 </div>
               </Link>
@@ -112,6 +112,7 @@ export default function LogoType({
           </Tooltip>
         </TooltipProvider>
       )}
+
       {showArrow && toggleSidebar && (
         <TooltipProvider delayDuration={0}>
           <Tooltip>

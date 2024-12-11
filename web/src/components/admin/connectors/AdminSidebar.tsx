@@ -38,31 +38,25 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
   return (
     <div className="text-text-settings-sidebar pl-0">
       <nav className="space-y-2">
-        <div className="w-full justify-center mb-4 flex">
-          <div className="w-52">
-            <Link className="flex flex-col" href="/chat">
-              <div className="max-w-[200px] w-full flex gap-x-1 my-auto">
-                <div className="flex-none mb-auto">
-                  <Logo />
-                </div>
-                <div className="flex-grow min-w-0 my-auto">
-                  {enterpriseSettings && enterpriseSettings.application_name ? (
-                    <div className="w-full">
-                      <HeaderTitle backgroundToggled={true}>
-                        {enterpriseSettings.application_name}
-                      </HeaderTitle>
-                      {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
-                        <p className="text-xs text-subtle">
-                          Powered by Danswer
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <HeaderTitle backgroundToggled={true}>Danswer</HeaderTitle>
+        <div className="w-full ml-4  h-8 justify-start mb-4 flex">
+          <div className="flex items-center gap-x-1 my-auto">
+            <div className="flex-none my-auto">
+              <Logo height={24} width={24} />
+            </div>
+            <div className="w-full">
+              {enterpriseSettings && enterpriseSettings.application_name ? (
+                <div>
+                  <HeaderTitle>
+                    {enterpriseSettings.application_name}
+                  </HeaderTitle>
+                  {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
+                    <p className="text-xs text-subtle">Powered by Danswer</p>
                   )}
                 </div>
-              </div>
-            </Link>
+              ) : (
+                <HeaderTitle>Danswer</HeaderTitle>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex w-full justify-center">

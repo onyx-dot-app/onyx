@@ -135,7 +135,7 @@ const AssistantSelector = ({
           </Tab>
           <Tab
             className={({ selected }) =>
-              `w-full py-2.5 text-sm leading-5 font-medium rounded-md
+              `w-full py-2.5  text-sm leading-5 font-medium rounded-md
                  ${
                    selected
                      ? "bg-white text-gray-700 shadow"
@@ -290,11 +290,14 @@ const AssistantSelector = ({
   return (
     <div className="pointer-events-auto relative" ref={dropdownRef}>
       <div
-        className={
-          (settings?.enterpriseSettings?.two_lines_for_chat_header
-            ? "mt-20 "
-            : "mt-8") + " flex justify-center"
-        }
+        className={`h-12 items-end flex justify-center 
+          ${
+            settings?.enterpriseSettings?.custom_header_content &&
+            (settings?.enterpriseSettings?.two_lines_for_chat_header
+              ? "mt-16 "
+              : "mt-10")
+          }
+        `}
       >
         <div
           onClick={() => {
@@ -307,20 +310,23 @@ const AssistantSelector = ({
           }}
           className="flex items-center gap-x-2 justify-between px-6 py-3 text-sm font-medium text-white bg-black rounded-full shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer"
         >
-          <div className="flex gap-x-2 items-center">
+          <div className="h-4 flex gap-x-2 items-center">
             <AssistantIcon assistant={liveAssistant} size="xs" />
             <span className="font-bold">{liveAssistant.name}</span>
           </div>
-          <div className="flex items-center">
+          <div className="h-4 flex items-center">
             <span className="mr-2 text-xs">
               {truncateString(getDisplayNameForModel(currentLlm), 30)}
             </span>
             <FiChevronDown
-              className={`w-5 h-5 text-white transition-transform duration-300 transform ${
+              className={`w-3 h-3 text-white transition-transform duration-300 transform ${
                 isOpen ? "rotate-180" : ""
               }`}
               aria-hidden="true"
             />
+            <div className="invisible w-0">
+              <AssistantIcon assistant={liveAssistant} size="xs" />
+            </div>
           </div>
         </div>
       </div>

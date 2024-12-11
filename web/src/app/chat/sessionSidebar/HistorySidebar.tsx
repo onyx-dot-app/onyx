@@ -101,7 +101,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             flex-col relative
             h-screen
             transition-transform 
-            pt-2`}
+            `}
         >
           <LogoType
             showArrow={true}

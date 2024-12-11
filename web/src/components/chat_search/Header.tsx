@@ -74,18 +74,18 @@ export default function FunctionalHeader({
     router.push(newChatUrl);
   };
   return (
-    <div className="left-0  sticky top-0 z-20 w-full relative flex">
-      <div className="mt-2 cursor-pointer text-text-700 relative flex w-full">
+    <div className="left-0 sticky top-0 z-20 w-full relative flex">
+      <div className="items-end flex  cursor-pointer text-text-700 relative flex w-full">
         <LogoType
           assistantId={currentChatSession?.persona_id}
           page={page}
           toggleSidebar={toggleSidebar}
           handleNewChat={handleNewChat}
         />
-
-        <div
-          style={{ transition: "width 0.30s ease-out" }}
-          className={`
+        <div className="mt-2 flex w-full h-8">
+          <div
+            style={{ transition: "width 0.30s ease-out" }}
+            className={`
             mobile:hidden
             flex-none 
             mx-auto
@@ -96,50 +96,67 @@ export default function FunctionalHeader({
             h-full
             ${sidebarToggled ? "w-[250px]" : "w-[0px]"}
             `}
-        />
-
-        <div className="w-full mobile:-mx-20 desktop:px-4">
-          <ChatBanner />
-        </div>
-
-        <div className="invisible">
-          <LogoType
-            page={page}
-            toggleSidebar={toggleSidebar}
-            handleNewChat={handleNewChat}
           />
-        </div>
 
-        <div className="absolute right-0 top-0 flex gap-x-2">
-          {setSharingModalVisible && (
-            <div
-              onClick={() => setSharingModalVisible(true)}
-              className="mobile:hidden my-auto rounded cursor-pointer hover:bg-hover-light"
-            >
-              <FiShare2 size="18" />
-            </div>
-          )}
-          <div className="mobile:hidden flex my-auto">
-            <UserDropdown page={page} toggleUserSettings={toggleUserSettings} />
+          <div className="w-full mobile:-mx-20 desktop:px-4">
+            <ChatBanner />
           </div>
-          <Link
-            className="desktop:hidden my-auto"
-            href={
-              `/${page}` +
-              (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA &&
-              currentChatSession
-                ? `?assistantId=${currentChatSession.persona_id}`
-                : "")
-            }
-          >
-            <div className="cursor-pointer mr-4 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
-              <NewChatIcon size={20} />
+
+          <div className="invisible">
+            <LogoType
+              page={page}
+              toggleSidebar={toggleSidebar}
+              handleNewChat={handleNewChat}
+            />
+          </div>
+
+          <div className="absolute right-0 top-2 h-8 items-end flex gap-x-2">
+            {setSharingModalVisible && (
+              <div
+                onClick={() => setSharingModalVisible(true)}
+                className="mobile:hidden p-1 my-auto rounded cursor-pointer hover:bg-hover-light"
+              >
+                <FiShare2 size="16" />
+              </div>
+            )}
+            <div className="mobile:hidden flex my-auto">
+              <UserDropdown
+                page={page}
+                toggleUserSettings={toggleUserSettings}
+              />
             </div>
-          </Link>
-        </div>
-        <div
-          style={{ transition: "width 0.30s ease-out" }}
-          className={`
+            <Link
+              className="desktop:hidden my-auto"
+              href={
+                `/${page}` +
+                (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA &&
+                currentChatSession
+                  ? `?assistantId=${currentChatSession.persona_id}`
+                  : "")
+              }
+            >
+              <div className="cursor-pointer mr-4 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
+                <NewChatIcon size={20} />
+              </div>
+            </Link>
+            <div
+              style={{ transition: "width 0.30s ease-out" }}
+              className={`
+              hidden
+              md:flex 
+              mx-auto
+              overflow-y-hidden 
+              transition-all 
+              duration-300 
+              ease-in-out
+              h-full
+              ${documentSidebarToggled ? "w-[400px]" : "w-[0px]"}
+              `}
+            />
+          </div>
+          <div
+            style={{ transition: "width 0.30s ease-out" }}
+            className={`
             hidden
             md:flex 
             mx-auto
@@ -150,11 +167,11 @@ export default function FunctionalHeader({
             h-full
             ${documentSidebarToggled ? "w-[400px]" : "w-[0px]"}
             `}
-        />
+          />
 
-        {page != "assistants" && (
-          <div
-            className={`
+          {page != "assistants" && (
+            <div
+              className={`
               h-20 absolute top-0 z-10 w-full sm:w-[90%] lg:w-[70%]
               bg-gradient-to-b via-50% z-[-1] from-background via-background to-background/10 flex
               transition-all duration-300 ease-in-out
@@ -164,8 +181,9 @@ export default function FunctionalHeader({
                   : "left-1/2 transform -translate-x-1/2"
               }
             `}
-          />
-        )}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

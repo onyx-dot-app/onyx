@@ -85,7 +85,7 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
     return (
       <div
         id="danswer-chat-sidebar"
-        className={`relative py-2 max-w-full ${
+        className={`relative  max-w-full ${
           !modal ? "border-l h-full border-sidebar-border" : ""
         }`}
         onClick={(e) => {
