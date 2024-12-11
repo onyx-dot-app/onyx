@@ -66,6 +66,7 @@ export interface TextOption extends Option {
 export interface NumberOption extends Option {
   type: "number";
   default?: number;
+  min?: number;
 }
 
 export interface BooleanOption extends Option {
@@ -345,6 +346,18 @@ export const connectorConfigs: Record<
         default: true,
         description:
           "Check if this is a Confluence Cloud instance, uncheck for Confluence Server/Data Center",
+      },
+      {
+        type: "number",
+        query: "Enter the Server Timezone Offset:",
+        label: "Server Timezone Offset",
+        name: "timezone_offset",
+        optional: false,
+        default: 0,
+        min: -24,
+        description:
+          "Enter the timezone offset for your Confluence instance (in hours). This is used to convert the server's timezone to UTC. E.g. EST is -5, CET is +1",
+        visibleCondition: (values, currentCredential) => !values.is_cloud,
       },
       {
         type: "text",

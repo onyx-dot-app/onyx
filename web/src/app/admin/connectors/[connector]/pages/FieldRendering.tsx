@@ -123,6 +123,14 @@ export const RenderField: FC<RenderFieldProps> = ({
   connector,
   currentCredential,
 }) => {
+  // Check visibility condition first
+  if (
+    field.visibleCondition &&
+    !field.visibleCondition(values, currentCredential)
+  ) {
+    return null;
+  }
+
   const label =
     typeof field.label === "function"
       ? field.label(currentCredential)
@@ -169,6 +177,7 @@ export const RenderField: FC<RenderFieldProps> = ({
           optional={field.optional}
           description={description}
           name={field.name}
+          min={field.min}
         />
       ) : field.type === "checkbox" ? (
         <AdminBooleanFormField

@@ -1,6 +1,5 @@
 from datetime import datetime
 from datetime import timedelta
-from datetime import timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -108,7 +107,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             )
             self.cql_label_filter = f" and label not in ({comma_separated_labels})"
 
-        self.timezone: timezone = timezone(offset=timedelta(hours=timezone_offset))
+        self.timezone_offset = timezone_offset or CONFLUENCE_TIMEZONE_OFFSET
 
     @property
     def confluence_client(self) -> OnyxConfluence:
@@ -249,13 +248,11 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         return self._fetch_document_batches()
 
     def poll_source(self, start: float, end: float) -> GenerateDocumentsOutput:
-        # Add time filters
-        formatted_start_time = datetime.fromtimestamp(start, tz=self.timezone).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-        formatted_end_time = datetime.fromtimestamp(end, tz=self.timezone).strftime(
-            "%Y-%m-%d %H:%M"
-        )
+        # Convert float timestamps to datetime, then adjust for timezone
+        start_dt = datetime.fromtimestamp(start) + timedelta(hours=self.timezone_offset)
+        end_dt = datetime.fromtimestamp(end) + timedelta(hours=self.timezone_offset)
+        formatted_start_time = start_dt.strftime("%Y-%m-%d %H:%M")
+        formatted_end_time = end_dt.strftime("%Y-%m-%d %H:%M")
         self.cql_time_filter = f" and lastmodified >= '{formatted_start_time}'"
         self.cql_time_filter += f" and lastmodified <= '{formatted_end_time}'"
         return self._fetch_document_batches()

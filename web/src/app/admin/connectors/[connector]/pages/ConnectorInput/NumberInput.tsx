@@ -7,12 +7,14 @@ export default function NumberInput({
   description,
   name,
   showNeverIfZero,
+  min = -1,
 }: {
   label: string;
   name: string;
   optional?: boolean;
   description?: string;
   showNeverIfZero?: boolean;
+  min?: number;
 }) {
   return (
     <div className="w-full flex flex-col">
@@ -25,7 +27,7 @@ export default function NumberInput({
       <Field
         type="number"
         name={name}
-        min="-1"
+        min={min}
         className={`mt-2 block w-full px-3 py-2 
                 bg-white border border-gray-300 rounded-md 
                 text-sm shadow-sm placeholder-gray-400
