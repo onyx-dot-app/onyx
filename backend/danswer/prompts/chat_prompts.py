@@ -11,7 +11,7 @@ Do not provide any citations even if there are examples in the chat history.
 """.rstrip()
 
 CITATION_REMINDER = """
-Remember to provide inline citations in the format [1], [2], [3], etc.
+Remember to provide inline citations in the format [1], [5], [N], etc to reference the document number
 """
 
 ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
