@@ -12,7 +12,7 @@ import { useContext, useEffect, useState } from "react";
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
 import { destructureValue } from "./llm/utils";
-import { ChatSession } from "@/app/chat/interfaces";
+import { ChatSession, FileDescriptor } from "@/app/chat/interfaces";
 import { UsersResponse } from "./users/interfaces";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -116,9 +116,12 @@ export interface FilterManager {
   setSelectedDocumentSets: React.Dispatch<React.SetStateAction<string[]>>;
   selectedTags: Tag[];
   setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>;
+  fileDescriptors: FileDescriptor[];
+  setFileDescriptors: React.Dispatch<React.SetStateAction<FileDescriptor[]>>;
 }
 
 export function useFilters(): FilterManager {
+  const [fileDescriptors, setFileDescriptors] = useState<FileDescriptor[]>([]);
   const [timeRange, setTimeRange] = useTimeRange();
   const [selectedSources, setSelectedSources] = useState<SourceMetadata[]>([]);
   const [selectedDocumentSets, setSelectedDocumentSets] = useState<string[]>(
@@ -135,6 +138,8 @@ export function useFilters(): FilterManager {
     setSelectedDocumentSets,
     selectedTags,
     setSelectedTags,
+    fileDescriptors,
+    setFileDescriptors,
   };
 }
 

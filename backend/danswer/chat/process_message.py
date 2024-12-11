@@ -475,6 +475,9 @@ def stream_chat_message_objects(
         files = load_all_chat_files(
             history_msgs, new_msg_req.file_descriptors, db_session
         )
+        print("")
+        print("message")
+        print(new_msg_req.__dict__)
         latest_query_files = [
             file
             for file in files

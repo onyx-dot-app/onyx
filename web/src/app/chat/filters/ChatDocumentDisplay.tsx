@@ -8,6 +8,8 @@ import { MetadataBadge } from "@/components/MetadataBadge";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { Dispatch, SetStateAction } from "react";
 import { ValidSources } from "@/lib/types";
+import { FileDescriptor } from "../interfaces";
+import { truncateString } from "@/lib/utils";
 
 interface DocumentDisplayProps {
   closeSidebar: () => void;
@@ -122,6 +124,66 @@ export function ChatDocumentDisplay({
                 isDisabled={tokenLimitReached && !isSelected}
               />
             )}
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function ChatFileDisplay({
+  closeSidebar,
+  file,
+  modal,
+  isSelected,
+  handleSelect,
+  tokenLimitReached,
+  setPresentingDocument,
+}: {
+  closeSidebar: () => void;
+  file: FileDescriptor;
+  modal?: boolean;
+  isSelected: boolean;
+  handleSelect: (fileId: string) => void;
+  tokenLimitReached: boolean;
+  setPresentingDocument?: (document: DanswerDocument) => void;
+}) {
+  const handleViewFile = () => {
+    if (setPresentingDocument) {
+      setPresentingDocument({
+        document_id: file.id,
+        source_type: ValidSources.File,
+        semantic_identifier: file.name,
+      } as DanswerDocument);
+    }
+  };
+
+  return (
+    <div className={`opacity-100 ${modal ? "w-[90vw]" : "w-full"}`}>
+      <div
+        className={`flex relative flex-col gap-0.5 rounded-xl mx-2 my-1 ${
+          isSelected ? "bg-gray-200" : "hover:bg-background-125"
+        }`}
+      >
+        <button
+          onClick={handleViewFile}
+          className="cursor-pointer text-left flex flex-col px-2 py-1.5"
+        >
+          <div className="line-clamp-1 mb-1 flex h-6 items-center gap-2 text-xs">
+            <SourceIcon sourceType={ValidSources.File} iconSize={18} />
+            <div className="line-clamp-1 text-text-900 text-sm font-semibold">
+              {truncateString(file.name || file.id, modal ? 30 : 40)}
+            </div>
+          </div>
+          <div className="line-clamp-2 text-sm font-normal leading-snug text-gray-600">
+            {file.type}
+          </div>
+          <div className="absolute top-2 right-2">
+            <DocumentSelector
+              isSelected={isSelected}
+              handleSelect={() => handleSelect(file.id)}
+              isDisabled={tokenLimitReached && !isSelected}
+            />
           </div>
         </button>
       </div>

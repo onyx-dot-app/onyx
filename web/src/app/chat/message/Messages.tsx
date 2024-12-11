@@ -6,6 +6,7 @@ import {
   FiChevronLeft,
   FiTool,
   FiGlobe,
+  FiBook,
 } from "react-icons/fi";
 import { FeedbackType } from "../types";
 import React, {
@@ -72,6 +73,8 @@ import CsvContent from "../../../components/tools/CSVContent";
 import SourceCard, {
   SeeMoreBlock,
 } from "@/components/chat_search/sources/SourceCard";
+import { FileSeeMoreBlock } from "@/components/chat_search/sources/FileSource";
+import FileSourceCard from "@/components/chat_search/sources/FileSource";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -163,10 +166,12 @@ function FileDisplay({
 }
 
 export const AIMessage = ({
+  setSelectedFiles = () => {},
   regenerate,
   overriddenModel,
   selectedMessageForDocDisplay,
   continueGenerating,
+  userFiles,
   shared,
   isActive,
   toggleDocumentSelection,
@@ -193,6 +198,8 @@ export const AIMessage = ({
   setPresentingDocument,
   index,
 }: {
+  setSelectedFiles?: (files: FileDescriptor[]) => void;
+  userFiles?: FileDescriptor[];
   index?: number;
   selectedMessageForDocDisplay?: number | null;
   shared?: boolean;
@@ -391,7 +398,8 @@ export const AIMessage = ({
               <div className="max-w-message-max break-words">
                 <div className="w-full ml-4">
                   <div className="max-w-message-max break-words">
-                    {!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
+                    {!userFiles &&
+                    (!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME) ? (
                       <>
                         {query !== undefined &&
                           handleShowRetrieved !== undefined &&
@@ -458,6 +466,54 @@ export const AIMessage = ({
                           isRunning={!toolCall.tool_result}
                         />
                       )}
+
+                    {userFiles && userFiles.length > 0 && (
+                      <div>
+                        <div className="flex mb-auto">
+                          <FiBook
+                            className="my-auto flex-none mr-2"
+                            size={14}
+                          />
+                          <div className="my-auto cursor-default">
+                            <span className="mobile:hidden">
+                              Used context from the following files:
+                            </span>
+                            <span className="desktop:hidden">Files used:</span>
+                          </div>
+                        </div>
+                        <div className=" -mx-8 w-full mb-4 flex relative">
+                          <div className="w-full">
+                            <div className="px-8 flex gap-x-2">
+                              {!settings?.isMobile &&
+                                userFiles.length > 0 &&
+                                userFiles
+                                  .slice(0, 2)
+                                  .map((doc, ind) => (
+                                    <FileSourceCard
+                                      file={doc}
+                                      key={ind}
+                                      setPresentingDocument={
+                                        setPresentingDocument
+                                      }
+                                    />
+                                  ))}
+                              <FileSeeMoreBlock
+                                documentSelectionToggled={
+                                  (documentSelectionToggled &&
+                                    selectedMessageForDocDisplay ===
+                                      messageId) ||
+                                  false
+                                }
+                                toggleDocumentSelection={
+                                  toggleDocumentSelection
+                                }
+                                uniqueSources={uniqueSources}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {docs && docs.length > 0 && (
                       <div className="mt-2 -mx-8 w-full mb-4 flex relative">

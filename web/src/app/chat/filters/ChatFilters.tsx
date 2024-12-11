@@ -1,8 +1,8 @@
 import { DanswerDocument } from "@/lib/search/interfaces";
-import { ChatDocumentDisplay } from "./ChatDocumentDisplay";
+import { ChatDocumentDisplay, ChatFileDisplay } from "./ChatDocumentDisplay";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
-import { Message } from "../interfaces";
+import { FileDescriptor, Message } from "../interfaces";
 import {
   Dispatch,
   ForwardedRef,
@@ -15,6 +15,7 @@ import { FilterManager } from "@/lib/hooks";
 import { CCPairBasicInfo, DocumentSet, Tag } from "@/lib/types";
 import { SourceSelector } from "../shared_chat_search/SearchFilters";
 import { XIcon } from "@/components/icons/icons";
+import FileSourceCard from "@/components/chat_search/sources/FileSource";
 
 interface ChatFiltersProps {
   filterManager: FilterManager;
@@ -33,6 +34,8 @@ interface ChatFiltersProps {
   documentSets: DocumentSet[];
   showFilters: boolean;
   setPresentingDocument: Dispatch<SetStateAction<DanswerDocument | null>>;
+  selectedFiles: FileDescriptor[];
+  toggledFiles?: FileDescriptor[];
 }
 
 export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
@@ -52,6 +55,8 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
       ccPairs,
       tags,
       setPresentingDocument,
+      selectedFiles,
+      toggledFiles = [],
       documentSets,
       showFilters,
     },
@@ -72,8 +77,9 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
       return () => clearTimeout(timer);
     }, [selectedDocuments]);
 
-    const selectedDocumentIds =
-      selectedDocuments?.map((document) => document.document_id) || [];
+    const selectedDocumentIds = (
+      selectedDocuments?.map((document) => document.document_id) || []
+    ).concat(toggledFiles.map((file) => file.id));
 
     const currentDocuments = selectedMessage?.documents || null;
     const dedupedDocuments = removeDuplicateDocs(currentDocuments || []);
@@ -132,38 +138,47 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
                 />
               ) : (
                 <>
-                  {dedupedDocuments.length > 0 ? (
-                    dedupedDocuments.map((document, ind) => (
-                      <div
-                        key={document.document_id}
-                        className={`${
-                          ind === dedupedDocuments.length - 1
-                            ? ""
-                            : "border-b border-border-light w-full"
-                        }`}
-                      >
-                        <ChatDocumentDisplay
-                          setPresentingDocument={setPresentingDocument}
+                  {dedupedDocuments.length > 0
+                    ? dedupedDocuments.map((document, ind) => (
+                        <div
+                          key={document.document_id}
+                          className={`${
+                            ind === dedupedDocuments.length - 1
+                              ? ""
+                              : "border-b border-border-light w-full"
+                          }`}
+                        >
+                          <ChatDocumentDisplay
+                            setPresentingDocument={setPresentingDocument}
+                            closeSidebar={closeSidebar}
+                            modal={modal}
+                            document={document}
+                            isSelected={selectedDocumentIds.includes(
+                              document.document_id
+                            )}
+                            handleSelect={(documentId) => {
+                              toggleDocumentSelection(
+                                dedupedDocuments.find(
+                                  (doc) => doc.document_id === documentId
+                                )!
+                              );
+                            }}
+                            tokenLimitReached={tokenLimitReached}
+                          />
+                        </div>
+                      ))
+                    : selectedFiles.map((file) => (
+                        <ChatFileDisplay
+                          file={file}
+                          key={file.id}
                           closeSidebar={closeSidebar}
                           modal={modal}
-                          document={document}
-                          isSelected={selectedDocumentIds.includes(
-                            document.document_id
-                          )}
-                          handleSelect={(documentId) => {
-                            toggleDocumentSelection(
-                              dedupedDocuments.find(
-                                (doc) => doc.document_id === documentId
-                              )!
-                            );
-                          }}
+                          isSelected={selectedDocumentIds.includes(file.id)}
+                          handleSelect={(d: any) => toggleDocumentSelection(d)}
                           tokenLimitReached={tokenLimitReached}
+                          setPresentingDocument={setPresentingDocument}
                         />
-                      </div>
-                    ))
-                  ) : (
-                    <div className="mx-3" />
-                  )}
+                      ))}
                 </>
               )}
             </div>
@@ -184,7 +199,10 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
                   delayedSelectedDocumentCount > 0
                     ? delayedSelectedDocumentCount
                     : ""
-                } Source${delayedSelectedDocumentCount > 1 ? "s" : ""}`}
+                } 
+                ${selectedFiles ? "Document" : "Source"}${
+                  delayedSelectedDocumentCount > 1 ? "s" : ""
+                }`}
               </button>
             </div>
           )}
