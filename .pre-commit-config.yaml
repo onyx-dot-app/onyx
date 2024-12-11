@@ -1,19 +1,19 @@
 repos:
   - repo: https://github.com/psf/black
-    rev: 23.3.0
+    rev: 24.3.0
     hooks:
-    - id: black
-      language_version: python3.11
+      - id: black
+        language_version: python3.11
 
   - repo: https://github.com/asottile/reorder_python_imports
     rev: v3.9.0
     hooks:
-    - id: reorder-python-imports
-      args: ['--py311-plus', '--application-directories=backend/']
-      # need to ignore alembic files, since reorder-python-imports gets confused
-      # and thinks that alembic is a local package since there is a folder
-      # in the backend directory called `alembic`
-      exclude: ^backend/alembic/
+      - id: reorder-python-imports
+        args: ["--py311-plus", "--application-directories=backend/"]
+        # need to ignore alembic files, since reorder-python-imports gets confused
+        # and thinks that alembic is a local package since there is a folder
+        # in the backend directory called `alembic`
+        exclude: ^backend/alembic/
 
   # These settings will remove unused imports with side effects
   # Note: The repo currently does not and should not have imports with side effects
@@ -21,7 +21,13 @@ repos:
     rev: v2.2.0
     hooks:
       - id: autoflake
-        args: [ '--remove-all-unused-imports', '--remove-unused-variables', '--in-place' , '--recursive']
+        args:
+          [
+            "--remove-all-unused-imports",
+            "--remove-unused-variables",
+            "--in-place",
+            "--recursive",
+          ]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
@@ -31,10 +37,10 @@ repos:
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v3.1.0
     hooks:
-    - id: prettier
-      types_or: [html, css, javascript, ts, tsx]
-      additional_dependencies:
-      - prettier
+      - id: prettier
+        types_or: [html, css, javascript, ts, tsx]
+        additional_dependencies:
+          - prettier
 
   # We would like to have a mypy pre-commit hook, but due to the fact that
   # pre-commit runs in it's own isolated environment, we would need to install
