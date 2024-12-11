@@ -61,7 +61,6 @@ def test_slack_prune(
         input_type=InputType.POLL,
         source=DocumentSource.SLACK,
         connector_specific_config={
-            "workspace": "onyx-test-workspace",
             "channels": [public_channel["name"], private_channel["name"]],
         },
         access_type=AccessType.PUBLIC,

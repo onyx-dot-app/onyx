@@ -546,15 +546,7 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
   },
   slack: {
     description: "Configure Slack connector",
-    values: [
-      {
-        type: "text",
-        query: "Enter the Slack workspace:",
-        label: "Workspace",
-        name: "workspace",
-        optional: false,
-      },
-    ],
+    values: [],
     advanced_values: [
       {
         type: "list",
