@@ -233,7 +233,7 @@ class InternetSearchTool(Tool):
         )
 
     def run(self, **kwargs: str) -> Generator[ToolResponse, None, None]:
-        query = cast(str, kwargs["internet_search_query"])
+        query = cast(str, kwargs["internet_search_query"]).strip('"')
 
         results = self._perform_search(query)
         yield ToolResponse(
