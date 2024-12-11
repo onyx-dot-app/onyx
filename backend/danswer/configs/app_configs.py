@@ -378,6 +378,10 @@ ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS = os.environ.get(
     "ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS", ""
 ).split(",")
 
+# comma delimited list of zendesk ticket tags to skip indexing for
+ZENDESK_CONNECTOR_SKIP_TICKET_TAGS = os.environ.get(
+    "ZENDESK_CONNECTOR_SKIP_TICKET_TAGS", ""
+).split(",")
 
 #####
 # Indexing Configs

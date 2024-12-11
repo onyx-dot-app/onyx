@@ -5,6 +5,7 @@ import requests
 
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.app_configs import ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
+from danswer.configs.app_configs import ZENDESK_CONNECTOR_SKIP_TICKET_TAGS
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.cross_connector_utils.miscellaneous_utils import (
     time_str_to_utc,
@@ -89,6 +90,7 @@ def _get_tickets(
     client: ZendeskClient, start_time: int | None = None
 ) -> Iterator[dict[str, Any]]:
     params = {"start_time": start_time} if start_time else {"start_time": 0}
+    params["exclude_deleted"] = "true"
 
     while True:
         data = client.make_request("incremental/tickets.json", params)
@@ -361,8 +363,10 @@ class ZendeskConnector(LoadConnector, PollConnector):
                 try:
                     ticket = next(ticket_generator)
 
-                    # Check if the ticket status is deleted and skip it if so
-                    if ticket.get("status") == "deleted":
+                    if any(
+                        tag in ZENDESK_CONNECTOR_SKIP_TICKET_TAGS
+                        for tag in ticket.get("tags", [])
+                    ):
                         continue
 
                     new_author_map, documents = _ticket_to_document(
