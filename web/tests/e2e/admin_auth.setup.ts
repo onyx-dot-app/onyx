@@ -8,6 +8,9 @@ setup("authenticate", async ({ page }) => {
 
   await page.goto("http://localhost:3000/chat");
 
+  const url = page.url();
+  console.log(`Initial URL after navigation: ${url}`);
+
   await page.waitForURL("http://localhost:3000/auth/login?next=%2Fchat");
 
   await expect(page).toHaveTitle("Danswer");
