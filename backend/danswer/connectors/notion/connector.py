@@ -29,7 +29,7 @@ logger = setup_logger()
 _NOTION_CALL_TIMEOUT = 30  # 30 seconds
 
 
-# TODO: Tables need to be ingested, Pages need to have their metadata ingested
+# TODO: Pages need to have their metadata ingested
 
 
 @dataclass
@@ -405,6 +405,64 @@ class NotionConnector(LoadConnector, PollConnector):
 
                     if self.recursive_index_enabled:
                         child_pages.extend(inner_child_pages)
+
+                if result_type == "table":
+                    logger.debug(f"Found table with ID '{result_block_id}'")
+                    
+                    table_props = result[result_type]
+                    table_width = table_props.get("table_width", 0)
+                    has_column_header = table_props.get("has_column_header", False)
+                    has_row_header = table_props.get("has_row_header", False)
+                    
+                    table_blocks_data = self._fetch_child_blocks(result_block_id)
+                    if table_blocks_data is None:
+                        continue
+                    
+                    table_rows = []
+                    for table_block in table_blocks_data["results"]:
+                        if table_block["type"] != "table_row":
+                            continue
+                        
+                        row_cells = []
+                        cells_data = table_block["table_row"]["cells"]
+                        
+                        for cell in cells_data:
+                            cell_texts = []
+                            for text_obj in cell:
+                                if text_obj["type"] == "text":
+                                    cell_texts.append(text_obj["plain_text"])
+                            row_cells.append(" ".join(cell_texts).strip())
+                        
+                        if row_cells:
+                            table_rows.append(row_cells)
+                    
+                    # Add formatting to table headers and rows
+                    if table_rows:
+                        table_text = []
+                        
+                        if has_column_header and table_rows:
+                            header = table_rows[0]
+                            table_text.append("| " + " | ".join(header) + " |")
+                            table_text.append("|" + "|".join(["-" * (len(cell) + 2) for cell in header]) + "|")
+                            table_rows = table_rows[1:]
+                        
+                        for row_idx, row in enumerate(table_rows):
+                            if has_row_header:
+                                row = ["**" + row[0] + "**"] + row[1:]
+                            
+                            # Pad row if needed to match table width
+                            while len(row) < table_width:
+                                row.append("")
+                                
+                            table_text.append("| " + " | ".join(row) + " |")
+                        
+                        result_blocks.append(
+                            NotionBlock(
+                                id=result_block_id,
+                                text="\n".join(table_text),
+                                prefix="\n\n"
+                            )
+                        )
 
                 if cur_result_text_arr:
                     new_block = NotionBlock(
