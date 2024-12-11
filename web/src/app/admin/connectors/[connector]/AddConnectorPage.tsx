@@ -49,6 +49,7 @@ import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
 import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
 import { EE_ENABLED, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import TemporaryLoadingModal from "@/components/TemporaryLoadingModal";
 export interface AdvancedConfig {
   refreshFreq: number;
   pruneFreq: number;
@@ -160,6 +161,7 @@ export default function AddConnector({
   // Form context and popup management
   const { setFormStep, setAllowCreate, formStep } = useFormContext();
   const { popup, setPopup } = usePopup();
+  const [uploading, setUploading] = useState(false);
 
   // Hooks for Google Drive and Gmail credentials
   const { liveGDriveCredential } = useGoogleDriveCredentials(connector);
@@ -337,16 +339,24 @@ export default function AddConnector({
         }
         // File-specific handling
         if (connector == "file") {
-          const response = await submitFiles(
-            selectedFiles,
-            setPopup,
-            name,
-            access_type,
-            groups
-          );
-          if (response) {
-            onSuccess();
+          setUploading(true);
+          try {
+            const response = await submitFiles(
+              selectedFiles,
+              setPopup,
+              name,
+              access_type,
+              groups
+            );
+            if (response) {
+              onSuccess();
+            }
+          } catch (error) {
+            setPopup({ message: "Error uploading files", type: "error" });
+          } finally {
+            setUploading(false);
           }
+
           return;
         }
 
@@ -408,9 +418,9 @@ export default function AddConnector({
           <div className="mx-auto mb-8 w-full">
             {popup}
 
-            <div className="mb-4">
-              <HealthCheckBanner />
-            </div>
+            {uploading && (
+              <TemporaryLoadingModal content="Uploading files..." />
+            )}
 
             <AdminPageTitle
               includeDivider={false}
