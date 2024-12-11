@@ -19,6 +19,11 @@ export interface GithubCredentialJson {
   github_access_token: string;
 }
 
+export interface GithubPagesCredentialJson {
+  github_username: string; 
+  github_personal_access_token: string; 
+}
+
 export interface GitlabCredentialJson {
   gitlab_url: string;
   gitlab_access_token: string;
@@ -202,6 +207,10 @@ export interface EgnyteCredentialJson {
 
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
+  github_pages: {
+    github_username: "",
+    github_personal_access_token: "",
+  } as GithubPagesCredentialJson,
   gitlab: {
     gitlab_url: "",
     gitlab_access_token: "",

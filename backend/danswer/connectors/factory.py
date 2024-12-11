@@ -20,6 +20,7 @@ from danswer.connectors.file.connector import LocalFileConnector
 from danswer.connectors.fireflies.connector import FirefliesConnector
 from danswer.connectors.freshdesk.connector import FreshdeskConnector
 from danswer.connectors.github.connector import GithubConnector
+from danswer.connectors.github_pages.connector import GithubPagesConnector
 from danswer.connectors.gitlab.connector import GitlabConnector
 from danswer.connectors.gmail.connector import GmailConnector
 from danswer.connectors.gong.connector import GongConnector
@@ -69,6 +70,7 @@ def identify_connector_class(
             InputType.SLIM_RETRIEVAL: SlackPollConnector,
         },
         DocumentSource.GITHUB: GithubConnector,
+        DocumentSource.GITHUB_PAGES: GithubPagesConnector,
         DocumentSource.GMAIL: GmailConnector,
         DocumentSource.GITLAB: GitlabConnector,
         DocumentSource.GOOGLE_DRIVE: GoogleDriveConnector,

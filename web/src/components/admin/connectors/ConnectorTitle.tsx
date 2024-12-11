@@ -2,6 +2,7 @@ import {
   ConfluenceConfig,
   Connector,
   GithubConfig,
+  GithubPagesConfig,
   GitlabConfig,
   GoogleDriveConfig,
   JiraConfig,
@@ -40,6 +41,9 @@ export const ConnectorTitle = ({
       "Repo",
       `${typedConnector.connector_specific_config.repo_owner}/${typedConnector.connector_specific_config.repo_name}`
     );
+  }else if (connector.source === "github_pages") {
+    const typedConnector = connector as Connector<GithubPagesConfig>;
+    additionalMetadata.set("Site URL", typedConnector.connector_specific_config.base_url);
   } else if (connector.source === "gitlab") {
     const typedConnector = connector as Connector<GitlabConfig>;
     additionalMetadata.set(

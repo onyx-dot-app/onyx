@@ -97,6 +97,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.CodeRepository,
     docs: "https://docs.danswer.dev/connectors/github",
   },
+  github_pages: {
+    icon: GithubIcon,
+    displayName: "Github Pages",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.danswer.dev/connectors/github_pages",
+  },
   gitlab: {
     icon: GitlabIcon,
     displayName: "Gitlab",
