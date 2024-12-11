@@ -470,13 +470,14 @@ export function ChatPage({
           loadedSessionId != null) &&
         !currentChatAnswering()
       ) {
-        updateCompleteMessageDetail(chatSession.chat_session_id, newMessageMap);
-
         const latestMessageId =
           newMessageHistory[newMessageHistory.length - 1]?.messageId;
+
         setSelectedMessageForDocDisplay(
           latestMessageId !== undefined ? latestMessageId : null
         );
+
+        updateCompleteMessageDetail(chatSession.chat_session_id, newMessageMap);
       }
 
       setChatSessionSharedStatus(chatSession.shared_status);
@@ -975,6 +976,7 @@ export function ChatPage({
 
   useEffect(() => {
     if (
+      !personaIncludesRetrieval &&
       (!selectedDocuments || selectedDocuments.length === 0) &&
       documentSidebarToggled &&
       !filtersToggled
