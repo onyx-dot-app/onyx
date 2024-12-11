@@ -39,6 +39,23 @@ export async function updateConnectorCredentialPairName(
   );
 }
 
+export async function updateConnectorCredentialPairProperty(
+  ccPairId: number,
+  name: string,
+  value: string
+): Promise<Response> {
+  return fetch(`/api/manage/admin/cc-pair/${ccPairId}/property`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: name,
+      value: value,
+    }),
+  });
+}
+
 export async function updateConnector<T>(
   connector: Connector<T>
 ): Promise<Connector<T>> {

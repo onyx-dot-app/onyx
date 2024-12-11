@@ -2,6 +2,7 @@ import CardSection from "@/components/admin/CardSection";
 import { getNameFromPath } from "@/lib/fileUtils";
 import { ValidSources } from "@/lib/types";
 import Title from "@/components/ui/title";
+import { EditIcon } from "@/components/icons/icons";
 
 function convertObjectToString(obj: any): string | any {
   // Check if obj is an object and not an array or null
@@ -43,10 +44,14 @@ export function AdvancedConfigDisplay({
   pruneFreq,
   refreshFreq,
   indexingStart,
+  onRefreshEdit,
+  onPruningEdit,
 }: {
   pruneFreq: number | null;
   refreshFreq: number | null;
   indexingStart: Date | null;
+  onRefreshEdit: () => void;
+  onPruningEdit: () => void;
 }) {
   const formatRefreshFrequency = (seconds: number | null): string => {
     if (seconds === null) return "-";
@@ -82,7 +87,14 @@ export function AdvancedConfigDisplay({
               className="w-full flex justify-between items-center py-2"
             >
               <span>Pruning Frequency</span>
-              <span>{formatPruneFrequency(pruneFreq)}</span>
+              <span className="ml-auto w-24">
+                {formatPruneFrequency(pruneFreq)}
+              </span>
+              <span className="w-8 text-right">
+                <button onClick={() => onPruningEdit()}>
+                  <EditIcon size={12} />
+                </button>
+              </span>
             </li>
           )}
           {refreshFreq && (
@@ -91,7 +103,14 @@ export function AdvancedConfigDisplay({
               className="w-full flex justify-between items-center py-2"
             >
               <span>Refresh Frequency</span>
-              <span>{formatRefreshFrequency(refreshFreq)}</span>
+              <span className="ml-auto w-24">
+                {formatRefreshFrequency(refreshFreq)}
+              </span>
+              <span className="w-8 text-right">
+                <button onClick={() => onRefreshEdit()}>
+                  <EditIcon size={12} />
+                </button>
+              </span>
             </li>
           )}
           {indexingStart && (

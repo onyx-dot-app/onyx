@@ -568,6 +568,25 @@ class Connector(Base):
         list["DocumentByConnectorCredentialPair"]
     ] = relationship("DocumentByConnectorCredentialPair", back_populates="connector")
 
+    # synchronize this validation logic with RefreshFrequencySchema etc on front end
+    # until we have a centralized validation schema
+
+    # TODO(rkuo): experiment with SQLAlchemy validators rather than manual checks
+    # https://docs.sqlalchemy.org/en/20/orm/mapped_attributes.html
+    def validate_refresh_freq(self) -> None:
+        if self.refresh_freq is not None:
+            if self.refresh_freq < 60:
+                raise ValueError(
+                    "refresh_freq must be greater than or equal to 60 seconds."
+                )
+
+    def validate_prune_freq(self) -> None:
+        if self.prune_freq is not None:
+            if self.prune_freq < 86400:
+                raise ValueError(
+                    "prune_freq must be greater than or equal to 86400 seconds."
+                )
+
 
 class Credential(Base):
     __tablename__ = "credential"

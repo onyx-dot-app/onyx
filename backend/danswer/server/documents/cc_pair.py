@@ -45,6 +45,7 @@ from danswer.db.search_settings import get_current_search_settings
 from danswer.redis.redis_connector import RedisConnector
 from danswer.redis.redis_pool import get_redis_client
 from danswer.server.documents.models import CCPairFullInfo
+from danswer.server.documents.models import CCPropertyUpdateRequest
 from danswer.server.documents.models import CCStatusUpdateRequest
 from danswer.server.documents.models import ConnectorCredentialPairIdentifier
 from danswer.server.documents.models import ConnectorCredentialPairMetadata
@@ -306,6 +307,46 @@ def update_cc_pair_name(
     except IntegrityError:
         db_session.rollback()
         raise HTTPException(status_code=400, detail="Name must be unique")
+
+
+@router.put("/admin/cc-pair/{cc_pair_id}/property")
+def update_cc_pair_property(
+    cc_pair_id: int,
+    update_request: CCPropertyUpdateRequest,  # in seconds
+    user: User | None = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> StatusResponse[int]:
+    cc_pair = get_connector_credential_pair_from_id(
+        cc_pair_id=cc_pair_id,
+        db_session=db_session,
+        user=user,
+        get_editable=True,
+    )
+    if not cc_pair:
+        raise HTTPException(
+            status_code=400, detail="CC Pair not found for current user's permissions"
+        )
+
+    # Can we centralize logic for updating connector properties
+    # so that we don't need to manually validate everywhere?
+    if update_request.name == "refresh_frequency":
+        cc_pair.connector.refresh_freq = int(update_request.value)
+        cc_pair.connector.validate_refresh_freq()
+        db_session.commit()
+
+        msg = "Refresh frequency updated successfully"
+    elif update_request.name == "pruning_frequency":
+        cc_pair.connector.prune_freq = int(update_request.value)
+        cc_pair.connector.validate_prune_freq()
+        db_session.commit()
+
+        msg = "Pruning frequency updated successfully"
+    else:
+        raise HTTPException(
+            status_code=400, detail=f"Property name {update_request.name} is not valid."
+        )
+
+    return StatusResponse(success=True, message=msg, data=cc_pair_id)
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/last_pruned")
