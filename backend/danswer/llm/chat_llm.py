@@ -372,6 +372,20 @@ class DefaultMultiLLM(LLM):
         self._record_call(processed_prompt)
 
         try:
+            # Get vertex_credentials directly from custom_config if model provider is Vertex AI
+            vertex_credentials = None
+            if self._model_provider == "vertex_ai":
+                if not self._custom_config:
+                    raise ValueError(
+                        "Vertex AI requires 'vertex_credentials' to be provided in custom_config"
+                    )
+                vertex_credentials = self._custom_config.get("vertex_credentials")
+                if not vertex_credentials:
+                    raise ValueError(
+                        "Vertex AI credentials not found."
+                        "Please provide 'vertex_credentials' with vertex ai service account details in json format."
+                    )
+
             return litellm.completion(
                 # model choice
                 model=f"{self.config.model_provider}/{self.config.deployment_name or self.config.model_name}",
@@ -399,6 +413,7 @@ class DefaultMultiLLM(LLM):
                     if structured_response_format
                     else {}
                 ),
+                **({"vertex_credentials": vertex_credentials} if vertex_credentials else {}),
                 **self._model_kwargs,
             )
         except Exception as e:
