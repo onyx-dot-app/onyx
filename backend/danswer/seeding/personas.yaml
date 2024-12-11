@@ -39,7 +39,7 @@ personas:
     document_sets: []
     icon_shape: 23013
     icon_color: "#6FB1FF"
-    display_priority: 1
+    display_priority: 0
     is_visible: true
     starter_messages:
       - name: "Give me an overview of what's here"
@@ -64,7 +64,7 @@ personas:
     document_sets: []
     icon_shape: 50910
     icon_color: "#FF6F6F"
-    display_priority: 0
+    display_priority: 1
     is_visible: true
     starter_messages:
       - name: "Summarize a document"
