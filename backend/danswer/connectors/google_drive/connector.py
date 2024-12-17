@@ -58,7 +58,7 @@ def _extract_ids_from_urls(urls: list[str]) -> list[str]:
 def _convert_single_file(
     creds: Any, primary_admin_email: str, file: dict[str, Any]
 ) -> Any:
-    user_email = file.get("owners", [{}])[0].get("emailAddress") or primary_admin_email
+    user_email = primary_admin_email
     user_drive_service = get_drive_service(creds, user_email=user_email)
     docs_service = get_google_docs_service(creds, user_email=user_email)
     return convert_drive_item_to_document(
@@ -348,16 +348,14 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             future_to_email = {
                 executor.submit(
                     self._impersonate_user_for_retrieval,
-                    email,
+                    self._primary_admin_email,
                     is_slim,
                     drive_ids_to_retrieve,
                     folder_ids_to_retrieve,
                     start,
                     end,
-                ): email
-                for email in all_org_emails
+                ): self._primary_admin_email
             }
-
             # Yield results as they complete
             for future in as_completed(future_to_email):
                 yield from future.result()
@@ -420,8 +418,6 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
                 end=end,
             )
 
-        # Even if no folders were requested, we still check if any drives were requested
-        # that could be folders.
         remaining_folders = folder_ids_to_retrieve - self._retrieved_ids
         for folder_id in remaining_folders:
             yield from crawl_folders_for_files(
@@ -463,15 +459,12 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateDocumentsOutput:
-        # Create a larger process pool for file conversion
         convert_func = partial(
             _convert_single_file, self.creds, self.primary_admin_email
         )
 
-        # Process files in larger batches
         LARGE_BATCH_SIZE = self.batch_size * 4
         files_to_process = []
-        # Gather the files into batches to be processed in parallel
         for file in self._fetch_drive_items(is_slim=False, start=start, end=end):
             files_to_process.append(file)
             if len(files_to_process) >= LARGE_BATCH_SIZE:
@@ -480,7 +473,6 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
                 )
                 files_to_process = []
 
-        # Process any remaining files
         if files_to_process:
             yield from _process_files_batch(
                 files_to_process, convert_func, self.batch_size

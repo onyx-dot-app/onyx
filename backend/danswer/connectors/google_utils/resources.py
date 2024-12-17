@@ -1,3 +1,4 @@
+from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
 from googleapiclient.discovery import build  # type: ignore
@@ -46,7 +47,14 @@ def get_drive_service(
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> GoogleDriveService:
-    return _get_google_service("drive", "v3", creds, user_email)
+    if isinstance(creds, ServiceAccountCredentials) and user_email:
+        creds = creds.with_subject(user_email)
+        # Optionally force refresh again after impersonation
+        creds.refresh(Request())
+
+    # Always build a new service here
+    service = build("drive", "v3", credentials=creds)
+    return service
 
 
 def get_admin_service(

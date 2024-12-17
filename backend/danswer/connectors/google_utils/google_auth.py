@@ -88,7 +88,7 @@ def get_google_creds(
             service_account_key, scopes=GOOGLE_SCOPES[source]
         )
 
-        if not service_creds.valid or not service_creds.expired:
+        if not service_creds.valid or service_creds.expired:
             service_creds.refresh(Request())
 
         if not service_creds.valid:
