@@ -12,6 +12,7 @@ from ee.onyx.server.enterprise_settings.api import (
     basic_router as enterprise_settings_router,
 )
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
+from ee.onyx.server.manage.users import router as manage_users_router
 from ee.onyx.server.middleware.tenant_tracking import add_tenant_id_middleware
 from ee.onyx.server.oauth import router as oauth_router
 from ee.onyx.server.query_and_chat.chat_backend import (
@@ -111,6 +112,7 @@ def get_application() -> FastAPI:
     elif AUTH_TYPE == AuthType.SAML:
         include_router_with_global_prefix_prepended(application, saml_router)
 
+    include_router_with_global_prefix_prepended(application, manage_users_router)
     # RBAC / group access control
     include_router_with_global_prefix_prepended(application, user_group_router)
     # Analytics endpoints

@@ -185,6 +185,7 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
     try:
         # Drop the tenant's schema to rollback provisioning
         drop_schema(tenant_id)
+
         # Remove tenant mapping
         with Session(get_sqlalchemy_engine()) as db_session:
             db_session.query(UserTenantMapping).filter(

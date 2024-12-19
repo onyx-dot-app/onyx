@@ -41,11 +41,8 @@ from onyx.db.auth import get_total_users_count
 from onyx.db.engine import CURRENT_TENANT_ID_CONTEXTVAR
 from onyx.db.engine import get_session
 from onyx.db.models import AccessToken
-from onyx.db.models import DocumentSet__User
-from onyx.db.models import Persona__User
-from onyx.db.models import SamlAccount
 from onyx.db.models import User
-from onyx.db.models import User__UserGroup
+from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_user_by_email
 from onyx.db.users import list_users
 from onyx.db.users import validate_user_role_update
@@ -370,45 +367,10 @@ async def delete_user(
     db_session.expunge(user_to_delete)
 
     try:
-        for oauth_account in user_to_delete.oauth_accounts:
-            db_session.delete(oauth_account)
-
-        fetch_ee_implementation_or_noop(
-            "onyx.db.external_perm",
-            "delete_user__ext_group_for_user__no_commit",
-        )(
-            db_session=db_session,
-            user_id=user_to_delete.id,
-        )
-        db_session.query(SamlAccount).filter(
-            SamlAccount.user_id == user_to_delete.id
-        ).delete()
-        db_session.query(DocumentSet__User).filter(
-            DocumentSet__User.user_id == user_to_delete.id
-        ).delete()
-        db_session.query(Persona__User).filter(
-            Persona__User.user_id == user_to_delete.id
-        ).delete()
-        db_session.query(User__UserGroup).filter(
-            User__UserGroup.user_id == user_to_delete.id
-        ).delete()
-        db_session.delete(user_to_delete)
-        db_session.commit()
-
-        # NOTE: edge case may exist with race conditions
-        # with this `invited user` scheme generally.
-        user_emails = get_invited_users()
-        remaining_users = [
-            user for user in user_emails if user != user_email.user_email
-        ]
-        write_invited_users(remaining_users)
-
+        delete_user_from_db(user_to_delete, db_session)
         logger.info(f"Deleted user {user_to_delete.email}")
-    except Exception as e:
-        import traceback
 
-        full_traceback = traceback.format_exc()
-        logger.error(f"Full stack trace:\n{full_traceback}")
+    except Exception as e:
         db_session.rollback()
         logger.error(f"Error deleting user {user_to_delete.email}: {str(e)}")
         raise HTTPException(status_code=500, detail="Error deleting user")
