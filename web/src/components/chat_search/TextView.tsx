@@ -21,11 +21,11 @@ export default function TextView({
   onClose,
 }: TextViewProps) {
   const [zoom, setZoom] = useState(100);
-  const [fileContent, setFileContent] = useState<string>("");
-  const [fileUrl, setFileUrl] = useState<string>("");
-  const [fileName, setFileName] = useState<string>("");
+  const [fileContent, setFileContent] = useState("");
+  const [fileUrl, setFileUrl] = useState("");
+  const [fileName, setFileName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [fileType, setFileType] = useState<string>("application/octet-stream");
+  const [fileType, setFileType] = useState("application/octet-stream");
 
   const isMarkdownFormat = (mimeType: string): boolean => {
     const markdownFormats = [
@@ -51,18 +51,17 @@ export default function TextView({
 
   const fetchFile = useCallback(async () => {
     setIsLoading(true);
-    const fileId = presentingDocument.document_id.split("__")[1];
     try {
+      const fileId = presentingDocument.document_id.split("__")[1];
       const response = await fetch(
-        `/api/chat/file/${encodeURIComponent(fileId)}`,
-        {
-          method: "GET",
-        }
+        `/api/chat/file/${encodeURIComponent(fileId)}`
       );
       const blob = await response.blob();
+
       const url = window.URL.createObjectURL(blob);
       setFileUrl(url);
       setFileName(presentingDocument.semantic_identifier || "document");
+
       const contentType =
         response.headers.get("Content-Type") || "application/octet-stream";
       setFileType(contentType);
@@ -70,9 +69,28 @@ export default function TextView({
       if (isMarkdownFormat(blob.type)) {
         const text = await blob.text();
         setFileContent(text);
+      } else if (blob.type === "application/octet-stream") {
+        try {
+          const text = await blob.text();
+          let nonPrintingCount = 0;
+          for (let i = 0; i < text.length; i++) {
+            const code = text.charCodeAt(i);
+            if (code < 32 && ![9, 10, 13].includes(code)) {
+              nonPrintingCount++;
+            }
+          }
+          const ratio = nonPrintingCount / text.length;
+
+          if (ratio < 0.05) {
+            setFileContent(text);
+            setFileType("text/plain");
+          }
+        } catch (err) {
+          console.error("Failed to parse octet-stream as text", err);
+        }
       }
-    } catch (error) {
-      console.error("Error fetching file:", error);
+    } catch (err) {
+      console.error("Error fetching file:", err);
     } finally {
       setTimeout(() => {
         setIsLoading(false);
@@ -137,7 +155,7 @@ export default function TextView({
               </div>
             ) : (
               <div
-                className={`w-full h-full transform origin-center transition-transform duration-300 ease-in-out`}
+                className="w-full h-full transform origin-center transition-transform duration-300 ease-in-out"
                 style={{ transform: `scale(${zoom / 100})` }}
               >
                 {isSupportedIframeFormat(fileType) ? (
@@ -146,7 +164,7 @@ export default function TextView({
                     className="w-full h-full border-none"
                     title="File Viewer"
                   />
-                ) : isMarkdownFormat(fileType) ? (
+                ) : isMarkdownFormat(fileType) || fileType === "text/plain" ? (
                   <div className="w-full h-full p-6 overflow-y-scroll overflow-x-hidden">
                     <MinimalMarkdown
                       content={fileContent}
