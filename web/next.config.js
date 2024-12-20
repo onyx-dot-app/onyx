@@ -17,6 +17,8 @@ const cspHeader = `
     ${process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true" ? "upgrade-insecure-requests;" : ""}
 `;
 
+const withNextIntl = require('next-intl/plugin')();
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
@@ -85,4 +87,4 @@ const sentryWebpackPluginOptions = {
 };
 
 // Export the module with conditional Sentry configuration
-module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);
+module.exports = withNextIntl(withSentryConfig(nextConfig, sentryWebpackPluginOptions));
