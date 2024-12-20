@@ -81,3 +81,35 @@ Create env vars from secrets
     {{- end }}
 {{- end }}
 
+{{/*
+Switch between internally created postgres host or external host if given
+*/}}
+{{- define "onyx-stack.postgresHost" -}}
+{{- if .Values.postgres.enabled }}
+{{ .Release.Name }}-postgresql
+{{- else }}
+{{- .Values.postgres.externalHost }}
+{{- end }}
+{{- end }}
+
+{{/*
+Switch between internally created redis host or external host if given
+*/}}
+{{- define "onyx-stack.redisHost" -}}
+{{- if .Values.redis.enabled }}
+{{ .Release.Name }}-redis-master
+{{- else }}
+{{- .Values.redis.externalHost }}
+{{- end }}
+{{- end }}
+
+{{/*
+Switch between internally created vespa host or external host if given
+*/}}
+{{- define "onyx-stack.vespaHost" -}}
+{{- if .Values.vespa.enabled }}
+"da-vespa-0.vespa-service"
+{{- else }}
+{{- .Values.vespa.externalHost }}
+{{- end }}
+{{- end }}
