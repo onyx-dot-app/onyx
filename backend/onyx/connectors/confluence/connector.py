@@ -66,7 +66,7 @@ _ATTACHMENT_EXTENSIONS_TO_FILTER_OUT = [
     "mp3",
     "wav",
 ]
-_FULL_EXTENTION_FILTER_STRING = "".join(
+_FULL_EXTENSION_FILTER_STRING = "".join(
     [
         f" and title!~'*.{extension}'"
         for extension in _ATTACHMENT_EXTENSIONS_TO_FILTER_OUT
@@ -166,7 +166,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
     def _construct_attachment_query(self, confluence_page_id: str) -> str:
         attachment_query = f"type=attachment and container='{confluence_page_id}'"
         attachment_query += self.cql_label_filter
-        attachment_query += _FULL_EXTENTION_FILTER_STRING
+        attachment_query += _FULL_EXTENSION_FILTER_STRING
         return attachment_query
 
     def _get_comment_string_for_page_id(self, page_id: str) -> str:
