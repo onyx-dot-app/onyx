@@ -152,10 +152,16 @@ def fetch_credential_by_id(
     user: User | None,
     db_session: Session,
     assume_admin: bool = False,
+    get_editable: bool = True,
 ) -> Credential | None:
     stmt = select(Credential).distinct()
     stmt = stmt.where(Credential.id == credential_id)
-    stmt = _add_user_filters(stmt, user, assume_admin=assume_admin)
+    stmt = _add_user_filters(
+        stmt=stmt,
+        user=user,
+        assume_admin=assume_admin,
+        get_editable=get_editable,
+    )
     result = db_session.execute(stmt)
     credential = result.scalar_one_or_none()
     return credential
