@@ -64,7 +64,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         is_cloud: bool,
         space: str = "",
         page_id: str = "",
-        index_recursively: bool = True,
+        index_recursively: bool = False,
         cql_query: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
         continue_on_failure: bool = CONTINUE_ON_CONNECTOR_FAILURE,
@@ -84,18 +84,22 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
 
         # if nothing is provided, we will fetch all pages
         cql_page_query = "type=page"
+
+        """
+        Only one of the following options should be specified so
+            the order shouldn't matter
+        However, we use elif to ensure that only of the following is provided
+        """
         if cql_query:
-            # if a cql_query is provided, we will use it to fetch the pages
             cql_page_query = cql_query
         elif page_id:
-            # if a cql_query is not provided, we will use the page_id to fetch the page
             if index_recursively:
-                cql_page_query += f" and ancestor='{page_id}'"
+                cql_page_query += f" and (ancestor='{page_id}' or id='{page_id}')"
             else:
                 cql_page_query += f" and id='{page_id}'"
         elif space:
-            # if no cql_query or page_id is provided, we will use the space to fetch the pages
-            cql_page_query += f" and space='{quote(space)}'"
+            uri_safe_space = quote(space)
+            cql_page_query += f" and space='{uri_safe_space}'"
 
         self.cql_page_query = cql_page_query
         self.cql_time_filter = ""
