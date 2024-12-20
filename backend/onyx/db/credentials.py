@@ -86,7 +86,7 @@ def _add_user_filters(
     """
     Filter Credentials by:
     - if the user is in the user_group that owns the Credential
-    - if the user is a regular curator, they must also have a curator relationship
+    - if the user is a curator, they must also have a curator relationship
     to the user_group
     - if editing is being done, we also filter out Credentials that are owned by groups
     that the user isn't a curator for
