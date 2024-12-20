@@ -7,8 +7,10 @@ from typing import Any
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.confluence.onyx_confluence import (
+    get_user_email_from_username__server,
+)
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.confluence.utils import get_user_email_from_username__server
 from onyx.connectors.models import SlimDocument
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger

@@ -69,7 +69,7 @@ def _get_connector_runner(
             tenant_id=tenant_id,
         )
     except Exception as e:
-        logger.exception(f"Unable to instantiate connector due to {e}")
+        logger.exception("Unable to instantiate connector.")
         # since we failed to even instantiate the connector, we pause the CCPair since
         # it will never succeed
 

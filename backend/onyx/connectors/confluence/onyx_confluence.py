@@ -1,3 +1,4 @@
+import io
 import math
 import time
 from collections.abc import Callable
@@ -7,9 +8,18 @@ from typing import cast
 from typing import TypeVar
 from urllib.parse import quote
 
+import bs4
 from atlassian import Confluence  # type:ignore
 from requests import HTTPError
 
+from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
+from onyx.configs.app_configs import (
+    CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
+)
+from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
+from onyx.connectors.confluence.utils import validate_attachment_filetype
+from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -23,6 +33,9 @@ RATE_LIMIT_MESSAGE_LOWERCASE = "Rate limit exceeded".lower()
 # https://jira.atlassian.com/browse/CONFCLOUD-76433
 _PROBLEMATIC_EXPANSIONS = "body.storage.value"
 _REPLACEMENT_EXPANSIONS = "body.view.value"
+
+_USER_NOT_FOUND = "Unknown Confluence User"
+_USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
 
 
 class ConfluenceRateLimitError(Exception):
@@ -314,22 +327,48 @@ class OnyxConfluence(Confluence):
         yield from self._paginate_url(f"rest/api/group/{group_name}/member", limit)
 
 
-def _validate_connector_configuration(
+def build_confluence_client(
     credentials: dict[str, Any],
     is_cloud: bool,
     wiki_base: str,
-) -> None:
-    # test connection with direct client, no retries
-    confluence_client_with_minimal_retries = Confluence(
-        api_version="cloud" if is_cloud else "latest",
-        url=wiki_base.rstrip("/"),
-        username=credentials["confluence_username"] if is_cloud else None,
-        password=credentials["confluence_access_token"] if is_cloud else None,
-        token=credentials["confluence_access_token"] if not is_cloud else None,
-        backoff_and_retry=True,
-        max_backoff_retries=6,
-        max_backoff_seconds=10,
-    )
+) -> OnyxConfluence:
+    oauth2_dict: dict[str, Any] = {}
+    url = wiki_base.rstrip("/")
+    if "confluence_refresh_token" in credentials:
+        oauth2_dict["client_id"] = OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
+        oauth2_dict["token"] = {}
+        oauth2_dict["token"]["access_token"] = credentials["confluence_access_token"]
+        url = f"https://api.atlassian.com/ex/confluence/{credentials['cloud_id']}"
+
+    shared_base_kwargs = {
+        "api_version": "cloud" if is_cloud else "latest",
+        "backoff_and_retry": True,
+        "cloud": is_cloud,
+    }
+
+    shared_probe_kwargs = {
+        **shared_base_kwargs,
+        "url": url,
+        "max_backoff_retries": 6,
+        "max_backoff_seconds": 10,
+    }
+
+    # probe connection with direct client, no retries
+    if "confluence_refresh_token" in credentials:
+        logger.info("Probing Confluence with OAuth Access Token.")
+
+        confluence_client_with_minimal_retries = Confluence(
+            oauth2=oauth2_dict, **shared_probe_kwargs
+        )
+    else:
+        logger.info("Probing Confluence with Personal Access Token.")
+        confluence_client_with_minimal_retries = Confluence(
+            username=credentials["confluence_username"] if is_cloud else None,
+            password=credentials["confluence_access_token"] if is_cloud else None,
+            token=credentials["confluence_access_token"] if not is_cloud else None,
+            **shared_probe_kwargs,
+        )
+
     spaces = confluence_client_with_minimal_retries.get_all_spaces(limit=1)
 
     # uncomment the following for testing
@@ -346,27 +385,231 @@ def _validate_connector_configuration(
             "is_cloud is set correctly."
         )
 
+    shared_final_kwargs = {
+        **shared_base_kwargs,
+        "max_backoff_retries": 10,
+        "max_backoff_seconds": 60,
+    }
 
-def build_confluence_client(
-    credentials: dict[str, Any],
-    is_cloud: bool,
-    wiki_base: str,
-) -> OnyxConfluence:
-    _validate_connector_configuration(
-        credentials=credentials,
-        is_cloud=is_cloud,
-        wiki_base=wiki_base,
-    )
+    if "confluence_refresh_token" in credentials:
+        return OnyxConfluence(url=url, oauth2=oauth2_dict, **shared_final_kwargs)
+
     return OnyxConfluence(
-        api_version="cloud" if is_cloud else "latest",
-        # Remove trailing slash from wiki_base if present
-        url=wiki_base.rstrip("/"),
+        url=url,
         # passing in username causes issues for Confluence data center
         username=credentials["confluence_username"] if is_cloud else None,
         password=credentials["confluence_access_token"] if is_cloud else None,
         token=credentials["confluence_access_token"] if not is_cloud else None,
-        backoff_and_retry=True,
-        max_backoff_retries=10,
-        max_backoff_seconds=60,
-        cloud=is_cloud,
+        **shared_final_kwargs,
     )
+
+
+_USER_EMAIL_CACHE: dict[str, str | None] = {}
+
+
+def get_user_email_from_username__server(
+    confluence_client: OnyxConfluence, user_name: str
+) -> str | None:
+    global _USER_EMAIL_CACHE
+    if _USER_EMAIL_CACHE.get(user_name) is None:
+        try:
+            response = confluence_client.get_mobile_parameters(user_name)
+            email = response.get("email")
+        except Exception:
+            # For now, we'll just return a string that indicates failure
+            # We may want to revert to returning None in the future
+            # email = None
+            email = f"FAILED TO GET CONFLUENCE EMAIL FOR {user_name}"
+            logger.warning(f"failed to get confluence email for {user_name}")
+        _USER_EMAIL_CACHE[user_name] = email
+    return _USER_EMAIL_CACHE[user_name]
+
+
+def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:
+    """Get Confluence Display Name based on the account-id or userkey value
+
+    Args:
+        user_id (str): The user id (i.e: the account-id or userkey)
+        confluence_client (Confluence): The Confluence Client
+
+    Returns:
+        str: The User Display Name. 'Unknown User' if the user is deactivated or not found
+    """
+    global _USER_ID_TO_DISPLAY_NAME_CACHE
+    if _USER_ID_TO_DISPLAY_NAME_CACHE.get(user_id) is None:
+        try:
+            result = confluence_client.get_user_details_by_userkey(user_id)
+            found_display_name = result.get("displayName")
+        except Exception:
+            found_display_name = None
+
+        if not found_display_name:
+            try:
+                result = confluence_client.get_user_details_by_accountid(user_id)
+                found_display_name = result.get("displayName")
+            except Exception:
+                found_display_name = None
+
+        _USER_ID_TO_DISPLAY_NAME_CACHE[user_id] = found_display_name
+
+    return _USER_ID_TO_DISPLAY_NAME_CACHE.get(user_id) or _USER_NOT_FOUND
+
+
+def attachment_to_content(
+    confluence_client: OnyxConfluence,
+    attachment: dict[str, Any],
+    parent_content_id: str | None = None,
+) -> str | None:
+    """If it returns None, assume that we should skip this attachment."""
+    if not validate_attachment_filetype(attachment):
+        return None
+
+    if "api.atlassian.com" in confluence_client.url:
+        # https://developer.atlassian.com/cloud/confluence/rest/v1/api-group-content---attachments/#api-wiki-rest-api-content-id-child-attachment-attachmentid-download-get
+        if not parent_content_id:
+            logger.warning(
+                "parent_content_id is required to download attachments from Confluence Cloud!"
+            )
+            return None
+
+        download_link = (
+            confluence_client.url
+            + f"/rest/api/content/{parent_content_id}/child/attachment/{attachment['id']}/download"
+        )
+    else:
+        download_link = confluence_client.url + attachment["_links"]["download"]
+
+    attachment_size = attachment["extensions"]["fileSize"]
+    if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
+        logger.warning(
+            f"Skipping {download_link} due to size. "
+            f"size={attachment_size} "
+            f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD}"
+        )
+        return None
+
+    logger.info(f"_attachment_to_content - _session.get: link={download_link}")
+
+    response = confluence_client._session.get(download_link)
+    if response.status_code != 200:
+        logger.warning(
+            f"Failed to fetch {download_link} with invalid status code {response.status_code}"
+        )
+        return None
+
+    extracted_text = extract_file_text(
+        io.BytesIO(response.content),
+        file_name=attachment["title"],
+        break_on_unprocessable=False,
+    )
+    if len(extracted_text) > CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD:
+        logger.warning(
+            f"Skipping {download_link} due to char count. "
+            f"char count={len(extracted_text)} "
+            f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD}"
+        )
+        return None
+
+    return extracted_text
+
+
+def extract_text_from_confluence_html(
+    confluence_client: OnyxConfluence,
+    confluence_object: dict[str, Any],
+    fetched_titles: set[str],
+) -> str:
+    """Parse a Confluence html page and replace the 'user Id' by the real
+        User Display Name
+
+    Args:
+        confluence_object (dict): The confluence object as a dict
+        confluence_client (Confluence): Confluence client
+        fetched_titles (set[str]): The titles of the pages that have already been fetched
+    Returns:
+        str: loaded and formated Confluence page
+    """
+    body = confluence_object["body"]
+    object_html = body.get("storage", body.get("view", {})).get("value")
+
+    soup = bs4.BeautifulSoup(object_html, "html.parser")
+    for user in soup.findAll("ri:user"):
+        user_id = (
+            user.attrs["ri:account-id"]
+            if "ri:account-id" in user.attrs
+            else user.get("ri:userkey")
+        )
+        if not user_id:
+            logger.warning(
+                "ri:userkey not found in ri:user element. " f"Found attrs: {user.attrs}"
+            )
+            continue
+        # Include @ sign for tagging, more clear for LLM
+        user.replaceWith("@" + _get_user(confluence_client, user_id))
+
+    for html_page_reference in soup.findAll("ac:structured-macro"):
+        # Here, we only want to process page within page macros
+        if html_page_reference.attrs.get("ac:name") != "include":
+            continue
+
+        page_data = html_page_reference.find("ri:page")
+        if not page_data:
+            logger.warning(
+                f"Skipping retrieval of {html_page_reference} because because page data is missing"
+            )
+            continue
+
+        page_title = page_data.attrs.get("ri:content-title")
+        if not page_title:
+            # only fetch pages that have a title
+            logger.warning(
+                f"Skipping retrieval of {html_page_reference} because it has no title"
+            )
+            continue
+
+        if page_title in fetched_titles:
+            # prevent recursive fetching of pages
+            logger.debug(f"Skipping {page_title} because it has already been fetched")
+            continue
+
+        fetched_titles.add(page_title)
+
+        # Wrap this in a try-except because there are some pages that might not exist
+        try:
+            page_query = f"type=page and title='{quote(page_title)}'"
+
+            page_contents: dict[str, Any] | None = None
+            # Confluence enforces title uniqueness, so we should only get one result here
+            for page in confluence_client.paginated_cql_retrieval(
+                cql=page_query,
+                expand="body.storage.value",
+                limit=1,
+            ):
+                page_contents = page
+                break
+        except Exception as e:
+            logger.warning(
+                f"Error getting page contents for object {confluence_object}: {e}"
+            )
+            continue
+
+        if not page_contents:
+            continue
+
+        text_from_page = extract_text_from_confluence_html(
+            confluence_client=confluence_client,
+            confluence_object=page_contents,
+            fetched_titles=fetched_titles,
+        )
+
+        html_page_reference.replaceWith(text_from_page)
+
+    for html_link_body in soup.findAll("ac:link-body"):
+        # This extracts the text from inline links in the page so they can be
+        # represented in the document text as plain text
+        try:
+            text_from_link = html_link_body.text
+            html_link_body.replaceWith(f"(LINK TEXT: {text_from_link})")
+        except Exception as e:
+            logger.warning(f"Error processing ac:link-body: {e}")
+
+    return format_document_soup(soup)

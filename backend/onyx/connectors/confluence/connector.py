@@ -4,17 +4,22 @@ from datetime import timezone
 from typing import Any
 from urllib.parse import quote
 
+from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
+from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.confluence.onyx_confluence import attachment_to_content
 from onyx.connectors.confluence.onyx_confluence import build_confluence_client
+from onyx.connectors.confluence.onyx_confluence import (
+    extract_text_from_confluence_html,
+)
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.confluence.utils import attachment_to_content
 from onyx.connectors.confluence.utils import build_confluence_document_id
+from onyx.connectors.confluence.utils import confluence_refresh_tokens
 from onyx.connectors.confluence.utils import datetime_from_string
-from onyx.connectors.confluence.utils import extract_text_from_confluence_html
 from onyx.connectors.confluence.utils import validate_attachment_filetype
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
@@ -119,12 +124,23 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         # see https://github.com/atlassian-api/atlassian-python-api/blob/master/atlassian/rest_client.py
         # for a list of other hidden constructor args
+
+        final_credentials: dict[str, Any] = credentials
+        if "confluence_refresh_token" in credentials:
+            final_credentials = confluence_refresh_tokens(
+                OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
+                OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
+                credentials["confluence_refresh_token"],
+            )
+            final_credentials["cloud_id"] = credentials["cloud_id"]
+
         self._confluence_client = build_confluence_client(
-            credentials=credentials,
+            credentials=final_credentials,
             is_cloud=self.is_cloud,
             wiki_base=self.wiki_base,
         )
-        return None
+
+        return final_credentials
 
     def _get_comment_string_for_page_id(self, page_id: str) -> str:
         comment_string = ""
@@ -147,12 +163,17 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         return comment_string
 
     def _convert_object_to_document(
-        self, confluence_object: dict[str, Any]
+        self,
+        confluence_object: dict[str, Any],
+        parent_content_id: str | None = None,
     ) -> Document | None:
         """
         Takes in a confluence object, extracts all metadata, and converts it into a document.
         If its a page, it extracts the text, adds the comments for the document text.
         If its an attachment, it just downloads the attachment and converts that into a document.
+
+        parent_content_id: if the object is an attachment, specifies the content id that
+        the attachment is attached to
         """
         # The url and the id are the same
         object_url = build_confluence_document_id(
@@ -171,7 +192,9 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             object_text += self._get_comment_string_for_page_id(confluence_object["id"])
         elif confluence_object["type"] == "attachment":
             object_text = attachment_to_content(
-                confluence_client=self.confluence_client, attachment=confluence_object
+                confluence_client=self.confluence_client,
+                attachment=confluence_object,
+                parent_content_id=parent_content_id,
             )
 
         if object_text is None:
@@ -235,7 +258,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                 cql=attachment_cql,
                 expand=",".join(_ATTACHMENT_EXPANSION_FIELDS),
             ):
-                doc = self._convert_object_to_document(attachment)
+                doc = self._convert_object_to_document(attachment, confluence_page_id)
                 if doc is not None:
                     doc_batch.append(doc)
                 if len(doc_batch) >= self.batch_size:

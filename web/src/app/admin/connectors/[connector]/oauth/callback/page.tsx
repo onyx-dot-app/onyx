@@ -33,7 +33,7 @@ export default function OAuthCallbackPage() {
   const connector = pathname?.split("/")[3];
 
   useEffect(() => {
-    const handleOAuthCallback = async () => {
+    const onFirstLoad = async () => {
       // Examples
       // connector (url segment)= "google-drive"
       // sourceType (for looking up metadata) = "google_drive"
@@ -85,10 +85,19 @@ export default function OAuthCallbackPage() {
         }
 
         setStatusMessage("Success!");
-        setStatusDetails(
-          `Your authorization with ${sourceMetadata.displayName} completed successfully.`
-        );
-        setRedirectUrl(response.redirect_on_success); // Extract the redirect URL
+
+        // set the continuation link
+        if (response.finalize_url) {
+          setRedirectUrl(response.finalize_url);
+          setStatusDetails(
+            `Your authorization with ${sourceMetadata.displayName} completed successfully. Additional steps are required to complete credential setup.`
+          );
+        } else {
+          setRedirectUrl(response.redirect_on_success);
+          setStatusDetails(
+            `Your authorization with ${sourceMetadata.displayName} completed successfully.`
+          );
+        }
         setIsError(false);
       } catch (error) {
         console.error("OAuth error:", error);
@@ -100,7 +109,7 @@ export default function OAuthCallbackPage() {
       }
     };
 
-    handleOAuthCallback();
+    onFirstLoad();
   }, [code, state, connector]);
 
   return (

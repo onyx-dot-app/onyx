@@ -1,7 +1,9 @@
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.connectors.confluence.onyx_confluence import build_confluence_client
+from onyx.connectors.confluence.onyx_confluence import (
+    get_user_email_from_username__server,
+)
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.confluence.utils import get_user_email_from_username__server
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 
