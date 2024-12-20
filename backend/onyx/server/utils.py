@@ -5,6 +5,10 @@ from typing import Any
 from fastapi import HTTPException
 from fastapi import status
 
+from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_AUTHENTICATION_METHOD,
+)
+
 
 class BasicAuthenticationError(HTTPException):
     def __init__(self, detail: str):
@@ -43,11 +47,22 @@ def mask_string(sensitive_str: str) -> str:
 def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, str]:
     masked_creds = {}
     for key, val in credential_dict.items():
-        if not isinstance(val, str):
-            raise ValueError(
-                f"Unable to mask credentials of type other than string, cannot process request."
-                f"Recieved type: {type(val)}"
-            )
+        if isinstance(val, str):
+            # we want to pass the authentication_method field through so the frontend
+            # can disambiguate credentials created by different methods
+            if key == DB_CREDENTIALS_AUTHENTICATION_METHOD:
+                masked_creds[key] = val
+            else:
+                masked_creds[key] = mask_string(val)
+            continue
 
-        masked_creds[key] = mask_string(val)
+        if isinstance(val, int):
+            masked_creds[key] = "*****"
+            continue
+
+        raise ValueError(
+            f"Unable to mask credentials of type other than string, cannot process request."
+            f"Recieved type: {type(val)}"
+        )
+
     return masked_creds
