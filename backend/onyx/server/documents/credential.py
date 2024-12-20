@@ -164,7 +164,12 @@ def get_credential_by_id(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> CredentialSnapshot | StatusResponse[int]:
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id(
+        credential_id,
+        user,
+        db_session,
+        get_editable=False,
+    )
     if credential is None:
         raise HTTPException(
             status_code=401,

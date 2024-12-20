@@ -81,13 +81,13 @@ export const getProviderIcon = (providerName: string, modelName?: string) => {
       }
       if (modelName?.toLowerCase().includes("phi")) {
         return MicrosoftIconSVG;
-      }    
+      }
       if (modelName?.toLowerCase().includes("mistral")) {
         return MistralIcon;
-      }    
+      }
       if (modelName?.toLowerCase().includes("llama")) {
         return MetaIcon;
-      }      
+      }
       if (modelName?.toLowerCase().includes("gemini")) {
         return GeminiIcon;
       }

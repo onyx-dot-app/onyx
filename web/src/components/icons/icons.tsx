@@ -1121,12 +1121,16 @@ export const MetaIcon = ({
 export const MicrosoftIconSVG = ({
   size = 16,
   className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={microsoftSVG} />;
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={microsoftSVG} />
+);
 
 export const MistralIcon = ({
   size = 16,
   className = defaultTailwindCSS,
-}: IconProps) => <LogoIcon size={size} className={className} src={mistralSVG} />;
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={mistralSVG} />
+);
 
 export const VoyageIcon = ({
   size = 16,

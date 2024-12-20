@@ -1,23 +1,13 @@
 import json
-import smtplib
 from datetime import datetime
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from textwrap import dedent
 from typing import Any
 
 from fastapi import HTTPException
 from fastapi import status
 
-from onyx.configs.app_configs import SMTP_PASS
-from onyx.configs.app_configs import SMTP_PORT
-from onyx.configs.app_configs import SMTP_SERVER
-from onyx.configs.app_configs import SMTP_USER
-from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
 )
-from onyx.db.models import User
 
 
 class BasicAuthenticationError(HTTPException):
@@ -76,31 +66,3 @@ def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, str]:
         )
 
     return masked_creds
-
-
-def send_user_email_invite(user_email: str, current_user: User) -> None:
-    msg = MIMEMultipart()
-    msg["Subject"] = "Invitation to Join Onyx Workspace"
-    msg["From"] = current_user.email
-    msg["To"] = user_email
-
-    email_body = dedent(
-        f"""\
-        Hello,
-
-        You have been invited to join a workspace on Onyx.
-
-        To join the workspace, please visit the following link:
-
-        {WEB_DOMAIN}/auth/login
-
-        Best regards,
-        The Onyx Team
-    """
-    )
-
-    msg.attach(MIMEText(email_body, "plain"))
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp_server:
-        smtp_server.starttls()
-        smtp_server.login(SMTP_USER, SMTP_PASS)
-        smtp_server.send_message(msg)

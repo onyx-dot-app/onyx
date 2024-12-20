@@ -2105,6 +2105,7 @@ export function ChatPage({
           }
         />
       )}
+
       {sharingModalVisible && chatSessionIdRef.current !== null && (
         <ShareChatSessionModal
           message={message}

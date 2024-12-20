@@ -16,6 +16,11 @@ result_expires = shared_config.result_expires  # 86400 seconds is the default
 task_default_priority = shared_config.task_default_priority
 task_acks_late = shared_config.task_acks_late
 
+# Indexing worker specific ... this lets us track the transition to STARTED in redis
+# We don't currently rely on this but it has the potential to be useful and
+# indexing tasks are not high volume
+task_track_started = True
+
 worker_concurrency = CELERY_WORKER_INDEXING_CONCURRENCY
 worker_pool = "threads"
 worker_prefetch_multiplier = 1

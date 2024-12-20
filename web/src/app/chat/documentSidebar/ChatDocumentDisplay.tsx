@@ -16,6 +16,7 @@ interface DocumentDisplayProps {
   isSelected: boolean;
   handleSelect: (documentId: string) => void;
   tokenLimitReached: boolean;
+  hideSelection?: boolean;
   setPresentingDocument: Dispatch<SetStateAction<OnyxDocument | null>>;
 }
 
@@ -62,6 +63,7 @@ export function ChatDocumentDisplay({
   closeSidebar,
   document,
   modal,
+  hideSelection,
   isSelected,
   handleSelect,
   tokenLimitReached,
@@ -76,7 +78,9 @@ export function ChatDocumentDisplay({
   const hasMetadata =
     document.updated_at || Object.keys(document.metadata).length > 0;
   return (
-    <div className={`opacity-100 ${modal ? "w-[90vw]" : "w-full"}`}>
+    <div
+      className={`max-w-[400px] opacity-100 ${modal ? "w-[90vw]" : "w-full"}`}
+    >
       <div
         className={`flex relative flex-col gap-0.5  rounded-xl mx-2 my-1 ${
           isSelected ? "bg-gray-200" : "hover:bg-background-125"
@@ -115,7 +119,7 @@ export function ChatDocumentDisplay({
             )}
           </div>
           <div className="absolute top-2 right-2">
-            {!isInternet && (
+            {!isInternet && !hideSelection && (
               <DocumentSelector
                 isSelected={isSelected}
                 handleSelect={() => handleSelect(document.document_id)}

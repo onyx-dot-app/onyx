@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import SUPER_USERS
+from onyx.auth.email_utils import send_user_email_invite
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.noauth_user import fetch_no_auth_user
@@ -61,7 +62,6 @@ from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.server.utils import BasicAuthenticationError
-from onyx.server.utils import send_user_email_invite
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT

@@ -16,6 +16,7 @@ import { LoginText } from "./LoginText";
 import { getSecondsUntilExpiration } from "@/lib/time";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import CardSection from "@/components/admin/CardSection";
+import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -101,16 +102,24 @@ const Page = async (props: {
             </div>
             <EmailPasswordForm shouldVerify={true} nextUrl={nextUrl} />
 
-            <div className="flex">
-              <Text className="mt-4 mx-auto">
-                Don&apos;t have an account?{" "}
+            <div className="flex mt-4 justify-between">
+              <Link
+                href={`/auth/signup${
+                  searchParams?.next ? `?next=${searchParams.next}` : ""
+                }`}
+                className="text-link font-medium"
+              >
+                Create an account
+              </Link>
+
+              {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
                 <Link
-                  href={`/auth/signup${searchParams?.next ? `?next=${searchParams.next}` : ""}`}
+                  href="/auth/forgot-password"
                   className="text-link font-medium"
                 >
-                  Create an account
+                  Reset Password
                 </Link>
-              </Text>
+              )}
             </div>
           </div>
         )}
@@ -123,11 +132,13 @@ const Page = async (props: {
               </Title>
             </div>
             <EmailPasswordForm nextUrl={nextUrl} />
-            <div className="flex">
-              <Text className="mt-4 mx-auto">
+            <div className="flex flex-col gap-y-2 items-center">
+              <Text className="mt-4 ">
                 Don&apos;t have an account?{" "}
                 <Link
-                  href={`/auth/signup${searchParams?.next ? `?next=${searchParams.next}` : ""}`}
+                  href={`/auth/signup${
+                    searchParams?.next ? `?next=${searchParams.next}` : ""
+                  }`}
                   className="text-link font-medium"
                 >
                   Create an account

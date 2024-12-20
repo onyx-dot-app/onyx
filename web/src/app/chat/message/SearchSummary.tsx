@@ -43,18 +43,12 @@ export function ShowHideDocsButton({
 export function SearchSummary({
   index,
   query,
-  hasDocs,
   finished,
-  messageId,
-  handleShowRetrieved,
   handleSearchQueryEdit,
 }: {
   index: number;
   finished: boolean;
   query: string;
-  hasDocs: boolean;
-  messageId: number | null;
-  handleShowRetrieved: (messageId: number | null) => void;
   handleSearchQueryEdit?: (query: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);

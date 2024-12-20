@@ -101,7 +101,7 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "amazon.nova-pro@v1",
   // meta models
   "llama-3.2-90b-vision-instruct",
-  "llama-3.2-11b-vision-instruct"  
+  "llama-3.2-11b-vision-instruct",
 ];
 
 export function checkLLMSupportsImageInput(model: string) {

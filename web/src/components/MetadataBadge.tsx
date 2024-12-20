@@ -28,7 +28,7 @@ export function MetadataBadge({
           className: flexNone ? "flex-none" : "mr-0.5 my-auto",
         })}
       <p className="max-w-[6rem] text-ellipsis overflow-hidden truncate whitespace-nowrap">
-        {value}lllaasfasdf
+        {value}
       </p>
     </div>
   );
