@@ -11,7 +11,9 @@ export function HeaderTitle({
 }) {
   const isString = typeof children === "string";
   const textSize =
-    isString && children.length > 10 ? "text-lg mb-[4px] " : "text-2xl";
+    isString && children.length > 10
+      ? "text-lg pb-[4px] "
+      : "pb-[2px] text-2xl";
 
   return (
     <h1

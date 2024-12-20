@@ -101,7 +101,6 @@ const UserRoleDropdown = ({
   if (isEditable) {
     return (
       <div className="w-40">
-        Select group
         <Select
           value={localRole}
           onValueChange={handleChange}

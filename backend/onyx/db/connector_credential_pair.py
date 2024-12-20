@@ -353,7 +353,12 @@ def add_credential_to_connector(
     last_successful_index_time: datetime | None = None,
 ) -> StatusResponse:
     connector = fetch_connector_by_id(connector_id, db_session)
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id(
+        credential_id,
+        user,
+        db_session,
+        get_editable=False,
+    )
 
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")
@@ -430,7 +435,12 @@ def remove_credential_from_connector(
     db_session: Session,
 ) -> StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id(
+        credential_id,
+        user,
+        db_session,
+        get_editable=False,
+    )
 
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")

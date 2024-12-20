@@ -1,5 +1,6 @@
 "use client";
 
+import React, { memo } from "react";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { Logo } from "@/components/logo/Logo";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -11,7 +12,7 @@ import { LogoType } from "@/components/logo/Logo";
 import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { useRouter } from "next/navigation";
 
-export function LogoComponent({
+export const LogoComponent = memo(function LogoComponent({
   enterpriseSettings,
   backgroundToggled,
   show,
@@ -23,12 +24,13 @@ export function LogoComponent({
   isAdmin?: boolean;
 }) {
   const router = useRouter();
+
   return (
     <button
       onClick={isAdmin ? () => router.push("/chat") : () => {}}
-      className={`max-w-[200px] ${
-        !show && "mobile:hidden"
-      } flex items-center gap-x-1`}
+      className={`max-w-[200px]
+        ${!show && "mobile:hidden"}
+       flex items-center gap-x-1`}
     >
       {enterpriseSettings && enterpriseSettings.application_name ? (
         <>
@@ -40,7 +42,9 @@ export function LogoComponent({
               {enterpriseSettings.application_name}
             </HeaderTitle>
             {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
-              <p className="text-xs text-left text-subtle">Powered by Onyx</p>
+              <p className="text-xs text-left text-subtle whitespace-nowrap overflow-hidden text-ellipsis">
+                Powered by Onyx
+              </p>
             )}
           </div>
         </>
@@ -49,7 +53,7 @@ export function LogoComponent({
       )}
     </button>
   );
-}
+});
 
 export default function FixedLogo({
   backgroundToggled,

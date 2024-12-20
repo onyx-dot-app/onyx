@@ -271,13 +271,21 @@ class DefaultMultiLLM(LLM):
         # variables. We'll also try passing them in, since litellm just ignores
         # addtional kwargs (and some kwargs MUST be passed in rather than set as
         # env variables)
+
+        # Create a dictionary for model-specific arguments if it's None
+        model_kwargs = model_kwargs or {}
+
+        # Filter out empty or None values from custom_config before use
         if custom_config:
-            for k, v in custom_config.items():
+            filtered_config = {k: v for k, v in custom_config.items() if v}
+
+            # Set non-empty config entries as environment variables for litellm
+            for k, v in filtered_config.items():
                 os.environ[k] = v
 
-        model_kwargs = model_kwargs or {}
-        if custom_config:
-            model_kwargs.update(custom_config)
+            # Update model_kwargs with remaining non-empty config
+            model_kwargs.update(filtered_config)
+
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
         if extra_body:

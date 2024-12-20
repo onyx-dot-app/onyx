@@ -238,7 +238,7 @@ services:
     volumes:
       - ../data/certbot/conf:/etc/letsencrypt
       - ../data/certbot/www:/var/www/certbot
-    logging::wq
+    logging:
       driver: json-file
       options:
         max-size: "50m"
@@ -260,6 +260,3 @@ volumes:
   # Created by the container itself
   model_cache_huggingface:
   indexing_huggingface_model_cache:
-
-
-
