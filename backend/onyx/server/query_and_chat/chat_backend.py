@@ -200,7 +200,7 @@ def get_chat_session(
 @router.post("/create-chat-session")
 def create_new_chat_session(
     chat_session_creation_request: ChatSessionCreationRequest,
-    user: User | None = Depends(current_user),
+    user: User | None = Depends(current_limited_user),
     db_session: Session = Depends(get_session),
 ) -> CreateChatSessionID:
     user_id = user.id if user is not None else None
