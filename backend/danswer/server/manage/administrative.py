@@ -13,6 +13,7 @@ from danswer.auth.users import current_curator_or_admin_user
 from danswer.background.celery.versioned_apps.primary import app as primary_app
 from danswer.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
 from danswer.configs.constants import DanswerCeleryPriority
+from danswer.configs.constants import DanswerCeleryTask
 from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import KV_GEN_AI_KEY_CHECK_TIME
 from danswer.db.connector_credential_pair import get_connector_credential_pair
@@ -199,7 +200,7 @@ def create_deletion_attempt_for_connector_id(
 
     # run the beat task to pick up this deletion from the db immediately
     primary_app.send_task(
-        "check_for_connector_deletion_task",
+        DanswerCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
         priority=DanswerCeleryPriority.HIGH,
         kwargs={"tenant_id": tenant_id},
     )

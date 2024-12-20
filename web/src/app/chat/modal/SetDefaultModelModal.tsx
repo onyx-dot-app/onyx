@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction, useEffect, useRef } from "react";
+import { Dispatch, SetStateAction, useContext, useEffect, useRef } from "react";
 import { Modal } from "@/components/Modal";
 import Text from "@/components/ui/text";
 import { getDisplayNameForModel, LlmOverride } from "@/lib/hooks";
@@ -9,6 +9,10 @@ import { setUserDefaultModel } from "@/lib/users/UserSettings";
 import { useRouter } from "next/navigation";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/admin/connectors/Field";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 export function SetDefaultModelModal({
   setPopup,
@@ -23,13 +27,20 @@ export function SetDefaultModelModal({
   onClose: () => void;
   defaultModel: string | null;
 }) {
-  const { refreshUser } = useUser();
+  const { refreshUser, user, updateUserAutoScroll } = useUser();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const container = containerRef.current;
     const message = messageRef.current;
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
 
     if (container && message) {
       const checkScrollable = () => {
@@ -41,9 +52,14 @@ export function SetDefaultModelModal({
       };
       checkScrollable();
       window.addEventListener("resize", checkScrollable);
-      return () => window.removeEventListener("resize", checkScrollable);
+      return () => {
+        window.removeEventListener("resize", checkScrollable);
+        window.removeEventListener("keydown", handleEscape);
+      };
     }
-  }, []);
+
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
 
   const defaultModelDestructured = defaultModel
     ? destructureValue(defaultModel)
@@ -121,15 +137,40 @@ export function SetDefaultModelModal({
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
   );
+  const settings = useContext(SettingsContext);
+  const autoScroll = settings?.enterpriseSettings?.auto_scroll;
+
+  const checked =
+    user?.preferences?.auto_scroll === null
+      ? autoScroll
+      : user?.preferences?.auto_scroll;
 
   return (
     <Modal onOutsideClick={onClose} width="rounded-lg  bg-white max-w-xl">
       <>
         <div className="flex mb-4">
           <h2 className="text-2xl text-emphasis font-bold flex my-auto">
-            Set Default Model
+            User settings
           </h2>
         </div>
+
+        <div className="flex flex-col gap-y-2">
+          <div className="flex items-center gap-x-2">
+            <Switch
+              checked={checked}
+              onCheckedChange={(checked) => {
+                updateUserAutoScroll(checked);
+              }}
+            />
+            <Label className="text-sm">Enable auto-scroll</Label>
+          </div>
+        </div>
+
+        <Separator />
+
+        <h3 className="text-lg text-emphasis font-bold">
+          Default model for assistants
+        </h3>
 
         <Text className="mb-4">
           Choose a Large Language Model (LLM) to serve as the default for

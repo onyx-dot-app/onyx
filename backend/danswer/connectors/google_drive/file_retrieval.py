@@ -16,7 +16,7 @@ logger = setup_logger()
 
 FILE_FIELDS = (
     "nextPageToken, files(mimeType, id, name, permissions, modifiedTime, webViewLink, "
-    "shortcutDetails, owners(emailAddress))"
+    "shortcutDetails, owners(emailAddress), size)"
 )
 SLIM_FILE_FIELDS = (
     "nextPageToken, files(mimeType, id, name, permissions(emailAddress, type), "

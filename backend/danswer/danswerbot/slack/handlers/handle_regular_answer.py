@@ -1,59 +1,42 @@
 import functools
 from collections.abc import Callable
 from typing import Any
-from typing import cast
 from typing import Optional
 from typing import TypeVar
 
 from retry import retry
 from slack_sdk import WebClient
-from slack_sdk.models.blocks import DividerBlock
 from slack_sdk.models.blocks import SectionBlock
 
+from danswer.chat.chat_utils import prepare_chat_message_request
+from danswer.chat.models import ChatDanswerBotResponse
+from danswer.chat.process_message import gather_stream_for_slack
+from danswer.chat.process_message import stream_chat_message_objects
 from danswer.configs.app_configs import DISABLE_GENERATIVE_AI
-from danswer.configs.danswerbot_configs import DANSWER_BOT_ANSWER_GENERATION_TIMEOUT
-from danswer.configs.danswerbot_configs import DANSWER_BOT_DISABLE_COT
+from danswer.configs.constants import DEFAULT_PERSONA_ID
 from danswer.configs.danswerbot_configs import DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER
 from danswer.configs.danswerbot_configs import DANSWER_BOT_DISPLAY_ERROR_MSGS
 from danswer.configs.danswerbot_configs import DANSWER_BOT_NUM_RETRIES
-from danswer.configs.danswerbot_configs import DANSWER_BOT_TARGET_CHUNK_PERCENTAGE
-from danswer.configs.danswerbot_configs import DANSWER_BOT_USE_QUOTES
 from danswer.configs.danswerbot_configs import DANSWER_FOLLOWUP_EMOJI
 from danswer.configs.danswerbot_configs import DANSWER_REACT_EMOJI
-from danswer.configs.danswerbot_configs import ENABLE_DANSWERBOT_REFLEXION
+from danswer.configs.danswerbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from danswer.context.search.enums import OptionalSearchSetting
 from danswer.context.search.models import BaseFilters
-from danswer.context.search.models import RerankingDetails
 from danswer.context.search.models import RetrievalDetails
-from danswer.danswerbot.slack.blocks import build_documents_blocks
-from danswer.danswerbot.slack.blocks import build_follow_up_block
-from danswer.danswerbot.slack.blocks import build_qa_response_blocks
-from danswer.danswerbot.slack.blocks import build_sources_blocks
-from danswer.danswerbot.slack.blocks import get_restate_blocks
-from danswer.danswerbot.slack.formatting import format_slack_message
+from danswer.danswerbot.slack.blocks import build_slack_response_blocks
 from danswer.danswerbot.slack.handlers.utils import send_team_member_message
+from danswer.danswerbot.slack.handlers.utils import slackify_message_thread
 from danswer.danswerbot.slack.models import SlackMessageInfo
 from danswer.danswerbot.slack.utils import respond_in_thread
 from danswer.danswerbot.slack.utils import SlackRateLimiter
 from danswer.danswerbot.slack.utils import update_emote_react
 from danswer.db.engine import get_session_with_tenant
-from danswer.db.models import Persona
-from danswer.db.models import SlackBotResponseType
 from danswer.db.models import SlackChannelConfig
-from danswer.db.persona import fetch_persona_by_id
-from danswer.db.search_settings import get_current_search_settings
+from danswer.db.models import User
+from danswer.db.persona import get_persona_by_id
 from danswer.db.users import get_user_by_email
-from danswer.llm.answering.prompts.citations_prompt import (
-    compute_max_document_tokens_for_persona,
-)
-from danswer.llm.factory import get_llms_for_persona
-from danswer.llm.utils import check_number_of_tokens
-from danswer.llm.utils import get_max_input_tokens
-from danswer.one_shot_answer.answer_question import get_search_answer
-from danswer.one_shot_answer.models import DirectQARequest
-from danswer.one_shot_answer.models import OneShotQAResponse
+from danswer.server.query_and_chat.models import CreateChatMessageRequest
 from danswer.utils.logger import DanswerLoggingAdapter
-
 
 srl = SlackRateLimiter()
 
@@ -89,16 +72,14 @@ def handle_regular_answer(
     feedback_reminder_id: str | None,
     tenant_id: str | None,
     num_retries: int = DANSWER_BOT_NUM_RETRIES,
-    answer_generation_timeout: int = DANSWER_BOT_ANSWER_GENERATION_TIMEOUT,
-    thread_context_percent: float = DANSWER_BOT_TARGET_CHUNK_PERCENTAGE,
+    thread_context_percent: float = MAX_THREAD_CONTEXT_PERCENTAGE,
     should_respond_with_error_msgs: bool = DANSWER_BOT_DISPLAY_ERROR_MSGS,
     disable_docs_only_answer: bool = DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER,
-    disable_cot: bool = DANSWER_BOT_DISABLE_COT,
-    reflexion: bool = ENABLE_DANSWERBOT_REFLEXION,
 ) -> bool:
     channel_conf = slack_channel_config.channel_config if slack_channel_config else None
 
     messages = message_info.thread_messages
+
     message_ts_to_respond_to = message_info.msg_to_respond
     is_bot_msg = message_info.is_bot_msg
     user = None
@@ -108,15 +89,44 @@ def handle_regular_answer(
                 user = get_user_by_email(message_info.email, db_session)
 
     document_set_names: list[str] | None = None
-    persona = slack_channel_config.persona if slack_channel_config else None
     prompt = None
-    if persona:
+    # If no persona is specified, use the default search based persona
+    # This way slack flow always has a persona
+    persona = slack_channel_config.persona if slack_channel_config else None
+    if not persona:
+        with get_session_with_tenant(tenant_id) as db_session:
+            persona = get_persona_by_id(DEFAULT_PERSONA_ID, user, db_session)
+            document_set_names = [
+                document_set.name for document_set in persona.document_sets
+            ]
+            prompt = persona.prompts[0] if persona.prompts else None
+    else:
         document_set_names = [
             document_set.name for document_set in persona.document_sets
         ]
         prompt = persona.prompts[0] if persona.prompts else None
 
     should_respond_even_with_no_docs = persona.num_chunks == 0 if persona else False
+
+    # TODO: Add in support for Slack to truncate messages based on max LLM context
+    # llm, _ = get_llms_for_persona(persona)
+
+    # llm_tokenizer = get_tokenizer(
+    #     model_name=llm.config.model_name,
+    #     provider_type=llm.config.model_provider,
+    # )
+
+    # # In cases of threads, split the available tokens between docs and thread context
+    # input_tokens = get_max_input_tokens(
+    #     model_name=llm.config.model_name,
+    #     model_provider=llm.config.model_provider,
+    # )
+    # max_history_tokens = int(input_tokens * thread_context_percent)
+    # combined_message = combine_message_thread(
+    #     messages, max_tokens=max_history_tokens, llm_tokenizer=llm_tokenizer
+    # )
+
+    combined_message = slackify_message_thread(messages)
 
     bypass_acl = False
     if (
@@ -127,13 +137,6 @@ def handle_regular_answer(
         # For Slack channels, use the full document set, admin will be warned when configuring it
         # with non-public document sets
         bypass_acl = True
-
-    # figure out if we want to use citations or quotes
-    use_citations = (
-        not DANSWER_BOT_USE_QUOTES
-        if slack_channel_config is None
-        else slack_channel_config.response_type == SlackBotResponseType.CITATIONS
-    )
 
     if not message_ts_to_respond_to and not is_bot_msg:
         # if the message is not "/danswer" command, then it should have a message ts to respond to
@@ -147,75 +150,23 @@ def handle_regular_answer(
         backoff=2,
     )
     @rate_limits(client=client, channel=channel, thread_ts=message_ts_to_respond_to)
-    def _get_answer(new_message_request: DirectQARequest) -> OneShotQAResponse | None:
-        max_document_tokens: int | None = None
-        max_history_tokens: int | None = None
-
+    def _get_slack_answer(
+        new_message_request: CreateChatMessageRequest, danswer_user: User | None
+    ) -> ChatDanswerBotResponse:
         with get_session_with_tenant(tenant_id) as db_session:
-            if len(new_message_request.messages) > 1:
-                if new_message_request.persona_config:
-                    raise RuntimeError("Slack bot does not support persona config")
-                elif new_message_request.persona_id is not None:
-                    persona = cast(
-                        Persona,
-                        fetch_persona_by_id(
-                            db_session,
-                            new_message_request.persona_id,
-                            user=None,
-                            get_editable=False,
-                        ),
-                    )
-                else:
-                    raise RuntimeError(
-                        "No persona id provided, this should never happen."
-                    )
-
-                llm, _ = get_llms_for_persona(persona)
-
-                # In cases of threads, split the available tokens between docs and thread context
-                input_tokens = get_max_input_tokens(
-                    model_name=llm.config.model_name,
-                    model_provider=llm.config.model_provider,
-                )
-                max_history_tokens = int(input_tokens * thread_context_percent)
-
-                remaining_tokens = input_tokens - max_history_tokens
-
-                query_text = new_message_request.messages[0].message
-                if persona:
-                    max_document_tokens = compute_max_document_tokens_for_persona(
-                        persona=persona,
-                        actual_user_input=query_text,
-                        max_llm_token_override=remaining_tokens,
-                    )
-                else:
-                    max_document_tokens = (
-                        remaining_tokens
-                        - 512  # Needs to be more than any of the QA prompts
-                        - check_number_of_tokens(query_text)
-                    )
-
-            if DISABLE_GENERATIVE_AI:
-                return None
-
-            # This also handles creating the query event in postgres
-            answer = get_search_answer(
-                query_req=new_message_request,
-                user=user,
-                max_document_tokens=max_document_tokens,
-                max_history_tokens=max_history_tokens,
+            packets = stream_chat_message_objects(
+                new_msg_req=new_message_request,
+                user=danswer_user,
                 db_session=db_session,
-                answer_generation_timeout=answer_generation_timeout,
-                enable_reflexion=reflexion,
                 bypass_acl=bypass_acl,
-                use_citations=use_citations,
-                danswerbot_flow=True,
             )
 
-            if not answer.error_msg:
-                return answer
-            else:
-                raise RuntimeError(answer.error_msg)
+            answer = gather_stream_for_slack(packets)
+
+        if answer.error_msg:
+            raise RuntimeError(answer.error_msg)
+
+        return answer
 
     try:
         # By leaving time_cutoff and favor_recent as None, and setting enable_auto_detect_filters
@@ -245,26 +196,24 @@ def handle_regular_answer(
             enable_auto_detect_filters=auto_detect_filters,
         )
 
-        # Always apply reranking settings if it exists, this is the non-streaming flow
         with get_session_with_tenant(tenant_id) as db_session:
-            saved_search_settings = get_current_search_settings(db_session)
-
-        # This includes throwing out answer via reflexion
-        answer = _get_answer(
-            DirectQARequest(
-                messages=messages,
-                multilingual_query_expansion=saved_search_settings.multilingual_expansion
-                if saved_search_settings
-                else None,
-                prompt_id=prompt.id if prompt else None,
-                persona_id=persona.id if persona is not None else 0,
-                retrieval_options=retrieval_details,
-                chain_of_thought=not disable_cot,
-                rerank_settings=RerankingDetails.from_db_model(saved_search_settings)
-                if saved_search_settings
-                else None,
+            answer_request = prepare_chat_message_request(
+                message_text=combined_message,
+                user=user,
+                persona_id=persona.id,
+                # This is not used in the Slack flow, only in the answer API
+                persona_override_config=None,
+                prompt=prompt,
+                message_ts_to_respond_to=message_ts_to_respond_to,
+                retrieval_details=retrieval_details,
+                rerank_settings=None,  # Rerank customization supported in Slack flow
+                db_session=db_session,
             )
+
+        answer = _get_slack_answer(
+            new_message_request=answer_request, danswer_user=user
         )
+
     except Exception as e:
         logger.exception(
             f"Unable to process message - did not successfully answer "
@@ -365,7 +314,7 @@ def handle_regular_answer(
     top_docs = retrieval_info.top_documents
     if not top_docs and not should_respond_even_with_no_docs:
         logger.error(
-            f"Unable to answer question: '{answer.rephrase}' - no documents found"
+            f"Unable to answer question: '{combined_message}' - no documents found"
         )
         # Optionally, respond in thread with the error message
         # Used primarily for debugging purposes
@@ -386,18 +335,18 @@ def handle_regular_answer(
         )
         return True
 
-    only_respond_with_citations_or_quotes = (
+    only_respond_if_citations = (
         channel_conf
         and "well_answered_postfilter" in channel_conf.get("answer_filters", [])
     )
-    has_citations_or_quotes = bool(answer.citations or answer.quotes)
+
     if (
-        only_respond_with_citations_or_quotes
-        and not has_citations_or_quotes
+        only_respond_if_citations
+        and not answer.citations
         and not message_info.bypass_filters
     ):
         logger.error(
-            f"Unable to find citations or quotes to answer: '{answer.rephrase}' - not answering!"
+            f"Unable to find citations to answer: '{answer.answer}' - not answering!"
         )
         # Optionally, respond in thread with the error message
         # Used primarily for debugging purposes
@@ -411,67 +360,22 @@ def handle_regular_answer(
             )
         return True
 
-    # If called with the DanswerBot slash command, the question is lost so we have to reshow it
-    restate_question_block = get_restate_blocks(messages[-1].message, is_bot_msg)
-    formatted_answer = format_slack_message(answer.answer) if answer.answer else None
-
-    answer_blocks = build_qa_response_blocks(
-        message_id=answer.chat_message_id,
-        answer=formatted_answer,
-        quotes=answer.quotes.quotes if answer.quotes else None,
-        source_filters=retrieval_info.applied_source_filters,
-        time_cutoff=retrieval_info.applied_time_cutoff,
-        favor_recent=retrieval_info.recency_bias_multiplier > 1,
-        # currently Personas don't support quotes
-        # if citations are enabled, also don't use quotes
-        skip_quotes=persona is not None or use_citations,
-        process_message_for_citations=use_citations,
+    all_blocks = build_slack_response_blocks(
+        tenant_id=tenant_id,
+        message_info=message_info,
+        answer=answer,
+        channel_conf=channel_conf,
+        use_citations=True,  # No longer supporting quotes
         feedback_reminder_id=feedback_reminder_id,
     )
-
-    # Get the chunks fed to the LLM only, then fill with other docs
-    llm_doc_inds = answer.llm_selected_doc_indices or []
-    llm_docs = [top_docs[i] for i in llm_doc_inds]
-    remaining_docs = [
-        doc for idx, doc in enumerate(top_docs) if idx not in llm_doc_inds
-    ]
-    priority_ordered_docs = llm_docs + remaining_docs
-
-    document_blocks = []
-    citations_block = []
-    # if citations are enabled, only show cited documents
-    if use_citations:
-        citations = answer.citations or []
-        cited_docs = []
-        for citation in citations:
-            matching_doc = next(
-                (d for d in top_docs if d.document_id == citation.document_id),
-                None,
-            )
-            if matching_doc:
-                cited_docs.append((citation.citation_num, matching_doc))
-
-        cited_docs.sort()
-        citations_block = build_sources_blocks(cited_documents=cited_docs)
-    elif priority_ordered_docs:
-        document_blocks = build_documents_blocks(
-            documents=priority_ordered_docs,
-            message_id=answer.chat_message_id,
-        )
-        document_blocks = [DividerBlock()] + document_blocks
-
-    all_blocks = (
-        restate_question_block + answer_blocks + citations_block + document_blocks
-    )
-
-    if channel_conf and channel_conf.get("follow_up_tags") is not None:
-        all_blocks.append(build_follow_up_block(message_id=answer.chat_message_id))
 
     try:
         respond_in_thread(
             client=client,
             channel=channel,
-            receiver_ids=receiver_ids,
+            receiver_ids=[message_info.sender]
+            if message_info.is_bot_msg and message_info.sender
+            else receiver_ids,
             text="Hello! Danswer has some results for you!",
             blocks=all_blocks,
             thread_ts=message_ts_to_respond_to,

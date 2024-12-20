@@ -23,6 +23,9 @@ const Page = async (props: {
 }) => {
   const searchParams = await props.searchParams;
   const autoRedirectDisabled = searchParams?.disableAutoRedirect === "true";
+  const nextUrl = Array.isArray(searchParams?.next)
+    ? searchParams?.next[0]
+    : searchParams?.next || null;
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
@@ -38,10 +41,6 @@ const Page = async (props: {
   } catch (e) {
     console.log(`Some fetch failed for the login page - ${e}`);
   }
-
-  const nextUrl = Array.isArray(searchParams?.next)
-    ? searchParams?.next[0]
-    : searchParams?.next || null;
 
   // simply take the user to the home page if Auth is disabled
   if (authTypeMetadata?.authType === "disabled") {
@@ -102,12 +101,15 @@ const Page = async (props: {
               <span className="px-4 text-gray-500">or</span>
               <div className="flex-grow border-t border-gray-300"></div>
             </div>
-            <EmailPasswordForm shouldVerify={true} />
+            <EmailPasswordForm shouldVerify={true} nextUrl={nextUrl} />
 
             <div className="flex">
               <Text className="mt-4 mx-auto">
                 Don&apos;t have an account?{" "}
-                <Link href="/auth/signup" className="text-link font-medium">
+                <Link
+                  href={`/auth/signup${searchParams?.next ? `?next=${searchParams.next}` : ""}`}
+                  className="text-link font-medium"
+                >
                   Create an account
                 </Link>
               </Text>
@@ -122,11 +124,14 @@ const Page = async (props: {
                 <LoginText />
               </Title>
             </div>
-            <EmailPasswordForm />
+            <EmailPasswordForm nextUrl={nextUrl} />
             <div className="flex">
               <Text className="mt-4 mx-auto">
                 Don&apos;t have an account?{" "}
-                <Link href="/auth/signup" className="text-link font-medium">
+                <Link
+                  href={`/auth/signup${searchParams?.next ? `?next=${searchParams.next}` : ""}`}
+                  className="text-link font-medium"
+                >
                   Create an account
                 </Link>
               </Text>

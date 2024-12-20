@@ -2,8 +2,8 @@ from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
 
-from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.interfaces import LLM
+from danswer.llm.models import PreviousMessage
 from danswer.tools.models import ToolCallFinalResult
 from danswer.tools.models import ToolCallKickoff
 from danswer.tools.models import ToolResponse

@@ -196,7 +196,7 @@ def seed_initial_documents(
     docs, chunks = _create_indexable_chunks(processed_docs, tenant_id)
 
     index_doc_batch_prepare(
-        document_batch=docs,
+        documents=docs,
         index_attempt_metadata=IndexAttemptMetadata(
             connector_id=connector_id,
             credential_id=PUBLIC_CREDENTIAL_ID,

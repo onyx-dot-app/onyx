@@ -1,38 +1,47 @@
+import json
+from collections.abc import Generator
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_user
-from danswer.configs.danswerbot_configs import DANSWER_BOT_TARGET_CHUNK_PERCENTAGE
+from danswer.chat.chat_utils import combine_message_thread
+from danswer.chat.chat_utils import prepare_chat_message_request
+from danswer.chat.models import PersonaOverrideConfig
+from danswer.chat.process_message import ChatPacketStream
+from danswer.chat.process_message import stream_chat_message_objects
+from danswer.configs.danswerbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from danswer.context.search.models import SavedSearchDocWithContent
 from danswer.context.search.models import SearchRequest
 from danswer.context.search.pipeline import SearchPipeline
 from danswer.context.search.utils import dedupe_documents
 from danswer.context.search.utils import drop_llm_indices
 from danswer.context.search.utils import relevant_sections_to_indices
+from danswer.db.chat import get_prompt_by_id
 from danswer.db.engine import get_session
+from danswer.db.models import Persona
 from danswer.db.models import User
 from danswer.db.persona import get_persona_by_id
-from danswer.llm.answering.prompts.citations_prompt import (
-    compute_max_document_tokens_for_persona,
-)
 from danswer.llm.factory import get_default_llms
 from danswer.llm.factory import get_llms_for_persona
 from danswer.llm.factory import get_main_llm_from_tuple
 from danswer.llm.utils import get_max_input_tokens
-from danswer.one_shot_answer.answer_question import get_search_answer
-from danswer.one_shot_answer.models import DirectQARequest
-from danswer.one_shot_answer.models import OneShotQAResponse
+from danswer.natural_language_processing.utils import get_tokenizer
+from danswer.server.utils import get_json_line
 from danswer.utils.logger import setup_logger
+from ee.danswer.chat.process_message import gather_stream_for_answer_api
 from ee.danswer.danswerbot.slack.handlers.handle_standard_answers import (
     oneoff_standard_answers,
 )
 from ee.danswer.server.query_and_chat.models import DocumentSearchRequest
+from ee.danswer.server.query_and_chat.models import OneShotQARequest
+from ee.danswer.server.query_and_chat.models import OneShotQAResponse
 from ee.danswer.server.query_and_chat.models import StandardAnswerRequest
 from ee.danswer.server.query_and_chat.models import StandardAnswerResponse
-from ee.danswer.server.query_and_chat.utils import create_temporary_persona
 
 
 logger = setup_logger()
@@ -125,58 +134,115 @@ def handle_search_request(
     return DocumentSearchResponse(top_documents=deduped_docs, llm_indices=llm_indices)
 
 
-@basic_router.post("/answer-with-quote")
-def get_answer_with_quote(
-    query_request: DirectQARequest,
+def get_answer_stream(
+    query_request: OneShotQARequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> OneShotQAResponse:
+) -> ChatPacketStream:
     query = query_request.messages[0].message
-    logger.notice(f"Received query for one shot answer API with quotes: {query}")
+    logger.notice(f"Received query for Answer API: {query}")
 
-    if query_request.persona_config is not None:
-        new_persona = create_temporary_persona(
-            db_session=db_session,
-            persona_config=query_request.persona_config,
+    if (
+        query_request.persona_override_config is None
+        and query_request.persona_id is None
+    ):
+        raise KeyError("Must provide persona ID or Persona Config")
+
+    prompt = None
+    if query_request.prompt_id is not None:
+        prompt = get_prompt_by_id(
+            prompt_id=query_request.prompt_id,
             user=user,
+            db_session=db_session,
         )
-        persona = new_persona
 
+    persona_info: Persona | PersonaOverrideConfig | None = None
+    if query_request.persona_override_config is not None:
+        persona_info = query_request.persona_override_config
     elif query_request.persona_id is not None:
-        persona = get_persona_by_id(
+        persona_info = get_persona_by_id(
             persona_id=query_request.persona_id,
             user=user,
             db_session=db_session,
             is_for_edit=False,
         )
-    else:
-        raise KeyError("Must provide persona ID or Persona Config")
 
-    llm = get_main_llm_from_tuple(
-        get_default_llms() if not persona else get_llms_for_persona(persona)
+    llm = get_main_llm_from_tuple(get_llms_for_persona(persona_info))
+
+    llm_tokenizer = get_tokenizer(
+        model_name=llm.config.model_name,
+        provider_type=llm.config.model_provider,
     )
+
     input_tokens = get_max_input_tokens(
         model_name=llm.config.model_name, model_provider=llm.config.model_provider
     )
-    max_history_tokens = int(input_tokens * DANSWER_BOT_TARGET_CHUNK_PERCENTAGE)
+    max_history_tokens = int(input_tokens * MAX_THREAD_CONTEXT_PERCENTAGE)
 
-    remaining_tokens = input_tokens - max_history_tokens
-
-    max_document_tokens = compute_max_document_tokens_for_persona(
-        persona=persona,
-        actual_user_input=query,
-        max_llm_token_override=remaining_tokens,
+    combined_message = combine_message_thread(
+        messages=query_request.messages,
+        max_tokens=max_history_tokens,
+        llm_tokenizer=llm_tokenizer,
     )
 
-    answer_details = get_search_answer(
-        query_req=query_request,
+    # Also creates a new chat session
+    request = prepare_chat_message_request(
+        message_text=combined_message,
         user=user,
-        max_document_tokens=max_document_tokens,
-        max_history_tokens=max_history_tokens,
+        persona_id=query_request.persona_id,
+        persona_override_config=query_request.persona_override_config,
+        prompt=prompt,
+        message_ts_to_respond_to=None,
+        retrieval_details=query_request.retrieval_options,
+        rerank_settings=query_request.rerank_settings,
         db_session=db_session,
     )
 
-    return answer_details
+    packets = stream_chat_message_objects(
+        new_msg_req=request,
+        user=user,
+        db_session=db_session,
+        include_contexts=query_request.return_contexts,
+    )
+
+    return packets
+
+
+@basic_router.post("/answer-with-citation")
+def get_answer_with_citation(
+    request: OneShotQARequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_user),
+) -> OneShotQAResponse:
+    try:
+        packets = get_answer_stream(request, user, db_session)
+        answer = gather_stream_for_answer_api(packets)
+
+        if answer.error_msg:
+            raise RuntimeError(answer.error_msg)
+
+        return answer
+    except Exception as e:
+        logger.error(f"Error in get_answer_with_citation: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An internal server error occurred")
+
+
+@basic_router.post("/stream-answer-with-citation")
+def stream_answer_with_citation(
+    request: OneShotQARequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_user),
+) -> StreamingResponse:
+    def stream_generator() -> Generator[str, None, None]:
+        try:
+            for packet in get_answer_stream(request, user, db_session):
+                serialized = get_json_line(packet.model_dump())
+                yield serialized
+        except Exception as e:
+            logger.exception("Error in answer streaming")
+            yield json.dumps({"error": str(e)})
+
+    return StreamingResponse(stream_generator(), media_type="application/json")
 
 
 @basic_router.get("/standard-answer")

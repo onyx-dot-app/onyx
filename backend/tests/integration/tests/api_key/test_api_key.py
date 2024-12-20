@@ -27,13 +27,6 @@ def test_limited(reset: None) -> None:
     )
     assert response.status_code == 200
 
-    # test basic endpoints
-    response = requests.get(
-        f"{API_SERVER_URL}/input_prompt",
-        headers=api_key.headers,
-    )
-    assert response.status_code == 403
-
     # test admin endpoints
     response = requests.get(
         f"{API_SERVER_URL}/admin/api-key",

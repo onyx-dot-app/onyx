@@ -81,6 +81,11 @@ export const SlackChannelConfigCreationForm = ({
             respond_to_bots:
               existingSlackChannelConfig?.channel_config?.respond_to_bots ||
               false,
+            show_continue_in_web_ui:
+              // If we're updating, we want to keep the existing value
+              // Otherwise, we want to default to true
+              existingSlackChannelConfig?.channel_config
+                ?.show_continue_in_web_ui ?? !isUpdate,
             enable_auto_filters:
               existingSlackChannelConfig?.enable_auto_filters || false,
             respond_member_group_list:
@@ -119,6 +124,7 @@ export const SlackChannelConfigCreationForm = ({
             questionmark_prefilter_enabled: Yup.boolean().required(),
             respond_tag_only: Yup.boolean().required(),
             respond_to_bots: Yup.boolean().required(),
+            show_continue_in_web_ui: Yup.boolean().required(),
             enable_auto_filters: Yup.boolean().required(),
             respond_member_group_list: Yup.array().of(Yup.string()).required(),
             still_need_help_enabled: Yup.boolean().required(),
@@ -282,6 +288,12 @@ export const SlackChannelConfigCreationForm = ({
                       />
                     </div>
 
+                    <BooleanFormField
+                      name="show_continue_in_web_ui"
+                      removeIndent
+                      label="Show Continue in Web UI button"
+                      tooltip="If set, will show a button at the bottom of the response that allows the user to continue the conversation in the Danswer Web UI"
+                    />
                     <div className="flex flex-col space-y-3 mt-2">
                       <BooleanFormField
                         name="still_need_help_enabled"
@@ -313,8 +325,8 @@ export const SlackChannelConfigCreationForm = ({
                       <BooleanFormField
                         name="answer_validity_check_enabled"
                         removeIndent
-                        label="Hide Non-Answers"
-                        tooltip="If set, will only answer questions that the model determines it can answer"
+                        label="Only respond if citations found"
+                        tooltip="If set, will only answer questions where the model successfully produces citations"
                       />
                       <BooleanFormField
                         name="questionmark_prefilter_enabled"

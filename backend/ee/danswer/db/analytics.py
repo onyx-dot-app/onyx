@@ -170,3 +170,67 @@ def fetch_danswerbot_analytics(
     )
 
     return results
+
+
+def fetch_persona_message_analytics(
+    db_session: Session,
+    persona_id: int,
+    start: datetime.datetime,
+    end: datetime.datetime,
+) -> list[tuple[int, datetime.date]]:
+    """Gets the daily message counts for a specific persona within the given time range."""
+    query = (
+        select(
+            func.count(ChatMessage.id),
+            cast(ChatMessage.time_sent, Date),
+        )
+        .join(
+            ChatSession,
+            ChatMessage.chat_session_id == ChatSession.id,
+        )
+        .where(
+            or_(
+                ChatMessage.alternate_assistant_id == persona_id,
+                ChatSession.persona_id == persona_id,
+            ),
+            ChatMessage.time_sent >= start,
+            ChatMessage.time_sent <= end,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+        .group_by(cast(ChatMessage.time_sent, Date))
+        .order_by(cast(ChatMessage.time_sent, Date))
+    )
+
+    return [tuple(row) for row in db_session.execute(query).all()]
+
+
+def fetch_persona_unique_users(
+    db_session: Session,
+    persona_id: int,
+    start: datetime.datetime,
+    end: datetime.datetime,
+) -> list[tuple[int, datetime.date]]:
+    """Gets the daily unique user counts for a specific persona within the given time range."""
+    query = (
+        select(
+            func.count(func.distinct(ChatSession.user_id)),
+            cast(ChatMessage.time_sent, Date),
+        )
+        .join(
+            ChatSession,
+            ChatMessage.chat_session_id == ChatSession.id,
+        )
+        .where(
+            or_(
+                ChatMessage.alternate_assistant_id == persona_id,
+                ChatSession.persona_id == persona_id,
+            ),
+            ChatMessage.time_sent >= start,
+            ChatMessage.time_sent <= end,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+        .group_by(cast(ChatMessage.time_sent, Date))
+        .order_by(cast(ChatMessage.time_sent, Date))
+    )
+
+    return [tuple(row) for row in db_session.execute(query).all()]

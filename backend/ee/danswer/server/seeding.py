@@ -132,13 +132,18 @@ def _seed_personas(db_session: Session, personas: list[CreatePersonaRequest]) ->
     if personas:
         logger.notice("Seeding Personas")
         for persona in personas:
+            if not persona.prompt_ids:
+                raise ValueError(
+                    f"Invalid Persona with name {persona.name}; no prompts exist"
+                )
+
             upsert_persona(
                 user=None,  # Seeding is done as admin
                 name=persona.name,
                 description=persona.description,
-                num_chunks=persona.num_chunks
-                if persona.num_chunks is not None
-                else 0.0,
+                num_chunks=(
+                    persona.num_chunks if persona.num_chunks is not None else 0.0
+                ),
                 llm_relevance_filter=persona.llm_relevance_filter,
                 llm_filter_extraction=persona.llm_filter_extraction,
                 recency_bias=RecencyBiasSetting.AUTO,
@@ -157,7 +162,6 @@ def _seed_personas(db_session: Session, personas: list[CreatePersonaRequest]) ->
 def _seed_settings(settings: Settings) -> None:
     logger.notice("Seeding Settings")
     try:
-        settings.check_validity()
         store_base_settings(settings)
         logger.notice("Successfully seeded Settings")
     except ValueError as e:

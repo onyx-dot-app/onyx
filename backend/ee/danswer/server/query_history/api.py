@@ -179,13 +179,7 @@ class QuestionAnswerPairSnapshot(BaseModel):
 
 
 def determine_flow_type(chat_session: ChatSession) -> SessionType:
-    return (
-        SessionType.SLACK
-        if chat_session.danswerbot_flow
-        else SessionType.SEARCH
-        if chat_session.one_shot
-        else SessionType.CHAT
-    )
+    return SessionType.SLACK if chat_session.danswerbot_flow else SessionType.CHAT
 
 
 def fetch_and_process_chat_session_history_minimal(

@@ -3,14 +3,14 @@ from langchain.schema import HumanMessage
 from langchain.schema import SystemMessage
 
 from danswer.chat.chat_utils import combine_message_chain
+from danswer.chat.prompt_builder.utils import translate_danswer_msg_to_langchain
 from danswer.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from danswer.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from danswer.db.models import ChatMessage
-from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.interfaces import LLM
+from danswer.llm.models import PreviousMessage
 from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
 from danswer.llm.utils import message_to_string
-from danswer.llm.utils import translate_danswer_msg_to_langchain
 from danswer.prompts.chat_prompts import AGGRESSIVE_SEARCH_TEMPLATE
 from danswer.prompts.chat_prompts import NO_SEARCH
 from danswer.prompts.chat_prompts import REQUIRE_SEARCH_HINT

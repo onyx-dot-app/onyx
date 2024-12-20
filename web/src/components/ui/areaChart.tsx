@@ -24,18 +24,12 @@ interface AreaChartProps {
   categories?: string[];
   index?: string;
   colors?: string[];
-  startEndOnly?: boolean;
   showXAxis?: boolean;
   showYAxis?: boolean;
   yAxisWidth?: number;
   showAnimation?: boolean;
   showTooltip?: boolean;
-  showLegend?: boolean;
   showGridLines?: boolean;
-  showGradient?: boolean;
-  autoMinValue?: boolean;
-  minValue?: number;
-  maxValue?: number;
   connectNulls?: boolean;
   allowDecimals?: boolean;
   className?: string;
@@ -43,6 +37,7 @@ interface AreaChartProps {
   description?: string;
   xAxisFormatter?: (value: any) => string;
   yAxisFormatter?: (value: any) => string;
+  stacked?: boolean;
 }
 
 export function AreaChartDisplay({
@@ -50,18 +45,12 @@ export function AreaChartDisplay({
   categories = [],
   index,
   colors = ["indigo", "fuchsia"],
-  startEndOnly = false,
   showXAxis = true,
   showYAxis = true,
   yAxisWidth = 56,
   showAnimation = true,
   showTooltip = true,
-  showLegend = false,
   showGridLines = true,
-  showGradient = true,
-  autoMinValue = false,
-  minValue,
-  maxValue,
   connectNulls = false,
   allowDecimals = true,
   className,
@@ -69,6 +58,7 @@ export function AreaChartDisplay({
   description,
   xAxisFormatter = (dateStr: string) => dateStr,
   yAxisFormatter = (number: number) => number.toString(),
+  stacked = false,
 }: AreaChartProps) {
   return (
     <Card className={className}>
@@ -113,7 +103,7 @@ export function AreaChartDisplay({
                   key={category}
                   type="monotone"
                   dataKey={category}
-                  stackId="1"
+                  stackId={stacked ? "1" : category}
                   stroke={colors[ind % colors.length]}
                   fill={colors[ind % colors.length]}
                   fillOpacity={0.3}

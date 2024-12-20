@@ -6,16 +6,24 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
+from danswer.chat.answer import Answer
 from danswer.chat.chat_utils import create_chat_chain
+from danswer.chat.chat_utils import create_temporary_persona
 from danswer.chat.models import AllCitations
+from danswer.chat.models import AnswerStyleConfig
+from danswer.chat.models import ChatDanswerBotResponse
+from danswer.chat.models import CitationConfig
 from danswer.chat.models import CitationInfo
 from danswer.chat.models import CustomToolResponse
 from danswer.chat.models import DanswerAnswerPiece
+from danswer.chat.models import DanswerContexts
+from danswer.chat.models import DocumentPruningConfig
 from danswer.chat.models import FileChatDisplay
 from danswer.chat.models import FinalUsedContextDocsResponse
 from danswer.chat.models import LLMRelevanceFilterResponse
 from danswer.chat.models import MessageResponseIDInfo
 from danswer.chat.models import MessageSpecificCitations
+from danswer.chat.models import PromptConfig
 from danswer.chat.models import QADocsResponse
 from danswer.chat.models import StreamingError
 from danswer.chat.models import StreamStopInfo
@@ -54,16 +62,11 @@ from danswer.document_index.factory import get_default_document_index
 from danswer.file_store.models import ChatFileType
 from danswer.file_store.models import FileDescriptor
 from danswer.file_store.utils import load_all_chat_files
-from danswer.file_store.utils import save_files_from_urls
-from danswer.llm.answering.answer import Answer
-from danswer.llm.answering.models import AnswerStyleConfig
-from danswer.llm.answering.models import CitationConfig
-from danswer.llm.answering.models import DocumentPruningConfig
-from danswer.llm.answering.models import PreviousMessage
-from danswer.llm.answering.models import PromptConfig
+from danswer.file_store.utils import save_files
 from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_llms_for_persona
 from danswer.llm.factory import get_main_llm_from_tuple
+from danswer.llm.models import PreviousMessage
 from danswer.llm.utils import litellm_exception_to_error_msg
 from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.server.query_and_chat.models import ChatMessageDetail
@@ -102,6 +105,7 @@ from danswer.tools.tool_implementations.internet_search.internet_search_tool imp
 from danswer.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
+from danswer.tools.tool_implementations.search.search_tool import SEARCH_DOC_CONTENT_ID
 from danswer.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -113,7 +117,10 @@ from danswer.tools.tool_implementations.search.search_tool import (
 from danswer.tools.tool_runner import ToolCallFinalResult
 from danswer.utils.logger import setup_logger
 from danswer.utils.long_term_log import LongTermLogger
+from danswer.utils.timing import log_function_time
 from danswer.utils.timing import log_generator_function_time
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
 
 logger = setup_logger()
 
@@ -256,6 +263,7 @@ def _get_force_search_settings(
 ChatPacket = (
     StreamingError
     | QADocsResponse
+    | DanswerContexts
     | LLMRelevanceFilterResponse
     | FinalUsedContextDocsResponse
     | ChatMessageDetail
@@ -286,6 +294,8 @@ def stream_chat_message_objects(
     custom_tool_additional_headers: dict[str, str] | None = None,
     is_connected: Callable[[], bool] | None = None,
     enforce_chat_session_id_for_search_docs: bool = True,
+    bypass_acl: bool = False,
+    include_contexts: bool = False,
 ) -> ChatPacketStream:
     """Streams in order:
     1. [conditional] Retrieved documents if a search needs to be run
@@ -293,6 +303,7 @@ def stream_chat_message_objects(
     3. [always] A set of streamed LLM tokens or an error anywhere along the line if something fails
     4. [always] Details on the final AI response message that is created
     """
+    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     use_existing_user_message = new_msg_req.use_existing_user_message
     existing_assistant_message_id = new_msg_req.existing_assistant_message_id
 
@@ -322,17 +333,31 @@ def stream_chat_message_objects(
             metadata={"user_id": str(user_id), "chat_session_id": str(chat_session_id)}
         )
 
-        # use alternate persona if alternative assistant id is passed in
         if alternate_assistant_id is not None:
+            # Allows users to specify a temporary persona (assistant) in the chat session
+            # this takes highest priority since it's user specified
             persona = get_persona_by_id(
                 alternate_assistant_id,
                 user=user,
                 db_session=db_session,
                 is_for_edit=False,
             )
+        elif new_msg_req.persona_override_config:
+            # Certain endpoints allow users to specify arbitrary persona settings
+            # this should never conflict with the alternate_assistant_id
+            persona = persona = create_temporary_persona(
+                db_session=db_session,
+                persona_config=new_msg_req.persona_override_config,
+                user=user,
+            )
         else:
             persona = chat_session.persona
 
+        if not persona:
+            raise RuntimeError("No persona specified or found for chat session")
+
+        # If a prompt override is specified via the API, use that with highest priority
+        # but for saving it, we are just mapping it to an existing prompt
         prompt_id = new_msg_req.prompt_id
         if prompt_id is None and persona.prompts:
             prompt_id = sorted(persona.prompts, key=lambda x: x.id)[-1].id
@@ -555,19 +580,34 @@ def stream_chat_message_objects(
             reserved_message_id=reserved_message_id,
         )
 
-        if not final_msg.prompt:
-            raise RuntimeError("No Prompt found")
-
-        prompt_config = (
-            PromptConfig.from_model(
-                final_msg.prompt,
-                prompt_override=(
-                    new_msg_req.prompt_override or chat_session.prompt_override
-                ),
+        prompt_override = new_msg_req.prompt_override or chat_session.prompt_override
+        if new_msg_req.persona_override_config:
+            prompt_config = PromptConfig(
+                system_prompt=new_msg_req.persona_override_config.prompts[
+                    0
+                ].system_prompt,
+                task_prompt=new_msg_req.persona_override_config.prompts[0].task_prompt,
+                datetime_aware=new_msg_req.persona_override_config.prompts[
+                    0
+                ].datetime_aware,
+                include_citations=new_msg_req.persona_override_config.prompts[
+                    0
+                ].include_citations,
             )
-            if not persona
-            else PromptConfig.from_model(persona.prompts[0])
-        )
+        elif prompt_override:
+            if not final_msg.prompt:
+                raise ValueError(
+                    "Prompt override cannot be applied, no base prompt found."
+                )
+            prompt_config = PromptConfig.from_model(
+                final_msg.prompt,
+                prompt_override=prompt_override,
+            )
+        elif final_msg.prompt:
+            prompt_config = PromptConfig.from_model(final_msg.prompt)
+        else:
+            prompt_config = PromptConfig.from_model(persona.prompts[0])
+
         answer_style_config = AnswerStyleConfig(
             citation_config=CitationConfig(
                 all_docs_useful=selected_db_search_docs is not None
@@ -587,11 +627,13 @@ def stream_chat_message_objects(
                 answer_style_config=answer_style_config,
                 document_pruning_config=document_pruning_config,
                 retrieval_options=retrieval_options or RetrievalDetails(),
+                rerank_settings=new_msg_req.rerank_settings,
                 selected_sections=selected_sections,
                 chunks_above=new_msg_req.chunks_above,
                 chunks_below=new_msg_req.chunks_below,
                 full_doc=new_msg_req.full_doc,
                 latest_query_files=latest_query_files,
+                bypass_acl=bypass_acl,
             ),
             internet_search_tool_config=InternetSearchToolConfig(
                 answer_style_config=answer_style_config,
@@ -605,6 +647,7 @@ def stream_chat_message_objects(
                 additional_headers=custom_tool_additional_headers,
             ),
         )
+
         tools: list[Tool] = []
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
@@ -637,7 +680,8 @@ def stream_chat_message_objects(
 
         reference_db_search_docs = None
         qa_docs_response = None
-        ai_message_files = None  # any files to associate with the AI message e.g. dall-e generated images
+        # any files to associate with the AI message e.g. dall-e generated images
+        ai_message_files = []
         dropped_indices = None
         tool_result = None
 
@@ -692,8 +736,14 @@ def stream_chat_message_objects(
                         list[ImageGenerationResponse], packet.response
                     )
 
-                    file_ids = save_files_from_urls(
-                        [img.url for img in img_generation_response]
+                    file_ids = save_files(
+                        urls=[img.url for img in img_generation_response if img.url],
+                        base64_files=[
+                            img.image_data
+                            for img in img_generation_response
+                            if img.image_data
+                        ],
+                        tenant_id=tenant_id,
                     )
                     ai_message_files = [
                         FileDescriptor(id=str(file_id), type=ChatFileType.IMAGE)
@@ -719,15 +769,19 @@ def stream_chat_message_objects(
                         or custom_tool_response.response_type == "csv"
                     ):
                         file_ids = custom_tool_response.tool_result.file_ids
-                        ai_message_files = [
-                            FileDescriptor(
-                                id=str(file_id),
-                                type=ChatFileType.IMAGE
-                                if custom_tool_response.response_type == "image"
-                                else ChatFileType.CSV,
-                            )
-                            for file_id in file_ids
-                        ]
+                        ai_message_files.extend(
+                            [
+                                FileDescriptor(
+                                    id=str(file_id),
+                                    type=(
+                                        ChatFileType.IMAGE
+                                        if custom_tool_response.response_type == "image"
+                                        else ChatFileType.CSV
+                                    ),
+                                )
+                                for file_id in file_ids
+                            ]
+                        )
                         yield FileChatDisplay(
                             file_ids=[str(file_id) for file_id in file_ids]
                         )
@@ -736,6 +790,8 @@ def stream_chat_message_objects(
                             response=custom_tool_response.tool_result,
                             tool_name=custom_tool_response.tool_name,
                         )
+                elif packet.id == SEARCH_DOC_CONTENT_ID and include_contexts:
+                    yield cast(DanswerContexts, packet.response)
 
             elif isinstance(packet, StreamStopInfo):
                 pass
@@ -775,7 +831,8 @@ def stream_chat_message_objects(
                 citations_list=answer.citations,
                 db_docs=reference_db_search_docs,
             )
-            yield AllCitations(citations=answer.citations)
+            if not answer.is_cancelled():
+                yield AllCitations(citations=answer.citations)
 
         # Saving Gen AI answer and responding with message info
         tool_name_to_tool_id: dict[str, int] = {}
@@ -844,3 +901,30 @@ def stream_chat_message(
         )
         for obj in objects:
             yield get_json_line(obj.model_dump())
+
+
+@log_function_time()
+def gather_stream_for_slack(
+    packets: ChatPacketStream,
+) -> ChatDanswerBotResponse:
+    response = ChatDanswerBotResponse()
+
+    answer = ""
+    for packet in packets:
+        if isinstance(packet, DanswerAnswerPiece) and packet.answer_piece:
+            answer += packet.answer_piece
+        elif isinstance(packet, QADocsResponse):
+            response.docs = packet
+        elif isinstance(packet, StreamingError):
+            response.error_msg = packet.error
+        elif isinstance(packet, ChatMessageDetail):
+            response.chat_message_id = packet.message_id
+        elif isinstance(packet, LLMRelevanceFilterResponse):
+            response.llm_selected_doc_indices = packet.llm_selected_doc_indices
+        elif isinstance(packet, AllCitations):
+            response.citations = packet.citations
+
+    if answer:
+        response.answer = answer
+
+    return response

@@ -1,14 +1,11 @@
-import io
+import copy
 import json
 from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Any
 from typing import cast
-from typing import TYPE_CHECKING
-from typing import Union
 
 import litellm  # type: ignore
-import pandas as pd
 import tiktoken
 from langchain.prompts.base import StringPromptValue
 from langchain.prompts.chat import ChatPromptValue
@@ -35,16 +32,14 @@ from danswer.configs.constants import MessageType
 from danswer.configs.model_configs import GEN_AI_MAX_TOKENS
 from danswer.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from danswer.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
-from danswer.db.models import ChatMessage
 from danswer.file_store.models import ChatFileType
 from danswer.file_store.models import InMemoryChatFile
 from danswer.llm.interfaces import LLM
 from danswer.prompts.constants import CODE_BLOCK_PAT
+from danswer.utils.b64 import get_image_type
+from danswer.utils.b64 import get_image_type_from_bytes
 from danswer.utils.logger import setup_logger
 from shared_configs.configs import LOG_LEVEL
-
-if TYPE_CHECKING:
-    from danswer.llm.answering.models import PreviousMessage
 
 logger = setup_logger()
 
@@ -103,92 +98,39 @@ def litellm_exception_to_error_msg(
     return error_msg
 
 
-def translate_danswer_msg_to_langchain(
-    msg: Union[ChatMessage, "PreviousMessage"],
-) -> BaseMessage:
-    files: list[InMemoryChatFile] = []
-
-    # If the message is a `ChatMessage`, it doesn't have the downloaded files
-    # attached. Just ignore them for now.
-    if not isinstance(msg, ChatMessage):
-        files = msg.files
-    content = build_content_with_imgs(msg.message, files, message_type=msg.message_type)
-
-    if msg.message_type == MessageType.SYSTEM:
-        raise ValueError("System messages are not currently part of history")
-    if msg.message_type == MessageType.ASSISTANT:
-        return AIMessage(content=content)
-    if msg.message_type == MessageType.USER:
-        return HumanMessage(content=content)
-
-    raise ValueError(f"New message type {msg.message_type} not handled")
-
-
-def translate_history_to_basemessages(
-    history: list[ChatMessage] | list["PreviousMessage"],
-) -> tuple[list[BaseMessage], list[int]]:
-    history_basemessages = [
-        translate_danswer_msg_to_langchain(msg)
-        for msg in history
-        if msg.token_count != 0
-    ]
-    history_token_counts = [msg.token_count for msg in history if msg.token_count != 0]
-    return history_basemessages, history_token_counts
-
-
-#  Processes CSV files to show the first 5 rows and max_columns (default 40) columns
-def _process_csv_file(file: InMemoryChatFile, max_columns: int = 40) -> str:
-    df = pd.read_csv(io.StringIO(file.content.decode("utf-8")))
-
-    csv_preview = df.head().to_string(max_cols=max_columns)
-
-    file_name_section = (
-        f"CSV FILE NAME: {file.filename}\n"
-        if file.filename
-        else "CSV FILE (NO NAME PROVIDED):\n"
-    )
-    return f"{file_name_section}{CODE_BLOCK_PAT.format(csv_preview)}\n\n\n"
-
-
 def _build_content(
     message: str,
     files: list[InMemoryChatFile] | None = None,
 ) -> str:
     """Applies all non-image files."""
-    text_files = (
-        [file for file in files if file.file_type == ChatFileType.PLAIN_TEXT]
-        if files
-        else None
-    )
+    if not files:
+        return message
 
-    csv_files = (
-        [file for file in files if file.file_type == ChatFileType.CSV]
-        if files
-        else None
-    )
+    text_files = [
+        file
+        for file in files
+        if file.file_type in (ChatFileType.PLAIN_TEXT, ChatFileType.CSV)
+    ]
 
-    if not text_files and not csv_files:
+    if not text_files:
         return message
 
     final_message_with_files = "FILES:\n\n"
-    for file in text_files or []:
+    for file in text_files:
         file_content = file.content.decode("utf-8")
         file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""
         final_message_with_files += (
             f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
         )
-    for file in csv_files or []:
-        final_message_with_files += _process_csv_file(file)
 
-    final_message_with_files += message
-
-    return final_message_with_files
+    return final_message_with_files + message
 
 
 def build_content_with_imgs(
     message: str,
     files: list[InMemoryChatFile] | None = None,
     img_urls: list[str] | None = None,
+    b64_imgs: list[str] | None = None,
     message_type: MessageType = MessageType.USER,
 ) -> str | list[str | dict[str, Any]]:  # matching Langchain's BaseMessage content type
     files = files or []
@@ -201,6 +143,7 @@ def build_content_with_imgs(
     )
 
     img_urls = img_urls or []
+    b64_imgs = b64_imgs or []
 
     message_main_content = _build_content(message, files)
 
@@ -219,11 +162,22 @@ def build_content_with_imgs(
             {
                 "type": "image_url",
                 "image_url": {
-                    "url": f"data:image/jpeg;base64,{file.to_base64()}",
+                    "url": (
+                        f"data:{get_image_type_from_bytes(file.content)};"
+                        f"base64,{file.to_base64()}"
+                    ),
                 },
             }
-            for file in files
-            if file.file_type == "image"
+            for file in img_files
+        ]
+        + [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{get_image_type(b64_img)};base64,{b64_img}",
+                },
+            }
+            for b64_img in b64_imgs
         ]
         + [
             {
@@ -385,6 +339,62 @@ def test_llm(llm: LLM) -> str | None:
     return error_msg
 
 
+def get_model_map() -> dict:
+    starting_map = copy.deepcopy(cast(dict, litellm.model_cost))
+
+    # NOTE: we could add additional models here in the future,
+    # but for now there is no point. Ollama allows the user to
+    # to specify their desired max context window, and it's
+    # unlikely to be standard across users even for the same model
+    # (it heavily depends on their hardware). For now, we'll just
+    # rely on GEN_AI_MODEL_FALLBACK_MAX_TOKENS to cover this.
+    # for model_name in [
+    #     "llama3.2",
+    #     "llama3.2:1b",
+    #     "llama3.2:3b",
+    #     "llama3.2:11b",
+    #     "llama3.2:90b",
+    # ]:
+    #     starting_map[f"ollama/{model_name}"] = {
+    #         "max_tokens": 128000,
+    #         "max_input_tokens": 128000,
+    #         "max_output_tokens": 128000,
+    #     }
+
+    return starting_map
+
+
+def _strip_extra_provider_from_model_name(model_name: str) -> str:
+    return model_name.split("/")[1] if "/" in model_name else model_name
+
+
+def _strip_colon_from_model_name(model_name: str) -> str:
+    return ":".join(model_name.split(":")[:-1]) if ":" in model_name else model_name
+
+
+def _find_model_obj(
+    model_map: dict, provider: str, model_names: list[str | None]
+) -> dict | None:
+    # Filter out None values and deduplicate model names
+    filtered_model_names = [name for name in model_names if name]
+
+    # First try all model names with provider prefix
+    for model_name in filtered_model_names:
+        model_obj = model_map.get(f"{provider}/{model_name}")
+        if model_obj:
+            logger.debug(f"Using model object for {provider}/{model_name}")
+            return model_obj
+
+    # Then try all model names without provider prefix
+    for model_name in filtered_model_names:
+        model_obj = model_map.get(model_name)
+        if model_obj:
+            logger.debug(f"Using model object for {model_name}")
+            return model_obj
+
+    return None
+
+
 def get_llm_max_tokens(
     model_map: dict,
     model_name: str,
@@ -404,22 +414,22 @@ def get_llm_max_tokens(
         return GEN_AI_MAX_TOKENS
 
     try:
-        model_obj = model_map.get(f"{model_provider}/{model_name}")
-        if model_obj:
-            logger.debug(f"Using model object for {model_provider}/{model_name}")
-
-        if not model_obj:
-            model_obj = model_map.get(model_name)
-            if model_obj:
-                logger.debug(f"Using model object for {model_name}")
-
-        if not model_obj:
-            model_name_split = model_name.split("/")
-            if len(model_name_split) > 1:
-                model_obj = model_map.get(model_name_split[1])
-            if model_obj:
-                logger.debug(f"Using model object for {model_name_split[1]}")
-
+        extra_provider_stripped_model_name = _strip_extra_provider_from_model_name(
+            model_name
+        )
+        model_obj = _find_model_obj(
+            model_map,
+            model_provider,
+            [
+                model_name,
+                # Remove leading extra provider. Usually for cases where user has a
+                # customer model proxy which appends another prefix
+                extra_provider_stripped_model_name,
+                # remove :XXXX from the end, if present. Needed for ollama.
+                _strip_colon_from_model_name(model_name),
+                _strip_colon_from_model_name(extra_provider_stripped_model_name),
+            ],
+        )
         if not model_obj:
             raise RuntimeError(
                 f"No litellm entry found for {model_provider}/{model_name}"
@@ -495,7 +505,7 @@ def get_max_input_tokens(
     # `model_cost` dict is a named public interface:
     # https://litellm.vercel.app/docs/completion/token_usage#7-model_cost
     # model_map is  litellm.model_cost
-    litellm_model_map = litellm.model_cost
+    litellm_model_map = get_model_map()
 
     input_toks = (
         get_llm_max_tokens(

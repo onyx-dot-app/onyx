@@ -10,6 +10,9 @@ from danswer.access.utils import prefix_group_w_source
 from danswer.configs.constants import DocumentSource
 from danswer.db.models import User__ExternalUserGroupId
 from danswer.db.users import batch_add_ext_perm_user_if_not_exists
+from danswer.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class ExternalUserGroup(BaseModel):
@@ -73,7 +76,13 @@ def replace_user__ext_group_for_cc_pair(
     new_external_permissions = []
     for external_group in group_defs:
         for user_email in external_group.user_emails:
-            user_id = email_id_map[user_email]
+            user_id = email_id_map.get(user_email.lower())
+            if user_id is None:
+                logger.warning(
+                    f"User in group {external_group.id}"
+                    f" with email {user_email} not found"
+                )
+                continue
             new_external_permissions.append(
                 User__ExternalUserGroupId(
                     user_id=user_id,

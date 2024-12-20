@@ -13,7 +13,6 @@ from danswer.configs.app_configs import WEB_DOMAIN
 from danswer.configs.constants import AuthType
 from danswer.main import get_application as get_application_base
 from danswer.main import include_router_with_global_prefix_prepended
-from danswer.server.api_key.api import router as api_key_router
 from danswer.utils.logger import setup_logger
 from danswer.utils.variable_functionality import global_version
 from ee.danswer.configs.app_configs import OPENID_CONFIG_URL
@@ -27,6 +26,7 @@ from ee.danswer.server.enterprise_settings.api import (
 )
 from ee.danswer.server.manage.standard_answer import router as standard_answer_router
 from ee.danswer.server.middleware.tenant_tracking import add_tenant_id_middleware
+from ee.danswer.server.oauth import router as oauth_router
 from ee.danswer.server.query_and_chat.chat_backend import (
     router as chat_router,
 )
@@ -116,12 +116,12 @@ def get_application() -> FastAPI:
     # Analytics endpoints
     include_router_with_global_prefix_prepended(application, analytics_router)
     include_router_with_global_prefix_prepended(application, query_history_router)
-    # Api key management
-    include_router_with_global_prefix_prepended(application, api_key_router)
     # EE only backend APIs
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, chat_router)
     include_router_with_global_prefix_prepended(application, standard_answer_router)
+    include_router_with_global_prefix_prepended(application, oauth_router)
+
     # Enterprise-only global settings
     include_router_with_global_prefix_prepended(
         application, enterprise_settings_admin_router

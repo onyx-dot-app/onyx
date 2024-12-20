@@ -1,12 +1,12 @@
 import { TextFormField } from "@/components/admin/connectors/Field";
-import { ValidAutoSyncSources } from "@/lib/types";
+import { ValidAutoSyncSource } from "@/lib/types";
 import { Separator } from "@/components/ui/separator";
 import { autoSyncConfigBySource } from "@/lib/connectors/AutoSyncOptionFields";
 
 export function AutoSyncOptions({
   connectorType,
 }: {
-  connectorType: ValidAutoSyncSources;
+  connectorType: ValidAutoSyncSource;
 }) {
   const autoSyncConfig = autoSyncConfigBySource[connectorType];
 

@@ -31,6 +31,8 @@ DISABLED_GEN_AI_MSG = (
     "You can still use Danswer as a search engine."
 )
 
+DEFAULT_PERSONA_ID = 0
+
 # Postgres connection constants for application_name
 POSTGRES_WEB_APP_NAME = "web"
 POSTGRES_INDEXER_APP_NAME = "indexer"
@@ -130,6 +132,7 @@ class DocumentSource(str, Enum):
     NOT_APPLICABLE = "not_applicable"
     FRESHDESK = "freshdesk"
     FIREFLIES = "fireflies"
+    EGNYTE = "egnyte"
 
 
 DocumentSourceRequiringTenantContext: list[DocumentSource] = [DocumentSource.FILE]
@@ -257,6 +260,32 @@ class DanswerCeleryPriority(int, Enum):
     MEDIUM = auto()
     LOW = auto()
     LOWEST = auto()
+
+
+class DanswerCeleryTask:
+    CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
+    CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
+    CHECK_FOR_INDEXING = "check_for_indexing"
+    CHECK_FOR_PRUNING = "check_for_pruning"
+    CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
+    CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
+    MONITOR_VESPA_SYNC = "monitor_vespa_sync"
+    KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
+    CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
+        "connector_permission_sync_generator_task"
+    )
+    UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK = (
+        "update_external_document_permissions_task"
+    )
+    CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK = (
+        "connector_external_group_sync_generator_task"
+    )
+    CONNECTOR_INDEXING_PROXY_TASK = "connector_indexing_proxy_task"
+    CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
+    DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
+    VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
+    CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
+    AUTOGENERATE_USAGE_REPORT_TASK = "autogenerate_usage_report_task"
 
 
 REDIS_SOCKET_KEEPALIVE_OPTIONS = {}

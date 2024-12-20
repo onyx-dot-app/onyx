@@ -8,8 +8,6 @@ from danswer.context.search.models import RetrievalDetails
 from danswer.file_store.models import FileDescriptor
 from danswer.llm.override_models import LLMOverride
 from danswer.llm.override_models import PromptOverride
-from danswer.one_shot_answer.models import DirectQARequest
-from danswer.one_shot_answer.models import ThreadMessage
 from danswer.server.query_and_chat.models import ChatSessionCreationRequest
 from danswer.server.query_and_chat.models import CreateChatMessageRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -68,6 +66,7 @@ class ChatSessionManager:
             prompt_id=prompt_id,
             search_doc_ids=search_doc_ids or [],
             retrieval_options=retrieval_options,
+            rerank_settings=None,  # Can be added if needed
             query_override=query_override,
             regenerate=regenerate,
             llm_override=llm_override,
@@ -84,30 +83,6 @@ class ChatSessionManager:
             else GENERAL_HEADERS,
             stream=True,
         )
-
-        return ChatSessionManager.analyze_response(response)
-
-    @staticmethod
-    def get_answer_with_quote(
-        persona_id: int,
-        message: str,
-        user_performing_action: DATestUser | None = None,
-    ) -> StreamedResponse:
-        direct_qa_request = DirectQARequest(
-            messages=[ThreadMessage(message=message)],
-            prompt_id=None,
-            persona_id=persona_id,
-        )
-
-        response = requests.post(
-            f"{API_SERVER_URL}/query/stream-answer-with-quote",
-            json=direct_qa_request.model_dump(),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
-            stream=True,
-        )
-        response.raise_for_status()
 
         return ChatSessionManager.analyze_response(response)
 

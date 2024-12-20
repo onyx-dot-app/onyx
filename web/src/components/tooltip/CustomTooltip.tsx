@@ -131,7 +131,7 @@ export const CustomTooltip = ({
             transform -translate-x-1/2 text-sm 
             ${
               light
-                ? "text-gray-800 bg-background-200"
+                ? "text-text-800 bg-background-200"
                 : "text-white bg-background-800"
             } 
             rounded-lg shadow-lg`}

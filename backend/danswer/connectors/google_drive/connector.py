@@ -4,11 +4,13 @@ from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Any
+from typing import cast
 
 from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
 
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
+from danswer.configs.app_configs import MAX_FILE_SIZE_BYTES
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.google_drive.doc_conversion import build_slim_document
 from danswer.connectors.google_drive.doc_conversion import (
@@ -452,11 +454,13 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             if isinstance(self.creds, ServiceAccountCredentials)
             else self._manage_oauth_retrieval
         )
-        return retrieval_method(
+        drive_files = retrieval_method(
             is_slim=is_slim,
             start=start,
             end=end,
         )
+
+        return drive_files
 
     def _extract_docs_from_google_drive(
         self,
@@ -473,6 +477,15 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
         files_to_process = []
         # Gather the files into batches to be processed in parallel
         for file in self._fetch_drive_items(is_slim=False, start=start, end=end):
+            if (
+                file.get("size")
+                and int(cast(str, file.get("size"))) > MAX_FILE_SIZE_BYTES
+            ):
+                logger.warning(
+                    f"Skipping file {file.get('name', 'Unknown')} as it is too large: {file.get('size')} bytes"
+                )
+                continue
+
             files_to_process.append(file)
             if len(files_to_process) >= LARGE_BATCH_SIZE:
                 yield from _process_files_batch(

@@ -55,9 +55,10 @@ def upsert_document_external_perms(
     doc_id: str,
     external_access: ExternalAccess,
     source_type: DocumentSource,
-) -> None:
+) -> bool:
     """
-    This sets the permissions for a document in postgres.
+    This sets the permissions for a document in postgres. Returns True if the
+    a new document was created, False otherwise.
     NOTE: this will replace any existing external access, it will not do a union
     """
     document = db_session.scalars(
@@ -85,7 +86,7 @@ def upsert_document_external_perms(
         )
         db_session.add(document)
         db_session.commit()
-        return
+        return True
 
     # If the document exists, we need to check if the external access has changed
     if (
@@ -98,3 +99,5 @@ def upsert_document_external_perms(
         document.is_public = external_access.is_public
         document.last_modified = datetime.now(timezone.utc)
         db_session.commit()
+
+    return False

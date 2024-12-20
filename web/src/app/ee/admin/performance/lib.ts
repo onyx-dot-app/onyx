@@ -97,3 +97,69 @@ export function getDatesList(startDate: Date): string[] {
 
   return datesList;
 }
+
+export interface PersonaMessageAnalytics {
+  total_messages: number;
+  date: string;
+  persona_id: number;
+}
+
+export interface PersonaSnapshot {
+  id: number;
+  name: string;
+  description: string;
+  is_visible: boolean;
+  is_public: boolean;
+}
+
+export const usePersonaMessages = (
+  personaId: number | undefined,
+  timeRange: DateRangePickerValue
+) => {
+  const url = buildApiPath(`/api/analytics/admin/persona/messages`, {
+    persona_id: personaId?.toString(),
+    start: convertDateToStartOfDay(timeRange.from)?.toISOString(),
+    end: convertDateToEndOfDay(timeRange.to)?.toISOString(),
+  });
+
+  const { data, error, isLoading } = useSWR<PersonaMessageAnalytics[]>(
+    personaId !== undefined ? url : null,
+    errorHandlingFetcher
+  );
+
+  return {
+    data,
+    error,
+    isLoading,
+    refreshPersonaMessages: () => mutate(url),
+  };
+};
+
+export interface PersonaUniqueUserAnalytics {
+  unique_users: number;
+  date: string;
+  persona_id: number;
+}
+
+export const usePersonaUniqueUsers = (
+  personaId: number | undefined,
+  timeRange: DateRangePickerValue
+) => {
+  const url = buildApiPath(`/api/analytics/admin/persona/unique-users`, {
+    persona_id: personaId?.toString(),
+    start: convertDateToStartOfDay(timeRange.from)?.toISOString(),
+    end: convertDateToEndOfDay(timeRange.to)?.toISOString(),
+  });
+
+  const { data, error, isLoading } = useSWR<PersonaUniqueUserAnalytics[]>(
+    personaId !== undefined ? url : null,
+    errorHandlingFetcher
+  );
+
+  return {
+    data,
+    error,
+    isLoading,
+    refreshPersonaUniqueUsers: () => mutate(url),
+  };
+};

@@ -8,6 +8,7 @@ from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 from redis import Redis
+from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from danswer.background.celery.apps.app_base import task_logger
@@ -20,6 +21,7 @@ from danswer.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from danswer.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
 from danswer.configs.constants import DanswerCeleryPriority
 from danswer.configs.constants import DanswerCeleryQueues
+from danswer.configs.constants import DanswerCeleryTask
 from danswer.configs.constants import DanswerRedisLocks
 from danswer.connectors.factory import instantiate_connector
 from danswer.connectors.models import InputType
@@ -75,7 +77,7 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
 
 
 @shared_task(
-    name="check_for_pruning",
+    name=DanswerCeleryTask.CHECK_FOR_PRUNING,
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )
@@ -184,7 +186,7 @@ def try_creating_prune_generator_task(
         custom_task_id = f"{redis_connector.prune.generator_task_key}_{uuid4()}"
 
         celery_app.send_task(
-            "connector_pruning_generator_task",
+            DanswerCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
             kwargs=dict(
                 cc_pair_id=cc_pair.id,
                 connector_id=cc_pair.connector_id,
@@ -209,7 +211,7 @@ def try_creating_prune_generator_task(
 
 
 @shared_task(
-    name="connector_pruning_generator_task",
+    name=DanswerCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
     acks_late=False,
     soft_time_limit=JOB_TIMEOUT,
     track_started=True,
@@ -238,9 +240,12 @@ def connector_pruning_generator_task(
 
     r = get_redis_client(tenant_id=tenant_id)
 
-    lock = r.lock(
+    # set thread_local=False since we don't control what thread the indexing/pruning
+    # might run our callback with
+    lock: RedisLock = r.lock(
         DanswerRedisLocks.PRUNING_LOCK_PREFIX + f"_{redis_connector.id}",
         timeout=CELERY_PRUNING_LOCK_TIMEOUT,
+        thread_local=False,
     )
 
     acquired = lock.acquire(blocking=False)

@@ -43,9 +43,6 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 AUTH_TYPE = AuthType((os.environ.get("AUTH_TYPE") or AuthType.DISABLED.value).lower())
 DISABLE_AUTH = AUTH_TYPE == AuthType.DISABLED
 
-# Necessary for cloud integration tests
-DISABLE_VERIFICATION = os.environ.get("DISABLE_VERIFICATION", "").lower() == "true"
-
 # Encryption key secret is used to encrypt connector credentials, api keys, and other sensitive
 # information. This provides an extra layer of security on top of Postgres access controls
 # and is available in Danswer EE
@@ -84,7 +81,14 @@ OAUTH_CLIENT_SECRET = (
     or ""
 )
 
+# for future OAuth connector support
+# OAUTH_CONFLUENCE_CLIENT_ID = os.environ.get("OAUTH_CONFLUENCE_CLIENT_ID", "")
+# OAUTH_CONFLUENCE_CLIENT_SECRET = os.environ.get("OAUTH_CONFLUENCE_CLIENT_SECRET", "")
+# OAUTH_JIRA_CLIENT_ID = os.environ.get("OAUTH_JIRA_CLIENT_ID", "")
+# OAUTH_JIRA_CLIENT_SECRET = os.environ.get("OAUTH_JIRA_CLIENT_SECRET", "")
+
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
+
 # for basic auth
 REQUIRE_EMAIL_VERIFICATION = (
     os.environ.get("REQUIRE_EMAIL_VERIFICATION", "").lower() == "true"
@@ -118,6 +122,8 @@ VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
 VESPA_CONFIG_SERVER_HOST = os.environ.get("VESPA_CONFIG_SERVER_HOST") or VESPA_HOST
 VESPA_PORT = os.environ.get("VESPA_PORT") or "8081"
 VESPA_TENANT_PORT = os.environ.get("VESPA_TENANT_PORT") or "19071"
+# the number of times to try and connect to vespa on startup before giving up
+VESPA_NUM_ATTEMPTS_ON_STARTUP = int(os.environ.get("NUM_RETRIES_ON_STARTUP") or 10)
 
 VESPA_CLOUD_URL = os.environ.get("VESPA_CLOUD_URL", "")
 
@@ -308,6 +314,22 @@ CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD = int(
     os.environ.get("CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD", 200_000)
 )
 
+# Due to breakages in the confluence API, the timezone offset must be specified client side
+# to match the user's specified timezone.
+
+# The current state of affairs:
+# CQL queries are parsed in the user's timezone and cannot be specified in UTC
+# no API retrieves the user's timezone
+# All data is returned in UTC, so we can't derive the user's timezone from that
+
+# https://community.developer.atlassian.com/t/confluence-cloud-time-zone-get-via-rest-api/35954/16
+# https://jira.atlassian.com/browse/CONFCLOUD-69670
+
+# enter as a floating point offset from UTC in hours (-24 < val < 24)
+# this will be applied globally, so it probably makes sense to transition this to per
+# connector as some point.
+CONFLUENCE_TIMEZONE_OFFSET = float(os.environ.get("CONFLUENCE_TIMEZONE_OFFSET", 0.0))
+
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
     for ignored_tag in os.environ.get("JIRA_CONNECTOR_LABELS_TO_SKIP", "").split(",")
@@ -325,6 +347,12 @@ GITHUB_CONNECTOR_BASE_URL = os.environ.get("GITHUB_CONNECTOR_BASE_URL") or None
 GITLAB_CONNECTOR_INCLUDE_CODE_FILES = (
     os.environ.get("GITLAB_CONNECTOR_INCLUDE_CODE_FILES", "").lower() == "true"
 )
+
+# Egnyte specific configs
+EGNYTE_LOCALHOST_OVERRIDE = os.getenv("EGNYTE_LOCALHOST_OVERRIDE")
+EGNYTE_BASE_DOMAIN = os.getenv("EGNYTE_DOMAIN")
+EGNYTE_CLIENT_ID = os.getenv("EGNYTE_CLIENT_ID")
+EGNYTE_CLIENT_SECRET = os.getenv("EGNYTE_CLIENT_SECRET")
 
 DASK_JOB_CLIENT_ENABLED = (
     os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"
@@ -389,21 +417,28 @@ LARGE_CHUNK_RATIO = 4
 # We don't want the metadata to overwhelm the actual contents of the chunk
 SKIP_METADATA_IN_CHUNK = os.environ.get("SKIP_METADATA_IN_CHUNK", "").lower() == "true"
 # Timeout to wait for job's last update before killing it, in hours
-CLEANUP_INDEXING_JOBS_TIMEOUT = int(os.environ.get("CLEANUP_INDEXING_JOBS_TIMEOUT", 3))
+CLEANUP_INDEXING_JOBS_TIMEOUT = int(
+    os.environ.get("CLEANUP_INDEXING_JOBS_TIMEOUT") or 3
+)
 
 # The indexer will warn in the logs whenver a document exceeds this threshold (in bytes)
 INDEXING_SIZE_WARNING_THRESHOLD = int(
-    os.environ.get("INDEXING_SIZE_WARNING_THRESHOLD", 100 * 1024 * 1024)
+    os.environ.get("INDEXING_SIZE_WARNING_THRESHOLD") or 100 * 1024 * 1024
 )
 
 # during indexing, will log verbose memory diff stats every x batches and at the end.
 # 0 disables this behavior and is the default.
-INDEXING_TRACER_INTERVAL = int(os.environ.get("INDEXING_TRACER_INTERVAL", 0))
+INDEXING_TRACER_INTERVAL = int(os.environ.get("INDEXING_TRACER_INTERVAL") or 0)
 
 # During an indexing attempt, specifies the number of batches which are allowed to
 # exception without aborting the attempt.
-INDEXING_EXCEPTION_LIMIT = int(os.environ.get("INDEXING_EXCEPTION_LIMIT", 0))
+INDEXING_EXCEPTION_LIMIT = int(os.environ.get("INDEXING_EXCEPTION_LIMIT") or 0)
 
+# Maximum file size in a document to be indexed
+MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
+MAX_FILE_SIZE_BYTES = int(
+    os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
+)  # 2GB in bytes
 
 #####
 # Miscellaneous
@@ -493,10 +528,6 @@ CONTROL_PLANE_API_BASE_URL = os.environ.get(
 # JWT configuration
 JWT_ALGORITHM = "HS256"
 
-# Super Users
-SUPER_USERS = json.loads(os.environ.get("SUPER_USERS", '["pablo@danswer.ai"]'))
-SUPER_CLOUD_API_KEY = os.environ.get("SUPER_CLOUD_API_KEY", "api_key")
-
 
 #####
 # API Key Configs
@@ -510,3 +541,6 @@ API_KEY_HASH_ROUNDS = (
 
 POD_NAME = os.environ.get("POD_NAME")
 POD_NAMESPACE = os.environ.get("POD_NAMESPACE")
+
+
+DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"

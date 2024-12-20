@@ -364,6 +364,11 @@ class RunConnectorRequest(BaseModel):
     from_beginning: bool = False
 
 
+class CCPropertyUpdateRequest(BaseModel):
+    name: str
+    value: str
+
+
 """Connectors Models"""
 
 

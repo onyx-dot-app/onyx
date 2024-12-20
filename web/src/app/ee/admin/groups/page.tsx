@@ -35,10 +35,7 @@ const Main = () => {
     error: usersError,
   } = useUsers();
 
-  const { isLoadingUser, isAdmin } = useUser();
-  if (isLoadingUser) {
-    return <></>;
-  }
+  const { isAdmin } = useUser();
 
   if (isLoading || isCCPairsLoading || userIsLoading) {
     return <ThreeDotsLoader />;

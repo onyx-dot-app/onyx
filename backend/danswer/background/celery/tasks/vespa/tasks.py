@@ -25,6 +25,7 @@ from danswer.background.celery.tasks.shared.tasks import LIGHT_TIME_LIMIT
 from danswer.configs.app_configs import JOB_TIMEOUT
 from danswer.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from danswer.configs.constants import DanswerCeleryQueues
+from danswer.configs.constants import DanswerCeleryTask
 from danswer.configs.constants import DanswerRedisLocks
 from danswer.db.connector import fetch_connector_by_id
 from danswer.db.connector import mark_cc_pair_as_permissions_synced
@@ -46,6 +47,7 @@ from danswer.db.document_set import fetch_document_sets_for_document
 from danswer.db.document_set import get_document_set_by_id
 from danswer.db.document_set import mark_document_set_as_synced
 from danswer.db.engine import get_session_with_tenant
+from danswer.db.enums import IndexingStatus
 from danswer.db.index_attempt import delete_index_attempts
 from danswer.db.index_attempt import get_index_attempt
 from danswer.db.index_attempt import mark_attempt_failed
@@ -58,7 +60,7 @@ from danswer.redis.redis_connector_credential_pair import RedisConnectorCredenti
 from danswer.redis.redis_connector_delete import RedisConnectorDelete
 from danswer.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
 from danswer.redis.redis_connector_doc_perm_sync import (
-    RedisConnectorPermissionSyncData,
+    RedisConnectorPermissionSyncPayload,
 )
 from danswer.redis.redis_connector_index import RedisConnectorIndex
 from danswer.redis.redis_connector_prune import RedisConnectorPrune
@@ -79,7 +81,7 @@ logger = setup_logger()
 # celery auto associates tasks created inside another task,
 # which bloats the result metadata considerably. trail=False prevents this.
 @shared_task(
-    name="check_for_vespa_sync_task",
+    name=DanswerCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
     soft_time_limit=JOB_TIMEOUT,
     trail=False,
     bind=True,
@@ -588,7 +590,7 @@ def monitor_ccpair_permissions_taskset(
     if remaining > 0:
         return
 
-    payload: RedisConnectorPermissionSyncData | None = (
+    payload: RedisConnectorPermissionSyncPayload | None = (
         redis_connector.permissions.payload
     )
     start_time: datetime | None = payload.started if payload else None
@@ -596,9 +598,7 @@ def monitor_ccpair_permissions_taskset(
     mark_cc_pair_as_permissions_synced(db_session, int(cc_pair_id), start_time)
     task_logger.info(f"Successfully synced permissions for cc_pair={cc_pair_id}")
 
-    redis_connector.permissions.taskset_clear()
-    redis_connector.permissions.generator_clear()
-    redis_connector.permissions.set_fence(None)
+    redis_connector.permissions.reset()
 
 
 def monitor_ccpair_indexing_taskset(
@@ -655,33 +655,52 @@ def monitor_ccpair_indexing_taskset(
     # outer = result.state in READY state
     status_int = redis_connector_index.get_completion()
     if status_int is None:  # inner signal not set ... possible error
-        result_state = result.state
+        task_state = result.state
         if (
-            result_state in READY_STATES
+            task_state in READY_STATES
         ):  # outer signal in terminal state ... possible error
             # Now double check!
             if redis_connector_index.get_completion() is None:
                 # inner signal still not set (and cannot change when outer result_state is READY)
                 # Task is finished but generator complete isn't set.
                 # We have a problem! Worker may have crashed.
+                task_result = str(result.result)
+                task_traceback = str(result.traceback)
 
                 msg = (
                     f"Connector indexing aborted or exceptioned: "
                     f"attempt={payload.index_attempt_id} "
                     f"celery_task={payload.celery_task_id} "
-                    f"result_state={result_state} "
                     f"cc_pair={cc_pair_id} "
                     f"search_settings={search_settings_id} "
-                    f"elapsed_submitted={elapsed_submitted.total_seconds():.2f}"
+                    f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
+                    f"result.state={task_state} "
+                    f"result.result={task_result} "
+                    f"result.traceback={task_traceback}"
                 )
                 task_logger.warning(msg)
 
-                index_attempt = get_index_attempt(db_session, payload.index_attempt_id)
-                if index_attempt:
-                    mark_attempt_failed(
-                        index_attempt_id=payload.index_attempt_id,
-                        db_session=db_session,
-                        failure_reason=msg,
+                try:
+                    index_attempt = get_index_attempt(
+                        db_session, payload.index_attempt_id
+                    )
+                    if index_attempt:
+                        if (
+                            index_attempt.status != IndexingStatus.CANCELED
+                            and index_attempt.status != IndexingStatus.FAILED
+                        ):
+                            mark_attempt_failed(
+                                index_attempt_id=payload.index_attempt_id,
+                                db_session=db_session,
+                                failure_reason=msg,
+                            )
+                except Exception:
+                    task_logger.exception(
+                        "monitor_ccpair_indexing_taskset - transient exception marking index attempt as failed: "
+                        f"attempt={payload.index_attempt_id} "
+                        f"tenant={tenant_id} "
+                        f"cc_pair={cc_pair_id} "
+                        f"search_settings={search_settings_id}"
                     )
 
                 redis_connector_index.reset()
@@ -692,6 +711,7 @@ def monitor_ccpair_indexing_taskset(
     task_logger.info(
         f"Connector indexing finished: cc_pair={cc_pair_id} "
         f"search_settings={search_settings_id} "
+        f"progress={progress} "
         f"status={status_enum.name} "
         f"elapsed_submitted={elapsed_submitted.total_seconds():.2f}"
     )
@@ -699,38 +719,8 @@ def monitor_ccpair_indexing_taskset(
     redis_connector_index.reset()
 
 
-# def get_unfenced_index_attempt_ids(db_session: Session, r: redis.Redis) -> list[int]:
-#     """Gets a list of unfenced index attempts. Should not be possible, so we'd typically
-#     want to clean them up.
 
-#     Unfenced = attempt not in terminal state and fence does not exist.
-#     """
-#     unfenced_attempts: list[int] = []
-
-#     # do some cleanup before clearing fences
-#     # check the db for any outstanding index attempts
-#     attempts: list[IndexAttempt] = []
-#     attempts.extend(
-#         get_all_index_attempts_by_status(IndexingStatus.NOT_STARTED, db_session)
-#     )
-#     attempts.extend(
-#         get_all_index_attempts_by_status(IndexingStatus.IN_PROGRESS, db_session)
-#     )
-
-#     for attempt in attempts:
-#         # if attempts exist in the db but we don't detect them in redis, mark them as failed
-#         fence_key = RedisConnectorIndex.fence_key_with_ids(
-#             attempt.connector_credential_pair_id, attempt.search_settings_id
-#         )
-#         if r.exists(fence_key):
-#             continue
-
-#         unfenced_attempts.append(attempt.id)
-
-#     return unfenced_attempts
-
-
-@shared_task(name="monitor_vespa_sync", soft_time_limit=300, bind=True)
+@shared_task(name=DanswerCeleryTask.MONITOR_VESPA_SYNC, soft_time_limit=300, bind=True)
 def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
     """This is a celery beat task that monitors and finalizes metadata sync tasksets.
     It scans for fence values and then gets the counts of any associated tasksets.
@@ -755,7 +745,7 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
 
         # print current queue lengths
         r_celery = self.app.broker_connection().channel().client  # type: ignore
-        n_celery = celery_get_queue_length("celery", r)
+        n_celery = celery_get_queue_length("celery", r_celery)
         n_indexing = celery_get_queue_length(
             DanswerCeleryQueues.CONNECTOR_INDEXING, r_celery
         )
@@ -841,7 +831,7 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
 
 
 @shared_task(
-    name="vespa_metadata_sync_task",
+    name=DanswerCeleryTask.VESPA_METADATA_SYNC_TASK,
     bind=True,
     soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
     time_limit=LIGHT_TIME_LIMIT,

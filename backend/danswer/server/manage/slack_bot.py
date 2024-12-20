@@ -81,6 +81,10 @@ def _form_channel_config(
         channel_config["follow_up_tags"] = follow_up_tags
 
     channel_config[
+        "show_continue_in_web_ui"
+    ] = slack_channel_config_creation_request.show_continue_in_web_ui
+
+    channel_config[
         "respond_to_bots"
     ] = slack_channel_config_creation_request.respond_to_bots
 
@@ -114,7 +118,6 @@ def create_slack_channel_config(
         slack_bot_id=slack_channel_config_creation_request.slack_bot_id,
         persona_id=persona_id,
         channel_config=channel_config,
-        response_type=slack_channel_config_creation_request.response_type,
         standard_answer_category_ids=slack_channel_config_creation_request.standard_answer_categories,
         db_session=db_session,
         enable_auto_filters=slack_channel_config_creation_request.enable_auto_filters,
@@ -178,7 +181,6 @@ def patch_slack_channel_config(
         slack_channel_config_id=slack_channel_config_id,
         persona_id=persona_id,
         channel_config=channel_config,
-        response_type=slack_channel_config_creation_request.response_type,
         standard_answer_category_ids=slack_channel_config_creation_request.standard_answer_categories,
         enable_auto_filters=slack_channel_config_creation_request.enable_auto_filters,
     )

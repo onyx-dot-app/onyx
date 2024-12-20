@@ -195,6 +195,11 @@ export interface FirefliesCredentialJson {
 export interface MediaWikiCredentialJson {}
 export interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
 
+export interface EgnyteCredentialJson {
+  domain: string;
+  access_token: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -298,6 +303,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
   fireflies: {
     fireflies_api_key: "",
   } as FirefliesCredentialJson,
+  egnyte: {
+    domain: "",
+    access_token: "",
+  } as EgnyteCredentialJson,
   xenforo: null,
   google_sites: null,
   file: null,

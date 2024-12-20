@@ -113,10 +113,6 @@ async def refresh_access_token(
 def put_settings(
     settings: EnterpriseSettings, _: User | None = Depends(current_admin_user)
 ) -> None:
-    try:
-        settings.check_validity()
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     store_settings(settings)
 
 

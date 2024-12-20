@@ -13,7 +13,7 @@ from danswer.danswerbot.slack.handlers.handle_standard_answers import (
     handle_standard_answers,
 )
 from danswer.danswerbot.slack.models import SlackMessageInfo
-from danswer.danswerbot.slack.utils import fetch_user_ids_from_emails
+from danswer.danswerbot.slack.utils import fetch_slack_user_ids_from_emails
 from danswer.danswerbot.slack.utils import fetch_user_ids_from_groups
 from danswer.danswerbot.slack.utils import respond_in_thread
 from danswer.danswerbot.slack.utils import slack_usage_report
@@ -184,7 +184,7 @@ def handle_message(
     send_to: list[str] | None = None
     missing_users: list[str] | None = None
     if respond_member_group_list:
-        send_to, missing_ids = fetch_user_ids_from_emails(
+        send_to, missing_ids = fetch_slack_user_ids_from_emails(
             respond_member_group_list, client
         )
 

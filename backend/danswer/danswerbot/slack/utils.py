@@ -3,14 +3,15 @@ import random
 import re
 import string
 import time
+import uuid
 from typing import Any
 from typing import cast
-from typing import Optional
 
 from retry import retry
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.models.blocks import Block
+from slack_sdk.models.blocks import SectionBlock
 from slack_sdk.models.metadata import Metadata
 from slack_sdk.socket_mode import SocketModeClient
 
@@ -30,13 +31,13 @@ from danswer.configs.danswerbot_configs import (
 from danswer.connectors.slack.utils import make_slack_api_rate_limited
 from danswer.connectors.slack.utils import SlackTextCleaner
 from danswer.danswerbot.slack.constants import FeedbackVisibility
+from danswer.danswerbot.slack.models import ThreadMessage
 from danswer.db.engine import get_session_with_tenant
 from danswer.db.users import get_user_by_email
 from danswer.llm.exceptions import GenAIDisabledException
 from danswer.llm.factory import get_default_llms
 from danswer.llm.utils import dict_based_prompt_to_langchain_prompt
 from danswer.llm.utils import message_to_string
-from danswer.one_shot_answer.models import ThreadMessage
 from danswer.prompts.miscellaneous_prompts import SLACK_LANGUAGE_REPHRASE_PROMPT
 from danswer.utils.logger import setup_logger
 from danswer.utils.telemetry import optional_telemetry
@@ -140,6 +141,40 @@ def remove_danswer_bot_tag(message_str: str, client: WebClient) -> str:
     return re.sub(rf"<@{bot_tag_id}>\s", "", message_str)
 
 
+def _check_for_url_in_block(block: Block) -> bool:
+    """
+    Check if the block has a key that contains "url" in it
+    """
+    block_dict = block.to_dict()
+
+    def check_dict_for_url(d: dict) -> bool:
+        for key, value in d.items():
+            if "url" in key.lower():
+                return True
+            if isinstance(value, dict):
+                if check_dict_for_url(value):
+                    return True
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict) and check_dict_for_url(item):
+                        return True
+        return False
+
+    return check_dict_for_url(block_dict)
+
+
+def _build_error_block(error_message: str) -> Block:
+    """
+    Build an error block to display in slack so that the user can see
+    the error without completely breaking
+    """
+    display_text = (
+        "There was an error displaying all of the Onyx answers."
+        f" Please let an admin or an onyx developer know. Error: {error_message}"
+    )
+    return SectionBlock(text=display_text)
+
+
 @retry(
     tries=DANSWER_BOT_NUM_RETRIES,
     delay=0.25,
@@ -162,24 +197,9 @@ def respond_in_thread(
     message_ids: list[str] = []
     if not receiver_ids:
         slack_call = make_slack_api_rate_limited(client.chat_postMessage)
-        response = slack_call(
-            channel=channel,
-            text=text,
-            blocks=blocks,
-            thread_ts=thread_ts,
-            metadata=metadata,
-            unfurl_links=unfurl,
-            unfurl_media=unfurl,
-        )
-        if not response.get("ok"):
-            raise RuntimeError(f"Failed to post message: {response}")
-        message_ids.append(response["message_ts"])
-    else:
-        slack_call = make_slack_api_rate_limited(client.chat_postEphemeral)
-        for receiver in receiver_ids:
+        try:
             response = slack_call(
                 channel=channel,
-                user=receiver,
                 text=text,
                 blocks=blocks,
                 thread_ts=thread_ts,
@@ -187,8 +207,68 @@ def respond_in_thread(
                 unfurl_links=unfurl,
                 unfurl_media=unfurl,
             )
-            if not response.get("ok"):
-                raise RuntimeError(f"Failed to post message: {response}")
+        except Exception as e:
+            logger.warning(f"Failed to post message: {e} \n blocks: {blocks}")
+            logger.warning("Trying again without blocks that have urls")
+
+            if not blocks:
+                raise e
+
+            blocks_without_urls = [
+                block for block in blocks if not _check_for_url_in_block(block)
+            ]
+            blocks_without_urls.append(_build_error_block(str(e)))
+
+            # Try again wtihout blocks containing url
+            response = slack_call(
+                channel=channel,
+                text=text,
+                blocks=blocks_without_urls,
+                thread_ts=thread_ts,
+                metadata=metadata,
+                unfurl_links=unfurl,
+                unfurl_media=unfurl,
+            )
+
+        message_ids.append(response["message_ts"])
+    else:
+        slack_call = make_slack_api_rate_limited(client.chat_postEphemeral)
+        for receiver in receiver_ids:
+            try:
+                response = slack_call(
+                    channel=channel,
+                    user=receiver,
+                    text=text,
+                    blocks=blocks,
+                    thread_ts=thread_ts,
+                    metadata=metadata,
+                    unfurl_links=unfurl,
+                    unfurl_media=unfurl,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to post message: {e} \n blocks: {blocks}")
+                logger.warning("Trying again without blocks that have urls")
+
+                if not blocks:
+                    raise e
+
+                blocks_without_urls = [
+                    block for block in blocks if not _check_for_url_in_block(block)
+                ]
+                blocks_without_urls.append(_build_error_block(str(e)))
+
+                # Try again wtihout blocks containing url
+                response = slack_call(
+                    channel=channel,
+                    user=receiver,
+                    text=text,
+                    blocks=blocks_without_urls,
+                    thread_ts=thread_ts,
+                    metadata=metadata,
+                    unfurl_links=unfurl,
+                    unfurl_media=unfurl,
+                )
+
             message_ids.append(response["message_ts"])
 
     return message_ids
@@ -214,6 +294,13 @@ def build_feedback_id(
         feedback_id = str(message_id)
 
     return unique_prefix + ID_SEPARATOR + feedback_id
+
+
+def build_continue_in_web_ui_id(
+    message_id: int,
+) -> str:
+    unique_prefix = str(uuid.uuid4())[:10]
+    return unique_prefix + ID_SEPARATOR + str(message_id)
 
 
 def decompose_action_id(feedback_id: str) -> tuple[int, str | None, int | None]:
@@ -313,7 +400,7 @@ def get_channel_name_from_id(
         raise e
 
 
-def fetch_user_ids_from_emails(
+def fetch_slack_user_ids_from_emails(
     user_emails: list[str], client: WebClient
 ) -> tuple[list[str], list[str]]:
     user_ids: list[str] = []
@@ -522,7 +609,7 @@ class SlackRateLimiter:
             self.last_reset_time = time.time()
 
     def notify(
-        self, client: WebClient, channel: str, position: int, thread_ts: Optional[str]
+        self, client: WebClient, channel: str, position: int, thread_ts: str | None
     ) -> None:
         respond_in_thread(
             client=client,

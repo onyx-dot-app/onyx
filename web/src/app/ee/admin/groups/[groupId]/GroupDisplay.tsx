@@ -133,10 +133,7 @@ export const GroupDisplay = ({
   const [addConnectorFormVisible, setAddConnectorFormVisible] = useState(false);
   const [addRateLimitFormVisible, setAddRateLimitFormVisible] = useState(false);
 
-  const { isLoadingUser, isAdmin } = useUser();
-  if (isLoadingUser) {
-    return <></>;
-  }
+  const { isAdmin } = useUser();
 
   const handlePopup = (message: string, type: "success" | "error") => {
     setPopup({ message, type });

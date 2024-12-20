@@ -2,6 +2,7 @@ from enum import Enum
 
 LIKE_BLOCK_ACTION_ID = "feedback-like"
 DISLIKE_BLOCK_ACTION_ID = "feedback-dislike"
+CONTINUE_IN_WEB_UI_ACTION_ID = "continue-in-web-ui"
 FEEDBACK_DOC_BUTTON_BLOCK_ACTION_ID = "feedback-doc-button"
 IMMEDIATE_RESOLVED_BUTTON_ACTION_ID = "immediate-resolved-button"
 FOLLOWUP_BUTTON_ACTION_ID = "followup-button"

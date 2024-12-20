@@ -19,6 +19,8 @@ from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from sqlalchemy.orm import Session
 
+from danswer.chat.models import ThreadMessage
+from danswer.configs.app_configs import DEV_MODE
 from danswer.configs.app_configs import POD_NAME
 from danswer.configs.app_configs import POD_NAMESPACE
 from danswer.configs.constants import DanswerRedisLocks
@@ -74,7 +76,6 @@ from danswer.db.slack_bot import fetch_slack_bots
 from danswer.key_value_store.interface import KvKeyNotFoundError
 from danswer.natural_language_processing.search_nlp_models import EmbeddingModel
 from danswer.natural_language_processing.search_nlp_models import warm_up_bi_encoder
-from danswer.one_shot_answer.models import ThreadMessage
 from danswer.redis.redis_pool import get_redis_client
 from danswer.server.manage.models import SlackBotTokens
 from danswer.utils.logger import setup_logger
@@ -250,7 +251,7 @@ class SlackbotHandler:
                 nx=True,
                 ex=TENANT_LOCK_EXPIRATION,
             )
-            if not acquired:
+            if not acquired and not DEV_MODE:
                 logger.debug(f"Another pod holds the lock for tenant {tenant_id}")
                 continue
 

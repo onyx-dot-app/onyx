@@ -3,7 +3,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 
 import { EmbeddingModelSelection } from "../EmbeddingModelSelectionForm";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Text from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, WarningCircle } from "@phosphor-icons/react";
@@ -28,7 +28,8 @@ import { Modal } from "@/components/Modal";
 
 import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
-import { CardDescription } from "@/components/ui/card";
+import { combineSearchSettings } from "./utils";
+
 export default function EmbeddingForm() {
   const { formStep, nextFormStep, prevFormStep } = useEmbeddingFormContext();
   const { popup, setPopup } = usePopup();
@@ -157,6 +158,26 @@ export default function EmbeddingForm() {
     searchSettings?.multipass_indexing !=
       advancedEmbeddingDetails.multipass_indexing;
 
+  const updateSearch = useCallback(async () => {
+    if (!selectedProvider) {
+      return false;
+    }
+    const searchSettings = combineSearchSettings(
+      selectedProvider,
+      advancedEmbeddingDetails,
+      rerankingDetails,
+      selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null
+    );
+
+    const response = await updateSearchSettings(searchSettings);
+    if (response.ok) {
+      return true;
+    } else {
+      setPopup({ message: "Failed to update search settings", type: "error" });
+      return false;
+    }
+  }, [selectedProvider, advancedEmbeddingDetails, rerankingDetails, setPopup]);
+
   const ReIndexingButton = useMemo(() => {
     const ReIndexingButtonComponent = ({
       needsReIndex,
@@ -205,7 +226,7 @@ export default function EmbeddingForm() {
     };
     ReIndexingButtonComponent.displayName = "ReIndexingButton";
     return ReIndexingButtonComponent;
-  }, [needsReIndex]);
+  }, [needsReIndex, updateSearch]);
 
   if (!selectedProvider) {
     return <ThreeDotsLoader />;
@@ -221,24 +242,6 @@ export default function EmbeddingForm() {
     }));
   };
 
-  const updateSearch = async () => {
-    const values: SavedSearchSettings = {
-      ...rerankingDetails,
-      ...advancedEmbeddingDetails,
-      ...selectedProvider,
-      provider_type:
-        selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null,
-    };
-
-    const response = await updateSearchSettings(values);
-    if (response.ok) {
-      return true;
-    } else {
-      setPopup({ message: "Failed to update search settings", type: "error" });
-      return false;
-    }
-  };
-
   const navigateToEmbeddingPage = (changedResource: string) => {
     router.push("/admin/configuration/search?message=search-settings");
   };
@@ -247,39 +250,35 @@ export default function EmbeddingForm() {
     if (!selectedProvider) {
       return;
     }
-    let newModel: SavedSearchSettings;
+    let searchSettings: SavedSearchSettings;
 
-    // We use a spread operation to merge properties from multiple objects into a single object.
-    // Advanced embedding details may update default values.
-    // Do NOT modify the order unless you are positive the new hierarchy is correct.
     if (selectedProvider.provider_type != null) {
       // This is a cloud model
-      newModel = {
-        ...selectedProvider,
-        ...advancedEmbeddingDetails,
-        ...rerankingDetails,
-        provider_type:
-          (selectedProvider.provider_type
-            ?.toLowerCase()
-            .split(" ")[0] as EmbeddingProvider) || null,
-      };
+      searchSettings = combineSearchSettings(
+        selectedProvider,
+        advancedEmbeddingDetails,
+        rerankingDetails,
+        selectedProvider.provider_type
+          ?.toLowerCase()
+          .split(" ")[0] as EmbeddingProvider | null
+      );
     } else {
       // This is a locally hosted model
-      newModel = {
-        ...selectedProvider,
-        ...advancedEmbeddingDetails,
-        ...rerankingDetails,
-        provider_type: null,
-      };
+      searchSettings = combineSearchSettings(
+        selectedProvider,
+        advancedEmbeddingDetails,
+        rerankingDetails,
+        null
+      );
     }
 
-    newModel.index_name = null;
+    searchSettings.index_name = null;
 
     const response = await fetch(
       "/api/search-settings/set-new-search-settings",
       {
         method: "POST",
-        body: JSON.stringify(newModel),
+        body: JSON.stringify(searchSettings),
         headers: {
           "Content-Type": "application/json",
         },

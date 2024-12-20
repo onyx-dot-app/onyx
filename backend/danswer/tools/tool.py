@@ -3,13 +3,13 @@ from collections.abc import Generator
 from typing import Any
 from typing import TYPE_CHECKING
 
-from danswer.llm.answering.models import PreviousMessage
 from danswer.llm.interfaces import LLM
+from danswer.llm.models import PreviousMessage
 from danswer.utils.special_types import JSON_ro
 
 
 if TYPE_CHECKING:
-    from danswer.llm.answering.prompts.build import AnswerPromptBuilder
+    from danswer.chat.prompt_builder.build import AnswerPromptBuilder
     from danswer.tools.message import ToolCallSummary
     from danswer.tools.models import ToolResponse
 

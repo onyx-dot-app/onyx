@@ -13,6 +13,7 @@ from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_curator_or_admin_user
 from danswer.auth.users import current_limited_user
 from danswer.auth.users import current_user
+from danswer.chat.prompt_builder.utils import build_dummy_prompt
 from danswer.configs.constants import FileOrigin
 from danswer.configs.constants import NotificationType
 from danswer.db.engine import get_session
@@ -33,7 +34,6 @@ from danswer.db.persona import update_persona_shared_users
 from danswer.db.persona import update_persona_visibility
 from danswer.file_store.file_store import get_default_file_store
 from danswer.file_store.models import ChatFileType
-from danswer.llm.answering.prompts.utils import build_dummy_prompt
 from danswer.server.features.persona.models import CreatePersonaRequest
 from danswer.server.features.persona.models import ImageGenerationToolStatus
 from danswer.server.features.persona.models import PersonaCategoryCreate

@@ -5,7 +5,11 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
+from danswer.chat.models import PromptConfig
 from danswer.chat.models import SectionRelevancePiece
+from danswer.chat.prune_and_merge import _merge_sections
+from danswer.chat.prune_and_merge import ChunkRange
+from danswer.chat.prune_and_merge import merge_chunk_intervals
 from danswer.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
 from danswer.context.search.enums import LLMEvaluationType
 from danswer.context.search.enums import QueryFlow
@@ -27,10 +31,6 @@ from danswer.db.models import User
 from danswer.db.search_settings import get_current_search_settings
 from danswer.document_index.factory import get_default_document_index
 from danswer.document_index.interfaces import VespaChunkRequest
-from danswer.llm.answering.models import PromptConfig
-from danswer.llm.answering.prune_and_merge import _merge_sections
-from danswer.llm.answering.prune_and_merge import ChunkRange
-from danswer.llm.answering.prune_and_merge import merge_chunk_intervals
 from danswer.llm.interfaces import LLM
 from danswer.secondary_llm_flows.agentic_evaluation import evaluate_inference_section
 from danswer.utils.logger import setup_logger

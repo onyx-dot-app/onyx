@@ -32,7 +32,11 @@ def get_user_email_from_username__server(
             response = confluence_client.get_mobile_parameters(user_name)
             email = response.get("email")
         except Exception:
-            email = None
+            # For now, we'll just return a string that indicates failure
+            # We may want to revert to returning None in the future
+            # email = None
+            email = f"FAILED TO GET CONFLUENCE EMAIL FOR {user_name}"
+            logger.warning(f"failed to get confluence email for {user_name}")
         _USER_EMAIL_CACHE[user_name] = email
     return _USER_EMAIL_CACHE[user_name]
 
@@ -173,19 +177,23 @@ def extract_text_from_confluence_html(
     return format_document_soup(soup)
 
 
-def attachment_to_content(
-    confluence_client: OnyxConfluence,
-    attachment: dict[str, Any],
-) -> str | None:
-    """If it returns None, assume that we should skip this attachment."""
-    if attachment["metadata"]["mediaType"] in [
+def validate_attachment_filetype(attachment: dict[str, Any]) -> bool:
+    return attachment["metadata"]["mediaType"] not in [
         "image/jpeg",
         "image/png",
         "image/gif",
         "image/svg+xml",
         "video/mp4",
         "video/quicktime",
-    ]:
+    ]
+
+
+def attachment_to_content(
+    confluence_client: OnyxConfluence,
+    attachment: dict[str, Any],
+) -> str | None:
+    """If it returns None, assume that we should skip this attachment."""
+    if not validate_attachment_filetype(attachment):
         return None
 
     download_link = confluence_client.url + attachment["_links"]["download"]
@@ -241,7 +249,7 @@ def build_confluence_document_id(
     return f"{base_url}{content_url}"
 
 
-def extract_referenced_attachment_names(page_text: str) -> list[str]:
+def _extract_referenced_attachment_names(page_text: str) -> list[str]:
     """Parse a Confluence html page to generate a list of current
         attachments in use
 

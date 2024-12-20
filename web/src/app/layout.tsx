@@ -25,11 +25,11 @@ import PostHogPageView from "./PostHogPageView";
 import Script from "next/script";
 
 
-declare global {
-  interface Window {
-    justLoggedIn: any;
-  }
-}
+// declare global {
+//   interface Window {
+//     justLoggedIn: any;
+//   }
+// }
 
 const inter = Inter({
   subsets: ["latin"],

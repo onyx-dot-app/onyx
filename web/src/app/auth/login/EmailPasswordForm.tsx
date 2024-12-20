@@ -3,25 +3,25 @@
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { basicLogin, basicSignup } from "@/lib/user";
+import Cookies from "js-cookie";
 import { Button } from "@/components/ui/button";
 import { Form, Formik } from "formik";
-import { useRouter } from "next/navigation";
 import * as Yup from "yup";
 import { requestEmailVerification } from "../lib";
 import { useState } from "react";
 import { Spinner } from "@/components/Spinner";
 
-
 export function EmailPasswordForm({
   isSignup = false,
   shouldVerify,
   referralSource,
+  nextUrl,
 }: {
   isSignup?: boolean;
   shouldVerify?: boolean;
   referralSource?: string;
+  nextUrl?: string | null;
 }) {
-  const router = useRouter();
   const { popup, setPopup } = usePopup();
   const [isWorking, setIsWorking] = useState(false);
 
@@ -70,12 +70,17 @@ export function EmailPasswordForm({
 
           const loginResponse = await basicLogin(values.email, values.password);
           if (loginResponse.ok) {
-            window.justLoggedIn = true;
+            Cookies.set("JUST_LOGGED_IN", "true", { expires: 1 });
+//            window.justLoggedIn = true;
             if (isSignup && shouldVerify) {
               await requestEmailVerification(values.email);
-              router.push("/auth/waiting-on-verification");
+              // Use window.location.href to force a full page reload,
+              // ensuring app re-initializes with the new state (including
+              // server-side provider values)
+              window.location.href = "/auth/waiting-on-verification";
             } else {
-              router.push("/");
+              // See above comment
+              window.location.href = nextUrl ? encodeURI(nextUrl) : "/";
             }
           } else {
             setIsWorking(false);

@@ -1,6 +1,5 @@
 import datetime
 import json
-from enum import Enum as PyEnum
 from typing import Any
 from typing import Literal
 from typing import NotRequired
@@ -126,6 +125,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # if specified, controls the assistants that are shown to the user + their order
     # if not specified, all assistants are shown
+    auto_scroll: Mapped[bool] = mapped_column(Boolean, default=True)
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
     )
@@ -159,9 +159,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
 
     prompts: Mapped[list["Prompt"]] = relationship("Prompt", back_populates="user")
-    input_prompts: Mapped[list["InputPrompt"]] = relationship(
-        "InputPrompt", back_populates="user"
-    )
 
     # Personas owned by this user
     personas: Mapped[list["Persona"]] = relationship("Persona", back_populates="user")
@@ -175,31 +172,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "ConnectorCredentialPair",
         back_populates="creator",
         primaryjoin="User.id == foreign(ConnectorCredentialPair.creator_id)",
-    )
-
-
-class InputPrompt(Base):
-    __tablename__ = "inputprompt"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    prompt: Mapped[str] = mapped_column(String)
-    content: Mapped[str] = mapped_column(String)
-    active: Mapped[bool] = mapped_column(Boolean)
-    user: Mapped[User | None] = relationship("User", back_populates="input_prompts")
-    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
-    )
-
-
-class InputPrompt__User(Base):
-    __tablename__ = "inputprompt__user"
-
-    input_prompt_id: Mapped[int] = mapped_column(
-        ForeignKey("inputprompt.id"), primary_key=True
-    )
-    user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("inputprompt.id"), primary_key=True
     )
 
 
@@ -596,6 +568,25 @@ class Connector(Base):
         list["DocumentByConnectorCredentialPair"]
     ] = relationship("DocumentByConnectorCredentialPair", back_populates="connector")
 
+    # synchronize this validation logic with RefreshFrequencySchema etc on front end
+    # until we have a centralized validation schema
+
+    # TODO(rkuo): experiment with SQLAlchemy validators rather than manual checks
+    # https://docs.sqlalchemy.org/en/20/orm/mapped_attributes.html
+    def validate_refresh_freq(self) -> None:
+        if self.refresh_freq is not None:
+            if self.refresh_freq < 60:
+                raise ValueError(
+                    "refresh_freq must be greater than or equal to 60 seconds."
+                )
+
+    def validate_prune_freq(self) -> None:
+        if self.prune_freq is not None:
+            if self.prune_freq < 86400:
+                raise ValueError(
+                    "prune_freq must be greater than or equal to 86400 seconds."
+                )
+
 
 class Credential(Base):
     __tablename__ = "credential"
@@ -963,9 +954,8 @@ class ChatSession(Base):
     persona_id: Mapped[int | None] = mapped_column(
         ForeignKey("persona.id"), nullable=True
     )
-    description: Mapped[str] = mapped_column(Text)
-    # One-shot direct answering, currently the two types of chats are not mixed
-    one_shot: Mapped[bool] = mapped_column(Boolean, default=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # This chat created by DanswerBot
     danswerbot_flow: Mapped[bool] = mapped_column(Boolean, default=False)
     # Only ever set to True if system is set to not hard-delete chats
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -1484,27 +1474,22 @@ class ChannelConfig(TypedDict):
     # If None then no follow up
     # If empty list, follow up with no tags
     follow_up_tags: NotRequired[list[str]]
-
-
-class SlackBotResponseType(str, PyEnum):
-    QUOTES = "quotes"
-    CITATIONS = "citations"
+    show_continue_in_web_ui: NotRequired[bool]  # defaults to False
 
 
 class SlackChannelConfig(Base):
     __tablename__ = "slack_channel_config"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    slack_bot_id: Mapped[int] = mapped_column(ForeignKey("slack_bot.id"), nullable=True)
+    slack_bot_id: Mapped[int] = mapped_column(
+        ForeignKey("slack_bot.id"), nullable=False
+    )
     persona_id: Mapped[int | None] = mapped_column(
         ForeignKey("persona.id"), nullable=True
     )
     # JSON for flexibility. Contains things like: channel name, team members, etc.
     channel_config: Mapped[ChannelConfig] = mapped_column(
         postgresql.JSONB(), nullable=False
-    )
-    response_type: Mapped[SlackBotResponseType] = mapped_column(
-        Enum(SlackBotResponseType, native_enum=False), nullable=False
     )
 
     enable_auto_filters: Mapped[bool] = mapped_column(
@@ -1536,6 +1521,7 @@ class SlackBot(Base):
     slack_channel_configs: Mapped[list[SlackChannelConfig]] = relationship(
         "SlackChannelConfig",
         back_populates="slack_bot",
+        cascade="all, delete-orphan",
     )
 
 

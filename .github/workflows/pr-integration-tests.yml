@@ -8,7 +8,7 @@ on:
   pull_request:
     branches:
       - main
-      - 'release/**'
+      - "release/**"
 
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -16,11 +16,11 @@ env:
   CONFLUENCE_TEST_SPACE_URL: ${{ secrets.CONFLUENCE_TEST_SPACE_URL }}
   CONFLUENCE_USER_NAME: ${{ secrets.CONFLUENCE_USER_NAME }}
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
-  
+
 jobs:
   integration-tests:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=8cpu-linux-x64,ram=16,"run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=32cpu-linux-x64, "run-id=${{ github.run_id }}"]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,21 +36,21 @@ jobs:
 
       # tag every docker image with "test" so that we can spin up the correct set
       # of images during testing
-      
+
       # We don't need to build the Web Docker image since it's not yet used
-      # in the integration tests. We have a separate action to verify that it builds 
+      # in the integration tests. We have a separate action to verify that it builds
       # successfully.
       - name: Pull Web Docker image
         run: |
-          docker pull danswer/danswer-web-server:latest
-          docker tag danswer/danswer-web-server:latest danswer/danswer-web-server:test
+          docker pull onyxdotapp/onyx-web-server:latest
+          docker tag onyxdotapp/onyx-web-server:latest onyxdotapp/onyx-web-server:test
 
       # we use the runs-on cache for docker builds
       # in conjunction with runs-on runners, it has better speed and unlimited caching
       # https://runs-on.com/caching/s3-cache-for-github-actions/
       # https://runs-on.com/caching/docker/
       # https://github.com/moby/buildkit#s3-cache-experimental
-      
+
       # images are built and run locally for testing purposes. Not pushed.
       - name: Build Backend Docker image
         uses: ./.github/actions/custom-build-and-push
@@ -58,7 +58,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: linux/amd64
-          tags: danswer/danswer-backend:test
+          tags: onyxdotapp/onyx-backend:test
           push: false
           load: true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/backend/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
@@ -70,19 +70,19 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/amd64
-          tags: danswer/danswer-model-server:test
+          tags: onyxdotapp/onyx-model-server:test
           push: false
           load: true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/model-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/integration-tests/model-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
-      
+
       - name: Build integration test Docker image
         uses: ./.github/actions/custom-build-and-push
         with:
           context: ./backend
           file: ./backend/tests/integration/Dockerfile
           platforms: linux/amd64
-          tags: danswer/danswer-integration:test
+          tags: onyxdotapp/onyx-integration:test
           push: false
           load: true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/integration/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
@@ -119,7 +119,7 @@ jobs:
             -e TEST_WEB_HOSTNAME=test-runner \
             -e AUTH_TYPE=cloud \
             -e MULTI_TENANT=true \
-            danswer/danswer-integration:test \
+            onyxdotapp/onyx-integration:test \
             /app/tests/integration/multitenant_tests
         continue-on-error: true
         id: run_multitenant_tests
@@ -131,15 +131,14 @@ jobs:
             exit 1
           else
             echo "All integration tests passed successfully."
-          fi 
+          fi
 
       - name: Stop multi-tenant Docker containers
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p danswer-stack down -v
 
-
-      - name: Start Docker containers 
+      - name: Start Docker containers
         run: |
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
@@ -153,12 +152,12 @@ jobs:
       - name: Wait for service to be ready
         run: |
           echo "Starting wait-for-service script..."
-          
+
           docker logs -f danswer-stack-api_server-1 &
 
           start_time=$(date +%s)
           timeout=300  # 5 minutes in seconds
-          
+
           while true; do
             current_time=$(date +%s)
             elapsed_time=$((current_time - start_time))
@@ -202,7 +201,7 @@ jobs:
             -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
             -e CONFLUENCE_ACCESS_TOKEN=${CONFLUENCE_ACCESS_TOKEN} \
             -e TEST_WEB_HOSTNAME=test-runner \
-            danswer/danswer-integration:test \
+            onyxdotapp/onyx-integration:test \
             /app/tests/integration/tests \
             /app/tests/integration/connector_job_tests
         continue-on-error: true
@@ -229,7 +228,7 @@ jobs:
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p danswer-stack down -v
-      
+
       - name: Upload logs
         if: success() || failure()
         uses: actions/upload-artifact@v4

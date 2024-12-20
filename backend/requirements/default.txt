@@ -29,7 +29,7 @@ trafilatura==1.12.2
 langchain==0.1.17
 langchain-core==0.1.50
 langchain-text-splitters==0.0.1
-litellm==1.50.2
+litellm==1.54.1
 lxml==5.3.0
 lxml_html_clean==0.2.2
 llama-index==0.9.45
@@ -38,7 +38,7 @@ msal==1.28.0
 nltk==3.8.1
 Office365-REST-Python-Client==2.5.9
 oauthlib==3.2.2
-openai==1.52.2
+openai==1.55.3
 openpyxl==3.1.2
 playwright==1.41.2
 psutil==5.9.5

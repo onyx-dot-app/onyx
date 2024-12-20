@@ -3,6 +3,7 @@ from datetime import datetime
 from datetime import timedelta
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import desc
 from sqlalchemy import func
@@ -30,6 +31,7 @@ from danswer.db.models import SearchDoc
 from danswer.db.models import SearchDoc as DBSearchDoc
 from danswer.db.models import ToolCall
 from danswer.db.models import User
+from danswer.db.persona import get_best_persona_id_for_user
 from danswer.db.pg_file_store import delete_lobj_by_name
 from danswer.file_store.models import FileDescriptor
 from danswer.llm.override_models import LLMOverride
@@ -143,15 +145,9 @@ def get_chat_sessions_by_user(
     user_id: UUID | None,
     deleted: bool | None,
     db_session: Session,
-    only_one_shot: bool = False,
     limit: int = 50,
 ) -> list[ChatSession]:
     stmt = select(ChatSession).where(ChatSession.user_id == user_id)
-
-    if only_one_shot:
-        stmt = stmt.where(ChatSession.one_shot.is_(True))
-    else:
-        stmt = stmt.where(ChatSession.one_shot.is_(False))
 
     stmt = stmt.order_by(desc(ChatSession.time_created))
 
@@ -224,12 +220,11 @@ def delete_messages_and_files_from_chat_session(
 
 def create_chat_session(
     db_session: Session,
-    description: str,
+    description: str | None,
     user_id: UUID | None,
     persona_id: int | None,  # Can be none if temporary persona is used
     llm_override: LLMOverride | None = None,
     prompt_override: PromptOverride | None = None,
-    one_shot: bool = False,
     danswerbot_flow: bool = False,
     slack_thread_id: str | None = None,
 ) -> ChatSession:
@@ -239,7 +234,6 @@ def create_chat_session(
         description=description,
         llm_override=llm_override,
         prompt_override=prompt_override,
-        one_shot=one_shot,
         danswerbot_flow=danswerbot_flow,
         slack_thread_id=slack_thread_id,
     )
@@ -248,6 +242,48 @@ def create_chat_session(
     db_session.commit()
 
     return chat_session
+
+
+def duplicate_chat_session_for_user_from_slack(
+    db_session: Session,
+    user: User | None,
+    chat_session_id: UUID,
+) -> ChatSession:
+    """
+    This takes a chat session id for a session in Slack and:
+    - Creates a new chat session in the DB
+    - Tries to copy the persona from the original chat session
+        (if it is available to the user clicking the button)
+    - Sets the user to the given user (if provided)
+    """
+    chat_session = get_chat_session_by_id(
+        chat_session_id=chat_session_id,
+        user_id=None,  # Ignore user permissions for this
+        db_session=db_session,
+    )
+    if not chat_session:
+        raise HTTPException(status_code=400, detail="Invalid Chat Session ID provided")
+
+    # This enforces permissions and sets a default
+    new_persona_id = get_best_persona_id_for_user(
+        db_session=db_session,
+        user=user,
+        persona_id=chat_session.persona_id,
+    )
+
+    return create_chat_session(
+        db_session=db_session,
+        user_id=user.id if user else None,
+        persona_id=new_persona_id,
+        # Set this to empty string so the frontend will force a rename
+        description="",
+        llm_override=chat_session.llm_override,
+        prompt_override=chat_session.prompt_override,
+        # Chat is in UI now so this is false
+        danswerbot_flow=False,
+        # Maybe we want this in the future to track if it was created from Slack
+        slack_thread_id=None,
+    )
 
 
 def update_chat_session(
@@ -336,6 +372,28 @@ def get_chat_message(
     return chat_message
 
 
+def get_chat_session_by_message_id(
+    db_session: Session,
+    message_id: int,
+) -> ChatSession:
+    """
+    Should only be used for Slack
+    Get the chat session associated with a specific message ID
+    Note: this ignores permission checks.
+    """
+    stmt = select(ChatMessage).where(ChatMessage.id == message_id)
+
+    result = db_session.execute(stmt)
+    chat_message = result.scalar_one_or_none()
+
+    if chat_message is None:
+        raise ValueError(
+            f"Unable to find chat session associated with message ID: {message_id}"
+        )
+
+    return chat_message.chat_session
+
+
 def get_chat_messages_by_sessions(
     chat_session_ids: list[UUID],
     user_id: UUID | None,
@@ -353,6 +411,44 @@ def get_chat_messages_by_sessions(
         .order_by(nullsfirst(ChatMessage.parent_message))
     )
     return db_session.execute(stmt).scalars().all()
+
+
+def add_chats_to_session_from_slack_thread(
+    db_session: Session,
+    slack_chat_session_id: UUID,
+    new_chat_session_id: UUID,
+) -> None:
+    new_root_message = get_or_create_root_message(
+        chat_session_id=new_chat_session_id,
+        db_session=db_session,
+    )
+
+    for chat_message in get_chat_messages_by_sessions(
+        chat_session_ids=[slack_chat_session_id],
+        user_id=None,  # Ignore user permissions for this
+        db_session=db_session,
+        skip_permission_check=True,
+    ):
+        if chat_message.message_type == MessageType.SYSTEM:
+            continue
+        # Duplicate the message
+        new_root_message = create_new_chat_message(
+            db_session=db_session,
+            chat_session_id=new_chat_session_id,
+            parent_message=new_root_message,
+            message=chat_message.message,
+            files=chat_message.files,
+            rephrased_query=chat_message.rephrased_query,
+            error=chat_message.error,
+            citations=chat_message.citations,
+            reference_docs=chat_message.search_docs,
+            tool_call=chat_message.tool_call,
+            prompt_id=chat_message.prompt_id,
+            token_count=chat_message.token_count,
+            message_type=chat_message.message_type,
+            alternate_assistant_id=chat_message.alternate_assistant_id,
+            overridden_model=chat_message.overridden_model,
+        )
 
 
 def get_search_docs_for_chat_message(

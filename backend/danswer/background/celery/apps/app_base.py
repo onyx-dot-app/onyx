@@ -11,6 +11,7 @@ from celery.exceptions import WorkerShutdown
 from celery.states import READY_STATES
 from celery.utils.log import get_task_logger
 from celery.worker import strategy  # type: ignore
+from redis.lock import Lock as RedisLock
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -332,16 +333,16 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
         return
 
     logger.info("Releasing primary worker lock.")
-    lock = sender.primary_worker_lock
+    lock: RedisLock = sender.primary_worker_lock
     try:
         if lock.owned():
             try:
                 lock.release()
                 sender.primary_worker_lock = None
-            except Exception as e:
-                logger.error(f"Failed to release primary worker lock: {e}")
-    except Exception as e:
-        logger.error(f"Failed to check if primary worker lock is owned: {e}")
+            except Exception:
+                logger.exception("Failed to release primary worker lock")
+    except Exception:
+        logger.exception("Failed to check if primary worker lock is owned")
 
 
 def on_setup_logging(

@@ -135,7 +135,7 @@ export const DocumentFeedbackTable = ({
                     />
                   </TableCell>
                   <TableCell>
-                    <div className="ml-auto flex w-16">
+                    <div className="relative">
                       <div
                         key={document.document_id}
                         className="h-10 ml-auto mr-8"

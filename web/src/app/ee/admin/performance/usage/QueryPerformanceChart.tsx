@@ -62,6 +62,7 @@ export function QueryPerformanceChart({
     chart = (
       <AreaChartDisplay
         className="mt-4"
+        stacked={false}
         data={dateRange.map((dateStr) => {
           const queryAnalyticsForDate = dateToQueryAnalytics.get(dateStr);
           const userAnalyticsForDate = dateToUserAnalytics.get(dateStr);

@@ -17,11 +17,11 @@ from danswer.connectors.models import BasicExpertInfo
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.db.engine import get_session_with_tenant
-from danswer.file_processing.extract_file_text import check_file_ext_is_valid
 from danswer.file_processing.extract_file_text import detect_encoding
 from danswer.file_processing.extract_file_text import extract_file_text
 from danswer.file_processing.extract_file_text import get_file_ext
 from danswer.file_processing.extract_file_text import is_text_file_extension
+from danswer.file_processing.extract_file_text import is_valid_file_ext
 from danswer.file_processing.extract_file_text import load_files_from_zip
 from danswer.file_processing.extract_file_text import read_pdf_file
 from danswer.file_processing.extract_file_text import read_text_file
@@ -50,7 +50,7 @@ def _read_files_and_metadata(
             file_content, ignore_dirs=True
         ):
             yield os.path.join(directory_path, file_info.filename), file, metadata
-    elif check_file_ext_is_valid(extension):
+    elif is_valid_file_ext(extension):
         yield file_name, file_content, metadata
     else:
         logger.warning(f"Skipping file '{file_name}' with extension '{extension}'")
@@ -63,7 +63,7 @@ def _process_file(
     pdf_pass: str | None = None,
 ) -> list[Document]:
     extension = get_file_ext(file_name)
-    if not check_file_ext_is_valid(extension):
+    if not is_valid_file_ext(extension):
         logger.warning(f"Skipping file '{file_name}' with extension '{extension}'")
         return []
 

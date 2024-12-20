@@ -28,7 +28,7 @@ from danswer.danswerbot.slack.models import SlackMessageInfo
 from danswer.danswerbot.slack.utils import build_feedback_id
 from danswer.danswerbot.slack.utils import decompose_action_id
 from danswer.danswerbot.slack.utils import fetch_group_ids_from_names
-from danswer.danswerbot.slack.utils import fetch_user_ids_from_emails
+from danswer.danswerbot.slack.utils import fetch_slack_user_ids_from_emails
 from danswer.danswerbot.slack.utils import get_channel_name_from_id
 from danswer.danswerbot.slack.utils import get_feedback_visibility
 from danswer.danswerbot.slack.utils import read_slack_thread
@@ -267,7 +267,7 @@ def handle_followup_button(
             tag_names = slack_channel_config.channel_config.get("follow_up_tags")
             remaining = None
             if tag_names:
-                tag_ids, remaining = fetch_user_ids_from_emails(
+                tag_ids, remaining = fetch_slack_user_ids_from_emails(
                     tag_names, client.web_client
                 )
             if remaining:

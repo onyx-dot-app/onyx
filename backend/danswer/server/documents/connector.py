@@ -20,6 +20,7 @@ from danswer.background.celery.celery_utils import get_deletion_attempt_snapshot
 from danswer.background.celery.versioned_apps.primary import app as primary_app
 from danswer.configs.app_configs import ENABLED_CONNECTOR_TYPES
 from danswer.configs.constants import DanswerCeleryPriority
+from danswer.configs.constants import DanswerCeleryTask
 from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import FileOrigin
 from danswer.connectors.google_utils.google_auth import (
@@ -85,6 +86,7 @@ from danswer.db.models import SearchSettings
 from danswer.db.models import User
 from danswer.db.search_settings import get_current_search_settings
 from danswer.db.search_settings import get_secondary_search_settings
+from danswer.file_processing.extract_file_text import convert_docx_to_txt
 from danswer.file_store.file_store import get_default_file_store
 from danswer.key_value_store.interface import KvKeyNotFoundError
 from danswer.redis.redis_connector import RedisConnector
@@ -392,6 +394,12 @@ def upload_files(
                 file_origin=FileOrigin.CONNECTOR,
                 file_type=file.content_type or "text/plain",
             )
+
+            if file.content_type and file.content_type.startswith(
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ):
+                convert_docx_to_txt(file, file_store, file_path)
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return FileUploadResponse(file_paths=deduped_file_paths)
@@ -867,7 +875,7 @@ def connector_run_once(
 
     # run the beat task to pick up the triggers immediately
     primary_app.send_task(
-        "check_for_indexing",
+        DanswerCeleryTask.CHECK_FOR_INDEXING,
         priority=DanswerCeleryPriority.HIGH,
         kwargs={"tenant_id": tenant_id},
     )

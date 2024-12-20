@@ -37,10 +37,15 @@ def get_cc_pairs_by_source(
     source_type: DocumentSource,
     only_sync: bool,
 ) -> list[ConnectorCredentialPair]:
+    """
+    Get all cc_pairs for a given source type (and optionally only sync)
+    result is sorted by cc_pair id
+    """
     query = (
         db_session.query(ConnectorCredentialPair)
         .join(ConnectorCredentialPair.connector)
         .filter(Connector.source == source_type)
+        .order_by(ConnectorCredentialPair.id)
     )
 
     if only_sync:

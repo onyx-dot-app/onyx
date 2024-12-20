@@ -134,7 +134,6 @@ def get_latest_message_time(thread: ThreadType) -> datetime:
 
 
 def thread_to_doc(
-    workspace: str,
     channel: ChannelType,
     thread: ThreadType,
     slack_cleaner: SlackTextCleaner,
@@ -171,15 +170,15 @@ def thread_to_doc(
         else first_message
     )
 
-    doc_sem_id = f"{initial_sender_name} in #{channel['name']}: {snippet}"
+    doc_sem_id = f"{initial_sender_name} in #{channel['name']}: {snippet}".replace(
+        "\n", " "
+    )
 
     return Document(
         id=f"{channel_id}__{thread[0]['ts']}",
         sections=[
             Section(
-                link=get_message_link(
-                    event=m, workspace=workspace, channel_id=channel_id
-                ),
+                link=get_message_link(event=m, client=client, channel_id=channel_id),
                 text=slack_cleaner.index_clean(cast(str, m["text"])),
             )
             for m in thread
@@ -263,7 +262,6 @@ def filter_channels(
 
 def _get_all_docs(
     client: WebClient,
-    workspace: str,
     channels: list[str] | None = None,
     channel_name_regex_enabled: bool = False,
     oldest: str | None = None,
@@ -310,7 +308,6 @@ def _get_all_docs(
                 if filtered_thread:
                     channel_docs += 1
                     yield thread_to_doc(
-                        workspace=workspace,
                         channel=channel,
                         thread=filtered_thread,
                         slack_cleaner=slack_cleaner,
@@ -373,14 +370,12 @@ def _get_all_doc_ids(
 class SlackPollConnector(PollConnector, SlimConnector):
     def __init__(
         self,
-        workspace: str,
         channels: list[str] | None = None,
         # if specified, will treat the specified channel strings as
         # regexes, and will only index channels that fully match the regexes
         channel_regex_enabled: bool = False,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
-        self.workspace = workspace
         self.channels = channels
         self.channel_regex_enabled = channel_regex_enabled
         self.batch_size = batch_size
@@ -414,7 +409,6 @@ class SlackPollConnector(PollConnector, SlimConnector):
         documents: list[Document] = []
         for document in _get_all_docs(
             client=self.client,
-            workspace=self.workspace,
             channels=self.channels,
             channel_name_regex_enabled=self.channel_regex_enabled,
             # NOTE: need to impute to `None` instead of using 0.0, since Slack will
@@ -438,7 +432,6 @@ if __name__ == "__main__":
 
     slack_channel = os.environ.get("SLACK_CHANNEL")
     connector = SlackPollConnector(
-        workspace=os.environ["SLACK_WORKSPACE"],
         channels=[slack_channel] if slack_channel else None,
     )
     connector.load_credentials({"slack_bot_token": os.environ["SLACK_BOT_TOKEN"]})

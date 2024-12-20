@@ -23,10 +23,8 @@ export default function FixedLogo({
   return (
     <>
       <Link
-        href={
-          settings && settings.default_page === "chat" ? "/chat" : "/search"
-        }
-        className="fixed cursor-pointer flex z-40 left-2.5 top-2"
+        href="/chat"
+        className="fixed cursor-pointer flex z-40 left-4 top-2 h-8"
       >
         <div className="max-w-[185px] mobile:hidden flex items-center gap-x-1 my-auto">
           <div className="flex-none my-auto">
@@ -48,7 +46,7 @@ export default function FixedLogo({
           </div>
         </div>
       </Link>
-      <div className="mobile:hidden fixed left-2.5 bottom-4">
+      <div className="mobile:hidden fixed left-4 bottom-4">
         <FiSidebar className="text-text-mobile-sidebar" />
       </div>
     </>

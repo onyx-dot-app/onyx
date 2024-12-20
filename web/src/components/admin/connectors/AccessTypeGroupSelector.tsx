@@ -8,7 +8,7 @@ import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import {
   AccessType,
-  ValidAutoSyncSources,
+  ValidAutoSyncSource,
   ConfigurableSources,
   validAutoSyncSources,
 } from "@/lib/types";
@@ -16,8 +16,8 @@ import { useUser } from "@/components/user/UserProvider";
 
 function isValidAutoSyncSource(
   value: ConfigurableSources
-): value is ValidAutoSyncSources {
-  return validAutoSyncSources.includes(value as ValidAutoSyncSources);
+): value is ValidAutoSyncSource {
+  return validAutoSyncSources.includes(value as ValidAutoSyncSource);
 }
 
 // This should be included for all forms that require groups / public access
@@ -34,7 +34,7 @@ export function AccessTypeGroupSelector({
   connector: ConfigurableSources;
 }) {
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
-  const { isAdmin, user, isLoadingUser, isCurator } = useUser();
+  const { isAdmin, user, isCurator } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const [shouldHideContent, setShouldHideContent] = useState(false);
   const isAutoSyncSupported = isValidAutoSyncSource(connector);
@@ -77,7 +77,7 @@ export function AccessTypeGroupSelector({
     isPaidEnterpriseFeaturesEnabled,
   ]);
 
-  if (isLoadingUser || userGroupsIsLoading) {
+  if (userGroupsIsLoading) {
     return <div>Loading...</div>;
   }
   if (!isPaidEnterpriseFeaturesEnabled) {

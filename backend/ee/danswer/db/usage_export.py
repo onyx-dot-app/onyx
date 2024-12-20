@@ -33,12 +33,7 @@ def get_empty_chat_messages_entries__paginated(
 
     message_skeletons: list[ChatMessageSkeleton] = []
     for chat_session in chat_sessions:
-        if chat_session.one_shot:
-            flow_type = FlowType.SEARCH
-        elif chat_session.danswerbot_flow:
-            flow_type = FlowType.SLACK
-        else:
-            flow_type = FlowType.CHAT
+        flow_type = FlowType.SLACK if chat_session.danswerbot_flow else FlowType.CHAT
 
         for message in chat_session.messages:
             # Only count user messages

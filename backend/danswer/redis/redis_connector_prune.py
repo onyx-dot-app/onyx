@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from danswer.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from danswer.configs.constants import DanswerCeleryPriority
 from danswer.configs.constants import DanswerCeleryQueues
+from danswer.configs.constants import DanswerCeleryTask
 from danswer.db.connector_credential_pair import get_connector_credential_pair_from_id
 
 
@@ -134,7 +135,7 @@ class RedisConnectorPrune:
 
             # Priority on sync's triggered by new indexing should be medium
             result = celery_app.send_task(
-                "document_by_cc_pair_cleanup_task",
+                DanswerCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
                 kwargs=dict(
                     document_id=doc_id,
                     connector_id=cc_pair.connector_id,

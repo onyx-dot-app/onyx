@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
+  workers: 1, // temporary change to see if single threaded testing stabilizes the tests
   testDir: "./tests/e2e", // Folder for test files
   reporter: "list",
   // Configure paths for screenshots

@@ -26,7 +26,6 @@ from danswer.auth.noauth_user import fetch_no_auth_user
 from danswer.auth.noauth_user import set_no_auth_user_preferences
 from danswer.auth.schemas import UserRole
 from danswer.auth.schemas import UserStatus
-from danswer.auth.users import BasicAuthenticationError
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_curator_or_admin_user
 from danswer.auth.users import current_user
@@ -34,7 +33,6 @@ from danswer.auth.users import optional_user
 from danswer.configs.app_configs import AUTH_TYPE
 from danswer.configs.app_configs import ENABLE_EMAIL_INVITES
 from danswer.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
-from danswer.configs.app_configs import SUPER_USERS
 from danswer.configs.app_configs import VALID_EMAIL_DOMAINS
 from danswer.configs.constants import AuthType
 from danswer.db.api_key import is_api_key_email_address
@@ -52,6 +50,7 @@ from danswer.db.users import list_users
 from danswer.db.users import validate_user_role_update
 from danswer.key_value_store.factory import get_kv_store
 from danswer.server.manage.models import AllUsersResponse
+from danswer.server.manage.models import AutoScrollRequest
 from danswer.server.manage.models import UserByEmail
 from danswer.server.manage.models import UserInfo
 from danswer.server.manage.models import UserPreferences
@@ -60,9 +59,11 @@ from danswer.server.manage.models import UserRoleUpdateRequest
 from danswer.server.models import FullUserSnapshot
 from danswer.server.models import InvitedUserSnapshot
 from danswer.server.models import MinimalUserSnapshot
+from danswer.server.utils import BasicAuthenticationError
 from danswer.server.utils import send_user_email_invite
 from danswer.utils.logger import setup_logger
 from danswer.utils.variable_functionality import fetch_ee_implementation_or_noop
+from ee.danswer.configs.app_configs import SUPER_USERS
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -118,6 +119,7 @@ def set_user_role(
 def list_all_users(
     q: str | None = None,
     accepted_page: int | None = None,
+    slack_users_page: int | None = None,
     invited_page: int | None = None,
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
@@ -130,7 +132,12 @@ def list_all_users(
         for user in list_users(db_session, email_filter_string=q)
         if not is_api_key_email_address(user.email)
     ]
-    accepted_emails = {user.email for user in users}
+
+    slack_users = [user for user in users if user.role == UserRole.SLACK_USER]
+    accepted_users = [user for user in users if user.role != UserRole.SLACK_USER]
+
+    accepted_emails = {user.email for user in accepted_users}
+    slack_users_emails = {user.email for user in slack_users}
     invited_emails = get_invited_users()
     if q:
         invited_emails = [
@@ -138,10 +145,11 @@ def list_all_users(
         ]
 
     accepted_count = len(accepted_emails)
+    slack_users_count = len(slack_users_emails)
     invited_count = len(invited_emails)
 
     # If any of q, accepted_page, or invited_page is None, return all users
-    if accepted_page is None or invited_page is None:
+    if accepted_page is None or invited_page is None or slack_users_page is None:
         return AllUsersResponse(
             accepted=[
                 FullUserSnapshot(
@@ -152,11 +160,23 @@ def list_all_users(
                         UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED
                     ),
                 )
-                for user in users
+                for user in accepted_users
+            ],
+            slack_users=[
+                FullUserSnapshot(
+                    id=user.id,
+                    email=user.email,
+                    role=user.role,
+                    status=(
+                        UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED
+                    ),
+                )
+                for user in slack_users
             ],
             invited=[InvitedUserSnapshot(email=email) for email in invited_emails],
             accepted_pages=1,
             invited_pages=1,
+            slack_users_pages=1,
         )
 
     # Otherwise, return paginated results
@@ -168,13 +188,27 @@ def list_all_users(
                 role=user.role,
                 status=UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED,
             )
-            for user in users
+            for user in accepted_users
         ][accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE],
+        slack_users=[
+            FullUserSnapshot(
+                id=user.id,
+                email=user.email,
+                role=user.role,
+                status=UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED,
+            )
+            for user in slack_users
+        ][
+            slack_users_page
+            * USERS_PAGE_SIZE : (slack_users_page + 1)
+            * USERS_PAGE_SIZE
+        ],
         invited=[InvitedUserSnapshot(email=email) for email in invited_emails][
             invited_page * USERS_PAGE_SIZE : (invited_page + 1) * USERS_PAGE_SIZE
         ],
         accepted_pages=accepted_count // USERS_PAGE_SIZE + 1,
         invited_pages=invited_count // USERS_PAGE_SIZE + 1,
+        slack_users_pages=slack_users_count // USERS_PAGE_SIZE + 1,
     )
 
 
@@ -193,11 +227,11 @@ def bulk_invite_users(
         )
 
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
-    normalized_emails = []
+    new_invited_emails = []
     try:
         for email in emails:
             email_info = validate_email(email)
-            normalized_emails.append(email_info.normalized)  # type: ignore
+            new_invited_emails.append(email_info.normalized)
 
     except (EmailUndeliverableError, EmailNotValidError) as e:
         raise HTTPException(
@@ -209,7 +243,7 @@ def bulk_invite_users(
         try:
             fetch_ee_implementation_or_noop(
                 "danswer.server.tenants.provisioning", "add_users_to_tenant", None
-            )(normalized_emails, tenant_id)
+            )(new_invited_emails, tenant_id)
 
         except IntegrityError as e:
             if isinstance(e.orig, UniqueViolation):
@@ -223,7 +257,7 @@ def bulk_invite_users(
 
     initial_invited_users = get_invited_users()
 
-    all_emails = list(set(normalized_emails) | set(initial_invited_users))
+    all_emails = list(set(new_invited_emails) | set(initial_invited_users))
     number_of_invited_users = write_invited_users(all_emails)
 
     if not MULTI_TENANT:
@@ -235,7 +269,7 @@ def bulk_invite_users(
         )(CURRENT_TENANT_ID_CONTEXTVAR.get(), get_total_users_count(db_session))
         if ENABLE_EMAIL_INVITES:
             try:
-                for email in all_emails:
+                for email in new_invited_emails:
                     send_user_email_invite(email, current_user)
             except Exception as e:
                 logger.error(f"Error sending email invite to invited users: {e}")
@@ -249,7 +283,7 @@ def bulk_invite_users(
         write_invited_users(initial_invited_users)  # Reset to original state
         fetch_ee_implementation_or_noop(
             "danswer.server.tenants.user_mapping", "remove_users_from_tenant", None
-        )(normalized_emails, tenant_id)
+        )(new_invited_emails, tenant_id)
         raise e
 
 
@@ -497,7 +531,6 @@ def verify_user_logged_in(
             return fetch_no_auth_user(store)
 
         raise BasicAuthenticationError(detail="User Not Authenticated")
-
     if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
         raise BasicAuthenticationError(
             detail="Access denied. User's OIDC token has expired.",
@@ -577,6 +610,30 @@ def update_user_recent_assistants(
         update(User)
         .where(User.id == user.id)  # type: ignore
         .values(recent_assistants=updated_recent_assistants)
+    )
+    db_session.commit()
+
+
+@router.patch("/auto-scroll")
+def update_user_auto_scroll(
+    request: AutoScrollRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            no_auth_user.preferences.auto_scroll = request.auto_scroll
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    db_session.execute(
+        update(User)
+        .where(User.id == user.id)  # type: ignore
+        .values(auto_scroll=request.auto_scroll)
     )
     db_session.commit()
 

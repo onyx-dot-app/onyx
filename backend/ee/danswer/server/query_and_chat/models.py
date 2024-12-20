@@ -2,7 +2,13 @@ from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import model_validator
 
+from danswer.chat.models import CitationInfo
+from danswer.chat.models import DanswerContexts
+from danswer.chat.models import PersonaOverrideConfig
+from danswer.chat.models import QADocsResponse
+from danswer.chat.models import ThreadMessage
 from danswer.configs.constants import DocumentSource
 from danswer.context.search.enums import LLMEvaluationType
 from danswer.context.search.enums import SearchType
@@ -10,7 +16,6 @@ from danswer.context.search.models import ChunkContext
 from danswer.context.search.models import RerankingDetails
 from danswer.context.search.models import RetrievalDetails
 from danswer.context.search.models import SavedSearchDoc
-from danswer.one_shot_answer.models import ThreadMessage
 from ee.danswer.server.manage.models import StandardAnswer
 
 
@@ -96,3 +101,48 @@ class ChatBasicResponse(BaseModel):
     # TODO: deprecate both of these
     simple_search_docs: list[SimpleDoc] | None = None
     llm_chunks_indices: list[int] | None = None
+
+
+class OneShotQARequest(ChunkContext):
+    # Supports simplier APIs that don't deal with chat histories or message edits
+    # Easier APIs to work with for developers
+    persona_override_config: PersonaOverrideConfig | None = None
+    persona_id: int | None = None
+
+    messages: list[ThreadMessage]
+    prompt_id: int | None = None
+    retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
+    rerank_settings: RerankingDetails | None = None
+    return_contexts: bool = False
+
+    # allows the caller to specify the exact search query they want to use
+    # can be used if the message sent to the LLM / query should not be the same
+    # will also disable Thread-based Rewording if specified
+    query_override: str | None = None
+
+    # If True, skips generative an AI response to the search query
+    skip_gen_ai_answer_generation: bool = False
+
+    @model_validator(mode="after")
+    def check_persona_fields(self) -> "OneShotQARequest":
+        if self.persona_override_config is None and self.persona_id is None:
+            raise ValueError("Exactly one of persona_config or persona_id must be set")
+        elif self.persona_override_config is not None and (
+            self.persona_id is not None or self.prompt_id is not None
+        ):
+            raise ValueError(
+                "If persona_override_config is set, persona_id and prompt_id cannot be set"
+            )
+        return self
+
+
+class OneShotQAResponse(BaseModel):
+    # This is built piece by piece, any of these can be None as the flow could break
+    answer: str | None = None
+    rephrase: str | None = None
+    citations: list[CitationInfo] | None = None
+    docs: QADocsResponse | None = None
+    llm_selected_doc_indices: list[int] | None = None
+    error_msg: str | None = None
+    chat_message_id: int | None = None
+    contexts: DanswerContexts | None = None

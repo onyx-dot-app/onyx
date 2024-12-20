@@ -82,7 +82,7 @@ class SimpleJob:
             return "running"
         elif self.process.exitcode is None:
             return "cancelled"
-        elif self.process.exitcode > 0:
+        elif self.process.exitcode != 0:
             return "error"
         else:
             return "finished"
@@ -123,7 +123,8 @@ class SimpleJobClient:
         self._cleanup_completed_jobs()
         if len(self.jobs) >= self.n_workers:
             logger.debug(
-                f"No available workers to run job. Currently running '{len(self.jobs)}' jobs, with a limit of '{self.n_workers}'."
+                f"No available workers to run job. "
+                f"Currently running '{len(self.jobs)}' jobs, with a limit of '{self.n_workers}'."
             )
             return None
 

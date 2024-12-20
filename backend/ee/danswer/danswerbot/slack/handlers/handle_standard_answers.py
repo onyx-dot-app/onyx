@@ -155,7 +155,6 @@ def _handle_standard_answers(
             else 0,
             danswerbot_flow=True,
             slack_thread_id=slack_thread_id,
-            one_shot=True,
         )
 
         root_message = get_or_create_root_message(

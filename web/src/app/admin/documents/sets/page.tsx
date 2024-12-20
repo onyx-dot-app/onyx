@@ -83,7 +83,7 @@ const EditRow = ({
             </div>
           </TooltipTrigger>
           {!documentSet.is_up_to_date && (
-            <TooltipContent maxWidth="max-w-sm">
+            <TooltipContent width="max-w-sm">
               <div className="flex break-words break-keep whitespace-pre-wrap items-start">
                 <InfoIcon className="mr-2 mt-0.5" />
                 Cannot update while syncing! Wait for the sync to finish, then

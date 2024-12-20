@@ -7,6 +7,7 @@ import { useState } from "react";
 import { SlackTokensForm } from "./SlackTokensForm";
 import { SourceIcon } from "@/components/SourceIcon";
 import { AdminPageTitle } from "@/components/admin/Title";
+import { ValidSources } from "@/lib/types";
 
 export const NewSlackBotForm = ({}: {}) => {
   const [formValues] = useState({
@@ -21,7 +22,7 @@ export const NewSlackBotForm = ({}: {}) => {
   return (
     <div>
       <AdminPageTitle
-        icon={<SourceIcon iconSize={36} sourceType={"slack"} />}
+        icon={<SourceIcon iconSize={36} sourceType={ValidSources.Slack} />}
         title="New Slack Bot"
       />
       <CardSection>

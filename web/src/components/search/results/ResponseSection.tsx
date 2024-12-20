@@ -6,8 +6,6 @@ import {
   TriangleAlertIcon,
 } from "@/components/icons/icons";
 import { useState } from "react";
-import { Grid } from "react-loader-spinner";
-import { searchState } from "../SearchSection";
 
 export type StatusOptions = "in-progress" | "failed" | "warning" | "success";
 

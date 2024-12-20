@@ -1,8 +1,8 @@
-import { ValidAutoSyncSources } from "@/lib/types";
+import { ValidAutoSyncSource } from "@/lib/types";
 
 // The first key is the connector type, and the second key is the field name
 export const autoSyncConfigBySource: Record<
-  ValidAutoSyncSources,
+  ValidAutoSyncSource,
   Record<
     string,
     {

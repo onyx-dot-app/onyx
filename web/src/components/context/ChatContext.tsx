@@ -1,23 +1,28 @@
 "use client";
 
 import React, { createContext, useContext, useState } from "react";
-import { DocumentSet, Tag, User, ValidSources } from "@/lib/types";
+import {
+  CCPairBasicInfo,
+  DocumentSet,
+  Tag,
+  User,
+  ValidSources,
+} from "@/lib/types";
 import { ChatSession } from "@/app/chat/interfaces";
-import { Persona } from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Folder } from "@/app/chat/folders/interfaces";
-import { InputPrompt } from "@/app/admin/prompt-library/interfaces";
-import { personaComparator } from "@/app/admin/assistants/lib";
 
 interface ChatContextProps {
   chatSessions: ChatSession[];
   availableSources: ValidSources[];
+  ccPairs: CCPairBasicInfo[];
+  tags: Tag[];
+  documentSets: DocumentSet[];
   availableDocumentSets: DocumentSet[];
   availableTags: Tag[];
   llmProviders: LLMProviderDescriptor[];
   folders: Folder[];
   openedFolders: Record<string, boolean>;
-  userInputPrompts: InputPrompt[];
   shouldShowWelcomeModal?: boolean;
   shouldDisplaySourcesIncompleteModal?: boolean;
   defaultAssistantId?: number;

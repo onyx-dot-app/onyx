@@ -20,7 +20,6 @@ from danswer.db.models import DocumentByConnectorCredentialPair
 from danswer.db.models import User
 from danswer.db.models import User__UserGroup
 from danswer.server.documents.models import CredentialBase
-from danswer.server.documents.models import CredentialDataUpdateRequest
 from danswer.utils.logger import setup_logger
 
 
@@ -248,7 +247,6 @@ def create_credential(
     )
 
     db_session.commit()
-
     return credential
 
 
@@ -263,7 +261,8 @@ def _cleanup_credential__user_group_relationships__no_commit(
 
 def alter_credential(
     credential_id: int,
-    credential_data: CredentialDataUpdateRequest,
+    name: str,
+    credential_json: dict[str, Any],
     user: User,
     db_session: Session,
 ) -> Credential | None:
@@ -273,11 +272,13 @@ def alter_credential(
     if credential is None:
         return None
 
-    credential.name = credential_data.name
+    credential.name = name
 
-    # Update only the keys present in credential_data.credential_json
-    for key, value in credential_data.credential_json.items():
-        credential.credential_json[key] = value
+    # Assign a new dictionary to credential.credential_json
+    credential.credential_json = {
+        **credential.credential_json,
+        **credential_json,
+    }
 
     credential.user_id = user.id if user is not None else None
     db_session.commit()
@@ -310,8 +311,8 @@ def update_credential_json(
     credential = fetch_credential_by_id(credential_id, user, db_session)
     if credential is None:
         return None
-    credential.credential_json = credential_json
 
+    credential.credential_json = credential_json
     db_session.commit()
     return credential
 

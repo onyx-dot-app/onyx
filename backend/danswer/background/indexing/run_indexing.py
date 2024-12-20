@@ -19,6 +19,7 @@ from danswer.db.connector_credential_pair import get_last_successful_attempt_tim
 from danswer.db.connector_credential_pair import update_connector_credential_pair
 from danswer.db.engine import get_session_with_tenant
 from danswer.db.enums import ConnectorCredentialPairStatus
+from danswer.db.index_attempt import mark_attempt_canceled
 from danswer.db.index_attempt import mark_attempt_failed
 from danswer.db.index_attempt import mark_attempt_partially_succeeded
 from danswer.db.index_attempt import mark_attempt_succeeded
@@ -85,6 +86,10 @@ def _get_connector_runner(
     return ConnectorRunner(
         connector=runnable_connector, time_range=(start_time, end_time)
     )
+
+
+class ConnectorStopSignal(Exception):
+    """A custom exception used to signal a stop in processing."""
 
 
 def _run_indexing(
@@ -208,9 +213,7 @@ def _run_indexing(
                 # contents still need to be initially pulled.
                 if callback:
                     if callback.should_stop():
-                        raise RuntimeError(
-                            "_run_indexing: Connector stop signal detected"
-                        )
+                        raise ConnectorStopSignal("Connector stop signal detected")
 
                 # TODO: should we move this into the above callback instead?
                 db_session.refresh(db_cc_pair)
@@ -304,26 +307,16 @@ def _run_indexing(
                 )
         except Exception as e:
             logger.exception(
-                f"Connector run ran into exception after elapsed time: {time.time() - start_time} seconds"
+                f"Connector run exceptioned after elapsed time: {time.time() - start_time} seconds"
             )
-            # Only mark the attempt as a complete failure if this is the first indexing window.
-            # Otherwise, some progress was made - the next run will not start from the beginning.
-            # In this case, it is not accurate to mark it as a failure. When the next run begins,
-            # if that fails immediately, it will be marked as a failure.
-            #
-            # NOTE: if the connector is manually disabled, we should mark it as a failure regardless
-            # to give better clarity in the UI, as the next run will never happen.
-            if (
-                ind == 0
-                or not db_cc_pair.status.is_active()
-                or index_attempt.status != IndexingStatus.IN_PROGRESS
-            ):
-                mark_attempt_failed(
+
+            if isinstance(e, ConnectorStopSignal):
+                mark_attempt_canceled(
                     index_attempt.id,
                     db_session,
-                    failure_reason=str(e),
-                    full_exception_trace=traceback.format_exc(),
+                    reason=str(e),
                 )
+
                 if is_primary:
                     update_connector_credential_pair(
                         db_session=db_session,
@@ -335,6 +328,37 @@ def _run_indexing(
                 if INDEXING_TRACER_INTERVAL > 0:
                     tracer.stop()
                 raise e
+            else:
+                # Only mark the attempt as a complete failure if this is the first indexing window.
+                # Otherwise, some progress was made - the next run will not start from the beginning.
+                # In this case, it is not accurate to mark it as a failure. When the next run begins,
+                # if that fails immediately, it will be marked as a failure.
+                #
+                # NOTE: if the connector is manually disabled, we should mark it as a failure regardless
+                # to give better clarity in the UI, as the next run will never happen.
+                if (
+                    ind == 0
+                    or not db_cc_pair.status.is_active()
+                    or index_attempt.status != IndexingStatus.IN_PROGRESS
+                ):
+                    mark_attempt_failed(
+                        index_attempt.id,
+                        db_session,
+                        failure_reason=str(e),
+                        full_exception_trace=traceback.format_exc(),
+                    )
+
+                    if is_primary:
+                        update_connector_credential_pair(
+                            db_session=db_session,
+                            connector_id=db_connector.id,
+                            credential_id=db_credential.id,
+                            net_docs=net_doc_change,
+                        )
+
+                    if INDEXING_TRACER_INTERVAL > 0:
+                        tracer.stop()
+                    raise e
 
             # break => similar to success case. As mentioned above, if the next run fails for the same
             # reason it will then be marked as a failure

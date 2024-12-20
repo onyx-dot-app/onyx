@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: celery-beat
-          image: danswer/danswer-backend-cloud:v0.12.0-cloud.beta.10
+          image: danswer/danswer-backend-cloud:v0.14.0-cloud.beta.4
           imagePullPolicy: IfNotPresent
           command:
             [

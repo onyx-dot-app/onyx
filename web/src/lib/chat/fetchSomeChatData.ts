@@ -13,7 +13,6 @@ import {
 } from "@/lib/types";
 import { ChatSession } from "@/app/chat/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { InputPrompt } from "@/app/admin/prompt-library/interfaces";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Folder } from "@/app/chat/folders/interfaces";
@@ -44,7 +43,6 @@ interface FetchChatDataResult {
   finalDocumentSidebarInitialWidth?: number;
   shouldShowWelcomeModal?: boolean;
   shouldDisplaySourcesIncompleteModal?: boolean;
-  userInputPrompts?: InputPrompt[];
 }
 
 type FetchOption =
@@ -55,8 +53,7 @@ type FetchOption =
   | "assistants"
   | "tags"
   | "llmProviders"
-  | "folders"
-  | "userInputPrompts";
+  | "folders";
 
 /* 
 NOTE: currently unused, but leaving here for future use. 
@@ -76,7 +73,6 @@ export async function fetchSomeChatData(
     tags: () => fetchSS("/query/valid-tags"),
     llmProviders: fetchLLMProvidersSS,
     folders: () => fetchSS("/folder"),
-    userInputPrompts: () => fetchSS("/input_prompt?include_public=true"),
   };
 
   // Always fetch auth type metadata
@@ -150,11 +146,6 @@ export async function fetchSomeChatData(
       case "folders":
         result.folders = result?.ok
           ? ((await result.json()) as { folders: Folder[] }).folders
-          : [];
-        break;
-      case "userInputPrompts":
-        result.userInputPrompts = result?.ok
-          ? ((await result.json()) as InputPrompt[])
           : [];
         break;
     }

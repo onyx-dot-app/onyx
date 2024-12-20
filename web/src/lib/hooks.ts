@@ -1,6 +1,7 @@
 "use client";
 import {
   ConnectorIndexingStatus,
+  OAuthSlackCallbackResponse,
   DocumentBoostStatus,
   Tag,
   UserGroup,
@@ -16,6 +17,7 @@ import { UsersResponse } from "./users/interfaces";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { PersonaCategory } from "@/app/admin/assistants/interfaces";
+import { isAnthropic } from "@/app/admin/configuration/llm/interfaces";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -71,7 +73,9 @@ export const useConnectorCredentialIndexingStatus = (
   getEditable = false
 ) => {
   const { mutate } = useSWRConfig();
-  const url = `${INDEXING_STATUS_URL}${getEditable ? "?get_editable=true" : ""}`;
+  const url = `${INDEXING_STATUS_URL}${
+    getEditable ? "?get_editable=true" : ""
+  }`;
   const swrResponse = useSWR<ConnectorIndexingStatus<any, any>[]>(
     url,
     errorHandlingFetcher,
@@ -157,7 +161,7 @@ export interface LlmOverrideManager {
   globalDefault: LlmOverride;
   setGlobalDefault: React.Dispatch<React.SetStateAction<LlmOverride>>;
   temperature: number | null;
-  setTemperature: React.Dispatch<React.SetStateAction<number | null>>;
+  updateTemperature: (temperature: number | null) => void;
   updateModelOverrideForChatSession: (chatSession?: ChatSession) => void;
 }
 export function useLlmOverride(
@@ -212,6 +216,20 @@ export function useLlmOverride(
     setTemperature(defaultTemperature !== undefined ? defaultTemperature : 0);
   }, [defaultTemperature]);
 
+  useEffect(() => {
+    if (isAnthropic(llmOverride.provider, llmOverride.modelName)) {
+      setTemperature((prevTemp) => Math.min(prevTemp ?? 0, 1.0));
+    }
+  }, [llmOverride]);
+
+  const updateTemperature = (temperature: number | null) => {
+    if (isAnthropic(llmOverride.provider, llmOverride.modelName)) {
+      setTemperature((prevTemp) => Math.min(temperature ?? 0, 1.0));
+    } else {
+      setTemperature(temperature);
+    }
+  };
+
   return {
     updateModelOverrideForChatSession,
     llmOverride,
@@ -219,9 +237,10 @@ export function useLlmOverride(
     globalDefault,
     setGlobalDefault,
     temperature,
-    setTemperature,
+    updateTemperature,
   };
 }
+
 /* 
 EE Only APIs
 */

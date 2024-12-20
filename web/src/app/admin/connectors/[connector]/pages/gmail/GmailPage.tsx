@@ -20,7 +20,7 @@ import { GmailConfig } from "@/lib/connectors/connectors";
 import { useUser } from "@/components/user/UserProvider";
 
 export const GmailMain = () => {
-  const { isLoadingUser, isAdmin, user } = useUser();
+  const { isAdmin, user } = useUser();
 
   const {
     data: appCredentialData,
@@ -59,10 +59,6 @@ export const GmailMain = () => {
   const serviceAccountKeySuccessfullyFetched =
     serviceAccountKeyData ||
     (isServiceAccountKeyError && isServiceAccountKeyError.status === 404);
-
-  if (isLoadingUser) {
-    return <></>;
-  }
 
   if (
     (!appCredentialSuccessfullyFetched && isAppCredentialLoading) ||

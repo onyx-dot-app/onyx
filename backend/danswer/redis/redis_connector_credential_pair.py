@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from danswer.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from danswer.configs.constants import DanswerCeleryPriority
 from danswer.configs.constants import DanswerCeleryQueues
+from danswer.configs.constants import DanswerCeleryTask
 from danswer.db.connector_credential_pair import get_connector_credential_pair_from_id
 from danswer.db.document import (
     construct_document_select_for_connector_credential_pair_by_needs_sync,
@@ -104,7 +105,7 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
 
             # Priority on sync's triggered by new indexing should be medium
             result = celery_app.send_task(
-                "vespa_metadata_sync_task",
+                DanswerCeleryTask.VESPA_METADATA_SYNC_TASK,
                 kwargs=dict(document_id=doc.id, tenant_id=tenant_id),
                 queue=DanswerCeleryQueues.VESPA_METADATA_SYNC,
                 task_id=custom_task_id,

@@ -14,7 +14,6 @@ import { destructureValue, getFinalLLM, structureValue } from "@/lib/llm/utils";
 import { useState } from "react";
 import { Hoverable } from "@/components/Hoverable";
 import { Popover } from "@/components/popover/Popover";
-import { StarFeedback } from "@/components/icons/icons";
 import { IconType } from "react-icons";
 import { FiRefreshCw } from "react-icons/fi";
 

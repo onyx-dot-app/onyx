@@ -5,18 +5,24 @@ import { Separator } from "@/components/ui/separator";
 
 import { Modal } from "../Modal";
 import { useState, useEffect } from "react";
+import Cookies from "js-cookie";
 
 export function UserDisclaimerModal(props: any) {
   const { disclaimerTitle, disclaimerText } = props;
   const [show, setShow] = useState(false);
+  const justLoggedIn = Cookies.get("JUST_LOGGED_IN");
 
-  useEffect(() => {
-    if (window.justLoggedIn) {
-      setShow(true)
-      window.justLoggedIn = false;
-    }
-  }, []);
+  if (justLoggedIn){
+    setShow(true);
+    Cookies.remove("JUST_LOGGED_IN");
+  }
 
+  // useEffect(() => {
+  //   if (window.justLoggedIn) {
+  //     setShow(true)
+  //     window.justLoggedIn = false;
+  //   }
+  // }, []);
   return (show && disclaimerText != "") ? (
     <Modal
       className="max-w-4xl"

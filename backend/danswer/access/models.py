@@ -18,6 +18,11 @@ class ExternalAccess:
 
 @dataclass(frozen=True)
 class DocExternalAccess:
+    """
+    This is just a class to wrap the external access and the document ID
+    together. It's used for syncing document permissions to Redis.
+    """
+
     external_access: ExternalAccess
     # The document ID
     doc_id: str

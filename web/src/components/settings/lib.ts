@@ -43,11 +43,9 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
     if (!results[0].ok) {
       if (results[0].status === 403 || results[0].status === 401) {
         settings = {
+          auto_scroll: true,
           product_gating: GatingType.NONE,
           gpu_enabled: false,
-          chat_page_enabled: true,
-          search_page_enabled: true,
-          default_page: "search",
           maximum_chat_retention_days: null,
           notifications: [],
           needs_reindexing: false,

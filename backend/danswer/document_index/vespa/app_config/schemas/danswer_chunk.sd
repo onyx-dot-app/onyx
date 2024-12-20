@@ -4,6 +4,8 @@ schema DANSWER_CHUNK_NAME {
         # Not to be confused with the UUID generated for this chunk which is called documentid by default
         field document_id type string {
             indexing: summary | attribute
+            attribute: fast-search
+            rank: filter
         }
         field chunk_id type int {
             indexing: summary | attribute
