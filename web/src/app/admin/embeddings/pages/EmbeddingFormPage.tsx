@@ -216,7 +216,8 @@ export default function EmbeddingForm() {
         <button
           className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-accent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
           onClick={async () => {
-            updateSearch();
+            await updateSearch();
+            router.refresh();
             navigateToEmbeddingPage("search settings");
           }}
         >
