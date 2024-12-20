@@ -1,0 +1,50 @@
+name: Deploy to Server
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install sshpass
+      run: sudo apt-get install sshpass
+
+    - name: Deploy to server
+      env:
+        SERVER_USER: ${{ secrets.SERVER_USER_APP }}
+        SERVER_IP: ${{ secrets.SERVER_IP_APP }}
+        SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD_APP }}
+      run: |
+        # Create a tarball of the project
+        git archive --format=tar.gz -o project.tar.gz HEAD
+        
+        # Copy the tarball to the server and extract it
+        sshpass -p "$SERVER_PASSWORD" scp -o StrictHostKeyChecking=no project.tar.gz $SERVER_USER@$SERVER_IP:/tmp/project.tar.gz
+        sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP << EOF
+          
+          cd ~/grantgpt/
+          
+          rm -r *
+          mv /tmp/project.tar.gz project.tar.gz 
+          tar -xzf project.tar.gz
+          rm project.tar.gz
+          
+          cd deployment/docker_compose
+          
+          # Copy .env files
+          cp ~/env_files/.env .env
+          cp ~/env_files/.env.nginx .env.nginx
+          
+          # Deploy
+          docker compose -f docker-compose.prod.yml -p danswer-stack down
+          docker compose -f docker-compose.prod.yml -p danswer-stack up -d --build --force-recreate
+          ./init-letsencrypt.sh
+          
+        EOF
