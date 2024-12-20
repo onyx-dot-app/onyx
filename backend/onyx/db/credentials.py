@@ -97,6 +97,7 @@ def _add_user_filters(
     where_clause = User__UserGroup.user_id == user.id
     if user.role == UserRole.CURATOR:
         where_clause &= User__UserGroup.is_curator == True  # noqa: E712
+
     if get_editable:
         user_groups = select(User__UserGroup.user_group_id).where(
             User__UserGroup.user_id == user.id
