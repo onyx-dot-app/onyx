@@ -28,7 +28,7 @@ def test_user_role_setting_permissions(reset: None) -> None:
         UserManager.set_role(
             user_to_set=curator,
             target_role=UserRole.CURATOR,
-            user_to_perform_action=admin_user,
+            user_performing_action=admin_user,
         )
 
     global_curator: DATestUser = UserManager.create(name="global_curator")
@@ -39,14 +39,14 @@ def test_user_role_setting_permissions(reset: None) -> None:
         UserManager.set_role(
             user_to_set=global_curator,
             target_role=UserRole.GLOBAL_CURATOR,
-            user_to_perform_action=basic_user,
+            user_performing_action=basic_user,
         )
 
     # Setting the role of a global curator should work for an admin user
     UserManager.set_role(
         user_to_set=global_curator,
         target_role=UserRole.GLOBAL_CURATOR,
-        user_to_perform_action=admin_user,
+        user_performing_action=admin_user,
     )
     assert UserManager.verify_role(global_curator, UserRole.GLOBAL_CURATOR)
 
@@ -55,7 +55,7 @@ def test_user_role_setting_permissions(reset: None) -> None:
         UserManager.set_role(
             user_to_set=global_curator,
             target_role=UserRole.BASIC,
-            user_to_perform_action=global_curator,
+            user_performing_action=global_curator,
         )
     assert UserManager.verify_role(global_curator, UserRole.GLOBAL_CURATOR)
 

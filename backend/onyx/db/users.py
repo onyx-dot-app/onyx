@@ -4,10 +4,13 @@ from uuid import UUID
 from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import func
+from sqlalchemy import not_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
+from onyx.auth.schemas import UserStatus
+from onyx.db.api_key import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.db.models import User
 
 
@@ -83,7 +86,7 @@ def validate_user_role_update(requested_role: UserRole, current_role: UserRole) 
         )
 
 
-def list_users(
+def get_all_users(
     db_session: Session, email_filter_string: str = "", include_external: bool = False
 ) -> Sequence[User]:
     """List all users. No pagination as of now, as the # of users
@@ -103,13 +106,84 @@ def list_users(
     return db_session.scalars(stmt).unique().all()
 
 
+def _get_accepted_user_where_clause(
+    email_filter_string: str = "",
+    status_filter: UserStatus | None = None,
+    roles_filter: list[UserRole] = [],
+    include_external: bool = False,
+) -> list:
+    # Init where clause and remove any users with API email domains
+    where_clause = [not_(User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN))]
+
+    # Exclude external permissioned users
+    if not include_external:
+        where_clause.append(User.role != UserRole.EXT_PERM_USER)
+
+    if email_filter_string:
+        where_clause.append(User.email.ilike(f"%{email_filter_string}%"))
+
+    if roles_filter:
+        where_clause.append(User.role.in_(roles_filter))
+
+    # When status_filter = "live" the inner condition evaluates True, if status_filter is "deactivated" we get False.
+    # so if status_filter = "live" we select only active users, and if status_filter = "deactivated" we select only inactive users
+    if status_filter:
+        where_clause.append(User.is_active == (status_filter == UserStatus.LIVE))
+
+    return where_clause
+
+
+def get_page_of_filtered_users(
+    db_session: Session,
+    page_size: int,
+    page: int,
+    email_filter_string: str = "",
+    status_filter: UserStatus | None = None,
+    roles_filter: list[UserRole] = [],
+    include_external: bool = False,
+) -> Sequence[User]:
+    users_stmt = select(User)
+
+    where_clause = _get_accepted_user_where_clause(
+        email_filter_string=email_filter_string,
+        status_filter=status_filter,
+        roles_filter=roles_filter,
+        include_external=include_external,
+    )
+    # Apply pagination
+    users_stmt = users_stmt.offset((page - 1) * page_size).limit(page_size)
+    # Apply filtering
+    users_stmt = users_stmt.where(*where_clause)
+
+    return db_session.scalars(users_stmt).unique().all()
+
+
+def get_total_filtered_users_count(
+    db_session: Session,
+    email_filter_string: str = "",
+    status_filter: UserStatus | None = None,
+    roles_filter: list[UserRole] = [],
+    include_external: bool = False,
+) -> int:
+    where_clause = _get_accepted_user_where_clause(
+        email_filter_string=email_filter_string,
+        status_filter=status_filter,
+        roles_filter=roles_filter,
+        include_external=include_external,
+    )
+    total_count_stmt = select(func.count()).select_from(User)
+    # Apply filtering
+    total_count_stmt = total_count_stmt.where(*where_clause)
+
+    return db_session.scalar(total_count_stmt)
+
+
 def get_user_by_email(email: str, db_session: Session) -> User | None:
     user = (
         db_session.query(User)
         .filter(func.lower(User.email) == func.lower(email))
         .first()
     )
-
     return user
 
 

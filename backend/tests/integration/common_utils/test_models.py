@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.auth.schemas import UserRole
+from onyx.auth.schemas import UserStatus
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
@@ -36,6 +37,8 @@ class DATestUser(BaseModel):
     email: str
     password: str
     headers: dict
+    role: UserRole
+    status: UserStatus
 
 
 class DATestPersonaCategory(BaseModel):

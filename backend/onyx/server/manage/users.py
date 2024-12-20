@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from fastapi import Body
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import Request
 from psycopg2.errors import UniqueViolation
 from pydantic import BaseModel
@@ -47,10 +48,13 @@ from onyx.db.models import Persona__User
 from onyx.db.models import SamlAccount
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.users import get_all_users
+from onyx.db.users import get_page_of_filtered_users
+from onyx.db.users import get_total_filtered_users_count
 from onyx.db.users import get_user_by_email
-from onyx.db.users import list_users
 from onyx.db.users import validate_user_role_update
 from onyx.key_value_store.factory import get_kv_store
+from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import UserByEmail
@@ -67,9 +71,7 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
-
 router = APIRouter()
-
 
 USERS_PAGE_SIZE = 10
 
@@ -115,6 +117,71 @@ def set_user_role(
     db_session.commit()
 
 
+@router.get("/manage/users/accepted")
+def list_accepted_users(
+    q: str | None = Query(default=None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=1000),
+    roles: list[UserRole] = Query(default=[]),
+    status: UserStatus | None = Query(default=None),
+    user: User | None = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> PaginatedReturn[FullUserSnapshot]:
+    if not q:
+        q = ""
+
+    filtered_accepted_users = get_page_of_filtered_users(
+        db_session=db_session,
+        page_size=page_size,
+        page=page,
+        email_filter_string=q,
+        status_filter=status,
+        roles_filter=roles,
+    )
+
+    total_accepted_users_count = get_total_filtered_users_count(
+        db_session=db_session,
+        email_filter_string=q,
+        status_filter=status,
+        roles_filter=roles,
+    )
+
+    if not filtered_accepted_users:
+        logger.info("No users found")
+        return PaginatedReturn(
+            items=[],
+            total_items=0,
+        )
+
+    return PaginatedReturn(
+        items=[
+            FullUserSnapshot.from_user_model(user) for user in filtered_accepted_users
+        ],
+        total_items=total_accepted_users_count,
+    )
+
+
+@router.get("/manage/users/invited")
+def list_invited_users(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=1000),
+    user: User | None = Depends(current_curator_or_admin_user),
+) -> PaginatedReturn[InvitedUserSnapshot]:
+    invited_emails = get_invited_users()
+
+    total_count = len(invited_emails)
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+
+    return PaginatedReturn(
+        items=[
+            InvitedUserSnapshot(email=email)
+            for email in invited_emails[start_idx:end_idx]
+        ],
+        total_items=total_count,
+    )
+
+
 @router.get("/manage/users")
 def list_all_users(
     q: str | None = None,
@@ -129,7 +196,7 @@ def list_all_users(
 
     users = [
         user
-        for user in list_users(db_session, email_filter_string=q)
+        for user in get_all_users(db_session, email_filter_string=q)
         if not is_api_key_email_address(user.email)
     ]
 
@@ -449,7 +516,7 @@ def list_all_users_basic_info(
     _: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
-    users = list_users(db_session)
+    users = get_all_users(db_session)
     return [MinimalUserSnapshot(id=user.id, email=user.email) for user in users]
 
 

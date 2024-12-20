@@ -15,7 +15,7 @@ from ee.onyx.server.reporting.usage_export_models import UsageReportMetadata
 from ee.onyx.server.reporting.usage_export_models import UserSkeleton
 from onyx.auth.schemas import UserStatus
 from onyx.configs.constants import FileOrigin
-from onyx.db.users import list_users
+from onyx.db.users import get_all_users
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
@@ -86,7 +86,7 @@ def generate_user_report(
         csvwriter = csv.writer(temp_file, delimiter=",")
         csvwriter.writerow(["user_id", "status"])
 
-        users = list_users(db_session)
+        users = get_all_users(db_session)
         for user in users:
             user_skeleton = UserSkeleton(
                 user_id=str(user.id),

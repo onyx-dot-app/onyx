@@ -4,14 +4,13 @@ from uuid import uuid4
 
 import requests
 
-from onyx.db.models import UserRole
-from onyx.server.manage.models import AllUsersResponse
+from onyx.auth.schemas import UserRole
+from onyx.auth.schemas import UserStatus
+from onyx.server.documents.models import PaginatedReturn
 from onyx.server.models import FullUserSnapshot
-from onyx.server.models import InvitedUserSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser
-
 
 DOMAIN = "test.com"
 DEFAULT_PASSWORD = "TestPassword123!"
@@ -26,6 +25,7 @@ class UserManager:
     def create(
         name: str | None = None,
         email: str | None = None,
+        is_first_user: bool = False,
     ) -> DATestUser:
         if name is None:
             name = f"test{str(uuid4())}"
@@ -47,11 +47,15 @@ class UserManager:
         )
         response.raise_for_status()
 
+        role = UserRole.ADMIN if is_first_user else UserRole.BASIC
+
         test_user = DATestUser(
             id=response.json()["id"],
             email=email,
             password=password,
             headers=deepcopy(GENERAL_HEADERS),
+            role=role,
+            status=UserStatus.LIVE,
         )
         print(f"Created user {test_user.email}")
 
@@ -89,7 +93,13 @@ class UserManager:
         return test_user
 
     @staticmethod
-    def verify_role(user_to_verify: DATestUser, target_role: UserRole) -> bool:
+    def verify_role(
+        user_to_verify: DATestUser,
+        target_role: UserRole | None = None,
+    ) -> bool:
+        if target_role is None:
+            target_role = user_to_verify.role
+
         response = requests.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_to_verify.headers,
@@ -101,41 +111,147 @@ class UserManager:
     def set_role(
         user_to_set: DATestUser,
         target_role: UserRole,
-        user_to_perform_action: DATestUser | None = None,
-    ) -> None:
-        if user_to_perform_action is None:
-            user_to_perform_action = user_to_set
+        user_performing_action: DATestUser | None = None,
+    ) -> DATestUser:
+        if user_performing_action is None:
+            user_performing_action = user_to_set
         response = requests.patch(
             url=f"{API_SERVER_URL}/manage/set-user-role",
             json={"user_email": user_to_set.email, "new_role": target_role.value},
-            headers=user_to_perform_action.headers,
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        user_to_set.role = target_role
+        return user_to_set
+
+    @staticmethod
+    def verify_status(
+        user_to_verify: DATestUser, target_status: UserStatus | None = None
+    ) -> bool:
+        if target_status is None:
+            target_status = user_to_verify.status
+        response = requests.get(
+            url=f"{API_SERVER_URL}/me",
+            headers=user_to_verify.headers,
         )
         response.raise_for_status()
 
+        is_active = response.json().get("is_active", None)
+        if is_active is None:
+            raise KeyError("The 'is_active' field is not found in the user's info")
+        return target_status == UserStatus("live" if is_active else "deactivated")
+
     @staticmethod
-    def verify(
-        user: DATestUser, user_to_perform_action: DATestUser | None = None
-    ) -> None:
-        if user_to_perform_action is None:
-            user_to_perform_action = user
+    def set_status(
+        user_to_set: DATestUser,
+        target_status: UserStatus,
+        user_performing_action: DATestUser | None = None,
+    ) -> DATestUser:
+        if user_performing_action is None:
+            user_performing_action = user_to_set
+        if target_status == UserStatus.LIVE:
+            url_substring = "activate"
+        elif target_status == UserStatus.DEACTIVATED:
+            url_substring = "deactivate"
+        response = requests.patch(
+            url=f"{API_SERVER_URL}/manage/admin/{url_substring}-user",
+            json={"user_email": user_to_set.email},
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        user_to_set.status = target_status
+        return user_to_set
+
+    @staticmethod
+    def create_test_users(
+        user_name_prefix: str,
+        count: int = 10,
+        role: UserRole = UserRole.BASIC,
+        status: UserStatus | None = None,
+        admin_user: DATestUser = None,
+        has_first_user: bool = False,
+    ) -> list[DATestUser]:
+        users_list = []
+        for i in range(1, count + 1):
+            user = UserManager.create(
+                name=f"{user_name_prefix}_{i}", is_first_user=has_first_user and i == 1
+            )
+            if has_first_user and i == 1:
+                admin_user = user
+            if role != UserRole.BASIC:
+                user = UserManager.set_role(user, role, admin_user)
+            if status:
+                user = UserManager.set_status(user, status, admin_user)
+            if status != UserStatus.DEACTIVATED:
+                assert UserManager.verify_role(user)
+                assert UserManager.verify_status(user)
+            users_list.append(user)
+        return users_list
+
+    @staticmethod
+    def get_user_page(
+        page: int = 1,
+        page_size: int = 10,
+        search_query: str | None = None,
+        role_filter: list[UserRole] | None = None,
+        status_filter: UserStatus | None = None,
+        user_performing_action: DATestUser | None = None,
+    ) -> PaginatedReturn[FullUserSnapshot]:
+        query_params = {
+            "page": page,
+            "page_size": page_size,
+            "q": search_query if search_query else None,
+            "roles": role_filter if role_filter else None,
+            "status": status_filter.value if status_filter else None,
+        }
+        # Remove None values
+        query_params = {
+            key: value for key, value in query_params.items() if value is not None
+        }
+
         response = requests.get(
-            url=f"{API_SERVER_URL}/manage/users",
-            headers=user_to_perform_action.headers
-            if user_to_perform_action
+            url=f"{API_SERVER_URL}/manage/users/accepted?{urlencode(query_params, doseq=True)}",
+            headers=user_performing_action.headers
+            if user_performing_action
             else GENERAL_HEADERS,
         )
         response.raise_for_status()
 
         data = response.json()
-        all_users = AllUsersResponse(
-            accepted=[FullUserSnapshot(**user) for user in data["accepted"]],
-            invited=[InvitedUserSnapshot(**user) for user in data["invited"]],
-            slack_users=[FullUserSnapshot(**user) for user in data["slack_users"]],
-            accepted_pages=data["accepted_pages"],
-            invited_pages=data["invited_pages"],
-            slack_users_pages=data["slack_users_pages"],
+        paginated_result = PaginatedReturn(
+            items=[FullUserSnapshot(**user) for user in data["items"]],
+            total_items=data["total_items"],
         )
-        for accepted_user in all_users.accepted:
-            if accepted_user.email == user.email and accepted_user.id == user.id:
-                return
-        raise ValueError(f"User {user.email} not found")
+        assert len(paginated_result.items) == page_size
+        return paginated_result
+
+    @staticmethod
+    def verify_pagination(
+        users: list[DATestUser],
+        page_size: int = 5,
+        search_query: str | None = None,
+        role_filter: list[UserRole] | None = None,
+        status_filter: UserStatus | None = None,
+        user_performing_action: DATestUser | None = None,
+    ) -> None:
+        all_expected_emails = set([user.email for user in users])
+
+        retrieved_users = []
+        i = 0
+        while i == 0 or i < len(users):
+            paginated_result = UserManager.get_user_page(
+                page=i // page_size + 1,
+                page_size=page_size,
+                search_query=search_query,
+                role_filter=role_filter,
+                status_filter=status_filter,
+                user_performing_action=user_performing_action,
+            )
+            i += page_size
+
+            assert paginated_result.total_items == len(users)
+            assert len(paginated_result.items) == page_size
+            retrieved_users.extend(paginated_result.items)
+
+        all_retrieved_emails = set([user.email for user in retrieved_users])
+        assert all_expected_emails == all_retrieved_emails

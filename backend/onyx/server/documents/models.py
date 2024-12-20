@@ -1,5 +1,7 @@
 from datetime import datetime
 from typing import Any
+from typing import Generic
+from typing import TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -19,6 +21,8 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError as DbIndexAttemptError
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
+from onyx.server.models import FullUserSnapshot
+from onyx.server.models import InvitedUserSnapshot
 from onyx.server.utils import mask_credential_dict
 
 
@@ -201,26 +205,19 @@ class IndexAttemptError(BaseModel):
         )
 
 
-class PaginatedIndexAttempts(BaseModel):
-    index_attempts: list[IndexAttemptSnapshot]
-    page: int
-    total_pages: int
+# These are the types currently supported by the pagination hook
+# More api endpoints can be refactored and be added here for use with the pagination hook
+PaginatedType = TypeVar(
+    "PaginatedType",
+    IndexAttemptSnapshot,
+    FullUserSnapshot,
+    InvitedUserSnapshot,
+)
 
-    @classmethod
-    def from_models(
-        cls,
-        index_attempt_models: list[IndexAttempt],
-        page: int,
-        total_pages: int,
-    ) -> "PaginatedIndexAttempts":
-        return cls(
-            index_attempts=[
-                IndexAttemptSnapshot.from_index_attempt_db_model(index_attempt_model)
-                for index_attempt_model in index_attempt_models
-            ],
-            page=page,
-            total_pages=total_pages,
-        )
+
+class PaginatedReturn(BaseModel, Generic[PaginatedType]):
+    items: list[PaginatedType]
+    total_items: int
 
 
 class CCPairFullInfo(BaseModel):

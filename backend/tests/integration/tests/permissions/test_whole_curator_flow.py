@@ -102,7 +102,7 @@ def test_global_curator_flow(reset: None) -> None:
     UserManager.set_role(
         user_to_set=global_curator,
         target_role=UserRole.GLOBAL_CURATOR,
-        user_to_perform_action=admin_user,
+        user_performing_action=admin_user,
     )
     assert UserManager.verify_role(global_curator, UserRole.GLOBAL_CURATOR)
 
