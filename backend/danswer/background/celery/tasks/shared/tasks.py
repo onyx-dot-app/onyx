@@ -9,6 +9,7 @@ from tenacity import RetryError
 from danswer.access.access import get_access_for_document
 from danswer.background.celery.apps.app_base import task_logger
 from danswer.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
+from danswer.configs.constants import DanswerCeleryTask
 from danswer.db.document import delete_document_by_connector_credential_pair__no_commit
 from danswer.db.document import delete_documents_complete__no_commit
 from danswer.db.document import get_document
@@ -31,7 +32,7 @@ LIGHT_TIME_LIMIT = LIGHT_SOFT_TIME_LIMIT + 15
 
 
 @shared_task(
-    name="document_by_cc_pair_cleanup_task",
+    name=DanswerCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
     soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
     time_limit=LIGHT_TIME_LIMIT,
     max_retries=DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES,

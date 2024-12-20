@@ -6,6 +6,7 @@ import zipfile
 from collections.abc import Callable
 from collections.abc import Iterator
 from email.parser import Parser as EmailParser
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from typing import Dict
@@ -15,13 +16,17 @@ import chardet
 import docx  # type: ignore
 import openpyxl  # type: ignore
 import pptx  # type: ignore
+from docx import Document
+from fastapi import UploadFile
 from pypdf import PdfReader
 from pypdf.errors import PdfStreamError
 
 from danswer.configs.constants import DANSWER_METADATA_FILENAME
+from danswer.configs.constants import FileOrigin
 from danswer.file_processing.html_utils import parse_html_page_basic
 from danswer.file_processing.unstructured import get_unstructured_api_key
 from danswer.file_processing.unstructured import unstructured_to_text
+from danswer.file_store.file_store import FileStore
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -65,7 +70,7 @@ def get_file_ext(file_path_or_name: str | Path) -> str:
     return extension
 
 
-def check_file_ext_is_valid(ext: str) -> bool:
+def is_valid_file_ext(ext: str) -> bool:
     return ext in VALID_FILE_EXTENSIONS
 
 
@@ -295,7 +300,7 @@ def pptx_to_text(file: IO[Any]) -> str:
 
 
 def xlsx_to_text(file: IO[Any]) -> str:
-    workbook = openpyxl.load_workbook(file)
+    workbook = openpyxl.load_workbook(file, read_only=True)
     text_content = []
     for sheet in workbook.worksheets:
         sheet_string = "\n".join(
@@ -359,7 +364,7 @@ def extract_file_text(
             elif file_name is not None:
                 final_extension = get_file_ext(file_name)
 
-            if check_file_ext_is_valid(final_extension):
+            if is_valid_file_ext(final_extension):
                 return extension_to_function.get(final_extension, file_io_to_text)(file)
 
         # Either the file somehow has no name or the extension is not one that we recognize
@@ -375,3 +380,35 @@ def extract_file_text(
             ) from e
         logger.warning(f"Failed to process file {file_name or 'Unknown'}: {str(e)}")
         return ""
+
+
+def convert_docx_to_txt(
+    file: UploadFile, file_store: FileStore, file_path: str
+) -> None:
+    file.file.seek(0)
+    docx_content = file.file.read()
+    doc = Document(BytesIO(docx_content))
+
+    # Extract text from the document
+    full_text = []
+    for para in doc.paragraphs:
+        full_text.append(para.text)
+
+    # Join the extracted text
+    text_content = "\n".join(full_text)
+
+    txt_file_path = docx_to_txt_filename(file_path)
+    file_store.save_file(
+        file_name=txt_file_path,
+        content=BytesIO(text_content.encode("utf-8")),
+        display_name=file.filename,
+        file_origin=FileOrigin.CONNECTOR,
+        file_type="text/plain",
+    )
+
+
+def docx_to_txt_filename(file_path: str) -> str:
+    """
+    Convert a .docx file path to its corresponding .txt file path.
+    """
+    return file_path.rsplit(".", 1)[0] + ".txt"

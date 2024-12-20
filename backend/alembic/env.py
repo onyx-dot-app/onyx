@@ -1,5 +1,5 @@
 from sqlalchemy.engine.base import Connection
-from typing import Any
+from typing import Literal
 import asyncio
 from logging.config import fileConfig
 import logging
@@ -8,6 +8,7 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.sql import text
+from sqlalchemy.sql.schema import SchemaItem
 
 from shared_configs.configs import MULTI_TENANT
 from danswer.db.engine import build_connection_string
@@ -35,7 +36,18 @@ logger = logging.getLogger(__name__)
 
 
 def include_object(
-    object: Any, name: str, type_: str, reflected: bool, compare_to: Any
+    object: SchemaItem,
+    name: str | None,
+    type_: Literal[
+        "schema",
+        "table",
+        "column",
+        "index",
+        "unique_constraint",
+        "foreign_key_constraint",
+    ],
+    reflected: bool,
+    compare_to: SchemaItem | None,
 ) -> bool:
     """
     Determines whether a database object should be included in migrations.

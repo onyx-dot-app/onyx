@@ -11,6 +11,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from danswer.db.connector_credential_pair import get_connector_credential_pair_from_id
+from danswer.db.enums import AccessType
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import Credential__UserGroup
@@ -298,6 +299,11 @@ def fetch_user_groups_for_documents(
     db_session: Session,
     document_ids: list[str],
 ) -> Sequence[tuple[str, list[str]]]:
+    """
+    Fetches all user groups that have access to the given documents.
+
+    NOTE: this doesn't include groups if the cc_pair is access type SYNC
+    """
     stmt = (
         select(Document.id, func.array_agg(UserGroup.name))
         .join(
@@ -306,7 +312,11 @@ def fetch_user_groups_for_documents(
         )
         .join(
             ConnectorCredentialPair,
-            ConnectorCredentialPair.id == UserGroup__ConnectorCredentialPair.cc_pair_id,
+            and_(
+                ConnectorCredentialPair.id
+                == UserGroup__ConnectorCredentialPair.cc_pair_id,
+                ConnectorCredentialPair.access_type != AccessType.SYNC,
+            ),
         )
         .join(
             DocumentByConnectorCredentialPair,

@@ -8,12 +8,20 @@ test(
   async ({ page }, testInfo) => {
     // Test simple loading
     await page.goto("http://localhost:3000/chat");
-    await expect(page.locator("div.text-2xl").nth(0)).toHaveText("General");
-    await expect(page.getByRole("button", { name: "Search S" })).toHaveClass(
-      /text-text-application-untoggled/
-    );
-    await expect(page.getByRole("button", { name: "Chat D" })).toHaveClass(
-      /text-text-application-toggled/
-    );
+
+    // Check for the "General" text in the new UI element
+    await expect(
+      page.locator("div.flex.items-center span.font-bold")
+    ).toHaveText("General");
+
+    // Check for the presence of the new UI element
+    await expect(
+      page.locator("div.flex.justify-center div.bg-black.rounded-full")
+    ).toBeVisible();
+
+    // Check for the SVG icon
+    await expect(
+      page.locator("div.flex.justify-center svg.w-5.h-5")
+    ).toBeVisible();
   }
 );

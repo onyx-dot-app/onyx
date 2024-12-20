@@ -13,7 +13,9 @@ export default function AssistantBanner({
   liveAssistant,
   allAssistants,
   onAssistantChange,
+  mobile = false,
 }: {
+  mobile?: boolean;
   recentAssistants: Persona[];
   liveAssistant: Persona | undefined;
   allAssistants: Persona[];
@@ -35,13 +37,15 @@ export default function AssistantBanner({
           )
         )
         // Take first 4
-        .slice(0, 4)
+        .slice(0, mobile ? 2 : 4)
         .map((assistant) => (
           <TooltipProvider key={assistant.id}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
-                  className="flex w-36 mx-3 py-1.5 scale-[1.] rounded-full border border-background-150  justify-center items-center gap-x-2 py-1 px-3 hover:bg-background-125 transition-colors cursor-pointer"
+                  className={`${
+                    mobile ? "w-full" : "w-36 mx-3"
+                  } flex py-1.5 scale-[1.] rounded-full border border-background-150 justify-center items-center gap-x-2 py-1 px-3 hover:bg-background-125 transition-colors cursor-pointer`}
                   onClick={() => onAssistantChange(assistant)}
                 >
                   <AssistantIcon

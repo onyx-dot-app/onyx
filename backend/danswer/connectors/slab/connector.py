@@ -12,12 +12,15 @@ from dateutil import parser
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.interfaces import GenerateDocumentsOutput
+from danswer.connectors.interfaces import GenerateSlimDocumentOutput
 from danswer.connectors.interfaces import LoadConnector
 from danswer.connectors.interfaces import PollConnector
 from danswer.connectors.interfaces import SecondsSinceUnixEpoch
+from danswer.connectors.interfaces import SlimConnector
 from danswer.connectors.models import ConnectorMissingCredentialError
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
+from danswer.connectors.models import SlimDocument
 from danswer.utils.logger import setup_logger
 
 
@@ -27,6 +30,8 @@ logger = setup_logger()
 # Fairly generous retry because it's not understood why occasionally GraphQL requests fail even with timeout > 1 min
 SLAB_GRAPHQL_MAX_TRIES = 10
 SLAB_API_URL = "https://api.slab.com/v1/graphql"
+
+_SLIM_BATCH_SIZE = 1000
 
 
 def run_graphql_request(
@@ -158,20 +163,25 @@ def get_slab_url_from_title_id(base_url: str, title: str, page_id: str) -> str:
     return urljoin(urljoin(base_url, "posts/"), url_id)
 
 
-class SlabConnector(LoadConnector, PollConnector):
+class SlabConnector(LoadConnector, PollConnector, SlimConnector):
     def __init__(
         self,
         base_url: str,
         batch_size: int = INDEX_BATCH_SIZE,
-        slab_bot_token: str | None = None,
     ) -> None:
         self.base_url = base_url
         self.batch_size = batch_size
-        self.slab_bot_token = slab_bot_token
+        self._slab_bot_token: str | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self.slab_bot_token = credentials["slab_bot_token"]
+        self._slab_bot_token = credentials["slab_bot_token"]
         return None
+
+    @property
+    def slab_bot_token(self) -> str:
+        if self._slab_bot_token is None:
+            raise ConnectorMissingCredentialError("Slab")
+        return self._slab_bot_token
 
     def _iterate_posts(
         self, time_filter: Callable[[datetime], bool] | None = None
@@ -227,3 +237,21 @@ class SlabConnector(LoadConnector, PollConnector):
         yield from self._iterate_posts(
             time_filter=lambda t: start_time <= t <= end_time
         )
+
+    def retrieve_all_slim_documents(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        slim_doc_batch: list[SlimDocument] = []
+        for post_id in get_all_post_ids(self.slab_bot_token):
+            slim_doc_batch.append(
+                SlimDocument(
+                    id=post_id,
+                )
+            )
+            if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:
+                yield slim_doc_batch
+                slim_doc_batch = []
+        if slim_doc_batch:
+            yield slim_doc_batch

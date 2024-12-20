@@ -89,3 +89,6 @@ export const getProviderIcon = (providerName: string, modelName?: string) => {
       return CPUIcon;
   }
 };
+
+export const isAnthropic = (provider: string, modelName: string) =>
+  provider === "anthropic" || modelName.toLowerCase().includes("claude");

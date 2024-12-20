@@ -17,18 +17,17 @@ export default async function Page(props: {
   const requestCookies = await cookies();
   const data = await fetchChatData(searchParams);
 
-
   if ("redirect" in data) {
     redirect(data.redirect);
   }
- 
+
   const config = await fetchEEASettings();
-  
+
   const {
     disclaimerTitle,
     disclaimerText
   } = config;
-  
+
   const {
     user,
     chatSessions,
@@ -41,7 +40,7 @@ export default async function Page(props: {
     openedFolders,
     defaultAssistantId,
     shouldShowWelcomeModal,
-    userInputPrompts,
+    ccPairs,
   } = data;
 
   return (
@@ -56,12 +55,14 @@ export default async function Page(props: {
         value={{
           chatSessions,
           availableSources,
+          ccPairs,
+          documentSets,
+          tags,
           availableDocumentSets: documentSets,
           availableTags: tags,
           llmProviders,
           folders,
           openedFolders,
-          userInputPrompts,
           shouldShowWelcomeModal,
           defaultAssistantId,
         }}

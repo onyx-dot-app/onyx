@@ -69,8 +69,10 @@ class TenantManager:
         return AllUsersResponse(
             accepted=[FullUserSnapshot(**user) for user in data["accepted"]],
             invited=[InvitedUserSnapshot(**user) for user in data["invited"]],
+            slack_users=[FullUserSnapshot(**user) for user in data["slack_users"]],
             accepted_pages=data["accepted_pages"],
             invited_pages=data["invited_pages"],
+            slack_users_pages=data["slack_users_pages"],
         )
 
     @staticmethod

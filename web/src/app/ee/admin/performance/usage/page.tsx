@@ -4,6 +4,7 @@ import { DateRangeSelector } from "../DateRangeSelector";
 import { DanswerBotChart } from "./DanswerBotChart";
 import { FeedbackChart } from "./FeedbackChart";
 import { QueryPerformanceChart } from "./QueryPerformanceChart";
+import { PersonaMessagesChart } from "./PersonaMessagesChart";
 import { useTimeRange } from "../lib";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { FiActivity } from "react-icons/fi";
@@ -26,6 +27,7 @@ export default function AnalyticsPage() {
       <QueryPerformanceChart timeRange={timeRange} />
       <FeedbackChart timeRange={timeRange} />
       <DanswerBotChart timeRange={timeRange} />
+      <PersonaMessagesChart timeRange={timeRange} />
       <Separator />
       <UsageReports />
     </main>

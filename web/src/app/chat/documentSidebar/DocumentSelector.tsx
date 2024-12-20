@@ -12,7 +12,8 @@ export function DocumentSelector({
 }) {
   const [popupDisabled, setPopupDisabled] = useState(false);
 
-  function onClick() {
+  function onClick(e: React.MouseEvent<HTMLInputElement>) {
+    e.stopPropagation();
     if (!isDisabled) {
       setPopupDisabled(true);
       handleSelect();

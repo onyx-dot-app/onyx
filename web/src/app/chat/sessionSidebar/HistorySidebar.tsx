@@ -101,7 +101,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             flex-col relative
             h-screen
             transition-transform 
-            pt-2`}
+            `}
         >
 
           <LogoType
@@ -114,7 +114,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
           {page == "chat" && (
             <div className="mx-3 mt-4 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
               <Link
-                className="w-full p-2 bg-white border-border border rounded items-center hover:bg-background-200 cursor-pointer transition-all duration-150 flex gap-x-2"
+                className=" w-full p-2 bg-white border-border border rounded items-center hover:bg-background-200 cursor-pointer transition-all duration-150 flex gap-x-2"
                 href={
                   `/${page}` +
                   (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA &&
@@ -162,15 +162,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                 <AssistantsIconSkeleton className="h-4 w-4 my-auto text-text-history-sidebar-button" />
                 <p className="my-auto flex items-center text-sm">
                   Manage Assistants
-                </p>
-              </Link>
-              <Link
-                href="/prompts"
-                className="w-full p-2 bg-white border-border border rounded items-center hover:bg-background-history-sidebar-button-hover cursor-pointer transition-all duration-150 flex gap-x-2"
-              >
-                <ClosedBookIcon className="h-4 w-4 my-auto text-text-history-sidebar-button" />
-                <p className="my-auto flex items-center text-sm ">
-                  Manage Prompts
                 </p>
               </Link>
             </div>

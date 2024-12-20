@@ -15,7 +15,10 @@ def _build_group_member_email_map(
 ) -> dict[str, set[str]]:
     group_member_emails: dict[str, set[str]] = {}
     for user_result in confluence_client.paginated_cql_user_retrieval():
-        user = user_result["user"]
+        user = user_result.get("user", {})
+        if not user:
+            logger.warning(f"user result missing user field: {user_result}")
+            continue
         email = user.get("email")
         if not email:
             # This field is only present in Confluence Server

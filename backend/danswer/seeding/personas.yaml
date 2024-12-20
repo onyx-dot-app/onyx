@@ -5,7 +5,7 @@ personas:
   # this is for DanswerBot to use when tagged in a non-configured channel
   # Careful setting specific IDs, this won't autoincrement the next ID value for postgres
   - id: 0
-    name: "Knowledge"
+    name: "Search"
     description: >
       Assistant with access to documents from your Connected Sources.
     # Default Prompt objects attached to the persona, see prompts.yaml

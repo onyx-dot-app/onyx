@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_user
+from danswer.chat.chat_utils import combine_message_thread
 from danswer.chat.chat_utils import create_chat_chain
 from danswer.chat.models import AllCitations
 from danswer.chat.models import DanswerAnswerPiece
@@ -16,8 +17,8 @@ from danswer.chat.models import QADocsResponse
 from danswer.chat.models import StreamingError
 from danswer.chat.process_message import ChatPacketStream
 from danswer.chat.process_message import stream_chat_message_objects
+from danswer.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from danswer.configs.constants import MessageType
-from danswer.configs.danswerbot_configs import DANSWER_BOT_TARGET_CHUNK_PERCENTAGE
 from danswer.context.search.models import OptionalSearchSetting
 from danswer.context.search.models import RetrievalDetails
 from danswer.context.search.models import SavedSearchDoc
@@ -29,7 +30,6 @@ from danswer.db.models import User
 from danswer.llm.factory import get_llms_for_persona
 from danswer.llm.utils import get_max_input_tokens
 from danswer.natural_language_processing.utils import get_tokenizer
-from danswer.one_shot_answer.qa_utils import combine_message_thread
 from danswer.secondary_llm_flows.query_expansion import thread_based_query_rephrase
 from danswer.server.query_and_chat.models import ChatMessageDetail
 from danswer.server.query_and_chat.models import CreateChatMessageRequest
@@ -171,6 +171,8 @@ def handle_simplified_chat_message(
         prompt_id=None,
         search_doc_ids=chat_message_req.search_doc_ids,
         retrieval_options=retrieval_options,
+        # Simple API does not support reranking, hide complexity from user
+        rerank_settings=None,
         query_override=chat_message_req.query_override,
         # Currently only applies to search flow not chat
         chunks_above=0,
@@ -232,7 +234,6 @@ def handle_send_message_simple_with_history(
         description="handle_send_message_simple_with_history",
         user_id=user_id,
         persona_id=req.persona_id,
-        one_shot=False,
     )
 
     llm, _ = get_llms_for_persona(persona=chat_session.persona)
@@ -245,7 +246,7 @@ def handle_send_message_simple_with_history(
     input_tokens = get_max_input_tokens(
         model_name=llm.config.model_name, model_provider=llm.config.model_provider
     )
-    max_history_tokens = int(input_tokens * DANSWER_BOT_TARGET_CHUNK_PERCENTAGE)
+    max_history_tokens = int(input_tokens * CHAT_TARGET_CHUNK_PERCENTAGE)
 
     # Every chat Session begins with an empty root message
     root_message = get_or_create_root_message(
@@ -293,6 +294,8 @@ def handle_send_message_simple_with_history(
         prompt_id=req.prompt_id,
         search_doc_ids=req.search_doc_ids,
         retrieval_options=retrieval_options,
+        # Simple API does not support reranking, hide complexity from user
+        rerank_settings=None,
         query_override=rephrased_query,
         chunks_above=0,
         chunks_below=0,

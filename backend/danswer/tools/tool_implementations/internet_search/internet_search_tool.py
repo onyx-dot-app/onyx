@@ -7,15 +7,15 @@ from typing import cast
 import httpx
 
 from danswer.chat.chat_utils import combine_message_chain
+from danswer.chat.models import AnswerStyleConfig
 from danswer.chat.models import LlmDoc
+from danswer.chat.models import PromptConfig
+from danswer.chat.prompt_builder.build import AnswerPromptBuilder
 from danswer.configs.constants import DocumentSource
 from danswer.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from danswer.context.search.models import SearchDoc
-from danswer.llm.answering.models import AnswerStyleConfig
-from danswer.llm.answering.models import PreviousMessage
-from danswer.llm.answering.models import PromptConfig
-from danswer.llm.answering.prompts.build import AnswerPromptBuilder
 from danswer.llm.interfaces import LLM
+from danswer.llm.models import PreviousMessage
 from danswer.llm.utils import message_to_string
 from danswer.prompts.chat_prompts import INTERNET_SEARCH_QUERY_REPHRASE
 from danswer.prompts.constants import GENERAL_SEP_PAT
@@ -77,6 +77,7 @@ def llm_doc_from_internet_search_result(result: InternetSearchResult) -> LlmDoc:
         updated_at=datetime.now(),
         link=result.link,
         source_links={0: result.link},
+        match_highlights=[],
     )
 
 

@@ -5,6 +5,10 @@ from pydantic import BaseModel
 from pydantic import Field
 from sqlalchemy.orm import Session
 
+from danswer.chat.models import AnswerStyleConfig
+from danswer.chat.models import CitationConfig
+from danswer.chat.models import DocumentPruningConfig
+from danswer.chat.models import PromptConfig
 from danswer.configs.app_configs import AZURE_DALLE_API_BASE
 from danswer.configs.app_configs import AZURE_DALLE_API_KEY
 from danswer.configs.app_configs import AZURE_DALLE_API_VERSION
@@ -13,15 +17,12 @@ from danswer.configs.chat_configs import BING_API_KEY
 from danswer.configs.model_configs import GEN_AI_TEMPERATURE
 from danswer.context.search.enums import LLMEvaluationType
 from danswer.context.search.models import InferenceSection
+from danswer.context.search.models import RerankingDetails
 from danswer.context.search.models import RetrievalDetails
 from danswer.db.llm import fetch_existing_llm_providers
 from danswer.db.models import Persona
 from danswer.db.models import User
 from danswer.file_store.models import InMemoryChatFile
-from danswer.llm.answering.models import AnswerStyleConfig
-from danswer.llm.answering.models import CitationConfig
-from danswer.llm.answering.models import DocumentPruningConfig
-from danswer.llm.answering.models import PromptConfig
 from danswer.llm.interfaces import LLM
 from danswer.llm.interfaces import LLMConfig
 from danswer.natural_language_processing.utils import get_tokenizer
@@ -102,11 +103,14 @@ class SearchToolConfig(BaseModel):
         default_factory=DocumentPruningConfig
     )
     retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
+    rerank_settings: RerankingDetails | None = None
     selected_sections: list[InferenceSection] | None = None
     chunks_above: int = 0
     chunks_below: int = 0
     full_doc: bool = False
     latest_query_files: list[InMemoryChatFile] | None = None
+    # Use with care, should only be used for DanswerBot in channels with multiple users
+    bypass_acl: bool = False
 
 
 class InternetSearchToolConfig(BaseModel):
@@ -170,6 +174,8 @@ def construct_tools(
                         if persona.llm_relevance_filter
                         else LLMEvaluationType.SKIP
                     ),
+                    rerank_settings=search_tool_config.rerank_settings,
+                    bypass_acl=search_tool_config.bypass_acl,
                 )
                 tool_dict[db_tool_model.id] = [search_tool]
 

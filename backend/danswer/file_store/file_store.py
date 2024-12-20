@@ -60,6 +60,12 @@ class FileStore(ABC):
         """
 
     @abstractmethod
+    def read_file_record(self, file_name: str) -> PGFileStore:
+        """
+        Read the file record by the name
+        """
+
+    @abstractmethod
     def delete_file(self, file_name: str) -> None:
         """
         Delete a file by its name.

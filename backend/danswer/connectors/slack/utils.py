@@ -2,6 +2,7 @@ import re
 import time
 from collections.abc import Callable
 from collections.abc import Generator
+from functools import lru_cache
 from functools import wraps
 from typing import Any
 from typing import cast
@@ -21,19 +22,21 @@ basic_retry_wrapper = retry_builder()
 _SLACK_LIMIT = 900
 
 
+@lru_cache()
+def get_base_url(token: str) -> str:
+    """Retrieve and cache the base URL of the Slack workspace based on the client token."""
+    client = WebClient(token=token)
+    return client.auth_test()["url"]
+
+
 def get_message_link(
-    event: dict[str, Any], workspace: str, channel_id: str | None = None
+    event: dict[str, Any], client: WebClient, channel_id: str | None = None
 ) -> str:
-    channel_id = channel_id or cast(
-        str, event["channel"]
-    )  # channel must either be present in the event or passed in
-    message_ts = cast(str, event["ts"])
-    message_ts_without_dot = message_ts.replace(".", "")
-    thread_ts = cast(str | None, event.get("thread_ts"))
-    return (
-        f"https://{workspace}.slack.com/archives/{channel_id}/p{message_ts_without_dot}"
-        + (f"?thread_ts={thread_ts}" if thread_ts else "")
-    )
+    channel_id = channel_id or event["channel"]
+    message_ts = event["ts"]
+    response = client.chat_getPermalink(channel=channel_id, message_ts=message_ts)
+    permalink = response["permalink"]
+    return permalink
 
 
 def _make_slack_api_call_logged(

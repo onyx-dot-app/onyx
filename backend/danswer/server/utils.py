@@ -6,12 +6,20 @@ from email.mime.text import MIMEText
 from textwrap import dedent
 from typing import Any
 
+from fastapi import HTTPException
+from fastapi import status
+
 from danswer.configs.app_configs import SMTP_PASS
 from danswer.configs.app_configs import SMTP_PORT
 from danswer.configs.app_configs import SMTP_SERVER
 from danswer.configs.app_configs import SMTP_USER
 from danswer.configs.app_configs import WEB_DOMAIN
 from danswer.db.models import User
+
+
+class BasicAuthenticationError(HTTPException):
+    def __init__(self, detail: str):
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 class DateTimeEncoder(json.JSONEncoder):

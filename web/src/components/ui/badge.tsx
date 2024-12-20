@@ -50,12 +50,13 @@ function Badge({
   ...props
 }: BadgeProps & {
   icon?: React.ElementType;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "xs";
   circle?: boolean;
 }) {
   const sizeClasses = {
     sm: "px-2.5 py-0.5 text-xs",
     md: "px-3 py-1 text-sm",
+    xs: "px-1.5 py-0.25 text-[.5rem]", // Made xs smaller
   };
 
   return (
@@ -64,10 +65,20 @@ function Badge({
       {...props}
     >
       {Icon && (
-        <Icon className={cn("mr-1", size === "sm" ? "h-3 w-3" : "h-4 w-4")} />
+        <Icon
+          className={cn(
+            "mr-1",
+            size === "sm" ? "h-3 w-3" : size === "xs" ? "h-2 w-2" : "h-4 w-4"
+          )}
+        />
       )}
       {circle && (
-        <div className="h-2.5 w-2.5 mr-2 rounded-full bg-current opacity-80" />
+        <div
+          className={cn(
+            "mr-2 rounded-full bg-current opacity-80",
+            size === "xs" ? "h-2 w-2" : "h-2.5 w-2.5"
+          )}
+        />
       )}
       {props.children}
     </div>

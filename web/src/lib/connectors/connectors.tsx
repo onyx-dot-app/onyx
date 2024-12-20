@@ -546,15 +546,7 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
   },
   slack: {
     description: "Configure Slack connector",
-    values: [
-      {
-        type: "text",
-        query: "Enter the Slack workspace:",
-        label: "Workspace",
-        name: "workspace",
-        optional: false,
-      },
-    ],
+    values: [],
     advanced_values: [
       {
         type: "list",
@@ -1048,6 +1040,21 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
   fireflies: {
     description: "Configure Fireflies connector",
     values: [],
+    advanced_values: [],
+  },
+  egnyte: {
+    description: "Configure Egnyte connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter folder path to index:",
+        label: "Folder Path",
+        name: "folder_path",
+        optional: true,
+        description:
+          "The folder path to index (e.g., '/Shared/Documents'). Leave empty to index everything.",
+      },
+    ],
     advanced_values: [],
   },
 };

@@ -2,6 +2,7 @@ import abc
 from collections.abc import Iterator
 from typing import Any
 
+from danswer.configs.constants import DocumentSource
 from danswer.connectors.models import Document
 from danswer.connectors.models import SlimDocument
 
@@ -61,6 +62,23 @@ class SlimConnector(BaseConnector):
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateSlimDocumentOutput:
+        raise NotImplementedError
+
+
+class OAuthConnector(BaseConnector):
+    @classmethod
+    @abc.abstractmethod
+    def oauth_id(cls) -> DocumentSource:
+        raise NotImplementedError
+
+    @classmethod
+    @abc.abstractmethod
+    def oauth_authorization_url(cls, base_domain: str, state: str) -> str:
+        raise NotImplementedError
+
+    @classmethod
+    @abc.abstractmethod
+    def oauth_code_to_token(cls, code: str) -> dict[str, Any]:
         raise NotImplementedError
 
 

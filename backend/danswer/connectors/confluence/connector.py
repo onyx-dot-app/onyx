@@ -1,4 +1,5 @@
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 from typing import Any
 from urllib.parse import quote
@@ -6,6 +7,7 @@ from urllib.parse import quote
 from atlassian import Confluence  # type: ignore
 
 from danswer.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
+from danswer.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from danswer.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.constants import DocumentSource
@@ -15,6 +17,7 @@ from danswer.connectors.confluence.utils import attachment_to_content
 from danswer.connectors.confluence.utils import build_confluence_document_id
 from danswer.connectors.confluence.utils import datetime_from_string
 from danswer.connectors.confluence.utils import extract_text_from_confluence_html
+from danswer.connectors.confluence.utils import validate_attachment_filetype
 from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import GenerateSlimDocumentOutput
 from danswer.connectors.interfaces import LoadConnector
@@ -53,7 +56,7 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
     "restrictions.read.restrictions.group",
 ]
 
-_SLIM_DOC_BATCH_SIZE = 1000
+_SLIM_DOC_BATCH_SIZE = 5000
 
 
 class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
@@ -71,6 +74,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         # skip it. This is generally used to avoid indexing extra sensitive
         # pages.
         labels_to_skip: list[str] = CONFLUENCE_CONNECTOR_LABELS_TO_SKIP,
+        timezone_offset: float = CONFLUENCE_TIMEZONE_OFFSET,
     ) -> None:
         self.batch_size = batch_size
         self.continue_on_failure = continue_on_failure
@@ -105,6 +109,8 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                 f"'{quote(label)}'" for label in labels_to_skip
             )
             self.cql_label_filter = f" and label not in ({comma_separated_labels})"
+
+        self.timezone: timezone = timezone(offset=timedelta(hours=timezone_offset))
 
     @property
     def confluence_client(self) -> OnyxConfluence:
@@ -221,12 +227,14 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         confluence_page_ids: list[str] = []
 
         page_query = self.cql_page_query + self.cql_label_filter + self.cql_time_filter
+        logger.debug(f"page_query: {page_query}")
         # Fetch pages as Documents
         for page in self.confluence_client.paginated_cql_retrieval(
             cql=page_query,
             expand=",".join(_PAGE_EXPANSION_FIELDS),
             limit=self.batch_size,
         ):
+            logger.debug(f"_fetch_document_batches: {page['id']}")
             confluence_page_ids.append(page["id"])
             doc = self._convert_object_to_document(page)
             if doc is not None:
@@ -259,10 +267,10 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
 
     def poll_source(self, start: float, end: float) -> GenerateDocumentsOutput:
         # Add time filters
-        formatted_start_time = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
+        formatted_start_time = datetime.fromtimestamp(start, tz=self.timezone).strftime(
             "%Y-%m-%d %H:%M"
         )
-        formatted_end_time = datetime.fromtimestamp(end, tz=timezone.utc).strftime(
+        formatted_end_time = datetime.fromtimestamp(end, tz=self.timezone).strftime(
             "%Y-%m-%d %H:%M"
         )
         self.cql_time_filter = f" and lastmodified >= '{formatted_start_time}'"
@@ -286,9 +294,11 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         ):
             # If the page has restrictions, add them to the perm_sync_data
             # These will be used by doc_sync.py to sync permissions
-            perm_sync_data = {
-                "restrictions": page.get("restrictions", {}),
-                "space_key": page.get("space", {}).get("key"),
+            page_restrictions = page.get("restrictions")
+            page_space_key = page.get("space", {}).get("key")
+            page_perm_sync_data = {
+                "restrictions": page_restrictions or {},
+                "space_key": page_space_key,
             }
 
             doc_metadata_list.append(
@@ -298,7 +308,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                         page["_links"]["webui"],
                         self.is_cloud,
                     ),
-                    perm_sync_data=perm_sync_data,
+                    perm_sync_data=page_perm_sync_data,
                 )
             )
             attachment_cql = f"type=attachment and container='{page['id']}'"
@@ -308,6 +318,21 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                 expand=restrictions_expand,
                 limit=_SLIM_DOC_BATCH_SIZE,
             ):
+                if not validate_attachment_filetype(attachment):
+                    continue
+                attachment_restrictions = attachment.get("restrictions")
+                if not attachment_restrictions:
+                    attachment_restrictions = page_restrictions
+
+                attachment_space_key = attachment.get("space", {}).get("key")
+                if not attachment_space_key:
+                    attachment_space_key = page_space_key
+
+                attachment_perm_sync_data = {
+                    "restrictions": attachment_restrictions or {},
+                    "space_key": attachment_space_key,
+                }
+
                 doc_metadata_list.append(
                     SlimDocument(
                         id=build_confluence_document_id(
@@ -315,8 +340,11 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                             attachment["_links"]["webui"],
                             self.is_cloud,
                         ),
-                        perm_sync_data=perm_sync_data,
+                        perm_sync_data=attachment_perm_sync_data,
                     )
                 )
-            yield doc_metadata_list
-            doc_metadata_list = []
+            if len(doc_metadata_list) > _SLIM_DOC_BATCH_SIZE:
+                yield doc_metadata_list[:_SLIM_DOC_BATCH_SIZE]
+                doc_metadata_list = doc_metadata_list[_SLIM_DOC_BATCH_SIZE:]
+
+        yield doc_metadata_list

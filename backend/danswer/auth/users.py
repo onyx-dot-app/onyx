@@ -58,7 +58,6 @@ from danswer.auth.schemas import UserRole
 from danswer.auth.schemas import UserUpdate
 from danswer.configs.app_configs import AUTH_TYPE
 from danswer.configs.app_configs import DISABLE_AUTH
-from danswer.configs.app_configs import DISABLE_VERIFICATION
 from danswer.configs.app_configs import EMAIL_FROM
 from danswer.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
 from danswer.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
@@ -87,6 +86,7 @@ from danswer.db.models import AccessToken
 from danswer.db.models import OAuthAccount
 from danswer.db.models import User
 from danswer.db.users import get_user_by_email
+from danswer.server.utils import BasicAuthenticationError
 from danswer.utils.logger import setup_logger
 from danswer.utils.telemetry import optional_telemetry
 from danswer.utils.telemetry import RecordType
@@ -98,11 +98,6 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
 logger = setup_logger()
-
-
-class BasicAuthenticationError(HTTPException):
-    def __init__(self, detail: str):
-        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 def is_user_admin(user: User | None) -> bool:
@@ -137,11 +132,12 @@ def get_display_email(email: str | None, space_less: bool = False) -> str:
 
 
 def user_needs_to_be_verified() -> bool:
-    # all other auth types besides basic should require users to be
-    # verified
-    return not DISABLE_VERIFICATION and (
-        AUTH_TYPE != AuthType.BASIC or REQUIRE_EMAIL_VERIFICATION
-    )
+    if AUTH_TYPE == AuthType.BASIC or AUTH_TYPE == AuthType.CLOUD:
+        return REQUIRE_EMAIL_VERIFICATION
+
+    # For other auth types, if the user is authenticated it's assumed that
+    # the user is already verified via the external IDP
+    return False
 
 
 def verify_email_is_invited(email: str) -> None:

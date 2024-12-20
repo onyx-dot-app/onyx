@@ -5,13 +5,13 @@ from celery import Celery
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from danswer.background.celery.apps.app_base import task_logger
 from danswer.configs.app_configs import JOB_TIMEOUT
 from danswer.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
+from danswer.configs.constants import DanswerCeleryTask
 from danswer.configs.constants import DanswerRedisLocks
 from danswer.db.connector_credential_pair import get_connector_credential_pair_from_id
 from danswer.db.connector_credential_pair import get_connector_credential_pairs
@@ -29,7 +29,7 @@ class TaskDependencyError(RuntimeError):
 
 
 @shared_task(
-    name="check_for_connector_deletion_task",
+    name=DanswerCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
     soft_time_limit=JOB_TIMEOUT,
     trail=False,
     bind=True,
@@ -37,7 +37,7 @@ class TaskDependencyError(RuntimeError):
 def check_for_connector_deletion_task(self: Task, *, tenant_id: str | None) -> None:
     r = get_redis_client(tenant_id=tenant_id)
 
-    lock_beat = r.lock(
+    lock_beat: RedisLock = r.lock(
         DanswerRedisLocks.CHECK_CONNECTOR_DELETION_BEAT_LOCK,
         timeout=CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
     )
@@ -60,7 +60,7 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str | None) -> N
                 redis_connector = RedisConnector(tenant_id, cc_pair_id)
                 try:
                     try_generate_document_cc_pair_cleanup_tasks(
-                        self.app, cc_pair_id, db_session, r, lock_beat, tenant_id
+                        self.app, cc_pair_id, db_session, lock_beat, tenant_id
                     )
                 except TaskDependencyError as e:
                     # this means we wanted to start deleting but dependent tasks were running
@@ -86,7 +86,6 @@ def try_generate_document_cc_pair_cleanup_tasks(
     app: Celery,
     cc_pair_id: int,
     db_session: Session,
-    r: Redis,
     lock_beat: RedisLock,
     tenant_id: str | None,
 ) -> int | None:

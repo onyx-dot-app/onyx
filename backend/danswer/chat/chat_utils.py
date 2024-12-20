@@ -2,18 +2,77 @@ import re
 from typing import cast
 from uuid import UUID
 
+from fastapi import HTTPException
 from fastapi.datastructures import Headers
 from sqlalchemy.orm import Session
 
+from danswer.auth.users import is_user_admin
 from danswer.chat.models import CitationInfo
 from danswer.chat.models import LlmDoc
+from danswer.chat.models import PersonaOverrideConfig
+from danswer.chat.models import ThreadMessage
+from danswer.configs.constants import DEFAULT_PERSONA_ID
+from danswer.configs.constants import MessageType
 from danswer.context.search.models import InferenceSection
+from danswer.context.search.models import RerankingDetails
+from danswer.context.search.models import RetrievalDetails
+from danswer.db.chat import create_chat_session
 from danswer.db.chat import get_chat_messages_by_session
+from danswer.db.llm import fetch_existing_doc_sets
+from danswer.db.llm import fetch_existing_tools
 from danswer.db.models import ChatMessage
-from danswer.llm.answering.models import PreviousMessage
+from danswer.db.models import Persona
+from danswer.db.models import Prompt
+from danswer.db.models import Tool
+from danswer.db.models import User
+from danswer.db.persona import get_prompts_by_ids
+from danswer.llm.models import PreviousMessage
+from danswer.natural_language_processing.utils import BaseTokenizer
+from danswer.server.query_and_chat.models import CreateChatMessageRequest
+from danswer.tools.tool_implementations.custom.custom_tool import (
+    build_custom_tools_from_openapi_schema_and_headers,
+)
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def prepare_chat_message_request(
+    message_text: str,
+    user: User | None,
+    persona_id: int | None,
+    # Does the question need to have a persona override
+    persona_override_config: PersonaOverrideConfig | None,
+    prompt: Prompt | None,
+    message_ts_to_respond_to: str | None,
+    retrieval_details: RetrievalDetails | None,
+    rerank_settings: RerankingDetails | None,
+    db_session: Session,
+) -> CreateChatMessageRequest:
+    # Typically used for one shot flows like SlackBot or non-chat API endpoint use cases
+    new_chat_session = create_chat_session(
+        db_session=db_session,
+        description=None,
+        user_id=user.id if user else None,
+        # If using an override, this id will be ignored later on
+        persona_id=persona_id or DEFAULT_PERSONA_ID,
+        danswerbot_flow=True,
+        slack_thread_id=message_ts_to_respond_to,
+    )
+
+    return CreateChatMessageRequest(
+        chat_session_id=new_chat_session.id,
+        parent_message_id=None,  # It's a standalone chat session each time
+        message=message_text,
+        file_descriptors=[],  # Currently SlackBot/answer api do not support files in the context
+        prompt_id=prompt.id if prompt else None,
+        # Can always override the persona for the single query, if it's a normal persona
+        # then it will be treated the same
+        persona_override_config=persona_override_config,
+        search_doc_ids=None,
+        retrieval_options=retrieval_details,
+        rerank_settings=rerank_settings,
+    )
 
 
 def llm_doc_from_inference_section(inference_section: InferenceSection) -> LlmDoc:
@@ -31,7 +90,47 @@ def llm_doc_from_inference_section(inference_section: InferenceSection) -> LlmDo
         if inference_section.center_chunk.source_links
         else None,
         source_links=inference_section.center_chunk.source_links,
+        match_highlights=inference_section.center_chunk.match_highlights,
     )
+
+
+def combine_message_thread(
+    messages: list[ThreadMessage],
+    max_tokens: int | None,
+    llm_tokenizer: BaseTokenizer,
+) -> str:
+    """Used to create a single combined message context from threads"""
+    if not messages:
+        return ""
+
+    message_strs: list[str] = []
+    total_token_count = 0
+
+    for message in reversed(messages):
+        if message.role == MessageType.USER:
+            role_str = message.role.value.upper()
+            if message.sender:
+                role_str += " " + message.sender
+            else:
+                # Since other messages might have the user identifying information
+                # better to use Unknown for symmetry
+                role_str += " Unknown"
+        else:
+            role_str = message.role.value.upper()
+
+        msg_str = f"{role_str}:\n{message.message}"
+        message_token_count = len(llm_tokenizer.encode(msg_str))
+
+        if (
+            max_tokens is not None
+            and total_token_count + message_token_count > max_tokens
+        ):
+            break
+
+        message_strs.insert(0, msg_str)
+        total_token_count += message_token_count
+
+    return "\n\n".join(message_strs)
 
 
 def create_chat_chain(
@@ -196,3 +295,71 @@ def extract_headers(
             if lowercase_key in headers:
                 extracted_headers[lowercase_key] = headers[lowercase_key]
     return extracted_headers
+
+
+def create_temporary_persona(
+    persona_config: PersonaOverrideConfig, db_session: Session, user: User | None = None
+) -> Persona:
+    if not is_user_admin(user):
+        raise HTTPException(
+            status_code=403,
+            detail="User is not authorized to create a persona in one shot queries",
+        )
+
+    """Create a temporary Persona object from the provided configuration."""
+    persona = Persona(
+        name=persona_config.name,
+        description=persona_config.description,
+        num_chunks=persona_config.num_chunks,
+        llm_relevance_filter=persona_config.llm_relevance_filter,
+        llm_filter_extraction=persona_config.llm_filter_extraction,
+        recency_bias=persona_config.recency_bias,
+        llm_model_provider_override=persona_config.llm_model_provider_override,
+        llm_model_version_override=persona_config.llm_model_version_override,
+    )
+
+    if persona_config.prompts:
+        persona.prompts = [
+            Prompt(
+                name=p.name,
+                description=p.description,
+                system_prompt=p.system_prompt,
+                task_prompt=p.task_prompt,
+                include_citations=p.include_citations,
+                datetime_aware=p.datetime_aware,
+            )
+            for p in persona_config.prompts
+        ]
+    elif persona_config.prompt_ids:
+        persona.prompts = get_prompts_by_ids(
+            db_session=db_session, prompt_ids=persona_config.prompt_ids
+        )
+
+    persona.tools = []
+    if persona_config.custom_tools_openapi:
+        for schema in persona_config.custom_tools_openapi:
+            tools = cast(
+                list[Tool],
+                build_custom_tools_from_openapi_schema_and_headers(schema),
+            )
+            persona.tools.extend(tools)
+
+    if persona_config.tools:
+        tool_ids = [tool.id for tool in persona_config.tools]
+        persona.tools.extend(
+            fetch_existing_tools(db_session=db_session, tool_ids=tool_ids)
+        )
+
+    if persona_config.tool_ids:
+        persona.tools.extend(
+            fetch_existing_tools(
+                db_session=db_session, tool_ids=persona_config.tool_ids
+            )
+        )
+
+    fetched_docs = fetch_existing_doc_sets(
+        db_session=db_session, doc_ids=persona_config.document_set_ids
+    )
+    persona.document_sets = fetched_docs
+
+    return persona

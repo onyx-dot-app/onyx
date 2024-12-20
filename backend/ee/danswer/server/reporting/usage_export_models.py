@@ -9,7 +9,6 @@ from danswer.auth.schemas import UserStatus
 
 class FlowType(str, Enum):
     CHAT = "chat"
-    SEARCH = "search"
     SLACK = "slack"
 
 

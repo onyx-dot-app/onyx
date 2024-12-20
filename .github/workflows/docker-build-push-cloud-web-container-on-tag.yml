@@ -7,7 +7,7 @@ on:
       - "*"
 
 env:
-  REGISTRY_IMAGE: danswer/danswer-web-server-cloud
+  REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
   LATEST_TAG: ${{ contains(github.ref_name, 'latest') }}
 
 jobs:
@@ -60,7 +60,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           build-args: |
-            DANSWER_VERSION=${{ github.ref_name }}
+            ONYX_VERSION=${{ github.ref_name }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}

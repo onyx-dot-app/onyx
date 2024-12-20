@@ -240,7 +240,85 @@ class CCPairManager:
         result.raise_for_status()
 
     @staticmethod
-    def wait_for_indexing(
+    def wait_for_indexing_inactive(
+        cc_pair: DATestCCPair,
+        timeout: float = MAX_DELAY,
+        user_performing_action: DATestUser | None = None,
+    ) -> None:
+        """wait for the number of docs to be indexed on the connector.
+        This is used to test pausing a connector in the middle of indexing and
+        terminating that indexing."""
+        print(f"Indexing wait for inactive starting: cc_pair={cc_pair.id}")
+        start = time.monotonic()
+        while True:
+            fetched_cc_pairs = CCPairManager.get_indexing_statuses(
+                user_performing_action
+            )
+            for fetched_cc_pair in fetched_cc_pairs:
+                if fetched_cc_pair.cc_pair_id != cc_pair.id:
+                    continue
+
+                if fetched_cc_pair.in_progress:
+                    continue
+
+                print(f"Indexing is inactive: cc_pair={cc_pair.id}")
+                return
+
+            elapsed = time.monotonic() - start
+            if elapsed > timeout:
+                raise TimeoutError(
+                    f"Indexing wait for inactive timed out: cc_pair={cc_pair.id} timeout={timeout}s"
+                )
+
+            print(
+                f"Indexing wait for inactive still waiting: cc_pair={cc_pair.id} elapsed={elapsed:.2f} timeout={timeout}s"
+            )
+            time.sleep(5)
+
+    @staticmethod
+    def wait_for_indexing_in_progress(
+        cc_pair: DATestCCPair,
+        timeout: float = MAX_DELAY,
+        num_docs: int = 16,
+        user_performing_action: DATestUser | None = None,
+    ) -> None:
+        """wait for the number of docs to be indexed on the connector.
+        This is used to test pausing a connector in the middle of indexing and
+        terminating that indexing."""
+        start = time.monotonic()
+        while True:
+            fetched_cc_pairs = CCPairManager.get_indexing_statuses(
+                user_performing_action
+            )
+            for fetched_cc_pair in fetched_cc_pairs:
+                if fetched_cc_pair.cc_pair_id != cc_pair.id:
+                    continue
+
+                if not fetched_cc_pair.in_progress:
+                    continue
+
+                if fetched_cc_pair.docs_indexed >= num_docs:
+                    print(
+                        "Indexed at least the requested number of docs: "
+                        f"cc_pair={cc_pair.id} "
+                        f"docs_indexed={fetched_cc_pair.docs_indexed} "
+                        f"num_docs={num_docs}"
+                    )
+                    return
+
+            elapsed = time.monotonic() - start
+            if elapsed > timeout:
+                raise TimeoutError(
+                    f"Indexing in progress wait timed out: cc_pair={cc_pair.id} timeout={timeout}s"
+                )
+
+            print(
+                f"Indexing in progress waiting: cc_pair={cc_pair.id} elapsed={elapsed:.2f} timeout={timeout}s"
+            )
+            time.sleep(5)
+
+    @staticmethod
+    def wait_for_indexing_completion(
         cc_pair: DATestCCPair,
         after: datetime,
         timeout: float = MAX_DELAY,

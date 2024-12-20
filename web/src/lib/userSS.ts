@@ -62,12 +62,17 @@ const getOIDCAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
   return data.authorization_url;
 };
 
-const getGoogleOAuthUrlSS = async (): Promise<string> => {
-  const res = await fetch(buildUrl(`/auth/oauth/authorize`), {
-    headers: {
-      cookie: processCookies(await cookies()),
-    },
-  });
+const getGoogleOAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
+  const res = await fetch(
+    buildUrl(
+      `/auth/oauth/authorize${nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ""}`
+    ),
+    {
+      headers: {
+        cookie: processCookies(await cookies()),
+      },
+    }
+  );
   if (!res.ok) {
     throw new Error("Failed to fetch data");
   }
@@ -76,8 +81,12 @@ const getGoogleOAuthUrlSS = async (): Promise<string> => {
   return data.authorization_url;
 };
 
-const getSAMLAuthUrlSS = async (): Promise<string> => {
-  const res = await fetch(buildUrl("/auth/saml/authorize"));
+const getSAMLAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
+  const res = await fetch(
+    buildUrl(
+      `/auth/saml/authorize${nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ""}`
+    )
+  );
   if (!res.ok) {
     throw new Error("Failed to fetch data");
   }
@@ -97,13 +106,13 @@ export const getAuthUrlSS = async (
     case "basic":
       return "";
     case "google_oauth": {
-      return await getGoogleOAuthUrlSS();
+      return await getGoogleOAuthUrlSS(nextUrl);
     }
     case "cloud": {
-      return await getGoogleOAuthUrlSS();
+      return await getGoogleOAuthUrlSS(nextUrl);
     }
     case "saml": {
-      return await getSAMLAuthUrlSS();
+      return await getSAMLAuthUrlSS(nextUrl);
     }
     case "oidc": {
       return await getOIDCAuthUrlSS(nextUrl);

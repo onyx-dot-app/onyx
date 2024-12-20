@@ -4,6 +4,7 @@ import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { personaComparator } from "@/app/admin/assistants/lib";
 import { fetchAssistantsSS } from "../assistants/fetchAssistantsSS";
 import { checkLLMSupportsImageInput } from "../llm/utils";
+import { filterAssistants } from "../assistants/utils";
 
 interface AssistantData {
   assistants: Persona[];
@@ -39,42 +40,21 @@ export async function fetchAssistantData(): Promise<AssistantData> {
       }),
     ]);
 
-    // Process visible assistants
-    let filteredAssistants = assistants.filter(
-      (assistant) => assistant.is_visible
-    );
-
-    // Process connector status
     const hasAnyConnectors = ccPairsResponse?.ok
       ? (await ccPairsResponse.json()).length > 0
       : false;
 
-    // Filter assistants based on connector status
-    if (!hasAnyConnectors) {
-      filteredAssistants = filteredAssistants.filter(
-        (assistant) => assistant.num_chunks === 0
-      );
-    }
-
-    // Sort assistants
-    filteredAssistants.sort(personaComparator);
-
-    // Check for image-compatible models
     const hasImageCompatibleModel = llmProviders.some(
       (provider) =>
         provider.provider === "openai" ||
         provider.model_names.some((model) => checkLLMSupportsImageInput(model))
     );
 
-    // Filter out image generation tools if no compatible model
-    if (!hasImageCompatibleModel) {
-      filteredAssistants = filteredAssistants.filter(
-        (assistant) =>
-          !assistant.tools.some(
-            (tool) => tool.in_code_tool_id === "ImageGenerationTool"
-          )
-      );
-    }
+    let filteredAssistants = filterAssistants(
+      assistants,
+      hasAnyConnectors,
+      hasImageCompatibleModel
+    );
 
     return {
       assistants: filteredAssistants,

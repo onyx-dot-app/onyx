@@ -11,7 +11,8 @@ import { pageType } from "@/app/chat/sessionSidebar/types";
 import { useRouter } from "next/navigation";
 import { ChatBanner } from "@/app/chat/ChatBanner";
 import LogoType from "../header/LogoType";
-import { useUser } from "../user/UserProvider";
+import { Persona } from "@/app/admin/assistants/interfaces";
+import { LlmOverrideManager } from "@/lib/hooks";
 
 export default function FunctionalHeader({
   page,
@@ -20,13 +21,23 @@ export default function FunctionalHeader({
   toggleSidebar = () => null,
   reset = () => null,
   sidebarToggled,
+  liveAssistant,
+  onAssistantChange,
+  llmOverrideManager,
+  documentSidebarToggled,
+  toggleUserSettings,
 }: {
   reset?: () => void;
   page: pageType;
   sidebarToggled?: boolean;
+  documentSidebarToggled?: boolean;
   currentChatSession?: ChatSession | null | undefined;
   setSharingModalVisible?: (value: SetStateAction<boolean>) => void;
   toggleSidebar?: () => void;
+  liveAssistant?: Persona;
+  onAssistantChange?: (assistant: Persona) => void;
+  llmOverrideManager?: LlmOverrideManager;
+  toggleUserSettings?: () => void;
 }) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -63,19 +74,18 @@ export default function FunctionalHeader({
     router.push(newChatUrl);
   };
   return (
-    // <div className="pb-6 left-0 sticky top-0 z-20 w-full relative flex">
-
-    <div className="left-0 bg-transparent sticky top-0 z-20 w-full relative flex">
-      <div className="mt-2 mx-2.5 cursor-pointer text-text-700 relative flex w-full">
+    <div className="left-0 sticky top-0 z-20 w-full relative flex">
+      <div className="items-end flex mt-2 cursor-pointer text-text-700 relative flex w-full">
         <LogoType
           assistantId={currentChatSession?.persona_id}
           page={page}
           toggleSidebar={toggleSidebar}
           handleNewChat={handleNewChat}
         />
-        <div
-          style={{ transition: "width 0.30s ease-out" }}
-          className={`
+        <div className="mt-2 flex w-full h-8">
+          <div
+            style={{ transition: "width 0.30s ease-out" }}
+            className={`
             mobile:hidden
             flex-none 
             mx-auto
@@ -86,52 +96,81 @@ export default function FunctionalHeader({
             h-full
             ${sidebarToggled ? "w-[250px]" : "w-[0px]"}
             `}
-        />
-        <div className="w-full mobile:-mx-20 desktop:px-4">
-          <ChatBanner />
-        </div>
-
-        <div className="invisible">
-          <LogoType
-            page={page}
-            toggleSidebar={toggleSidebar}
-            handleNewChat={handleNewChat}
           />
-        </div>
 
-        <div className="absolute right-0 top-0 flex gap-x-2">
-          {setSharingModalVisible && (
-            <div
-              onClick={() => setSharingModalVisible(true)}
-              className="mobile:hidden my-auto rounded cursor-pointer hover:bg-hover-light"
-            >
-              <FiShare2 size="18" />
-            </div>
-          )}
-
-          <div className="mobile:hidden flex my-auto">
-            <UserDropdown />
+          <div className="w-full mobile:-mx-20 desktop:px-4">
+            <ChatBanner />
           </div>
-          <Link
-            className="desktop:hidden my-auto"
-            href={
-              `/${page}` +
-              (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA &&
-              currentChatSession
-                ? `?assistantId=${currentChatSession.persona_id}`
-                : "")
-            }
-          >
-            <div className="cursor-pointer mr-4 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
-              <NewChatIcon size={20} />
+
+          <div className="invisible">
+            <LogoType
+              page={page}
+              toggleSidebar={toggleSidebar}
+              handleNewChat={handleNewChat}
+            />
+          </div>
+
+          <div className="absolute right-0 top-0 flex gap-x-2">
+            {setSharingModalVisible && (
+              <div
+                onClick={() => setSharingModalVisible(true)}
+                className="mobile:hidden my-auto rounded cursor-pointer hover:bg-hover-light"
+              >
+                <FiShare2 size="18" />
+              </div>
+            )}
+            <div className="mobile:hidden flex my-auto">
+              <UserDropdown
+                page={page}
+                toggleUserSettings={toggleUserSettings}
+              />
             </div>
-          </Link>
+            <Link
+              className="desktop:hidden my-auto"
+              href={
+                `/${page}` +
+                (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA &&
+                currentChatSession
+                  ? `?assistantId=${currentChatSession.persona_id}`
+                  : "")
+              }
+            >
+              <div className="cursor-pointer mr-4 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
+                <NewChatIcon size={20} />
+              </div>
+            </Link>
+          </div>
+          <div
+            style={{ transition: "width 0.30s ease-out" }}
+            className={`
+            hidden
+            md:flex 
+            mx-auto
+            overflow-y-hidden 
+            transition-all 
+            duration-300 
+            ease-in-out
+            h-full
+            ${documentSidebarToggled ? "w-[400px]" : "w-[0px]"}
+            `}
+          />
+
+          {page != "assistants" && (
+            <div
+              className={`
+              h-20 absolute top-0 z-10 w-full sm:w-[90%] lg:w-[70%]
+              bg-gradient-to-b via-50% z-[-1] from-background via-background to-background/10 flex
+              transition-all duration-300 ease-in-out
+              ${
+                documentSidebarToggled
+                  ? "left-[200px] transform -translate-x-[calc(50%+100px)]"
+                  : "left-1/2 transform -translate-x-1/2"
+              }
+            `}
+            />
+          )}
         </div>
       </div>
-
-      {page != "assistants" && (
-        <div className="h-20 left-0 absolute top-0 z-10 w-full bg-gradient-to-b via-50% z-[-1] from-background via-background to-background/10 flex" />
-      )}
     </div>
   );
 }

@@ -22,7 +22,6 @@ function SlackBotEditPage({
   const unwrappedParams = use(params);
   const { popup, setPopup } = usePopup();
 
-  console.log("unwrappedParams", unwrappedParams);
   const {
     data: slackBot,
     isLoading: isSlackBotLoading,

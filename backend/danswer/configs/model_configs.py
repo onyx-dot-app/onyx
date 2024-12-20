@@ -70,7 +70,9 @@ GEN_AI_NUM_RESERVED_OUTPUT_TOKENS = int(
 )
 
 # Typically, GenAI models nowadays are at least 4K tokens
-GEN_AI_MODEL_FALLBACK_MAX_TOKENS = 4096
+GEN_AI_MODEL_FALLBACK_MAX_TOKENS = int(
+    os.environ.get("GEN_AI_MODEL_FALLBACK_MAX_TOKENS") or 4096
+)
 
 # Number of tokens from chat history to include at maximum
 # 3000 should be enough context regardless of use, no need to include as much as possible

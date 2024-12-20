@@ -1,16 +1,16 @@
 import requests
 from retry import retry
 
+from danswer.chat.models import ThreadMessage
 from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import MessageType
 from danswer.connectors.models import InputType
+from danswer.context.search.enums import OptionalSearchSetting
 from danswer.context.search.models import IndexFilters
-from danswer.context.search.models import OptionalSearchSetting
 from danswer.context.search.models import RetrievalDetails
 from danswer.db.enums import IndexingStatus
-from danswer.one_shot_answer.models import DirectQARequest
-from danswer.one_shot_answer.models import ThreadMessage
 from danswer.server.documents.models import ConnectorBase
+from ee.danswer.server.query_and_chat.models import OneShotQARequest
 from tests.regression.answer_quality.cli_utils import get_api_server_host_port
 
 GENERAL_HEADERS = {"Content-Type": "application/json"}
@@ -37,7 +37,7 @@ def get_answer_from_query(
 
     messages = [ThreadMessage(message=query, sender=None, role=MessageType.USER)]
 
-    new_message_request = DirectQARequest(
+    new_message_request = OneShotQARequest(
         messages=messages,
         prompt_id=0,
         persona_id=0,
@@ -47,12 +47,11 @@ def get_answer_from_query(
             filters=filters,
             enable_auto_detect_filters=False,
         ),
-        chain_of_thought=False,
         return_contexts=True,
         skip_gen_ai_answer_generation=only_retrieve_docs,
     )
 
-    url = _api_url_builder(env_name, "/query/answer-with-quote/")
+    url = _api_url_builder(env_name, "/query/answer-with-citation/")
     headers = {
         "Content-Type": "application/json",
     }

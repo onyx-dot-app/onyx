@@ -1,0 +1,74 @@
+# Docker service resource limits. Most are commented out by default.
+# 'background' service has preset (override-able) limits due to variable resource needs.
+# Uncomment and set env vars for specific service limits.
+# See: https://docs.danswer.dev/deployment/resource-sizing for details.
+
+services:
+  background:
+    deploy:
+      resources:
+        limits:
+          cpus: ${BACKGROUND_CPU_LIMIT:-4}
+          memory: ${BACKGROUND_MEM_LIMIT:-4g}
+  #       reservations:
+  #         cpus: ${BACKGROUND_CPU_RESERVATION}
+  #         memory: ${BACKGROUND_MEM_RESERVATION}
+
+  # nginx:
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: ${NGINX_CPU_LIMIT}
+  #         memory: ${NGINX_MEM_LIMIT}
+  #       reservations:
+  #         cpus: ${NGINX_CPU_RESERVATION}
+  #         memory: ${NGINX_MEM_RESERVATION}
+  # api_server:
+  #     deploy:
+  #       resources:
+  #         limits:
+  #           cpus: ${API_SERVER_CPU_LIMIT}
+  #           memory: ${API_SERVER_MEM_LIMIT}
+  #         reservations:
+  #           cpus: ${API_SERVER_CPU_RESERVATION}
+  #           memory: ${API_SERVER_MEM_RESERVATION}
+
+  #   index:
+  #     deploy:
+  #       resources:
+  #         limits:
+  #           cpus: ${VESPA_CPU_LIMIT}
+  #           memory: ${VESPA_MEM_LIMIT}
+  #         reservations:
+  #           cpus: ${VESPA_CPU_RESERVATION}
+  #           memory: ${VESPA_MEM_RESERVATION}
+
+  #   inference_model_server:
+  #     deploy:
+  #       resources:
+  #         limits:
+  #           cpus: ${INFERENCE_CPU_LIMIT}
+  #           memory: ${INFERENCE_MEM_LIMIT}
+  #         reservations:
+  #           cpus: ${INFERENCE_CPU_RESERVATION}
+  #           memory: ${INFERENCE_MEM_RESERVATION}
+
+  #   indexing_model_server:
+  #     deploy:
+  #       resources:
+  #         limits:
+  #           cpus: ${INDEXING_CPU_LIMIT}
+  #           memory: ${INDEXING_MEM_LIMIT}
+  #         reservations:
+  #           cpus: ${INDEXING_CPU_RESERVATION}
+  #           memory: ${INDEXING_MEM_RESERVATION}
+
+  #   relational_db:
+  #     deploy:
+  #       resources:
+  #         limits:
+  #           cpus: ${POSTGRES_CPU_LIMIT}
+  #           memory: ${POSTGRES_MEM_LIMIT}
+  #         reservations:
+  #           cpus: ${POSTGRES_CPU_RESERVATION}
+  #           memory: ${POSTGRES_MEM_RESERVATION}

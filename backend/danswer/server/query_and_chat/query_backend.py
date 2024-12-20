@@ -1,15 +1,11 @@
-import json
-from collections.abc import Generator
 from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
-from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from danswer.auth.users import current_curator_or_admin_user
-from danswer.auth.users import current_limited_user
 from danswer.auth.users import current_user
 from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import MessageType
@@ -32,8 +28,6 @@ from danswer.db.search_settings import get_current_search_settings
 from danswer.db.tag import find_tags
 from danswer.document_index.factory import get_default_document_index
 from danswer.document_index.vespa.index import VespaIndex
-from danswer.one_shot_answer.answer_question import stream_search_answer
-from danswer.one_shot_answer.models import DirectQARequest
 from danswer.server.query_and_chat.models import AdminSearchRequest
 from danswer.server.query_and_chat.models import AdminSearchResponse
 from danswer.server.query_and_chat.models import ChatSessionDetails
@@ -41,7 +35,6 @@ from danswer.server.query_and_chat.models import ChatSessionsResponse
 from danswer.server.query_and_chat.models import SearchSessionDetailResponse
 from danswer.server.query_and_chat.models import SourceTag
 from danswer.server.query_and_chat.models import TagResponse
-from danswer.server.query_and_chat.token_limit import check_token_rate_limits
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -140,7 +133,7 @@ def get_user_search_sessions(
 
     try:
         search_sessions = get_chat_sessions_by_user(
-            user_id=user_id, deleted=False, db_session=db_session, only_one_shot=True
+            user_id=user_id, deleted=False, db_session=db_session
         )
     except ValueError:
         raise HTTPException(
@@ -229,29 +222,3 @@ def get_search_session(
         ],
     )
     return response
-
-
-@basic_router.post("/stream-answer-with-quote")
-def get_answer_with_quote(
-    query_request: DirectQARequest,
-    user: User = Depends(current_limited_user),
-    _: None = Depends(check_token_rate_limits),
-) -> StreamingResponse:
-    query = query_request.messages[0].message
-
-    logger.notice(f"Received query for one shot answer with quotes: {query}")
-
-    def stream_generator() -> Generator[str, None, None]:
-        try:
-            for packet in stream_search_answer(
-                query_req=query_request,
-                user=user,
-                max_document_tokens=None,
-                max_history_tokens=0,
-            ):
-                yield json.dumps(packet) if isinstance(packet, dict) else packet
-        except Exception as e:
-            logger.exception("Error in search answer streaming")
-            yield json.dumps({"error": str(e)})
-
-    return StreamingResponse(stream_generator(), media_type="application/json")

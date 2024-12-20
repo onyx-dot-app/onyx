@@ -2,19 +2,20 @@ from typing import cast
 
 from langchain_core.messages import HumanMessage
 
+from danswer.chat.models import AnswerStyleConfig
 from danswer.chat.models import LlmDoc
-from danswer.llm.answering.models import AnswerStyleConfig
-from danswer.llm.answering.models import PromptConfig
-from danswer.llm.answering.prompts.build import AnswerPromptBuilder
-from danswer.llm.answering.prompts.citations_prompt import (
+from danswer.chat.models import PromptConfig
+from danswer.chat.prompt_builder.build import AnswerPromptBuilder
+from danswer.chat.prompt_builder.citations_prompt import (
     build_citations_system_message,
 )
-from danswer.llm.answering.prompts.citations_prompt import build_citations_user_message
-from danswer.llm.answering.prompts.quotes_prompt import build_quotes_user_message
+from danswer.chat.prompt_builder.citations_prompt import build_citations_user_message
+from danswer.chat.prompt_builder.quotes_prompt import build_quotes_user_message
 from danswer.tools.message import ToolCallSummary
 from danswer.tools.models import ToolResponse
 
 
+ORIGINAL_CONTEXT_DOCUMENTS_ID = "search_doc_content"
 FINAL_CONTEXT_DOCUMENTS_ID = "final_context_documents"
 
 

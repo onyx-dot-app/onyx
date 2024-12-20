@@ -33,6 +33,7 @@ import {
   getDateRangeString,
   getTimeAgoString,
 } from "@/lib/dateUtils";
+import { Separator } from "@/components/ui/separator";
 
 const SectionTitle = ({ children }: { children: string }) => (
   <div className="font-bold text-xs mt-2 flex">{children}</div>
@@ -53,6 +54,9 @@ export interface SourceSelectorProps {
   availableDocumentSets: DocumentSet[];
   existingSources: ValidSources[];
   availableTags: Tag[];
+  toggleFilters?: () => void;
+  filtersUntoggled?: boolean;
+  tagsOnLeft?: boolean;
 }
 
 export function SourceSelector({
@@ -68,6 +72,9 @@ export function SourceSelector({
   existingSources,
   availableTags,
   showDocSidebar,
+  toggleFilters,
+  filtersUntoggled,
+  tagsOnLeft,
 }: SourceSelectorProps) {
   const handleSelect = (source: SourceMetadata) => {
     setSelectedSources((prev: SourceMetadata[]) => {
@@ -110,138 +117,156 @@ export function SourceSelector({
         showDocSidebar ? "4xl:block" : "!block"
       } duration-1000 flex ease-out transition-all transform origin-top-right`}
     >
-      <div className="mb-4 pb-2 flex border-b border-border text-emphasis">
+      <button
+        onClick={() => toggleFilters && toggleFilters()}
+        className="flex text-emphasis"
+      >
         <h2 className="font-bold my-auto">Filters</h2>
         <FiFilter className="my-auto ml-2" size="16" />
-      </div>
-
-      <Popover>
-        <PopoverTrigger asChild>
-          <div className="cursor-pointer">
-            <SectionTitle>Time Range</SectionTitle>
-            <p className="text-sm text-default mt-2">
-              {timeRange?.from
-                ? getDateRangeString(timeRange.from, timeRange.to)
-                : "Since"}
-            </p>
-          </div>
-        </PopoverTrigger>
-        <PopoverContent
-          className="bg-background border-border border rounded-md z-[200] p-0"
-          align="start"
-        >
-          <Calendar
-            mode="range"
-            selected={
-              timeRange
-                ? { from: new Date(timeRange.from), to: new Date(timeRange.to) }
-                : undefined
-            }
-            onSelect={(daterange) => {
-              const initialDate = daterange?.from || new Date();
-              const endDate = daterange?.to || new Date();
-              setTimeRange({
-                from: initialDate,
-                to: endDate,
-                selectValue: timeRange?.selectValue || "",
-              });
-            }}
-            className="rounded-md "
-          />
-        </PopoverContent>
-      </Popover>
-
-      {availableTags.length > 0 && (
+      </button>
+      {!filtersUntoggled && (
         <>
-          <div className="mt-4 mb-2">
-            <SectionTitle>Tags</SectionTitle>
-          </div>
-          <TagFilter
-            tags={availableTags}
-            selectedTags={selectedTags}
-            setSelectedTags={setSelectedTags}
-          />
-        </>
-      )}
-
-      {existingSources.length > 0 && (
-        <div className="mt-4">
-          <div className="flex w-full gap-x-2 items-center">
-            <div className="font-bold text-xs mt-2 flex items-center gap-x-2">
-              <p>Sources</p>
-              <input
-                type="checkbox"
-                checked={allSourcesSelected}
-                onChange={toggleAllSources}
-                className="my-auto form-checkbox h-3 w-3 text-primary border-background-900 rounded"
+          <Separator />
+          <Popover>
+            <PopoverTrigger asChild>
+              <div className="cursor-pointer">
+                <SectionTitle>Time Range</SectionTitle>
+                <p className="text-sm text-default mt-2">
+                  {getDateRangeString(timeRange?.from!, timeRange?.to!) ||
+                    "Select a time range"}
+                </p>
+              </div>
+            </PopoverTrigger>
+            <PopoverContent
+              className="bg-background-search-filter border-border border rounded-md z-[200] p-0"
+              align="start"
+            >
+              <Calendar
+                mode="range"
+                selected={
+                  timeRange
+                    ? {
+                        from: new Date(timeRange.from),
+                        to: new Date(timeRange.to),
+                      }
+                    : undefined
+                }
+                onSelect={(daterange) => {
+                  const initialDate = daterange?.from || new Date();
+                  const endDate = daterange?.to || new Date();
+                  setTimeRange({
+                    from: initialDate,
+                    to: endDate,
+                    selectValue: timeRange?.selectValue || "",
+                  });
+                }}
+                className="rounded-md "
               />
-            </div>
-          </div>
-          <div className="px-1">
-            {listSourceMetadata()
-              .filter((source) => existingSources.includes(source.internalName))
-              .map((source) => (
-                <div
-                  key={source.internalName}
-                  className={
-                    "flex cursor-pointer w-full items-center " +
-                    "py-1.5 my-1.5 rounded-lg px-2 select-none " +
-                    (selectedSources
-                      .map((source) => source.internalName)
-                      .includes(source.internalName)
-                      ? "bg-hover"
-                      : "hover:bg-hover-light")
-                  }
-                  onClick={() => handleSelect(source)}
-                >
-                  <SourceIcon sourceType={source.internalName} iconSize={16} />
-                  <span className="ml-2 text-sm text-default">
-                    {source.displayName}
-                  </span>
-                </div>
-              ))}
-          </div>
-        </div>
-      )}
+            </PopoverContent>
+          </Popover>
 
-      {availableDocumentSets.length > 0 && (
-        <>
-          <div className="mt-4">
-            <SectionTitle>Knowledge Sets</SectionTitle>
-          </div>
-          <div className="px-1">
-            {availableDocumentSets.sort(function(a,b){return b.name < a.name ? 1 : b.name > a.name ? -1 : 0}).map((documentSet) => (
-              <div key={documentSet.name} className="my-1.5 flex">
-                <div
-                  key={documentSet.name}
-                  className={
-                    "flex cursor-pointer w-full items-center " +
-                    "py-1.5 rounded-lg px-2 " +
-                    (selectedDocumentSets.includes(documentSet.name)
-                      ? "bg-hover"
-                      : "hover:bg-hover-light")
-                  }
-                  onClick={() => handleDocumentSetSelect(documentSet.name)}
-                >
-                  <HoverPopup
-                    mainContent={
-                      <div className="flex my-auto mr-2">
-                        <InfoIcon className={defaultTailwindCSS} />
-                      </div>
-                    }
-                    popupContent={
-                      <div className="text-sm w-64">
-                        <div className="flex font-medium">Description</div>
-                        <div className="mt-1">{documentSet.description}</div>
-                      </div>
-                    }
-                    classNameModifications="-ml-2"
+          {availableTags.length > 0 && (
+            <>
+              <div className="mt-4 mb-2">
+                <SectionTitle>Tags</SectionTitle>
+              </div>
+              <TagFilter
+                showTagsOnLeft={true}
+                tags={availableTags}
+                selectedTags={selectedTags}
+                setSelectedTags={setSelectedTags}
+              />
+            </>
+          )}
+
+
+          {existingSources.length > 0 && (
+            <div className="mt-4">
+              <div className="flex w-full gap-x-2 items-center">
+                <div className="font-bold text-xs mt-2 flex items-center gap-x-2">
+                  <p>Sources</p>
+                  <input
+                    type="checkbox"
+                    checked={allSourcesSelected}
+                    onChange={toggleAllSources}
+                    className="my-auto form-checkbox h-3 w-3 text-primary border-background-900 rounded"
                   />
-                  <span className="text-sm">{documentSet.name}</span>
                 </div>
               </div>
-            ))}
-          </div>
+              <div className="px-1">
+                {listSourceMetadata()
+                  .filter((source) =>
+                    existingSources.includes(source.internalName)
+                  )
+                  .map((source) => (
+                    <div
+                      key={source.internalName}
+                      className={
+                        "flex cursor-pointer w-full items-center " +
+                        "py-1.5 my-1.5 rounded-lg px-2 select-none " +
+                        (selectedSources
+                          .map((source) => source.internalName)
+                          .includes(source.internalName)
+                          ? "bg-hover"
+                          : "hover:bg-hover-light")
+                      }
+                      onClick={() => handleSelect(source)}
+                    >
+                      <SourceIcon
+                        sourceType={source.internalName}
+                        iconSize={16}
+                      />
+                      <span className="ml-2 text-sm text-default">
+                        {source.displayName}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {availableDocumentSets.length > 0 && (
+            <>
+              <div className="mt-4">
+                <SectionTitle>Knowledge Sets</SectionTitle>
+              </div>
+              <div className="px-1">
+                {availableDocumentSets.map((documentSet) => (
+                  <div key={documentSet.name} className="my-1.5 flex">
+                    <div
+                      key={documentSet.name}
+                      className={
+                        "flex cursor-pointer w-full items-center " +
+                        "py-1.5 rounded-lg px-2 " +
+                        (selectedDocumentSets.includes(documentSet.name)
+                          ? "bg-hover"
+                          : "hover:bg-hover-light")
+                      }
+                      onClick={() => handleDocumentSetSelect(documentSet.name)}
+                    >
+                      <HoverPopup
+                        mainContent={
+                          <div className="flex my-auto mr-2">
+                            <InfoIcon className={defaultTailwindCSS} />
+                          </div>
+                        }
+                        popupContent={
+                          <div className="text-sm w-64">
+                            <div className="flex font-medium">Description</div>
+                            <div className="mt-1">
+                              {documentSet.description}
+                            </div>
+                          </div>
+                        }
+                        classNameModifications="-ml-2"
+                      />
+                      <span className="text-sm">{documentSet.name}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

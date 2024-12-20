@@ -15,6 +15,7 @@ from danswer.connectors.danswer_jira.connector import JiraConnector
 from danswer.connectors.discourse.connector import DiscourseConnector
 from danswer.connectors.document360.connector import Document360Connector
 from danswer.connectors.dropbox.connector import DropboxConnector
+from danswer.connectors.egnyte.connector import EgnyteConnector
 from danswer.connectors.file.connector import LocalFileConnector
 from danswer.connectors.fireflies.connector import FirefliesConnector
 from danswer.connectors.freshdesk.connector import FreshdeskConnector
@@ -40,7 +41,6 @@ from danswer.connectors.salesforce.connector import SalesforceConnector
 from danswer.connectors.sharepoint.connector import SharepointConnector
 from danswer.connectors.slab.connector import SlabConnector
 from danswer.connectors.slack.connector import SlackPollConnector
-from danswer.connectors.slack.load_connector import SlackLoadConnector
 from danswer.connectors.teams.connector import TeamsConnector
 from danswer.connectors.web.connector import WebConnector
 from danswer.connectors.wikipedia.connector import WikipediaConnector
@@ -63,7 +63,6 @@ def identify_connector_class(
         DocumentSource.WEB: WebConnector,
         DocumentSource.FILE: LocalFileConnector,
         DocumentSource.SLACK: {
-            InputType.LOAD_STATE: SlackLoadConnector,
             InputType.POLL: SlackPollConnector,
             InputType.SLIM_RETRIEVAL: SlackPollConnector,
         },
@@ -103,6 +102,7 @@ def identify_connector_class(
         DocumentSource.XENFORO: XenforoConnector,
         DocumentSource.FRESHDESK: FreshdeskConnector,
         DocumentSource.FIREFLIES: FirefliesConnector,
+        DocumentSource.EGNYTE: EgnyteConnector,
     }
     connector_by_source = connector_map.get(source, {})
 

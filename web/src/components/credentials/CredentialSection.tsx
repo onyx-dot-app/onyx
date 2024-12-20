@@ -28,6 +28,7 @@ import {
   ConfluenceCredentialJson,
   Credential,
 } from "@/lib/connectors/credentials";
+import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
 
 export default function CredentialSection({
   ccPair,
@@ -38,9 +39,14 @@ export default function CredentialSection({
   sourceType: ValidSources;
   refresh: () => void;
 }) {
-  const makeShowCreateCredential = () => {
-    setShowModifyCredential(false);
-    setShowCreateCredential(true);
+  const makeShowCreateCredential = async () => {
+    const redirectUrl = await getConnectorOauthRedirectUrl(sourceType);
+    if (redirectUrl) {
+      window.location.href = redirectUrl;
+    } else {
+      setShowModifyCredential(false);
+      setShowCreateCredential(true);
+    }
   };
 
   const { data: credentials } = useSWR<Credential<ConfluenceCredentialJson>[]>(
@@ -150,9 +156,6 @@ export default function CredentialSection({
           title="Update Credentials"
         >
           <ModifyCredential
-            showCreate={() => {
-              setShowCreateCredential(true);
-            }}
             close={closeModifyCredential}
             source={sourceType}
             attachedConnector={ccPair.connector}

@@ -22,7 +22,7 @@ import { GoogleDriveConfig } from "@/lib/connectors/connectors";
 import { useUser } from "@/components/user/UserProvider";
 
 const GDriveMain = ({}: {}) => {
-  const { isLoadingUser, isAdmin, user } = useUser();
+  const { isAdmin, user } = useUser();
 
   const {
     data: appCredentialData,
@@ -62,10 +62,6 @@ const GDriveMain = ({}: {}) => {
   const serviceAccountKeySuccessfullyFetched =
     serviceAccountKeyData ||
     (isServiceAccountKeyError && isServiceAccountKeyError.status === 404);
-
-  if (isLoadingUser) {
-    return <></>;
-  }
 
   if (
     (!appCredentialSuccessfullyFetched && isAppCredentialLoading) ||
@@ -108,7 +104,9 @@ const GDriveMain = ({}: {}) => {
   const googleDriveServiceAccountCredential:
     | Credential<GoogleDriveServiceAccountCredentialJson>
     | undefined = credentialsData.find(
-    (credential) => credential.credential_json?.google_service_account_key
+    (credential) =>
+      credential.credential_json?.google_service_account_key &&
+      credential.source === "google_drive"
   );
 
   const googleDriveConnectorIndexingStatuses: ConnectorIndexingStatus<

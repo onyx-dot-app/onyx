@@ -38,6 +38,7 @@ import {
   XenforoIcon,
   FreshdeskIcon,
   FirefliesIcon,
+  EgnyteIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import {
@@ -58,7 +59,7 @@ type SourceMap = {
   [K in ValidSources]: PartialSourceMetadata;
 };
 
-const SOURCE_METADATA_MAP: SourceMap = {
+export const SOURCE_METADATA_MAP: SourceMap = {
   web: {
     icon: GlobeIcon,
     displayName: "Web",
@@ -76,6 +77,7 @@ const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Slack",
     category: SourceCategory.Messaging,
     docs: "https://docs.danswer.dev/connectors/slack",
+    oauthSupported: true,
   },
   gmail: {
     icon: GmailIcon,
@@ -303,6 +305,12 @@ const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Not Applicable",
     category: SourceCategory.Other,
   },
+  egnyte: {
+    icon: EgnyteIcon,
+    displayName: "Egnyte",
+    category: SourceCategory.Storage,
+    docs: "https://docs.danswer.dev/connectors/egnyte",
+  },
 } as SourceMap;
 
 function fillSourceMetadata(
@@ -341,6 +349,7 @@ export function listSourceMetadata(): SourceMetadata[] {
 export function getSourceDocLink(sourceType: ValidSources): string | null {
   return SOURCE_METADATA_MAP[sourceType].docs || null;
 }
+
 export const isValidSource = (sourceType: string) => {
   return Object.keys(SOURCE_METADATA_MAP).includes(sourceType);
 };

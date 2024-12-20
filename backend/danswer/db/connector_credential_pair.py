@@ -324,8 +324,11 @@ def associate_default_cc_pair(db_session: Session) -> None:
 def _relate_groups_to_cc_pair__no_commit(
     db_session: Session,
     cc_pair_id: int,
-    user_group_ids: list[int],
+    user_group_ids: list[int] | None = None,
 ) -> None:
+    if not user_group_ids:
+        return
+
     for group_id in user_group_ids:
         db_session.add(
             UserGroup__ConnectorCredentialPair(
@@ -402,12 +405,11 @@ def add_credential_to_connector(
     db_session.flush()  # make sure the association has an id
     db_session.refresh(association)
 
-    if groups and access_type != AccessType.SYNC:
-        _relate_groups_to_cc_pair__no_commit(
-            db_session=db_session,
-            cc_pair_id=association.id,
-            user_group_ids=groups,
-        )
+    _relate_groups_to_cc_pair__no_commit(
+        db_session=db_session,
+        cc_pair_id=association.id,
+        user_group_ids=groups,
+    )
 
     db_session.commit()
 

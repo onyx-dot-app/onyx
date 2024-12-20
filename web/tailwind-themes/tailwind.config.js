@@ -336,6 +336,7 @@ module.exports = {
         "tremor-full": "9999px",
       },
       fontSize: {
+        "2xs": "0.625rem",
         "code-sm": "small",
         "tremor-label": ["0.75rem"],
         "tremor-default": ["0.875rem", { lineHeight: "1.25rem" }],

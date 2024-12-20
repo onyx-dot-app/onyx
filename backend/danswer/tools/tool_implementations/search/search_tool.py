@@ -7,10 +7,19 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from danswer.chat.chat_utils import llm_doc_from_inference_section
+from danswer.chat.llm_response_handler import LLMCall
+from danswer.chat.models import AnswerStyleConfig
+from danswer.chat.models import ContextualPruningConfig
 from danswer.chat.models import DanswerContext
 from danswer.chat.models import DanswerContexts
+from danswer.chat.models import DocumentPruningConfig
 from danswer.chat.models import LlmDoc
+from danswer.chat.models import PromptConfig
 from danswer.chat.models import SectionRelevancePiece
+from danswer.chat.prompt_builder.build import AnswerPromptBuilder
+from danswer.chat.prompt_builder.citations_prompt import compute_max_llm_input_tokens
+from danswer.chat.prune_and_merge import prune_and_merge_sections
+from danswer.chat.prune_and_merge import prune_sections
 from danswer.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from danswer.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from danswer.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
@@ -19,22 +28,14 @@ from danswer.context.search.enums import QueryFlow
 from danswer.context.search.enums import SearchType
 from danswer.context.search.models import IndexFilters
 from danswer.context.search.models import InferenceSection
+from danswer.context.search.models import RerankingDetails
 from danswer.context.search.models import RetrievalDetails
 from danswer.context.search.models import SearchRequest
 from danswer.context.search.pipeline import SearchPipeline
 from danswer.db.models import Persona
 from danswer.db.models import User
-from danswer.llm.answering.llm_response_handler import LLMCall
-from danswer.llm.answering.models import AnswerStyleConfig
-from danswer.llm.answering.models import ContextualPruningConfig
-from danswer.llm.answering.models import DocumentPruningConfig
-from danswer.llm.answering.models import PreviousMessage
-from danswer.llm.answering.models import PromptConfig
-from danswer.llm.answering.prompts.build import AnswerPromptBuilder
-from danswer.llm.answering.prompts.citations_prompt import compute_max_llm_input_tokens
-from danswer.llm.answering.prune_and_merge import prune_and_merge_sections
-from danswer.llm.answering.prune_and_merge import prune_sections
 from danswer.llm.interfaces import LLM
+from danswer.llm.models import PreviousMessage
 from danswer.secondary_llm_flows.choose_search import check_if_need_search
 from danswer.secondary_llm_flows.query_expansion import history_based_query_rephrase
 from danswer.tools.message import ToolCallSummary
@@ -46,6 +47,9 @@ from danswer.tools.tool_implementations.search_like_tool_utils import (
 )
 from danswer.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
+)
+from danswer.tools.tool_implementations.search_like_tool_utils import (
+    ORIGINAL_CONTEXT_DOCUMENTS_ID,
 )
 from danswer.utils.logger import setup_logger
 from danswer.utils.special_types import JSON_ro
@@ -103,6 +107,7 @@ class SearchTool(Tool):
         chunks_below: int | None = None,
         full_doc: bool = False,
         bypass_acl: bool = False,
+        rerank_settings: RerankingDetails | None = None,
     ) -> None:
         self.user = user
         self.persona = persona
@@ -117,6 +122,9 @@ class SearchTool(Tool):
         self.full_doc = full_doc
         self.bypass_acl = bypass_acl
         self.db_session = db_session
+
+        # Only used via API
+        self.rerank_settings = rerank_settings
 
         self.chunks_above = (
             chunks_above
@@ -292,6 +300,7 @@ class SearchTool(Tool):
                     self.retrieval_options.offset if self.retrieval_options else None
                 ),
                 limit=self.retrieval_options.limit if self.retrieval_options else None,
+                rerank_settings=self.rerank_settings,
                 chunks_above=self.chunks_above,
                 chunks_below=self.chunks_below,
                 full_doc=self.full_doc,
@@ -385,15 +394,35 @@ class SearchTool(Tool):
     """Other utility functions"""
 
     @classmethod
-    def get_search_result(cls, llm_call: LLMCall) -> list[LlmDoc] | None:
+    def get_search_result(
+        cls, llm_call: LLMCall
+    ) -> tuple[list[LlmDoc], dict[str, int]] | None:
+        """
+        Returns the final search results and a map of docs to their original search rank (which is what is displayed to user)
+        """
         if not llm_call.tool_call_info:
             return None
+
+        final_search_results = []
+        doc_id_to_original_search_rank_map = {}
 
         for yield_item in llm_call.tool_call_info:
             if (
                 isinstance(yield_item, ToolResponse)
                 and yield_item.id == FINAL_CONTEXT_DOCUMENTS_ID
             ):
-                return cast(list[LlmDoc], yield_item.response)
+                final_search_results = cast(list[LlmDoc], yield_item.response)
+            elif (
+                isinstance(yield_item, ToolResponse)
+                and yield_item.id == ORIGINAL_CONTEXT_DOCUMENTS_ID
+            ):
+                search_contexts = yield_item.response.contexts
+                original_doc_search_rank = 1
+                for idx, doc in enumerate(search_contexts):
+                    if doc.document_id not in doc_id_to_original_search_rank_map:
+                        doc_id_to_original_search_rank_map[
+                            doc.document_id
+                        ] = original_doc_search_rank
+                        original_doc_search_rank += 1
 
-        return None
+        return final_search_results, doc_id_to_original_search_rank_map

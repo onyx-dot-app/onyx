@@ -8,6 +8,7 @@ from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 from redis import Redis
+from redis.lock import Lock as RedisLock
 
 from danswer.background.celery.apps.app_base import task_logger
 from danswer.configs.app_configs import JOB_TIMEOUT
@@ -16,6 +17,7 @@ from danswer.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from danswer.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
 from danswer.configs.constants import DanswerCeleryPriority
 from danswer.configs.constants import DanswerCeleryQueues
+from danswer.configs.constants import DanswerCeleryTask
 from danswer.configs.constants import DanswerRedisLocks
 from danswer.db.connector import mark_cc_pair_as_external_group_synced
 from danswer.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -24,13 +26,20 @@ from danswer.db.enums import AccessType
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.models import ConnectorCredentialPair
 from danswer.redis.redis_connector import RedisConnector
+from danswer.redis.redis_connector_ext_group_sync import (
+    RedisConnectorExternalGroupSyncPayload,
+)
 from danswer.redis.redis_pool import get_redis_client
 from danswer.utils.logger import setup_logger
 from ee.danswer.db.connector_credential_pair import get_all_auto_sync_cc_pairs
+from ee.danswer.db.connector_credential_pair import get_cc_pairs_by_source
 from ee.danswer.db.external_perm import ExternalUserGroup
 from ee.danswer.db.external_perm import replace_user__ext_group_for_cc_pair
 from ee.danswer.external_permissions.sync_params import EXTERNAL_GROUP_SYNC_PERIODS
 from ee.danswer.external_permissions.sync_params import GROUP_PERMISSIONS_FUNC_MAP
+from ee.danswer.external_permissions.sync_params import (
+    GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC,
+)
 
 logger = setup_logger()
 
@@ -49,7 +58,7 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     if cc_pair.access_type != AccessType.SYNC:
         return False
 
-    # skip pruning if not active
+    # skip external group sync if not active
     if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
         return False
 
@@ -81,7 +90,7 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
 
 
 @shared_task(
-    name="check_for_external_group_sync",
+    name=DanswerCeleryTask.CHECK_FOR_EXTERNAL_GROUP_SYNC,
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )
@@ -102,12 +111,28 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> None:
         with get_session_with_tenant(tenant_id) as db_session:
             cc_pairs = get_all_auto_sync_cc_pairs(db_session)
 
+            # We only want to sync one cc_pair per source type in
+            # GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC
+            for source in GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC:
+                # These are ordered by cc_pair id so the first one is the one we want
+                cc_pairs_to_dedupe = get_cc_pairs_by_source(
+                    db_session, source, only_sync=True
+                )
+                # We only want to sync one cc_pair per source type
+                # in GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC so we dedupe here
+                for cc_pair_to_remove in cc_pairs_to_dedupe[1:]:
+                    cc_pairs = [
+                        cc_pair
+                        for cc_pair in cc_pairs
+                        if cc_pair.id != cc_pair_to_remove.id
+                    ]
+
             for cc_pair in cc_pairs:
                 if _is_external_group_sync_due(cc_pair):
                     cc_pair_ids_to_sync.append(cc_pair.id)
 
         for cc_pair_id in cc_pair_ids_to_sync:
-            tasks_created = try_creating_permissions_sync_task(
+            tasks_created = try_creating_external_group_sync_task(
                 self.app, cc_pair_id, r, tenant_id
             )
             if not tasks_created:
@@ -125,7 +150,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> None:
             lock_beat.release()
 
 
-def try_creating_permissions_sync_task(
+def try_creating_external_group_sync_task(
     app: Celery,
     cc_pair_id: int,
     r: Redis,
@@ -156,8 +181,8 @@ def try_creating_permissions_sync_task(
 
         custom_task_id = f"{redis_connector.external_group_sync.taskset_key}_{uuid4()}"
 
-        _ = app.send_task(
-            "connector_external_group_sync_generator_task",
+        result = app.send_task(
+            DanswerCeleryTask.CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK,
             kwargs=dict(
                 cc_pair_id=cc_pair_id,
                 tenant_id=tenant_id,
@@ -166,8 +191,13 @@ def try_creating_permissions_sync_task(
             task_id=custom_task_id,
             priority=DanswerCeleryPriority.HIGH,
         )
-        # set a basic fence to start
-        redis_connector.external_group_sync.set_fence(True)
+
+        payload = RedisConnectorExternalGroupSyncPayload(
+            started=datetime.now(timezone.utc),
+            celery_task_id=result.id,
+        )
+
+        redis_connector.external_group_sync.set_fence(payload)
 
     except Exception:
         task_logger.exception(
@@ -182,7 +212,7 @@ def try_creating_permissions_sync_task(
 
 
 @shared_task(
-    name="connector_external_group_sync_generator_task",
+    name=DanswerCeleryTask.CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK,
     acks_late=False,
     soft_time_limit=JOB_TIMEOUT,
     track_started=True,
@@ -195,7 +225,7 @@ def connector_external_group_sync_generator_task(
     tenant_id: str | None,
 ) -> None:
     """
-    Permission sync task that handles document permission syncing for a given connector credential pair
+    Permission sync task that handles external group syncing for a given connector credential pair
     This task assumes that the task has already been properly fenced
     """
 
@@ -203,7 +233,7 @@ def connector_external_group_sync_generator_task(
 
     r = get_redis_client(tenant_id=tenant_id)
 
-    lock = r.lock(
+    lock: RedisLock = r.lock(
         DanswerRedisLocks.CONNECTOR_EXTERNAL_GROUP_SYNC_LOCK_PREFIX
         + f"_{redis_connector.id}",
         timeout=CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT,
@@ -228,9 +258,13 @@ def connector_external_group_sync_generator_task(
 
             ext_group_sync_func = GROUP_PERMISSIONS_FUNC_MAP.get(source_type)
             if ext_group_sync_func is None:
-                raise ValueError(f"No external group sync func found for {source_type}")
+                raise ValueError(
+                    f"No external group sync func found for {source_type} for cc_pair: {cc_pair_id}"
+                )
 
-            logger.info(f"Syncing docs for {source_type}")
+            logger.info(
+                f"Syncing external groups for {source_type} for cc_pair: {cc_pair_id}"
+            )
 
             external_user_groups: list[ExternalUserGroup] = ext_group_sync_func(cc_pair)
 
@@ -249,7 +283,6 @@ def connector_external_group_sync_generator_task(
             )
 
             mark_cc_pair_as_external_group_synced(db_session, cc_pair.id)
-
     except Exception as e:
         task_logger.exception(
             f"Failed to run external group sync: cc_pair={cc_pair_id}"
@@ -260,6 +293,6 @@ def connector_external_group_sync_generator_task(
         raise e
     finally:
         # we always want to clear the fence after the task is done or failed so it doesn't get stuck
-        redis_connector.external_group_sync.set_fence(False)
+        redis_connector.external_group_sync.set_fence(None)
         if lock.owned():
             lock.release()

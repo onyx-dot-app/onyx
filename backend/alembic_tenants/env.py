@@ -1,5 +1,6 @@
 import asyncio
 from logging.config import fileConfig
+from typing import Literal
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -37,8 +38,15 @@ EXCLUDE_TABLES = {"kombu_queue", "kombu_message"}
 
 def include_object(
     object: SchemaItem,
-    name: str,
-    type_: str,
+    name: str | None,
+    type_: Literal[
+        "schema",
+        "table",
+        "column",
+        "index",
+        "unique_constraint",
+        "foreign_key_constraint",
+    ],
     reflected: bool,
     compare_to: SchemaItem | None,
 ) -> bool:

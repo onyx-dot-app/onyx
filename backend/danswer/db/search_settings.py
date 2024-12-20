@@ -143,6 +143,25 @@ def get_secondary_search_settings(db_session: Session) -> SearchSettings | None:
     return latest_settings
 
 
+def get_active_search_settings(db_session: Session) -> list[SearchSettings]:
+    """Returns active search settings. The first entry will always be the current search
+    settings. If there are new search settings that are being migrated to, those will be
+    the second entry."""
+    search_settings_list: list[SearchSettings] = []
+
+    # Get the primary search settings
+    primary_search_settings = get_current_search_settings(db_session)
+    search_settings_list.append(primary_search_settings)
+
+    # Check for secondary search settings
+    secondary_search_settings = get_secondary_search_settings(db_session)
+    if secondary_search_settings is not None:
+        # If secondary settings exist, add them to the list
+        search_settings_list.append(secondary_search_settings)
+
+    return search_settings_list
+
+
 def get_all_search_settings(db_session: Session) -> list[SearchSettings]:
     query = select(SearchSettings).order_by(SearchSettings.id.desc())
     result = db_session.execute(query)

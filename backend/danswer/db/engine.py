@@ -37,6 +37,7 @@ from danswer.configs.app_configs import POSTGRES_PORT
 from danswer.configs.app_configs import POSTGRES_USER
 from danswer.configs.app_configs import USER_AUTH_SECRET
 from danswer.configs.constants import POSTGRES_UNKNOWN_APP_NAME
+from danswer.server.utils import BasicAuthenticationError
 from danswer.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -426,7 +427,9 @@ def get_session() -> Generator[Session, None, None]:
     """Generate a database session with the appropriate tenant schema set."""
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     if tenant_id == POSTGRES_DEFAULT_SCHEMA and MULTI_TENANT:
-        raise HTTPException(status_code=401, detail="User must authenticate")
+        raise BasicAuthenticationError(
+            detail="User must authenticate",
+        )
 
     engine = get_sqlalchemy_engine()
 

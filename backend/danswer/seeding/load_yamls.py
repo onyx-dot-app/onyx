@@ -1,13 +1,11 @@
 import yaml
 from sqlalchemy.orm import Session
 
-from danswer.configs.chat_configs import INPUT_PROMPT_YAML
 from danswer.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from danswer.configs.chat_configs import PERSONAS_YAML
 from danswer.configs.chat_configs import PROMPTS_YAML
 from danswer.context.search.enums import RecencyBiasSetting
 from danswer.db.document_set import get_or_create_document_set_by_name
-from danswer.db.input_prompt import insert_input_prompt_if_not_exists
 from danswer.db.models import DocumentSet as DocumentSetDBModel
 from danswer.db.models import Persona
 from danswer.db.models import Prompt as PromptDBModel
@@ -79,8 +77,12 @@ def load_personas_from_yaml(
             if prompts:
                 prompt_ids = [prompt.id for prompt in prompts if prompt is not None]
 
+        if not prompt_ids:
+            raise ValueError("Invalid Persona config, no prompts exist")
+
         p_id = persona.get("id")
         tool_ids = []
+
         if persona.get("image_generation"):
             image_gen_tool = (
                 db_session.query(ToolDBModel)
@@ -122,36 +124,17 @@ def load_personas_from_yaml(
             tool_ids=tool_ids,
             builtin_persona=True,
             is_public=True,
-            display_priority=existing_persona.display_priority
-            if existing_persona is not None
-            else persona.get("display_priority"),
-            is_visible=existing_persona.is_visible
-            if existing_persona is not None
-            else persona.get("is_visible"),
+            display_priority=(
+                existing_persona.display_priority
+                if existing_persona is not None
+                else persona.get("display_priority")
+            ),
+            is_visible=(
+                existing_persona.is_visible
+                if existing_persona is not None
+                else persona.get("is_visible")
+            ),
             db_session=db_session,
-        )
-
-
-def load_input_prompts_from_yaml(
-    db_session: Session, input_prompts_yaml: str = INPUT_PROMPT_YAML
-) -> None:
-    with open(input_prompts_yaml, "r") as file:
-        data = yaml.safe_load(file)
-
-    all_input_prompts = data.get("input_prompts", [])
-    for input_prompt in all_input_prompts:
-        # If these prompts are deleted (which is a hard delete in the DB), on server startup
-        # they will be recreated, but the user can always just deactivate them, just a light inconvenience
-
-        insert_input_prompt_if_not_exists(
-            user=None,
-            input_prompt_id=input_prompt.get("id"),
-            prompt=input_prompt["prompt"],
-            content=input_prompt["content"],
-            is_public=input_prompt["is_public"],
-            active=input_prompt.get("active", True),
-            db_session=db_session,
-            commit=True,
         )
 
 
@@ -159,8 +142,6 @@ def load_chat_yamls(
     db_session: Session,
     prompt_yaml: str = PROMPTS_YAML,
     personas_yaml: str = PERSONAS_YAML,
-    input_prompts_yaml: str = INPUT_PROMPT_YAML,
 ) -> None:
     load_prompts_from_yaml(db_session, prompt_yaml)
     load_personas_from_yaml(db_session, personas_yaml)
-    load_input_prompts_from_yaml(db_session, input_prompts_yaml)

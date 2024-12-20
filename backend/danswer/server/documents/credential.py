@@ -181,7 +181,13 @@ def update_credential_data(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> CredentialBase:
-    credential = alter_credential(credential_id, credential_update, user, db_session)
+    credential = alter_credential(
+        credential_id,
+        credential_update.name,
+        credential_update.credential_json,
+        user,
+        db_session,
+    )
 
     if credential is None:
         raise HTTPException(

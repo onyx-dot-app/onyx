@@ -9,6 +9,7 @@ interface UserPreferences {
   hidden_assistants: number[];
   default_model: string | null;
   recent_assistants: number[];
+  auto_scroll: boolean | null;
 }
 
 export enum UserStatus {
@@ -134,6 +135,18 @@ export interface ConnectorIndexingStatus<
   in_progress: boolean;
 }
 
+export interface OAuthPrepareAuthorizationResponse {
+  url: string;
+}
+
+export interface OAuthSlackCallbackResponse {
+  success: boolean;
+  message: string;
+  team_id: string;
+  authed_user_id: string;
+  redirect_on_success: string;
+}
+
 export interface CCPairBasicInfo {
   has_successful_run: boolean;
   source: ValidSources;
@@ -207,6 +220,7 @@ export interface ChannelConfig {
   channel_name: string;
   respond_tag_only?: boolean;
   respond_to_bots?: boolean;
+  show_continue_in_web_ui?: boolean;
   respond_member_group_list?: string[];
   answer_filters?: AnswerFilterOption[];
   follow_up_tags?: string[];
@@ -253,62 +267,68 @@ export interface UserGroup {
   is_up_for_deletion: boolean;
 }
 
-const validSources = [
-  "web",
-  "github",
-  "gitlab",
-  "slack",
-  "google_drive",
-  "gmail",
-  "bookstack",
-  "confluence",
-  "jira",
-  "productboard",
-  "slab",
-  "notion",
-  "guru",
-  "gong",
-  "zulip",
-  "linear",
-  "hubspot",
-  "document360",
-  "file",
-  "google_sites",
-  "loopio",
-  "dropbox",
-  "salesforce",
-  "sharepoint",
-  "teams",
-  "zendesk",
-  "discourse",
-  "axero",
-  "clickup",
-  "wikipedia",
-  "mediawiki",
-  "asana",
-  "s3",
-  "r2",
-  "google_cloud_storage",
-  "xenforo",
-  "oci_storage",
-  "not_applicable",
-  "ingestion_api",
-  "freshdesk",
-  "fireflies",
+export enum ValidSources {
+  Web = "web",
+  GitHub = "github",
+  GitLab = "gitlab",
+  Slack = "slack",
+  GoogleDrive = "google_drive",
+  Gmail = "gmail",
+  Bookstack = "bookstack",
+  Confluence = "confluence",
+  Jira = "jira",
+  Productboard = "productboard",
+  Slab = "slab",
+  Notion = "notion",
+  Guru = "guru",
+  Gong = "gong",
+  Zulip = "zulip",
+  Linear = "linear",
+  Hubspot = "hubspot",
+  Document360 = "document360",
+  File = "file",
+  GoogleSites = "google_sites",
+  Loopio = "loopio",
+  Dropbox = "dropbox",
+  Salesforce = "salesforce",
+  Sharepoint = "sharepoint",
+  Teams = "teams",
+  Zendesk = "zendesk",
+  Discourse = "discourse",
+  Axero = "axero",
+  Clickup = "clickup",
+  Wikipedia = "wikipedia",
+  Mediawiki = "mediawiki",
+  Asana = "asana",
+  S3 = "s3",
+  R2 = "r2",
+  GoogleCloudStorage = "google_cloud_storage",
+  Xenforo = "xenforo",
+  OciStorage = "oci_storage",
+  NotApplicable = "not_applicable",
+  IngestionApi = "ingestion_api",
+  Freshdesk = "freshdesk",
+  Fireflies = "fireflies",
+  Egnyte = "egnyte",
+}
+
+export const validAutoSyncSources = [
+  ValidSources.Confluence,
+  ValidSources.GoogleDrive,
+  ValidSources.Gmail,
+  ValidSources.Slack,
 ] as const;
 
-export type ValidSources = (typeof validSources)[number];
-// The valid sources that are actually valid to select in the UI
+// Create a type from the array elements
+export type ValidAutoSyncSource = (typeof validAutoSyncSources)[number];
+
 export type ConfigurableSources = Exclude<
   ValidSources,
-  "not_applicable" | "ingestion_api"
+  ValidSources.NotApplicable | ValidSources.IngestionApi
 >;
 
-// The sources that have auto-sync support on the backend
-export const validAutoSyncSources = [
-  "confluence",
-  "google_drive",
-  "gmail",
-  "slack",
-] as const;
-export type ValidAutoSyncSources = (typeof validAutoSyncSources)[number];
+export const oauthSupportedSources: ConfigurableSources[] = [
+  ValidSources.Slack,
+];
+
+export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];

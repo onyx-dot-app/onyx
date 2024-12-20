@@ -6,7 +6,6 @@ import { Logo } from "@/components/EEA_Logo";
 import { NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED } from "@/lib/constants";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { BackIcon } from "@/components/icons/icons";
 import { WarningCircle, WarningDiamond } from "@phosphor-icons/react";
 import {
   Tooltip,
@@ -14,6 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { CgArrowsExpandUpLeft } from "react-icons/cg";
 
 interface Item {
   name: string | JSX.Element;
@@ -38,47 +38,33 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
   return (
     <div className="text-text-settings-sidebar pl-0">
       <nav className="space-y-2">
-        <div className="w-full justify-center mb-4 flex">
-          <div className="w-52">
-            <Link
-              className="flex flex-col"
-              href={
-                settings && settings.default_page === "chat"
-                  ? "/chat"
-                  : "/search"
-              }
-            >
-              <div className="max-w-[200px] w-full flex gap-x-1 my-auto">
-                <div className="flex-none mb-auto">
-                  <Logo />
-
-                </div>
-                <div className="flex-grow min-w-0 my-auto">
-                  {enterpriseSettings && enterpriseSettings.application_name ? (
-                    <div className="w-full">
-                      <HeaderTitle backgroundToggled={true}>
-                        {enterpriseSettings.application_name}
-                      </HeaderTitle>
-                      {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
-                        <p className="text-xs text-subtle">
-                          Powered by Danswer
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <HeaderTitle backgroundToggled={true}>GPT Lab</HeaderTitle>
+        <div className="w-full ml-4  h-8 justify-start mb-4 flex">
+          <div className="flex items-center gap-x-1 my-auto">
+            <div className="flex-none my-auto">
+              <Logo height={24} width={80} />
+            </div>
+            <div className="w-full">
+              {enterpriseSettings && enterpriseSettings.application_name ? (
+                <div>
+                  <HeaderTitle>
+                    {enterpriseSettings.application_name}
+                  </HeaderTitle>
+                  {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
+                    <p className="text-xs text-subtle">Powered by Danswer</p>
                   )}
                 </div>
-              </div>
-            </Link>
+              ) : (
+                <HeaderTitle>GPT Lab</HeaderTitle>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex w-full justify-center">
-          <Link href={settings.default_page == "chat" ? "/chat" : "/search"}>
-            <button className="text-sm flex items-center block w-52 py-2.5 flex px-2 text-left text-text-back-button bg-background-back-button hover:bg-opacity-80 cursor-pointer rounded">
-              <BackIcon className="my-auto" size={18} />
+          <Link href="/chat">
+            <button className="text-sm flex items-center block w-52 py-2.5 flex px-2 text-left hover:bg-opacity-80 cursor-pointer rounded">
+              <CgArrowsExpandUpLeft className="my-auto" size={18} />
               <p className="ml-1 break-words line-clamp-2 ellipsis leading-none">
-                Back to GPT Lab
+                Exit Admin
               </p>
             </button>
           </Link>

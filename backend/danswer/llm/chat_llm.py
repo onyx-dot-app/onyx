@@ -26,7 +26,9 @@ from langchain_core.messages.tool import ToolMessage
 from langchain_core.prompt_values import PromptValue
 
 from danswer.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
-from danswer.configs.model_configs import DISABLE_LITELLM_STREAMING
+from danswer.configs.model_configs import (
+    DISABLE_LITELLM_STREAMING,
+)
 from danswer.configs.model_configs import GEN_AI_TEMPERATURE
 from danswer.configs.model_configs import LITELLM_EXTRA_BODY
 from danswer.llm.interfaces import LLM
@@ -161,7 +163,9 @@ def _convert_delta_to_message_chunk(
 
     if role == "user":
         return HumanMessageChunk(content=content)
-    elif role == "assistant":
+    # NOTE: if tool calls are present, then it's an assistant.
+    # In Ollama, the role will be None for tool-calls
+    elif role == "assistant" or tool_calls:
         if tool_calls:
             tool_call = tool_calls[0]
             tool_name = tool_call.function.name or (curr_msg and curr_msg.name) or ""
@@ -236,6 +240,7 @@ class DefaultMultiLLM(LLM):
         custom_config: dict[str, str] | None = None,
         extra_headers: dict[str, str] | None = None,
         extra_body: dict | None = LITELLM_EXTRA_BODY,
+        model_kwargs: dict[str, Any] | None = None,
         long_term_logger: LongTermLogger | None = None,
     ):
         self._timeout = timeout
@@ -263,12 +268,16 @@ class DefaultMultiLLM(LLM):
 
         # NOTE: have to set these as environment variables for Litellm since
         # not all are able to passed in but they always support them set as env
-        # variables
+        # variables. We'll also try passing them in, since litellm just ignores
+        # addtional kwargs (and some kwargs MUST be passed in rather than set as
+        # env variables)
         if custom_config:
             for k, v in custom_config.items():
                 os.environ[k] = v
 
-        model_kwargs: dict[str, Any] = {}
+        model_kwargs = model_kwargs or {}
+        if custom_config:
+            model_kwargs.update(custom_config)
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
         if extra_body:

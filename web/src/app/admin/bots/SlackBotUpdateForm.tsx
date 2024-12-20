@@ -1,7 +1,7 @@
 "use client";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { SlackBot } from "@/lib/types";
+import { SlackBot, ValidSources } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
@@ -78,7 +78,7 @@ export const ExistingSlackBotForm = ({
       <div className="flex items-center justify-between h-14">
         <div className="flex items-center gap-2">
           <div className="my-auto">
-            <SourceIcon iconSize={32} sourceType={"slack"} />
+            <SourceIcon iconSize={32} sourceType={ValidSources.Slack} />
           </div>
           <div className="ml-1">
             <EditableStringFieldDisplay

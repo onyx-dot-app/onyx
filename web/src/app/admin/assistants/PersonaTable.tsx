@@ -41,7 +41,7 @@ function PersonaTypeDisplay({ persona }: { persona: Persona }) {
 export function PersonasTable() {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
-  const { refreshUser, isLoadingUser, isAdmin } = useUser();
+  const { refreshUser, isAdmin } = useUser();
   const {
     allAssistants: assistants,
     refreshAssistants,
@@ -90,17 +90,13 @@ export function PersonasTable() {
         message: `Failed to update persona order - ${await response.text()}`,
       });
       setFinalPersonas(assistants);
-      router.refresh();
+      await refreshAssistants();
       return;
     }
 
     await refreshAssistants();
     await refreshUser();
   };
-
-  if (isLoadingUser) {
-    return <></>;
-  }
 
   return (
     <div>
@@ -151,7 +147,7 @@ export function PersonasTable() {
                       persona.is_visible
                     );
                     if (response.ok) {
-                      router.refresh();
+                      await refreshAssistants();
                     } else {
                       setPopup({
                         type: "error",
@@ -183,7 +179,7 @@ export function PersonasTable() {
                       onClick={async () => {
                         const response = await deletePersona(persona.id);
                         if (response.ok) {
-                          router.refresh();
+                          await refreshAssistants();
                         } else {
                           alert(
                             `Failed to delete persona - ${await response.text()}`

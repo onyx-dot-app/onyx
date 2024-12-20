@@ -1,9 +1,16 @@
+from datetime import datetime
 from typing import cast
 
 import redis
 from celery import Celery
+from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
+
+
+class RedisConnectorExternalGroupSyncPayload(BaseModel):
+    started: datetime | None
+    celery_task_id: str | None
 
 
 class RedisConnectorExternalGroupSync:
@@ -68,12 +75,29 @@ class RedisConnectorExternalGroupSync:
 
         return False
 
-    def set_fence(self, value: bool) -> None:
-        if not value:
+    @property
+    def payload(self) -> RedisConnectorExternalGroupSyncPayload | None:
+        # read related data and evaluate/print task progress
+        fence_bytes = cast(bytes, self.redis.get(self.fence_key))
+        if fence_bytes is None:
+            return None
+
+        fence_str = fence_bytes.decode("utf-8")
+        payload = RedisConnectorExternalGroupSyncPayload.model_validate_json(
+            cast(str, fence_str)
+        )
+
+        return payload
+
+    def set_fence(
+        self,
+        payload: RedisConnectorExternalGroupSyncPayload | None,
+    ) -> None:
+        if not payload:
             self.redis.delete(self.fence_key)
             return
 
-        self.redis.set(self.fence_key, 0)
+        self.redis.set(self.fence_key, payload.model_dump_json())
 
     @property
     def generator_complete(self) -> int | None:

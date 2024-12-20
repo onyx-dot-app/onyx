@@ -1,7 +1,7 @@
 import { DefaultDropdown } from "@/components/Dropdown";
 import {
   AccessType,
-  ValidAutoSyncSources,
+  ValidAutoSyncSource,
   ConfigurableSources,
   validAutoSyncSources,
 } from "@/lib/types";
@@ -13,8 +13,8 @@ import { useEffect } from "react";
 
 function isValidAutoSyncSource(
   value: ConfigurableSources
-): value is ValidAutoSyncSources {
-  return validAutoSyncSources.includes(value as ValidAutoSyncSources);
+): value is ValidAutoSyncSource {
+  return validAutoSyncSources.includes(value as ValidAutoSyncSource);
 }
 
 export function AccessTypeForm({
@@ -27,7 +27,7 @@ export function AccessTypeForm({
 
   const isPaidEnterpriseEnabled = usePaidEnterpriseFeaturesEnabled();
   const isAutoSyncSupported = isValidAutoSyncSource(connector);
-  const { isLoadingUser, isAdmin } = useUser();
+  const { isAdmin } = useUser();
 
   useEffect(() => {
     if (!isPaidEnterpriseEnabled) {
@@ -49,7 +49,7 @@ export function AccessTypeForm({
       name: "Private",
       value: "private",
       description:
-        "Only users who have expliticly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
+        "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
     },
   ];
 
@@ -92,9 +92,7 @@ export function AccessTypeForm({
           />
 
           {access_type.value === "sync" && isAutoSyncSupported && (
-            <AutoSyncOptions
-              connectorType={connector as ValidAutoSyncSources}
-            />
+            <AutoSyncOptions connectorType={connector as ValidAutoSyncSource} />
           )}
         </>
       )}

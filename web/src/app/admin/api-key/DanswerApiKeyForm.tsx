@@ -82,7 +82,7 @@ export const DanswerApiKeyForm = ({
           }}
         >
           {({ isSubmitting, values, setFieldValue }) => (
-            <Form>
+            <Form className="w-full overflow-visible">
               <Text className="mb-4 text-lg">
                 Choose a memorable name for your API key. This is optional and
                 can be added or changed later!

@@ -12,9 +12,9 @@ test(
     // Test redirect to login, and redirect to search after login
     const { email, password } = TEST_CREDENTIALS;
 
-    await page.goto("http://localhost:3000/search");
+    await page.goto("http://localhost:3000/chat");
 
-    await page.waitForURL("http://localhost:3000/auth/login?next=%2Fsearch");
+    await page.waitForURL("http://localhost:3000/auth/login?next=%2Fchat");
 
     await expect(page).toHaveTitle("Danswer");
 
@@ -26,6 +26,12 @@ test(
     // Click the login button
     await page.click('button[type="submit"]');
 
-    await page.waitForURL("http://localhost:3000/search");
+    await page.waitForURL("http://localhost:3000/chat");
+
+    await page.getByPlaceholder("Send a message or try using @ or /");
+
+    await expect(page.locator("body")).not.toContainText(
+      "Initializing Danswer"
+    );
   }
 );

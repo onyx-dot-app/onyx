@@ -14,12 +14,8 @@ const ImpersonateSchema = Yup.object().shape({
 
 export default function ImpersonatePage() {
   const router = useRouter();
-  const { user, isLoadingUser, isCloudSuperuser } = useUser();
+  const { user, isCloudSuperuser } = useUser();
   const { popup, setPopup } = usePopup();
-
-  if (isLoadingUser) {
-    return null;
-  }
 
   if (!user) {
     redirect("/auth/login");

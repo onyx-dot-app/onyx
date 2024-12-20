@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -32,16 +33,17 @@ from danswer.db.engine import get_current_tenant_id
 from danswer.db.engine import get_session
 from danswer.db.enums import AccessType
 from danswer.db.enums import ConnectorCredentialPairStatus
-from danswer.db.index_attempt import cancel_indexing_attempts_for_ccpair
-from danswer.db.index_attempt import cancel_indexing_attempts_past_model
 from danswer.db.index_attempt import count_index_attempts_for_connector
 from danswer.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from danswer.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id
+from danswer.db.models import SearchSettings
 from danswer.db.models import User
+from danswer.db.search_settings import get_active_search_settings
 from danswer.db.search_settings import get_current_search_settings
 from danswer.redis.redis_connector import RedisConnector
 from danswer.redis.redis_pool import get_redis_client
 from danswer.server.documents.models import CCPairFullInfo
+from danswer.server.documents.models import CCPropertyUpdateRequest
 from danswer.server.documents.models import CCStatusUpdateRequest
 from danswer.server.documents.models import ConnectorCredentialPairIdentifier
 from danswer.server.documents.models import ConnectorCredentialPairMetadata
@@ -158,7 +160,19 @@ def update_cc_pair_status(
     status_update_request: CCStatusUpdateRequest,
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-) -> None:
+    tenant_id: str | None = Depends(get_current_tenant_id),
+) -> JSONResponse:
+    """This method may wait up to 30 seconds if pausing the connector due to the need to
+    terminate tasks in progress. Tasks are not guaranteed to terminate within the
+    timeout.
+
+    Returns HTTPStatus.OK if everything finished.
+    Returns HTTPStatus.ACCEPTED if the connector is being paused, but background tasks
+    did not finish within the timeout.
+    """
+    WAIT_TIMEOUT = 15.0
+    still_terminating = False
+
     cc_pair = get_connector_credential_pair_from_id(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
@@ -173,9 +187,72 @@ def update_cc_pair_status(
         )
 
     if status_update_request.status == ConnectorCredentialPairStatus.PAUSED:
-        cancel_indexing_attempts_for_ccpair(cc_pair_id, db_session)
+        search_settings_list: list[SearchSettings] = get_active_search_settings(
+            db_session
+        )
 
-        cancel_indexing_attempts_past_model(db_session)
+        redis_connector = RedisConnector(tenant_id, cc_pair_id)
+
+        try:
+            redis_connector.stop.set_fence(True)
+            while True:
+                logger.debug(
+                    f"Wait for indexing soft termination starting: cc_pair={cc_pair_id}"
+                )
+                wait_succeeded = redis_connector.wait_for_indexing_termination(
+                    search_settings_list, WAIT_TIMEOUT
+                )
+                if wait_succeeded:
+                    logger.debug(
+                        f"Wait for indexing soft termination succeeded: cc_pair={cc_pair_id}"
+                    )
+                    break
+
+                logger.debug(
+                    "Wait for indexing soft termination timed out. "
+                    f"Moving to hard termination: cc_pair={cc_pair_id} timeout={WAIT_TIMEOUT:.2f}"
+                )
+
+                for search_settings in search_settings_list:
+                    redis_connector_index = redis_connector.new_index(
+                        search_settings.id
+                    )
+                    if not redis_connector_index.fenced:
+                        continue
+
+                    index_payload = redis_connector_index.payload
+                    if not index_payload:
+                        continue
+
+                    if not index_payload.celery_task_id:
+                        continue
+
+                    # Revoke the task to prevent it from running
+                    primary_app.control.revoke(index_payload.celery_task_id)
+
+                    # If it is running, then signaling for termination will get the
+                    # watchdog thread to kill the spawned task
+                    redis_connector_index.set_terminate(index_payload.celery_task_id)
+
+                logger.debug(
+                    f"Wait for indexing hard termination starting: cc_pair={cc_pair_id}"
+                )
+                wait_succeeded = redis_connector.wait_for_indexing_termination(
+                    search_settings_list, WAIT_TIMEOUT
+                )
+                if wait_succeeded:
+                    logger.debug(
+                        f"Wait for indexing hard termination succeeded: cc_pair={cc_pair_id}"
+                    )
+                    break
+
+                logger.debug(
+                    f"Wait for indexing hard termination timed out: cc_pair={cc_pair_id}"
+                )
+                still_terminating = True
+                break
+        finally:
+            redis_connector.stop.set_fence(False)
 
     update_connector_credential_pair_from_id(
         db_session=db_session,
@@ -184,6 +261,18 @@ def update_cc_pair_status(
     )
 
     db_session.commit()
+
+    if still_terminating:
+        return JSONResponse(
+            status_code=HTTPStatus.ACCEPTED,
+            content={
+                "message": "Request accepted, background task termination still in progress"
+            },
+        )
+
+    return JSONResponse(
+        status_code=HTTPStatus.OK, content={"message": str(HTTPStatus.OK)}
+    )
 
 
 @router.put("/admin/cc-pair/{cc_pair_id}/name")
@@ -213,6 +302,46 @@ def update_cc_pair_name(
     except IntegrityError:
         db_session.rollback()
         raise HTTPException(status_code=400, detail="Name must be unique")
+
+
+@router.put("/admin/cc-pair/{cc_pair_id}/property")
+def update_cc_pair_property(
+    cc_pair_id: int,
+    update_request: CCPropertyUpdateRequest,  # in seconds
+    user: User | None = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> StatusResponse[int]:
+    cc_pair = get_connector_credential_pair_from_id(
+        cc_pair_id=cc_pair_id,
+        db_session=db_session,
+        user=user,
+        get_editable=True,
+    )
+    if not cc_pair:
+        raise HTTPException(
+            status_code=400, detail="CC Pair not found for current user's permissions"
+        )
+
+    # Can we centralize logic for updating connector properties
+    # so that we don't need to manually validate everywhere?
+    if update_request.name == "refresh_frequency":
+        cc_pair.connector.refresh_freq = int(update_request.value)
+        cc_pair.connector.validate_refresh_freq()
+        db_session.commit()
+
+        msg = "Refresh frequency updated successfully"
+    elif update_request.name == "pruning_frequency":
+        cc_pair.connector.prune_freq = int(update_request.value)
+        cc_pair.connector.validate_prune_freq()
+        db_session.commit()
+
+        msg = "Pruning frequency updated successfully"
+    else:
+        raise HTTPException(
+            status_code=400, detail=f"Property name {update_request.name} is not valid."
+        )
+
+    return StatusResponse(success=True, message=msg, data=cc_pair_id)
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/last_pruned")
@@ -267,9 +396,9 @@ def prune_cc_pair(
         )
 
     logger.info(
-        f"Pruning cc_pair: cc_pair_id={cc_pair_id} "
-        f"connector_id={cc_pair.connector_id} "
-        f"credential_id={cc_pair.credential_id} "
+        f"Pruning cc_pair: cc_pair={cc_pair_id} "
+        f"connector={cc_pair.connector_id} "
+        f"credential={cc_pair.credential_id} "
         f"{cc_pair.connector.name} connector."
     )
     tasks_created = try_creating_prune_generator_task(

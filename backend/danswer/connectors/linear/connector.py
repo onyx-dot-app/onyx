@@ -132,7 +132,6 @@ class LinearConnector(LoadConnector, PollConnector):
                             branchName
                             customerTicketCount
                             description
-                            descriptionData
                             comments {
                                 nodes {
                                     url
@@ -215,5 +214,6 @@ class LinearConnector(LoadConnector, PollConnector):
 if __name__ == "__main__":
     connector = LinearConnector()
     connector.load_credentials({"linear_api_key": os.environ["LINEAR_API_KEY"]})
+
     document_batches = connector.load_from_state()
     print(next(document_batches))

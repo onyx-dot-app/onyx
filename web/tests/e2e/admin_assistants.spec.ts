@@ -12,5 +12,8 @@ test(
     await expect(page.locator("p.text-sm").nth(0)).toHaveText(
       /^Assistants are a way to build/
     );
+
+    const generalTextLocator = page.locator("tr.border-b td").nth(1);
+    await expect(generalTextLocator.locator("p.text")).toHaveText("General");
   }
 );

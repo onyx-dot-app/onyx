@@ -7,7 +7,7 @@ from danswer.llm.utils import message_to_prompt_and_imgs
 from danswer.tools.tool import Tool
 
 if TYPE_CHECKING:
-    from danswer.llm.answering.prompts.build import AnswerPromptBuilder
+    from danswer.chat.prompt_builder.build import AnswerPromptBuilder
     from danswer.tools.tool_implementations.custom.custom_tool import (
         CustomToolCallSummary,
     )

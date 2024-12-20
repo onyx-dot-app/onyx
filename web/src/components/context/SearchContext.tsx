@@ -8,9 +8,9 @@ import { ChatSession } from "@/app/chat/interfaces";
 interface SearchContextProps {
   querySessions: ChatSession[];
   ccPairs: CCPairBasicInfo[];
+  tags: Tag[];
   documentSets: DocumentSet[];
   assistants: Persona[];
-  tags: Tag[];
   agenticSearchEnabled: boolean;
   disabledAgentic: boolean;
   initiallyToggled: boolean;

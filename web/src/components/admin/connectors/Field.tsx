@@ -109,7 +109,7 @@ export function ToolTipDetails({
   return (
     <TooltipProvider>
       <Tooltip>
-        <TooltipTrigger>
+        <TooltipTrigger type="button">
           <FiInfo size={12} />
         </TooltipTrigger>
         <TooltipContent side="top" align="center">
@@ -209,7 +209,7 @@ export function TextFormField({
 
   return (
     <div className={`w-full ${width}`}>
-      <div className="flex gap-x-2 items-center">
+      <div className="flex flex-col gap-x-2 items-start">
         {!removeLabel && (
           <Label className={sizeClass.label} small={small}>
             {label}

@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from danswer.one_shot_answer.models import ThreadMessage
+from danswer.chat.models import ThreadMessage
 
 
 class SlackMessageInfo(BaseModel):

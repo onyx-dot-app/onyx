@@ -118,7 +118,7 @@ def handle_confluence_rate_limit(confluence_call: F) -> F:
     return cast(F, wrapped_call)
 
 
-_DEFAULT_PAGINATION_LIMIT = 100
+_DEFAULT_PAGINATION_LIMIT = 1000
 
 
 class OnyxConfluence(Confluence):
@@ -131,6 +131,32 @@ class OnyxConfluence(Confluence):
     def __init__(self, url: str, *args: Any, **kwargs: Any) -> None:
         super(OnyxConfluence, self).__init__(url, *args, **kwargs)
         self._wrap_methods()
+
+    def get_current_user(self, expand: str | None = None) -> Any:
+        """
+        Implements a method that isn't in the third party client.
+
+        Get information about the current user
+        :param expand: OPTIONAL expand for get status of user.
+                Possible param is "status". Results are "Active, Deactivated"
+        :return: Returns the user details
+        """
+
+        from atlassian.errors import ApiPermissionError  # type:ignore
+
+        url = "rest/api/user/current"
+        params = {}
+        if expand:
+            params["expand"] = expand
+        try:
+            response = self.get(url, params=params)
+        except HTTPError as e:
+            if e.response.status_code == 403:
+                raise ApiPermissionError(
+                    "The calling user does not have permission", reason=e
+                )
+            raise
+        return response
 
     def _wrap_methods(self) -> None:
         """
@@ -304,6 +330,13 @@ def _validate_connector_configuration(
         max_backoff_seconds=10,
     )
     spaces = confluence_client_with_minimal_retries.get_all_spaces(limit=1)
+
+    # uncomment the following for testing
+    # the following is an attempt to retrieve the user's timezone
+    # Unfornately, all data is returned in UTC regardless of the user's time zone
+    # even tho CQL parses incoming times based on the user's time zone
+    # space_key = spaces["results"][0]["key"]
+    # space_details = confluence_client_with_minimal_retries.cql(f"space.key={space_key}+AND+type=space")
 
     if not spaces:
         raise RuntimeError(

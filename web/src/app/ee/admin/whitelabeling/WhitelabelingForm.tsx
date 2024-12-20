@@ -55,6 +55,7 @@ export function WhitelabelingForm() {
     <div>
       <Formik
         initialValues={{
+          auto_scroll: enterpriseSettings?.auto_scroll || false,
           application_name: enterpriseSettings?.application_name || null,
           use_custom_logo: enterpriseSettings?.use_custom_logo || false,
           use_custom_logotype: enterpriseSettings?.use_custom_logotype || false,
@@ -71,6 +72,7 @@ export function WhitelabelingForm() {
             enterpriseSettings?.enable_consent_screen || false,
         }}
         validationSchema={Yup.object().shape({
+          auto_scroll: Yup.boolean().nullable(),
           application_name: Yup.string().nullable(),
           use_custom_logo: Yup.boolean().required(),
           use_custom_logotype: Yup.boolean().required(),

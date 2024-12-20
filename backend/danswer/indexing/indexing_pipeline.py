@@ -1,4 +1,5 @@
 import traceback
+from collections.abc import Callable
 from functools import partial
 from http import HTTPStatus
 from typing import Protocol
@@ -12,6 +13,7 @@ from danswer.access.access import get_access_for_documents
 from danswer.access.models import DocumentAccess
 from danswer.configs.app_configs import ENABLE_MULTIPASS_INDEXING
 from danswer.configs.app_configs import INDEXING_EXCEPTION_LIMIT
+from danswer.configs.app_configs import MAX_DOCUMENT_CHARS
 from danswer.configs.constants import DEFAULT_BOOST
 from danswer.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
@@ -202,40 +204,13 @@ def index_doc_batch_with_handler(
 
 
 def index_doc_batch_prepare(
-    document_batch: list[Document],
+    documents: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
     ignore_time_skip: bool = False,
 ) -> DocumentBatchPrepareContext | None:
     """Sets up the documents in the relational DB (source of truth) for permissions, metadata, etc.
     This preceeds indexing it into the actual document index."""
-    documents: list[Document] = []
-    for document in document_batch:
-        empty_contents = not any(section.text.strip() for section in document.sections)
-        if (
-            (not document.title or not document.title.strip())
-            and not document.semantic_identifier.strip()
-            and empty_contents
-        ):
-            # Skip documents that have neither title nor content
-            # If the document doesn't have either, then there is no useful information in it
-            # This is again verified later in the pipeline after chunking but at that point there should
-            # already be no documents that are empty.
-            logger.warning(
-                f"Skipping document with ID {document.id} as it has neither title nor content."
-            )
-            continue
-
-        if document.title is not None and not document.title.strip() and empty_contents:
-            # The title is explicitly empty ("" and not None) and the document is empty
-            # so when building the chunk text representation, it will be empty and unuseable
-            logger.warning(
-                f"Skipping document with ID {document.id} as the chunks will be empty."
-            )
-            continue
-
-        documents.append(document)
-
     # Create a trimmed list of docs that don't have a newer updated at
     # Shortcuts the time-consuming flow on connector index retries
     document_ids: list[str] = [document.id for document in documents]
@@ -282,17 +257,64 @@ def index_doc_batch_prepare(
     )
 
 
+def filter_documents(document_batch: list[Document]) -> list[Document]:
+    documents: list[Document] = []
+    for document in document_batch:
+        empty_contents = not any(section.text.strip() for section in document.sections)
+        if (
+            (not document.title or not document.title.strip())
+            and not document.semantic_identifier.strip()
+            and empty_contents
+        ):
+            # Skip documents that have neither title nor content
+            # If the document doesn't have either, then there is no useful information in it
+            # This is again verified later in the pipeline after chunking but at that point there should
+            # already be no documents that are empty.
+            logger.warning(
+                f"Skipping document with ID {document.id} as it has neither title nor content."
+            )
+            continue
+
+        if document.title is not None and not document.title.strip() and empty_contents:
+            # The title is explicitly empty ("" and not None) and the document is empty
+            # so when building the chunk text representation, it will be empty and unuseable
+            logger.warning(
+                f"Skipping document with ID {document.id} as the chunks will be empty."
+            )
+            continue
+
+        section_chars = sum(len(section.text) for section in document.sections)
+        if (
+            MAX_DOCUMENT_CHARS
+            and len(document.title or document.semantic_identifier) + section_chars
+            > MAX_DOCUMENT_CHARS
+        ):
+            # Skip documents that are too long, later on there are more memory intensive steps done on the text
+            # and the container will run out of memory and crash. Several other checks are included upstream but
+            # those are at the connector level so a catchall is still needed.
+            # Assumption here is that files that are that long, are generated files and not the type users
+            # generally care for.
+            logger.warning(
+                f"Skipping document with ID {document.id} as it is too long."
+            )
+            continue
+
+        documents.append(document)
+    return documents
+
+
 @log_function_time(debug_only=True)
 def index_doc_batch(
     *,
+    document_batch: list[Document],
     chunker: Chunker,
     embedder: IndexingEmbedder,
     document_index: DocumentIndex,
-    document_batch: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
     ignore_time_skip: bool = False,
     tenant_id: str | None = None,
+    filter_fnc: Callable[[list[Document]], list[Document]] = filter_documents,
 ) -> tuple[int, int]:
     """Takes different pieces of the indexing pipeline and applies it to a batch of documents
     Note that the documents should already be batched at this point so that it does not inflate the
@@ -309,8 +331,11 @@ def index_doc_batch(
         is_public=False,
     )
 
+    logger.debug("Filtering Documents")
+    filtered_documents = filter_fnc(document_batch)
+
     ctx = index_doc_batch_prepare(
-        document_batch=document_batch,
+        documents=filtered_documents,
         index_attempt_metadata=index_attempt_metadata,
         ignore_time_skip=ignore_time_skip,
         db_session=db_session,

@@ -1,16 +1,19 @@
 from datetime import datetime
 from typing import Any
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import model_validator
 
+from danswer.chat.models import PersonaOverrideConfig
 from danswer.chat.models import RetrievalDocs
 from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import MessageType
 from danswer.configs.constants import SearchFeedbackType
 from danswer.context.search.models import BaseFilters
 from danswer.context.search.models import ChunkContext
+from danswer.context.search.models import RerankingDetails
 from danswer.context.search.models import RetrievalDetails
 from danswer.context.search.models import SearchDoc
 from danswer.context.search.models import Tag
@@ -19,6 +22,9 @@ from danswer.file_store.models import FileDescriptor
 from danswer.llm.override_models import LLMOverride
 from danswer.llm.override_models import PromptOverride
 from danswer.tools.models import ToolCallFinalResult
+
+if TYPE_CHECKING:
+    pass
 
 
 class SourceTag(Tag):
@@ -79,6 +85,7 @@ class CreateChatMessageRequest(ChunkContext):
     message: str
     # Files that we should attach to this message
     file_descriptors: list[FileDescriptor]
+
     # If no prompt provided, uses the largest prompt of the chat session
     # but really this should be explicitly specified, only in the simplified APIs is this inferred
     # Use prompt_id 0 to use the system default prompt which is Answer-Question
@@ -86,6 +93,8 @@ class CreateChatMessageRequest(ChunkContext):
     # If search_doc_ids provided, then retrieval options are unused
     search_doc_ids: list[int] | None
     retrieval_options: RetrievalDetails | None
+    # Useable via the APIs but not recommended for most flows
+    rerank_settings: RerankingDetails | None = None
     # allows the caller to specify the exact search query they want to use
     # will disable Query Rewording if specified
     query_override: str | None = None
@@ -100,6 +109,10 @@ class CreateChatMessageRequest(ChunkContext):
 
     # allow user to specify an alternate assistnat
     alternate_assistant_id: int | None = None
+
+    # This takes the priority over the prompt_override
+    # This won't be a type that's passed in directly from the API
+    persona_override_config: PersonaOverrideConfig | None = None
 
     # used for seeded chats to kick off the generation of an AI answer
     use_existing_user_message: bool = False
@@ -144,7 +157,7 @@ class RenameChatSessionResponse(BaseModel):
 
 class ChatSessionDetails(BaseModel):
     id: UUID
-    name: str
+    name: str | None
     persona_id: int | None = None
     time_created: str
     shared_status: ChatSessionSharedStatus
@@ -197,14 +210,14 @@ class ChatMessageDetail(BaseModel):
 
 class SearchSessionDetailResponse(BaseModel):
     search_session_id: UUID
-    description: str
+    description: str | None
     documents: list[SearchDoc]
     messages: list[ChatMessageDetail]
 
 
 class ChatSessionDetailResponse(BaseModel):
     chat_session_id: UUID
-    description: str
+    description: str | None
     persona_id: int | None = None
     persona_name: str | None
     messages: list[ChatMessageDetail]

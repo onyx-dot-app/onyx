@@ -113,6 +113,31 @@ def fetch_persona_by_id(
     return persona
 
 
+def get_best_persona_id_for_user(
+    db_session: Session, user: User | None, persona_id: int | None = None
+) -> int | None:
+    if persona_id is not None:
+        stmt = select(Persona).where(Persona.id == persona_id).distinct()
+        stmt = _add_user_filters(
+            stmt=stmt,
+            user=user,
+            # We don't want to filter by editable here, we just want to see if the
+            # persona is usable by the user
+            get_editable=False,
+        )
+        persona = db_session.scalars(stmt).one_or_none()
+        if persona:
+            return persona.id
+
+    # If the persona is not found, or the slack bot is using doc sets instead of personas,
+    # we need to find the best persona for the user
+    # This is the persona with the highest display priority that the user has access to
+    stmt = select(Persona).order_by(Persona.display_priority.desc()).distinct()
+    stmt = _add_user_filters(stmt=stmt, user=user, get_editable=True)
+    persona = db_session.scalars(stmt).one_or_none()
+    return persona.id if persona else None
+
+
 def _get_persona_by_name(
     persona_name: str, user: User | None, db_session: Session
 ) -> Persona | None:
@@ -390,9 +415,6 @@ def upsert_prompt(
     return prompt
 
 
-# NOTE: This operation cannot update persona configuration options that
-# are core to the persona, such as its display priority and
-# whether or not the assistant is a built-in / default assistant
 def upsert_persona(
     user: User | None,
     name: str,
@@ -424,10 +446,16 @@ def upsert_persona(
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
 ) -> Persona:
+    """
+    NOTE: This operation cannot update persona configuration options that
+    are core to the persona, such as its display priority and
+    whether or not the assistant is a built-in / default assistant
+    """
+
     if persona_id is not None:
-        persona = db_session.query(Persona).filter_by(id=persona_id).first()
+        existing_persona = db_session.query(Persona).filter_by(id=persona_id).first()
     else:
-        persona = _get_persona_by_name(
+        existing_persona = _get_persona_by_name(
             persona_name=name, user=user, db_session=db_session
         )
 
@@ -453,57 +481,78 @@ def upsert_persona(
     prompts = None
     if prompt_ids is not None:
         prompts = db_session.query(Prompt).filter(Prompt.id.in_(prompt_ids)).all()
-        if not prompts and prompt_ids:
-            raise ValueError("prompts not found")
+
+    if prompts is not None and len(prompts) == 0:
+        raise ValueError(
+            f"Invalid Persona config, no valid prompts "
+            f"specified. Specified IDs were: '{prompt_ids}'"
+        )
 
     # ensure all specified tools are valid
     if tools:
         validate_persona_tools(tools)
 
-    if persona:
-        if persona.builtin_persona and not builtin_persona:
+    if existing_persona:
+        # Built-in personas can only be updated through YAML configuration.
+        # This ensures that core system personas are not modified unintentionally.
+        if existing_persona.builtin_persona and not builtin_persona:
             raise ValueError("Cannot update builtin persona with non-builtin.")
 
         # this checks if the user has permission to edit the persona
-        persona = fetch_persona_by_id(
-            db_session=db_session, persona_id=persona.id, user=user, get_editable=True
+        # will raise an Exception if the user does not have permission
+        existing_persona = fetch_persona_by_id(
+            db_session=db_session,
+            persona_id=existing_persona.id,
+            user=user,
+            get_editable=True,
         )
 
-        persona.name = name
-        persona.description = description
-        persona.num_chunks = num_chunks
-        persona.chunks_above = chunks_above
-        persona.chunks_below = chunks_below
-        persona.llm_relevance_filter = llm_relevance_filter
-        persona.llm_filter_extraction = llm_filter_extraction
-        persona.recency_bias = recency_bias
-        persona.llm_model_provider_override = llm_model_provider_override
-        persona.llm_model_version_override = llm_model_version_override
-        persona.starter_messages = starter_messages
-        persona.deleted = False  # Un-delete if previously deleted
-        persona.is_public = is_public
-        persona.icon_color = icon_color
-        persona.icon_shape = icon_shape
+        # The following update excludes `default`, `built-in`, and display priority.
+        # Display priority is handled separately in the `display-priority` endpoint.
+        # `default` and `built-in` properties can only be set when creating a persona.
+        existing_persona.name = name
+        existing_persona.description = description
+        existing_persona.num_chunks = num_chunks
+        existing_persona.chunks_above = chunks_above
+        existing_persona.chunks_below = chunks_below
+        existing_persona.llm_relevance_filter = llm_relevance_filter
+        existing_persona.llm_filter_extraction = llm_filter_extraction
+        existing_persona.recency_bias = recency_bias
+        existing_persona.llm_model_provider_override = llm_model_provider_override
+        existing_persona.llm_model_version_override = llm_model_version_override
+        existing_persona.starter_messages = starter_messages
+        existing_persona.deleted = False  # Un-delete if previously deleted
+        existing_persona.is_public = is_public
+        existing_persona.icon_color = icon_color
+        existing_persona.icon_shape = icon_shape
         if remove_image or uploaded_image_id:
-            persona.uploaded_image_id = uploaded_image_id
-        persona.is_visible = is_visible
-        persona.search_start_date = search_start_date
-        persona.category_id = category_id
+            existing_persona.uploaded_image_id = uploaded_image_id
+        existing_persona.is_visible = is_visible
+        existing_persona.search_start_date = search_start_date
+        existing_persona.category_id = category_id
         # Do not delete any associations manually added unless
         # a new updated list is provided
         if document_sets is not None:
-            persona.document_sets.clear()
-            persona.document_sets = document_sets or []
+            existing_persona.document_sets.clear()
+            existing_persona.document_sets = document_sets or []
 
         if prompts is not None:
-            persona.prompts.clear()
-            persona.prompts = prompts or []
+            existing_persona.prompts.clear()
+            existing_persona.prompts = prompts
 
         if tools is not None:
-            persona.tools = tools or []
+            existing_persona.tools = tools or []
+
+        persona = existing_persona
 
     else:
-        persona = Persona(
+        if not prompts:
+            raise ValueError(
+                "Invalid Persona config. "
+                "Must specify at least one prompt for a new persona."
+            )
+
+        new_persona = Persona(
             id=persona_id,
             user_id=user.id if user else None,
             is_public=is_public,
@@ -516,7 +565,7 @@ def upsert_persona(
             llm_filter_extraction=llm_filter_extraction,
             recency_bias=recency_bias,
             builtin_persona=builtin_persona,
-            prompts=prompts or [],
+            prompts=prompts,
             document_sets=document_sets or [],
             llm_model_provider_override=llm_model_provider_override,
             llm_model_version_override=llm_model_version_override,
@@ -531,8 +580,8 @@ def upsert_persona(
             is_default_persona=is_default_persona,
             category_id=category_id,
         )
-        db_session.add(persona)
-
+        db_session.add(new_persona)
+        persona = new_persona
     if commit:
         db_session.commit()
     else:

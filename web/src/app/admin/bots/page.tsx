@@ -10,6 +10,7 @@ import Link from "next/link";
 import { SourceIcon } from "@/components/SourceIcon";
 import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
+import { ValidSources } from "@/lib/types";
 
 const Main = () => {
   const {
@@ -103,7 +104,7 @@ const Page = () => {
   return (
     <div className="container mx-auto">
       <AdminPageTitle
-        icon={<SourceIcon iconSize={36} sourceType={"slack"} />}
+        icon={<SourceIcon iconSize={36} sourceType={ValidSources.Slack} />}
         title="Slack Bots"
       />
       <InstantSSRAutoRefresh />

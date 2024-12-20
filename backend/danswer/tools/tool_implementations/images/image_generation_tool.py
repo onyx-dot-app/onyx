@@ -4,14 +4,16 @@ from enum import Enum
 from typing import Any
 from typing import cast
 
+import requests
 from litellm import image_generation  # type: ignore
 from pydantic import BaseModel
 
 from danswer.chat.chat_utils import combine_message_chain
+from danswer.chat.prompt_builder.build import AnswerPromptBuilder
 from danswer.configs.model_configs import GEN_AI_HISTORY_CUTOFF
-from danswer.llm.answering.models import PreviousMessage
-from danswer.llm.answering.prompts.build import AnswerPromptBuilder
+from danswer.configs.tool_configs import IMAGE_GENERATION_OUTPUT_FORMAT
 from danswer.llm.interfaces import LLM
+from danswer.llm.models import PreviousMessage
 from danswer.llm.utils import build_content_with_imgs
 from danswer.llm.utils import message_to_string
 from danswer.prompts.constants import GENERAL_SEP_PAT
@@ -56,9 +58,18 @@ Follow Up Input:
 """.strip()
 
 
+class ImageFormat(str, Enum):
+    URL = "url"
+    BASE64 = "b64_json"
+
+
+_DEFAULT_OUTPUT_FORMAT = ImageFormat(IMAGE_GENERATION_OUTPUT_FORMAT)
+
+
 class ImageGenerationResponse(BaseModel):
     revised_prompt: str
-    url: str
+    url: str | None
+    image_data: str | None
 
 
 class ImageShape(str, Enum):
@@ -80,6 +91,7 @@ class ImageGenerationTool(Tool):
         model: str = "dall-e-3",
         num_imgs: int = 2,
         additional_headers: dict[str, str] | None = None,
+        output_format: ImageFormat = _DEFAULT_OUTPUT_FORMAT,
     ) -> None:
         self.api_key = api_key
         self.api_base = api_base
@@ -89,6 +101,7 @@ class ImageGenerationTool(Tool):
         self.num_imgs = num_imgs
 
         self.additional_headers = additional_headers
+        self.output_format = output_format
 
     @property
     def name(self) -> str:
@@ -168,7 +181,7 @@ class ImageGenerationTool(Tool):
         )
 
         return build_content_with_imgs(
-            json.dumps(
+            message=json.dumps(
                 [
                     {
                         "revised_prompt": image_generation.revised_prompt,
@@ -177,13 +190,10 @@ class ImageGenerationTool(Tool):
                     for image_generation in image_generations
                 ]
             ),
-            # NOTE: we can't pass in the image URLs here, since OpenAI doesn't allow
-            # Tool messages to contain images
-            # img_urls=[image_generation.url for image_generation in image_generations],
         )
 
     def _generate_image(
-        self, prompt: str, shape: ImageShape
+        self, prompt: str, shape: ImageShape, format: ImageFormat
     ) -> ImageGenerationResponse:
         if shape == ImageShape.LANDSCAPE:
             size = "1792x1024"
@@ -197,20 +207,32 @@ class ImageGenerationTool(Tool):
                 prompt=prompt,
                 model=self.model,
                 api_key=self.api_key,
-                # need to pass in None rather than empty str
                 api_base=self.api_base or None,
                 api_version=self.api_version or None,
                 size=size,
                 n=1,
+                response_format=format,
                 extra_headers=build_llm_extra_headers(self.additional_headers),
             )
+
+            if format == ImageFormat.URL:
+                url = response.data[0]["url"]
+                image_data = None
+            else:
+                url = None
+                image_data = response.data[0]["b64_json"]
+
             return ImageGenerationResponse(
                 revised_prompt=response.data[0]["revised_prompt"],
-                url=response.data[0]["url"],
+                url=url,
+                image_data=image_data,
             )
 
+        except requests.RequestException as e:
+            logger.error(f"Error fetching or converting image: {e}")
+            raise ValueError("Failed to fetch or convert the generated image")
         except Exception as e:
-            logger.debug(f"Error occured during image generation: {e}")
+            logger.debug(f"Error occurred during image generation: {e}")
 
             error_message = str(e)
             if "OpenAIException" in str(type(e)):
@@ -235,9 +257,8 @@ class ImageGenerationTool(Tool):
     def run(self, **kwargs: str) -> Generator[ToolResponse, None, None]:
         prompt = cast(str, kwargs["prompt"])
         shape = ImageShape(kwargs.get("shape", ImageShape.SQUARE))
+        format = self.output_format
 
-        # dalle3 only supports 1 image at a time, which is why we have to
-        # parallelize this via threading
         results = cast(
             list[ImageGenerationResponse],
             run_functions_tuples_in_parallel(
@@ -247,6 +268,7 @@ class ImageGenerationTool(Tool):
                         (
                             prompt,
                             shape,
+                            format,
                         ),
                     )
                     for _ in range(self.num_imgs)
@@ -288,11 +310,17 @@ class ImageGenerationTool(Tool):
         if img_generation_response is None:
             raise ValueError("No image generation response found")
 
-        img_urls = [img.url for img in img_generation_response]
+        img_urls = [img.url for img in img_generation_response if img.url is not None]
+        b64_imgs = [
+            img.image_data
+            for img in img_generation_response
+            if img.image_data is not None
+        ]
         prompt_builder.update_user_prompt(
             build_image_generation_user_prompt(
                 query=prompt_builder.get_user_message_content(),
                 img_urls=img_urls,
+                b64_imgs=b64_imgs,
             )
         )
 

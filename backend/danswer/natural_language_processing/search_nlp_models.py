@@ -6,6 +6,9 @@ from typing import Any
 
 import requests
 from httpx import HTTPError
+from requests import JSONDecodeError
+from requests import RequestException
+from requests import Response
 from retry import retry
 
 from danswer.configs.app_configs import LARGE_CHUNK_RATIO
@@ -16,6 +19,9 @@ from danswer.configs.model_configs import (
 from danswer.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from danswer.db.models import SearchSettings
 from danswer.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from danswer.natural_language_processing.exceptions import (
+    ModelServerRateLimitError,
+)
 from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.natural_language_processing.utils import tokenizer_trim_content
 from danswer.utils.logger import setup_logger
@@ -101,28 +107,43 @@ class EmbeddingModel:
         self.embed_server_endpoint = f"{model_server_url}/encoder/bi-encoder-embed"
 
     def _make_model_server_request(self, embed_request: EmbedRequest) -> EmbedResponse:
-        def _make_request() -> EmbedResponse:
+        def _make_request() -> Response:
             response = requests.post(
                 self.embed_server_endpoint, json=embed_request.model_dump()
             )
-            try:
-                response.raise_for_status()
-            except requests.HTTPError as e:
-                try:
-                    error_detail = response.json().get("detail", str(e))
-                except Exception:
-                    error_detail = response.text
-                raise HTTPError(f"HTTP error occurred: {error_detail}") from e
-            except requests.RequestException as e:
-                raise HTTPError(f"Request failed: {str(e)}") from e
+            # signify that this is a rate limit error
+            if response.status_code == 429:
+                raise ModelServerRateLimitError(response.text)
 
-            return EmbedResponse(**response.json())
+            response.raise_for_status()
+            return response
 
-        # only perform retries for the non-realtime embedding of passages (e.g. for indexing)
+        final_make_request_func = _make_request
+
+        # if the text type is a passage, add some default
+        # retries + handling for rate limiting
         if embed_request.text_type == EmbedTextType.PASSAGE:
-            return retry(tries=3, delay=5)(_make_request)()
-        else:
-            return _make_request()
+            final_make_request_func = retry(
+                tries=3,
+                delay=5,
+                exceptions=(RequestException, ValueError, JSONDecodeError),
+            )(final_make_request_func)
+            # use 10 second delay as per Azure suggestion
+            final_make_request_func = retry(
+                tries=10, delay=10, exceptions=ModelServerRateLimitError
+            )(final_make_request_func)
+
+        try:
+            response = final_make_request_func()
+            return EmbedResponse(**response.json())
+        except requests.HTTPError as e:
+            try:
+                error_detail = response.json().get("detail", str(e))
+            except Exception:
+                error_detail = response.text
+            raise HTTPError(f"HTTP error occurred: {error_detail}") from e
+        except requests.RequestException as e:
+            raise HTTPError(f"Request failed: {str(e)}") from e
 
     def _batch_encode_texts(
         self,

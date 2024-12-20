@@ -41,6 +41,7 @@ export function ShowHideDocsButton({
 }
 
 export function SearchSummary({
+  index,
   query,
   hasDocs,
   finished,
@@ -48,6 +49,7 @@ export function SearchSummary({
   handleShowRetrieved,
   handleSearchQueryEdit,
 }: {
+  index: number;
   finished: boolean;
   query: string;
   hasDocs: boolean;
@@ -98,7 +100,14 @@ export function SearchSummary({
         !text-sm !line-clamp-1 !break-all px-0.5`}
         ref={searchingForRef}
       >
-        {finished ? "Searched" : "Searching"} for: <i> {finalQuery}</i>
+        {finished ? "Searched" : "Searching"} for:{" "}
+        <i>
+          {index === 1
+            ? finalQuery.length > 50
+              ? `${finalQuery.slice(0, 50)}...`
+              : finalQuery
+            : finalQuery}
+        </i>
       </div>
     </div>
   );

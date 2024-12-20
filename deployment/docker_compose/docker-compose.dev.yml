@@ -130,6 +130,7 @@ services:
     restart: always
     environment:
       - ENCRYPTION_KEY_SECRET=${ENCRYPTION_KEY_SECRET:-}
+      - JWT_PUBLIC_KEY_URL=${JWT_PUBLIC_KEY_URL:-} # used for JWT authentication of users via API
       # Gen AI Settings (Needed by DanswerBot)
       - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
       - QA_TIMEOUT=${QA_TIMEOUT:-}
@@ -182,6 +183,13 @@ services:
       - GONG_CONNECTOR_START_TIME=${GONG_CONNECTOR_START_TIME:-}
       - NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP=${NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP:-}
       - GITHUB_CONNECTOR_BASE_URL=${GITHUB_CONNECTOR_BASE_URL:-}
+      - MAX_DOCUMENT_CHARS=${MAX_DOCUMENT_CHARS:-}
+      - MAX_FILE_SIZE_BYTES=${MAX_FILE_SIZE_BYTES:-}
+      # Egnyte OAuth Configs
+      - EGNYTE_CLIENT_ID=${EGNYTE_CLIENT_ID:-}
+      - EGNYTE_CLIENT_SECRET=${EGNYTE_CLIENT_SECRET:-}
+      - EGNYTE_BASE_DOMAIN=${EGNYTE_BASE_DOMAIN:-}
+      - EGNYTE_LOCALHOST_OVERRIDE=${EGNYTE_LOCALHOST_OVERRIDE:-}
       # Celery Configs (defaults are set in the supervisord.conf file.
       # prefer doing that to have one source of defaults)
       - CELERY_WORKER_INDEXING_CONCURRENCY=${CELERY_WORKER_INDEXING_CONCURRENCY:-}

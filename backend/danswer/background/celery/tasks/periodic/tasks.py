@@ -13,12 +13,13 @@ from sqlalchemy.orm import Session
 
 from danswer.background.celery.apps.app_base import task_logger
 from danswer.configs.app_configs import JOB_TIMEOUT
+from danswer.configs.constants import DanswerCeleryTask
 from danswer.configs.constants import PostgresAdvisoryLocks
 from danswer.db.engine import get_session_with_tenant
 
 
 @shared_task(
-    name="kombu_message_cleanup_task",
+    name=DanswerCeleryTask.KOMBU_MESSAGE_CLEANUP_TASK,
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
     base=AbortableTask,

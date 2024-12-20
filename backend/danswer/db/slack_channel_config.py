@@ -10,7 +10,6 @@ from danswer.db.constants import SLACK_BOT_PERSONA_PREFIX
 from danswer.db.models import ChannelConfig
 from danswer.db.models import Persona
 from danswer.db.models import Persona__DocumentSet
-from danswer.db.models import SlackBotResponseType
 from danswer.db.models import SlackChannelConfig
 from danswer.db.models import User
 from danswer.db.persona import get_default_prompt
@@ -83,7 +82,6 @@ def insert_slack_channel_config(
     slack_bot_id: int,
     persona_id: int | None,
     channel_config: ChannelConfig,
-    response_type: SlackBotResponseType,
     standard_answer_category_ids: list[int],
     enable_auto_filters: bool,
 ) -> SlackChannelConfig:
@@ -115,7 +113,6 @@ def insert_slack_channel_config(
         slack_bot_id=slack_bot_id,
         persona_id=persona_id,
         channel_config=channel_config,
-        response_type=response_type,
         standard_answer_categories=existing_standard_answer_categories,
         enable_auto_filters=enable_auto_filters,
     )
@@ -130,7 +127,6 @@ def update_slack_channel_config(
     slack_channel_config_id: int,
     persona_id: int | None,
     channel_config: ChannelConfig,
-    response_type: SlackBotResponseType,
     standard_answer_category_ids: list[int],
     enable_auto_filters: bool,
 ) -> SlackChannelConfig:
@@ -170,7 +166,6 @@ def update_slack_channel_config(
     # will encounter `violates foreign key constraint` errors
     slack_channel_config.persona_id = persona_id
     slack_channel_config.channel_config = channel_config
-    slack_channel_config.response_type = response_type
     slack_channel_config.standard_answer_categories = list(
         existing_standard_answer_categories
     )

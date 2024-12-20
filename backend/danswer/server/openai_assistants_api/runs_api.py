@@ -109,6 +109,7 @@ def process_run_in_background(
         prompt_id=chat_session.persona.prompts[0].id,
         search_doc_ids=None,
         retrieval_options=search_tool_retrieval_details,  # Adjust as needed
+        rerank_settings=None,
         query_override=None,
         regenerate=None,
         llm_override=None,

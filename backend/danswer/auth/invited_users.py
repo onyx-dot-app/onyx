@@ -9,7 +9,6 @@ from danswer.utils.special_types import JSON_ro
 def get_invited_users() -> list[str]:
     try:
         store = get_kv_store()
-
         return cast(list, store.load(KV_USER_STORE_KEY))
     except KvKeyNotFoundError:
         return list()
