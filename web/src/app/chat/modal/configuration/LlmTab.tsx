@@ -66,6 +66,7 @@ export const LlmTab = forwardRef<HTMLDivElement, LlmTabProps>(
             }
             close();
           }}
+            onClose={close}
         />
 
         <div className="mt-4">
