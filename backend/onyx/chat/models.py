@@ -1,5 +1,3 @@
-from collections.abc import Callable
-from collections.abc import Iterator
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -215,15 +213,9 @@ AnswerQuestionPossibleReturn = (
 )
 
 
-AnswerQuestionStreamReturn = Iterator[AnswerQuestionPossibleReturn]
-
-
 class LLMMetricsContainer(BaseModel):
     prompt_tokens: int
     response_tokens: int
-
-
-StreamProcessor = Callable[[Iterator[str]], AnswerQuestionStreamReturn]
 
 
 class DocumentPruningConfig(BaseModel):
