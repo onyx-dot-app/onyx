@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 # .env.nginx file must be present in the same directory as this script and
 # must set DOMAIN (and optionally EMAIL)
 set -o allexport
