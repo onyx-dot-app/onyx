@@ -122,7 +122,7 @@ def _cleanup_document_set__user_group_relationships__no_commit(
     )
 
 
-def validate_user_creation_permissions(
+def validate_object_creation_for_user(
     db_session: Session,
     user: User | None,
     target_group_ids: list[int] | None = None,
@@ -440,32 +440,92 @@ def remove_curator_status__no_commit(db_session: Session, user: User) -> None:
     _validate_curator_status__no_commit(db_session, [user])
 
 
-def update_user_curator_relationship(
+def _validate_curator_relationship_update(
     db_session: Session,
     user_group_id: int,
-    set_curator_request: SetCuratorRequest,
+    target_user: User,
+    user_making_change: User | None = None,
 ) -> None:
-    user = fetch_user_by_id(db_session, set_curator_request.user_id)
-    if not user:
-        raise ValueError(f"User with id '{set_curator_request.user_id}' not found")
-
-    if user.role == UserRole.ADMIN:
+    """
+    This function will raise an error if:
+    - the target user is an admin
+    - the target user is a global_curator
+    - the user making the change does not have the necessary permissions to update the curator relationship.
+    - the user making the change is not a curator in the group they are
+        trying to update the curator relationship for.
+    - the user making the change is not an admin or a curator/global_curator for the group they are
+        trying to update the curator relationship for.
+    """
+    if target_user.role == UserRole.ADMIN:
         raise ValueError(
-            f"User '{user.email}' is an admin and therefore has all permissions "
+            f"User '{target_user.email}' is an admin and therefore has all permissions "
             "of a curator. If you'd like this user to only have curator permissions, "
             "you must update their role to BASIC then assign them to be CURATOR in the "
             "appropriate groups."
         )
+    if target_user.role == UserRole.GLOBAL_CURATOR:
+        raise ValueError(
+            f"User '{target_user.email}' is a global_curator and therefore has all "
+            "permissions of a curator for all groups. If you'd like this user to only "
+            "have curator permissions for a specific group, you must update their role "
+            "to BASIC then assign them to be CURATOR in the appropriate groups."
+        )
+
+    if user_making_change is None or user_making_change.role == UserRole.ADMIN:
+        return
 
     requested_user_groups = fetch_user_groups_for_user(
         db_session=db_session,
-        user_id=set_curator_request.user_id,
+        user_id=target_user.id,
         only_curator_groups=False,
     )
 
     group_ids = [group.id for group in requested_user_groups]
     if user_group_id not in group_ids:
-        raise ValueError(f"user is not in group '{user_group_id}'")
+        raise ValueError(
+            f"target user {target_user.email} is not in group '{user_group_id}'"
+        )
+
+    user_making_change_curator_groups = fetch_user_groups_for_user(
+        db_session=db_session,
+        user_id=user_making_change.id,
+        # only check if the user making the change is a curator if they are a curator
+        # otherwise, they are a global_curator and can update the curator relationship
+        # for any group they are a member of
+        only_curator_groups=user_making_change.role == UserRole.CURATOR,
+    )
+
+    requestor_curator_group_ids = [
+        group.id for group in user_making_change_curator_groups
+    ]
+    if user_group_id not in requestor_curator_group_ids:
+        raise ValueError(
+            f"user making change {user_making_change.email} is not a curator,"
+            f" admin, or global_curator for group '{user_group_id}'"
+        )
+
+
+def update_user_curator_relationship(
+    db_session: Session,
+    user_group_id: int,
+    set_curator_request: SetCuratorRequest,
+    user_making_change: User | None = None,
+) -> None:
+    target_user = fetch_user_by_id(db_session, set_curator_request.user_id)
+    if not target_user:
+        raise ValueError(f"User with id '{set_curator_request.user_id}' not found")
+
+    _validate_curator_relationship_update(
+        db_session=db_session,
+        user_group_id=user_group_id,
+        target_user=target_user,
+        user_making_change=user_making_change,
+    )
+    logger.info(
+        f"user_making_change={user_making_change.email} is "
+        f"updating the curator relationship for user={target_user.email} "
+        f"in group={user_group_id} to is_curator={set_curator_request.is_curator}"
+    )
 
     relationship_to_update = (
         db_session.query(User__UserGroup)
@@ -486,7 +546,7 @@ def update_user_curator_relationship(
         )
         db_session.add(relationship_to_update)
 
-    _validate_curator_status__no_commit(db_session, [user])
+    _validate_curator_status__no_commit(db_session, [target_user])
     db_session.commit()
 
 
