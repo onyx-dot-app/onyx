@@ -680,7 +680,7 @@ def create_connector_from_model(
         _validate_connector_allowed(connector_data.source)
 
         fetch_ee_implementation_or_noop(
-            "onyx.db.user_group", "validate_user_creation_permissions", None
+            "onyx.db.user_group", "validate_object_creation_for_user", None
         )(
             db_session=db_session,
             user=user,
@@ -716,7 +716,7 @@ def create_connector_with_mock_credential(
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse:
     fetch_ee_implementation_or_noop(
-        "onyx.db.user_group", "validate_user_creation_permissions", None
+        "onyx.db.user_group", "validate_object_creation_for_user", None
     )(
         db_session=db_session,
         user=user,
@@ -776,7 +776,7 @@ def update_connector_from_model(
     try:
         _validate_connector_allowed(connector_data.source)
         fetch_ee_implementation_or_noop(
-            "onyx.db.user_group", "validate_user_creation_permissions", None
+            "onyx.db.user_group", "validate_object_creation_for_user", None
         )(
             db_session=db_session,
             user=user,
