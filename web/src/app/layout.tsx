@@ -156,6 +156,7 @@ export default async function RootLayout({
       </div>
     );
   }
+
   if (productGating === GatingType.FULL) {
     return getPageContent(
       <div className="flex flex-col items-center justify-center min-h-screen">

@@ -23,7 +23,7 @@ export default async function Page() {
   }
 
   if (!authTypeMetadata?.requiresVerification || currentUser?.is_verified) {
-    return redirect("/");
+    return redirect("/chat");
   }
 
   return <Verify user={currentUser} />;

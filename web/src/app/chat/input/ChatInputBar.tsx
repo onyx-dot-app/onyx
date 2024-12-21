@@ -3,8 +3,7 @@ import { FiPlusCircle, FiPlus, FiInfo, FiX, FiSearch } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { Persona } from "@/app/admin/assistants/interfaces";
 
-import { FilterManager, LlmOverrideManager } from "@/lib/hooks";
-import { SelectedFilterDisplay } from "./SelectedFilterDisplay";
+import { FilterManager } from "@/lib/hooks";
 import { useChatContext } from "@/components/context/ChatContext";
 import { getFinalLLM } from "@/lib/llm/utils";
 import { ChatFileType, FileDescriptor } from "../interfaces";
@@ -37,9 +36,9 @@ import FiltersDisplay from "./FilterDisplay";
 const MAX_INPUT_HEIGHT = 200;
 
 interface ChatInputBarProps {
-  removeFilters: () => void;
   removeDocs: () => void;
   openModelSettings: () => void;
+  showDocs: () => void;
   showConfigureAPIKey: () => void;
   selectedDocuments: OnyxDocument[];
   message: string;
@@ -47,41 +46,34 @@ interface ChatInputBarProps {
   stopGenerating: () => void;
   onSubmit: () => void;
   filterManager: FilterManager;
-  llmOverrideManager: LlmOverrideManager;
   chatState: ChatState;
-  showDocs: () => void;
   alternativeAssistant: Persona | null;
   // assistants
   selectedAssistant: Persona;
-  setSelectedAssistant: (assistant: Persona) => void;
   setAlternativeAssistant: (alternativeAssistant: Persona | null) => void;
 
   files: FileDescriptor[];
   setFiles: (files: FileDescriptor[]) => void;
   handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
-  chatSessionId?: string;
   toggleFilters?: () => void;
 }
 
 export function ChatInputBar({
-  removeFilters,
   removeDocs,
   openModelSettings,
-  showConfigureAPIKey,
   showDocs,
+  showConfigureAPIKey,
   selectedDocuments,
   message,
   setMessage,
   stopGenerating,
   onSubmit,
   filterManager,
-  llmOverrideManager,
   chatState,
 
   // assistants
   selectedAssistant,
-  setSelectedAssistant,
   setAlternativeAssistant,
 
   files,
@@ -89,7 +81,6 @@ export function ChatInputBar({
   handleFileUpload,
   textAreaRef,
   alternativeAssistant,
-  chatSessionId,
   toggleFilters,
 }: ChatInputBarProps) {
   useEffect(() => {

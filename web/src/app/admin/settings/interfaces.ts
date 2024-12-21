@@ -5,6 +5,7 @@ export enum GatingType {
 }
 
 export interface Settings {
+  anonymous_user_enabled: boolean;
   maximum_chat_retention_days: number | null;
   notifications: Notification[];
   needs_reindexing: boolean;

@@ -1661,6 +1661,7 @@ export function ChatPage({
     setShowDocSidebar: setShowHistorySidebar,
     setToggled: removeToggle,
     mobile: settings?.isMobile,
+    isAnonymousUser: user?.is_anonymous_user,
   });
 
   const autoScrollEnabled =
@@ -2229,6 +2230,7 @@ export function ChatPage({
                   toggleSidebar={toggleSidebar}
                   currentChatSession={selectedChatSession}
                   documentSidebarToggled={documentSidebarToggled}
+                  hideUserDropdown={user?.is_anonymous_user}
                 />
               )}
 
@@ -2767,12 +2769,6 @@ export function ChatPage({
                                 setFiltersToggled(false);
                                 setDocumentSidebarToggled(true);
                               }}
-                              removeFilters={() => {
-                                filterManager.setSelectedSources([]);
-                                filterManager.setSelectedTags([]);
-                                filterManager.setSelectedDocumentSets([]);
-                                setDocumentSidebarToggled(false);
-                              }}
                               showConfigureAPIKey={() =>
                                 setShowApiKeyModal(true)
                               }
@@ -2782,7 +2778,6 @@ export function ChatPage({
                               selectedDocuments={selectedDocuments}
                               // assistant stuff
                               selectedAssistant={liveAssistant}
-                              setSelectedAssistant={onAssistantChange}
                               setAlternativeAssistant={setAlternativeAssistant}
                               alternativeAssistant={alternativeAssistant}
                               // end assistant stuff
@@ -2790,7 +2785,6 @@ export function ChatPage({
                               setMessage={setMessage}
                               onSubmit={onSubmit}
                               filterManager={filterManager}
-                              llmOverrideManager={llmOverrideManager}
                               files={currentMessageFiles}
                               setFiles={setCurrentMessageFiles}
                               toggleFilters={
@@ -2798,7 +2792,6 @@ export function ChatPage({
                               }
                               handleFileUpload={handleImageUpload}
                               textAreaRef={textAreaRef}
-                              chatSessionId={chatSessionIdRef.current!}
                             />
                             {enterpriseSettings &&
                               enterpriseSettings.custom_lower_disclaimer_content && (

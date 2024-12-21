@@ -8,6 +8,7 @@ export interface AuthTypeMetadata {
   authType: AuthType;
   autoRedirect: boolean;
   requiresVerification: boolean;
+  anonymousUserEnabled: boolean | null;
 }
 
 export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
@@ -16,8 +17,11 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
     throw new Error("Failed to fetch data");
   }
 
-  const data: { auth_type: string; requires_verification: boolean } =
-    await res.json();
+  const data: {
+    auth_type: string;
+    requires_verification: boolean;
+    anonymous_user_enabled: boolean | null;
+  } = await res.json();
 
   let authType: AuthType;
 
@@ -35,12 +39,14 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
       authType,
       autoRedirect: true,
       requiresVerification: data.requires_verification,
+      anonymousUserEnabled: data.anonymous_user_enabled,
     };
   }
   return {
     authType,
     autoRedirect: false,
     requiresVerification: data.requires_verification,
+    anonymousUserEnabled: data.anonymous_user_enabled,
   };
 };
 

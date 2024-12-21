@@ -28,6 +28,7 @@ from onyx.auth.noauth_user import fetch_no_auth_user
 from onyx.auth.noauth_user import set_no_auth_user_preferences
 from onyx.auth.schemas import UserRole
 from onyx.auth.schemas import UserStatus
+from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
@@ -484,13 +485,15 @@ def verify_user_logged_in(
     # NOTE: this does not use `current_user` / `current_admin_user` because we don't want
     # to enforce user verification here - the frontend always wants to get the info about
     # the current user regardless of if they are currently verified
-
     if user is None:
         # if auth type is disabled, return a dummy user with preferences from
         # the key-value store
         if AUTH_TYPE == AuthType.DISABLED:
             store = get_kv_store()
             return fetch_no_auth_user(store)
+        if anonymous_user_enabled():
+            store = get_kv_store()
+            return fetch_no_auth_user(store, anonymous_user_enabled=True)
 
         raise BasicAuthenticationError(detail="User Not Authenticated")
     if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
