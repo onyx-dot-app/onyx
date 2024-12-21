@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
+from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.app_configs import ENABLE_MULTIPASS_INDEXING
 from onyx.configs.app_configs import INDEXING_EXCEPTION_LIMIT
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
@@ -39,6 +40,7 @@ from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.llm.factory import get_default_llms
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 from shared_configs.enums import EmbeddingProvider
@@ -449,6 +451,13 @@ def build_indexing_pipeline(
         else ENABLE_MULTIPASS_INDEXING
     )
 
+    enable_contextual_rag = (
+        search_settings.enable_contextual_rag
+        if search_settings
+        else ENABLE_CONTEXTUAL_RAG
+    )
+    llm = get_default_llms()[1] if enable_contextual_rag else None
+
     enable_large_chunks = (
         multipass
         and
@@ -465,9 +474,11 @@ def build_indexing_pipeline(
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
         enable_multipass=multipass,
+        enable_contextual_rag=enable_contextual_rag,
         enable_large_chunks=enable_large_chunks,
         # after every doc, update status in case there are a bunch of really long docs
         callback=callback,
+        llm=llm
     )
 
     return partial(

@@ -23,6 +23,7 @@ export enum RerankerProvider {
 export interface AdvancedSearchConfiguration {
   index_name: string | null;
   multipass_indexing: boolean;
+  enable_contextual_rag: boolean;
   multilingual_expansion: string[];
   disable_rerank_for_streaming: boolean;
   api_url: string | null;

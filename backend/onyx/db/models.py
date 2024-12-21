@@ -648,6 +648,9 @@ class SearchSettings(Base):
     # Mini and Large Chunks (large chunk also checks for model max context)
     multipass_indexing: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Contextual RAG
+    enable_contextual_rag: Mapped[bool] = mapped_column(Boolean, default=False)
+
     multilingual_expansion: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), default=[]
     )

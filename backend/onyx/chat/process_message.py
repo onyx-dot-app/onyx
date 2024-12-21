@@ -841,15 +841,19 @@ def stream_chat_message_objects(
 
     except Exception as e:
         logger.exception("Failed to process chat message.")
+        
+        # when gen ai is disabled, llm variable is not defined
+        if isinstance(e, GenAIDisabledException):
+            yield StreamingError(error=error_msg)
+        else:
+            client_error_msg = litellm_exception_to_error_msg(e, llm)
+            if llm.config.api_key and len(llm.config.api_key) > 2:
+                error_msg = error_msg.replace(llm.config.api_key, "[REDACTED_API_KEY]")
+                stack_trace = stack_trace.replace(
+                    llm.config.api_key, "[REDACTED_API_KEY]"
+                )
 
-        error_msg = str(e)
-        stack_trace = traceback.format_exc()
-        client_error_msg = litellm_exception_to_error_msg(e, llm)
-        if llm.config.api_key and len(llm.config.api_key) > 2:
-            error_msg = error_msg.replace(llm.config.api_key, "[REDACTED_API_KEY]")
-            stack_trace = stack_trace.replace(llm.config.api_key, "[REDACTED_API_KEY]")
-
-        yield StreamingError(error=client_error_msg, stack_trace=stack_trace)
+            yield StreamingError(error=client_error_msg, stack_trace=stack_trace)
         db_session.rollback()
         return
 

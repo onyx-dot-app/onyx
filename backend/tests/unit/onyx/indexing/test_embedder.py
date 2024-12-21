@@ -21,7 +21,13 @@ def mock_embedding_model() -> Generator[Mock, None, None]:
         yield mock
 
 
-def test_default_indexing_embedder_embed_chunks(mock_embedding_model: Mock) -> None:
+@pytest.mark.parametrize(
+    "chunk_context, doc_summary",
+    [("Test chunk context", "Test document summary"), ("", "")],
+)
+def test_default_indexing_embedder_embed_chunks(
+    mock_embedding_model: Mock, chunk_context: str, doc_summary: str
+) -> None:
     # Setup
     embedder = DefaultIndexingEmbedder(
         model_name="test-model",
@@ -61,6 +67,8 @@ def test_default_indexing_embedder_embed_chunks(mock_embedding_model: Mock) -> N
             metadata_suffix_keyword="",
             mini_chunk_texts=None,
             large_chunk_reference_ids=[],
+            chunk_context=chunk_context,
+            doc_summary=doc_summary,
         )
     ]
 
@@ -79,7 +87,7 @@ def test_default_indexing_embedder_embed_chunks(mock_embedding_model: Mock) -> N
 
     # Verify the embedding model was called correctly
     mock_embedding_model.return_value.encode.assert_any_call(
-        texts=["Title: Test chunk"],
+        texts=[f"Title: {doc_summary}Test chunk{chunk_context}"],
         text_type=EmbedTextType.PASSAGE,
         large_chunks_present=False,
     )
