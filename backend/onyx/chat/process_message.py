@@ -841,7 +841,9 @@ def stream_chat_message_objects(
 
     except Exception as e:
         logger.exception("Failed to process chat message.")
-        
+
+        error_msg = str(e)
+        stack_trace = traceback.format_exc()
         # when gen ai is disabled, llm variable is not defined
         if isinstance(e, GenAIDisabledException):
             yield StreamingError(error=error_msg)

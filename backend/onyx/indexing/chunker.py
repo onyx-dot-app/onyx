@@ -1,10 +1,10 @@
-from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.app_configs import AVERAGE_SUMMARY_EMBEDDINGS
-from onyx.configs.app_configs import USE_CHUNK_SUMMARY
-from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
+from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
 from onyx.configs.app_configs import MINI_CHUNK_SIZE
 from onyx.configs.app_configs import SKIP_METADATA_IN_CHUNK
+from onyx.configs.app_configs import USE_CHUNK_SUMMARY
+from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.configs.constants import SECTION_SEPARATOR
@@ -26,7 +26,7 @@ from onyx.prompts.chat_prompts import DOCUMENT_SUMMARY_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import clean_text
 from onyx.utils.text_processing import shared_precompare_cleanup
-from danswer.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from shared_configs.configs import STRICT_CHUNK_TOKEN_LIMIT
 
 # Not supporting overlaps, we need a clean combination of chunks and it is unclear if overlaps
@@ -387,7 +387,11 @@ class Chunker:
 
         # expand the size of the context used for contextual rag based on whether chunk context and doc summary are used
         context_size = 0
-        if self.enable_contextual_rag and not single_chunk_fits and not AVERAGE_SUMMARY_EMBEDDINGS:
+        if (
+            self.enable_contextual_rag
+            and not single_chunk_fits
+            and not AVERAGE_SUMMARY_EMBEDDINGS
+        ):
             if USE_CHUNK_SUMMARY:
                 context_size += MAX_CONTEXT_TOKENS
             if USE_DOCUMENT_SUMMARY:
@@ -401,7 +405,9 @@ class Chunker:
         # then don't do contextual rag
         if content_token_limit <= CHUNK_MIN_CONTENT:
             context_size = 0  # Don't do contextual RAG
-            content_token_limit = self.chunk_token_limit - title_tokens - metadata_tokens
+            content_token_limit = (
+                self.chunk_token_limit - title_tokens - metadata_tokens
+            )
 
         # If there is not enough context remaining then just index the chunk with no prefix/suffix
         if content_token_limit <= CHUNK_MIN_CONTENT:
@@ -421,17 +427,17 @@ class Chunker:
             large_chunks = generate_large_chunks(normal_chunks)
             normal_chunks.extend(large_chunks)
 
-
         if self.enable_contextual_rag and context_size > 0:
             if self.llm is None:
                 raise ValueError("LLM must be available for contextual RAG")
-                
 
             if USE_DOCUMENT_SUMMARY:
-                trunc_doc_tokens = (
-                    self.max_context - len(self.tokenizer.tokenize(DOCUMENT_SUMMARY_PROMPT))
+                trunc_doc_tokens = self.max_context - len(
+                    self.tokenizer.tokenize(DOCUMENT_SUMMARY_PROMPT)
                 )
-                doc_content = tokenizer_trim_content(doc_content, trunc_doc_tokens, self.tokenizer)
+                doc_content = tokenizer_trim_content(
+                    doc_content, trunc_doc_tokens, self.tokenizer
+                )
                 summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
                 doc_summary = message_to_string(
                     self.llm.invoke(summary_prompt, max_tokens=MAX_CONTEXT_TOKENS)
@@ -444,18 +450,26 @@ class Chunker:
                 trunc_doc_tokens = (
                     self.max_context - self.prompt_tokens - self.chunk_token_limit
                 )
-                doc_content = tokenizer_trim_content(doc_content, trunc_doc_tokens, self.tokenizer)
+                doc_content = tokenizer_trim_content(
+                    doc_content, trunc_doc_tokens, self.tokenizer
+                )
                 context_prompt1 = CONTEXTUAL_RAG_PROMPT1.format(document=doc_content)
-                def assign_context(chunk: DocAwareChunk):
+
+                def assign_context(chunk: DocAwareChunk) -> None:
                     context_prompt2 = CONTEXTUAL_RAG_PROMPT2.format(chunk=chunk.content)
-                    chunk.chunk_context = message_to_string(
-                        self.llm.invoke(
-                            context_prompt1 + context_prompt2, max_tokens=MAX_CONTEXT_TOKENS
+                    chunk.chunk_context = (
+                        ""
+                        if self.llm is None
+                        else message_to_string(
+                            self.llm.invoke(
+                                context_prompt1 + context_prompt2,
+                                max_tokens=MAX_CONTEXT_TOKENS,
+                            )
                         )
                     )
 
                 run_functions_tuples_in_parallel(
-                    [(assign_context, [chunk]) for chunk in normal_chunks]
+                    [(assign_context, (chunk,)) for chunk in normal_chunks]
                 )
         return normal_chunks
 

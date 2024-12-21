@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -19,8 +20,11 @@ def embedder() -> DefaultIndexingEmbedder:
         passage_prefix=None,
     )
 
+
 @pytest.mark.parametrize("enable_contextual_rag", [True, False])
-def test_chunk_document(embedder: DefaultIndexingEmbedder, enable_contextual_rag: bool) -> None:
+def test_chunk_document(
+    embedder: DefaultIndexingEmbedder, enable_contextual_rag: bool
+) -> None:
     short_section_1 = "This is a short section."
     long_section = (
         "This is a long section that should be split into multiple chunks. " * 100
@@ -47,7 +51,7 @@ def test_chunk_document(embedder: DefaultIndexingEmbedder, enable_contextual_rag
 
     mock_llm_invoke_count = 0
 
-    def mock_llm_invoke(self, *args, **kwargs):
+    def mock_llm_invoke(self: Any, *args: Any, **kwargs: Any) -> Mock:
         nonlocal mock_llm_invoke_count
         mock_llm_invoke_count += 1
         m = Mock()
@@ -101,7 +105,7 @@ def test_chunker_heartbeat(
         tokenizer=embedder.embedding_model.tokenizer,
         enable_multipass=False,
         callback=mock_heartbeat,
-        enable_contextual_rag=False
+        enable_contextual_rag=False,
     )
 
     chunks = chunker.chunk([document])
