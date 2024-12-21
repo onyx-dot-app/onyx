@@ -74,6 +74,9 @@ from onyx.server.manage.search_settings import router as search_settings_router
 from onyx.server.manage.slack_bot import router as slack_bot_management_router
 from onyx.server.manage.users import router as user_router
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
+from onyx.server.middleware.rate_limiting import close_limiter
+from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
+from onyx.server.middleware.rate_limiting import setup_limiter
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.openai_assistants_api.full_openai_assistants_api import (
     get_full_openai_assistants_api_router,
@@ -194,7 +197,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         setup_multitenant_onyx()
 
     optional_telemetry(record_type=RecordType.VERSION, data={"version": __version__})
+
+    # Set up rate limiter
+    await setup_limiter()
+
     yield
+
+    # Close rate limiter
+    await close_limiter()
 
 
 def log_http_error(_: Request, exc: Exception) -> JSONResponse:
@@ -288,6 +298,7 @@ def get_application() -> FastAPI:
             fastapi_users.get_auth_router(auth_backend),
             prefix="/auth",
             tags=["auth"],
+            dependencies=get_auth_rate_limiters(),
         )
 
         include_router_with_global_prefix_prepended(
@@ -295,6 +306,7 @@ def get_application() -> FastAPI:
             fastapi_users.get_register_router(UserRead, UserCreate),
             prefix="/auth",
             tags=["auth"],
+            dependencies=get_auth_rate_limiters(),
         )
 
         include_router_with_global_prefix_prepended(
@@ -302,18 +314,21 @@ def get_application() -> FastAPI:
             fastapi_users.get_reset_password_router(),
             prefix="/auth",
             tags=["auth"],
+            dependencies=get_auth_rate_limiters(),
         )
         include_router_with_global_prefix_prepended(
             application,
             fastapi_users.get_verify_router(UserRead),
             prefix="/auth",
             tags=["auth"],
+            dependencies=get_auth_rate_limiters(),
         )
         include_router_with_global_prefix_prepended(
             application,
             fastapi_users.get_users_router(UserRead, UserUpdate),
             prefix="/users",
             tags=["users"],
+            dependencies=get_auth_rate_limiters(),
         )
 
     if AUTH_TYPE == AuthType.GOOGLE_OAUTH:
