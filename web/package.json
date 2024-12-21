@@ -79,6 +79,7 @@
   "devDependencies": {
     "@chromatic-com/playwright": "^0.10.0",
     "@tailwindcss/typography": "^0.5.10",
+    "@types/chrome": "^0.0.287",
     "chromatic": "^11.18.1",
     "eslint": "^8.48.0",
     "eslint-config-next": "^14.1.0",

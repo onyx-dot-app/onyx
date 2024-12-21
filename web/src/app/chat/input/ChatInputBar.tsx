@@ -46,7 +46,7 @@ interface ChatInputBarProps {
   setMessage: (message: string) => void;
   stopGenerating: () => void;
   onSubmit: () => void;
-  filterManager: FilterManager;
+  filterManager?: FilterManager;
   llmOverrideManager: LlmOverrideManager;
   chatState: ChatState;
   showDocs: () => void;
@@ -462,16 +462,6 @@ export function ChatInputBar({
                   onClick={toggleFilters}
                 />
               )}
-              {(filterManager.selectedSources.length > 0 ||
-                filterManager.selectedDocumentSets.length > 0 ||
-                filterManager.selectedTags.length > 0 ||
-                filterManager.timeRange) &&
-                toggleFilters && (
-                  <FiltersDisplay
-                    filterManager={filterManager}
-                    toggleFilters={toggleFilters}
-                  />
-                )}
             </div>
 
             <div className="absolute bottom-2.5 mobile:right-4 desktop:right-10">

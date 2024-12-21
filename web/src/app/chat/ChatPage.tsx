@@ -110,7 +110,6 @@ import AssistantBanner from "../../components/assistants/AssistantBanner";
 import TextView from "@/components/chat_search/TextView";
 import AssistantSelector from "@/components/chat_search/AssistantSelector";
 import { Modal } from "@/components/Modal";
-import { createPostponedAbortSignal } from "next/dist/server/app-render/dynamic-rendering";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -382,12 +381,12 @@ export function ChatPage({
     existingChatSessionId !== null
   );
 
-  const [isReady, setIsReady] = useState(false);
+  // const [isReady, setIsReady] = useState(false);
 
-  useEffect(() => {
-    Prism.highlightAll();
-    setIsReady(true);
-  }, []);
+  // useEffect(() => {
+  //   Prism.highlightAll();
+  //   setIsReady(true);
+  // }, []);
 
   // this is triggered every time the user switches which chat
   // session they are using
@@ -446,7 +445,7 @@ export function ChatPage({
         }
         return;
       }
-      setIsReady(true);
+      // setIsReady(true);
       const shouldScrollToBottom =
         visibleRange.get(existingChatSessionId) === undefined ||
         visibleRange.get(existingChatSessionId)?.end == 0;
@@ -1846,7 +1845,7 @@ export function ChatPage({
       if (!slackChatId) return;
 
       // Set isReady to false before starting retrieval to display loading text
-      setIsReady(false);
+      // setIsReady(false);
 
       try {
         const response = await fetch("/api/chat/seed-chat-session-from-slack", {
@@ -2232,7 +2231,7 @@ export function ChatPage({
                 />
               )}
 
-              {documentSidebarInitialWidth !== undefined && isReady ? (
+              {true ? (
                 <Dropzone onDrop={handleImageUpload} noClick>
                   {({ getRootProps }) => (
                     <div className="flex h-full w-full">

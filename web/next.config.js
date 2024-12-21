@@ -30,7 +30,12 @@ const nextConfig = {
         headers: [
           {
             key: "Content-Security-Policy",
-            value: cspHeader.replace(/\n/g, ""),
+            value: cspHeader
+              .replace(/\n/g, "")
+              .replace(
+                "frame-ancestors 'none';",
+                "frame-ancestors 'self' chrome-extension://iclfmmonpknonmfkggbjnaidfkfenjoh;"
+              ),
           },
           {
             key: "Strict-Transport-Security",
@@ -41,16 +46,11 @@ const nextConfig = {
             value: "strict-origin-when-cross-origin",
           },
           {
-            key: "X-Frame-Options",
-            value: "DENY",
-          },
-          {
             key: "X-Content-Type-Options",
             value: "nosniff",
           },
           {
             key: "Permissions-Policy",
-            // Deny all permissions by default
             value:
               "accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), cross-origin-isolated=(), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=(), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(), midi=(), navigation-override=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(), xr-spatial-tracking=()",
           },
