@@ -2,7 +2,6 @@ from collections.abc import Sequence
 from operator import and_
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import Select
@@ -120,59 +119,6 @@ def _cleanup_document_set__user_group_relationships__no_commit(
             DocumentSet__UserGroup.user_group_id == user_group_id
         )
     )
-
-
-def validate_object_creation_for_user(
-    db_session: Session,
-    user: User | None,
-    target_group_ids: list[int] | None = None,
-    object_is_public: bool | None = None,
-    object_is_perm_sync: bool | None = None,
-) -> None:
-    """
-    All users can create/edit permission synced objects if they don't specify a group
-    All admin actions are allowed.
-    Prevents non-admins from creating/editing:
-    - public objects
-    - objects with no groups
-    - objects that belong to a group they don't curate
-    """
-    if object_is_perm_sync and not target_group_ids:
-        return
-
-    if not user or user.role == UserRole.ADMIN:
-        return
-
-    if object_is_public:
-        detail = "User does not have permission to create public credentials"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
-    if not target_group_ids:
-        detail = "Curators must specify 1+ groups"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
-
-    user_curated_groups = fetch_user_groups_for_user(
-        db_session=db_session,
-        user_id=user.id,
-        # Global curators can curate all groups they are member of
-        only_curator_groups=user.role != UserRole.GLOBAL_CURATOR,
-    )
-    user_curated_group_ids = set([group.id for group in user_curated_groups])
-    target_group_ids_set = set(target_group_ids)
-    if not target_group_ids_set.issubset(user_curated_group_ids):
-        detail = "Curators cannot control groups they don't curate"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
 
 
 def fetch_user_group(db_session: Session, user_group_id: int) -> UserGroup | None:
