@@ -3,6 +3,7 @@ from datetime import datetime
 from datetime import timezone
 from http import HTTPStatus
 from time import sleep
+from typing import cast
 
 import redis
 import sentry_sdk
@@ -100,12 +101,36 @@ class IndexingCallback(IndexingHeartbeatInterface):
             self.last_lock_reacquire = datetime.now(timezone.utc)
         except LockError:
             logger.exception(
-                f"IndexingCallback - lock.reacquire exceptioned. "
+                f"IndexingCallback - lock.reacquire exceptioned: "
                 f"lock_timeout={self.redis_lock.timeout} "
                 f"start={self.started} "
                 f"last_tag={self.last_tag} "
                 f"last_reacquired={self.last_lock_reacquire} "
                 f"now={datetime.now(timezone.utc)}"
+            )
+
+            # diagnostic logging for lock errors
+            name = self.redis_lock.name
+            ttl = self.redis_client.ttl(name)
+            locked = self.redis_lock.locked()
+            owned = self.redis_lock.owned()
+            local_token: str | None = self.redis_lock.local.token  # type: ignore
+
+            remote_token_raw = self.redis_client.get(self.redis_lock.name)
+            if remote_token_raw:
+                remote_token_bytes = cast(bytes, remote_token_raw)
+                remote_token = remote_token_bytes.decode("utf-8")
+            else:
+                remote_token = None
+
+            logger.warning(
+                f"IndexingCallback - lock diagnostics: "
+                f"name={name} "
+                f"locked={locked} "
+                f"owned={owned} "
+                f"local_token={local_token} "
+                f"remote_token={remote_token} "
+                f"ttl={ttl}"
             )
             raise
 
