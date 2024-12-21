@@ -49,6 +49,11 @@ class DocAwareChunk(BaseChunk):
     metadata_suffix_semantic: str
     metadata_suffix_keyword: str
 
+    # This is the summary for the document generated for contextual RAG
+    doc_summary: str
+    # This is the context for this chunk generated for contextual RAG
+    chunk_context: str
+
     mini_chunk_texts: list[str] | None
 
     large_chunk_id: int | None
@@ -149,6 +154,7 @@ class IndexingSetting(EmbeddingModelDetail):
     reduced_dimension: int | None = None
 
     background_reindex_enabled: bool = True
+    enable_contextual_rag: bool
 
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}

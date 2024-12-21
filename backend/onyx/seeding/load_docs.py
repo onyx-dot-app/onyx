@@ -87,6 +87,8 @@ def _create_indexable_chunks(
             metadata_suffix_keyword="",
             mini_chunk_texts=None,
             large_chunk_reference_ids=[],
+            doc_summary="",
+            chunk_context="",
             embeddings=ChunkEmbedding(
                 full_embedding=preprocessed_doc["content_embedding"],
                 mini_chunk_embeddings=[],

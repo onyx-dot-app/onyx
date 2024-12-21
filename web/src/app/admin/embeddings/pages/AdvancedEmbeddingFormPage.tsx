@@ -53,6 +53,7 @@ const AdvancedEmbeddingFormPage = forwardRef<
           validationSchema={Yup.object().shape({
             multilingual_expansion: Yup.array().of(Yup.string()),
             multipass_indexing: Yup.boolean(),
+            enable_contextual_rag: Yup.boolean(),
             disable_rerank_for_streaming: Yup.boolean(),
             num_rerank: Yup.number()
               .required("Number of results to rerank is required")
@@ -183,6 +184,12 @@ const AdvancedEmbeddingFormPage = forwardRef<
                 optional
                 label="Multipass Indexing"
                 name="multipass_indexing"
+              />
+              <BooleanFormField
+                subtext="Enable contextual RAG for all chunk sizes."
+                optional
+                label="Contextual RAG"
+                name="enable_contextual_rag"
               />
               <BooleanFormField
                 subtext="Disable reranking for streaming to improve response time."
