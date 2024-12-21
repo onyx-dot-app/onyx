@@ -31,7 +31,7 @@ def create_document_set(
     db_session: Session = Depends(get_session),
 ) -> int:
     fetch_ee_implementation_or_noop(
-        "onyx.db.user_group", "validate_user_creation_permissions", None
+        "onyx.db.user_group", "validate_object_creation_for_user", None
     )(
         db_session=db_session,
         user=user,
@@ -56,7 +56,7 @@ def patch_document_set(
     db_session: Session = Depends(get_session),
 ) -> None:
     fetch_ee_implementation_or_noop(
-        "onyx.db.user_group", "validate_user_creation_permissions", None
+        "onyx.db.user_group", "validate_object_creation_for_user", None
     )(
         db_session=db_session,
         user=user,
