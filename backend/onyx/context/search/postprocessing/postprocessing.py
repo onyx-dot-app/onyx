@@ -196,9 +196,21 @@ def cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk
             RETURN_SEPARATOR
         )
 
+    def _remove_contextual_rag(chunk: InferenceChunkUncleaned) -> str:
+        # remove document summary
+        if chunk.content.startswith(chunk.doc_summary):
+            chunk.content = chunk.content[len(chunk.doc_summary) :].lstrip()
+        # remove chunk context
+        if chunk.content.endswith(chunk.chunk_context):
+            chunk.content = chunk.content[
+                : len(chunk.content) - len(chunk.chunk_context)
+            ].rstrip()
+        return chunk.content
+
     for chunk in chunks:
         chunk.content = _remove_title(chunk)
         chunk.content = _remove_metadata_suffix(chunk)
+        chunk.content = _remove_contextual_rag(chunk)
 
     return [chunk.to_inference_chunk() for chunk in chunks]
 
