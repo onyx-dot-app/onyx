@@ -179,6 +179,7 @@ class IndexingSetting(EmbeddingModelDetail):
             embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
             background_reindex_enabled=search_settings.background_reindex_enabled,
+            enable_contextual_rag=search_settings.enable_contextual_rag,
         )
 
 
