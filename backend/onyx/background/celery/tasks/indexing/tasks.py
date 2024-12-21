@@ -479,7 +479,11 @@ def validate_indexing_fence(
 
     # celery tasks don't exist and the active signal has expired, possibly due to a crash. Clean it up.
     logger.warning(
-        f"validate_indexing_fence - Resetting fence because no associated celery tasks were found: fence={fence_key}"
+        f"validate_indexing_fence - Resetting fence because no associated celery tasks were found: "
+        f"index_attempt={payload.index_attempt_id} "
+        f"cc_pair={cc_pair_id} "
+        f"search_settings={search_settings_id} "
+        f"fence={fence_key}"
     )
     if payload.index_attempt_id:
         try:

@@ -118,7 +118,7 @@ class RedisConnectorIndex:
 
         The slack in timing is needed to avoid race conditions where simply checking
         the celery queue and task status could result in race conditions."""
-        self.redis.set(self.active_key, 0, ex=300)
+        self.redis.set(self.active_key, 0, ex=3600)
 
     def active(self) -> bool:
         if self.redis.exists(self.active_key):
@@ -172,6 +172,9 @@ class RedisConnectorIndex:
     @staticmethod
     def reset_all(r: redis.Redis) -> None:
         """Deletes all redis values for all connectors"""
+        for key in r.scan_iter(RedisConnectorIndex.ACTIVE_PREFIX + "*"):
+            r.delete(key)
+
         for key in r.scan_iter(RedisConnectorIndex.GENERATOR_LOCK_PREFIX + "*"):
             r.delete(key)
 
