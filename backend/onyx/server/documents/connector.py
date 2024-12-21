@@ -1058,7 +1058,7 @@ def get_basic_connector_indexing_status(
     _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[BasicCCPairInfo]:
-    cc_pairs = get_connector_credential_pairs(db_session)
+    cc_pairs = get_connector_credential_pairs(db_session, eager_load_connector=True)
     return [
         BasicCCPairInfo(
             has_successful_run=cc_pair.last_successful_index_time is not None,

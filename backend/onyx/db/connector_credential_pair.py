@@ -7,6 +7,7 @@ from sqlalchemy import exists
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -90,15 +91,22 @@ def get_connector_credential_pairs(
     user: User | None = None,
     get_editable: bool = True,
     ids: list[int] | None = None,
+    eager_load_connector: bool = False,
 ) -> list[ConnectorCredentialPair]:
     stmt = select(ConnectorCredentialPair).distinct()
+
+    if eager_load_connector:
+        stmt = stmt.options(joinedload(ConnectorCredentialPair.connector))
+
     stmt = _add_user_filters(stmt, user, get_editable)
+
     if not include_disabled:
         stmt = stmt.where(
             ConnectorCredentialPair.status == ConnectorCredentialPairStatus.ACTIVE
-        )  # noqa
+        )
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
+
     return list(db_session.scalars(stmt).all())
 
 
