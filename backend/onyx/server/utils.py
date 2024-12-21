@@ -75,7 +75,6 @@ def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, str]:
             f"Recieved type: {type(val)}"
         )
 
-        masked_creds[key] = mask_string(val)
     return masked_creds
 
 

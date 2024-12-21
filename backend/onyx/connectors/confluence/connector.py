@@ -4,23 +4,22 @@ from datetime import timezone
 from typing import Any
 from urllib.parse import quote
 
-from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
-from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.onyx_confluence import attachment_to_content
-from onyx.connectors.confluence.onyx_confluence import build_confluence_client
+from onyx.connectors.confluence.onyx_confluence import build_confluence_client_2
 from onyx.connectors.confluence.onyx_confluence import (
     extract_text_from_confluence_html,
 )
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.confluence.utils import build_confluence_document_id
-from onyx.connectors.confluence.utils import confluence_refresh_tokens
 from onyx.connectors.confluence.utils import datetime_from_string
 from onyx.connectors.confluence.utils import validate_attachment_filetype
+from onyx.connectors.interfaces import CredentialsConnector
+from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -62,7 +61,9 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
 _SLIM_DOC_BATCH_SIZE = 5000
 
 
-class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
+class ConfluenceConnector(
+    LoadConnector, PollConnector, SlimConnector, CredentialsConnector
+):
     def __init__(
         self,
         wiki_base: str,
@@ -114,6 +115,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             self.cql_label_filter = f" and label not in ({comma_separated_labels})"
 
         self.timezone: timezone = timezone(offset=timedelta(hours=timezone_offset))
+        self.credentials_provider: CredentialsProviderInterface | None = None
 
     @property
     def confluence_client(self) -> OnyxConfluence:
@@ -121,26 +123,38 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             raise ConnectorMissingCredentialError("Confluence")
         return self._confluence_client
 
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        # see https://github.com/atlassian-api/atlassian-python-api/blob/master/atlassian/rest_client.py
-        # for a list of other hidden constructor args
+    def set_credentials_provider(
+        self, credentials_provider: CredentialsProviderInterface
+    ):
+        self.credentials_provider = credentials_provider
+        credentials_provider.get_credentials()
 
-        final_credentials: dict[str, Any] = credentials
-        if "confluence_refresh_token" in credentials:
-            final_credentials = confluence_refresh_tokens(
-                OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
-                OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
-                credentials["confluence_refresh_token"],
-            )
-            final_credentials["cloud_id"] = credentials["cloud_id"]
-
-        self._confluence_client = build_confluence_client(
-            credentials=final_credentials,
-            is_cloud=self.is_cloud,
-            wiki_base=self.wiki_base,
+        self.confluence_client = build_confluence_client_2(
+            credentials_provider, self.is_cloud, self.wiki_base
         )
 
-        return final_credentials
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        pass
+
+        # # see https://github.com/atlassian-api/atlassian-python-api/blob/master/atlassian/rest_client.py
+        # # for a list of other hidden constructor args
+
+        # final_credentials: dict[str, Any] = credentials
+        # if "confluence_refresh_token" in credentials:
+        #     final_credentials = confluence_refresh_tokens(
+        #         OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
+        #         OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
+        #         credentials["cloud_id"],
+        #         credentials["confluence_refresh_token"],
+        #     )
+
+        # self._confluence_client = build_confluence_client(
+        #     credentials=final_credentials,
+        #     is_cloud=self.is_cloud,
+        #     wiki_base=self.wiki_base,
+        # )
+
+        # return final_credentials
 
     def _get_comment_string_for_page_id(self, page_id: str) -> str:
         comment_string = ""

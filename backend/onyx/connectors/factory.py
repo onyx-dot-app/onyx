@@ -1,6 +1,7 @@
 from typing import Any
 from typing import Type
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -27,6 +28,8 @@ from onyx.connectors.google_site.connector import GoogleSitesConnector
 from onyx.connectors.guru.connector import GuruConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.interfaces import CredentialsConnector
+from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.connectors.interfaces import EventConnector
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -48,6 +51,7 @@ from onyx.connectors.xenforo.connector import XenforoConnector
 from onyx.connectors.zendesk.connector import ZendeskConnector
 from onyx.connectors.zulip.connector import ZulipConnector
 from onyx.db.credentials import backend_update_credential_json
+from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import Credential
 
 
@@ -131,6 +135,52 @@ def identify_connector_class(
     return connector
 
 
+class CredentialsProvider(CredentialsProviderInterface):
+    """Implementation to allow the connector to callback and update credentials.
+    Required in cases where credentials can rotate while the connector is running.
+    """
+
+    def __init__(self, tenant_id: str | None, credential_id: int):
+        self._tenant_id = tenant_id
+        self._credential_id = credential_id
+
+    def get_credential_id(self):
+        return self._credential_id
+
+    def get_credentials(self) -> dict[str, Any]:
+        with get_session_with_tenant(self._tenant_id) as db_session:
+            credential = db_session.execute(
+                select(Credential).where(Credential.id == self._credential_id)
+            ).scalar_one()
+
+            if credential is None:
+                raise ValueError(
+                    f"No credential found: credential={self._credential_id}"
+                )
+
+            return credential.credential_json
+
+    def set_credentials(self, credential_json: dict[str, Any]) -> None:
+        with get_session_with_tenant(self._tenant_id) as db_session:
+            try:
+                credential = db_session.execute(
+                    select(Credential)
+                    .where(Credential.id == self._credential_id)
+                    .with_for_update()
+                ).scalar_one()
+
+                if credential is None:
+                    raise ValueError(
+                        f"No credential found: credential={self._credential_id}"
+                    )
+
+                credential.credential_json = credential_json
+                db_session.commit()
+            except Exception:
+                db_session.rollback()
+                raise
+
+
 def instantiate_connector(
     db_session: Session,
     source: DocumentSource,
@@ -145,9 +195,14 @@ def instantiate_connector(
         connector_specific_config["tenant_id"] = tenant_id
 
     connector = connector_class(**connector_specific_config)
-    new_credentials = connector.load_credentials(credential.credential_json)
 
-    if new_credentials is not None:
-        backend_update_credential_json(credential, new_credentials, db_session)
+    if isinstance(connector, CredentialsConnector):
+        provider = CredentialsProvider(tenant_id, credential.id)
+        connector.set_credentials_provider(provider)
+    else:
+        new_credentials = connector.load_credentials(credential.credential_json)
+
+        if new_credentials is not None:
+            backend_update_credential_json(credential, new_credentials, db_session)
 
     return connector

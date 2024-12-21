@@ -84,7 +84,7 @@ def datetime_from_string(datetime_string: str) -> datetime:
 
 
 def confluence_refresh_tokens(
-    client_id: str, client_secret: str, refresh_token: str
+    client_id: str, client_secret: str, cloud_id: str, refresh_token: str
 ) -> dict[str, Any]:
     # rotate the refresh and access token
     # Note that access tokens are only good for an hour, so we're going to have
@@ -116,4 +116,5 @@ def confluence_refresh_tokens(
     new_credentials["expires_at"] = expires_at.isoformat()
     new_credentials["expires_in"] = token_response.expires_in
     new_credentials["scope"] = token_response.scope
+    new_credentials["cloud_id"] = cloud_id
     return new_credentials

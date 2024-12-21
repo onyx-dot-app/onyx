@@ -1,10 +1,14 @@
 import io
+import json
 import math
 import time
 from abc import ABC
 from abc import abstractmethod
 from collections.abc import Callable
 from collections.abc import Iterator
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 from typing import Any
 from typing import cast
 from typing import TypeVar
@@ -18,11 +22,14 @@ from redis.lock import Lock as RedisLock
 from requests import HTTPError
 
 from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
+from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
 from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
 )
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
+from onyx.connectors.confluence.utils import confluence_refresh_tokens
 from onyx.connectors.confluence.utils import validate_attachment_filetype
+from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
@@ -171,23 +178,61 @@ _DEFAULT_PAGINATION_LIMIT = 1000
 class OAuthRefresh(OAuthRefreshInterface):
     """Callback class for the rate limiting wrapper to use in between retries"""
 
-    REFRESH_KEY: str = "da_lock:connector:confluence_token_refresh"
-    LOCK_TIMEOUT = 900
+    LOCK_PREFIX: str = "da_lock:connector:confluence:token_refresh"
+    LOCK_TTL = 900  # TTL of the lock
 
-    def __init__(self):
+    CREDENTIAL_PREFIX = "connector:confluence:credential"
+    CREDENTIAL_TTL = 300
+
+    def __init__(self, credential_provider: CredentialsProviderInterface):
+        self._credential_provider = credential_provider
+
+        self.lock_key: str = (
+            self.LOCK_PREFIX + f":credential_{credential_provider.get_credential_id()}"
+        )
+        self.credential_key: str = (
+            self.CREDENTIAL_PREFIX
+            + f":credential_{credential_provider.get_credential_id()}"
+        )
+
         self.redis_client: Redis = get_redis_client()
         self.redis_lock: RedisLock = self.redis_client.lock(
-            self.REFRESH_KEY, timeout=self.LOCK_TIMEOUT
+            self.lock_key, timeout=self.LOCK_TTL
         )
 
     def acquire_and_refresh(self) -> bool:
         """Lock and refresh the OAuth Token"""
-        acquired = self.redis_lock.acquire(blocking_timeout=self.LOCK_TIMEOUT)
+        acquired = self.redis_lock.acquire(blocking_timeout=self.LOCK_TTL)
         if not acquired:
             raise LockError(
-                f"Could not acquire the lock refresh tokens within the specified timeout. timeout={self.LOCK_TIMEOUT}s"
+                f"Could not acquire the lock refresh tokens within the specified timeout. "
+                f"blocking_timeout={self.LOCK_TTL}s"
             )
-        # credentials
+
+        # check redis first, then fallback to the DB
+        credential_bytes: bytes | None = self.redis_client.get(self.credential_key)
+        if credential_bytes is not None:
+            credential_str = credential_bytes.decode("utf-8")
+            credential_json: dict[str, Any] = json.loads(credential_str)
+        else:
+            credential_json = self._credential_provider.get_credentials()
+
+        now = datetime.now(timezone.utc)
+        created_at = datetime.fromisoformat(credential_json["created_at"])
+        expires_in = credential_json["expires_in"]
+        renew_at = created_at + timedelta(seconds=expires_in // 2)
+        if now > renew_at:
+            new_credentials = confluence_refresh_tokens(
+                OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
+                OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
+                credential_json["cloud_id"],
+                credential_json["confluence_refresh_token"],
+            )
+            new_credential_str = json.dumps(new_credentials)
+            self.redis_client.set(
+                self.credential_key, new_credential_str, ex=self.CREDENTIAL_TTL
+            )
+            self._credential_provider.set_credentials(new_credentials)
 
     def release(self) -> None:
         """Release the lock."""
@@ -242,6 +287,86 @@ class OnyxConfluence:
 
         # super(OnyxConfluence, self).__init__(url, *args, **kwargs)
         # self._wrap_methods()
+
+    def _test_connection(
+        credential_provider: CredentialsProviderInterface,
+        is_cloud: bool,
+        wiki_base: str,
+    ) -> bool:
+        credentials = credential_provider.get_credentials()
+
+        oauth2_dict: dict[str, Any] = {}
+        url = wiki_base.rstrip("/")
+        if "confluence_refresh_token" in credentials:
+            oauth2_dict["client_id"] = OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
+            oauth2_dict["token"] = {}
+            oauth2_dict["token"]["access_token"] = credentials[
+                "confluence_access_token"
+            ]
+            url = f"https://api.atlassian.com/ex/confluence/{credentials['cloud_id']}"
+
+        shared_base_kwargs = {
+            "api_version": "cloud" if is_cloud else "latest",
+            "backoff_and_retry": True,
+            "cloud": is_cloud,
+        }
+
+        shared_probe_kwargs = {
+            **shared_base_kwargs,
+            "url": url,
+            "max_backoff_retries": 6,
+            "max_backoff_seconds": 10,
+        }
+
+        # probe connection with direct client, no retries
+        if "confluence_refresh_token" in credentials:
+            logger.info("Probing Confluence with OAuth Access Token.")
+
+            confluence_client_with_minimal_retries = Confluence(
+                oauth2=oauth2_dict, **shared_probe_kwargs
+            )
+        else:
+            logger.info("Probing Confluence with Personal Access Token.")
+            confluence_client_with_minimal_retries = Confluence(
+                username=credentials["confluence_username"] if is_cloud else None,
+                password=credentials["confluence_access_token"] if is_cloud else None,
+                token=credentials["confluence_access_token"] if not is_cloud else None,
+                **shared_probe_kwargs,
+            )
+
+        spaces = confluence_client_with_minimal_retries.get_all_spaces(limit=1)
+
+        # uncomment the following for testing
+        # the following is an attempt to retrieve the user's timezone
+        # Unfornately, all data is returned in UTC regardless of the user's time zone
+        # even tho CQL parses incoming times based on the user's time zone
+        # space_key = spaces["results"][0]["key"]
+        # space_details = confluence_client_with_minimal_retries.cql(f"space.key={space_key}+AND+type=space")
+
+        if not spaces:
+            raise RuntimeError(
+                f"No spaces found at {wiki_base}! "
+                "Check your credentials and wiki_base and make sure "
+                "is_cloud is set correctly."
+            )
+
+        shared_final_kwargs = {
+            **shared_base_kwargs,
+            "max_backoff_retries": 10,
+            "max_backoff_seconds": 60,
+        }
+
+        if "confluence_refresh_token" in credentials:
+            return OnyxConfluence(url=url, oauth2=oauth2_dict, **shared_final_kwargs)
+
+        return OnyxConfluence(
+            url=url,
+            # passing in username causes issues for Confluence data center
+            username=credentials["confluence_username"] if is_cloud else None,
+            password=credentials["confluence_access_token"] if is_cloud else None,
+            token=credentials["confluence_access_token"] if not is_cloud else None,
+            **shared_final_kwargs,
+        )
 
     def get_current_user(self, expand: str | None = None) -> Any:
         """
@@ -457,6 +582,85 @@ def build_confluence_client(
     is_cloud: bool,
     wiki_base: str,
 ) -> OnyxConfluence:
+    oauth2_dict: dict[str, Any] = {}
+    url = wiki_base.rstrip("/")
+    if "confluence_refresh_token" in credentials:
+        oauth2_dict["client_id"] = OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
+        oauth2_dict["token"] = {}
+        oauth2_dict["token"]["access_token"] = credentials["confluence_access_token"]
+        url = f"https://api.atlassian.com/ex/confluence/{credentials['cloud_id']}"
+
+    shared_base_kwargs = {
+        "api_version": "cloud" if is_cloud else "latest",
+        "backoff_and_retry": True,
+        "cloud": is_cloud,
+    }
+
+    shared_probe_kwargs = {
+        **shared_base_kwargs,
+        "url": url,
+        "max_backoff_retries": 6,
+        "max_backoff_seconds": 10,
+    }
+
+    # probe connection with direct client, no retries
+    if "confluence_refresh_token" in credentials:
+        logger.info("Probing Confluence with OAuth Access Token.")
+
+        confluence_client_with_minimal_retries = Confluence(
+            oauth2=oauth2_dict, **shared_probe_kwargs
+        )
+    else:
+        logger.info("Probing Confluence with Personal Access Token.")
+        confluence_client_with_minimal_retries = Confluence(
+            username=credentials["confluence_username"] if is_cloud else None,
+            password=credentials["confluence_access_token"] if is_cloud else None,
+            token=credentials["confluence_access_token"] if not is_cloud else None,
+            **shared_probe_kwargs,
+        )
+
+    spaces = confluence_client_with_minimal_retries.get_all_spaces(limit=1)
+
+    # uncomment the following for testing
+    # the following is an attempt to retrieve the user's timezone
+    # Unfornately, all data is returned in UTC regardless of the user's time zone
+    # even tho CQL parses incoming times based on the user's time zone
+    # space_key = spaces["results"][0]["key"]
+    # space_details = confluence_client_with_minimal_retries.cql(f"space.key={space_key}+AND+type=space")
+
+    if not spaces:
+        raise RuntimeError(
+            f"No spaces found at {wiki_base}! "
+            "Check your credentials and wiki_base and make sure "
+            "is_cloud is set correctly."
+        )
+
+    shared_final_kwargs = {
+        **shared_base_kwargs,
+        "max_backoff_retries": 10,
+        "max_backoff_seconds": 60,
+    }
+
+    if "confluence_refresh_token" in credentials:
+        return OnyxConfluence(url=url, oauth2=oauth2_dict, **shared_final_kwargs)
+
+    return OnyxConfluence(
+        url=url,
+        # passing in username causes issues for Confluence data center
+        username=credentials["confluence_username"] if is_cloud else None,
+        password=credentials["confluence_access_token"] if is_cloud else None,
+        token=credentials["confluence_access_token"] if not is_cloud else None,
+        **shared_final_kwargs,
+    )
+
+
+def build_confluence_client_2(
+    credential_provider: CredentialsProviderInterface,
+    is_cloud: bool,
+    wiki_base: str,
+) -> OnyxConfluence:
+    credentials = credential_provider.get_credentials()
+
     oauth2_dict: dict[str, Any] = {}
     url = wiki_base.rstrip("/")
     if "confluence_refresh_token" in credentials:

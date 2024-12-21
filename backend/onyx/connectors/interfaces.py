@@ -82,6 +82,32 @@ class OAuthConnector(BaseConnector):
         raise NotImplementedError
 
 
+class CredentialsProviderInterface(abc.ABC):
+    @abc.abstractmethod
+    def get_credential_id(self) -> int:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_credentials(self) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def set_credentials(self, credential_json: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+
+class CredentialsConnector(BaseConnector):
+    """Implement this if the connector needs to be able to read and write credentials
+    on the fly. Typically used with shared credentials/tokens that might be renewed
+    at any time."""
+
+    @abc.abstractmethod
+    def set_credentials_provider(
+        self, credentials_provider: CredentialsProviderInterface
+    ):
+        raise NotImplementedError
+
+
 # Event driven
 class EventConnector(BaseConnector):
     @abc.abstractmethod
