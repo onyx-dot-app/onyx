@@ -165,7 +165,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> None:
             lock_beat.release()
 
     time_elapsed = time.monotonic() - time_start
-    task_logger.info(f"check_for_vespa_sync_task finished: elapsed={time_elapsed:.2f}")
+    task_logger.debug(f"check_for_vespa_sync_task finished: elapsed={time_elapsed:.2f}")
     return
 
 
@@ -637,15 +637,23 @@ def monitor_ccpair_indexing_taskset(
     if not payload:
         return
 
+    elapsed_started_str = None
+    if payload.started:
+        elapsed_started = datetime.now(timezone.utc) - payload.started
+        elapsed_started_str = f"{elapsed_started.total_seconds():.2f}"
+
     elapsed_submitted = datetime.now(timezone.utc) - payload.submitted
 
     progress = redis_connector_index.get_progress()
     if progress is not None:
         task_logger.info(
-            f"Connector indexing progress: cc_pair={cc_pair_id} "
+            f"Connector indexing progress: "
+            f"attempt={payload.index_attempt_id} "
+            f"cc_pair={cc_pair_id} "
             f"search_settings={search_settings_id} "
             f"progress={progress} "
-            f"elapsed_submitted={elapsed_submitted.total_seconds():.2f}"
+            f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
+            f"elapsed_started={elapsed_started_str}"
         )
 
     if payload.index_attempt_id is None or payload.celery_task_id is None:
@@ -716,11 +724,14 @@ def monitor_ccpair_indexing_taskset(
     status_enum = HTTPStatus(status_int)
 
     task_logger.info(
-        f"Connector indexing finished: cc_pair={cc_pair_id} "
+        f"Connector indexing finished: "
+        f"attempt={payload.index_attempt_id} "
+        f"cc_pair={cc_pair_id} "
         f"search_settings={search_settings_id} "
         f"progress={progress} "
         f"status={status_enum.name} "
-        f"elapsed_submitted={elapsed_submitted.total_seconds():.2f}"
+        f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
+        f"elapsed_started={elapsed_started_str}"
     )
 
     redis_connector_index.reset()

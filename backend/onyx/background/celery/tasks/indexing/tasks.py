@@ -325,7 +325,6 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
             # tasks can be in the queue in redis, in reserved tasks (prefetched by the worker),
             # or be currently executing
             try:
-                task_logger.info("Validating indexing fences...")
                 validate_indexing_fences(
                     tenant_id, self.app, redis_client, redis_client_celery, lock_beat
                 )
@@ -363,7 +362,7 @@ def validate_indexing_fences(
     lock_beat: RedisLock,
 ) -> None:
     reserved_indexing_tasks = celery_get_unacked_task_ids(
-        "connector_indexing", r_celery
+        OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
     )
 
     # validate all existing indexing jobs
