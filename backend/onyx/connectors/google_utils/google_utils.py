@@ -113,6 +113,24 @@ def execute_paginated_retrieval(
                 results = _execute_with_retry(
                     lambda: retrieval_function(**request_kwargs).execute()
                 )
+            elif e.resp.status == 401:
+                if not continue_on_404_or_403:
+                    raise e
+
+                # Optionally skip only error code 4 (invalid session) but still raise for other 401s
+                error_content = e.content.decode("utf-8", errors="ignore")
+                if "Active session is invalid. Error code: 4" in error_content:
+                    logger.warning(
+                        f"Skipping 'Active session invalid (code 4)' "
+                        f"401 error for request_kwargs={request_kwargs}: {e}"
+                    )
+                    results = {}
+                else:
+                    logger.error(
+                        "Reraising 401 HttpError. Possibly invalid/missing credentials."
+                    )
+                    raise e
+
             else:
                 logger.exception("Error executing request:")
                 raise e
