@@ -110,7 +110,6 @@ import AssistantBanner from "../../components/assistants/AssistantBanner";
 import TextView from "@/components/chat_search/TextView";
 import AssistantSelector from "@/components/chat_search/AssistantSelector";
 import { Modal } from "@/components/Modal";
-import { createPostponedAbortSignal } from "next/dist/server/app-render/dynamic-rendering";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -391,6 +390,29 @@ export function ChatPage({
 
   // this is triggered every time the user switches which chat
   // session they are using
+  const [chromSentUrls, setchromSentUrls] = useState<string[]>([]);
+
+  useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      // If you have a specific origin, check event.origin === "https://my-extension-domain.com"
+      if (event.data?.type === "PAGE_URL") {
+        // The extension is telling us the new URL
+        const newUrl = event.data.url;
+        console.log("Got a URL from the extension side panel:", newUrl);
+        setchromSentUrls((prev) => [...prev, newUrl]);
+
+        // Use or store this URL as needed in your ChatPage
+        // e.g., set some local state or call a helper to do something with it
+        // setchromSentUrls(newUrl);
+      }
+    }
+
+    window.addEventListener("message", handleMessage);
+
+    return () => {
+      window.removeEventListener("message", handleMessage);
+    };
+  }, []);
   useEffect(() => {
     const priorChatSessionId = chatSessionIdRef.current;
     const loadedSessionId = loadedIdSessionRef.current;
@@ -446,7 +468,7 @@ export function ChatPage({
         }
         return;
       }
-      setIsReady(true);
+      // setIsReady(true);
       const shouldScrollToBottom =
         visibleRange.get(existingChatSessionId) === undefined ||
         visibleRange.get(existingChatSessionId)?.end == 0;
@@ -2026,7 +2048,11 @@ export function ChatPage({
 
       {retrievalEnabled && documentSidebarToggled && settings?.isMobile && (
         <div className="md:hidden">
-          <Modal noPadding noScroll>
+          <Modal
+            onOutsideClick={() => setDocumentSidebarToggled(false)}
+            noPadding
+            noScroll
+          >
             <ChatFilters
               setPresentingDocument={setPresentingDocument}
               modal={true}
@@ -2232,7 +2258,7 @@ export function ChatPage({
                 />
               )}
 
-              {documentSidebarInitialWidth !== undefined && isReady ? (
+              {true ? (
                 <Dropzone onDrop={handleImageUpload} noClick>
                   {({ getRootProps }) => (
                     <div className="flex h-full w-full">
@@ -2349,7 +2375,7 @@ export function ChatPage({
 
                           <div
                             className={
-                              "-ml-4 w-full mx-auto " +
+                              "desktop:-ml-4 w-full mx-auto " +
                               "absolute mobile:top-0 desktop:top-12 left-0 " +
                               (settings?.enterpriseSettings
                                 ?.two_lines_for_chat_header
@@ -2760,6 +2786,14 @@ export function ChatPage({
                               </div>
                             )}
                             <ChatInputBar
+                              chromSentUrls={chromSentUrls}
+                              removeChromeSentUrls={(chromSentUrl: string) => {
+                                setchromSentUrls(
+                                  chromSentUrls.filter(
+                                    (url) => url !== chromSentUrl
+                                  )
+                                );
+                              }}
                               removeDocs={() => {
                                 clearSelectedDocuments();
                               }}

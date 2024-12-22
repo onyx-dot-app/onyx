@@ -4,12 +4,14 @@ import {
 } from "@/components/BasicClickable";
 import { HoverPopup } from "@/components/HoverPopup";
 import { Hoverable } from "@/components/Hoverable";
+import { SourceIcon } from "@/components/SourceIcon";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ValidSources } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 import { FiCheck, FiEdit2, FiSearch, FiX } from "react-icons/fi";
 
@@ -88,10 +90,22 @@ export function SearchSummary({
 
   const searchingForDisplay = (
     <div className={`flex p-1 rounded ${isOverflowed && "cursor-default"}`}>
-      <FiSearch className="flex-none mr-2 my-auto" size={14} />
+      <div className="cursor-pointer mr-1 flex -space-x-2">
+        <div className="rounded-full bg-white -p-.5 z-30">
+          <SourceIcon sourceType={ValidSources.Asana} iconSize={14} />
+        </div>
+        <div className="rounded-full bg-white -p-.5 z-20">
+          <SourceIcon sourceType={ValidSources.Gong} iconSize={14} />
+        </div>
+        <div className="rounded-full bg-white -p-.5 z-10">
+          <SourceIcon sourceType={ValidSources.Bookstack} iconSize={14} />
+        </div>
+      </div>
+
+      <FiSearch className="mobile:hidden flex-none mr-2 my-auto" size={14} />
       <div
         className={`${!finished && "loading-text"} 
-        !text-sm !line-clamp-1 !break-all px-0.5`}
+        text-xs !line-clamp-1 !break-all px-0.5`}
         ref={searchingForRef}
       >
         {finished ? "Searched" : "Searching"} for:{" "}
@@ -107,7 +121,7 @@ export function SearchSummary({
   );
 
   const editInput = handleSearchQueryEdit ? (
-    <div className="flex w-full mr-3">
+    <div className="mobile:hidden flex w-full mr-3">
       <div className="my-2 w-full">
         <input
           ref={editQueryRef}
@@ -181,7 +195,7 @@ export function SearchSummary({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="my-auto hover:bg-hover p-1.5 rounded"
+                    className="my-auto mobile:hidden hover:bg-hover p-1.5 rounded"
                     onClick={() => {
                       setIsEditing(true);
                     }}

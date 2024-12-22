@@ -119,7 +119,7 @@ export default function LogoWithText({
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                className="mr-3 my-auto ml-auto"
+                className="mr-3  my-auto ml-auto"
                 onClick={() => {
                   toggleSidebar();
                   if (toggled) {
@@ -138,7 +138,7 @@ export default function LogoWithText({
                 />
               </button>
             </TooltipTrigger>
-            <TooltipContent>
+            <TooltipContent className="!border-none">
               {toggled ? `Unpin sidebar` : "Pin sidebar"}
             </TooltipContent>
           </Tooltip>

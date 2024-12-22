@@ -85,3 +85,6 @@ export const TEST_ENV = process.env.TEST_ENV?.toLowerCase() === "true";
 
 export const NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED =
   process.env.NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED?.toLowerCase() === "true";
+
+export const NEXT_PUBLIC_ENABLE_CHROME_EXTENSION =
+  process.env.NEXT_PUBLIC_ENABLE_CHROME_EXTENSION?.toLowerCase() === "true";

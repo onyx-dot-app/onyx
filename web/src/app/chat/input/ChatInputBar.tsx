@@ -32,7 +32,6 @@ import { ChatState } from "../types";
 import UnconfiguredProviderText from "@/components/chat_search/UnconfiguredProviderText";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { XIcon } from "lucide-react";
-import FiltersDisplay from "./FilterDisplay";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -46,7 +45,7 @@ interface ChatInputBarProps {
   setMessage: (message: string) => void;
   stopGenerating: () => void;
   onSubmit: () => void;
-  filterManager: FilterManager;
+  filterManager?: FilterManager;
   llmOverrideManager: LlmOverrideManager;
   chatState: ChatState;
   showDocs: () => void;
@@ -62,9 +61,12 @@ interface ChatInputBarProps {
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   chatSessionId?: string;
   toggleFilters?: () => void;
+  chromSentUrls?: string[];
+  removeChromeSentUrls: (chromSentUrl: string) => void;
 }
 
 export function ChatInputBar({
+  chromSentUrls,
   removeFilters,
   removeDocs,
   openModelSettings,
@@ -75,6 +77,7 @@ export function ChatInputBar({
   setMessage,
   stopGenerating,
   onSubmit,
+  removeChromeSentUrls,
   filterManager,
   llmOverrideManager,
   chatState,
@@ -237,6 +240,28 @@ export function ChatInputBar({
             mx-auto
           "
         >
+          {chromSentUrls &&
+            chromSentUrls.map((url) => (
+              <div className="absolute inset-x-0 top-0 w-fit transform -translate-y-full">
+                <div className="bg-white border border-gray-200 shadow-sm rounded-lg p-2 flex items-center space-x-2 mx-2">
+                  <img
+                    src={`https://www.google.com/s2/favicons?domain=${
+                      new URL(url).hostname
+                    }`}
+                    alt="Website favicon"
+                    className="w-4 h-4"
+                  />
+                  <p className="text-sm font-medium text-gray-700 truncate">
+                    {new URL(url).hostname}
+                  </p>
+                  <XIcon
+                    onClick={() => removeChromeSentUrls(url)}
+                    size={16}
+                    className="text-text-400 hover:text-text-600 ml-auto"
+                  />
+                </div>
+              </div>
+            ))}
           {showSuggestions && assistantTagOptions.length > 0 && (
             <div
               ref={suggestionsRef}
@@ -462,16 +487,6 @@ export function ChatInputBar({
                   onClick={toggleFilters}
                 />
               )}
-              {(filterManager.selectedSources.length > 0 ||
-                filterManager.selectedDocumentSets.length > 0 ||
-                filterManager.selectedTags.length > 0 ||
-                filterManager.timeRange) &&
-                toggleFilters && (
-                  <FiltersDisplay
-                    filterManager={filterManager}
-                    toggleFilters={toggleFilters}
-                  />
-                )}
             </div>
 
             <div className="absolute bottom-2.5 mobile:right-4 desktop:right-10">

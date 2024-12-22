@@ -33,6 +33,7 @@ export function AssistantIcon({
 
   return (
     <CustomTooltip
+      className="hidden lg:block"
       disabled={disableToolip || !assistant.description}
       showTick
       line
