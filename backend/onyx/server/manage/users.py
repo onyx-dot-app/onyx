@@ -163,23 +163,11 @@ def list_accepted_users(
 
 @router.get("/manage/users/invited")
 def list_invited_users(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=1000),
     user: User | None = Depends(current_curator_or_admin_user),
-) -> PaginatedReturn[InvitedUserSnapshot]:
+) -> list[InvitedUserSnapshot]:
     invited_emails = get_invited_users()
 
-    total_count = len(invited_emails)
-    start_idx = (page - 1) * page_size
-    end_idx = start_idx + page_size
-
-    return PaginatedReturn(
-        items=[
-            InvitedUserSnapshot(email=email)
-            for email in invited_emails[start_idx:end_idx]
-        ],
-        total_items=total_count,
-    )
+    return [InvitedUserSnapshot(email=email) for email in invited_emails]
 
 
 @router.get("/manage/users")
