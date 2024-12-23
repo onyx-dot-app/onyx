@@ -64,6 +64,26 @@ export interface User {
   organization_name: string | null;
 }
 
+export interface AllUsersResponse {
+  accepted: User[];
+  invited: User[];
+  slack_users: User[];
+  accepted_pages: number;
+  invited_pages: number;
+  slack_users_pages: number;
+}
+
+export interface AcceptedUserSnapshot {
+  id: string;
+  email: string;
+  role: UserRole;
+  status: UserStatus;
+}
+
+export interface InvitedUserSnapshot {
+  email: string;
+}
+
 export interface MinimalUserSnapshot {
   id: string;
   email: string;

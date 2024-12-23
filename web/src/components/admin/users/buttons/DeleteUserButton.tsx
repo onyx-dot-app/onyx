@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
 
-export const DeleteUserButton = ({
+const DeleteUserButton = ({
   user,
   setPopup,
   mutate,
@@ -59,3 +59,5 @@ export const DeleteUserButton = ({
     </>
   );
 };
+
+export default DeleteUserButton;
