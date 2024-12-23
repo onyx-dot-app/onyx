@@ -84,11 +84,11 @@ Create env vars from secrets
 {{/*
 Switch between internally created postgres host or external host if given
 */}}
-{{- define "onyx-stack.postgresHost" -}}
-{{- if .Values.postgres.enabled }}
+{{- define "onyx-stack.postgresqlHost" -}}
+{{- if .Values.postgresql.enabled }}
 {{ .Release.Name }}-postgresql
 {{- else }}
-{{- .Values.postgres.externalHost }}
+{{- .Values.postgresql.externalHost }}
 {{- end }}
 {{- end }}
 
