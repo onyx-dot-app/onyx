@@ -185,6 +185,25 @@ REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
 
+# Rate limiting for auth endpoints
+
+
+RATE_LIMIT_WINDOW_SECONDS: int | None = None
+_rate_limit_window_seconds_str = os.environ.get("RATE_LIMIT_WINDOW_SECONDS")
+if _rate_limit_window_seconds_str is not None:
+    try:
+        RATE_LIMIT_WINDOW_SECONDS = int(_rate_limit_window_seconds_str)
+    except ValueError:
+        pass
+
+RATE_LIMIT_MAX_REQUESTS: int | None = None
+_rate_limit_max_requests_str = os.environ.get("RATE_LIMIT_MAX_REQUESTS")
+if _rate_limit_max_requests_str is not None:
+    try:
+        RATE_LIMIT_MAX_REQUESTS = int(_rate_limit_max_requests_str)
+    except ValueError:
+        pass
+
 # Used for general redis things
 REDIS_DB_NUMBER = int(os.environ.get("REDIS_DB_NUMBER", 0))
 

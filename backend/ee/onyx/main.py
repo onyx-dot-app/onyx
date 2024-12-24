@@ -41,6 +41,7 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.main import get_application as get_application_base
 from onyx.main import include_router_with_global_prefix_prepended
+from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
@@ -75,6 +76,7 @@ def get_application() -> FastAPI:
             ),
             prefix="/auth/oauth",
             tags=["auth"],
+            dependencies=get_auth_rate_limiters(),
         )
 
         # Need basic auth router for `logout` endpoint
@@ -83,6 +85,7 @@ def get_application() -> FastAPI:
             fastapi_users.get_logout_router(auth_backend),
             prefix="/auth",
             tags=["auth"],
+            dependencies=get_auth_rate_limiters(),
         )
 
     if AUTH_TYPE == AuthType.OIDC:
@@ -98,6 +101,7 @@ def get_application() -> FastAPI:
             ),
             prefix="/auth/oidc",
             tags=["auth"],
+            dependencies=get_auth_rate_limiters(),
         )
 
         # need basic auth router for `logout` endpoint
@@ -106,10 +110,15 @@ def get_application() -> FastAPI:
             fastapi_users.get_auth_router(auth_backend),
             prefix="/auth",
             tags=["auth"],
+            dependencies=get_auth_rate_limiters(),
         )
 
     elif AUTH_TYPE == AuthType.SAML:
-        include_router_with_global_prefix_prepended(application, saml_router)
+        include_router_with_global_prefix_prepended(
+            application,
+            saml_router,
+            dependencies=get_auth_rate_limiters(),
+        )
 
     # RBAC / group access control
     include_router_with_global_prefix_prepended(application, user_group_router)
