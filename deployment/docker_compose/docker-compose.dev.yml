@@ -50,10 +50,6 @@ services:
       - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
       # if set, allows for the use of the token budget system
       - TOKEN_BUDGET_GLOBALLY_ENABLED=${TOKEN_BUDGET_GLOBALLY_ENABLED:-}
-      # Enables the use of bedrock models
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - AWS_REGION_NAME=${AWS_REGION_NAME:-}
       # Query Options
       - DOC_TIME_DECAY=${DOC_TIME_DECAY:-} # Recency Bias for search results, decay at 1 / (1 + DOC_TIME_DECAY * x years)
       - HYBRID_ALPHA=${HYBRID_ALPHA:-} # Hybrid Search Alpha (0 for entirely keyword, 1 for entirely vector)
@@ -100,14 +96,16 @@ services:
       # Chat Configs
       - HARD_DELETE_CHATS=${HARD_DELETE_CHATS:-}
 
+      # Enables the use of bedrock models or IAM Auth
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION_NAME=${AWS_REGION_NAME:-}
+
       # Enterprise Edition only
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
       - API_KEY_HASH_ROUNDS=${API_KEY_HASH_ROUNDS:-}
       # Seeding configuration
       - USE_IAM_AUTH=${USE_IAM_AUTH:-}
-      - AWS_REGION=${AWS_REGION-}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -232,7 +230,7 @@ services:
       # Enterprise Edition stuff
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
       - USE_IAM_AUTH=${USE_IAM_AUTH:-}
-      - AWS_REGION=${AWS_REGION-}
+      - AWS_REGION_NAME=${AWS_REGION_NAME:-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
