@@ -1,4 +1,4 @@
-FROM python:3.11.7-slim-bookworm
+FROM python:3.11.11-slim-bookworm
 # Dockerfile for integration tests
 # Currently needs all dependencies, since the ITs use some of the Onyx
 # backend code.
@@ -16,10 +16,10 @@ RUN apt-get update && \
         zip \
         ca-certificates \
         libgnutls30=3.7.9-2+deb12u3 \
-        libblkid1=2.38.1-5+deb12u1 \
-        libmount1=2.38.1-5+deb12u1 \
-        libsmartcols1=2.38.1-5+deb12u1 \
-        libuuid1=2.38.1-5+deb12u1 \
+        libblkid1=2.38.1-5+deb12u2 \
+        libmount1=2.38.1-5+deb12u2 \
+        libsmartcols1=2.38.1-5+deb12u2 \
+        libuuid1=2.38.1-5+deb12u2 \
         libxmlsec1-dev \
         pkg-config \
         gcc && \
