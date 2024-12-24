@@ -188,7 +188,7 @@ const SignedUpUserTable = ({
 
   const renderUserRoleDropdown = (user: User) => {
     if (user.role === UserRole.SLACK_USER) {
-      return <p>Slack User</p>;
+      return <p className="ml-2">Slack User</p>;
     }
     return (
       <UserRoleDropdown
@@ -267,13 +267,13 @@ const SignedUpUserTable = ({
                 .map((user) => (
                   <TableRow key={user.id}>
                     <TableCell>{user.email}</TableCell>
-                    <TableCell className="w-40">
+                    <TableCell className="w-[180px]">
                       {renderUserRoleDropdown(user)}
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="text-center w-[140px]">
                       <i>{user.status === "live" ? "Active" : "Inactive"}</i>
                     </TableCell>
-                    <TableCell className="flex justify-end">
+                    <TableCell className="text-right w-[200px]">
                       {renderActionButtons(user)}
                     </TableCell>
                   </TableRow>
