@@ -27,13 +27,13 @@ export default async function Page() {
 
   if (!currentUser) {
     if (authTypeMetadata?.authType === "disabled") {
-      return redirect("/");
+      return redirect("/chat");
     }
     return redirect("/auth/login");
   }
 
   if (!authTypeMetadata?.requiresVerification || currentUser.is_verified) {
-    return redirect("/");
+    return redirect("/chat");
   }
 
   return (

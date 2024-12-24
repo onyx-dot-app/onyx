@@ -19,6 +19,7 @@ from PIL import Image
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.users import current_chat_accesssible_user
 from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
 from onyx.chat.chat_utils import create_chat_chain
@@ -145,7 +146,7 @@ def update_chat_session_model(
 def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
-    user: User | None = Depends(current_user),
+    user: User | None = Depends(current_chat_accesssible_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionDetailResponse:
     user_id = user.id if user is not None else None
@@ -200,7 +201,7 @@ def get_chat_session(
 @router.post("/create-chat-session")
 def create_new_chat_session(
     chat_session_creation_request: ChatSessionCreationRequest,
-    user: User | None = Depends(current_limited_user),
+    user: User | None = Depends(current_chat_accesssible_user),
     db_session: Session = Depends(get_session),
 ) -> CreateChatSessionID:
     user_id = user.id if user is not None else None
@@ -333,7 +334,7 @@ async def is_connected(request: Request) -> Callable[[], bool]:
 def handle_new_chat_message(
     chat_message_req: CreateChatMessageRequest,
     request: Request,
-    user: User | None = Depends(current_limited_user),
+    user: User | None = Depends(current_chat_accesssible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     is_connected_func: Callable[[], bool] = Depends(is_connected),
     tenant_id: str = Depends(get_current_tenant_id),

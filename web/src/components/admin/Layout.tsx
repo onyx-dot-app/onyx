@@ -35,7 +35,7 @@ export async function Layout({ children }: { children: React.ReactNode }) {
       return redirect("/auth/login");
     }
     if (user.role === UserRole.BASIC) {
-      return redirect("/");
+      return redirect("/chat");
     }
     if (!user.is_verified && requiresVerification) {
       return redirect("/auth/waiting-on-verification");

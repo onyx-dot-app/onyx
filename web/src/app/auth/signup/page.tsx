@@ -13,7 +13,6 @@ import Link from "next/link";
 import { SignInButton } from "../login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
-import { Separator } from "@/components/ui/separator";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -39,13 +38,13 @@ const Page = async (props: {
 
   // simply take the user to the home page if Auth is disabled
   if (authTypeMetadata?.authType === "disabled") {
-    return redirect("/");
+    return redirect("/chat");
   }
 
   // if user is already logged in, take them to the main app page
-  if (currentUser && currentUser.is_active) {
+  if (currentUser && currentUser.is_active && !currentUser.is_anonymous_user) {
     if (!authTypeMetadata?.requiresVerification || currentUser.is_verified) {
-      return redirect("/");
+      return redirect("/chat");
     }
     return redirect("/auth/waiting-on-verification");
   }
@@ -53,7 +52,7 @@ const Page = async (props: {
 
   // only enable this page if basic login is enabled
   if (authTypeMetadata?.authType !== "basic" && !cloud) {
-    return redirect("/");
+    return redirect("/chat");
   }
 
   let authUrl: string | null = null;
@@ -62,7 +61,7 @@ const Page = async (props: {
   }
 
   return (
-    <AuthFlowContainer>
+    <AuthFlowContainer authState="signup">
       <HealthCheckBanner />
 
       <>
@@ -95,21 +94,6 @@ const Page = async (props: {
             shouldVerify={authTypeMetadata?.requiresVerification}
             nextUrl={nextUrl}
           />
-
-          <div className="flex">
-            <Text className="mt-4 mx-auto">
-              Already have an account?{" "}
-              <Link
-                href={{
-                  pathname: "/auth/login",
-                  query: { ...searchParams },
-                }}
-                className="text-link font-medium"
-              >
-                Log In
-              </Link>
-            </Text>
-          </div>
         </div>
       </>
     </AuthFlowContainer>
