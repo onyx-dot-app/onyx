@@ -37,22 +37,22 @@ class CitationResponseHandler(AnswerResponseHandler):
     def __init__(
         self,
         context_docs: list[LlmDoc],
-        doc_id_to_rank_map: DocumentIdOrderMapping,
-        display_doc_order_dict: dict[str, int],
+        final_doc_id_to_rank_map: DocumentIdOrderMapping,
+        display_doc_id_to_rank_map: DocumentIdOrderMapping,
     ):
         self.context_docs = context_docs
-        self.doc_id_to_rank_map = doc_id_to_rank_map
-        self.display_doc_order_dict = display_doc_order_dict
+        self.final_doc_id_to_rank_map = final_doc_id_to_rank_map
+        self.display_doc_id_to_rank_map = display_doc_id_to_rank_map
         self.citation_processor = CitationProcessor(
             context_docs=self.context_docs,
-            doc_id_to_rank_map=self.doc_id_to_rank_map,
-            display_doc_order_dict=self.display_doc_order_dict,
+            final_doc_id_to_rank_map=self.final_doc_id_to_rank_map,
+            display_doc_id_to_rank_map=self.display_doc_id_to_rank_map,
         )
         self.processed_text = ""
         self.citations: list[CitationInfo] = []
 
         # TODO remove this after citation issue is resolved
-        logger.debug(f"Document to ranking map {self.doc_id_to_rank_map}")
+        logger.debug(f"Document to ranking map {self.final_doc_id_to_rank_map}")
 
     def handle_response_part(
         self,
