@@ -51,7 +51,7 @@ import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
 import {
   EE_ENABLED,
   NEXT_PUBLIC_CLOUD_ENABLED,
-  TEST_ENV,
+  NEXT_PUBLIC_TEST_ENV,
 } from "@/lib/constants";
 import TemporaryLoadingModal from "@/components/TemporaryLoadingModal";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
@@ -131,7 +131,7 @@ export default function AddConnector({
       setCurrentPageUrl(window.location.href);
     }
 
-    if (EE_ENABLED && (NEXT_PUBLIC_CLOUD_ENABLED || TEST_ENV)) {
+    if (EE_ENABLED && (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV)) {
       const sourceMetadata = getSourceMetadata(connector);
       if (sourceMetadata?.oauthSupported == true) {
         setIsAuthorizeVisible(true);
@@ -473,7 +473,8 @@ export default function AddConnector({
                         </button>
                         {/* Button to sign in via OAuth */}
                         {oauthSupportedSources.includes(connector) &&
-                          NEXT_PUBLIC_CLOUD_ENABLED && (
+                          (NEXT_PUBLIC_CLOUD_ENABLED ||
+                            NEXT_PUBLIC_TEST_ENV) && (
                             <button
                               onClick={handleAuthorize}
                               className="mt-6 text-sm bg-blue-500 px-2 py-1.5 flex text-text-200 flex-none rounded"
