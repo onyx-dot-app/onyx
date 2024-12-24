@@ -14,10 +14,9 @@ from typing import IO
 
 import chardet
 import docx  # type: ignore
-import openpyxl  # type: ignore
 import pptx  # type: ignore
-from docx import Document
 from fastapi import UploadFile
+from markitdown import MarkItDown  # type: ignore
 from pypdf import PdfReader
 from pypdf.errors import PdfStreamError
 
@@ -60,6 +59,9 @@ VALID_FILE_EXTENSIONS = PLAIN_TEXT_FILE_EXTENSIONS + [
     ".html",
 ]
 
+# These are the file extensions that we use markitdown for
+MARKITDOWN_FILE_EXTENSIONS = [".docx", ".pptx", ".xlsx"]
+
 
 def is_text_file_extension(file_name: str) -> bool:
     return any(file_name.endswith(ext) for ext in PLAIN_TEXT_FILE_EXTENSIONS)
@@ -72,6 +74,10 @@ def get_file_ext(file_path_or_name: str | Path) -> str:
 
 def is_valid_file_ext(ext: str) -> bool:
     return ext in VALID_FILE_EXTENSIONS
+
+
+def is_markitdown_file_ext(ext: str) -> bool:
+    return ext in MARKITDOWN_FILE_EXTENSIONS
 
 
 def is_text_file(file: IO[bytes]) -> bool:
@@ -185,13 +191,6 @@ def read_text_file(
     return file_content_raw, metadata
 
 
-def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
-    """Extract text from a PDF file."""
-    # Return only the extracted text from read_pdf_file
-    text, _ = read_pdf_file(file, pdf_pass)
-    return text
-
-
 def read_pdf_file(
     file: IO[Any],
     pdf_pass: str | None = None,
@@ -299,16 +298,11 @@ def pptx_to_text(file: IO[Any]) -> str:
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
-def xlsx_to_text(file: IO[Any]) -> str:
-    workbook = openpyxl.load_workbook(file, read_only=True)
-    text_content = []
-    for sheet in workbook.worksheets:
-        sheet_string = "\n".join(
-            ",".join(map(str, row))
-            for row in sheet.iter_rows(min_row=1, values_only=True)
-        )
-        text_content.append(sheet_string)
-    return TEXT_SECTION_SEPARATOR.join(text_content)
+def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
+    """Extract text from a PDF file."""
+    # Return only the extracted text from read_pdf_file
+    text, _ = read_pdf_file(file, pdf_pass)
+    return text
 
 
 def eml_to_text(file: IO[Any]) -> str:
@@ -346,9 +340,6 @@ def extract_file_text(
 ) -> str:
     extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
         ".pdf": pdf_to_text,
-        ".docx": docx_to_text,
-        ".pptx": pptx_to_text,
-        ".xlsx": xlsx_to_text,
         ".eml": eml_to_text,
         ".epub": epub_to_text,
         ".html": parse_html_page_basic,
@@ -358,6 +349,8 @@ def extract_file_text(
         if get_unstructured_api_key():
             return unstructured_to_text(file, file_name)
 
+        md = MarkItDown()
+
         if file_name or extension:
             if extension is not None:
                 final_extension = extension
@@ -365,6 +358,12 @@ def extract_file_text(
                 final_extension = get_file_ext(file_name)
 
             if is_valid_file_ext(final_extension):
+                if is_markitdown_file_ext(final_extension):
+                    with BytesIO(file.read()) as file_like_object:
+                        result = md.convert_stream(
+                            file_like_object, file_extension=final_extension
+                        )
+                    return result.text_content
                 return extension_to_function.get(final_extension, file_io_to_text)(file)
 
         # Either the file somehow has no name or the extension is not one that we recognize
@@ -382,29 +381,37 @@ def extract_file_text(
         return ""
 
 
-def convert_docx_to_txt(
+def convert_docx_to_markdown(
     file: UploadFile, file_store: FileStore, file_path: str
 ) -> None:
-    file.file.seek(0)
-    docx_content = file.file.read()
-    doc = Document(BytesIO(docx_content))
+    try:
+        # Read the file content
+        file_content = file.file.read()
 
-    # Extract text from the document
-    full_text = []
-    for para in doc.paragraphs:
-        full_text.append(para.text)
+        if not file_content:
+            raise ValueError(f"File {file.filename} is empty")
 
-    # Join the extracted text
-    text_content = "\n".join(full_text)
+        # Reset the file pointer to the beginning
+        file.file.seek(0)
 
-    txt_file_path = docx_to_txt_filename(file_path)
-    file_store.save_file(
-        file_name=txt_file_path,
-        content=BytesIO(text_content.encode("utf-8")),
-        display_name=file.filename,
-        file_origin=FileOrigin.CONNECTOR,
-        file_type="text/plain",
-    )
+        text_content = extract_file_text(
+            file=file.file, file_name=file.filename or "", extension=".docx"
+        )
+
+        if not text_content:
+            raise ValueError(f"Failed to extract text from {file.filename}")
+
+        txt_file_path = docx_to_txt_filename(file_path)
+        file_store.save_file(
+            file_name=txt_file_path,
+            content=BytesIO(text_content.encode("utf-8")),
+            display_name=file.filename,
+            file_origin=FileOrigin.CONNECTOR,
+            file_type="text/plain",
+        )
+    except Exception as e:
+        logger.error(f"Error converting DOCX to Markdown: {str(e)}")
+        raise RuntimeError(f"Failed to process file {file.filename}: {str(e)}") from e
 
 
 def docx_to_txt_filename(file_path: str) -> str:

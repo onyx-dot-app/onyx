@@ -6,6 +6,7 @@ import {
 } from "@/app/chat/message/MemoizedTextComponents";
 import React, { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypePrism from "rehype-prism-plus";
 import remarkGfm from "remark-gfm";
 
 interface MinimalMarkdownProps {
@@ -35,9 +36,10 @@ export const MinimalMarkdown: React.FC<MinimalMarkdownProps> = ({
 
   return (
     <ReactMarkdown
-      className={`w-full text-wrap break-word ${className}`}
+      className={`prose max-w-full text-base ${className}`}
       components={markdownComponents}
       remarkPlugins={[remarkGfm]}
+      rehypePlugins={[[rehypePrism, { ignoreMissing: true }]]}
     >
       {content}
     </ReactMarkdown>
