@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import {
   ArrayHelpers,
+  ErrorMessage,
+  Field,
   FieldArray,
   Form,
   Formik,
@@ -26,6 +28,7 @@ import {
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { getDisplayNameForModel, useCategories } from "@/lib/hooks";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
+import { Option } from "@/components/Dropdown";
 import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
 import { checkLLMSupportsImageInput, destructureValue } from "@/lib/llm/utils";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
@@ -42,6 +45,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { FiInfo, FiRefreshCcw } from "react-icons/fi";
 import * as Yup from "yup";
+import { FullLLMProvider } from "../configuration/llm/interfaces";
 import CollapsibleSection from "./CollapsibleSection";
 import { SuccessfulPersonaUpdateRedirectType } from "./enums";
 import { Persona, PersonaCategory, StarterMessage } from "./interfaces";
@@ -290,6 +294,8 @@ export function AssistantEditor({
   );
 
   const [isRequestSuccessful, setIsRequestSuccessful] = useState(false);
+
+    const noop = () => {};
 
   return (
     <div>
@@ -770,6 +776,7 @@ export function AssistantEditor({
                           setFieldValue("llm_model_provider_override", null);
                         }
                       }}
+                        onClose={noop}
                     />
                   </div>
                 )}

@@ -208,6 +208,7 @@ const AssistantSelector = ({
                   updateModelOverrideForChatSession(chatSessionId, value);
                 }
               }}
+                onClose={() => setIsOpen(false)}
             />
             <div className="mt-4">
               <button
