@@ -60,7 +60,9 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
     logger.info(f"Multiprocessing start method: {multiprocessing.get_start_method()}")
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_INDEXING_APP_NAME)
-    SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=sender.concurrency)
+    SqlEngine.init_engine(
+        pool_size=sender.concurrency, max_overflow=sender.concurrency * 2
+    )
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
