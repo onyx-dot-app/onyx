@@ -1,0 +1,12 @@
+{
+  "Index": {
+    "title": "Welcome to Onyx",
+    "description": "A powerful and modern platform"
+  },
+  "Common": {
+    "loading": "Loading...",
+    "error": "An error has occurred",
+    "save": "Save",
+    "cancel": "Cancel"
+  }
+} 
