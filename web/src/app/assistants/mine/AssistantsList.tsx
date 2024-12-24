@@ -6,6 +6,7 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
+  FiBarChart,
   FiEdit2,
   FiList,
   FiMinus,
@@ -59,6 +60,7 @@ import { MakePublicAssistantModal } from "@/app/chat/modal/MakePublicAssistantMo
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { useUser } from "@/components/user/UserProvider";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 function DraggableAssistantListItem({ ...props }: any) {
   const {
@@ -116,7 +118,9 @@ function AssistantListItem({
   const router = useRouter();
   const [showSharingModal, setShowSharingModal] = useState(false);
 
+  const isEnterpriseEnabled = usePaidEnterpriseFeaturesEnabled();
   const isOwnedByUser = checkUserOwnsAssistant(user, assistant);
+  const { isAdmin } = useUser();
 
   return (
     <>
@@ -243,6 +247,18 @@ function AssistantListItem({
                     <FiPlus size={18} className="text-text-800" /> Add
                   </button>
                 ),
+
+                (isOwnedByUser || isAdmin) && isEnterpriseEnabled ? (
+                  <button
+                    key="view-stats"
+                    className="flex items-center gap-x-2 px-4 py-2 hover:bg-gray-100 w-full text-left"
+                    onClick={() =>
+                      router.push(`/assistants/stats/${assistant.id}`)
+                    }
+                  >
+                    <FiBarChart size={18} /> View Stats
+                  </button>
+                ) : null,
                 isOwnedByUser ? (
                   <button
                     key="delete"
@@ -373,7 +389,6 @@ export function AssistantsList() {
           }}
         />
       )}
-
       {makePublicPersona && (
         <MakePublicAssistantModal
           isPublic={makePublicPersona.is_public}
