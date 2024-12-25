@@ -44,7 +44,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         requested_objects: list[str] = [],
     ) -> None:
         self.batch_size = batch_size
-        self.sf_client: Salesforce | None = None
+        self._sf_client: Salesforce | None = None
         self.parent_object_list = (
             [obj.capitalize() for obj in requested_objects]
             if requested_objects
@@ -52,25 +52,26 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self.sf_client = Salesforce(
+        self._sf_client = Salesforce(
             username=credentials["sf_username"],
             password=credentials["sf_password"],
             security_token=credentials["sf_security_token"],
         )
-
         return None
 
-    def _get_sf_type_object_json(self, type_name: str) -> Any:
-        if self.sf_client is None:
+    @property
+    def sf_client(self) -> Salesforce:
+        if self._sf_client is None:
             raise ConnectorMissingCredentialError("Salesforce")
+        return self._sf_client
+
+    def _get_sf_type_object_json(self, type_name: str) -> Any:
         sf_object = SFType(
             type_name, self.sf_client.session_id, self.sf_client.sf_instance
         )
         return sf_object.describe()
 
     def _get_name_from_id(self, id: str) -> str:
-        if self.sf_client is None:
-            raise ConnectorMissingCredentialError("Salesforce")
         try:
             user_object_info = self.sf_client.query(
                 f"SELECT Name FROM User WHERE Id = '{id}'"
@@ -84,9 +85,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     def _convert_object_instance_to_document(
         self, object_dict: dict[str, Any]
     ) -> Document:
-        if self.sf_client is None:
-            raise ConnectorMissingCredentialError("Salesforce")
-
         salesforce_id = object_dict["Id"]
         onyx_salesforce_id = f"{ID_PREFIX}{salesforce_id}"
         extracted_link = f"https://{self.sf_client.sf_instance}/{salesforce_id}"
@@ -111,9 +109,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         return doc
 
     def _is_valid_child_object(self, child_relationship: dict) -> bool:
-        if self.sf_client is None:
-            raise ConnectorMissingCredentialError("Salesforce")
-
         if not child_relationship["childSObject"]:
             return False
         if not child_relationship["relationshipName"]:
@@ -142,9 +137,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         return True
 
     def _get_all_children_of_sf_type(self, sf_type: str) -> list[dict]:
-        if self.sf_client is None:
-            raise ConnectorMissingCredentialError("Salesforce")
-
         object_description = self._get_sf_type_object_json(sf_type)
 
         children_objects: list[dict] = []
@@ -159,9 +151,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         return children_objects
 
     def _get_all_fields_for_sf_type(self, sf_type: str) -> list[str]:
-        if self.sf_client is None:
-            raise ConnectorMissingCredentialError("Salesforce")
-
         object_description = self._get_sf_type_object_json(sf_type)
 
         fields = [
@@ -204,9 +193,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         start: datetime | None = None,
         end: datetime | None = None,
     ) -> GenerateDocumentsOutput:
-        if self.sf_client is None:
-            raise ConnectorMissingCredentialError("Salesforce")
-
         doc_batch: list[Document] = []
         for parent_object_type in self.parent_object_list:
             logger.debug(f"Processing: {parent_object_type}")
@@ -245,8 +231,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
-        if self.sf_client is None:
-            raise ConnectorMissingCredentialError("Salesforce")
         start_datetime = datetime.utcfromtimestamp(start)
         end_datetime = datetime.utcfromtimestamp(end)
         return self._fetch_from_salesforce(start=start_datetime, end=end_datetime)
@@ -256,8 +240,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateSlimDocumentOutput:
-        if self.sf_client is None:
-            raise ConnectorMissingCredentialError("Salesforce")
         doc_metadata_list: list[SlimDocument] = []
         for parent_object_type in self.parent_object_list:
             query = f"SELECT Id FROM {parent_object_type}"
