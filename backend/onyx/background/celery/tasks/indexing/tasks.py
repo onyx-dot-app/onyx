@@ -109,7 +109,7 @@ class IndexingCallback(IndexingHeartbeatInterface):
             try:
                 # this is unintuitive, but it checks if the parent pid is still running
                 os.kill(self.parent_pid, 0)
-            except ProcessLookupError:
+            except Exception:
                 logger.exception("IndexingCallback - parent pid check exceptioned")
                 raise
             self.last_parent_check = now
@@ -807,23 +807,26 @@ def connector_indexing_proxy_task(
 
         # if the job is done, clean up and break
         if job.done():
-            if job.status == "error":
-                ignore_exitcode = False
+            try:
+                if job.status == "error":
+                    ignore_exitcode = False
 
-                exit_code: int | None = None
-                if job.process:
-                    exit_code = job.process.exitcode
+                    exit_code: int | None = None
+                    if job.process:
+                        exit_code = job.process.exitcode
 
-                # seeing odd behavior where spawned tasks usually return exit code 1 in the cloud,
-                # even though logging clearly indicates that they completed successfully
-                # to work around this, we ignore the job error state if the completion signal is OK
-                status_int = redis_connector_index.get_completion()
-                if status_int:
-                    status_enum = HTTPStatus(status_int)
-                    if status_enum == HTTPStatus.OK:
-                        ignore_exitcode = True
+                    # seeing odd behavior where spawned tasks usually return exit code 1 in the cloud,
+                    # even though logging clearly indicates successful completion
+                    # to work around this, we ignore the job error state if the completion signal is OK
+                    status_int = redis_connector_index.get_completion()
+                    if status_int:
+                        status_enum = HTTPStatus(status_int)
+                        if status_enum == HTTPStatus.OK:
+                            ignore_exitcode = True
 
-                if ignore_exitcode:
+                    if not ignore_exitcode:
+                        raise RuntimeError("Spawned task exceptioned.")
+
                     task_logger.warning(
                         "Indexing watchdog - spawned task has non-zero exit code "
                         "but completion signal is OK. Continuing...: "
@@ -833,18 +836,21 @@ def connector_indexing_proxy_task(
                         f"search_settings={search_settings_id} "
                         f"exit_code={exit_code}"
                     )
-                else:
-                    task_logger.error(
-                        "Indexing watchdog - spawned task exceptioned: "
-                        f"attempt={index_attempt_id} "
-                        f"tenant={tenant_id} "
-                        f"cc_pair={cc_pair_id} "
-                        f"search_settings={search_settings_id} "
-                        f"exit_code={exit_code} "
-                        f"error={job.exception()}"
-                    )
+            except Exception:
+                task_logger.error(
+                    "Indexing watchdog - spawned task exceptioned: "
+                    f"attempt={index_attempt_id} "
+                    f"tenant={tenant_id} "
+                    f"cc_pair={cc_pair_id} "
+                    f"search_settings={search_settings_id} "
+                    f"exit_code={exit_code} "
+                    f"error={job.exception()}"
+                )
 
-            job.release()
+                raise
+            finally:
+                job.release()
+
             break
 
         # if a termination signal is detected, clean up and break
@@ -916,7 +922,6 @@ def connector_indexing_task_wrapper(
     search_settings_id: int,
     tenant_id: str | None,
     is_ee: bool,
-    parent_pid: int,
 ) -> int | None:
     """Just wraps connector_indexing_task so we can log any exceptions before
     re-raising it."""
@@ -929,7 +934,6 @@ def connector_indexing_task_wrapper(
             search_settings_id,
             tenant_id,
             is_ee,
-            parent_pid,
         )
     except Exception:
         logger.exception(
@@ -952,7 +956,6 @@ def connector_indexing_task(
     search_settings_id: int,
     tenant_id: str | None,
     is_ee: bool,
-    parent_pid: int,
 ) -> int | None:
     """Indexing task. For a cc pair, this task pulls all document IDs from the source
     and compares those IDs to locally stored documents and deletes all locally stored IDs missing

@@ -92,7 +92,7 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
 def check_for_doc_permissions_sync(self: Task, *, tenant_id: str | None) -> None:
     r = get_redis_client(tenant_id=tenant_id)
 
-    lock_beat = r.lock(
+    lock_beat: RedisLock = r.lock(
         OnyxRedisLocks.CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK,
         timeout=CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
     )
