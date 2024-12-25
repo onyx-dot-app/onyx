@@ -1,7 +1,7 @@
 import os
 from collections.abc import Iterator
 from datetime import datetime
-from datetime import timezone
+from datetime import UTC
 from typing import Any
 
 from simple_salesforce import Salesforce
@@ -21,7 +21,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
-from onyx.connectors.salesforce.utils import extract_dict_text
+from onyx.connectors.salesforce.doc_conversion import extract_dict_text
 from onyx.utils.logger import setup_logger
 
 
@@ -35,6 +35,19 @@ MAX_QUERY_LENGTH = 10000  # max query length is 20,000 characters
 ID_PREFIX = "SALESFORCE_"
 
 logger = setup_logger()
+
+
+def _build_time_filter_for_salesforce(
+    start: SecondsSinceUnixEpoch | None, end: SecondsSinceUnixEpoch | None
+) -> str:
+    if start is None or end is None:
+        return ""
+    start_datetime = datetime.fromtimestamp(start, UTC)
+    end_datetime = datetime.fromtimestamp(end, UTC)
+    return (
+        f" WHERE LastModifiedDate > {start_datetime.isoformat()} "
+        f"AND LastModifiedDate < {end_datetime.isoformat()}"
+    )
 
 
 class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
@@ -190,24 +203,21 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
     def _fetch_from_salesforce(
         self,
-        start: datetime | None = None,
-        end: datetime | None = None,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateDocumentsOutput:
+        time_filter_query = _build_time_filter_for_salesforce(start, end)
+
         doc_batch: list[Document] = []
         for parent_object_type in self.parent_object_list:
             logger.debug(f"Processing: {parent_object_type}")
 
-            query_results: dict = {}
+            # This contains the dictionaries describing the top level
+            # objects with the object id as the key
+            query_results: dict[str, dict] = {}
+            # loop over all queries and build the query_results dictionary
             for query in self._generate_query_per_parent_type(parent_object_type):
-                if start is not None and end is not None:
-                    if start and start.tzinfo is None:
-                        start = start.replace(tzinfo=timezone.utc)
-                    if end and end.tzinfo is None:
-                        end = end.replace(tzinfo=timezone.utc)
-                    query += f" WHERE LastModifiedDate > {start.isoformat()} AND LastModifiedDate < {end.isoformat()}"
-
-                query_result = self.sf_client.query_all(query)
-
+                query_result = self.sf_client.query_all(query + time_filter_query)
                 for record_dict in query_result["records"]:
                     query_results.setdefault(record_dict["Id"], {}).update(record_dict)
 
@@ -215,6 +225,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 f"Number of {parent_object_type} Objects processed: {len(query_results)}"
             )
 
+            # loop over all the top level object dictionaries and convert them to documents
             for combined_object_dict in query_results.values():
                 doc_batch.append(
                     self._convert_object_instance_to_document(combined_object_dict)
@@ -231,9 +242,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
-        start_datetime = datetime.utcfromtimestamp(start)
-        end_datetime = datetime.utcfromtimestamp(end)
-        return self._fetch_from_salesforce(start=start_datetime, end=end_datetime)
+        return self._fetch_from_salesforce(start=start, end=end)
 
     def retrieve_all_slim_documents(
         self,
