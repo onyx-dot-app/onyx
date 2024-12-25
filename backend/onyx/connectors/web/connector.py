@@ -26,15 +26,21 @@ from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
 from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
+from onyx.connectors.models import SlimDocument
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
 
 logger = setup_logger()
+
+_SLIM_BATCH_SIZE = 1000
 
 
 class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
@@ -217,7 +223,7 @@ def _get_datetime_from_last_modified_header(last_modified: str) -> datetime | No
         return None
 
 
-class WebConnector(LoadConnector):
+class WebConnector(LoadConnector, SlimConnector):
     def __init__(
         self,
         base_url: str,  # Can't change this without disrupting existing users
@@ -394,6 +400,110 @@ class WebConnector(LoadConnector):
             if last_error:
                 raise RuntimeError(last_error)
             raise RuntimeError("No valid pages found.")
+
+    def retrieve_all_slim_documents(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        visited_links: set[str] = set()
+        to_visit: list[str] = self.to_visit_list
+
+        if not to_visit:
+            raise ValueError("No URLs to visit")
+
+        base_url = to_visit[0]  # For the recursive case
+        doc_batch: list[SlimDocument] = []
+
+        # Needed to report error
+        at_least_one_doc = False
+        last_error = None
+
+        playwright, context = start_playwright()
+        restart_playwright = False
+        try:
+            while to_visit:
+                current_url = to_visit.pop()
+                if current_url in visited_links:
+                    continue
+                visited_links.add(current_url)
+
+                try:
+                    protected_url_check(current_url)
+                except Exception as e:
+                    last_error = f"Invalid URL {current_url} due to {e}"
+                    logger.warning(last_error)
+                    continue
+
+                logger.info(f"Visiting {current_url}")
+
+                try:
+                    check_internet_connection(current_url)
+                    if restart_playwright:
+                        playwright, context = start_playwright()
+                        restart_playwright = False
+
+                    if current_url.split(".")[-1] == "pdf":
+                        # PDF files are not checked for links
+                        doc_batch.append(
+                            SlimDocument(
+                                id=current_url,
+                            )
+                        )
+                        continue
+                    page = context.new_page()
+                    page_response = page.goto(current_url)
+                    final_page = page.url
+                    if final_page != current_url:
+                        logger.info(f"Redirected to {final_page}")
+                        protected_url_check(final_page)
+                        current_url = final_page
+                        if current_url in visited_links:
+                            logger.info("Redirected page already indexed")
+                            continue
+                        visited_links.add(current_url)
+                    if page_response and str(page_response.status)[0] in ("4", "5"):
+                        last_error = f"Skipped indexing {current_url} due to HTTP {page_response.status} response"
+                        logger.info(last_error)
+                        continue
+                    content = page.content()
+                    soup = BeautifulSoup(content, "html.parser")
+                    if self.recursive:
+                        internal_links = get_internal_links(base_url, current_url, soup)
+                        for link in internal_links:
+                            if link not in visited_links:
+                                to_visit.append(link)
+                    doc_batch.append(
+                        SlimDocument(
+                            id=current_url,
+                        )
+                    )
+                    page.close()
+                except Exception as e:
+                    last_error = f"Failed to fetch '{current_url}': {e}"
+                    logger.exception(last_error)
+                    playwright.stop()
+                    restart_playwright = True
+                    continue
+
+                if len(doc_batch) >= _SLIM_BATCH_SIZE:
+                    playwright.stop()
+                    restart_playwright = True
+                    at_least_one_doc = True
+                    yield doc_batch
+                    doc_batch = []
+
+            if doc_batch:
+                at_least_one_doc = True
+                yield doc_batch
+
+            if not at_least_one_doc:
+                if last_error:
+                    raise RuntimeError(last_error)
+                raise RuntimeError("No valid pages found.")
+        finally:
+            # Ensure playwright is stopped in case of an exception
+            playwright.stop()
 
 
 if __name__ == "__main__":
