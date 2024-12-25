@@ -1,3 +1,5 @@
+import os
+import sys
 import time
 from datetime import datetime
 from datetime import timezone
@@ -71,14 +73,18 @@ logger = setup_logger()
 
 
 class IndexingCallback(IndexingHeartbeatInterface):
+    PARENT_CHECK_INTERVAL = 60
+
     def __init__(
         self,
+        parent_pid: int,
         stop_key: str,
         generator_progress_key: str,
         redis_lock: RedisLock,
         redis_client: Redis,
     ):
         super().__init__()
+        self.parent_pid = parent_pid
         self.redis_lock: RedisLock = redis_lock
         self.stop_key: str = stop_key
         self.generator_progress_key: str = generator_progress_key
@@ -89,12 +95,25 @@ class IndexingCallback(IndexingHeartbeatInterface):
         self.last_tag: str = "IndexingCallback.__init__"
         self.last_lock_reacquire: datetime = datetime.now(timezone.utc)
 
+        self.last_parent_check = time.monotonic()
+
     def should_stop(self) -> bool:
         if self.redis_client.exists(self.stop_key):
             return True
+
         return False
 
     def progress(self, tag: str, amount: int) -> None:
+        now = time.monotonic()
+        if now - self.last_parent_check > IndexingCallback.PARENT_CHECK_INTERVAL:
+            try:
+                # this is unintuitive, but it checks if the parent pid is still running
+                os.kill(self.parent_pid, 0)
+            except ProcessLookupError:
+                logger.exception("IndexingCallback - parent pid check exceptioned")
+                raise
+            self.last_parent_check = now
+
         try:
             self.redis_lock.reacquire()
             self.last_tag = tag
@@ -772,7 +791,6 @@ def connector_indexing_proxy_task(
         return
 
     task_logger.info(
-        f"Indexing proxy - spawn succeeded: attempt={index_attempt_id} "
         f"Indexing watchdog - spawn succeeded: attempt={index_attempt_id} "
         f"cc_pair={cc_pair_id} "
         f"search_settings={search_settings_id}"
@@ -898,6 +916,7 @@ def connector_indexing_task_wrapper(
     search_settings_id: int,
     tenant_id: str | None,
     is_ee: bool,
+    parent_pid: int,
 ) -> int | None:
     """Just wraps connector_indexing_task so we can log any exceptions before
     re-raising it."""
@@ -910,8 +929,9 @@ def connector_indexing_task_wrapper(
             search_settings_id,
             tenant_id,
             is_ee,
+            parent_pid,
         )
-    except:
+    except Exception:
         logger.exception(
             f"connector_indexing_task exceptioned: "
             f"tenant={tenant_id} "
@@ -919,6 +939,8 @@ def connector_indexing_task_wrapper(
             f"cc_pair={cc_pair_id} "
             f"search_settings={search_settings_id}"
         )
+
+        sys.exit(255)
         raise
 
     return result
@@ -930,6 +952,7 @@ def connector_indexing_task(
     search_settings_id: int,
     tenant_id: str | None,
     is_ee: bool,
+    parent_pid: int,
 ) -> int | None:
     """Indexing task. For a cc pair, this task pulls all document IDs from the source
     and compares those IDs to locally stored documents and deletes all locally stored IDs missing
@@ -1032,7 +1055,9 @@ def connector_indexing_task(
     if not acquired:
         logger.warning(
             f"Indexing task already running, exiting...: "
-            f"index_attempt={index_attempt_id} cc_pair={cc_pair_id} search_settings={search_settings_id}"
+            f"index_attempt={index_attempt_id} "
+            f"cc_pair={cc_pair_id} "
+            f"search_settings={search_settings_id}"
         )
         return None
 
@@ -1068,6 +1093,7 @@ def connector_indexing_task(
 
         # define a callback class
         callback = IndexingCallback(
+            os.getppid(),
             redis_connector.stop.fence_key,
             redis_connector_index.generator_progress_key,
             lock,
@@ -1101,8 +1127,19 @@ def connector_indexing_task(
             f"search_settings={search_settings_id}"
         )
         if attempt_found:
-            with get_session_with_tenant(tenant_id) as db_session:
-                mark_attempt_failed(index_attempt_id, db_session, failure_reason=str(e))
+            try:
+                with get_session_with_tenant(tenant_id) as db_session:
+                    mark_attempt_failed(
+                        index_attempt_id, db_session, failure_reason=str(e)
+                    )
+            except Exception:
+                logger.exception(
+                    "Indexing watchdog - transient exception looking up index attempt: "
+                    f"attempt={index_attempt_id} "
+                    f"tenant={tenant_id} "
+                    f"cc_pair={cc_pair_id} "
+                    f"search_settings={search_settings_id}"
+                )
 
         raise e
     finally:
