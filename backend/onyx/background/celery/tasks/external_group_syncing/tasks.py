@@ -97,7 +97,7 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
 def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> None:
     r = get_redis_client(tenant_id=tenant_id)
 
-    lock_beat = r.lock(
+    lock_beat: RedisLock = r.lock(
         OnyxRedisLocks.CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK,
         timeout=CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
     )
@@ -162,7 +162,7 @@ def try_creating_external_group_sync_task(
 
     LOCK_TIMEOUT = 30
 
-    lock = r.lock(
+    lock: RedisLock = r.lock(
         DANSWER_REDIS_FUNCTION_LOCK_PREFIX + "try_generate_external_group_sync_tasks",
         timeout=LOCK_TIMEOUT,
     )

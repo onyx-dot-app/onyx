@@ -1,6 +1,7 @@
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from time import sleep
 from uuid import uuid4
 
 from celery import Celery
@@ -219,6 +220,33 @@ def connector_permission_sync_generator_task(
 
     r = get_redis_client(tenant_id=tenant_id)
 
+    while True:
+        if not redis_connector.permissions.fenced:  # The fence must exist
+            raise ValueError(
+                f"connector_permission_sync_generator_task - fence not found: "
+                f"fence={redis_connector.permissions.fence_key}"
+            )
+
+        payload = redis_connector.permissions.payload  # The payload must exist
+        if not payload:
+            raise ValueError(
+                "connector_permission_sync_generator_task: payload invalid or not found"
+            )
+
+        if payload.celery_task_id is None:
+            logger.info(
+                f"connector_permission_sync_generator_task - Waiting for fence: "
+                f"fence={redis_connector.permissions.fence_key}"
+            )
+            sleep(1)
+            continue
+
+        logger.info(
+            f"connector_permission_sync_generator_task - Fence found, continuing...: "
+            f"fence={redis_connector.permissions.fence_key}"
+        )
+        break
+
     lock: RedisLock = r.lock(
         OnyxRedisLocks.CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX
         + f"_{redis_connector.id}",
@@ -254,8 +282,11 @@ def connector_permission_sync_generator_task(
             if not payload:
                 raise ValueError(f"No fence payload found: cc_pair={cc_pair_id}")
 
-            payload.started = datetime.now(timezone.utc)
-            redis_connector.permissions.set_fence(payload)
+            new_payload = RedisConnectorPermissionSyncPayload(
+                started=datetime.now(timezone.utc),
+                celery_task_id=payload.celery_task_id,
+            )
+            redis_connector.permissions.set_fence(new_payload)
 
             document_external_accesses: list[DocExternalAccess] = doc_sync_func(cc_pair)
 

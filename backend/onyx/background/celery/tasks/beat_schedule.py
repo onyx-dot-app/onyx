@@ -4,6 +4,8 @@ from typing import Any
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 
+BEAT_EXPIRES_DEFAULT = 10 * 60  # 30 minutes
+
 # we set expires because it isn't necessary to queue up these tasks
 # it's only important that they run relatively regularly
 tasks_to_schedule = [
@@ -13,7 +15,7 @@ tasks_to_schedule = [
         "schedule": timedelta(seconds=20),
         "options": {
             "priority": OnyxCeleryPriority.HIGH,
-            "expires": 60,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
     {
@@ -22,7 +24,7 @@ tasks_to_schedule = [
         "schedule": timedelta(seconds=20),
         "options": {
             "priority": OnyxCeleryPriority.HIGH,
-            "expires": 60,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
     {
@@ -31,7 +33,7 @@ tasks_to_schedule = [
         "schedule": timedelta(seconds=15),
         "options": {
             "priority": OnyxCeleryPriority.HIGH,
-            "expires": 60,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
     {
@@ -40,7 +42,7 @@ tasks_to_schedule = [
         "schedule": timedelta(seconds=15),
         "options": {
             "priority": OnyxCeleryPriority.HIGH,
-            "expires": 60,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
     {
@@ -49,7 +51,7 @@ tasks_to_schedule = [
         "schedule": timedelta(seconds=3600),
         "options": {
             "priority": OnyxCeleryPriority.LOWEST,
-            "expires": 60,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
     {
@@ -58,7 +60,7 @@ tasks_to_schedule = [
         "schedule": timedelta(seconds=5),
         "options": {
             "priority": OnyxCeleryPriority.HIGH,
-            "expires": 60,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
     {
@@ -67,7 +69,7 @@ tasks_to_schedule = [
         "schedule": timedelta(seconds=30),
         "options": {
             "priority": OnyxCeleryPriority.HIGH,
-            "expires": 60,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
     {
@@ -76,7 +78,7 @@ tasks_to_schedule = [
         "schedule": timedelta(seconds=20),
         "options": {
             "priority": OnyxCeleryPriority.HIGH,
-            "expires": 60,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
 ]
