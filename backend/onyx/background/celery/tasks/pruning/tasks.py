@@ -1,4 +1,3 @@
-import os
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -284,7 +283,7 @@ def connector_pruning_generator_task(
             )
 
             callback = IndexingCallback(
-                os.getppid(),
+                0,
                 redis_connector.stop.fence_key,
                 redis_connector.prune.generator_progress_key,
                 lock,
