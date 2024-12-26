@@ -121,13 +121,6 @@ class DanswerDiscordClient(Client):
     async def on_ready(self) -> None:
         self.ready.set()
 
-    # async def _fetch_guilds(self) -> list[Guild]:
-    #     return [
-    #         guild
-    #         async for guild in self.fetch_guilds()
-    #         if (self.server_ids is None) or (guild.id in self.server_ids)
-    #     ]
-
     async def _fetch_filtered_channels(self) -> list[TextChannel]:
         filtered_channels: list[TextChannel] = []
 
