@@ -93,6 +93,35 @@ def main_graph_builder() -> StateGraph:
     return graph
 
 
+# from langgraph_sdk import get_client
+
+# client = get_client(url="http://localhost:8000")
+# # Using the graph deployed with the name "agent"
+# assistant_id = "agent"
+# # create thread
+# thread = await client.threads.create()
+# print(thread)
+# # create input
+# input = {
+#     "messages": [
+#         {
+#             "role": "user",
+#             "content": "What's the weather in SF?",
+#         }
+#     ]
+# }
+
+# # stream events
+# async for chunk in client.runs.stream(
+#     thread_id=thread["thread_id"],
+#     assistant_id=assistant_id,
+#     input=input,
+#     stream_mode="events",
+# ):
+#     print(f"Receiving new event of type: {chunk.event}...")
+#     print(chunk.data)
+#     print("\n\n")
+
 if __name__ == "__main__":
     from onyx.db.engine import get_session_context_manager
     from onyx.llm.factory import get_default_llms
@@ -113,9 +142,9 @@ if __name__ == "__main__":
         )
         for thing in compiled_graph.stream(
             input=inputs,
-            # stream_mode="debug",
-            # debug=True,
-            subgraphs=True,
+            stream_mode="messages",
+            # subgraphs=True,
         ):
-            # print(thing)
-            print()
+            print(thing)
+            # print()
+        print("done")
