@@ -82,137 +82,85 @@ def _convert_message_to_document(
     )
 
 
-class DanswerDiscordClient(Client):
-    def __init__(
-        self,
-        channel_names: list[str] | None = None,
-        server_ids: list[int] | None = None,
-        requested_start_date_string: str | None = None,
-        start: datetime | None = None,
-        end: datetime | None = None,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(*args, **kwargs)
+async def _fetch_filtered_channels(
+    discord_client: Client,
+    server_ids: list[int] | None,
+    channel_names: list[str] | None,
+) -> list[TextChannel]:
+    filtered_channels: list[TextChannel] = []
 
-        # parse requested_start_date_string to datetime
-        pull_date: datetime | None = (
-            datetime.strptime(requested_start_date_string, "%Y-%m-%d").replace(
-                tzinfo=timezone.utc
+    for channel in discord_client.get_all_channels():
+        if not channel.permissions_for(channel.guild.me).read_message_history:
+            continue
+        if not isinstance(channel, TextChannel):
+            continue
+        if server_ids and len(server_ids) > 0 and channel.guild.id not in server_ids:
+            continue
+        if channel_names and channel.name not in channel_names:
+            continue
+        filtered_channels.append(channel)
+
+    logger.info(f"Found {len(filtered_channels)} channels for the authenticated user")
+    return filtered_channels
+
+
+async def _fetch_documents_from_channel(
+    channel: TextChannel,
+    start_time: datetime | None,
+    end_time: datetime | None,
+) -> AsyncIterable[Document]:
+    async for channel_message in channel.history(
+        after=start_time,
+        before=end_time,
+    ):
+        # Skip messages that are not the default type
+        if channel_message.type != MessageType.default:
+            continue
+
+        sections: list[Section] = [
+            Section(
+                text=channel_message.content,
+                link=channel_message.jump_url,
             )
-            if requested_start_date_string
-            else None
-        )
+        ]
 
-        # Set start_time to the later of start and pull_date, or whichever is provided
-        self.start_time = (
-            max(filter(None, [start, pull_date])) if start or pull_date else None
-        )
+        yield _convert_message_to_document(channel_message, sections)
 
-        self.end_time: datetime | None = end
-        self.channel_names: list[str] | None = channel_names
-        self.server_ids: list[int] | None = server_ids
-        self.requested_start_date_string: str | None = (
-            requested_start_date_string  # YYYY-MM-DD
-        )
-        self.ready = asyncio.Event()
-        self.done = False
-
-    async def on_ready(self) -> None:
-        self.ready.set()
-
-    async def _fetch_filtered_channels(self) -> list[TextChannel]:
-        filtered_channels: list[TextChannel] = []
-
-        for channel in self.get_all_channels():
-            if not channel.permissions_for(channel.guild.me).read_message_history:
-                continue
-            if not isinstance(channel, TextChannel):
-                continue
-            if (
-                self.server_ids
-                and len(self.server_ids) > 0
-                and channel.guild.id not in self.server_ids
-            ):
-                continue
-            if self.channel_names and channel.name not in self.channel_names:
-                continue
-            filtered_channels.append(channel)
-
-        logger.info(
-            f"Found {len(filtered_channels)} channels for the authenticated user"
-        )
-        return filtered_channels
-
-    async def _fetch_documents_from_channel(
-        self, channel: TextChannel
-    ) -> AsyncIterable[Document]:
-        async for channel_message in channel.history(
-            after=self.start_time,
-            before=self.end_time,
+    for active_thread in channel.threads:
+        async for thread_message in active_thread.history(
+            after=start_time,
+            before=end_time,
         ):
             # Skip messages that are not the default type
-            if channel_message.type != MessageType.default:
+            if thread_message.type != MessageType.default:
                 continue
 
-            sections: list[Section] = [
+            sections = [
                 Section(
-                    text=channel_message.content,
-                    link=channel_message.jump_url,
+                    text=thread_message.content,
+                    link=thread_message.jump_url,
                 )
             ]
 
-            yield _convert_message_to_document(channel_message, sections)
+            yield _convert_message_to_document(thread_message, sections)
 
-        for active_thread in channel.threads:
-            async for thread_message in active_thread.history(
-                after=self.start_time,
-                before=self.end_time,
-            ):
-                # Skip messages that are not the default type
-                if thread_message.type != MessageType.default:
-                    continue
+    async for archived_thread in channel.archived_threads():
+        async for thread_message in archived_thread.history(
+            after=start_time,
+            before=end_time,
+        ):
+            # Skip messages that are not the default type
+            if thread_message.type != MessageType.default:
+                continue
 
-                sections = [
-                    Section(
-                        text=thread_message.content,
-                        link=thread_message.jump_url,
-                    )
-                ]
+            sections = [
+                Section(
+                    text=thread_message.content,
+                    link=thread_message.jump_url,
+                )
+            ]
 
-                yield _convert_message_to_document(thread_message, sections)
-
-        async for archived_thread in channel.archived_threads():
-            async for thread_message in archived_thread.history(
-                after=self.start_time,
-                before=self.end_time,
-            ):
-                # Skip messages that are not the default type
-                if thread_message.type != MessageType.default:
-                    continue
-
-                sections = [
-                    Section(
-                        text=thread_message.content,
-                        link=thread_message.jump_url,
-                    )
-                ]
-
-                yield _convert_message_to_document(thread_message, sections)
-
-    async def fetch_all_documents(self) -> AsyncIterable[Document]:
-        await self.ready.wait()
-        try:
-            filtered_channels: list[TextChannel] = await self._fetch_filtered_channels()
-            for channel in filtered_channels:
-                async for doc in self._fetch_documents_from_channel(channel):
-                    yield doc
-        except Exception as err:
-            logger.error("Something went wrong while fetching all documents", str(err))
-        finally:
-            self.done = True
-            logger.info("Closing the danswer discord client connection")
-            await self.close()
+            yield _convert_message_to_document(thread_message, sections)
 
 
 def _manage_async_retrieval(
@@ -223,25 +171,36 @@ def _manage_async_retrieval(
     channel_names: list[str] | None = None,
     server_ids: list[int] | None = None,
 ) -> Iterable[Document]:
+    # parse requested_start_date_string to datetime
+    pull_date: datetime | None = (
+        datetime.strptime(requested_start_date_string, "%Y-%m-%d").replace(
+            tzinfo=timezone.utc
+        )
+        if requested_start_date_string
+        else None
+    )
+
+    # Set start_time to the later of start and pull_date, or whichever is provided
+    start_time = max(filter(None, [start, pull_date])) if start or pull_date else None
+
+    end_time: datetime | None = end
+
     async def _async_fetch() -> AsyncIterable[Document]:
         intents = Intents.default()
         intents.message_content = True
-        client = DanswerDiscordClient(
-            channel_names=channel_names,
-            server_ids=server_ids,
-            requested_start_date_string=requested_start_date_string,
-            start=start,
-            end=end,
-            intents=intents,
-        )
+        async with Client(intents=intents) as discord_client:
+            asyncio.create_task(discord_client.start(token))
+            await discord_client.wait_until_ready()
 
-        try:
-            asyncio.create_task(client.start(token))
-            async for doc in client.fetch_all_documents():
-                yield doc
-        finally:
-            if not client.is_closed():
-                await client.close()
+            filtered_channels: list[TextChannel] = await _fetch_filtered_channels(
+                discord_client, server_ids=server_ids, channel_names=channel_names
+            )
+
+            for channel in filtered_channels:
+                async for doc in _fetch_documents_from_channel(
+                    channel, start_time=start_time, end_time=end_time
+                ):
+                    yield doc
 
     def run_and_yield() -> Iterable[Document]:
         loop = asyncio.new_event_loop()
