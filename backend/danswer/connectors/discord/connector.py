@@ -7,6 +7,7 @@ from typing import Any
 
 from discord import Client
 from discord.channel import TextChannel
+from discord.channel import Thread
 from discord.enums import MessageType
 from discord.flags import Intents
 from discord.message import Message as DiscordMessage
@@ -52,15 +53,15 @@ def _convert_message_to_document(
     title = ""
 
     # If there is a thread, add more detail to the metadata, title, and semantic identifier
-    if message.thread:
-        # If its a thread, update the metadata, title, and semantic_substring
-        metadata["Thread"] = message.thread.name
-
+    if isinstance(message.channel, Thread):
         # Threads do have a title
-        title = message.thread.name
+        title = message.channel.name
+
+        # If its a thread, update the metadata, title, and semantic_substring
+        metadata["Thread"] = title
 
         # Add more detail to the semantic identifier if available
-        semantic_substring += f" in Thread: {message.thread.name}"
+        semantic_substring += f" in Thread: {title}"
 
     snippet: str = (
         message.content[:_SNIPPET_LENGTH].rstrip() + "..."
@@ -96,7 +97,9 @@ class DanswerDiscordClient(Client):
 
         # parse requested_start_date_string to datetime
         pull_date: datetime | None = (
-            datetime.strptime(requested_start_date_string, "%Y-%m-%d")
+            datetime.strptime(requested_start_date_string, "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
             if requested_start_date_string
             else None
         )
@@ -118,18 +121,30 @@ class DanswerDiscordClient(Client):
     async def on_ready(self) -> None:
         self.ready.set()
 
+    # async def _fetch_guilds(self) -> list[Guild]:
+    #     return [
+    #         guild
+    #         async for guild in self.fetch_guilds()
+    #         if (self.server_ids is None) or (guild.id in self.server_ids)
+    #     ]
+
     async def _fetch_filtered_channels(self) -> list[TextChannel]:
         filtered_channels: list[TextChannel] = []
 
-        async for guild in self.fetch_guilds():
-            if (self.server_ids is None) or (guild.id in self.server_ids):
-                channels = await guild.fetch_channels()
-                for channel in channels:
-                    if not isinstance(channel, TextChannel):
-                        continue
-                    if self.channel_names and channel.name not in self.channel_names:
-                        continue
-                    filtered_channels.append(channel)
+        for channel in self.get_all_channels():
+            if not channel.permissions_for(channel.guild.me).read_message_history:
+                continue
+            if not isinstance(channel, TextChannel):
+                continue
+            if (
+                self.server_ids
+                and len(self.server_ids) > 0
+                and channel.guild.id not in self.server_ids
+            ):
+                continue
+            if self.channel_names and channel.name not in self.channel_names:
+                continue
+            filtered_channels.append(channel)
 
         logger.info(
             f"Found {len(filtered_channels)} channels for the authenticated user"
@@ -147,8 +162,6 @@ class DanswerDiscordClient(Client):
             if channel_message.type != MessageType.default:
                 continue
 
-            # Reset sections for each top level message since each message is a new document
-            # Add the initial message as a section
             sections: list[Section] = [
                 Section(
                     text=channel_message.content,
@@ -156,24 +169,43 @@ class DanswerDiscordClient(Client):
                 )
             ]
 
-            # If there is a thread, add all the messages from the thread to the sections
-            # This is done here because the thread history must be fetched async
-            if channel_message.thread:
-                async for thread_message in channel_message.thread.history(
-                    after=self.start_time,
-                    before=self.end_time,
-                ):
-                    # Skip messages that are not the default type
-                    if thread_message.type != MessageType.default:
-                        continue
-                    sections.append(
-                        Section(
-                            text=thread_message.content,
-                            link=thread_message.jump_url,
-                        )
-                    )
-
             yield _convert_message_to_document(channel_message, sections)
+
+        for active_thread in channel.threads:
+            async for thread_message in active_thread.history(
+                after=self.start_time,
+                before=self.end_time,
+            ):
+                # Skip messages that are not the default type
+                if thread_message.type != MessageType.default:
+                    continue
+
+                sections = [
+                    Section(
+                        text=thread_message.content,
+                        link=thread_message.jump_url,
+                    )
+                ]
+
+                yield _convert_message_to_document(thread_message, sections)
+
+        async for archived_thread in channel.archived_threads():
+            async for thread_message in archived_thread.history(
+                after=self.start_time,
+                before=self.end_time,
+            ):
+                # Skip messages that are not the default type
+                if thread_message.type != MessageType.default:
+                    continue
+
+                sections = [
+                    Section(
+                        text=thread_message.content,
+                        link=thread_message.jump_url,
+                    )
+                ]
+
+                yield _convert_message_to_document(thread_message, sections)
 
     async def fetch_all_documents(self) -> AsyncIterable[Document]:
         await self.ready.wait()
@@ -182,6 +214,8 @@ class DanswerDiscordClient(Client):
             for channel in filtered_channels:
                 async for doc in self._fetch_documents_from_channel(channel):
                     yield doc
+        except Exception as err:
+            logger.error("Something went wrong while fetching all documents", str(err))
         finally:
             self.done = True
             logger.info("Closing the danswer discord client connection")
