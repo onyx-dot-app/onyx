@@ -5,6 +5,9 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
+# Gets a page of users from the db that match the given parameters and then
+# compares that returned page to the list of users passed into the function
+# to verify that the pagination and filtering works as expected.
 def _verify_user_pagination(
     users: list[DATestUser],
     page_size: int = 5,
@@ -13,12 +16,9 @@ def _verify_user_pagination(
     status_filter: UserStatus | None = None,
     user_performing_action: DATestUser | None = None,
 ) -> None:
-    # Gets a page of users from the db that match the given parameters and then
-    # compares that returned page to the list of users passed into the function
-    # to verify that the pagination and filtering works as expected.
     retrieved_users: list[FullUserSnapshot] = []
-    i = 0
-    while i < len(users):
+
+    for i in range(0, len(users), page_size):
         paginated_result = UserManager.get_user_page(
             page=i // page_size + 1,
             page_size=page_size,
@@ -27,7 +27,6 @@ def _verify_user_pagination(
             status_filter=status_filter,
             user_performing_action=user_performing_action,
         )
-        i += page_size
 
         # Verify that the total items is equal to the length of the users list
         assert paginated_result.total_items == len(users)
@@ -36,7 +35,9 @@ def _verify_user_pagination(
         # Add the retrieved users to the list of retrieved users
         retrieved_users.extend(paginated_result.items)
 
+    # Create a set of all the expected emails
     all_expected_emails = set([user.email for user in users])
+    # Create a set of all the retrieved emails
     all_retrieved_emails = set([user.email for user in retrieved_users])
 
     # Verify that the set of retrieved emails is equal to the set of expected emails
@@ -44,8 +45,6 @@ def _verify_user_pagination(
 
 
 def test_user_pagination(reset: None) -> None:
-    all_users: list[DATestUser] = []
-
     # Create an admin user to perform actions
     user_performing_action: DATestUser = UserManager.create(
         name="admin_performing_action",
@@ -97,7 +96,7 @@ def test_user_pagination(reset: None) -> None:
     )
 
     # Combine all the users lists into the all_users list
-    all_users = (
+    all_users: list[DATestUser] = (
         admin_users
         + basic_users
         + global_curators

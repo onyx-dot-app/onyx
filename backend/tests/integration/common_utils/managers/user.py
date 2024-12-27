@@ -225,5 +225,6 @@ class UserManager:
             items=[FullUserSnapshot(**user) for user in data["items"]],
             total_items=data["total_items"],
         )
+        # Verify that the number of items in the page is equal to the page size
         assert len(paginated_result.items) == page_size
         return paginated_result
