@@ -25,6 +25,7 @@ async def setup_limiter() -> None:
 
 
 async def close_limiter() -> None:
+    # This closes the FastAPILimiter connection so we don't leave open connections to Redis.
     await FastAPILimiter.close()
 
 
