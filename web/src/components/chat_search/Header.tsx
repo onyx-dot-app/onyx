@@ -105,11 +105,11 @@ export default function FunctionalHeader({
             />
           </div>
 
-          <div className="absolute  right-0 mobile:top-2 desktop:top-0 flex">
+          <div className="absolute right-0 mobile:top-2 desktop:top-0 flex">
             {setSharingModalVisible && (
               <div
                 onClick={() => setSharingModalVisible(true)}
-                className="mobile:hidden ml-2 my-auto rounded cursor-pointer hover:bg-hover-light"
+                className="mobile:hidden mr-2 my-auto rounded cursor-pointer hover:bg-hover-light"
               >
                 <FiShare2 size="18" />
               </div>
@@ -121,7 +121,7 @@ export default function FunctionalHeader({
               />
             </div>
             <Link
-              className="desktop:hidden my-auto"
+              className="desktop:hidden ml-2 my-auto"
               href={
                 `/${page}` +
                 (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA &&
@@ -130,7 +130,7 @@ export default function FunctionalHeader({
                   : "")
               }
             >
-              <div className="cursor-pointer mr-4 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
+              <div className="cursor-pointer ml-2 mr-4 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
                 <NewChatIcon size={20} />
               </div>
             </Link>

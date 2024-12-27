@@ -3,7 +3,7 @@ from datetime import datetime
 from datetime import timezone
 from http import HTTPStatus
 from time import sleep
-from typing import Any
+from typing import cast
 
 import redis
 import sentry_sdk
@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
+from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.indexing.job_client import SimpleJobClient
 from onyx.background.indexing.run_indexing import run_indexing_entrypoint
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
@@ -100,12 +101,36 @@ class IndexingCallback(IndexingHeartbeatInterface):
             self.last_lock_reacquire = datetime.now(timezone.utc)
         except LockError:
             logger.exception(
-                f"IndexingCallback - lock.reacquire exceptioned. "
+                f"IndexingCallback - lock.reacquire exceptioned: "
                 f"lock_timeout={self.redis_lock.timeout} "
                 f"start={self.started} "
                 f"last_tag={self.last_tag} "
                 f"last_reacquired={self.last_lock_reacquire} "
                 f"now={datetime.now(timezone.utc)}"
+            )
+
+            # diagnostic logging for lock errors
+            name = self.redis_lock.name
+            ttl = self.redis_client.ttl(name)
+            locked = self.redis_lock.locked()
+            owned = self.redis_lock.owned()
+            local_token: str | None = self.redis_lock.local.token  # type: ignore
+
+            remote_token_raw = self.redis_client.get(self.redis_lock.name)
+            if remote_token_raw:
+                remote_token_bytes = cast(bytes, remote_token_raw)
+                remote_token = remote_token_bytes.decode("utf-8")
+            else:
+                remote_token = None
+
+            logger.warning(
+                f"IndexingCallback - lock diagnostics: "
+                f"name={name} "
+                f"locked={locked} "
+                f"owned={owned} "
+                f"local_token={local_token} "
+                f"remote_token={remote_token} "
+                f"ttl={ttl}"
             )
             raise
 
@@ -325,7 +350,6 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
             # tasks can be in the queue in redis, in reserved tasks (prefetched by the worker),
             # or be currently executing
             try:
-                task_logger.info("Validating indexing fences...")
                 validate_indexing_fences(
                     tenant_id, self.app, redis_client, redis_client_celery, lock_beat
                 )
@@ -351,7 +375,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
                 )
 
     time_elapsed = time.monotonic() - time_start
-    task_logger.info(f"check_for_indexing finished: elapsed={time_elapsed:.2f}")
+    task_logger.debug(f"check_for_indexing finished: elapsed={time_elapsed:.2f}")
     return tasks_created
 
 
@@ -362,46 +386,9 @@ def validate_indexing_fences(
     r_celery: Redis,
     lock_beat: RedisLock,
 ) -> None:
-    reserved_indexing_tasks: set[str] = set()
-    active_indexing_tasks: set[str] = set()
-    indexing_worker_names: list[str] = []
-
-    # filter for and create an indexing specific inspect object
-    inspect = celery_app.control.inspect()
-    workers: dict[str, Any] = inspect.ping()  # type: ignore
-    if not workers:
-        raise ValueError("No workers found!")
-
-    for worker_name in list(workers.keys()):
-        if "indexing" in worker_name:
-            indexing_worker_names.append(worker_name)
-
-    if len(indexing_worker_names) == 0:
-        raise ValueError("No indexing workers found!")
-
-    inspect_indexing = celery_app.control.inspect(destination=indexing_worker_names)
-
-    # NOTE: each dict entry is a map of worker name to a list of tasks
-    # we want sets for reserved task and active task id's to optimize
-    # subsequent validation lookups
-
-    # get the list of reserved tasks
-    reserved_tasks: dict[str, list] | None = inspect_indexing.reserved()  # type: ignore
-    if reserved_tasks is None:
-        raise ValueError("inspect_indexing.reserved() returned None!")
-
-    for _, task_list in reserved_tasks.items():
-        for task in task_list:
-            reserved_indexing_tasks.add(task["id"])
-
-    # get the list of active tasks
-    active_tasks: dict[str, list] | None = inspect_indexing.active()  # type: ignore
-    if active_tasks is None:
-        raise ValueError("inspect_indexing.active() returned None!")
-
-    for _, task_list in active_tasks.items():
-        for task in task_list:
-            active_indexing_tasks.add(task["id"])
+    reserved_indexing_tasks = celery_get_unacked_task_ids(
+        OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
+    )
 
     # validate all existing indexing jobs
     for key_bytes in r.scan_iter(RedisConnectorIndex.FENCE_PREFIX + "*"):
@@ -411,7 +398,6 @@ def validate_indexing_fences(
                 tenant_id,
                 key_bytes,
                 reserved_indexing_tasks,
-                active_indexing_tasks,
                 r_celery,
                 db_session,
             )
@@ -422,7 +408,6 @@ def validate_indexing_fence(
     tenant_id: str | None,
     key_bytes: bytes,
     reserved_tasks: set[str],
-    active_tasks: set[str],
     r_celery: Redis,
     db_session: Session,
 ) -> None:
@@ -432,11 +417,15 @@ def validate_indexing_fence(
     gives the help.
 
     How this works:
-    1. Active signal is renewed with a 5 minute TTL
-    1.1 When the fence is created
+    1. This function renews the active signal with a 5 minute TTL under the following conditions
     1.2. When the task is seen in the redis queue
-    1.3. When the task is seen in the reserved or active list for a worker
-    2. The TTL allows us to get through the transitions on fence startup
+    1.3. When the task is seen in the reserved / prefetched list
+
+    2. Externally, the active signal is renewed when:
+    2.1. The fence is created
+    2.2. The indexing watchdog checks the spawned task.
+
+    3. The TTL allows us to get through the transitions on fence startup
     and when the task starts executing.
 
     More TTL clarification: it is seemingly impossible to exactly query Celery for
@@ -464,6 +453,8 @@ def validate_indexing_fence(
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     redis_connector_index = redis_connector.new_index(search_settings_id)
+
+    # check to see if the fence/payload exists
     if not redis_connector_index.fenced:
         return
 
@@ -499,24 +490,24 @@ def validate_indexing_fence(
         redis_connector_index.set_active()
         return
 
-    if payload.celery_task_id in active_tasks:
-        # the celery task is active (aka currently executing)
-        redis_connector_index.set_active()
-        return
-
     # we may want to enable this check if using the active task list somehow isn't good enough
     # if redis_connector_index.generator_locked():
     #     logger.info(f"{payload.celery_task_id} is currently executing.")
 
-    # we didn't find any direct indication that associated celery tasks exist, but they still might be there
-    # due to gaps in our ability to check states during transitions
-    # Rely on the active signal (which has a duration that allows us to bridge those gaps)
+    # if we get here, we didn't find any direct indication that the associated celery tasks exist,
+    # but they still might be there due to gaps in our ability to check states during transitions
+    # Checking the active signal safeguards us against these transition periods
+    # (which has a duration that allows us to bridge those gaps)
     if redis_connector_index.active():
         return
 
     # celery tasks don't exist and the active signal has expired, possibly due to a crash. Clean it up.
     logger.warning(
-        f"validate_indexing_fence - Resetting fence because no associated celery tasks were found: fence={fence_key}"
+        f"validate_indexing_fence - Resetting fence because no associated celery tasks were found: "
+        f"index_attempt={payload.index_attempt_id} "
+        f"cc_pair={cc_pair_id} "
+        f"search_settings={search_settings_id} "
+        f"fence={fence_key}"
     )
     if payload.index_attempt_id:
         try:
@@ -793,6 +784,52 @@ def connector_indexing_proxy_task(
     while True:
         sleep(5)
 
+        # renew active signal
+        redis_connector_index.set_active()
+
+        # if the job is done, clean up and break
+        if job.done():
+            if job.status == "error":
+                ignore_exitcode = False
+
+                exit_code: int | None = None
+                if job.process:
+                    exit_code = job.process.exitcode
+
+                # seeing odd behavior where spawned tasks usually return exit code 1 in the cloud,
+                # even though logging clearly indicates that they completed successfully
+                # to work around this, we ignore the job error state if the completion signal is OK
+                status_int = redis_connector_index.get_completion()
+                if status_int:
+                    status_enum = HTTPStatus(status_int)
+                    if status_enum == HTTPStatus.OK:
+                        ignore_exitcode = True
+
+                if ignore_exitcode:
+                    task_logger.warning(
+                        "Indexing watchdog - spawned task has non-zero exit code "
+                        "but completion signal is OK. Continuing...: "
+                        f"attempt={index_attempt_id} "
+                        f"tenant={tenant_id} "
+                        f"cc_pair={cc_pair_id} "
+                        f"search_settings={search_settings_id} "
+                        f"exit_code={exit_code}"
+                    )
+                else:
+                    task_logger.error(
+                        "Indexing watchdog - spawned task exceptioned: "
+                        f"attempt={index_attempt_id} "
+                        f"tenant={tenant_id} "
+                        f"cc_pair={cc_pair_id} "
+                        f"search_settings={search_settings_id} "
+                        f"exit_code={exit_code} "
+                        f"error={job.exception()}"
+                    )
+
+            job.release()
+            break
+
+        # if a termination signal is detected, clean up and break
         if self.request.id and redis_connector_index.terminating(self.request.id):
             task_logger.warning(
                 "Indexing watchdog - termination signal detected: "
@@ -819,75 +856,33 @@ def connector_indexing_proxy_task(
                     f"search_settings={search_settings_id}"
                 )
 
-                job.cancel()
-
+            job.cancel()
             break
 
-        if not job.done():
-            # if the spawned task is still running, restart the check once again
-            # if the index attempt is not in a finished status
-            try:
-                with get_session_with_tenant(tenant_id) as db_session:
-                    index_attempt = get_index_attempt(
-                        db_session=db_session, index_attempt_id=index_attempt_id
-                    )
-
-                    if not index_attempt:
-                        continue
-
-                    if not index_attempt.is_finished():
-                        continue
-            except Exception:
-                # if the DB exceptioned, just restart the check.
-                # polling the index attempt status doesn't need to be strongly consistent
-                logger.exception(
-                    "Indexing watchdog - transient exception looking up index attempt: "
-                    f"attempt={index_attempt_id} "
-                    f"tenant={tenant_id} "
-                    f"cc_pair={cc_pair_id} "
-                    f"search_settings={search_settings_id}"
-                )
-                continue
-
-        if job.status == "error":
-            ignore_exitcode = False
-
-            exit_code: int | None = None
-            if job.process:
-                exit_code = job.process.exitcode
-
-            # seeing odd behavior where spawned tasks usually return exit code 1 in the cloud,
-            # even though logging clearly indicates that they completed successfully
-            # to work around this, we ignore the job error state if the completion signal is OK
-            status_int = redis_connector_index.get_completion()
-            if status_int:
-                status_enum = HTTPStatus(status_int)
-                if status_enum == HTTPStatus.OK:
-                    ignore_exitcode = True
-
-            if ignore_exitcode:
-                task_logger.warning(
-                    "Indexing watchdog - spawned task has non-zero exit code "
-                    "but completion signal is OK. Continuing...: "
-                    f"attempt={index_attempt_id} "
-                    f"tenant={tenant_id} "
-                    f"cc_pair={cc_pair_id} "
-                    f"search_settings={search_settings_id} "
-                    f"exit_code={exit_code}"
-                )
-            else:
-                task_logger.error(
-                    "Indexing watchdog - spawned task exceptioned: "
-                    f"attempt={index_attempt_id} "
-                    f"tenant={tenant_id} "
-                    f"cc_pair={cc_pair_id} "
-                    f"search_settings={search_settings_id} "
-                    f"exit_code={exit_code} "
-                    f"error={job.exception()}"
+        # if the spawned task is still running, restart the check once again
+        # if the index attempt is not in a finished status
+        try:
+            with get_session_with_tenant(tenant_id) as db_session:
+                index_attempt = get_index_attempt(
+                    db_session=db_session, index_attempt_id=index_attempt_id
                 )
 
-        job.release()
-        break
+                if not index_attempt:
+                    continue
+
+                if not index_attempt.is_finished():
+                    continue
+        except Exception:
+            # if the DB exceptioned, just restart the check.
+            # polling the index attempt status doesn't need to be strongly consistent
+            logger.exception(
+                "Indexing watchdog - transient exception looking up index attempt: "
+                f"attempt={index_attempt_id} "
+                f"tenant={tenant_id} "
+                f"cc_pair={cc_pair_id} "
+                f"search_settings={search_settings_id}"
+            )
+            continue
 
     task_logger.info(
         f"Indexing watchdog - finished: attempt={index_attempt_id} "

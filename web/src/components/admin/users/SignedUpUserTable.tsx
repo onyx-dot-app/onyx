@@ -33,6 +33,9 @@ import {
 
 const ITEMS_PER_PAGE = 10;
 const PAGES_PER_BATCH = 2;
+import { useUser } from "@/components/user/UserProvider";
+import { LeaveOrganizationButton } from "./buttons/LeaveOrganizationButton";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 interface Props {
   invitedUsers: InvitedUserSnapshot[];
@@ -69,6 +72,8 @@ const SignedUpUserTable = ({
     query: q,
     filter: filters,
   });
+
+  const { user: currentUser } = useUser();
 
   if (error) {
     return (
@@ -210,7 +215,13 @@ const SignedUpUserTable = ({
         />
       );
     }
-    return (
+    return NEXT_PUBLIC_CLOUD_ENABLED && user.id === currentUser?.id ? (
+      <LeaveOrganizationButton
+        user={user}
+        setPopup={setPopup}
+        mutate={refresh}
+      />
+    ) : (
       <>
         <DeactivateUserButton
           user={user}

@@ -310,6 +310,9 @@ def associate_default_cc_pair(db_session: Session) -> None:
     if existing_association is not None:
         return
 
+    # DefaultCCPair has id 1 since it is the first CC pair created
+    # It is DEFAULT_CC_PAIR_ID, but can't set it explicitly because it messed with the
+    # auto-incrementing id
     association = ConnectorCredentialPair(
         connector_id=0,
         credential_id=0,
@@ -350,7 +353,12 @@ def add_credential_to_connector(
     last_successful_index_time: datetime | None = None,
 ) -> StatusResponse:
     connector = fetch_connector_by_id(connector_id, db_session)
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id(
+        credential_id,
+        user,
+        db_session,
+        get_editable=False,
+    )
 
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")
@@ -427,7 +435,12 @@ def remove_credential_from_connector(
     db_session: Session,
 ) -> StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id(
+        credential_id,
+        user,
+        db_session,
+        get_editable=False,
+    )
 
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")

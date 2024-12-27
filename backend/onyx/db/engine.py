@@ -1,5 +1,7 @@
 import contextlib
+import os
 import re
+import ssl
 import threading
 import time
 from collections.abc import AsyncGenerator
@@ -10,6 +12,8 @@ from datetime import datetime
 from typing import Any
 from typing import ContextManager
 
+import asyncpg  # type: ignore
+import boto3
 import jwt
 from fastapi import HTTPException
 from fastapi import Request
@@ -23,6 +27,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
+from onyx.configs.app_configs import AWS_REGION
 from onyx.configs.app_configs import LOG_POSTGRES_CONN_COUNTS
 from onyx.configs.app_configs import LOG_POSTGRES_LATENCY
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
@@ -37,6 +42,7 @@ from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
+from onyx.configs.constants import SSL_CERT_FILE
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -49,28 +55,87 @@ logger = setup_logger()
 SYNC_DB_API = "psycopg2"
 ASYNC_DB_API = "asyncpg"
 
-# global so we don't create more than one engine per process
-# outside of being best practice, this is needed so we can properly pool
-# connections and not create a new pool on every request
+USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
+# Global so we don't create more than one engine per process
 _ASYNC_ENGINE: AsyncEngine | None = None
 SessionFactory: sessionmaker[Session] | None = None
 
+
+def create_ssl_context_if_iam() -> ssl.SSLContext | None:
+    """Create an SSL context if IAM authentication is enabled, else return None."""
+    if USE_IAM_AUTH:
+        return ssl.create_default_context(cafile=SSL_CERT_FILE)
+    return None
+
+
+ssl_context = create_ssl_context_if_iam()
+
+
+def get_iam_auth_token(
+    host: str, port: str, user: str, region: str = "us-east-2"
+) -> str:
+    """
+    Generate an IAM authentication token using boto3.
+    """
+    client = boto3.client("rds", region_name=region)
+    token = client.generate_db_auth_token(
+        DBHostname=host, Port=int(port), DBUsername=user
+    )
+    return token
+
+
+def configure_psycopg2_iam_auth(
+    cparams: dict[str, Any], host: str, port: str, user: str, region: str
+) -> None:
+    """
+    Configure cparams for psycopg2 with IAM token and SSL.
+    """
+    token = get_iam_auth_token(host, port, user, region)
+    cparams["password"] = token
+    cparams["sslmode"] = "require"
+    cparams["sslrootcert"] = SSL_CERT_FILE
+
+
+def build_connection_string(
+    *,
+    db_api: str = ASYNC_DB_API,
+    user: str = POSTGRES_USER,
+    password: str = POSTGRES_PASSWORD,
+    host: str = POSTGRES_HOST,
+    port: str = POSTGRES_PORT,
+    db: str = POSTGRES_DB,
+    app_name: str | None = None,
+    use_iam: bool = USE_IAM_AUTH,
+    region: str = "us-west-2",
+) -> str:
+    if use_iam:
+        base_conn_str = f"postgresql+{db_api}://{user}@{host}:{port}/{db}"
+    else:
+        base_conn_str = f"postgresql+{db_api}://{user}:{password}@{host}:{port}/{db}"
+
+    # For asyncpg, do not include application_name in the connection string
+    if app_name and db_api != "asyncpg":
+        if "?" in base_conn_str:
+            return f"{base_conn_str}&application_name={app_name}"
+        else:
+            return f"{base_conn_str}?application_name={app_name}"
+    return base_conn_str
+
+
 if LOG_POSTGRES_LATENCY:
-    # Function to log before query execution
+
     @event.listens_for(Engine, "before_cursor_execute")
     def before_cursor_execute(  # type: ignore
         conn, cursor, statement, parameters, context, executemany
     ):
         conn.info["query_start_time"] = time.time()
 
-    # Function to log after query execution
     @event.listens_for(Engine, "after_cursor_execute")
     def after_cursor_execute(  # type: ignore
         conn, cursor, statement, parameters, context, executemany
     ):
         total_time = time.time() - conn.info["query_start_time"]
-        # don't spam TOO hard
         if total_time > 0.1:
             logger.debug(
                 f"Query Complete: {statement}\n\nTotal Time: {total_time:.4f} seconds"
@@ -78,7 +143,6 @@ if LOG_POSTGRES_LATENCY:
 
 
 if LOG_POSTGRES_CONN_COUNTS:
-    # Global counter for connection checkouts and checkins
     checkout_count = 0
     checkin_count = 0
 
@@ -105,21 +169,13 @@ if LOG_POSTGRES_CONN_COUNTS:
         logger.debug(f"Total connection checkins: {checkin_count}")
 
 
-"""END DEBUGGING LOGGING"""
-
-
 def get_db_current_time(db_session: Session) -> datetime:
-    """Get the current time from Postgres representing the start of the transaction
-    Within the same transaction this value will not update
-    This datetime object returned should be timezone aware, default Postgres timezone is UTC
-    """
     result = db_session.execute(text("SELECT NOW()")).scalar()
     if result is None:
         raise ValueError("Database did not return a time")
     return result
 
 
-# Regular expression to validate schema names to prevent SQL injection
 SCHEMA_NAME_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
@@ -128,16 +184,9 @@ def is_valid_schema_name(name: str) -> bool:
 
 
 class SqlEngine:
-    """Class to manage a global SQLAlchemy engine (needed for proper resource control).
-    Will eventually subsume most of the standalone functions in this file.
-    Sync only for now.
-    """
-
     _engine: Engine | None = None
     _lock: threading.Lock = threading.Lock()
     _app_name: str = POSTGRES_UNKNOWN_APP_NAME
-
-    # Default parameters for engine creation
     DEFAULT_ENGINE_KWARGS = {
         "pool_size": 20,
         "max_overflow": 5,
@@ -145,33 +194,27 @@ class SqlEngine:
         "pool_recycle": POSTGRES_POOL_RECYCLE,
     }
 
-    def __init__(self) -> None:
-        pass
-
     @classmethod
     def _init_engine(cls, **engine_kwargs: Any) -> Engine:
-        """Private helper method to create and return an Engine."""
         connection_string = build_connection_string(
-            db_api=SYNC_DB_API, app_name=cls._app_name + "_sync"
+            db_api=SYNC_DB_API, app_name=cls._app_name + "_sync", use_iam=USE_IAM_AUTH
         )
         merged_kwargs = {**cls.DEFAULT_ENGINE_KWARGS, **engine_kwargs}
-        return create_engine(connection_string, **merged_kwargs)
+        engine = create_engine(connection_string, **merged_kwargs)
+
+        if USE_IAM_AUTH:
+            event.listen(engine, "do_connect", provide_iam_token)
+
+        return engine
 
     @classmethod
     def init_engine(cls, **engine_kwargs: Any) -> None:
-        """Allow the caller to init the engine with extra params. Different clients
-        such as the API server and different Celery workers and tasks
-        need different settings.
-        """
         with cls._lock:
             if not cls._engine:
                 cls._engine = cls._init_engine(**engine_kwargs)
 
     @classmethod
     def get_engine(cls) -> Engine:
-        """Gets the SQLAlchemy engine. Will init a default engine if init hasn't
-        already been called. You probably want to init first!
-        """
         if not cls._engine:
             with cls._lock:
                 if not cls._engine:
@@ -180,12 +223,10 @@ class SqlEngine:
 
     @classmethod
     def set_app_name(cls, app_name: str) -> None:
-        """Class method to set the app name."""
         cls._app_name = app_name
 
     @classmethod
     def get_app_name(cls) -> str:
-        """Class method to get current app name."""
         if not cls._app_name:
             return ""
         return cls._app_name
@@ -217,56 +258,71 @@ def get_all_tenant_ids() -> list[str] | list[None]:
         for tenant in tenant_ids
         if tenant is None or tenant.startswith(TENANT_ID_PREFIX)
     ]
-
     return valid_tenants
-
-
-def build_connection_string(
-    *,
-    db_api: str = ASYNC_DB_API,
-    user: str = POSTGRES_USER,
-    password: str = POSTGRES_PASSWORD,
-    host: str = POSTGRES_HOST,
-    port: str = POSTGRES_PORT,
-    db: str = POSTGRES_DB,
-    app_name: str | None = None,
-) -> str:
-    if app_name:
-        return f"postgresql+{db_api}://{user}:{password}@{host}:{port}/{db}?application_name={app_name}"
-    return f"postgresql+{db_api}://{user}:{password}@{host}:{port}/{db}"
 
 
 def get_sqlalchemy_engine() -> Engine:
     return SqlEngine.get_engine()
 
 
+async def get_async_connection() -> Any:
+    """
+    Custom connection function for async engine when using IAM auth.
+    """
+    host = POSTGRES_HOST
+    port = POSTGRES_PORT
+    user = POSTGRES_USER
+    db = POSTGRES_DB
+    token = get_iam_auth_token(host, port, user, AWS_REGION)
+
+    # asyncpg requires 'ssl="require"' if SSL needed
+    return await asyncpg.connect(
+        user=user, password=token, host=host, port=int(port), database=db, ssl="require"
+    )
+
+
 def get_sqlalchemy_async_engine() -> AsyncEngine:
     global _ASYNC_ENGINE
     if _ASYNC_ENGINE is None:
-        # Underlying asyncpg cannot accept application_name directly in the connection string
-        # https://github.com/MagicStack/asyncpg/issues/798
-        connection_string = build_connection_string()
+        app_name = SqlEngine.get_app_name() + "_async"
+        connection_string = build_connection_string(
+            db_api=ASYNC_DB_API,
+            use_iam=USE_IAM_AUTH,
+        )
+
+        connect_args: dict[str, Any] = {}
+        if app_name:
+            connect_args["server_settings"] = {"application_name": app_name}
+
+        connect_args["ssl"] = ssl_context
+
         _ASYNC_ENGINE = create_async_engine(
             connection_string,
-            connect_args={
-                "server_settings": {
-                    "application_name": SqlEngine.get_app_name() + "_async"
-                }
-            },
-            # async engine is only used by API server, so we can use those values
-            # here as well
+            connect_args=connect_args,
             pool_size=POSTGRES_API_SERVER_POOL_SIZE,
             max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
             pool_pre_ping=POSTGRES_POOL_PRE_PING,
             pool_recycle=POSTGRES_POOL_RECYCLE,
         )
+
+        if USE_IAM_AUTH:
+
+            @event.listens_for(_ASYNC_ENGINE.sync_engine, "do_connect")
+            def provide_iam_token_async(
+                dialect: Any, conn_rec: Any, cargs: Any, cparams: Any
+            ) -> None:
+                # For async engine using asyncpg, we still need to set the IAM token here.
+                host = POSTGRES_HOST
+                port = POSTGRES_PORT
+                user = POSTGRES_USER
+                token = get_iam_auth_token(host, port, user, AWS_REGION)
+                cparams["password"] = token
+                cparams["ssl"] = ssl_context
+
     return _ASYNC_ENGINE
 
 
-# Dependency to get the current tenant ID
-# If no token is present, uses the default schema for this use case
 def get_current_tenant_id(request: Request) -> str:
-    """Dependency that extracts the tenant ID from the JWT token in the request and sets the context variable."""
     if not MULTI_TENANT:
         tenant_id = POSTGRES_DEFAULT_SCHEMA
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
@@ -275,7 +331,6 @@ def get_current_tenant_id(request: Request) -> str:
     token = request.cookies.get("fastapiusersauth")
     if not token:
         current_value = CURRENT_TENANT_ID_CONTEXTVAR.get()
-        # If no token is present, use the default schema or handle accordingly
         return current_value
 
     try:
@@ -289,7 +344,6 @@ def get_current_tenant_id(request: Request) -> str:
         if not is_valid_schema_name(tenant_id):
             raise HTTPException(status_code=400, detail="Invalid tenant ID format")
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-
         return tenant_id
     except jwt.InvalidTokenError:
         return CURRENT_TENANT_ID_CONTEXTVAR.get()
@@ -316,7 +370,6 @@ async def get_async_session_with_tenant(
 
     async with async_session_factory() as session:
         try:
-            # Set the search_path to the tenant's schema
             await session.execute(text(f'SET search_path = "{tenant_id}"'))
             if POSTGRES_IDLE_SESSIONS_TIMEOUT:
                 await session.execute(
@@ -326,8 +379,6 @@ async def get_async_session_with_tenant(
                 )
         except Exception:
             logger.exception("Error setting search_path.")
-            # You can choose to re-raise the exception or handle it
-            # Here, we'll re-raise to prevent proceeding with an incorrect session
             raise
         else:
             yield session
@@ -335,9 +386,6 @@ async def get_async_session_with_tenant(
 
 @contextmanager
 def get_session_with_default_tenant() -> Generator[Session, None, None]:
-    """
-    Get a database session using the current tenant ID from the context variable.
-    """
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     with get_session_with_tenant(tenant_id) as session:
         yield session
@@ -349,7 +397,6 @@ def get_session_with_tenant(
 ) -> Generator[Session, None, None]:
     """
     Generate a database session for a specific tenant.
-
     This function:
     1. Sets the database schema to the specified tenant's schema.
     2. Preserves the tenant ID across the session.
@@ -357,27 +404,20 @@ def get_session_with_tenant(
     4. Uses the default schema if no tenant ID is provided.
     """
     engine = get_sqlalchemy_engine()
-
-    # Store the previous tenant ID
     previous_tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get() or POSTGRES_DEFAULT_SCHEMA
 
     if tenant_id is None:
         tenant_id = POSTGRES_DEFAULT_SCHEMA
 
     CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-
     event.listen(engine, "checkout", set_search_path_on_checkout)
 
     if not is_valid_schema_name(tenant_id):
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
     try:
-        # Establish a raw connection
         with engine.connect() as connection:
-            # Access the raw DBAPI connection and set the search_path
             dbapi_connection = connection.connection
-
-            # Set the search_path outside of any transaction
             cursor = dbapi_connection.cursor()
             try:
                 cursor.execute(f'SET search_path = "{tenant_id}"')
@@ -390,21 +430,17 @@ def get_session_with_tenant(
             finally:
                 cursor.close()
 
-            # Bind the session to the connection
             with Session(bind=connection, expire_on_commit=False) as session:
                 try:
                     yield session
                 finally:
-                    # Reset search_path to default after the session is used
                     if MULTI_TENANT:
                         cursor = dbapi_connection.cursor()
                         try:
                             cursor.execute('SET search_path TO "$user", public')
                         finally:
                             cursor.close()
-
     finally:
-        # Restore the previous tenant ID
         CURRENT_TENANT_ID_CONTEXTVAR.set(previous_tenant_id)
 
 
@@ -424,12 +460,9 @@ def get_session_generator_with_tenant() -> Generator[Session, None, None]:
 
 
 def get_session() -> Generator[Session, None, None]:
-    """Generate a database session with the appropriate tenant schema set."""
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     if tenant_id == POSTGRES_DEFAULT_SCHEMA and MULTI_TENANT:
-        raise BasicAuthenticationError(
-            detail="User must authenticate",
-        )
+        raise BasicAuthenticationError(detail="User must authenticate")
 
     engine = get_sqlalchemy_engine()
 
@@ -437,20 +470,17 @@ def get_session() -> Generator[Session, None, None]:
         if MULTI_TENANT:
             if not is_valid_schema_name(tenant_id):
                 raise HTTPException(status_code=400, detail="Invalid tenant ID")
-            # Set the search_path to the tenant's schema
             session.execute(text(f'SET search_path = "{tenant_id}"'))
         yield session
 
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
-    """Generate an async database session with the appropriate tenant schema set."""
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     engine = get_sqlalchemy_async_engine()
     async with AsyncSession(engine, expire_on_commit=False) as async_session:
         if MULTI_TENANT:
             if not is_valid_schema_name(tenant_id):
                 raise HTTPException(status_code=400, detail="Invalid tenant ID")
-            # Set the search_path to the tenant's schema
             await async_session.execute(text(f'SET search_path = "{tenant_id}"'))
         yield async_session
 
@@ -461,7 +491,6 @@ def get_session_context_manager() -> ContextManager[Session]:
 
 
 def get_session_factory() -> sessionmaker[Session]:
-    """Get a session factory."""
     global SessionFactory
     if SessionFactory is None:
         SessionFactory = sessionmaker(bind=get_sqlalchemy_engine())
@@ -489,3 +518,13 @@ async def warm_up_connections(
         await async_conn.execute(text("SELECT 1"))
     for async_conn in async_connections:
         await async_conn.close()
+
+
+def provide_iam_token(dialect: Any, conn_rec: Any, cargs: Any, cparams: Any) -> None:
+    if USE_IAM_AUTH:
+        host = POSTGRES_HOST
+        port = POSTGRES_PORT
+        user = POSTGRES_USER
+        region = os.getenv("AWS_REGION", "us-east-2")
+        # Configure for psycopg2 with IAM token
+        configure_psycopg2_iam_auth(cparams, host, port, user, region)

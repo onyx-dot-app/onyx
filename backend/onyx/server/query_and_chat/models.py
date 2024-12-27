@@ -225,6 +225,8 @@ class ChatSessionDetailResponse(BaseModel):
     description: str | None
     persona_id: int | None = None
     persona_name: str | None
+    persona_icon_color: str | None
+    persona_icon_shape: int | None
     messages: list[ChatMessageDetail]
     time_created: datetime
     shared_status: ChatSessionSharedStatus

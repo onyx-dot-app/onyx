@@ -7,7 +7,7 @@ import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBad
 import { MetadataBadge } from "@/components/MetadataBadge";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { Dispatch, SetStateAction } from "react";
-import { ValidSources } from "@/lib/types";
+import { openDocument } from "@/lib/search/utils";
 
 interface DocumentDisplayProps {
   closeSidebar: () => void;
@@ -16,6 +16,7 @@ interface DocumentDisplayProps {
   isSelected: boolean;
   handleSelect: (documentId: string) => void;
   tokenLimitReached: boolean;
+  hideSelection?: boolean;
   setPresentingDocument: Dispatch<SetStateAction<OnyxDocument | null>>;
 }
 
@@ -62,6 +63,7 @@ export function ChatDocumentDisplay({
   closeSidebar,
   document,
   modal,
+  hideSelection,
   isSelected,
   handleSelect,
   tokenLimitReached,
@@ -73,23 +75,19 @@ export function ChatDocumentDisplay({
     return null;
   }
 
-  const handleViewFile = async () => {
-    if (document.source_type == ValidSources.File && setPresentingDocument) {
-      setPresentingDocument(document);
-    } else if (document.link) {
-      window.open(document.link, "_blank");
-    }
-  };
-
+  const hasMetadata =
+    document.updated_at || Object.keys(document.metadata).length > 0;
   return (
-    <div className={`opacity-100 ${modal ? "w-[90vw]" : "w-full"}`}>
+    <div
+      className={`max-w-[400px] opacity-100 ${modal ? "w-[90vw]" : "w-full"}`}
+    >
       <div
         className={`flex relative flex-col gap-0.5  rounded-xl mx-2 my-1 ${
           isSelected ? "bg-gray-200" : "hover:bg-background-125"
         }`}
       >
         <button
-          onClick={handleViewFile}
+          onClick={() => openDocument(document, setPresentingDocument)}
           className="cursor-pointer text-left flex flex-col px-2 py-1.5"
         >
           <div className="line-clamp-1 mb-1 flex h-6 items-center gap-2 text-xs">
@@ -107,15 +105,21 @@ export function ChatDocumentDisplay({
                 : document.semantic_identifier || document.document_id}
             </div>
           </div>
-          <DocumentMetadataBlock modal={modal} document={document} />
-          <div className="line-clamp-3 pt-2 text-sm font-normal leading-snug text-gray-600">
+          {hasMetadata && (
+            <DocumentMetadataBlock modal={modal} document={document} />
+          )}
+          <div
+            className={`line-clamp-3 text-sm font-normal leading-snug text-gray-600 ${
+              hasMetadata ? "mt-2" : ""
+            }`}
+          >
             {buildDocumentSummaryDisplay(
               document.match_highlights,
               document.blurb
             )}
           </div>
           <div className="absolute top-2 right-2">
-            {!isInternet && (
+            {!isInternet && !hideSelection && (
               <DocumentSelector
                 isSelected={isSelected}
                 handleSelect={() => handleSelect(document.document_id)}

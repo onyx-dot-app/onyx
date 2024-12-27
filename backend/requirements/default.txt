@@ -29,7 +29,7 @@ trafilatura==1.12.2
 langchain==0.1.17
 langchain-core==0.1.50
 langchain-text-splitters==0.0.1
-litellm==1.54.1
+litellm==1.55.4
 lxml==5.3.0
 lxml_html_clean==0.2.2
 llama-index==0.9.45

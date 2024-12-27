@@ -182,12 +182,15 @@ def get_chat_session(
         description=chat_session.description,
         persona_id=chat_session.persona_id,
         persona_name=chat_session.persona.name if chat_session.persona else None,
+        persona_icon_color=chat_session.persona.icon_color
+        if chat_session.persona
+        else None,
+        persona_icon_shape=chat_session.persona.icon_shape
+        if chat_session.persona
+        else None,
         current_alternate_model=chat_session.current_alternate_model,
         messages=[
-            translate_db_message_to_chat_message_detail(
-                msg, remove_doc_content=is_shared  # if shared, don't leak doc content
-            )
-            for msg in session_messages
+            translate_db_message_to_chat_message_detail(msg) for msg in session_messages
         ],
         time_created=chat_session.time_created,
         shared_status=chat_session.shared_status,
@@ -197,7 +200,7 @@ def get_chat_session(
 @router.post("/create-chat-session")
 def create_new_chat_session(
     chat_session_creation_request: ChatSessionCreationRequest,
-    user: User | None = Depends(current_user),
+    user: User | None = Depends(current_limited_user),
     db_session: Session = Depends(get_session),
 ) -> CreateChatSessionID:
     user_id = user.id if user is not None else None

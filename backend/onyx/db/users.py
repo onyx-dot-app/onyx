@@ -8,10 +8,17 @@ from sqlalchemy import not_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.auth.invited_users import get_invited_users
+from onyx.auth.invited_users import write_invited_users
 from onyx.auth.schemas import UserRole
 from onyx.auth.schemas import UserStatus
 from onyx.db.api_key import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
+from onyx.db.models import DocumentSet__User
+from onyx.db.models import Persona__User
+from onyx.db.models import SamlAccount
 from onyx.db.models import User
+from onyx.db.models import User__UserGroup
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
 def validate_user_role_update(requested_role: UserRole, current_role: UserRole) -> None:
@@ -259,3 +266,43 @@ def batch_add_ext_perm_user_if_not_exists(
     db_session.commit()
 
     return found_users + new_users
+
+
+def delete_user_from_db(
+    user_to_delete: User,
+    db_session: Session,
+) -> None:
+    for oauth_account in user_to_delete.oauth_accounts:
+        db_session.delete(oauth_account)
+
+    fetch_ee_implementation_or_noop(
+        "onyx.db.external_perm",
+        "delete_user__ext_group_for_user__no_commit",
+    )(
+        db_session=db_session,
+        user_id=user_to_delete.id,
+    )
+    db_session.query(SamlAccount).filter(
+        SamlAccount.user_id == user_to_delete.id
+    ).delete()
+    db_session.query(DocumentSet__User).filter(
+        DocumentSet__User.user_id == user_to_delete.id
+    ).delete()
+    db_session.query(Persona__User).filter(
+        Persona__User.user_id == user_to_delete.id
+    ).delete()
+    db_session.query(User__UserGroup).filter(
+        User__UserGroup.user_id == user_to_delete.id
+    ).delete()
+    db_session.delete(user_to_delete)
+    db_session.commit()
+
+    # NOTE: edge case may exist with race conditions
+    # with this `invited user` scheme generally.
+    user_emails = get_invited_users()
+    remaining_users = [
+        remaining_user_email
+        for remaining_user_email in user_emails
+        if remaining_user_email != user_to_delete.email
+    ]
+    write_invited_users(remaining_users)

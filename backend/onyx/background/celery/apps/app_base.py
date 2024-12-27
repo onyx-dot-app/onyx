@@ -3,7 +3,6 @@ import multiprocessing
 import time
 from typing import Any
 
-import requests
 import sentry_sdk
 from celery import Task
 from celery.app import trace
@@ -23,6 +22,7 @@ from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
 from onyx.background.celery.celery_utils import celery_is_worker_primary
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine import get_sqlalchemy_engine
+from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa_constants import VESPA_CONFIG_SERVER_URL
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_credential_pair import RedisConnectorCredentialPair
@@ -262,7 +262,8 @@ def wait_for_vespa(sender: Any, **kwargs: Any) -> None:
     logger.info("Vespa: Readiness probe starting.")
     while True:
         try:
-            response = requests.get(f"{VESPA_CONFIG_SERVER_URL}/state/v1/health")
+            client = get_vespa_http_client()
+            response = client.get(f"{VESPA_CONFIG_SERVER_URL}/state/v1/health")
             response.raise_for_status()
 
             response_dict = response.json()

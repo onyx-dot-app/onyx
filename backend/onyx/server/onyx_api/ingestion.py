@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import api_key_dep
+from onyx.configs.constants import DEFAULT_CC_PAIR_ID
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
@@ -79,7 +80,7 @@ def upsert_ingestion_doc(
         document.source = DocumentSource.FILE
 
     cc_pair = get_connector_credential_pair_from_id(
-        cc_pair_id=doc_info.cc_pair_id or 0, db_session=db_session
+        cc_pair_id=doc_info.cc_pair_id or DEFAULT_CC_PAIR_ID, db_session=db_session
     )
     if cc_pair is None:
         raise HTTPException(

@@ -40,7 +40,7 @@ export default function LogoWithText({
     <div
       className={`${
         hideOnMobile && "mobile:hidden"
-      } z-[100] ml-2 mt-1 h-8 mb-auto shrink-0 flex gap-x-0  items-center text-xl`}
+      } z-[100] ml-2 mt-1 h-8 mb-auto shrink-0 flex gap-x-0 items-center text-xl`}
     >
       {toggleSidebar && page == "chat" ? (
         <button
@@ -59,27 +59,29 @@ export default function LogoWithText({
 
           <FiSidebar
             size={20}
-            className={`text-text-mobile-sidebar ${toggled && "mobile:hidden"}`}
+            className={`text-text-mobile-sidebar desktop:hidden ${
+              toggled && "mobile:hidden"
+            }`}
           />
         </button>
       ) : (
         <div className="mr-1 invisible mb-auto h-6 w-6">
           <Logo height={24} width={24} />
-          lll
         </div>
       )}
 
-      <div
-        className={`${
-          showArrow ? "desktop:invisible" : "invisible"
-        } break-words inline-block w-fit text-text-700 text-xl`}
-      >
-        <LogoComponent
-          enterpriseSettings={enterpriseSettings!}
-          backgroundToggled={toggled}
-        />
-      </div>
-
+      {!toggled && (
+        <div
+          className={`${
+            showArrow ? "desktop:hidden" : "invisible"
+          } break-words inline-block w-fit text-text-700 text-xl`}
+        >
+          <LogoComponent
+            enterpriseSettings={enterpriseSettings!}
+            backgroundToggled={toggled}
+          />
+        </div>
+      )}
       {page == "chat" && !showArrow && (
         <TooltipProvider delayDuration={1000}>
           <Tooltip>
@@ -111,6 +113,7 @@ export default function LogoWithText({
           </Tooltip>
         </TooltipProvider>
       )}
+
       {showArrow && toggleSidebar && (
         <TooltipProvider delayDuration={0}>
           <Tooltip>

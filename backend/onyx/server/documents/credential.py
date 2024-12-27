@@ -122,7 +122,7 @@ def create_credential_from_model(
 ) -> ObjectCreationIdResponse:
     if not _ignore_credential_permissions(credential_info.source):
         fetch_ee_implementation_or_noop(
-            "onyx.db.user_group", "validate_user_creation_permissions", None
+            "onyx.db.user_group", "validate_object_creation_for_user", None
         )(
             db_session=db_session,
             user=user,
@@ -164,7 +164,12 @@ def get_credential_by_id(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> CredentialSnapshot | StatusResponse[int]:
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id(
+        credential_id,
+        user,
+        db_session,
+        get_editable=False,
+    )
     if credential is None:
         raise HTTPException(
             status_code=401,

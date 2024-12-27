@@ -512,7 +512,7 @@ def associate_credential_to_connector(
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     fetch_ee_implementation_or_noop(
-        "onyx.db.user_group", "validate_user_creation_permissions", None
+        "onyx.db.user_group", "validate_object_creation_for_user", None
     )(
         db_session=db_session,
         user=user,
@@ -534,7 +534,8 @@ def associate_credential_to_connector(
         )
 
         return response
-    except IntegrityError:
+    except IntegrityError as e:
+        logger.error(f"IntegrityError: {e}")
         raise HTTPException(status_code=400, detail="Name must be unique")
 
 

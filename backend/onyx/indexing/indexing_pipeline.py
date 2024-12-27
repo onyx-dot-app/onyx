@@ -260,6 +260,21 @@ def index_doc_batch_prepare(
 def filter_documents(document_batch: list[Document]) -> list[Document]:
     documents: list[Document] = []
     for document in document_batch:
+        # Remove any NUL characters from title/semantic_id
+        # This is a known issue with the Zendesk connector
+        # Postgres cannot handle NUL characters in text fields
+        if document.title:
+            document.title = document.title.replace("\x00", "")
+        if document.semantic_identifier:
+            document.semantic_identifier = document.semantic_identifier.replace(
+                "\x00", ""
+            )
+
+        # Remove NUL characters from all sections
+        for section in document.sections:
+            if section.text is not None:
+                section.text = section.text.replace("\x00", "")
+
         empty_contents = not any(section.text.strip() for section in document.sections)
         if (
             (not document.title or not document.title.strip())

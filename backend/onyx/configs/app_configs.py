@@ -1,6 +1,7 @@
 import json
 import os
 import urllib.parse
+from typing import cast
 
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import DocumentIndexType
@@ -91,6 +92,7 @@ SMTP_SERVER = os.environ.get("SMTP_SERVER") or "smtp.gmail.com"
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
 SMTP_USER = os.environ.get("SMTP_USER", "your-email@gmail.com")
 SMTP_PASS = os.environ.get("SMTP_PASS", "your-gmail-password")
+EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS])
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
 
 # If set, Onyx will listen to the `expires_at` returned by the identity
@@ -144,6 +146,7 @@ POSTGRES_PASSWORD = urllib.parse.quote_plus(
 POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "localhost"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
+AWS_REGION = os.environ.get("AWS_REGION") or "us-east-2"
 
 POSTGRES_API_SERVER_POOL_SIZE = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 40
@@ -173,6 +176,9 @@ try:
     )
 except ValueError:
     POSTGRES_IDLE_SESSIONS_TIMEOUT = POSTGRES_IDLE_SESSIONS_TIMEOUT_DEFAULT
+
+USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
+
 
 REDIS_SSL = os.getenv("REDIS_SSL", "").lower() == "true"
 REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
@@ -482,6 +488,21 @@ VESPA_REQUEST_TIMEOUT = int(os.environ.get("VESPA_REQUEST_TIMEOUT") or "15")
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
 
 PARSE_WITH_TRAFILATURA = os.environ.get("PARSE_WITH_TRAFILATURA", "").lower() == "true"
+
+# allow for custom error messages for different errors returned by litellm
+# for example, can specify: {"Violated content safety policy": "EVIL REQUEST!!!"}
+# to make it so that if an LLM call returns an error containing "Violated content safety policy"
+# the end user will see "EVIL REQUEST!!!" instead of the default error message.
+_LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS = os.environ.get(
+    "LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS", ""
+)
+LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS: dict[str, str] | None = None
+try:
+    LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS = cast(
+        dict[str, str], json.loads(_LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS)
+    )
+except json.JSONDecodeError:
+    pass
 
 #####
 # Enterprise Edition Configs

@@ -33,7 +33,7 @@ export function AssistantIcon({
 
   return (
     <CustomTooltip
-      disabled={disableToolip}
+      disabled={disableToolip || !assistant.description}
       showTick
       line
       wrap

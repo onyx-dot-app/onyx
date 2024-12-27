@@ -28,6 +28,7 @@ from litellm.exceptions import RateLimitError  # type: ignore
 from litellm.exceptions import Timeout  # type: ignore
 from litellm.exceptions import UnprocessableEntityError  # type: ignore
 
+from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
 from onyx.configs.constants import MessageType
 from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
@@ -45,9 +46,18 @@ logger = setup_logger()
 
 
 def litellm_exception_to_error_msg(
-    e: Exception, llm: LLM, fallback_to_error_msg: bool = False
+    e: Exception,
+    llm: LLM,
+    fallback_to_error_msg: bool = False,
+    custom_error_msg_mappings: dict[str, str]
+    | None = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
 ) -> str:
     error_msg = str(e)
+
+    if custom_error_msg_mappings:
+        for error_msg_pattern, custom_error_msg in custom_error_msg_mappings.items():
+            if error_msg_pattern in error_msg:
+                return custom_error_msg
 
     if isinstance(e, BadRequestError):
         error_msg = "Bad request: The server couldn't process your request. Please check your input."

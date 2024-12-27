@@ -10,6 +10,8 @@ import { requestEmailVerification } from "../lib";
 import { useState } from "react";
 import { Spinner } from "@/components/Spinner";
 import { set } from "lodash";
+import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
+import Link from "next/link";
 
 export function EmailPasswordForm({
   isSignup = false,
@@ -110,15 +112,21 @@ export function EmailPasswordForm({
               placeholder="**************"
             />
 
-            <div className="flex">
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="mx-auto w-full"
+            {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && !isSignup && (
+              <Link
+                href="/auth/forgot-password"
+                className="text-sm text-link font-medium whitespace-nowrap"
               >
-                {isSignup ? "Sign Up" : "Log In"}
-              </Button>
-            </div>
+                Forgot Password?
+              </Link>
+            )}
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="mx-auto w-full"
+            >
+              {isSignup ? "Sign Up" : "Log In"}
+            </Button>
           </Form>
         )}
       </Formik>

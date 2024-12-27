@@ -102,6 +102,8 @@ export interface BackendChatSession {
   description: string;
   persona_id: number;
   persona_name: string;
+  persona_icon_color: string | null;
+  persona_icon_shape: number | null;
   messages: BackendMessage[];
   time_created: string;
   shared_status: ChatSessionSharedStatus;
