@@ -15,6 +15,9 @@ from onyx.configs.app_configs import REDIS_PORT
 
 
 async def setup_limiter() -> None:
+    # Sets up the global FastAPILimiter using an async Redis connection.
+    # Cannot reuse existing redis_pool functions, because our existing pool is synchronous while we need async here.
+    # Without this setup, we wouldn't have a shared store for rate-limit counters.
     redis = await aioredis.from_url(
         f"redis://{REDIS_HOST}:{REDIS_PORT}", password=REDIS_PASSWORD
     )
@@ -25,13 +28,15 @@ async def close_limiter() -> None:
     await FastAPILimiter.close()
 
 
-def rate_limit_key(request: Request) -> str:
-    return (
-        request.client.host if request.client else "unknown"
-    )  # Use IP address for unauthenticated users
+async def rate_limit_key(request: Request) -> str:
+    # Uses both IP and User-Agent to make collisions less likely if IP is behind NAT.
+    # If request.client is None, a fallback is used to avoid completely unknown keys.
+    # This helps ensure we have a unique key for each 'user' in simple scenarios.
+    ip_part = request.client.host if request.client else "unknown"
+    ua_part = request.headers.get("user-agent", "none").replace(" ", "_")
+    return f"{ip_part}-{ua_part}"
 
 
-# Custom rate limiter that uses the client's IP address
 def get_auth_rate_limiters() -> List[Callable]:
     if not (RATE_LIMIT_MAX_REQUESTS and RATE_LIMIT_WINDOW_SECONDS):
         return []
@@ -41,6 +46,8 @@ def get_auth_rate_limiters() -> List[Callable]:
             RateLimiter(
                 times=RATE_LIMIT_MAX_REQUESTS,
                 seconds=RATE_LIMIT_WINDOW_SECONDS,
+                # Use the custom key function to distinguish users
+                identifier=rate_limit_key,
             )
         )
     ]
