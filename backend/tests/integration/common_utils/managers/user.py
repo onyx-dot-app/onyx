@@ -2,7 +2,9 @@ from copy import deepcopy
 from urllib.parse import urlencode
 from uuid import uuid4
 
+import pytest
 import requests
+from requests import HTTPError
 
 from onyx.auth.schemas import UserRole
 from onyx.auth.schemas import UserStatus
@@ -165,24 +167,25 @@ class UserManager:
     @staticmethod
     def create_test_users(
         user_name_prefix: str,
-        count: int = 10,
+        count: int,
         role: UserRole = UserRole.BASIC,
         status: UserStatus | None = None,
-        admin_user: DATestUser = None,
-        has_first_user: bool = False,
+        user_performing_action: DATestUser | None = None,
     ) -> list[DATestUser]:
         users_list = []
         for i in range(1, count + 1):
-            user = UserManager.create(
-                name=f"{user_name_prefix}_{i}", is_first_user=has_first_user and i == 1
-            )
-            if has_first_user and i == 1:
-                admin_user = user
+            user = UserManager.create(name=f"{user_name_prefix}_{i}")
             if role != UserRole.BASIC:
-                user = UserManager.set_role(user, role, admin_user)
+                user = UserManager.set_role(user, role, user_performing_action)
             if status:
-                user = UserManager.set_status(user, status, admin_user)
-            if status != UserStatus.DEACTIVATED:
+                user = UserManager.set_status(user, status, user_performing_action)
+
+            if status == UserStatus.DEACTIVATED:
+                with pytest.raises(HTTPError):
+                    UserManager.verify_role(user)
+                with pytest.raises(HTTPError):
+                    UserManager.verify_status(user)
+            else:
                 assert UserManager.verify_role(user)
                 assert UserManager.verify_status(user)
             users_list.append(user)
@@ -193,7 +196,7 @@ class UserManager:
         page: int = 1,
         page_size: int = 10,
         search_query: str | None = None,
-        role_filter: list[UserRole] | None = None,
+        role_filter: list[str] | None = None,
         status_filter: UserStatus | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> PaginatedReturn[FullUserSnapshot]:
@@ -224,34 +227,3 @@ class UserManager:
         )
         assert len(paginated_result.items) == page_size
         return paginated_result
-
-    @staticmethod
-    def verify_pagination(
-        users: list[DATestUser],
-        page_size: int = 5,
-        search_query: str | None = None,
-        role_filter: list[UserRole] | None = None,
-        status_filter: UserStatus | None = None,
-        user_performing_action: DATestUser | None = None,
-    ) -> None:
-        all_expected_emails = set([user.email for user in users])
-
-        retrieved_users = []
-        i = 0
-        while i == 0 or i < len(users):
-            paginated_result = UserManager.get_user_page(
-                page=i // page_size + 1,
-                page_size=page_size,
-                search_query=search_query,
-                role_filter=role_filter,
-                status_filter=status_filter,
-                user_performing_action=user_performing_action,
-            )
-            i += page_size
-
-            assert paginated_result.total_items == len(users)
-            assert len(paginated_result.items) == page_size
-            retrieved_users.extend(paginated_result.items)
-
-        all_retrieved_emails = set([user.email for user in retrieved_users])
-        assert all_expected_emails == all_retrieved_emails

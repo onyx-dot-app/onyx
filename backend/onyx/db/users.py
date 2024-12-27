@@ -120,14 +120,14 @@ def _get_accepted_user_where_clause(
     include_external: bool = False,
 ) -> list:
     # Init where clause and remove any users with API email domains
-    where_clause = [not_(User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN))]
+    where_clause = [not_(User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN))]  # type: ignore
 
     # Exclude external permissioned users
     if not include_external:
         where_clause.append(User.role != UserRole.EXT_PERM_USER)
 
     if email_filter_string:
-        where_clause.append(User.email.ilike(f"%{email_filter_string}%"))
+        where_clause.append(User.email.ilike(f"%{email_filter_string}%"))  # type: ignore
 
     if roles_filter:
         where_clause.append(User.role.in_(roles_filter))
@@ -182,7 +182,7 @@ def get_total_filtered_users_count(
     # Apply filtering
     total_count_stmt = total_count_stmt.where(*where_clause)
 
-    return db_session.scalar(total_count_stmt)
+    return db_session.scalar(total_count_stmt) or 0
 
 
 def get_user_by_email(email: str, db_session: Session) -> User | None:
