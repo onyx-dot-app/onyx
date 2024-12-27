@@ -359,7 +359,7 @@ def stream_chat_message_objects(
         # If a prompt override is specified via the API, use that with highest priority
         # but for saving it, we are just mapping it to an existing prompt
         prompt_id = new_msg_req.prompt_id
-        if prompt_id is None and persona.prompts:
+        if (prompt_id is None or prompt_id == 0) and persona.prompts:
             prompt_id = sorted(persona.prompts, key=lambda x: x.id)[-1].id
 
         if reference_doc_ids is None and retrieval_options is None:
