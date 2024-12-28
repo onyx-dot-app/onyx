@@ -5,22 +5,15 @@ from fastapi import Depends
 from fastapi import Request
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
-from redis import asyncio as aioredis
 
 from onyx.configs.app_configs import RATE_LIMIT_MAX_REQUESTS
 from onyx.configs.app_configs import RATE_LIMIT_WINDOW_SECONDS
-from onyx.configs.app_configs import REDIS_HOST
-from onyx.configs.app_configs import REDIS_PASSWORD
-from onyx.configs.app_configs import REDIS_PORT
+from onyx.redis.redis_pool import get_async_redis_connection
 
 
 async def setup_limiter() -> None:
-    # Sets up the global FastAPILimiter using an async Redis connection.
-    # Cannot reuse existing redis_pool functions, because our existing pool is synchronous while we need async here.
-    # Without this setup, we wouldn't have a shared store for rate-limit counters.
-    redis = await aioredis.from_url(
-        f"redis://{REDIS_HOST}:{REDIS_PORT}", password=REDIS_PASSWORD
-    )
+    # Use the centralized async Redis connection
+    redis = await get_async_redis_connection()
     await FastAPILimiter.init(redis)
 
 

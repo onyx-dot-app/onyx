@@ -1,3 +1,4 @@
+import asyncio
 import functools
 import threading
 from collections.abc import Callable
@@ -5,6 +6,7 @@ from typing import Any
 from typing import Optional
 
 import redis
+from redis import asyncio as aioredis
 from redis.client import Redis
 
 from onyx.configs.app_configs import REDIS_DB_NUMBER
@@ -196,3 +198,25 @@ def get_redis_client(*, tenant_id: str | None) -> Redis:
 # redis_client.set('key', 'value')
 # value = redis_client.get('key')
 # print(value.decode())  # Output: 'value'
+
+_async_redis_connection = None
+_async_lock = asyncio.Lock()
+
+
+async def get_async_redis_connection() -> aioredis.Redis:
+    """
+    Provides a shared async Redis connection, using the same configs (host, port, SSL, etc.).
+    """
+    global _async_redis_connection
+    if _async_redis_connection is None:
+        async with _async_lock:  # Avoid race on first create
+            if _async_redis_connection is None:
+                scheme = "rediss" if REDIS_SSL else "redis"
+                url = f"{scheme}://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER}"
+
+                _async_redis_connection = aioredis.from_url(
+                    url,
+                    password=REDIS_PASSWORD,
+                    max_connections=REDIS_POOL_MAX_CONNECTIONS,
+                )
+    return _async_redis_connection
