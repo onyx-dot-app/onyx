@@ -19,9 +19,8 @@ from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
-from onyx.connectors.salesforce.doc_conversion import extract_dict_text
+from onyx.connectors.salesforce.doc_conversion import extract_sections
 from onyx.utils.logger import setup_logger
 
 
@@ -100,9 +99,8 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> Document:
         salesforce_id = object_dict["Id"]
         onyx_salesforce_id = f"{ID_PREFIX}{salesforce_id}"
-        extracted_link = f"https://{self.sf_client.sf_instance}/{salesforce_id}"
+        base_url = f"https://{self.sf_client.sf_instance}"
         extracted_doc_updated_at = time_str_to_utc(object_dict["LastModifiedDate"])
-        extracted_object_text = extract_dict_text(object_dict)
         extracted_semantic_identifier = object_dict.get("Name", "Unknown Object")
         extracted_primary_owners = [
             BasicExpertInfo(
@@ -112,7 +110,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
         doc = Document(
             id=onyx_salesforce_id,
-            sections=[Section(link=extracted_link, text=extracted_object_text)],
+            sections=extract_sections(object_dict, base_url),
             source=DocumentSource.SALESFORCE,
             semantic_identifier=extracted_semantic_identifier,
             doc_updated_at=extracted_doc_updated_at,
