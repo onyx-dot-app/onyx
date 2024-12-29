@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
-from onyx.configs.app_configs import AWS_REGION
+from onyx.configs.app_configs import AWS_REGION_NAME
 from onyx.configs.app_configs import LOG_POSTGRES_CONN_COUNTS
 from onyx.configs.app_configs import LOG_POSTGRES_LATENCY
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
@@ -273,7 +273,7 @@ async def get_async_connection() -> Any:
     port = POSTGRES_PORT
     user = POSTGRES_USER
     db = POSTGRES_DB
-    token = get_iam_auth_token(host, port, user, AWS_REGION)
+    token = get_iam_auth_token(host, port, user, AWS_REGION_NAME)
 
     # asyncpg requires 'ssl="require"' if SSL needed
     return await asyncpg.connect(
@@ -315,7 +315,7 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
                 host = POSTGRES_HOST
                 port = POSTGRES_PORT
                 user = POSTGRES_USER
-                token = get_iam_auth_token(host, port, user, AWS_REGION)
+                token = get_iam_auth_token(host, port, user, AWS_REGION_NAME)
                 cparams["password"] = token
                 cparams["ssl"] = ssl_context
 
@@ -525,6 +525,6 @@ def provide_iam_token(dialect: Any, conn_rec: Any, cargs: Any, cparams: Any) -> 
         host = POSTGRES_HOST
         port = POSTGRES_PORT
         user = POSTGRES_USER
-        region = os.getenv("AWS_REGION", "us-east-2")
+        region = os.getenv("AWS_REGION_NAME", "us-east-2")
         # Configure for psycopg2 with IAM token
         configure_psycopg2_iam_auth(cparams, host, port, user, region)

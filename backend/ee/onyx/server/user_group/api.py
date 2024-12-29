@@ -83,7 +83,7 @@ def patch_user_group(
 def set_user_curator(
     user_group_id: int,
     set_curator_request: SetCuratorRequest,
-    _: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -91,6 +91,7 @@ def set_user_curator(
             db_session=db_session,
             user_group_id=user_group_id,
             set_curator_request=set_curator_request,
+            user_making_change=user,
         )
     except ValueError as e:
         logger.error(f"Error setting user curator: {e}")

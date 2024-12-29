@@ -4,7 +4,7 @@ from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USER
-from onyx.configs.app_configs import AWS_REGION
+from onyx.configs.app_configs import AWS_REGION_NAME
 from onyx.db.engine import build_connection_string
 from onyx.db.engine import get_all_tenant_ids
 from sqlalchemy import event
@@ -120,7 +120,7 @@ def provide_iam_token_for_alembic(
 ) -> None:
     if USE_IAM_AUTH:
         # Database connection settings
-        region = AWS_REGION
+        region = AWS_REGION_NAME
         host = POSTGRES_HOST
         port = POSTGRES_PORT
         user = POSTGRES_USER
