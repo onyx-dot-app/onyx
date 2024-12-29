@@ -54,6 +54,7 @@ from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import TaskStatus
 from onyx.db.pydantic_type import PydanticType
+from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
@@ -65,6 +66,8 @@ from onyx.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import RerankerProvider
 
+logger = setup_logger()
+
 
 class Base(DeclarativeBase):
     __abstract__ = True
@@ -72,6 +75,8 @@ class Base(DeclarativeBase):
 
 class EncryptedString(TypeDecorator):
     impl = LargeBinary
+    # This type's behavior is fully deterministic and doesn't depend on any external factors.
+    cache_ok = True
 
     def process_bind_param(self, value: str | None, dialect: Dialect) -> bytes | None:
         if value is not None:
@@ -86,6 +91,8 @@ class EncryptedString(TypeDecorator):
 
 class EncryptedJson(TypeDecorator):
     impl = LargeBinary
+    # This type's behavior is fully deterministic and doesn't depend on any external factors.
+    cache_ok = True
 
     def process_bind_param(self, value: dict | None, dialect: Dialect) -> bytes | None:
         if value is not None:
@@ -99,6 +106,21 @@ class EncryptedJson(TypeDecorator):
         if value is not None:
             json_str = decrypt_bytes_to_string(value)
             return json.loads(json_str)
+        return value
+
+
+class NullFilteredString(TypeDecorator):
+    impl = String
+    # This type's behavior is fully deterministic and doesn't depend on any external factors.
+    cache_ok = True
+
+    def process_bind_param(self, value: str | None, dialect: Dialect) -> str | None:
+        if value is not None and "\x00" in value:
+            logger.warning(f"NUL characters found in value: {value}")
+            return value.replace("\x00", "")
+        return value
+
+    def process_result_value(self, value: str | None, dialect: Dialect) -> str | None:
         return value
 
 
@@ -451,16 +473,16 @@ class Document(Base):
 
     # this should correspond to the ID of the document
     # (as is passed around in Onyx)
-    id: Mapped[str] = mapped_column(String, primary_key=True)
+    id: Mapped[str] = mapped_column(NullFilteredString, primary_key=True)
     from_ingestion_api: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=True
     )
     # 0 for neutral, positive for mostly endorse, negative for mostly reject
     boost: Mapped[int] = mapped_column(Integer, default=DEFAULT_BOOST)
     hidden: Mapped[bool] = mapped_column(Boolean, default=False)
-    semantic_id: Mapped[str] = mapped_column(String)
+    semantic_id: Mapped[str] = mapped_column(NullFilteredString)
     # First Section's link
-    link: Mapped[str | None] = mapped_column(String, nullable=True)
+    link: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
 
     # The updated time is also used as a measure of the last successful state of the doc
     # pulled from the source (to help skip reindexing already updated docs in case of

@@ -40,6 +40,13 @@ class ZendeskClient:
         response = requests.get(
             f"{self.base_url}/{endpoint}", auth=self.auth, params=params
         )
+
+        if response.status_code == 429:
+            retry_after = response.headers.get("Retry-After")
+            if retry_after is not None:
+                # Sleep for the duration indicated by the Retry-After header
+                time.sleep(int(retry_after))
+
         response.raise_for_status()
         return response.json()
 

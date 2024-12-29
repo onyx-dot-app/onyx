@@ -510,7 +510,7 @@ def associate_credential_to_connector(
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     fetch_ee_implementation_or_noop(
-        "onyx.db.user_group", "validate_user_creation_permissions", None
+        "onyx.db.user_group", "validate_object_creation_for_user", None
     )(
         db_session=db_session,
         user=user,

@@ -146,7 +146,7 @@ POSTGRES_PASSWORD = urllib.parse.quote_plus(
 POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "localhost"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
-AWS_REGION = os.environ.get("AWS_REGION") or "us-east-2"
+AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
 
 POSTGRES_API_SERVER_POOL_SIZE = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 40
