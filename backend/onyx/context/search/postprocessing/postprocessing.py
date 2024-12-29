@@ -4,8 +4,12 @@ from typing import cast
 
 import numpy
 
+from ee.onyx.external_permissions.salesforce.postprocessing import (
+    validate_salesforce_access,
+)
 from onyx.chat.models import SectionRelevancePiece
 from onyx.configs.app_configs import BLURB_SIZE
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MAX
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MIN
@@ -337,3 +341,35 @@ def search_postprocessing(
         )
         for section in (reranked_sections or retrieved_sections)
     ]
+
+
+DOC_SOURCE_TO_PERMISSION_CHECK_FUNCTION: dict[
+    DocumentSource,
+    Callable[[list[InferenceChunk], str], list[InferenceChunk]],
+] = {
+    DocumentSource.SALESFORCE: validate_salesforce_access,
+}
+
+
+def post_query_permission_filter(
+    chunks: list[InferenceChunk],
+    user_email: str,
+) -> list[InferenceChunk]:
+    chunks_to_keep = []
+    chunks_to_process: dict[DocumentSource, list[InferenceChunk]] = {}
+
+    for chunk in chunks:
+        # Separate out chunks that require permission post-processing by source
+        if chunk.source_type in DOC_SOURCE_TO_PERMISSION_CHECK_FUNCTION:
+            chunks_to_process.setdefault(chunk.source_type, []).append(chunk)
+        else:
+            chunks_to_keep.append(chunk)
+
+    # For each source, filter out the chunks using the permission
+    # check function for that source
+    for source, chunks in chunks_to_process.items():
+        permission_check_function = DOC_SOURCE_TO_PERMISSION_CHECK_FUNCTION[source]
+        filtered_chunks = permission_check_function(chunks, user_email)
+        chunks_to_keep.extend(filtered_chunks)
+
+    return chunks_to_keep

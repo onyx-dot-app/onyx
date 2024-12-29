@@ -612,3 +612,23 @@ def get_document(
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc: DbDocument | None = db_session.execute(stmt).scalar_one_or_none()
     return doc
+
+
+def get_cc_pairs_for_document(
+    db_session: Session,
+    document_id: str,
+) -> list[ConnectorCredentialPair]:
+    stmt = (
+        select(ConnectorCredentialPair)
+        .join(
+            DocumentByConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(DocumentByConnectorCredentialPair.id == document_id)
+    )
+    return list(db_session.execute(stmt).scalars().all())

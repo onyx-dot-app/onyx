@@ -143,6 +143,5 @@ def extract_sections(salesforce_object: dict, base_url: str) -> list[Section]:
     top_level_section = Section(
         text=_extract_dict_text(top_level_dict),
         link=f"{base_url}/{top_level_id}",
-        permission_id=top_level_id,
     )
     return [top_level_section, *child_object_sections]

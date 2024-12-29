@@ -23,11 +23,13 @@ class ChunkEmbedding(BaseModel):
 
 class BaseChunk(BaseModel):
     chunk_id: int
-    blurb: str  # The first sentence(s) of the first Section of the chunk
+    # The first sentence(s) of the first Section of the chunk
+    blurb: str
     content: str
     # Holds the link and the offsets into the raw Chunk text
     source_links: dict[int, str] | None
-    section_continuation: bool  # True if this Chunk's start is not at the start of a Section
+    # True if this Chunk's start is not at the start of a Section
+    section_continuation: bool
 
 
 class DocAwareChunk(BaseChunk):
