@@ -22,18 +22,19 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.salesforce.doc_conversion import extract_sections
 from onyx.utils.logger import setup_logger
-
-
-# TODO: this connector does not work well at large scales
-# the large query against a large Salesforce instance has been reported to take 1.5 hours.
-# Additionally it seems to eat up more memory over time if the connection is long running (again a scale issue).
-
-
-DEFAULT_PARENT_OBJECT_TYPES = ["Account"]
-MAX_QUERY_LENGTH = 10000  # max query length is 20,000 characters
-ID_PREFIX = "SALESFORCE_"
+from shared_configs.utils import batch_list
 
 logger = setup_logger()
+
+# max query length is 20,000 characters, leave 5000 characters for slop
+_MAX_QUERY_LENGTH = 10000
+# There are 22 extra characters per ID so 200 * 22 = 4400 characters which is
+# still well under the max query length
+_MAX_ID_BATCH_SIZE = 200
+
+
+_DEFAULT_PARENT_OBJECT_TYPES = ["Account"]
+_ID_PREFIX = "SALESFORCE_"
 
 
 def _build_time_filter_for_salesforce(
@@ -60,7 +61,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         self.parent_object_list = (
             [obj.capitalize() for obj in requested_objects]
             if requested_objects
-            else DEFAULT_PARENT_OBJECT_TYPES
+            else _DEFAULT_PARENT_OBJECT_TYPES
         )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -98,7 +99,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         self, object_dict: dict[str, Any]
     ) -> Document:
         salesforce_id = object_dict["Id"]
-        onyx_salesforce_id = f"{ID_PREFIX}{salesforce_id}"
+        onyx_salesforce_id = f"{_ID_PREFIX}{salesforce_id}"
         base_url = f"https://{self.sf_client.sf_instance}"
         extracted_doc_updated_at = time_str_to_utc(object_dict["LastModifiedDate"])
         extracted_semantic_identifier = object_dict.get("Name", "Unknown Object")
@@ -148,6 +149,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         return True
 
     def _get_all_children_of_sf_type(self, sf_type: str) -> list[dict]:
+        logger.debug(f"Fetching children for SF type: {sf_type}")
         object_description = self._get_sf_type_object_json(sf_type)
 
         children_objects: list[dict] = []
@@ -172,23 +174,60 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
         return fields
 
+    def _get_parent_object_ids(
+        self, parent_sf_type: str, time_filter_query: str
+    ) -> list[str]:
+        """Fetch all IDs for a given parent object type."""
+        logger.debug(f"Fetching IDs for parent type: {parent_sf_type}")
+        query = f"SELECT Id FROM {parent_sf_type}{time_filter_query}"
+        query_result = self.sf_client.query_all(query)
+        ids = [record["Id"] for record in query_result["records"]]
+        logger.debug(f"Found {len(ids)} IDs for parent type: {parent_sf_type}")
+        return ids
+
+    def _process_id_batch(
+        self,
+        id_batch: list[str],
+        queries: list[str],
+    ) -> dict[str, dict[str, Any]]:
+        """Process a batch of IDs using the given queries."""
+        # Initialize results dictionary for this batch
+        logger.debug(f"Processing batch of {len(id_batch)} IDs")
+        query_results: dict[str, dict[str, Any]] = {}
+
+        # For each query, fetch and combine results for the batch
+        for query in queries:
+            id_filter = f" WHERE Id IN {tuple(id_batch)}"
+            batch_query = query + id_filter
+            logger.debug(f"Executing query with length: {len(batch_query)}")
+            query_result = self.sf_client.query_all(batch_query)
+            logger.debug(f"Retrieved {len(query_result['records'])} records for query")
+
+            for record_dict in query_result["records"]:
+                query_results.setdefault(record_dict["Id"], {}).update(record_dict)
+
+        # Convert results to documents
+        return query_results
+
     def _generate_query_per_parent_type(self, parent_sf_type: str) -> Iterator[str]:
         """
-        This function takes in an object_type and generates query(s) designed to grab
-        information associated to objects of that type.
-        It does that by getting all the fields of the parent object type.
-        Then it gets all the child objects of that object type and all the fields of
-        those children as well.
+        parent_sf_type is a string that represents the Salesforce object type.
+        This function generates queries that will fetch:
+        - all the fields of the parent object type
+        - all the fields of the child objects of the parent object type
         """
+        logger.debug(f"Generating queries for parent type: {parent_sf_type}")
         parent_fields = self._get_all_fields_for_sf_type(parent_sf_type)
+        logger.debug(f"Found {len(parent_fields)} fields for parent type")
         child_sf_types = self._get_all_children_of_sf_type(parent_sf_type)
+        logger.debug(f"Found {len(child_sf_types)} child types")
 
         query = f"SELECT {', '.join(parent_fields)}"
         for child_object_dict in child_sf_types:
             fields = self._get_all_fields_for_sf_type(child_object_dict["object_type"])
             query_addition = f", \n(SELECT {', '.join(fields)} FROM {child_object_dict['relationship_name']})"
 
-            if len(query_addition) + len(query) > MAX_QUERY_LENGTH:
+            if len(query_addition) + len(query) > _MAX_QUERY_LENGTH:
                 query += f"\n FROM {parent_sf_type}"
                 yield query
                 query = "SELECT Id" + query_addition
@@ -199,40 +238,41 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
         yield query
 
+    def _batch_retrieval(
+        self,
+        id_batches: list[list[str]],
+        queries: list[str],
+    ) -> GenerateDocumentsOutput:
+        doc_batch: list[Document] = []
+        # For each batch of IDs, perform all queries and convert to documents
+        # so they can be yielded in batches
+        for id_batch in id_batches:
+            query_results = self._process_id_batch(id_batch, queries)
+            for doc in query_results.values():
+                doc_batch.append(self._convert_object_instance_to_document(doc))
+                if len(doc_batch) >= self.batch_size:
+                    yield doc_batch
+                    doc_batch = []
+
+        yield doc_batch
+
     def _fetch_from_salesforce(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateDocumentsOutput:
+        logger.debug(f"Starting Salesforce fetch from {start} to {end}")
         time_filter_query = _build_time_filter_for_salesforce(start, end)
 
-        doc_batch: list[Document] = []
         for parent_object_type in self.parent_object_list:
             logger.debug(f"Processing: {parent_object_type}")
 
-            # This contains the dictionaries describing the top level
-            # objects with the object id as the key
-            query_results: dict[str, dict] = {}
-            # loop over all queries and build the query_results dictionary
-            for query in self._generate_query_per_parent_type(parent_object_type):
-                query_result = self.sf_client.query_all(query + time_filter_query)
-                for record_dict in query_result["records"]:
-                    query_results.setdefault(record_dict["Id"], {}).update(record_dict)
+            all_ids = self._get_parent_object_ids(parent_object_type, time_filter_query)
+            id_batches = batch_list(all_ids, _MAX_ID_BATCH_SIZE)
 
-            logger.info(
-                f"Number of {parent_object_type} Objects processed: {len(query_results)}"
-            )
-
-            # loop over all the top level object dictionaries and convert them to documents
-            for combined_object_dict in query_results.values():
-                doc_batch.append(
-                    self._convert_object_instance_to_document(combined_object_dict)
-                )
-
-                if len(doc_batch) > self.batch_size:
-                    yield doc_batch
-                    doc_batch = []
-        yield doc_batch
+            # Generate all queries we'll need
+            queries = list(self._generate_query_per_parent_type(parent_object_type))
+            yield from self._batch_retrieval(id_batches, queries)
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         return self._fetch_from_salesforce()
@@ -253,7 +293,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             query_result = self.sf_client.query_all(query)
             doc_metadata_list.extend(
                 SlimDocument(
-                    id=f"{ID_PREFIX}{instance_dict.get('Id', '')}",
+                    id=f"{_ID_PREFIX}{instance_dict.get('Id', '')}",
                     perm_sync_data={},
                 )
                 for instance_dict in query_result["records"]
