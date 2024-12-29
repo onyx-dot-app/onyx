@@ -17,7 +17,7 @@ def create_test_chunk(
     return InferenceChunk(
         document_id=doc_id,
         chunk_id=chunk_id,
-        blurb=content[:100],  # Just use first 100 chars as blurb
+        blurb=content[:BLURB_SIZE],
         content=content,
         source_links=source_links,
         section_continuation=False,
