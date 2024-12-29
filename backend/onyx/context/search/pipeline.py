@@ -22,9 +22,6 @@ from onyx.context.search.models import RetrievalMetricsContainer
 from onyx.context.search.models import SearchQuery
 from onyx.context.search.models import SearchRequest
 from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
-from onyx.context.search.postprocessing.postprocessing import (
-    post_query_permission_filter,
-)
 from onyx.context.search.postprocessing.postprocessing import search_postprocessing
 from onyx.context.search.preprocessing.preprocessing import retrieval_preprocessing
 from onyx.context.search.retrieval.search_runner import retrieve_chunks
@@ -40,6 +37,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from onyx.utils.timing import log_function_time
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
 
@@ -165,16 +163,16 @@ class SearchPipeline:
 
         # These chunks are ordered, deduped, and contain no large chunks
         retrieved_chunks = self._get_chunks()
-        if self.user is None:
-            # This means we are not filtering chunks based on user access
-            permission_filtered_chunks = retrieved_chunks
-        else:
-            # Filter out chunks that the user does not have access
-            # to if permission filtering is enabled
-            permission_filtered_chunks = post_query_permission_filter(
-                chunks=retrieved_chunks,
-                user_email=self.user.email,
-            )
+        # If ee is enabled, censor the chunk sections based on user access
+        # Otherwise, return the retrieved chunks
+        censored_chunks = fetch_ee_implementation_or_noop(
+            "onyx.external_permissions.postprocessing_params",
+            "post_query_chunk_censoring",
+            retrieved_chunks,
+        )(
+            chunks=retrieved_chunks,
+            user=self.user,
+        )
 
         above = self.search_query.chunks_above
         below = self.search_query.chunks_below
@@ -188,7 +186,7 @@ class SearchPipeline:
             seen_document_ids = set()
 
             # This preserves the ordering since the chunks are retrieved in score order
-            for chunk in permission_filtered_chunks:
+            for chunk in censored_chunks:
                 if chunk.document_id not in seen_document_ids:
                     seen_document_ids.add(chunk.document_id)
                     chunk_requests.append(
@@ -238,7 +236,7 @@ class SearchPipeline:
         #   This maintains the original chunks ordering. Note, we cannot simply sort by score here
         #   as reranking flow may wipe the scores for a lot of the chunks.
         doc_chunk_ranges_map = defaultdict(list)
-        for chunk in permission_filtered_chunks:
+        for chunk in censored_chunks:
             # The list of ranges for each document is ordered by score
             doc_chunk_ranges_map[chunk.document_id].append(
                 ChunkRange(
@@ -287,14 +285,11 @@ class SearchPipeline:
 
         # In case of failed parallel calls to Vespa, at least we should have the initial retrieved chunks
         doc_chunk_ind_to_chunk.update(
-            {
-                (chunk.document_id, chunk.chunk_id): chunk
-                for chunk in permission_filtered_chunks
-            }
+            {(chunk.document_id, chunk.chunk_id): chunk for chunk in censored_chunks}
         )
 
         # Build the surroundings for all of the initial retrieved chunks
-        for chunk in permission_filtered_chunks:
+        for chunk in censored_chunks:
             start_ind = max(0, chunk.chunk_id - above)
             end_ind = chunk.chunk_id + below
 

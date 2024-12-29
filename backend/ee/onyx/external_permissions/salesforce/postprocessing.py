@@ -110,9 +110,11 @@ def _update_filtered_chunk(
     return filtered_chunk
 
 
+# TODO: Generalize this to other sources
 def validate_salesforce_access(
     chunks: list[InferenceChunk],
     user_email: str,
+    # This is so we can provide a mock access map for testing
     access_map: dict[str, bool] | None = None,
 ) -> list[InferenceChunk]:
     # object_id -> list[((doc_id, chunk_id), (start_index, end_index))]
