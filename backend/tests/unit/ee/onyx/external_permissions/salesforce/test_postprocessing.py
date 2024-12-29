@@ -34,7 +34,7 @@ def create_test_chunk(
     )
 
 
-def test_validate_salesforce_access_single_object():
+def test_validate_salesforce_access_single_object() -> None:
     """Test filtering when chunk has a single Salesforce object reference"""
     section = "This is a test document about a Salesforce object."
     test_content = section
@@ -63,7 +63,7 @@ def test_validate_salesforce_access_single_object():
     assert len(filtered_chunks) == 0
 
 
-def test_validate_salesforce_access_multiple_objects():
+def test_validate_salesforce_access_multiple_objects() -> None:
     """Test filtering when chunk has multiple Salesforce object references"""
     section1 = "First part about object1. "
     section2 = "Second part about object2. "
@@ -125,7 +125,7 @@ def test_validate_salesforce_access_multiple_objects():
     assert len(filtered_chunks) == 0
 
 
-def test_validate_salesforce_access_multiple_chunks():
+def test_validate_salesforce_access_multiple_chunks() -> None:
     """Test filtering when there are multiple chunks with different access patterns"""
     section1 = "Content about object1"
     section2 = "Content about object2"
@@ -157,7 +157,7 @@ def test_validate_salesforce_access_multiple_chunks():
     assert section1 in filtered_chunks[0].content
 
 
-def test_validate_salesforce_access_no_source_links():
+def test_validate_salesforce_access_no_source_links() -> None:
     """Test handling of chunks with no source links"""
     section = "Content with no source links"
     test_chunk = create_test_chunk(
@@ -175,7 +175,7 @@ def test_validate_salesforce_access_no_source_links():
     assert len(filtered_chunks) == 0
 
 
-def test_validate_salesforce_access_blurb_update():
+def test_validate_salesforce_access_blurb_update() -> None:
     """Test that blurbs are properly updated based on permitted content"""
     section = "First part about object1. "
     long_content = section * 20  # Make it longer than BLURB_SIZE
