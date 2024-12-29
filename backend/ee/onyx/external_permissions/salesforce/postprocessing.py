@@ -14,23 +14,13 @@ ChunkKey = tuple[str, int]  # (doc_id, chunk_id)
 ContentRange = tuple[int, int | None]  # (start_index, end_index) None means to the end
 
 
-def _get_objects_access_for_user_email(
-    object_ids: set[str], user_email: str
-) -> dict[str, bool]:
-    with get_session_context_manager() as db_session:
-        external_groups = fetch_external_groups_for_user_email_and_group_ids(
-            db_session=db_session,
-            user_email=user_email,
-            # Maybe make a function that adds a salesforce prefix to the group ids
-            group_ids=list(object_ids),
-        )
-        external_group_ids = {group.external_user_group_id for group in external_groups}
-        return {group_id: group_id in external_group_ids for group_id in object_ids}
-
-
 def _get_objects_access_for_user_email_from_salesforce(
     object_ids: set[str], user_email: str, chunks: list[InferenceChunk]
 ) -> dict[str, bool]:
+    """
+    This function wraps the salesforce call as we may want to change how this
+    is done in the future. (E.g. replace it with the above function)
+    """
     first_doc_id = chunks[0].document_id
     with get_session_context_manager() as db_session:
         salesforce_client = get_any_salesforce_client_for_doc_id(
@@ -38,7 +28,10 @@ def _get_objects_access_for_user_email_from_salesforce(
         )
 
     user_id = get_salesforce_user_id(salesforce_client, user_email)
-    return get_objects_access_for_user_id(salesforce_client, user_id, list(object_ids))
+    object_id_to_access = get_objects_access_for_user_id(
+        salesforce_client, user_id, list(object_ids)
+    )
+    return object_id_to_access
 
 
 def _extract_salesforce_object_id_from_url(url: str) -> str:
@@ -69,22 +62,22 @@ def _get_object_ranges_for_chunk(
     return object_ranges
 
 
-def _create_empty_filtered_chunk(unfiltered_chunk: InferenceChunk) -> InferenceChunk:
+def _create_empty_censored_chunk(unfiltered_chunk: InferenceChunk) -> InferenceChunk:
     """
     Create a copy of the unfiltered chunk where potentially sensitive content is removed
     to be added later if the user has access to each of the sub-objects
     """
-    empty_filtered_chunk = InferenceChunk(
+    empty_censored_chunk = InferenceChunk(
         **unfiltered_chunk.model_dump(),
     )
-    empty_filtered_chunk.content = ""
-    empty_filtered_chunk.blurb = ""
-    empty_filtered_chunk.source_links = {}
-    return empty_filtered_chunk
+    empty_censored_chunk.content = ""
+    empty_censored_chunk.blurb = ""
+    empty_censored_chunk.source_links = {}
+    return empty_censored_chunk
 
 
-def _update_filtered_chunk(
-    filtered_chunk: InferenceChunk,
+def _update_censored_chunk(
+    censored_chunk: InferenceChunk,
     unfiltered_chunk: InferenceChunk,
     content_range: ContentRange,
 ) -> InferenceChunk:
@@ -95,23 +88,23 @@ def _update_filtered_chunk(
 
     # Update the content of the filtered chunk
     permitted_content = unfiltered_chunk.content[start_index:end_index]
-    filtered_chunk.content = permitted_content + filtered_chunk.content
+    censored_chunk.content = permitted_content + censored_chunk.content
 
     # Update the source links of the filtered chunk
     if unfiltered_chunk.source_links is not None:
-        if filtered_chunk.source_links is None:
-            filtered_chunk.source_links = {}
+        if censored_chunk.source_links is None:
+            censored_chunk.source_links = {}
         link_content = unfiltered_chunk.source_links[start_index]
-        filtered_chunk.source_links[len(filtered_chunk.content)] = link_content
+        censored_chunk.source_links[len(censored_chunk.content)] = link_content
 
     # Update the blurb of the filtered chunk
-    filtered_chunk.blurb = filtered_chunk.content[:BLURB_SIZE]
+    censored_chunk.blurb = censored_chunk.content[:BLURB_SIZE]
 
-    return filtered_chunk
+    return censored_chunk
 
 
 # TODO: Generalize this to other sources
-def validate_salesforce_access(
+def censor_salesforce_chunks(
     chunks: list[InferenceChunk],
     user_email: str,
     # This is so we can provide a mock access map for testing
@@ -121,7 +114,7 @@ def validate_salesforce_access(
     object_to_content_map: dict[str, list[tuple[ChunkKey, ContentRange]]] = {}
 
     # (doc_id, chunk_id) -> chunk
-    unfiltered_chunks: dict[ChunkKey, InferenceChunk] = {}
+    uncensored_chunks: dict[ChunkKey, InferenceChunk] = {}
 
     # keep track of all object ids that we have seen to make it easier to get
     # the access for these object ids
@@ -130,7 +123,7 @@ def validate_salesforce_access(
     for chunk in chunks:
         chunk_key = (chunk.document_id, chunk.chunk_id)
         # create a dictionary to quickly look up the unfiltered chunk
-        unfiltered_chunks[chunk_key] = chunk
+        uncensored_chunks[chunk_key] = chunk
 
         # for each chunk, get a dictionary of object ids and the content ranges
         # for that object id in the current chunk
@@ -150,7 +143,7 @@ def validate_salesforce_access(
             chunks=chunks,
         )
 
-    filtered_chunks: dict[ChunkKey, InferenceChunk] = {}
+    censored_chunks: dict[ChunkKey, InferenceChunk] = {}
     for object_id, content_list in object_to_content_map.items():
         # if the user does not have access to the object, or the object is not in the
         # access_map, do not include its content in the filtered chunks
@@ -159,17 +152,34 @@ def validate_salesforce_access(
 
         # if we got this far, the user has access to the object so we can create or update
         # the filtered chunk(s) for this object
+        # NOTE: we only create a censored chunk if the user has access to some
+        # part of the chunk
         for chunk_key, content_range in content_list:
-            if chunk_key not in filtered_chunks:
-                filtered_chunks[chunk_key] = _create_empty_filtered_chunk(
-                    unfiltered_chunks[chunk_key]
+            if chunk_key not in censored_chunks:
+                censored_chunks[chunk_key] = _create_empty_censored_chunk(
+                    uncensored_chunks[chunk_key]
                 )
 
-            unfiltered_chunk = unfiltered_chunks[chunk_key]
-            filtered_chunks[chunk_key] = _update_filtered_chunk(
-                filtered_chunk=filtered_chunks[chunk_key],
+            unfiltered_chunk = uncensored_chunks[chunk_key]
+            censored_chunks[chunk_key] = _update_censored_chunk(
+                censored_chunk=censored_chunks[chunk_key],
                 unfiltered_chunk=unfiltered_chunk,
                 content_range=content_range,
             )
 
-    return list(filtered_chunks.values())
+    return list(censored_chunks.values())
+
+
+# NOTE: This is not used anywhere.
+def _get_objects_access_for_user_email(
+    object_ids: set[str], user_email: str
+) -> dict[str, bool]:
+    with get_session_context_manager() as db_session:
+        external_groups = fetch_external_groups_for_user_email_and_group_ids(
+            db_session=db_session,
+            user_email=user_email,
+            # Maybe make a function that adds a salesforce prefix to the group ids
+            group_ids=list(object_ids),
+        )
+        external_group_ids = {group.external_user_group_id for group in external_groups}
+        return {group_id: group_id in external_group_ids for group_id in object_ids}

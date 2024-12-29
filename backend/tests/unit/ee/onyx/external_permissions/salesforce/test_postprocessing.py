@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from ee.onyx.external_permissions.salesforce.postprocessing import (
-    validate_salesforce_access,
+    censor_salesforce_chunks,
 )
 from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.constants import DocumentSource
@@ -46,7 +46,7 @@ def test_validate_salesforce_access_single_object() -> None:
     )
 
     # Test when user has access
-    filtered_chunks = validate_salesforce_access(
+    filtered_chunks = censor_salesforce_chunks(
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={"object1": True},
@@ -55,7 +55,7 @@ def test_validate_salesforce_access_single_object() -> None:
     assert filtered_chunks[0].content == test_content
 
     # Test when user doesn't have access
-    filtered_chunks = validate_salesforce_access(
+    filtered_chunks = censor_salesforce_chunks(
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={"object1": False},
@@ -85,7 +85,7 @@ def test_validate_salesforce_access_multiple_objects() -> None:
     )
 
     # Test when user has access to all objects
-    filtered_chunks = validate_salesforce_access(
+    filtered_chunks = censor_salesforce_chunks(
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={
@@ -98,7 +98,7 @@ def test_validate_salesforce_access_multiple_objects() -> None:
     assert filtered_chunks[0].content == test_content
 
     # Test when user has access to some objects
-    filtered_chunks = validate_salesforce_access(
+    filtered_chunks = censor_salesforce_chunks(
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={
@@ -113,7 +113,7 @@ def test_validate_salesforce_access_multiple_objects() -> None:
     assert section3 in filtered_chunks[0].content
 
     # Test when user has no access
-    filtered_chunks = validate_salesforce_access(
+    filtered_chunks = censor_salesforce_chunks(
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={
@@ -144,7 +144,7 @@ def test_validate_salesforce_access_multiple_chunks() -> None:
     )
 
     # Test mixed access
-    filtered_chunks = validate_salesforce_access(
+    filtered_chunks = censor_salesforce_chunks(
         chunks=[chunk1, chunk2],
         user_email="test@example.com",
         access_map={
@@ -167,7 +167,7 @@ def test_validate_salesforce_access_no_source_links() -> None:
         source_links=None,
     )
 
-    filtered_chunks = validate_salesforce_access(
+    filtered_chunks = censor_salesforce_chunks(
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={},
@@ -186,7 +186,7 @@ def test_validate_salesforce_access_blurb_update() -> None:
         source_links={0: "https://salesforce.com/object1"},
     )
 
-    filtered_chunks = validate_salesforce_access(
+    filtered_chunks = censor_salesforce_chunks(
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={"object1": True},

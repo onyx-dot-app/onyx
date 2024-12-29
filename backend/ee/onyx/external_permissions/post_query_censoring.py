@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.external_permissions.salesforce.postprocessing import (
-    validate_salesforce_access,
+    censor_salesforce_chunks,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.pipeline import InferenceChunk
@@ -17,7 +17,7 @@ DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION: dict[
     # list of chunks to be censored and the user email. returns censored chunks
     Callable[[list[InferenceChunk], str], list[InferenceChunk]],
 ] = {
-    DocumentSource.SALESFORCE: validate_salesforce_access,
+    DocumentSource.SALESFORCE: censor_salesforce_chunks,
 }
 
 
@@ -41,12 +41,15 @@ def _get_all_censoring_enabled_sources() -> set[DocumentSource]:
     }
 
 
-def post_query_chunk_censoring(
+# NOTE: This is only called if ee is enabled.
+def _post_query_chunk_censoring(
     chunks: list[InferenceChunk],
     user: User | None,
 ) -> list[InferenceChunk]:
     """
-    This is only called if ee is enabled.
+    This function checks all chunks to see if they need to be sent to a censoring
+    function. If they do, it sends them to the censoring function and returns the
+    censored chunks. If they don't, it returns the original chunks.
     """
     if user is None:
         # if user is None, permissions are not enforced
