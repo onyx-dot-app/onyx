@@ -1,5 +1,4 @@
 from onyx.auth.schemas import UserRole
-from onyx.auth.schemas import UserStatus
 from onyx.server.models import FullUserSnapshot
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -12,19 +11,19 @@ def _verify_user_pagination(
     users: list[DATestUser],
     page_size: int = 5,
     search_query: str | None = None,
-    role_filter: list[str] | None = None,
-    status_filter: UserStatus | None = None,
+    role_filter: list[UserRole] | None = None,
+    is_active_filter: bool | None = None,
     user_performing_action: DATestUser | None = None,
 ) -> None:
     retrieved_users: list[FullUserSnapshot] = []
 
     for i in range(0, len(users), page_size):
         paginated_result = UserManager.get_user_page(
-            page=i // page_size + 1,
+            page_num=i // page_size,
             page_size=page_size,
             search_query=search_query,
             role_filter=role_filter,
-            status_filter=status_filter,
+            is_active_filter=is_active_filter,
             user_performing_action=user_performing_action,
         )
 
@@ -42,6 +41,12 @@ def _verify_user_pagination(
 
     # Verify that the set of retrieved emails is equal to the set of expected emails
     assert all_expected_emails == all_retrieved_emails
+
+
+def _verify_user_role_and_status(users: list) -> None:
+    for user in users:
+        assert UserManager.is_role(user, user.role)
+        assert UserManager.is_status(user, user.is_active)
 
 
 def test_user_pagination(reset: None) -> None:
@@ -83,7 +88,7 @@ def test_user_pagination(reset: None) -> None:
         user_name_prefix="inactive_admin",
         count=10,
         role=UserRole.ADMIN,
-        status=UserStatus.DEACTIVATED,
+        is_active=False,
         user_performing_action=user_performing_action,
     )
 
@@ -103,6 +108,7 @@ def test_user_pagination(reset: None) -> None:
         + inactive_admins
         + searchable_curators
     )
+    _verify_user_role_and_status(all_users)
 
     # Verify pagination
     _verify_user_pagination(
@@ -113,13 +119,13 @@ def test_user_pagination(reset: None) -> None:
     # Verify filtering by role
     _verify_user_pagination(
         users=admin_users + inactive_admins,
-        role_filter=[UserRole.ADMIN.value],
+        role_filter=[UserRole.ADMIN],
         user_performing_action=user_performing_action,
     )
     # Verify filtering by status
     _verify_user_pagination(
         users=inactive_admins,
-        status_filter=UserStatus.DEACTIVATED,
+        is_active_filter=False,
         user_performing_action=user_performing_action,
     )
     # Verify filtering by search query
@@ -132,15 +138,15 @@ def test_user_pagination(reset: None) -> None:
     # Verify filtering by role and status
     _verify_user_pagination(
         users=inactive_admins,
-        role_filter=[UserRole.ADMIN.value],
-        status_filter=UserStatus.DEACTIVATED,
+        role_filter=[UserRole.ADMIN],
+        is_active_filter=False,
         user_performing_action=user_performing_action,
     )
 
     # Verify filtering by role and search query
     _verify_user_pagination(
         users=searchable_curators,
-        role_filter=[UserRole.GLOBAL_CURATOR.value],
+        role_filter=[UserRole.GLOBAL_CURATOR],
         search_query="search",
         user_performing_action=user_performing_action,
     )
@@ -148,8 +154,8 @@ def test_user_pagination(reset: None) -> None:
     # Verify filtering by role and status and search query
     _verify_user_pagination(
         users=inactive_admins,
-        role_filter=[UserRole.ADMIN.value],
-        status_filter=UserStatus.DEACTIVATED,
+        role_filter=[UserRole.ADMIN],
+        is_active_filter=False,
         search_query="inactive_ad",
         user_performing_action=user_performing_action,
     )
@@ -157,6 +163,6 @@ def test_user_pagination(reset: None) -> None:
     # Verify filtering by multiple roles (admin and global curator)
     _verify_user_pagination(
         users=admin_users + global_curators + inactive_admins + searchable_curators,
-        role_filter=[UserRole.ADMIN.value, UserRole.GLOBAL_CURATOR.value],
+        role_filter=[UserRole.ADMIN, UserRole.GLOBAL_CURATOR],
         user_performing_action=user_performing_action,
     )

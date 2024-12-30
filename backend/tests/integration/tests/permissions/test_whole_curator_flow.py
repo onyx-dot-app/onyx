@@ -15,7 +15,7 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 def test_whole_curator_flow(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
-    assert UserManager.verify_role(admin_user, UserRole.ADMIN)
+    assert UserManager.is_role(admin_user, UserRole.ADMIN)
 
     # Creating a curator
     curator: DATestUser = UserManager.create(name="curator")
@@ -36,7 +36,7 @@ def test_whole_curator_flow(reset: None) -> None:
         user_to_set_as_curator=curator,
         user_performing_action=admin_user,
     )
-    assert UserManager.verify_role(curator, UserRole.CURATOR)
+    assert UserManager.is_role(curator, UserRole.CURATOR)
 
     # Creating a credential as curator
     test_credential = CredentialManager.create(
@@ -92,11 +92,11 @@ def test_whole_curator_flow(reset: None) -> None:
 def test_global_curator_flow(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
-    assert UserManager.verify_role(admin_user, UserRole.ADMIN)
+    assert UserManager.is_role(admin_user, UserRole.ADMIN)
 
     # Creating a user
     global_curator: DATestUser = UserManager.create(name="global_curator")
-    assert UserManager.verify_role(global_curator, UserRole.BASIC)
+    assert UserManager.is_role(global_curator, UserRole.BASIC)
 
     # Set the user to a global curator
     UserManager.set_role(
@@ -104,7 +104,7 @@ def test_global_curator_flow(reset: None) -> None:
         target_role=UserRole.GLOBAL_CURATOR,
         user_performing_action=admin_user,
     )
-    assert UserManager.verify_role(global_curator, UserRole.GLOBAL_CURATOR)
+    assert UserManager.is_role(global_curator, UserRole.GLOBAL_CURATOR)
 
     # Creating a user group containing the global curator
     user_group_1 = UserGroupManager.create(

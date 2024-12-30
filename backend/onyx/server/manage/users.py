@@ -28,7 +28,6 @@ from onyx.auth.invited_users import write_invited_users
 from onyx.auth.noauth_user import fetch_no_auth_user
 from onyx.auth.noauth_user import set_no_auth_user_preferences
 from onyx.auth.schemas import UserRole
-from onyx.auth.schemas import UserStatus
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
@@ -117,29 +116,26 @@ def set_user_role(
 @router.get("/manage/users/accepted")
 def list_accepted_users(
     q: str | None = Query(default=None),
-    page: int = Query(1, ge=1),
+    page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
     roles: list[UserRole] = Query(default=[]),
-    status: UserStatus | None = Query(default=None),
-    user: User | None = Depends(current_curator_or_admin_user),
+    is_active: bool | None = Query(default=None),
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[FullUserSnapshot]:
-    if not q:
-        q = ""
-
     filtered_accepted_users = get_page_of_filtered_users(
         db_session=db_session,
         page_size=page_size,
-        page=page,
+        page_num=page_num,
         email_filter_string=q,
-        status_filter=status,
+        is_active_filter=is_active,
         roles_filter=roles,
     )
 
     total_accepted_users_count = get_total_filtered_users_count(
         db_session=db_session,
         email_filter_string=q,
-        status_filter=status,
+        is_active_filter=is_active,
         roles_filter=roles,
     )
 
@@ -160,7 +156,7 @@ def list_accepted_users(
 
 @router.get("/manage/users/invited")
 def list_invited_users(
-    user: User | None = Depends(current_curator_or_admin_user),
+    _: User | None = Depends(current_admin_user),
 ) -> list[InvitedUserSnapshot]:
     invited_emails = get_invited_users()
 
@@ -173,12 +169,9 @@ def list_all_users(
     accepted_page: int | None = None,
     slack_users_page: int | None = None,
     invited_page: int | None = None,
-    user: User | None = Depends(current_curator_or_admin_user),
+    _: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> AllUsersResponse:
-    if not q:
-        q = ""
-
     users = [
         user
         for user in get_all_users(db_session, email_filter_string=q)
@@ -208,9 +201,7 @@ def list_all_users(
                     id=user.id,
                     email=user.email,
                     role=user.role,
-                    status=(
-                        UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED
-                    ),
+                    is_active=user.is_active,
                 )
                 for user in accepted_users
             ],
@@ -219,9 +210,7 @@ def list_all_users(
                     id=user.id,
                     email=user.email,
                     role=user.role,
-                    status=(
-                        UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED
-                    ),
+                    is_active=user.is_active,
                 )
                 for user in slack_users
             ],
@@ -238,7 +227,7 @@ def list_all_users(
                 id=user.id,
                 email=user.email,
                 role=user.role,
-                status=UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED,
+                is_active=user.is_active,
             )
             for user in accepted_users
         ][accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE],
@@ -247,7 +236,7 @@ def list_all_users(
                 id=user.id,
                 email=user.email,
                 role=user.role,
-                status=UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED,
+                is_active=user.is_active,
             )
             for user in slack_users
         ][

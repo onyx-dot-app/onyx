@@ -1,24 +1,12 @@
 import {
   type User,
-  UserStatus,
   UserRole,
   USER_ROLE_LABELS,
   INVALID_ROLE_HOVER_TEXT,
 } from "@/lib/types";
-import CenteredPageSelector from "./CenteredPageSelector";
-import { type PageSelectorProps } from "@/components/PageSelector";
-import { HidableSection } from "@/app/admin/assistants/HidableSection";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
-import {
-  Table,
-  TableHead,
-  TableRow,
-  TableBody,
-  TableCell,
-} from "@/components/ui/table";
-
 import {
   Select,
   SelectContent,
@@ -30,8 +18,6 @@ import { Button } from "@/components/ui/button";
 import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
 import { useState } from "react";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
-import { TableHeader } from "@/components/ui/table";
 
 export const InviteUserButton = ({
   user,

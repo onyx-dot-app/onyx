@@ -47,8 +47,8 @@ const InvitedUserTable = ({
 
   // Get the current page of users
   const currentPageOfUsers = filteredUsers.slice(
-    (currentPageNum - 1) * 10,
-    currentPageNum * 10
+    (currentPageNum - 1) * USERS_PER_PAGE,
+    currentPageNum * USERS_PER_PAGE
   );
 
   if (isLoading) {

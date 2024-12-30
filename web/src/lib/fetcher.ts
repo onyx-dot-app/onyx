@@ -19,7 +19,7 @@ const DEFAULT_AUTH_ERROR_MSG =
 
 const DEFAULT_ERROR_MSG = "An error occurred while fetching the data.";
 
-export const errorHandlingFetcher = async (url: string) => {
+export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {
   const res = await fetch(url);
 
   if (res.status === 403) {

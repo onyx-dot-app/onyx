@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   IndexAttemptSnapshot,
   AcceptedUserSnapshot,
   InvitedUserSnapshot,
 } from "@/lib/types";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 
 type PaginatedType =
   | IndexAttemptSnapshot
@@ -45,15 +46,12 @@ function usePaginatedFetch<T extends PaginatedType>({
 }: PaginationConfig): PaginatedHookReturnData<T> {
   const router = useRouter();
   const currentPath = usePathname();
+  const searchParams = useSearchParams();
 
   // State to initialize and hold the current page number
-  const [currentPage, setCurrentPage] = useState(() => {
-    if (typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      return parseInt(urlParams.get("page") || "1", 10);
-    }
-    return 1;
-  });
+  const [currentPage, setCurrentPage] = useState(() =>
+    parseInt(searchParams?.get("page") || "1", 10)
+  );
   const [currentPageData, setCurrentPageData] = useState<T[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -87,9 +85,9 @@ function usePaginatedFetch<T extends PaginatedType>({
       ongoingRequestsRef.current.add(batchNum);
 
       try {
-        // Builds the query params, including pagination and filtering
+        // Build query params
         const params = new URLSearchParams({
-          page: (batchNum + 1).toString(),
+          page_num: batchNum.toString(),
           page_size: (pagesPerBatch * itemsPerPage).toString(),
         });
 
@@ -105,20 +103,30 @@ function usePaginatedFetch<T extends PaginatedType>({
           }
         }
 
-        const response = await fetch(`${endpoint}?${params.toString()}`);
-        if (!response.ok) throw new Error("Failed to fetch data");
-        const responseData: PaginatedApiResponse<T> = await response.json();
+        const url = `${endpoint}?${params.toString()}`;
+        const responseData =
+          await errorHandlingFetcher<PaginatedApiResponse<T>>(url);
 
-        const { items, total_items } = responseData;
-
-        if (total_items !== undefined) {
-          setTotalItems(total_items);
+        // Validate response data structure
+        if (
+          !Array.isArray(
+            responseData.items || typeof responseData.total_items !== "number"
+          )
+        ) {
+          throw new Error(
+            "Sorry, we encountered an issue with the data format. Please try again or contact support if the problem persists."
+          );
         }
+
+        setTotalItems(responseData.total_items);
 
         // Splits a batch into pages
         const pagesInBatch = Array.from({ length: pagesPerBatch }, (_, i) => {
           const startIndex = i * itemsPerPage;
-          return items.slice(startIndex, startIndex + itemsPerPage);
+          return responseData.items.slice(
+            startIndex,
+            startIndex + itemsPerPage
+          );
         });
 
         setCachedBatches((prev) => ({
@@ -126,9 +134,7 @@ function usePaginatedFetch<T extends PaginatedType>({
           [batchNum]: pagesInBatch,
         }));
       } catch (error) {
-        setError(
-          error instanceof Error ? error : new Error("Error fetching data")
-        );
+        setError(error instanceof Error ? error : new Error(String(error)));
       } finally {
         ongoingRequestsRef.current.delete(batchNum);
       }
@@ -140,10 +146,14 @@ function usePaginatedFetch<T extends PaginatedType>({
   const updatePageUrl = useCallback(
     (page: number) => {
       if (currentPath) {
-        router.replace(`${currentPath}?page=${page}`, { scroll: false });
+        const params = new URLSearchParams(searchParams);
+        params.set("page", page.toString());
+        router.replace(`${currentPath}?${params.toString()}`, {
+          scroll: false,
+        });
       }
     },
-    [currentPath, router]
+    [currentPath, router, searchParams]
   );
 
   // Updates the current page
@@ -221,6 +231,7 @@ function usePaginatedFetch<T extends PaginatedType>({
     setCachedBatches({});
     setTotalItems(0);
     goToPage(1);
+    setError(null);
   }, [currentPath, query, filter]);
 
   return {

@@ -1,6 +1,5 @@
 import {
   type User,
-  UserStatus,
   UserRole,
   InvitedUserSnapshot,
   USER_ROLE_LABELS,
@@ -51,7 +50,7 @@ const SignedUpUserTable = ({
   invitedUsersMutate,
 }: Props) => {
   const [filters, setFilters] = useState<{
-    status?: UserStatus.live | UserStatus.deactivated;
+    is_active?: boolean;
     roles?: UserRole[];
   }>({});
 
@@ -122,18 +121,16 @@ const SignedUpUserTable = ({
     <>
       <div className="flex items-center gap-4 py-4">
         <Select
-          value={filters.status || "all"}
+          value={filters.is_active?.toString() || "all"}
           onValueChange={(selectedStatus) =>
             setFilters((prev) => {
               if (selectedStatus === "all") {
-                const { status, ...rest } = prev;
+                const { is_active, ...rest } = prev;
                 return rest;
               }
               return {
                 ...prev,
-                status: selectedStatus as
-                  | UserStatus.live
-                  | UserStatus.deactivated,
+                is_active: selectedStatus === "true",
               };
             })
           }
@@ -143,8 +140,8 @@ const SignedUpUserTable = ({
           </SelectTrigger>
           <SelectContent className="bg-neutral-50">
             <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="live">Active</SelectItem>
-            <SelectItem value="deactivated">Inactive</SelectItem>
+            <SelectItem value="true">Active</SelectItem>
+            <SelectItem value="false">Inactive</SelectItem>
           </SelectContent>
         </Select>
         <Select value="roles">
@@ -225,11 +222,11 @@ const SignedUpUserTable = ({
       <>
         <DeactivateUserButton
           user={user}
-          deactivate={user.status === UserStatus.live}
+          deactivate={user.is_active}
           setPopup={setPopup}
           mutate={refresh}
         />
-        {user.status === UserStatus.deactivated && (
+        {!user.is_active && (
           <DeleteUserButton user={user} setPopup={setPopup} mutate={refresh} />
         )}
       </>
@@ -266,29 +263,27 @@ const SignedUpUserTable = ({
               <TableRow>
                 <TableCell colSpan={4} className="text-center">
                   <p className="pt-4 pb-4">
-                    {filters.roles?.length || filters.status
+                    {filters.roles?.length || filters.is_active
                       ? "No users found matching your filters"
                       : `No users found matching "${q}"`}
                   </p>
                 </TableCell>
               </TableRow>
             ) : (
-              pageOfUsers
-                ?.filter((user) => user.role !== UserRole.EXT_PERM_USER)
-                .map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell className="w-[180px]">
-                      {renderUserRoleDropdown(user)}
-                    </TableCell>
-                    <TableCell className="text-center w-[140px]">
-                      <i>{user.status === "live" ? "Active" : "Inactive"}</i>
-                    </TableCell>
-                    <TableCell className="text-right w-[200px]">
-                      {renderActionButtons(user)}
-                    </TableCell>
-                  </TableRow>
-                ))
+              pageOfUsers.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell className="w-[180px]">
+                    {renderUserRoleDropdown(user)}
+                  </TableCell>
+                  <TableCell className="text-center w-[140px]">
+                    <i>{user.is_active ? "Active" : "Inactive"}</i>
+                  </TableCell>
+                  <TableCell className="text-right w-[200px]">
+                    {renderActionButtons(user)}
+                  </TableCell>
+                </TableRow>
+              ))
             )}
           </TableBody>
         )}

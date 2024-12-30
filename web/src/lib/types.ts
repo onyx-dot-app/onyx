@@ -12,12 +12,6 @@ interface UserPreferences {
   auto_scroll: boolean | null;
 }
 
-export enum UserStatus {
-  live = "live",
-  invited = "invited",
-  deactivated = "deactivated",
-}
-
 export enum UserRole {
   LIMITED = "limited",
   BASIC = "basic",
@@ -51,12 +45,11 @@ export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
 export interface User {
   id: string;
   email: string;
-  is_active: string;
-  is_superuser: string;
-  is_verified: string;
+  is_active: boolean;
+  is_superuser: boolean;
+  is_verified: boolean;
   role: UserRole;
   preferences: UserPreferences;
-  status: UserStatus;
   current_token_created_at?: Date;
   current_token_expiry_length?: number;
   oidc_expiry?: Date;
@@ -77,7 +70,7 @@ export interface AcceptedUserSnapshot {
   id: string;
   email: string;
   role: UserRole;
-  status: UserStatus;
+  is_active: boolean;
 }
 
 export interface InvitedUserSnapshot {
