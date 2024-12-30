@@ -60,3 +60,12 @@ spec:
           envFrom:
             - configMapRef:
                 name: env-configmap
+      # Uncomment if you are using IAM auth for Postgres
+      #     volumeMounts:
+      #       - name: bundle-pem
+      #         mountPath: "/app/certs"
+      #         readOnly: true
+      # volumes:
+      #   - name: bundle-pem
+      #     secret:
+      #       secretName: bundle-pem-secret

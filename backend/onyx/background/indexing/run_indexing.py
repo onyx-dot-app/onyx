@@ -14,6 +14,7 @@ from onyx.configs.app_configs import POLL_CONNECTOR_OFFSET
 from onyx.configs.constants import MilestoneRecordType
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.factory import instantiate_connector
+from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_last_successful_attempt_time
@@ -88,6 +89,35 @@ def _get_connector_runner(
     return ConnectorRunner(
         connector=runnable_connector, time_range=(start_time, end_time)
     )
+
+
+def strip_null_characters(doc_batch: list[Document]) -> list[Document]:
+    cleaned_batch = []
+    for doc in doc_batch:
+        cleaned_doc = doc.model_copy()
+
+        if "\x00" in cleaned_doc.id:
+            logger.warning(f"NUL characters found in document ID: {cleaned_doc.id}")
+            cleaned_doc.id = cleaned_doc.id.replace("\x00", "")
+
+        if "\x00" in cleaned_doc.semantic_identifier:
+            logger.warning(
+                f"NUL characters found in document semantic identifier: {cleaned_doc.semantic_identifier}"
+            )
+            cleaned_doc.semantic_identifier = cleaned_doc.semantic_identifier.replace(
+                "\x00", ""
+            )
+
+        for section in cleaned_doc.sections:
+            if section.link and "\x00" in section.link:
+                logger.warning(
+                    f"NUL characters found in document link for document: {cleaned_doc.id}"
+                )
+                section.link = section.link.replace("\x00", "")
+
+        cleaned_batch.append(cleaned_doc)
+
+    return cleaned_batch
 
 
 class ConnectorStopSignal(Exception):
@@ -238,7 +268,9 @@ def _run_indexing(
                     )
 
                 batch_description = []
-                for doc in doc_batch:
+
+                doc_batch_cleaned = strip_null_characters(doc_batch)
+                for doc in doc_batch_cleaned:
                     batch_description.append(doc.to_short_descriptor())
 
                     doc_size = 0
@@ -258,15 +290,15 @@ def _run_indexing(
 
                 # real work happens here!
                 new_docs, total_batch_chunks = indexing_pipeline(
-                    document_batch=doc_batch,
+                    document_batch=doc_batch_cleaned,
                     index_attempt_metadata=index_attempt_md,
                 )
 
                 batch_num += 1
                 net_doc_change += new_docs
                 chunk_count += total_batch_chunks
-                document_count += len(doc_batch)
-                all_connector_doc_ids.update(doc.id for doc in doc_batch)
+                document_count += len(doc_batch_cleaned)
+                all_connector_doc_ids.update(doc.id for doc in doc_batch_cleaned)
 
                 # commit transaction so that the `update` below begins
                 # with a brand new transaction. Postgres uses the start
@@ -276,7 +308,7 @@ def _run_indexing(
                 db_session.commit()
 
                 if callback:
-                    callback.progress("_run_indexing", len(doc_batch))
+                    callback.progress("_run_indexing", len(doc_batch_cleaned))
 
                 # This new value is updated every batch, so UI can refresh per batch update
                 update_docs_indexed(

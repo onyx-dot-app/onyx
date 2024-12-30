@@ -2,9 +2,7 @@ import { WebResultIcon } from "@/components/WebResultIcon";
 import { SourceIcon } from "@/components/SourceIcon";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { truncateString } from "@/lib/utils";
-import { SetStateAction } from "react";
-import { Dispatch } from "react";
-import { ValidSources } from "@/lib/types";
+import { openDocument } from "@/lib/search/utils";
 
 export default function SourceCard({
   doc,
@@ -16,13 +14,7 @@ export default function SourceCard({
   return (
     <div
       key={doc.document_id}
-      onClick={() => {
-        if (doc.source_type == ValidSources.File && setPresentingDocument) {
-          setPresentingDocument(doc);
-        } else if (doc.link) {
-          window.open(doc.link, "_blank");
-        }
-      }}
+      onClick={() => openDocument(doc, setPresentingDocument)}
       className="cursor-pointer text-left overflow-hidden flex flex-col gap-0.5 rounded-sm px-3 py-2.5 hover:bg-background-125 bg-background-100 w-[200px]"
     >
       <div className="line-clamp-1 font-semibold text-ellipsis  text-text-900  flex h-6 items-center gap-2 text-sm">

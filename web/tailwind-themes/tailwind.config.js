@@ -143,7 +143,7 @@ module.exports = {
         // Background for chat messages (user bubbles)
         user: "var(--user-bubble)",
 
-        "userdropdown-background": "var(--background-100)",
+        "userdropdown-background": "var(--background-150)",
         "text-mobile-sidebar-toggled": "var(--text-800)",
         "text-mobile-sidebar-untoggled": "var(--text-500)",
         "text-editing-message": "var(--text-800)",

@@ -20,6 +20,7 @@ from tenacity import RetryError
 from onyx.access.access import get_access_for_document
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_get_queue_length
+from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.background.celery.tasks.shared.tasks import LIGHT_SOFT_TIME_LIMIT
 from onyx.background.celery.tasks.shared.tasks import LIGHT_TIME_LIMIT
@@ -164,7 +165,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> None:
             lock_beat.release()
 
     time_elapsed = time.monotonic() - time_start
-    task_logger.info(f"check_for_vespa_sync_task finished: elapsed={time_elapsed:.2f}")
+    task_logger.debug(f"check_for_vespa_sync_task finished: elapsed={time_elapsed:.2f}")
     return
 
 
@@ -636,15 +637,23 @@ def monitor_ccpair_indexing_taskset(
     if not payload:
         return
 
+    elapsed_started_str = None
+    if payload.started:
+        elapsed_started = datetime.now(timezone.utc) - payload.started
+        elapsed_started_str = f"{elapsed_started.total_seconds():.2f}"
+
     elapsed_submitted = datetime.now(timezone.utc) - payload.submitted
 
     progress = redis_connector_index.get_progress()
     if progress is not None:
         task_logger.info(
-            f"Connector indexing progress: cc_pair={cc_pair_id} "
+            f"Connector indexing progress: "
+            f"attempt={payload.index_attempt_id} "
+            f"cc_pair={cc_pair_id} "
             f"search_settings={search_settings_id} "
             f"progress={progress} "
-            f"elapsed_submitted={elapsed_submitted.total_seconds():.2f}"
+            f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
+            f"elapsed_started={elapsed_started_str}"
         )
 
     if payload.index_attempt_id is None or payload.celery_task_id is None:
@@ -715,11 +724,14 @@ def monitor_ccpair_indexing_taskset(
     status_enum = HTTPStatus(status_int)
 
     task_logger.info(
-        f"Connector indexing finished: cc_pair={cc_pair_id} "
+        f"Connector indexing finished: "
+        f"attempt={payload.index_attempt_id} "
+        f"cc_pair={cc_pair_id} "
         f"search_settings={search_settings_id} "
         f"progress={progress} "
         f"status={status_enum.name} "
-        f"elapsed_submitted={elapsed_submitted.total_seconds():.2f}"
+        f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
+        f"elapsed_started={elapsed_started_str}"
     )
 
     redis_connector_index.reset()
@@ -766,31 +778,34 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
             OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC, r_celery
         )
 
+        prefetched = celery_get_unacked_task_ids(
+            OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
+        )
+
         task_logger.info(
             f"Queue lengths: celery={n_celery} "
             f"indexing={n_indexing} "
+            f"indexing_prefetched={len(prefetched)} "
             f"sync={n_sync} "
             f"deletion={n_deletion} "
             f"pruning={n_pruning} "
             f"permissions_sync={n_permissions_sync} "
         )
 
+        # scan and monitor activity to completion
         lock_beat.reacquire()
         if r.exists(RedisConnectorCredentialPair.get_fence_key()):
             monitor_connector_taskset(r)
 
-        lock_beat.reacquire()
         for key_bytes in r.scan_iter(RedisConnectorDelete.FENCE_PREFIX + "*"):
             lock_beat.reacquire()
             monitor_connector_deletion_taskset(tenant_id, key_bytes, r)
 
-        lock_beat.reacquire()
         for key_bytes in r.scan_iter(RedisDocumentSet.FENCE_PREFIX + "*"):
             lock_beat.reacquire()
             with get_session_with_tenant(tenant_id) as db_session:
                 monitor_document_set_taskset(tenant_id, key_bytes, r, db_session)
 
-        lock_beat.reacquire()
         for key_bytes in r.scan_iter(RedisUserGroup.FENCE_PREFIX + "*"):
             lock_beat.reacquire()
             monitor_usergroup_taskset = fetch_versioned_implementation_with_fallback(
@@ -801,28 +816,21 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
             with get_session_with_tenant(tenant_id) as db_session:
                 monitor_usergroup_taskset(tenant_id, key_bytes, r, db_session)
 
-        lock_beat.reacquire()
         for key_bytes in r.scan_iter(RedisConnectorPrune.FENCE_PREFIX + "*"):
             lock_beat.reacquire()
             with get_session_with_tenant(tenant_id) as db_session:
                 monitor_ccpair_pruning_taskset(tenant_id, key_bytes, r, db_session)
 
-        lock_beat.reacquire()
         for key_bytes in r.scan_iter(RedisConnectorIndex.FENCE_PREFIX + "*"):
             lock_beat.reacquire()
             with get_session_with_tenant(tenant_id) as db_session:
                 monitor_ccpair_indexing_taskset(tenant_id, key_bytes, r, db_session)
 
-        lock_beat.reacquire()
         for key_bytes in r.scan_iter(RedisConnectorPermissionSync.FENCE_PREFIX + "*"):
             lock_beat.reacquire()
             with get_session_with_tenant(tenant_id) as db_session:
                 monitor_ccpair_permissions_taskset(tenant_id, key_bytes, r, db_session)
 
-        # uncomment for debugging if needed
-        # r_celery = celery_app.broker_connection().channel().client
-        # length = celery_get_queue_length(OnyxCeleryQueues.VESPA_METADATA_SYNC, r_celery)
-        # task_logger.warning(f"queue={OnyxCeleryQueues.VESPA_METADATA_SYNC} length={length}")
     except SoftTimeLimitExceeded:
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
@@ -832,7 +840,7 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
             lock_beat.release()
 
     time_elapsed = time.monotonic() - time_start
-    task_logger.info(f"monitor_vespa_sync finished: elapsed={time_elapsed:.2f}")
+    task_logger.debug(f"monitor_vespa_sync finished: elapsed={time_elapsed:.2f}")
     return True
 
 

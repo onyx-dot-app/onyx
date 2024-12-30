@@ -535,7 +535,7 @@ class VespaIndex(DocumentIndex):
         if self.secondary_index_name:
             index_names.append(self.secondary_index_name)
 
-        with get_vespa_http_client() as http_client:
+        with get_vespa_http_client(http2=False) as http_client:
             for index_name in index_names:
                 params = httpx.QueryParams(
                     {
@@ -546,8 +546,12 @@ class VespaIndex(DocumentIndex):
 
                 while True:
                     try:
+                        vespa_url = (
+                            f"{DOCUMENT_ID_ENDPOINT.format(index_name=self.index_name)}"
+                        )
+                        logger.debug(f'update_single PUT on URL "{vespa_url}"')
                         resp = http_client.put(
-                            f"{DOCUMENT_ID_ENDPOINT.format(index_name=self.index_name)}",
+                            vespa_url,
                             params=params,
                             headers={"Content-Type": "application/json"},
                             json=update_dict,
@@ -619,7 +623,7 @@ class VespaIndex(DocumentIndex):
         if self.secondary_index_name:
             index_names.append(self.secondary_index_name)
 
-        with get_vespa_http_client() as http_client:
+        with get_vespa_http_client(http2=False) as http_client:
             for index_name in index_names:
                 params = httpx.QueryParams(
                     {
@@ -630,8 +634,12 @@ class VespaIndex(DocumentIndex):
 
                 while True:
                     try:
+                        vespa_url = (
+                            f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}"
+                        )
+                        logger.debug(f'delete_single DELETE on URL "{vespa_url}"')
                         resp = http_client.delete(
-                            f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}",
+                            vespa_url,
                             params=params,
                         )
                         resp.raise_for_status()

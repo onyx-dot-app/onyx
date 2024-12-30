@@ -68,3 +68,11 @@ def remove_users_from_tenant(emails: list[str], tenant_id: str) -> None:
                 f"Failed to remove users from tenant {tenant_id}: {str(e)}"
             )
             db_session.rollback()
+
+
+def remove_all_users_from_tenant(tenant_id: str) -> None:
+    with get_session_with_tenant(POSTGRES_DEFAULT_SCHEMA) as db_session:
+        db_session.query(UserTenantMapping).filter(
+            UserTenantMapping.tenant_id == tenant_id
+        ).delete()
+        db_session.commit()

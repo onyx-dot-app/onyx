@@ -17,7 +17,7 @@ import { SourceSelector } from "../shared_chat_search/SearchFilters";
 import { XIcon } from "@/components/icons/icons";
 
 interface ChatFiltersProps {
-  filterManager: FilterManager;
+  filterManager?: FilterManager;
   closeSidebar: () => void;
   selectedMessage: Message | null;
   selectedDocuments: OnyxDocument[] | null;
@@ -27,6 +27,7 @@ interface ChatFiltersProps {
   maxTokens: number;
   initialWidth: number;
   isOpen: boolean;
+  isSharedChat?: boolean;
   modal: boolean;
   ccPairs: CCPairBasicInfo[];
   tags: Tag[];
@@ -48,6 +49,7 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
       selectedDocumentTokens,
       maxTokens,
       initialWidth,
+      isSharedChat,
       isOpen,
       ccPairs,
       tags,
@@ -79,13 +81,14 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
     const dedupedDocuments = removeDuplicateDocs(currentDocuments || []);
 
     const tokenLimitReached = selectedDocumentTokens > maxTokens - 75;
+    console.log("SELECTED MESSAGE is", selectedMessage);
 
     const hasSelectedDocuments = selectedDocumentIds.length > 0;
 
     return (
       <div
         id="onyx-chat-sidebar"
-        className={`relative  max-w-full ${
+        className={`relative bg-background max-w-full ${
           !modal ? "border-l h-full border-sidebar-border" : ""
         }`}
         onClick={(e) => {
@@ -122,10 +125,10 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
             <div className="overflow-y-auto -mx-1 sm:mx-0 flex-grow gap-y-0 default-scrollbar dark-scrollbar flex flex-col">
               {showFilters ? (
                 <SourceSelector
+                  {...filterManager!}
                   modal={modal}
                   tagsOnLeft={true}
                   filtersUntoggled={false}
-                  {...filterManager}
                   availableDocumentSets={documentSets}
                   existingSources={ccPairs.map((ccPair) => ccPair.source)}
                   availableTags={tags}
@@ -157,6 +160,7 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
                               )!
                             );
                           }}
+                          hideSelection={isSharedChat}
                           tokenLimitReached={tokenLimitReached}
                         />
                       </div>

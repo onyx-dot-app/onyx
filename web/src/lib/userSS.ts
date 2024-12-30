@@ -115,6 +115,7 @@ export const getAuthUrlSS = async (
       return await getGoogleOAuthUrlSS(nextUrl);
     }
     case "cloud": {
+      console.log("LLpp");
       return await getGoogleOAuthUrlSS(nextUrl);
     }
     case "saml": {

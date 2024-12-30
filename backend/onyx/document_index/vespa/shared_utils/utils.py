@@ -55,7 +55,7 @@ def remove_invalid_unicode_chars(text: str) -> str:
     return _illegal_xml_chars_RE.sub("", text)
 
 
-def get_vespa_http_client(no_timeout: bool = False) -> httpx.Client:
+def get_vespa_http_client(no_timeout: bool = False, http2: bool = True) -> httpx.Client:
     """
     Configure and return an HTTP client for communicating with Vespa,
     including authentication if needed.
@@ -67,5 +67,5 @@ def get_vespa_http_client(no_timeout: bool = False) -> httpx.Client:
         else None,
         verify=False if not MANAGED_VESPA else True,
         timeout=None if no_timeout else VESPA_REQUEST_TIMEOUT,
-        http2=True,
+        http2=http2,
     )

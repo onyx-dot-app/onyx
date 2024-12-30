@@ -15,6 +15,7 @@ from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
 from ee.onyx.configs.app_configs import OPENAI_DEFAULT_API_KEY
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import TenantCreationPayload
+from ee.onyx.server.tenants.models import TenantDeletionPayload
 from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
 from ee.onyx.server.tenants.schema_management import drop_schema
 from ee.onyx.server.tenants.schema_management import run_alembic_migrations
@@ -185,6 +186,7 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
     try:
         # Drop the tenant's schema to rollback provisioning
         drop_schema(tenant_id)
+
         # Remove tenant mapping
         with Session(get_sqlalchemy_engine()) as db_session:
             db_session.query(UserTenantMapping).filter(
@@ -320,3 +322,26 @@ async def submit_to_hubspot(
 
     if response.status_code != 200:
         logger.error(f"Failed to submit to HubSpot: {response.text}")
+
+
+async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
+    token = generate_data_plane_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    payload = TenantDeletionPayload(tenant_id=tenant_id, email=email)
+
+    async with aiohttp.ClientSession() as session:
+        async with session.delete(
+            f"{CONTROL_PLANE_API_BASE_URL}/tenants/delete",
+            headers=headers,
+            json=payload.model_dump(),
+        ) as response:
+            print(response)
+            if response.status != 200:
+                error_text = await response.text()
+                logger.error(f"Control plane tenant creation failed: {error_text}")
+                raise Exception(
+                    f"Failed to delete tenant on control plane: {error_text}"
+                )

@@ -39,7 +39,10 @@ import Image, { StaticImageData } from "next/image";
 import jiraSVG from "../../../public/Jira.svg";
 import confluenceSVG from "../../../public/Confluence.svg";
 import openAISVG from "../../../public/Openai.svg";
+import amazonSVG from "../../../public/Amazon.svg";
 import geminiSVG from "../../../public/Gemini.svg";
+import metaSVG from "../../../public/Meta.svg";
+import mistralSVG from "../../../public/Mistral.svg";
 import openSourceIcon from "../../../public/OpenSource.png";
 import litellmIcon from "../../../public/LiteLLM.jpg";
 
@@ -49,6 +52,7 @@ import asanaIcon from "../../../public/Asana.png";
 import anthropicSVG from "../../../public/Anthropic.svg";
 import nomicSVG from "../../../public/nomic.svg";
 import microsoftIcon from "../../../public/microsoft.png";
+import microsoftSVG from "../../../public/Microsoft.svg";
 import mixedBreadSVG from "../../../public/Mixedbread.png";
 
 import OCIStorageSVG from "../../../public/OCI.svg";
@@ -99,12 +103,14 @@ export const LogoIcon = ({
   className = defaultTailwindCSS,
   src,
 }: LogoIconProps) => (
-  <div
+  <Image
     style={{ width: `${size}px`, height: `${size}px` }}
     className={`w-[${size}px] h-[${size}px] ` + className}
-  >
-    <Image src={src} alt="Logo" width="96" height="96" />
-  </div>
+    src={src}
+    alt="Logo"
+    width="96"
+    height="96"
+  />
 );
 
 export const AssistantsIconSkeleton = ({
@@ -1103,6 +1109,30 @@ export const GeminiIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => <LogoIcon size={size} className={className} src={geminiSVG} />;
+
+export const AmazonIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => <LogoIcon size={size} className={className} src={amazonSVG} />;
+
+export const MetaIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => <LogoIcon size={size} className={className} src={metaSVG} />;
+
+export const MicrosoftIconSVG = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={microsoftSVG} />
+);
+
+export const MistralIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={mistralSVG} />
+);
 
 export const VoyageIcon = ({
   size = 16,

@@ -40,6 +40,7 @@ from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.main import get_application as get_application_base
+from onyx.main import include_auth_router_with_prefix
 from onyx.main import include_router_with_global_prefix_prepended
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
@@ -62,7 +63,7 @@ def get_application() -> FastAPI:
 
     if AUTH_TYPE == AuthType.CLOUD:
         oauth_client = GoogleOAuth2(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET)
-        include_router_with_global_prefix_prepended(
+        include_auth_router_with_prefix(
             application,
             create_onyx_oauth_router(
                 oauth_client,
@@ -74,19 +75,17 @@ def get_application() -> FastAPI:
                 redirect_url=f"{WEB_DOMAIN}/auth/oauth/callback",
             ),
             prefix="/auth/oauth",
-            tags=["auth"],
         )
 
         # Need basic auth router for `logout` endpoint
-        include_router_with_global_prefix_prepended(
+        include_auth_router_with_prefix(
             application,
             fastapi_users.get_logout_router(auth_backend),
             prefix="/auth",
-            tags=["auth"],
         )
 
     if AUTH_TYPE == AuthType.OIDC:
-        include_router_with_global_prefix_prepended(
+        include_auth_router_with_prefix(
             application,
             create_onyx_oauth_router(
                 OpenID(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OPENID_CONFIG_URL),
@@ -97,19 +96,21 @@ def get_application() -> FastAPI:
                 redirect_url=f"{WEB_DOMAIN}/auth/oidc/callback",
             ),
             prefix="/auth/oidc",
-            tags=["auth"],
         )
 
         # need basic auth router for `logout` endpoint
-        include_router_with_global_prefix_prepended(
+        include_auth_router_with_prefix(
             application,
             fastapi_users.get_auth_router(auth_backend),
             prefix="/auth",
-            tags=["auth"],
         )
 
     elif AUTH_TYPE == AuthType.SAML:
-        include_router_with_global_prefix_prepended(application, saml_router)
+        include_auth_router_with_prefix(
+            application,
+            saml_router,
+            prefix="/auth/saml",
+        )
 
     # RBAC / group access control
     include_router_with_global_prefix_prepended(application, user_group_router)

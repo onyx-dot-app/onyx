@@ -10,6 +10,8 @@ import { requestEmailVerification } from "../lib";
 import { useState } from "react";
 import { Spinner } from "@/components/Spinner";
 import { set } from "lodash";
+import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
+import Link from "next/link";
 
 export function EmailPasswordForm({
   isSignup = false,
@@ -57,10 +59,14 @@ export function EmailPasswordForm({
                 errorMsg =
                   "An account already exists with the specified email.";
               }
+              if (response.status === 429) {
+                errorMsg = "Too many requests. Please try again later.";
+              }
               setPopup({
                 type: "error",
                 message: `Failed to sign up - ${errorMsg}`,
               });
+              setIsWorking(false);
               return;
             }
           }
@@ -87,6 +93,9 @@ export function EmailPasswordForm({
             } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
               errorMsg = "Create an account to set a password";
             }
+            if (loginResponse.status === 429) {
+              errorMsg = "Too many requests. Please try again later.";
+            }
             setPopup({
               type: "error",
               message: `Failed to login - ${errorMsg}`,
@@ -110,15 +119,21 @@ export function EmailPasswordForm({
               placeholder="**************"
             />
 
-            <div className="flex">
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="mx-auto w-full"
+            {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && !isSignup && (
+              <Link
+                href="/auth/forgot-password"
+                className="text-sm text-link font-medium whitespace-nowrap"
               >
-                {isSignup ? "Sign Up" : "Log In"}
-              </Button>
-            </div>
+                Forgot Password?
+              </Link>
+            )}
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="mx-auto w-full"
+            >
+              {isSignup ? "Sign Up" : "Log In"}
+            </Button>
           </Form>
         )}
       </Formik>

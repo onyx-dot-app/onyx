@@ -74,6 +74,8 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "claude-3-opus-20240229",
   "claude-3-sonnet-20240229",
   "claude-3-haiku-20240307",
+  // custom claude names
+  "claude-3.5-sonnet-v2@20241022",
   // claude names with AWS Bedrock Suffix
   "claude-3-opus-20240229-v1:0",
   "claude-3-sonnet-20240229-v1:0",
@@ -93,6 +95,13 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "gemini-1.5-flash-001",
   "gemini-1.5-pro-002",
   "gemini-1.5-flash-002",
+  "gemini-2.0-flash-exp",
+  // amazon models
+  "amazon.nova-lite@v1",
+  "amazon.nova-pro@v1",
+  // meta models
+  "llama-3.2-90b-vision-instruct",
+  "llama-3.2-11b-vision-instruct",
 ];
 
 export function checkLLMSupportsImageInput(model: string) {

@@ -44,6 +44,7 @@ def _move_files_recursively(source: Path, dest: Path, overwrite: bool = False) -
     the files in the existing huggingface cache that don't exist in the temp
     huggingface cache.
     """
+
     for item in source.iterdir():
         target_path = dest / item.relative_to(source)
         if item.is_dir():

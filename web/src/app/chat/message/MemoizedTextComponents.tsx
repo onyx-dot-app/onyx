@@ -1,6 +1,6 @@
 import { Citation } from "@/components/search/results/Citation";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import { LoadedOnyxDocument } from "@/lib/search/interfaces";
+import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { getSourceMetadata, SOURCE_METADATA_MAP } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
 import React, { memo } from "react";
@@ -9,7 +9,15 @@ import { SlackIcon } from "@/components/icons/icons";
 import { SourceIcon } from "@/components/SourceIcon";
 
 export const MemoizedAnchor = memo(
-  ({ docs, updatePresentingDocument, children }: any) => {
+  ({
+    docs,
+    updatePresentingDocument,
+    children,
+  }: {
+    docs?: OnyxDocument[] | null;
+    updatePresentingDocument: (doc: OnyxDocument) => void;
+    children: React.ReactNode;
+  }) => {
     const value = children?.toString();
     if (value?.startsWith("[") && value?.endsWith("]")) {
       const match = value.match(/\[(\d+)\]/);
@@ -21,9 +29,11 @@ export const MemoizedAnchor = memo(
           ? new URL(associatedDoc.link).origin + "/favicon.ico"
           : "";
 
-        const icon = (
-          <SourceIcon sourceType={associatedDoc?.source_type} iconSize={18} />
-        );
+        const icon =
+          (associatedDoc && (
+            <SourceIcon sourceType={associatedDoc?.source_type} iconSize={18} />
+          )) ||
+          null;
 
         return (
           <MemoizedLink

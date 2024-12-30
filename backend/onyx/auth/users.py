@@ -1,10 +1,8 @@
-import smtplib
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from datetime import timezone
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+from typing import cast
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -52,19 +50,17 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
+from onyx.auth.email_utils import send_forgot_password_email
+from onyx.auth.email_utils import send_user_verification_email
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
 from onyx.auth.schemas import UserUpdate
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DISABLE_AUTH
-from onyx.configs.app_configs import EMAIL_FROM
+from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
-from onyx.configs.app_configs import SMTP_PASS
-from onyx.configs.app_configs import SMTP_PORT
-from onyx.configs.app_configs import SMTP_SERVER
-from onyx.configs.app_configs import SMTP_USER
 from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
@@ -192,30 +188,6 @@ def verify_email_domain(email: str) -> None:
             )
 
 
-def send_user_verification_email(
-    user_email: str,
-    token: str,
-    mail_from: str = EMAIL_FROM,
-) -> None:
-    msg = MIMEMultipart()
-    msg["Subject"] = "Onyx Email Verification"
-    msg["To"] = user_email
-    if mail_from:
-        msg["From"] = mail_from
-
-    link = f"{WEB_DOMAIN}/auth/verify-email?token={token}"
-
-    body = MIMEText(f"Click the following link to verify your email address: {link}")
-    msg.attach(body)
-
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
-        s.starttls()
-        # If credentials fails with gmail, check (You need an app password, not just the basic email password)
-        # https://support.google.com/accounts/answer/185833?sjid=8512343437447396151-NA
-        s.login(SMTP_USER, SMTP_PASS)
-        s.send_message(msg)
-
-
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
@@ -228,6 +200,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         safe: bool = False,
         request: Optional[Request] = None,
     ) -> User:
+        # We verify the password here to make sure it's valid before we proceed
+        await self.validate_password(
+            user_create.password, cast(schemas.UC, user_create)
+        )
+
         user_count: int | None = None
         referral_source = (
             request.cookies.get("referral_source", None)
@@ -284,25 +261,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             finally:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
-        # Blocking but this should be very quick
-        with get_session_with_tenant(tenant_id) as db_session:
-            if not user_count:
-                create_milestone_and_report(
-                    user=user,
-                    distinct_id=user.email,
-                    event_type=MilestoneRecordType.USER_SIGNED_UP,
-                    properties=None,
-                    db_session=db_session,
-                )
-            else:
-                create_milestone_and_report(
-                    user=user,
-                    distinct_id=user.email,
-                    event_type=MilestoneRecordType.MULTIPLE_USERS,
-                    properties=None,
-                    db_session=db_session,
-                )
 
         return user
 
@@ -422,6 +380,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     # Add OAuth account
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
+
                     await self.on_after_register(user, request)
 
             else:
@@ -475,6 +434,39 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def on_after_register(
         self, user: User, request: Optional[Request] = None
     ) -> None:
+        tenant_id = await fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.provisioning",
+            "get_or_provision_tenant",
+            async_return_default_schema,
+        )(
+            email=user.email,
+            request=request,
+        )
+
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        try:
+            user_count = await get_user_count()
+
+            with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+                if user_count == 1:
+                    create_milestone_and_report(
+                        user=user,
+                        distinct_id=user.email,
+                        event_type=MilestoneRecordType.USER_SIGNED_UP,
+                        properties=None,
+                        db_session=db_session,
+                    )
+                else:
+                    create_milestone_and_report(
+                        user=user,
+                        distinct_id=user.email,
+                        event_type=MilestoneRecordType.MULTIPLE_USERS,
+                        properties=None,
+                        db_session=db_session,
+                    )
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
         logger.notice(f"User {user.id} has registered.")
         optional_telemetry(
             record_type=RecordType.SIGN_UP,
@@ -485,7 +477,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def on_after_forgot_password(
         self, user: User, token: str, request: Optional[Request] = None
     ) -> None:
-        logger.notice(f"User {user.id} has forgot their password. Reset token: {token}")
+        if not EMAIL_CONFIGURED:
+            logger.error(
+                "Email is not configured. Please configure email in the admin panel"
+            )
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "Your admin has not enbaled this feature.",
+            )
+        send_forgot_password_email(user.email, token)
 
     async def on_after_request_verify(
         self, user: User, token: str, request: Optional[Request] = None
@@ -603,9 +603,7 @@ def get_database_strategy(
 
 
 auth_backend = AuthenticationBackend(
-    name="jwt" if MULTI_TENANT else "database",
-    transport=cookie_transport,
-    get_strategy=get_jwt_strategy if MULTI_TENANT else get_database_strategy,  # type: ignore
+    name="jwt", transport=cookie_transport, get_strategy=get_jwt_strategy
 )  # type: ignore
 
 

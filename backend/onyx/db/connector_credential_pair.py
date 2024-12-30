@@ -7,6 +7,7 @@ from sqlalchemy import exists
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -90,15 +91,22 @@ def get_connector_credential_pairs(
     user: User | None = None,
     get_editable: bool = True,
     ids: list[int] | None = None,
+    eager_load_connector: bool = False,
 ) -> list[ConnectorCredentialPair]:
     stmt = select(ConnectorCredentialPair).distinct()
+
+    if eager_load_connector:
+        stmt = stmt.options(joinedload(ConnectorCredentialPair.connector))
+
     stmt = _add_user_filters(stmt, user, get_editable)
+
     if not include_disabled:
         stmt = stmt.where(
             ConnectorCredentialPair.status == ConnectorCredentialPairStatus.ACTIVE
-        )  # noqa
+        )
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
+
     return list(db_session.scalars(stmt).all())
 
 
@@ -310,6 +318,9 @@ def associate_default_cc_pair(db_session: Session) -> None:
     if existing_association is not None:
         return
 
+    # DefaultCCPair has id 1 since it is the first CC pair created
+    # It is DEFAULT_CC_PAIR_ID, but can't set it explicitly because it messed with the
+    # auto-incrementing id
     association = ConnectorCredentialPair(
         connector_id=0,
         credential_id=0,
@@ -350,7 +361,12 @@ def add_credential_to_connector(
     last_successful_index_time: datetime | None = None,
 ) -> StatusResponse:
     connector = fetch_connector_by_id(connector_id, db_session)
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id(
+        credential_id,
+        user,
+        db_session,
+        get_editable=False,
+    )
 
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")
@@ -427,7 +443,12 @@ def remove_credential_from_connector(
     db_session: Session,
 ) -> StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id(
+        credential_id,
+        user,
+        db_session,
+        get_editable=False,
+    )
 
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")

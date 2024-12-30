@@ -35,8 +35,6 @@ logger = setup_logger()
 
 
 class ConfluenceCloudOAuth:
-    """work in progress"""
-
     # https://developer.atlassian.com/cloud/confluence/oauth-2-3lo-apps/
 
     class OAuthSession(BaseModel):
