@@ -265,13 +265,15 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         time_filter_query = _build_time_filter_for_salesforce(start, end)
 
         for parent_object_type in self.parent_object_list:
-            logger.debug(f"Processing: {parent_object_type}")
+            logger.info(f"Processing parent object type: {parent_object_type}")
 
             all_ids = self._get_parent_object_ids(parent_object_type, time_filter_query)
+            logger.info(f"Found {len(all_ids)} IDs for {parent_object_type}")
             id_batches = batch_list(all_ids, _MAX_ID_BATCH_SIZE)
 
             # Generate all queries we'll need
             queries = list(self._generate_query_per_parent_type(parent_object_type))
+            logger.info(f"Generated {len(queries)} queries for {parent_object_type}")
             yield from self._batch_retrieval(id_batches, queries)
 
     def load_from_state(self) -> GenerateDocumentsOutput:

@@ -110,6 +110,7 @@ def _field_value_is_child_object(field_value: dict) -> bool:
         isinstance(field_value, OrderedDict)
         and "records" in field_value.keys()
         and isinstance(field_value["records"], list)
+        and len(field_value["records"]) > 0
         and "Id" in field_value["records"][0].keys()
     )
 
