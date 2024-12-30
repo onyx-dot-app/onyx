@@ -1,3 +1,4 @@
+import time
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -220,7 +221,17 @@ def connector_permission_sync_generator_task(
 
     r = get_redis_client(tenant_id=tenant_id)
 
+    # this wait is needed to avoid a race condition where
+    # the primary worker sends the task and it is immediately executed
+    # beore the primary worker can finalize the fence
+    start = time.monotonic()
     while True:
+        if time.monotonic() - start > 300:
+            raise ValueError(
+                f"connector_permission_sync_generator_task - timed out waiting for fence to be ready: "
+                f"fence={redis_connector.permissions.fence_key}"
+            )
+
         if not redis_connector.permissions.fenced:  # The fence must exist
             raise ValueError(
                 f"connector_permission_sync_generator_task - fence not found: "

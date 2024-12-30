@@ -1019,7 +1019,17 @@ def connector_indexing_task(
             f"fence={redis_connector.stop.fence_key}"
         )
 
+    # this wait is needed to avoid a race condition where
+    # the primary worker sends the task and it is immediately executed
+    # beore the primary worker can finalize the fence
+    start = time.monotonic()
     while True:
+        if time.monotonic() - start > 300:
+            raise ValueError(
+                f"connector_permission_sync_generator_task - timed out waiting for fence to be ready: "
+                f"fence={redis_connector.permissions.fence_key}"
+            )
+
         if not redis_connector_index.fenced:  # The fence must exist
             raise ValueError(
                 f"connector_indexing_task - fence not found: fence={redis_connector_index.fence_key}"

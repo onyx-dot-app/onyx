@@ -4,7 +4,11 @@ from typing import Any
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 
-BEAT_EXPIRES_DEFAULT = 10 * 60  # 30 minutes
+# choosing 15 minutes because it roughly gives us enough time to process many tasks
+# we might be able to reduce this greatly if we can run a unified
+# loop across all tenants rather than tasks per tenant
+
+BEAT_EXPIRES_DEFAULT = 15 * 60  # 15 minutes (in seconds)
 
 # we set expires because it isn't necessary to queue up these tasks
 # it's only important that they run relatively regularly

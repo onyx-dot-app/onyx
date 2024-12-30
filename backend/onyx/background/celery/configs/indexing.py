@@ -20,7 +20,7 @@ task_acks_late = shared_config.task_acks_late
 # We don't currently rely on this but it has the potential to be useful and
 # indexing tasks are not high volume
 
-# we don't turn this on byet ecause celery occasionally runs tasks more than once
+# we don't turn this on yet because celery occasionally runs tasks more than once
 # which means a duplicate run might change the task state unexpectedly
 # task_track_started = True
 
