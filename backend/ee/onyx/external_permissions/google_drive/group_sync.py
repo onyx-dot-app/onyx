@@ -9,6 +9,7 @@ logger = setup_logger()
 
 
 def gdrive_group_sync(
+    tenant_id: str | None,
     cc_pair: ConnectorCredentialPair,
 ) -> list[ExternalUserGroup]:
     google_drive_connector = GoogleDriveConnector(

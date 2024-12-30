@@ -10,7 +10,6 @@ from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.onyx_confluence import attachment_to_content
-from onyx.connectors.confluence.onyx_confluence import build_confluence_client_2
 from onyx.connectors.confluence.onyx_confluence import (
     extract_text_from_confluence_html,
 )
@@ -82,7 +81,6 @@ class ConfluenceConnector(
     ) -> None:
         self.batch_size = batch_size
         self.continue_on_failure = continue_on_failure
-        self._confluence_client: OnyxConfluence | None = None
         self.is_cloud = is_cloud
 
         # Remove trailing slash from wiki_base if present
@@ -117,6 +115,18 @@ class ConfluenceConnector(
         self.timezone: timezone = timezone(offset=timedelta(hours=timezone_offset))
         self.credentials_provider: CredentialsProviderInterface | None = None
 
+        self.probe_kwargs = {
+            "max_backoff_retries": 6,
+            "max_backoff_seconds": 10,
+        }
+
+        self.final_kwargs = {
+            "max_backoff_retries": 10,
+            "max_backoff_seconds": 60,
+        }
+
+        self._confluence_client: OnyxConfluence | None = None
+
     @property
     def confluence_client(self) -> OnyxConfluence:
         if self._confluence_client is None:
@@ -125,36 +135,20 @@ class ConfluenceConnector(
 
     def set_credentials_provider(
         self, credentials_provider: CredentialsProviderInterface
-    ):
+    ) -> None:
         self.credentials_provider = credentials_provider
-        credentials_provider.get_credentials()
 
-        self.confluence_client = build_confluence_client_2(
-            credentials_provider, self.is_cloud, self.wiki_base
+        # raises exception if there's a problem
+        confluence_client = OnyxConfluence(
+            self.is_cloud, self.wiki_base, credentials_provider
         )
+        confluence_client._probe_connection(**self.probe_kwargs)
+        confluence_client._initialize_connection(**self.final_kwargs)
+
+        self._confluence_client = confluence_client
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        pass
-
-        # # see https://github.com/atlassian-api/atlassian-python-api/blob/master/atlassian/rest_client.py
-        # # for a list of other hidden constructor args
-
-        # final_credentials: dict[str, Any] = credentials
-        # if "confluence_refresh_token" in credentials:
-        #     final_credentials = confluence_refresh_tokens(
-        #         OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
-        #         OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
-        #         credentials["cloud_id"],
-        #         credentials["confluence_refresh_token"],
-        #     )
-
-        # self._confluence_client = build_confluence_client(
-        #     credentials=final_credentials,
-        #     is_cloud=self.is_cloud,
-        #     wiki_base=self.wiki_base,
-        # )
-
-        # return final_credentials
+        raise NotImplementedError("Use set_credentials_provider with this connector.")
 
     def _get_comment_string_for_page_id(self, page_id: str) -> str:
         comment_string = ""

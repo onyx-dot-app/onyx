@@ -16,6 +16,7 @@ from onyx.db.models import ConnectorCredentialPair
 # Defining the input/output types for the sync functions
 DocSyncFuncType = Callable[
     [
+        str | None,
         ConnectorCredentialPair,
     ],
     list[DocExternalAccess],
@@ -23,6 +24,7 @@ DocSyncFuncType = Callable[
 
 GroupSyncFuncType = Callable[
     [
+        str | None,
         ConnectorCredentialPair,
     ],
     list[ExternalUserGroup],

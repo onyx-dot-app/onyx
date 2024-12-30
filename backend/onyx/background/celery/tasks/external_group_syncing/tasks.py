@@ -266,7 +266,9 @@ def connector_external_group_sync_generator_task(
                 f"Syncing external groups for {source_type} for cc_pair: {cc_pair_id}"
             )
 
-            external_user_groups: list[ExternalUserGroup] = ext_group_sync_func(cc_pair)
+            external_user_groups: list[ExternalUserGroup] = ext_group_sync_func(
+                tenant_id, cc_pair
+            )
 
             logger.info(
                 f"Syncing {len(external_user_groups)} external user groups for {source_type}"

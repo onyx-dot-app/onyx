@@ -87,8 +87,8 @@ def confluence_refresh_tokens(
     client_id: str, client_secret: str, cloud_id: str, refresh_token: str
 ) -> dict[str, Any]:
     # rotate the refresh and access token
-    # Note that access tokens are only good for an hour, so we're going to have
-    # problems if the connector runs for longer
+    # Note that access tokens are only good for an hour in confluence cloud,
+    # so we're going to have problems if the connector runs for longer
     # https://developer.atlassian.com/cloud/confluence/oauth-2-3lo-apps/#use-a-refresh-token-to-get-another-access-token-and-refresh-token-pair
     response = requests.post(
         CONFLUENCE_OAUTH_TOKEN_URL,

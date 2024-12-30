@@ -1,6 +1,9 @@
 import abc
 from collections.abc import Iterator
+from types import TracebackType
 from typing import Any
+from typing import Generic
+from typing import TypeVar
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
@@ -82,7 +85,27 @@ class OAuthConnector(BaseConnector):
         raise NotImplementedError
 
 
-class CredentialsProviderInterface(abc.ABC):
+T = TypeVar("T", bound="CredentialsProviderInterface")
+
+
+class CredentialsProviderInterface(abc.ABC, Generic[T]):
+    @abc.abstractmethod
+    def __enter__(self) -> T:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_tenant_id(self) -> str | None:
+        raise NotImplementedError
+
     @abc.abstractmethod
     def get_credential_id(self) -> int:
         raise NotImplementedError
@@ -104,7 +127,7 @@ class CredentialsConnector(BaseConnector):
     @abc.abstractmethod
     def set_credentials_provider(
         self, credentials_provider: CredentialsProviderInterface
-    ):
+    ) -> None:
         raise NotImplementedError
 
 
