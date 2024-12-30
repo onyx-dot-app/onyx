@@ -83,6 +83,9 @@ CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 # if we can get callbacks as object bytes download, we could lower this a lot.
 CELERY_INDEXING_LOCK_TIMEOUT = 3 * 60 * 60  # 60 min
 
+# how long a task should wait for associated fence to be ready
+CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
+
 # needs to be long enough to cover the maximum time it takes to download an object
 # if we can get callbacks as object bytes download, we could lower this a lot.
 CELERY_PRUNING_LOCK_TIMEOUT = 300  # 5 min

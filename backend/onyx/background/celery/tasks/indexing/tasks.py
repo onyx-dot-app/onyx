@@ -25,6 +25,7 @@ from onyx.background.indexing.job_client import SimpleJobClient
 from onyx.background.indexing.run_indexing import run_indexing_entrypoint
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
 from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
 from onyx.configs.constants import DocumentSource
@@ -946,8 +947,13 @@ def connector_indexing_task_wrapper(
             f"search_settings={search_settings_id}"
         )
 
+        # There is a cloud related bug outside of our code
+        # where spawned tasks return with an exit code of 1.
+        # Unfortunately, exceptions also return with an exit code of 1,
+        # so just raising an exception isn't informative
+        # Exiting with 255 makes it possible to distinguish between normal exits
+        # and exceptions.
         sys.exit(255)
-        raise
 
     return result
 
@@ -1021,12 +1027,12 @@ def connector_indexing_task(
 
     # this wait is needed to avoid a race condition where
     # the primary worker sends the task and it is immediately executed
-    # beore the primary worker can finalize the fence
+    # before the primary worker can finalize the fence
     start = time.monotonic()
     while True:
-        if time.monotonic() - start > 300:
+        if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
             raise ValueError(
-                f"connector_permission_sync_generator_task - timed out waiting for fence to be ready: "
+                f"connector_indexing_task - timed out waiting for fence to be ready: "
                 f"fence={redis_connector.permissions.fence_key}"
             )
 

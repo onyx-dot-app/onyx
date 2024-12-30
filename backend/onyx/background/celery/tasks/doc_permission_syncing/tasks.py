@@ -20,6 +20,7 @@ from onyx.access.models import DocExternalAccess
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
 from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
 from onyx.configs.constants import DocumentSource
@@ -223,10 +224,10 @@ def connector_permission_sync_generator_task(
 
     # this wait is needed to avoid a race condition where
     # the primary worker sends the task and it is immediately executed
-    # beore the primary worker can finalize the fence
+    # before the primary worker can finalize the fence
     start = time.monotonic()
     while True:
-        if time.monotonic() - start > 300:
+        if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
             raise ValueError(
                 f"connector_permission_sync_generator_task - timed out waiting for fence to be ready: "
                 f"fence={redis_connector.permissions.fence_key}"
