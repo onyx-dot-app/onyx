@@ -3,21 +3,18 @@ import os
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
-from logging import Logger
 from typing import Any
-from typing import cast
 from typing import IO
 from urllib.parse import quote
-
-import requests
-from retry import retry
 
 from onyx.configs.app_configs import EGNYTE_BASE_DOMAIN
 from onyx.configs.app_configs import EGNYTE_CLIENT_ID
 from onyx.configs.app_configs import EGNYTE_CLIENT_SECRET
-from onyx.configs.app_configs import EGNYTE_LOCALHOST_OVERRIDE
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    get_oauth_callback_uri,
+)
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import OAuthConnector
@@ -34,54 +31,13 @@ from onyx.file_processing.extract_file_text import is_text_file_extension
 from onyx.file_processing.extract_file_text import is_valid_file_ext
 from onyx.file_processing.extract_file_text import read_text_file
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import request_with_retries
 
 
 logger = setup_logger()
 
 _EGNYTE_API_BASE = "https://{domain}.egnyte.com/pubapi/v1"
 _EGNYTE_APP_BASE = "https://{domain}.egnyte.com"
-_TIMEOUT = 60
-
-
-def _request_with_retries(
-    method: str,
-    url: str,
-    data: dict[str, Any] | None = None,
-    headers: dict[str, Any] | None = None,
-    params: dict[str, Any] | None = None,
-    timeout: int = _TIMEOUT,
-    stream: bool = False,
-    tries: int = 8,
-    delay: float = 1,
-    backoff: float = 2,
-) -> requests.Response:
-    @retry(tries=tries, delay=delay, backoff=backoff, logger=cast(Logger, logger))
-    def _make_request() -> requests.Response:
-        response = requests.request(
-            method,
-            url,
-            data=data,
-            headers=headers,
-            params=params,
-            timeout=timeout,
-            stream=stream,
-        )
-        try:
-            response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code != 403:
-                logger.exception(
-                    f"Failed to call Egnyte API.\n"
-                    f"URL: {url}\n"
-                    # NOTE: can't log headers because they contain the access token
-                    # f"Headers: {headers}\n"
-                    f"Data: {data}\n"
-                    f"Params: {params}"
-                )
-            raise e
-        return response
-
-    return _make_request()
 
 
 def _parse_last_modified(last_modified: str) -> datetime:
@@ -189,10 +145,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         if not EGNYTE_BASE_DOMAIN:
             raise ValueError("EGNYTE_DOMAIN environment variable must be set")
 
-        if EGNYTE_LOCALHOST_OVERRIDE:
-            base_domain = EGNYTE_LOCALHOST_OVERRIDE
-
-        callback_uri = f"{base_domain.strip('/')}/connector/oauth/callback/egnyte"
+        callback_uri = get_oauth_callback_uri(base_domain, "egnyte")
         return (
             f"https://{EGNYTE_BASE_DOMAIN}.egnyte.com/puboauth/token"
             f"?client_id={EGNYTE_CLIENT_ID}"
@@ -213,7 +166,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
 
         # Exchange code for token
         url = f"https://{EGNYTE_BASE_DOMAIN}.egnyte.com/puboauth/token"
-        redirect_uri = f"{EGNYTE_LOCALHOST_OVERRIDE or base_domain}/connector/oauth/callback/egnyte"
+        redirect_uri = get_oauth_callback_uri(base_domain, "egnyte")
         data = {
             "client_id": EGNYTE_CLIENT_ID,
             "client_secret": EGNYTE_CLIENT_SECRET,
@@ -224,7 +177,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-        response = _request_with_retries(
+        response = request_with_retries(
             method="POST",
             url=url,
             data=data,
@@ -264,8 +217,8 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
 
         url_encoded_path = quote(path or "", safe="")
         url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs/{url_encoded_path}"
-        response = _request_with_retries(
-            method="GET", url=url, headers=headers, params=params, timeout=_TIMEOUT
+        response = request_with_retries(
+            method="GET", url=url, headers=headers, params=params
         )
         if not response.ok:
             raise RuntimeError(f"Failed to fetch files from Egnyte: {response.text}")
@@ -320,11 +273,10 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
                 }
                 url_encoded_path = quote(file["path"], safe="")
                 url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs-content/{url_encoded_path}"
-                response = _request_with_retries(
+                response = request_with_retries(
                     method="GET",
                     url=url,
                     headers=headers,
-                    timeout=_TIMEOUT,
                     stream=True,
                 )
 

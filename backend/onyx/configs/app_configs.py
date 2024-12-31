@@ -58,6 +58,9 @@ SESSION_EXPIRE_TIME_SECONDS = int(
     os.environ.get("SESSION_EXPIRE_TIME_SECONDS") or 86400 * 7
 )  # 7 days
 
+# Default request timeout, mostly used by connectors
+REQUEST_TIMEOUT_SECONDS = int(os.environ.get("REQUEST_TIMEOUT_SECONDS") or 60)
+
 # set `VALID_EMAIL_DOMAINS` to a comma seperated list of domains in order to
 # restrict access to Onyx to only users with emails from those domains.
 # E.g. `VALID_EMAIL_DOMAINS=example.com,example.org` will restrict Onyx
@@ -367,11 +370,17 @@ GITLAB_CONNECTOR_INCLUDE_CODE_FILES = (
     os.environ.get("GITLAB_CONNECTOR_INCLUDE_CODE_FILES", "").lower() == "true"
 )
 
+# Typically set to http://localhost:3000 for OAuth connector development
+CONNECTOR_LOCALHOST_OVERRIDE = os.getenv("CONNECTOR_LOCALHOST_OVERRIDE")
+
 # Egnyte specific configs
-EGNYTE_LOCALHOST_OVERRIDE = os.getenv("EGNYTE_LOCALHOST_OVERRIDE")
 EGNYTE_BASE_DOMAIN = os.getenv("EGNYTE_DOMAIN")
 EGNYTE_CLIENT_ID = os.getenv("EGNYTE_CLIENT_ID")
 EGNYTE_CLIENT_SECRET = os.getenv("EGNYTE_CLIENT_SECRET")
+
+# Linear specific configs
+LINEAR_CLIENT_ID = os.getenv("LINEAR_CLIENT_ID")
+LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
 
 DASK_JOB_CLIENT_ENABLED = (
     os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"

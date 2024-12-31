@@ -199,7 +199,7 @@ def get_redis_client(*, tenant_id: str | None) -> Redis:
 # value = redis_client.get('key')
 # print(value.decode())  # Output: 'value'
 
-_async_redis_connection = None
+_async_redis_connection: aioredis.Redis | None = None
 _async_lock = asyncio.Lock()
 
 
