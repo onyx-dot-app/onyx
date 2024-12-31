@@ -84,9 +84,7 @@ class AirtableConnector(LoadConnector):
                             extension=file_ext,
                         )
                         if attachment_text:
-                            attachment_texts.append(
-                                f"Attachment {filename}:\n{attachment_text}"
-                            )
+                            attachment_texts.append(f"{filename}:\n{attachment_text}")
                     except Exception as e:
                         logger.warning(
                             f"Failed to process attachment {filename}: {str(e)}"

@@ -134,42 +134,7 @@ def test_airtable_connector_basic(airtable_connector: AirtableConnector) -> None
             days_since_status_change=0,
             assignee="Chris Weaver (chris@onyx.app)",
             submitted_by="Chris Weaver (chris@onyx.app)",
-            attachments=[
-                "Attachment invoice.pdf:\n"
-                "CALL 1-800-WEBPASS Invoice\n"
-                "Bill to:\n"
-                "DanswerAI Inc.\n"
-                "2175 Market St #C303\n"
-                "San Francisco, CA 94114\n"
-                "Invoice #:\n"
-                "160167106\n"
-                "Invoice date:\n"
-                "7/01/2024\n"
-                "Due date:\n"
-                "7/15/2024\n"
-                "Please note: if you have\n"
-                "a previous balance, your\n"
-                "payment will be applied\n"
-                "to the oldest invoice.\n"
-                "Contact us:\n"
-                "gfiber.com/support\n"
-                "Webpass, Inc.\n"
-                "PO Box 889046\n"
-                "Los Angeles, CA 90088-9046"
-                "Account summary\n"
-                "Previous balance $260.00\n"
-                "Payments & credits received \n"
-                "since previous invoice-$260.00\n"
-                "Previous unpaid balance $0.00\n"
-                "New charges for 7/01/2024 — 8/01/2024:\n"
-                "Business 1 Gig\n"
-                "Service for: 244 Kearny St 5th Floor, San Francisco CA 94108 $100.00\n"
-                "Public /29 Address Range\n"
-                "Service for: 244 Kearny St 5th Floor, San Francisco CA 94108 $30.00\n"
-                "New charges due 7/15/2024 $130.00\n"
-                "Total amount due $130.00\n"
-                "enrolled in Autopay - your card will automatically be charged this amount"
-            ],
+            attachments=["Test.pdf:\ntesting!!!"],
         ),
     ]
 
