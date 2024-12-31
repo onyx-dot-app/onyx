@@ -9,8 +9,6 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.file_processing.extract_file_text import extract_file_text
@@ -25,7 +23,7 @@ class AirtableClientNotSetUpError(PermissionError):
         super().__init__("Airtable Client is not set up, was load_credentials called?")
 
 
-class AirtableConnector(LoadConnector, PollConnector):
+class AirtableConnector(LoadConnector):
     def __init__(
         self,
         base_id: str,
@@ -189,21 +187,25 @@ class AirtableConnector(LoadConnector, PollConnector):
         ]
         return sections, {}
 
-    def poll_source(
-        self, start: SecondsSinceUnixEpoch | None, end: SecondsSinceUnixEpoch | None
-    ) -> GenerateDocumentsOutput:
+    def load_from_state(self) -> GenerateDocumentsOutput:
         """
-        Poll the airtable source between [start, end].
+        Fetch all records from the table.
+
+        NOTE: Airtable does not support filtering by time updated, so
+        we have to fetch all records every time.
         """
         if not self.airtable_client:
             raise AirtableClientNotSetUpError()
 
         table = self.airtable_client.table(self.base_id, self.table_name_or_id)
         table_id = table.id
-        table_name = table.name
-        all_records = table.all()
+        record_pages = table.iterate()
 
         table_schema = table.schema()
+        # have to get the name from the schema, since the table object will
+        # give back the ID instead of the name if the ID is used to create
+        # the table object
+        table_name = table_schema.name
         primary_field_name = None
 
         # Find a primary field from the schema
@@ -213,50 +215,51 @@ class AirtableConnector(LoadConnector, PollConnector):
                 break
 
         record_documents: list[Document] = []
-        for record in all_records:
-            record_id = record["id"]
-            fields = record["fields"]
-            sections: list[Section] = []
-            metadata: dict[str, Any] = {}
+        for page in record_pages:
+            for record in page:
+                record_id = record["id"]
+                fields = record["fields"]
+                sections: list[Section] = []
+                metadata: dict[str, Any] = {}
 
-            # Possibly retrieve the primary field's value
-            primary_field_value = (
-                fields.get(primary_field_name) if primary_field_name else None
-            )
-            for field_schema in table_schema.fields:
-                field_name = field_schema.name
-                field_val = fields.get(field_name)
-                field_type = field_schema.type
+                # Possibly retrieve the primary field's value
+                primary_field_value = (
+                    fields.get(primary_field_name) if primary_field_name else None
+                )
+                for field_schema in table_schema.fields:
+                    field_name = field_schema.name
+                    field_val = fields.get(field_name)
+                    field_type = field_schema.type
 
-                field_sections, field_metadata = self._process_field(
-                    field_name=field_name,
-                    field_info=field_val,
-                    field_type=field_type,
-                    table_id=table_id,
-                    record_id=record_id,
+                    field_sections, field_metadata = self._process_field(
+                        field_name=field_name,
+                        field_info=field_val,
+                        field_type=field_type,
+                        table_id=table_id,
+                        record_id=record_id,
+                    )
+
+                    sections.extend(field_sections)
+                    metadata.update(field_metadata)
+
+                semantic_id = (
+                    f"{table_name}: {primary_field_value}"
+                    if primary_field_value
+                    else table_name
                 )
 
-                sections.extend(field_sections)
-                metadata.update(field_metadata)
+                record_document = Document(
+                    id=str(record_id),
+                    sections=sections,
+                    source=DocumentSource.AIRTABLE,
+                    semantic_identifier=semantic_id,
+                    metadata=metadata,
+                )
+                record_documents.append(record_document)
 
-            semantic_id = (
-                f"{table_name}: {primary_field_value}"
-                if primary_field_value
-                else table_name
-            )
+                if len(record_documents) >= self.batch_size:
+                    yield record_documents
+                    record_documents = []
 
-            record_document = Document(
-                id=str(record_id),
-                sections=sections,
-                source=DocumentSource.AIRTABLE,
-                semantic_identifier=semantic_id,
-                metadata=metadata,
-            )
-            record_documents.append(record_document)
-
-        yield record_documents
-
-    def load_from_state(self) -> GenerateDocumentsOutput:
-        if not self.airtable_client:
-            raise AirtableClientNotSetUpError()
-        return self.poll_source(None, None)
+        if record_documents:
+            yield record_documents

@@ -1,5 +1,4 @@
 import os
-import time
 
 import pytest
 
@@ -9,11 +8,17 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 
 
-@pytest.fixture
-def airtable_connector() -> AirtableConnector:
+@pytest.fixture(
+    params=[
+        ("table_name", os.environ["AIRTABLE_TEST_TABLE_NAME"]),
+        ("table_id", os.environ["AIRTABLE_TEST_TABLE_ID"]),
+    ]
+)
+def airtable_connector(request) -> AirtableConnector:
+    param_type, table_identifier = request.param
     connector = AirtableConnector(
         base_id=os.environ["AIRTABLE_TEST_BASE_ID"],
-        table_name_or_id=os.environ["AIRTABLE_TEST_TABLE_NAME"],
+        table_name_or_id=table_identifier,
     )
 
     connector.load_credentials(
@@ -91,7 +96,7 @@ def create_test_document(
 
 
 def test_airtable_connector_basic(airtable_connector: AirtableConnector) -> None:
-    doc_batch_generator = airtable_connector.poll_source(0, time.time())
+    doc_batch_generator = airtable_connector.load_from_state()
 
     doc_batch = next(doc_batch_generator)
     with pytest.raises(StopIteration):

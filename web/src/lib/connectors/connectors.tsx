@@ -6,7 +6,7 @@ import { Credential } from "@/lib/connectors/credentials"; // Import Credential 
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
-  const loadStateConnectors = ["web", "xenforo", "file"];
+  const loadStateConnectors = ["web", "xenforo", "file", "airtable"];
   if (loadStateConnectors.includes(connector_name)) {
     return true;
   }
@@ -1076,6 +1076,7 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
       },
     ],
     advanced_values: [],
+    overrideDefaultFreq: 60 * 60 * 24,
   },
 };
 export function createConnectorInitialValues(
