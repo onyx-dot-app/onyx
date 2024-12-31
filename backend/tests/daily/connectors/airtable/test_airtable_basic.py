@@ -69,7 +69,7 @@ def create_test_document(
             )
 
     return Document(
-        id=id,
+        id=f"airtable__{id}",
         sections=sections,
         source=DocumentSource.AIRTABLE,
         semantic_identifier=f"{os.environ['AIRTABLE_TEST_TABLE_NAME']}: {title}",
