@@ -7,6 +7,7 @@ from logging import Logger
 from typing import Any
 from typing import cast
 from typing import IO
+from urllib.parse import quote
 
 import requests
 from retry import retry
@@ -72,7 +73,8 @@ def _request_with_retries(
                 logger.exception(
                     f"Failed to call Egnyte API.\n"
                     f"URL: {url}\n"
-                    f"Headers: {headers}\n"
+                    # NOTE: can't log headers because they contain the access token
+                    # f"Headers: {headers}\n"
                     f"Data: {data}\n"
                     f"Params: {params}"
                 )
@@ -260,7 +262,8 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
             "list_content": True,
         }
 
-        url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs/{path or ''}"
+        url_encoded_path = quote(path or "", safe="")
+        url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs/{url_encoded_path}"
         response = _request_with_retries(
             method="GET", url=url, headers=headers, params=params, timeout=_TIMEOUT
         )
@@ -315,7 +318,8 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
                 headers = {
                     "Authorization": f"Bearer {self.access_token}",
                 }
-                url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs-content/{file['path']}"
+                url_encoded_path = quote(file["path"], safe="")
+                url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs-content/{url_encoded_path}"
                 response = _request_with_retries(
                     method="GET",
                     url=url,
