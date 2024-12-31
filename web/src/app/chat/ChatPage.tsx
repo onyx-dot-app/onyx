@@ -2815,6 +2815,7 @@ export function ChatPage({
                               </div>
                             )}
                             <ChatInputBar
+                              llmOverrideManager={llmOverrideManager}
                               selectChromeUrl={(chromeUrl: string) => {
                                 setSelectedChromeUrls([
                                   ...selectedChromeUrls,

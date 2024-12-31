@@ -83,7 +83,7 @@ const LoginPage = async (props: {
         <LoginPanel
           authUrl={authUrl}
           authTypeMetadata={authTypeMetadata}
-          nextUrl={nextUrl}
+          nextUrl={nextUrl!}
           searchParams={searchParams}
         />
       </AuthFlowContainer>
