@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from "uuid";
 import { Button } from "@/components/ui/button";
 import { SimplifiedChatInputBar } from "../chat/input/SimplifiedChatInputBar";
 import { Menu } from "lucide-react";
+import Link from "next/link";
 import { Shortcut } from "./interfaces";
 import { MaxShortcutsReachedModal, NewShortCutModal } from "./ShortCuts";
 import { Modal } from "@/components/Modal";
@@ -32,6 +33,8 @@ import {
 import { SettingsPanel } from "../components/nrf/SettingsPanel";
 import { Switch } from "@/components/ui/switch";
 import { ShortcutsDisplay } from "../components/nrf/ShortcutsDisplay";
+import LoginPanel from "../auth/login/LoginPage";
+import { AuthType } from "@/lib/constants";
 
 // Chrome Extension Utility
 function sendSetDefaultNewTabMessage(value: boolean) {
@@ -158,6 +161,70 @@ export default function NRFPageNewDesign() {
 
   const [showMaxShortcutsModal, setShowMaxShortcutsModal] = useState(false);
 
+  const [showLoginModal, setShowLoginModal] = useState<boolean>(!user);
+
+  const [authUrl, setAuthUrl] = useState<string | null>(null);
+  const [authType, setAuthType] = useState<string | null>(null);
+  const [fetchingAuth, setFetchingAuth] = useState(false);
+
+  useEffect(() => {
+    // If user is already logged in, no need to fetch auth data
+    if (user) return;
+
+    async function fetchAuthData() {
+      setFetchingAuth(true);
+
+      try {
+        // 1) Fetch the auth type (e.g. "basic", "oidc", "cloud", "google_oauth", etc.)
+        const res = await fetch("/api/auth/type", {
+          method: "GET",
+          credentials: "include",
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch auth type: ${res.statusText}`);
+        }
+
+        const data = await res.json();
+        setAuthType(data.auth_type); // e.g. "basic", "oidc", "cloud", "google_oauth", etc.
+
+        // 2) For everything except "disabled" or "basic," fetch the authorization URL
+        if (data.auth_type !== "disabled" && data.auth_type !== "basic") {
+          let route = "";
+          if (data.auth_type === "oidc") {
+            route = "/api/auth/oidc/authorize";
+          } else if (data.auth_type === "google_oauth") {
+            route = "/api/auth/oauth/authorize";
+          } else if (data.auth_type === "saml") {
+            route = "/api/auth/saml/authorize";
+          } else if (data.auth_type === "cloud") {
+            // If your "cloud" mode reuses Google OAuth, then:
+            route = "/api/auth/oauth/authorize";
+          }
+
+          const urlWithNext = `${route}?next=${encodeURIComponent("/nrf")}`;
+          const authUrlRes = await fetch(urlWithNext, {
+            method: "GET",
+            credentials: "include",
+          });
+          if (!authUrlRes.ok) {
+            throw new Error(
+              `Failed to generate auth URL: ${authUrlRes.statusText}`
+            );
+          }
+
+          const authUrlData = await authUrlRes.json();
+          setAuthUrl(authUrlData.authorization_url);
+        }
+      } catch (err) {
+        console.error("Error fetching auth data:", err);
+      } finally {
+        setFetchingAuth(false);
+      }
+    }
+
+    fetchAuthData();
+  }, [user]);
+
   const onSubmit = async ({
     messageOverride,
   }: {
@@ -199,53 +266,6 @@ export default function NRFPageNewDesign() {
         transition: "background-image 0.3s ease",
       }}
     >
-      {/* Initial Blocking Modals */}
-      {!user ? (
-        <Modal className="max-w-md  gap-y-12 mx-auto">
-          <div className="flex flex-col gap-y-8">
-            <Title className="text-xl font-bold  text-left text-center text-neutral-800 dark:text-white">
-              Welcome to Onyx
-            </Title>
-            <Button
-              onClick={() => {
-                if (window.top) {
-                  window.top.location.href =
-                    "/auth/login?next=/chat?newTab=true";
-                } else {
-                  window.location.href = "/auth/login?next=/chat?newTab=true";
-                }
-              }}
-              className="block w-full bg-accent hover:bg-accent/90 text-white font-semibold rounded-lg text-center transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl focus:outline-none"
-            >
-              Log In
-            </Button>
-          </div>
-        </Modal>
-      ) : llmProviders.length === 0 ? (
-        <Modal className="max-w-md mx-auto">
-          <>
-            <Title className="text-xl font-bold mb-2 text-center text-neutral-800 dark:text-white">
-              No LLM Providers Found
-            </Title>
-            <p className="text-neutral-600 dark:text-neutral-300 text-sm text-center">
-              We couldn&apos;t locate any LLM providers. Please add or configure
-              at least one provider in the admin page to enable chat features.
-            </p>
-            <Button
-              onClick={() => {
-                if (window.top) {
-                  window.top.location.href = "/admin?next=/chat?newTab=true";
-                } else {
-                  window.location.href = "/admin?next=/chat?newTab=true";
-                }
-              }}
-              className="mt-4 w-full bg-accent hover:bg-accent/90 text-white font-semibold rounded-lg text-center transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl focus:outline-none"
-            >
-              Go to Admin Panel
-            </Button>
-          </>
-        </Modal>
-      ) : null}
       <div
         style={{
           position: "absolute",
@@ -390,6 +410,40 @@ export default function NRFPageNewDesign() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {!user && showLoginModal && (
+        <Modal
+          className="max-w-md mx-auto"
+          onOutsideClick={() => setShowLoginModal(false)}
+        >
+          {fetchingAuth ? (
+            <p className="p-4">Loading login info…</p>
+          ) : authType == "basic" ? (
+            <LoginPanel
+              authUrl={authUrl}
+              authTypeMetadata={{
+                authType: authType as AuthType,
+                autoRedirect: false,
+                requiresVerification: false,
+                anonymousUserEnabled: null,
+              }}
+              nextUrl="/nrf"
+              searchParams={{}}
+            />
+          ) : (
+            <div className="flex flex-col items-center">
+              <h2 className="text-center text-xl text-strong font-bold mb-4">
+                Welcome to Onyx
+              </h2>
+              <Button
+                className="bg-accent w-full hover:bg-accent-hover text-white"
+                onClick={() => (window.location.href = "/auth/login")}
+              >
+                Log in
+              </Button>
+            </div>
+          )}
+        </Modal>
+      )}
       {popup}
     </div>
   );
