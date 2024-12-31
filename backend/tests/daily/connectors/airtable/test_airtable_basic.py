@@ -1,4 +1,6 @@
 import os
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -95,7 +97,13 @@ def create_test_document(
     )
 
 
-def test_airtable_connector_basic(airtable_connector: AirtableConnector) -> None:
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+def test_airtable_connector_basic(
+    mock_get_api_key: MagicMock, airtable_connector: AirtableConnector
+) -> None:
     doc_batch_generator = airtable_connector.load_from_state()
 
     doc_batch = next(doc_batch_generator)
