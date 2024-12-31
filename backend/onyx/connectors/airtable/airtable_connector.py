@@ -17,6 +17,36 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# NOTE: all are made lowercase to avoid case sensitivity issues
+# these are the field types that are considered metadata rather
+# than sections
+_METADATA_FIELD_TYPES = {
+    "singlecollaborator",
+    "collaborator",
+    "createdby",
+    "singleselect",
+    "multipleselects",
+    "checkbox",
+    "date",
+    "datetime",
+    "email",
+    "phone",
+    "url",
+    "number",
+    "currency",
+    "duration",
+    "percent",
+    "rating",
+    "createdtime",
+    "lastmodifiedtime",
+    "autonumber",
+    "rollup",
+    "lookup",
+    "count",
+    "formula",
+    "date",
+}
+
 
 class AirtableClientNotSetUpError(PermissionError):
     def __init__(self) -> None:
@@ -108,34 +138,7 @@ class AirtableConnector(LoadConnector):
 
     def _should_be_metadata(self, field_type: str) -> bool:
         """Determine if a field type should be treated as metadata."""
-        # NOTE: all are made lowercase to avoid case sensitivity issues
-        metadata_field_types = {
-            "singlecollaborator",
-            "collaborator",
-            "createdby",
-            "singleselect",
-            "multipleselects",
-            "checkbox",
-            "date",
-            "datetime",
-            "email",
-            "phone",
-            "url",
-            "number",
-            "currency",
-            "duration",
-            "percent",
-            "rating",
-            "createdtime",
-            "lastmodifiedtime",
-            "autonumber",
-            "rollup",
-            "lookup",
-            "count",
-            "formula",
-            "date",
-        }
-        return field_type.lower() in metadata_field_types
+        return field_type.lower() in _METADATA_FIELD_TYPES
 
     def _process_field(
         self,
@@ -247,7 +250,7 @@ class AirtableConnector(LoadConnector):
                 )
 
                 record_document = Document(
-                    id=str(record_id),
+                    id=f"airtable__{record_id}",
                     sections=sections,
                     source=DocumentSource.AIRTABLE,
                     semantic_identifier=semantic_id,
