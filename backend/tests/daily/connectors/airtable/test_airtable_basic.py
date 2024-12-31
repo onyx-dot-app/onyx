@@ -14,7 +14,7 @@ from onyx.connectors.models import Section
         ("table_id", os.environ["AIRTABLE_TEST_TABLE_ID"]),
     ]
 )
-def airtable_connector(request) -> AirtableConnector:
+def airtable_connector(request: pytest.FixtureRequest) -> AirtableConnector:
     param_type, table_identifier = request.param
     connector = AirtableConnector(
         base_id=os.environ["AIRTABLE_TEST_BASE_ID"],
