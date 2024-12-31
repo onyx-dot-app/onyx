@@ -127,8 +127,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         elif "access_token" in credentials:
             self.linear_api_key = "Bearer " + cast(str, credentials["access_token"])
         else:
-            # The error is slightly different for Linear cause the failure likely happened upstream
-            # Could be that the refresh token expired
+            # May need to handle case in the future if the OAuth flow expires
             raise ConnectorMissingCredentialError("Linear")
 
         return None
