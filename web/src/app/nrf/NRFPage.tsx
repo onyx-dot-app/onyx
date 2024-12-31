@@ -419,6 +419,7 @@ export default function NRFPageNewDesign() {
             <p className="p-4">Loading login info…</p>
           ) : authType == "basic" ? (
             <LoginPanel
+              showPageRedirect
               authUrl={authUrl}
               authTypeMetadata={{
                 authType: authType as AuthType,

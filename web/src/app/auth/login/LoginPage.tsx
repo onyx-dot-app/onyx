@@ -1,6 +1,6 @@
 import { AuthTypeMetadata } from "@/lib/userSS";
 import { LoginText } from "./LoginText";
-import { Link } from "lucide-react";
+import Link from "next/link";
 import { SignInButton } from "./SignInButton";
 import { EmailPasswordForm } from "./EmailPasswordForm";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
@@ -11,6 +11,7 @@ export default function LoginPanel({
   authTypeMetadata,
   nextUrl,
   searchParams,
+  showPageRedirect,
 }: {
   authUrl: string | null;
   authTypeMetadata: AuthTypeMetadata | null;
@@ -20,6 +21,7 @@ export default function LoginPanel({
         [key: string]: string | string[] | undefined;
       }
     | undefined;
+  showPageRedirect?: boolean;
 }) {
   return (
     <div className="flex flex-col w-full justify-center">
@@ -77,6 +79,23 @@ export default function LoginPanel({
           <EmailPasswordForm nextUrl={nextUrl} />
           <div className="flex flex-col gap-y-2 items-center"></div>
         </>
+      )}
+      {showPageRedirect && (
+        <p className="text-center mt-4">
+          Don't have an account?{" "}
+          <span
+            onClick={() => {
+              if (typeof window !== "undefined" && window.top) {
+                window.top.location.href = "/auth/register";
+              } else {
+                window.location.href = "/auth/register";
+              }
+            }}
+            className="text-link font-medium cursor-pointer"
+          >
+            Create an account
+          </span>
+        </p>
       )}
     </div>
   );
