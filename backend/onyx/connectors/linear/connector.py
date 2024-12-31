@@ -81,7 +81,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         if not LINEAR_CLIENT_ID:
             raise ValueError("LINEAR_CLIENT_ID environment variable must be set")
 
-        callback_uri = get_oauth_callback_uri(base_domain, "linear")
+        callback_uri = get_oauth_callback_uri(base_domain, DocumentSource.LINEAR.value)
         return (
             f"https://linear.app/oauth/authorize"
             f"?client_id={LINEAR_CLIENT_ID}"
@@ -95,7 +95,9 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
     def oauth_code_to_token(cls, base_domain: str, code: str) -> dict[str, Any]:
         data = {
             "code": code,
-            "redirect_uri": get_oauth_callback_uri(base_domain, "linear"),
+            "redirect_uri": get_oauth_callback_uri(
+                base_domain, DocumentSource.LINEAR.value
+            ),
             "client_id": LINEAR_CLIENT_ID,
             "client_secret": LINEAR_CLIENT_SECRET,
             "grant_type": "authorization_code",
