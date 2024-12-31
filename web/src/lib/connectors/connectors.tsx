@@ -1056,6 +1056,27 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  airtable: {
+    description: "Configure Airtable connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the base ID:",
+        label: "Base ID",
+        name: "base_id",
+        optional: false,
+        description: "The ID of the Airtable base to index.",
+      },
+      {
+        type: "text",
+        query: "Enter the table name or ID:",
+        label: "Table Name or Table ID",
+        name: "table_name_or_id",
+        optional: false,
+      },
+    ],
+    advanced_values: [],
+  },
 };
 export function createConnectorInitialValues(
   connector: ConfigurableSources

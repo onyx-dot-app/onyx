@@ -146,6 +146,7 @@ class AirtableConnector(LoadConnector, PollConnector):
         field_name: str,
         field_info: Any,
         field_type: str,
+        table_id: str,
         record_id: str,
     ) -> tuple[list[Section], dict[str, Any]]:
         """
@@ -176,7 +177,7 @@ class AirtableConnector(LoadConnector, PollConnector):
         # Otherwise, create relevant sections
         sections = [
             Section(
-                link=f"https://airtable.com/{self.base_id}/{self.table_name_or_id}/{record_id}",
+                link=f"https://airtable.com/{self.base_id}/{table_id}/{record_id}",
                 text=(
                     f"{field_name}:\n"
                     "------------------------\n"
@@ -198,17 +199,17 @@ class AirtableConnector(LoadConnector, PollConnector):
             raise AirtableClientNotSetUpError()
 
         table = self.airtable_client.table(self.base_id, self.table_name_or_id)
+        table_id = table.id
+        table_name = table.name
         all_records = table.all()
 
         table_schema = table.schema()
-        primary_field_id = None
-        table_name = self.table_name_or_id
+        primary_field_name = None
 
         # Find a primary field from the schema
         for field in table_schema.fields:
             if field.id == table_schema.primary_field_id:
-                primary_field_id = field.id
-                table_name = field.name
+                primary_field_name = field.name
                 break
 
         record_documents: list[Document] = []
@@ -220,7 +221,7 @@ class AirtableConnector(LoadConnector, PollConnector):
 
             # Possibly retrieve the primary field's value
             primary_field_value = (
-                fields.get(primary_field_id) if primary_field_id else None
+                fields.get(primary_field_name) if primary_field_name else None
             )
             for field_schema in table_schema.fields:
                 field_name = field_schema.name
@@ -228,18 +229,12 @@ class AirtableConnector(LoadConnector, PollConnector):
                 field_type = field_schema.type
 
                 field_sections, field_metadata = self._process_field(
-                    field_name,
-                    field_val,
-                    field_type,
-                    record_id,
+                    field_name=field_name,
+                    field_info=field_val,
+                    field_type=field_type,
+                    table_id=table_id,
+                    record_id=record_id,
                 )
-
-                # Assign direct record link to each section
-                for sec in field_sections:
-                    sec.link = (
-                        f"https://airtable.com/{self.base_id}/"
-                        f"{self.table_name_or_id}/{record_id}"
-                    )
 
                 sections.extend(field_sections)
                 metadata.update(field_metadata)

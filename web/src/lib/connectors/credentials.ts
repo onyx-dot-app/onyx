@@ -202,6 +202,10 @@ export interface EgnyteCredentialJson {
   access_token: string;
 }
 
+export interface AirtableCredentialJson {
+  airtable_access_token: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -309,6 +313,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
     domain: "",
     access_token: "",
   } as EgnyteCredentialJson,
+  airtable: {
+    airtable_access_token: "",
+  } as AirtableCredentialJson,
   xenforo: null,
   google_sites: null,
   file: null,

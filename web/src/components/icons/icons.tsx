@@ -68,6 +68,7 @@ import zendeskIcon from "../../../public/Zendesk.svg";
 import dropboxIcon from "../../../public/Dropbox.png";
 import egnyteIcon from "../../../public/Egnyte.png";
 import slackIcon from "../../../public/Slack.png";
+import airtableIcon from "../../../public/Airtable.svg";
 
 import s3Icon from "../../../public/S3.png";
 import r2Icon from "../../../public/r2.png";
@@ -2766,6 +2767,20 @@ export const EgnyteIcon = ({
       className={`w-[${size}px] h-[${size}px] ` + className}
     >
       <Image src={egnyteIcon} alt="Egnyte" width="96" height="96" />
+    </div>
+  );
+};
+
+export const AirtableIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <div
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] ` + className}
+    >
+      <Image src={airtableIcon} alt="Airtable" width="96" height="96" />
     </div>
   );
 };

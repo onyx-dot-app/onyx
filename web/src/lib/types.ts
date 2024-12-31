@@ -320,6 +320,7 @@ export enum ValidSources {
   Freshdesk = "freshdesk",
   Fireflies = "fireflies",
   Egnyte = "egnyte",
+  Airtable = "airtable",
 }
 
 export const validAutoSyncSources = [

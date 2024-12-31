@@ -40,7 +40,7 @@ def create_test_document(
     days_since_status_change: int | None,
     attachments: list | None = None,
 ) -> Document:
-    link_base = f"https://airtable.com/{os.environ['AIRTABLE_TEST_BASE_ID']}/{os.environ['AIRTABLE_TEST_TABLE_NAME']}"
+    link_base = f"https://airtable.com/{os.environ['AIRTABLE_TEST_BASE_ID']}/{os.environ['AIRTABLE_TEST_TABLE_ID']}"
     sections = [
         Section(
             text=f"Title:\n------------------------\n{title}\n------------------------",
@@ -65,7 +65,7 @@ def create_test_document(
         id=id,
         sections=sections,
         source=DocumentSource.AIRTABLE,
-        semantic_identifier="Title",
+        semantic_identifier=f"{os.environ['AIRTABLE_TEST_TABLE_NAME']}: {title}",
         metadata={
             # "Category": category,
             "Assignee": assignee,
