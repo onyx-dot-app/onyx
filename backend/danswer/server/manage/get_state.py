@@ -46,6 +46,7 @@ def connectors_healthcheck(
     states = get_connectors_state(db_session, tenant_id)
     error_cnt = 0
     for state in states:
+        error_cnt_for_state = 0
         if state.cc_pair_status == ConnectorCredentialPairStatus.ACTIVE and \
             state.last_finished_status == IndexingStatus.FAILED:
             PAGE_SIZE = 10
@@ -63,8 +64,10 @@ def connectors_healthcheck(
                 if attempt.error_msg.startswith("Unknown index attempt"):
                   continue
                 else:
-                  error_cnt+=1
-                  break
+                  error_cnt_for_state += 1
+                  if error_cnt_for_state > 1:
+                    error_cnt+=1
+                    break
     if error_cnt > 0:
         success = False
         message = f"{error_cnt} of {len(states)} connectors failed"
