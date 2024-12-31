@@ -437,7 +437,13 @@ export default function NRFPageNewDesign() {
               </h2>
               <Button
                 className="bg-accent w-full hover:bg-accent-hover text-white"
-                onClick={() => (window.location.href = "/auth/login")}
+                onClick={() => {
+                  if (window.top) {
+                    window.top.location.href = "/auth/login";
+                  } else {
+                    window.location.href = "/auth/login";
+                  }
+                }}
               >
                 Log in
               </Button>
