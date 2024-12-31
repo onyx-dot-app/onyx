@@ -85,36 +85,49 @@ def execute_paginated_retrieval(
     continue_on_404_or_403: bool = False,
     **kwargs: Any,
 ) -> Iterator[GoogleDriveFileType]:
-    """Execute a paginated retrieval from Google Drive API
-    Args:
-        retrieval_function: The specific list function to call (e.g., service.files().list)
-        **kwargs: Arguments to pass to the list function
-    """
+    """Execute a paginated retrieval from Google Drive API."""
     next_page_token = ""
     while next_page_token is not None:
         request_kwargs = kwargs.copy()
         if next_page_token:
             request_kwargs["pageToken"] = next_page_token
 
+        # Log what we're about to call
+        logger.debug(
+            f"execute_paginated_retrieval: calling {retrieval_function}, "
+            f"request_kwargs={request_kwargs}, "
+            f"continue_on_404_or_403={continue_on_404_or_403}"
+        )
+
         try:
             results = retrieval_function(**request_kwargs).execute()
         except HttpError as e:
+            logger.exception(
+                f"HttpError in execute_paginated_retrieval: status={e.resp.status}, "
+                f"reason={e.resp.reason} - Error detail: {str(e)}"
+            )
             if e.resp.status >= 500:
+                # Retry for 5xx
                 results = add_retries(
                     lambda: retrieval_function(**request_kwargs).execute()
                 )()
-            elif e.resp.status == 404 or e.resp.status == 403:
+            elif e.resp.status in (404, 403):
                 if continue_on_404_or_403:
-                    logger.debug(f"Error executing request: {e}")
+                    logger.warning(
+                        f"Skipping 404/403 for request_kwargs={request_kwargs}: {e}"
+                    )
                     results = {}
                 else:
+                    logger.error("Reraising 404/403 HttpError (no skip).")
                     raise e
             elif e.resp.status == 429:
+                logger.warning("Got 429: Too Many Requests, going to retry.")
                 results = _execute_with_retry(
                     lambda: retrieval_function(**request_kwargs).execute()
                 )
             else:
-                logger.exception("Error executing request:")
+                # 401 or other unhandled errors
+                logger.error("Reraising HttpError. Possibly 401 means invalid session.")
                 raise e
 
         next_page_token = results.get("nextPageToken")

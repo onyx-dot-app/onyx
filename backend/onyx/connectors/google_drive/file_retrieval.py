@@ -138,15 +138,24 @@ def get_files_in_shared_drive(
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
 ) -> Iterator[GoogleDriveFileType]:
-    # If we know we are going to folder crawl later, we can cache the folders here
-    # Get all folders being queried and add them to the traversed set
-    folder_query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
-    folder_query += " and trashed = false"
+    # Add a debug log to announce we're about to retrieve a particular shared drive
+    logger.debug(
+        f"Starting get_files_in_shared_drive for drive_id={drive_id}, "
+        f"is_slim={is_slim}, start={start}, end={end}"
+    )
+
+    folder_query = "mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     found_folders = False
+    # Add a debug log for the arguments passed to execute_paginated_retrieval
+    logger.debug(
+        "Calling execute_paginated_retrieval with continue_on_404_or_403=True, "
+        f"driveId={drive_id}"
+    )
+
     for file in execute_paginated_retrieval(
         retrieval_function=service.files().list,
         list_key="files",
-        continue_on_404_or_403=True,
+        continue_on_404_or_403=True,  # skip 404/403 if encountered
         corpora="drive",
         driveId=drive_id,
         supportsAllDrives=True,
@@ -154,8 +163,10 @@ def get_files_in_shared_drive(
         fields="nextPageToken, files(id)",
         q=folder_query,
     ):
+        logger.debug(f"Retrieved file ID={file.get('id')} from drive_id={drive_id}")
         update_traversed_ids_func(file["id"])
         found_folders = True
+
     if found_folders:
         update_traversed_ids_func(drive_id)
 

@@ -1,11 +1,7 @@
 import { Citation } from "@/components/search/results/Citation";
-import { WebResultIcon } from "@/components/WebResultIcon";
 import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
-import { getSourceMetadata, SOURCE_METADATA_MAP } from "@/lib/sources";
-import { ValidSources } from "@/lib/types";
 import React, { memo } from "react";
 import isEqual from "lodash/isEqual";
-import { SlackIcon } from "@/components/icons/icons";
 import { SourceIcon } from "@/components/SourceIcon";
 
 export const MemoizedAnchor = memo(
@@ -66,7 +62,6 @@ export const MemoizedLink = memo((props: any) => {
       <Citation
         url={document?.url}
         icon={document?.icon as React.ReactNode}
-        link={rest?.href}
         document={document as LoadedOnyxDocument}
         updatePresentingDocument={updatePresentingDocument}
       >

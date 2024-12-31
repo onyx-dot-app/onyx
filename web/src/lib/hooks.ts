@@ -5,12 +5,13 @@ import {
   DocumentBoostStatus,
   Tag,
   UserGroup,
+  ValidSources,
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import { useContext, useEffect, useState } from "react";
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
-import { SourceMetadata } from "./search/interfaces";
+import { Filters, SourceMetadata } from "./search/interfaces";
 import { destructureValue, structureValue } from "./llm/utils";
 import { ChatSession } from "@/app/chat/interfaces";
 import { UsersResponse } from "./users/interfaces";
@@ -22,6 +23,8 @@ import {
   LLMProviderDescriptor,
 } from "@/app/admin/configuration/llm/interfaces";
 import { isAnthropic } from "@/app/admin/configuration/llm/interfaces";
+import { getSourceMetadata } from "./sources";
+import { buildFilters } from "./search/utils";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -120,6 +123,13 @@ export interface FilterManager {
   setSelectedDocumentSets: React.Dispatch<React.SetStateAction<string[]>>;
   selectedTags: Tag[];
   setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>;
+  getFilterString: () => string;
+  buildFiltersFromQueryString: (
+    filterString: string,
+    availableSources: ValidSources[],
+    availableDocumentSets: string[],
+    availableTags: Tag[]
+  ) => void;
 }
 
 export function useFilters(): FilterManager {
@@ -130,6 +140,101 @@ export function useFilters(): FilterManager {
   );
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
 
+  const getFilterString = () => {
+    const params = new URLSearchParams();
+
+    if (timeRange) {
+      params.set("from", timeRange.from.toISOString());
+      params.set("to", timeRange.to.toISOString());
+    }
+
+    if (selectedSources.length > 0) {
+      const sourcesParam = selectedSources
+        .map((source) => encodeURIComponent(source.internalName))
+        .join(",");
+      params.set("sources", sourcesParam);
+    }
+
+    if (selectedDocumentSets.length > 0) {
+      const docSetsParam = selectedDocumentSets
+        .map((ds) => encodeURIComponent(ds))
+        .join(",");
+      params.set("documentSets", docSetsParam);
+    }
+
+    if (selectedTags.length > 0) {
+      const tagsParam = selectedTags
+        .map((tag) => encodeURIComponent(tag.tag_value))
+        .join(",");
+      params.set("tags", tagsParam);
+    }
+
+    const queryString = params.toString();
+    return queryString ? `&${queryString}` : "";
+  };
+
+  function buildFiltersFromQueryString(
+    filterString: string,
+    availableSources: ValidSources[],
+    availableDocumentSets: string[],
+    availableTags: Tag[]
+  ): void {
+    const params = new URLSearchParams(filterString);
+
+    // Parse the "from" parameter as a DateRangePickerValue
+    let newTimeRange: DateRangePickerValue | null = null;
+    const fromParam = params.get("from");
+    const toParam = params.get("to");
+    if (fromParam && toParam) {
+      const fromDate = new Date(fromParam);
+      const toDate = new Date(toParam);
+      if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+        newTimeRange = { from: fromDate, to: toDate, selectValue: "" };
+      }
+    }
+
+    // Parse sources
+    const availableSourcesMetadata = availableSources.map(getSourceMetadata);
+    let newSelectedSources: SourceMetadata[] = [];
+    const sourcesParam = params.get("sources");
+    console.log("SOURCES PARAM", sourcesParam);
+    if (sourcesParam) {
+      const sourceNames = sourcesParam.split(",").map(decodeURIComponent);
+      newSelectedSources = availableSourcesMetadata.filter((source) =>
+        sourceNames.includes(source.internalName)
+      );
+      console.log("Parsed sources:", newSelectedSources);
+    } else {
+      console.log("No sources parsed");
+    }
+
+    // Parse document sets
+    let newSelectedDocSets: string[] = [];
+    const docSetsParam = params.get("documentSets");
+    if (docSetsParam) {
+      const docSetNames = docSetsParam.split(",").map(decodeURIComponent);
+      newSelectedDocSets = availableDocumentSets.filter((ds) =>
+        docSetNames.includes(ds)
+      );
+    }
+
+    // Parse tags
+    let newSelectedTags: Tag[] = [];
+    const tagsParam = params.get("tags");
+    if (tagsParam) {
+      const tagValues = tagsParam.split(",").map(decodeURIComponent);
+      newSelectedTags = availableTags.filter((tag) =>
+        tagValues.includes(tag.tag_value)
+      );
+    }
+
+    // Update filter manager's values instead of returning
+    setTimeRange(newTimeRange);
+    setSelectedSources(newSelectedSources);
+    setSelectedDocumentSets(newSelectedDocSets);
+    setSelectedTags(newSelectedTags);
+  }
+
   return {
     timeRange,
     setTimeRange,
@@ -139,6 +244,8 @@ export function useFilters(): FilterManager {
     setSelectedDocumentSets,
     selectedTags,
     setSelectedTags,
+    getFilterString,
+    buildFiltersFromQueryString,
   };
 }
 

@@ -20,7 +20,7 @@ import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useContext } from "react";
 
-const Page = async (props: {
+const LoginPage = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) => {
   const searchParams = await props.searchParams;
@@ -145,4 +145,4 @@ const Page = async (props: {
   );
 };
 
-export default Page;
+export default LoginPage;

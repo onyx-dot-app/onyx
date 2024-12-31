@@ -46,7 +46,7 @@ export function SignInButton({
 
   return (
     <a
-      className="mx-auto mt-6 py-3 w-full text-text-100 bg-accent flex rounded cursor-pointer hover:bg-indigo-800"
+      className="mx-auto mb-4 mt-6 py-3 w-full text-text-100 bg-accent flex rounded cursor-pointer hover:bg-indigo-800"
       href={finalAuthorizeUrl}
     >
       {button}

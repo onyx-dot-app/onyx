@@ -66,10 +66,12 @@ const AssistantSelector = ({
   const [isTemperatureExpanded, setIsTemperatureExpanded] = useState(false);
 
   // Initialize selectedTab from localStorage
-  const [selectedTab, setSelectedTab] = useState<number>(() => {
+  const [selectedTab, setSelectedTab] = useState<number | undefined>();
+  useEffect(() => {
     const storedTab = localStorage.getItem("assistantSelectorSelectedTab");
-    return storedTab !== null ? Number(storedTab) : 0;
-  });
+    const tab = storedTab !== null ? Number(storedTab) : 0;
+    setSelectedTab(tab);
+  }, [localStorage]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
