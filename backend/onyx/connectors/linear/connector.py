@@ -77,7 +77,9 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         return DocumentSource.LINEAR
 
     @classmethod
-    def oauth_authorization_url(cls, base_domain: str, state: str) -> str:
+    def oauth_authorization_url(
+        cls, base_domain: str, state: str, additional_kwargs: dict[str, str]
+    ) -> str:
         if not LINEAR_CLIENT_ID:
             raise ValueError("LINEAR_CLIENT_ID environment variable must be set")
 
@@ -92,7 +94,9 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         )
 
     @classmethod
-    def oauth_code_to_token(cls, base_domain: str, code: str) -> dict[str, Any]:
+    def oauth_code_to_token(
+        cls, base_domain: str, code: str, additional_kwargs: dict[str, str]
+    ) -> dict[str, Any]:
         data = {
             "code": code,
             "redirect_uri": get_oauth_callback_uri(
