@@ -1,12 +1,15 @@
 import { ValidSources } from "../types";
 
 export async function getConnectorOauthRedirectUrl(
-  connector: ValidSources
+  connector: ValidSources,
+  additional_kwargs: Record<string, string>
 ): Promise<string | null> {
+  const queryParams = new URLSearchParams({
+    desired_return_url: window.location.href,
+    ...additional_kwargs,
+  });
   const response = await fetch(
-    `/api/connector/oauth/authorize/${connector}?desired_return_url=${encodeURIComponent(
-      window.location.href
-    )}`
+    `/api/connector/oauth/authorize/${connector}?${queryParams.toString()}`
   );
 
   if (!response.ok) {

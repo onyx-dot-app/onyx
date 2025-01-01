@@ -7,7 +7,8 @@ from typing import Any
 from typing import IO
 from urllib.parse import quote
 
-from onyx.configs.app_configs import EGNYTE_BASE_DOMAIN
+from pydantic import Field
+
 from onyx.configs.app_configs import EGNYTE_CLIENT_ID
 from onyx.configs.app_configs import EGNYTE_CLIENT_SECRET
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -124,6 +125,15 @@ def _process_egnyte_file(
 
 
 class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
+    class AdditionalOauthKwargs(OAuthConnector.AdditionalOauthKwargs):
+        egnyte_base_domain: str = Field(
+            title="Egnyte Base Domain",
+            description=(
+                "The base domain for the Egnyte instance "
+                "(e.g. 'company' for company.egnyte.com)"
+            ),
+        )
+
     def __init__(
         self,
         folder_path: str | None = None,
@@ -139,15 +149,20 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         return DocumentSource.EGNYTE
 
     @classmethod
-    def oauth_authorization_url(cls, base_domain: str, state: str) -> str:
+    def oauth_authorization_url(
+        cls,
+        base_domain: str,
+        state: str,
+        additional_kwargs: dict[str, str],
+    ) -> str:
         if not EGNYTE_CLIENT_ID:
             raise ValueError("EGNYTE_CLIENT_ID environment variable must be set")
-        if not EGNYTE_BASE_DOMAIN:
-            raise ValueError("EGNYTE_DOMAIN environment variable must be set")
+
+        oauth_kwargs = cls.AdditionalOauthKwargs(**additional_kwargs)
 
         callback_uri = get_oauth_callback_uri(base_domain, "egnyte")
         return (
-            f"https://{EGNYTE_BASE_DOMAIN}.egnyte.com/puboauth/token"
+            f"https://{oauth_kwargs.egnyte_base_domain}.egnyte.com/puboauth/token"
             f"?client_id={EGNYTE_CLIENT_ID}"
             f"&redirect_uri={callback_uri}"
             f"&scope=Egnyte.filesystem"
@@ -156,17 +171,23 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         )
 
     @classmethod
-    def oauth_code_to_token(cls, base_domain: str, code: str) -> dict[str, Any]:
+    def oauth_code_to_token(
+        cls,
+        base_domain: str,
+        code: str,
+        additional_kwargs: dict[str, str],
+    ) -> dict[str, Any]:
         if not EGNYTE_CLIENT_ID:
             raise ValueError("EGNYTE_CLIENT_ID environment variable must be set")
         if not EGNYTE_CLIENT_SECRET:
             raise ValueError("EGNYTE_CLIENT_SECRET environment variable must be set")
-        if not EGNYTE_BASE_DOMAIN:
-            raise ValueError("EGNYTE_DOMAIN environment variable must be set")
+
+        oauth_kwargs = cls.AdditionalOauthKwargs(**additional_kwargs)
 
         # Exchange code for token
-        url = f"https://{EGNYTE_BASE_DOMAIN}.egnyte.com/puboauth/token"
+        url = f"https://{oauth_kwargs.egnyte_base_domain}.egnyte.com/puboauth/token"
         redirect_uri = get_oauth_callback_uri(base_domain, "egnyte")
+
         data = {
             "client_id": EGNYTE_CLIENT_ID,
             "client_secret": EGNYTE_CLIENT_SECRET,
@@ -191,7 +212,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
 
         token_data = response.json()
         return {
-            "domain": EGNYTE_BASE_DOMAIN,
+            "domain": oauth_kwargs.egnyte_base_domain,
             "access_token": token_data["access_token"],
         }
 
@@ -215,7 +236,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
             "list_content": True,
         }
 
-        url_encoded_path = quote(path or "", safe="")
+        url_encoded_path = quote(path or "")
         url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs/{url_encoded_path}"
         response = request_with_retries(
             method="GET", url=url, headers=headers, params=params
@@ -271,7 +292,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
                 headers = {
                     "Authorization": f"Bearer {self.access_token}",
                 }
-                url_encoded_path = quote(file["path"], safe="")
+                url_encoded_path = quote(file["path"])
                 url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs-content/{url_encoded_path}"
                 response = request_with_retries(
                     method="GET",

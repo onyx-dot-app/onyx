@@ -1,5 +1,16 @@
 import { ValidSources } from "../types";
 
+export interface OAuthAdditionalKwargDescription {
+  name: string;
+  display_name: string;
+  description: string;
+}
+
+export interface OAuthDetails {
+  oauth_enabled: boolean;
+  additional_kwargs: OAuthAdditionalKwargDescription[];
+}
+
 export interface CredentialBase<T> {
   credential_json: T;
   admin_public: boolean;
