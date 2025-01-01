@@ -59,7 +59,6 @@ export function CreateStdOAuthCredential({
         ),
       })}
       onSubmit={(values, formikHelpers) => {
-        console.log("HI");
         handleSubmit(values, formikHelpers);
       }}
     >
