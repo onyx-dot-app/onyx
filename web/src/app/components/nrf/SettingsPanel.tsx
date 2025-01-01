@@ -116,7 +116,6 @@ export const SettingsPanel = ({
         </div>
 
         <h3 className="text-sm font-semibold mb-2">General</h3>
-        {useOnyxAsNewTab ? "yes" : "no"}
         <SidebarSwitch
           checked={useOnyxAsNewTab}
           onCheckedChange={handleUseOnyxToggle}

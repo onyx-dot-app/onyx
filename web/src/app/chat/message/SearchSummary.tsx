@@ -94,52 +94,57 @@ export function SearchSummary({
   }, [query, isEditing]);
 
   const searchingForDisplay = (
-    <div
-      className={`flex items-center w-full rounded ${
-        isOverflowed && "cursor-default"
-      }`}
-    >
-      {docs && (
-        <button
-          className="desktop:hidden cursor-pointer mr-2 flex items-center gap-0.5"
-          onClick={() => toggleDocumentSelection()}
-        >
-          {Array.from(new Set(docs.map((doc) => doc.source_type)))
-            .slice(0, 3)
-            .map((sourceType, idx) => (
-              <div key={idx} className="rounded-full">
-                <SourceIcon sourceType={sourceType} iconSize={14} />
-              </div>
-            ))}
-          {Array.from(new Set(docs.map((doc) => doc.source_type))).length >
-            3 && (
-            <div className="rounded-full bg-gray-200 w-3.5 h-3.5 flex items-center justify-center">
-              <span className="text-[8px]">
-                +
-                {Array.from(new Set(docs.map((doc) => doc.source_type)))
-                  .length - 3}
-              </span>
-            </div>
-          )}
-          <span className="text-xs underline">View sources</span>
-        </button>
-      )}
-
-      <FiSearch className="mobile:hidden flex-none mr-2" size={14} />
+    <div className="flex flex-col gap-y-1">
       <div
-        className={`${
-          !finished && "loading-text"
-        } text-xs desktop:text-sm mobile:ml-auto !line-clamp-1 !break-all px-0.5 flex-grow`}
-        ref={searchingForRef}
+        className={`flex items-center w-full rounded ${
+          isOverflowed && "cursor-default"
+        }`}
       >
-        {finished ? "Searched" : "Searching"} for:{" "}
-        <i>
-          {index === 1
-            ? finalQuery.length > 50
-              ? `${finalQuery.slice(0, 50)}...`
-              : finalQuery
-            : finalQuery}
-        </i>
+        <FiSearch className="mobile:hidden flex-none mr-2" size={14} />
+        <div
+          className={`${
+            !finished && "loading-text"
+          } text-xs desktop:text-sm mobile:ml-auto !line-clamp-1 !break-all px-0.5 flex-grow`}
+          ref={searchingForRef}
+        >
+          {finished ? "Searched" : "Searching"} for:{" "}
+          <i>
+            {index === 1
+              ? finalQuery.length > 50
+                ? `${finalQuery.slice(0, 50)}...`
+                : finalQuery
+              : finalQuery}
+          </i>
+        </div>
+      </div>
+
+      <div className="desktop:hidden">
+        {" "}
+        {docs && (
+          <button
+            className="cursor-pointer mr-2 flex items-center gap-0.5"
+            onClick={() => toggleDocumentSelection()}
+          >
+            {Array.from(new Set(docs.map((doc) => doc.source_type)))
+              .slice(0, 3)
+              .map((sourceType, idx) => (
+                <div key={idx} className="rounded-full">
+                  <SourceIcon sourceType={sourceType} iconSize={14} />
+                </div>
+              ))}
+            {Array.from(new Set(docs.map((doc) => doc.source_type))).length >
+              3 && (
+              <div className="rounded-full bg-gray-200 w-3.5 h-3.5 flex items-center justify-center">
+                <span className="text-[8px]">
+                  +
+                  {Array.from(new Set(docs.map((doc) => doc.source_type)))
+                    .length - 3}
+                </span>
+              </div>
+            )}
+            <span className="text-xs underline">View sources</span>
+          </button>
+        )}
       </div>
     </div>
   );
