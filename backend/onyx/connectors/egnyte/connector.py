@@ -126,10 +126,10 @@ def _process_egnyte_file(
 
 class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
     class AdditionalOauthKwargs(OAuthConnector.AdditionalOauthKwargs):
-        egnyte_base_domain: str = Field(
-            title="Egnyte Base Domain",
+        egnyte_domain: str = Field(
+            title="Egnyte Domain",
             description=(
-                "The base domain for the Egnyte instance "
+                "The domain for the Egnyte instance "
                 "(e.g. 'company' for company.egnyte.com)"
             ),
         )
@@ -162,7 +162,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
 
         callback_uri = get_oauth_callback_uri(base_domain, "egnyte")
         return (
-            f"https://{oauth_kwargs.egnyte_base_domain}.egnyte.com/puboauth/token"
+            f"https://{oauth_kwargs.egnyte_domain}.egnyte.com/puboauth/token"
             f"?client_id={EGNYTE_CLIENT_ID}"
             f"&redirect_uri={callback_uri}"
             f"&scope=Egnyte.filesystem"
@@ -185,7 +185,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         oauth_kwargs = cls.AdditionalOauthKwargs(**additional_kwargs)
 
         # Exchange code for token
-        url = f"https://{oauth_kwargs.egnyte_base_domain}.egnyte.com/puboauth/token"
+        url = f"https://{oauth_kwargs.egnyte_domain}.egnyte.com/puboauth/token"
         redirect_uri = get_oauth_callback_uri(base_domain, "egnyte")
 
         data = {
@@ -212,7 +212,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
 
         token_data = response.json()
         return {
-            "domain": oauth_kwargs.egnyte_base_domain,
+            "domain": oauth_kwargs.egnyte_domain,
             "access_token": token_data["access_token"],
         }
 
