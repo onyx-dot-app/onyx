@@ -22,7 +22,9 @@ from onyx.chat.stream_processing.answer_response_handler import (
 from onyx.chat.stream_processing.answer_response_handler import (
     DummyAnswerResponseHandler,
 )
-from onyx.chat.stream_processing.utils import map_document_id_order
+from onyx.chat.stream_processing.utils import (
+    map_document_id_order,
+)
 from onyx.chat.tool_handling.tool_response_handler import ToolResponseHandler
 from onyx.file_store.utils import InMemoryChatFile
 from onyx.llm.interfaces import LLM
@@ -206,9 +208,9 @@ class Answer:
         # + figure out what the next LLM call should be
         tool_call_handler = ToolResponseHandler(current_llm_call.tools)
 
-        search_result, displayed_search_results_map = SearchTool.get_search_result(
+        final_search_results, displayed_search_results = SearchTool.get_search_result(
             current_llm_call
-        ) or ([], {})
+        ) or ([], [])
 
         # Quotes are no longer supported
         # answer_handler: AnswerResponseHandler
@@ -224,9 +226,9 @@ class Answer:
         # else:
         #     raise ValueError("No answer style config provided")
         answer_handler = CitationResponseHandler(
-            context_docs=search_result,
-            doc_id_to_rank_map=map_document_id_order(search_result),
-            display_doc_order_dict=displayed_search_results_map,
+            context_docs=final_search_results,
+            final_doc_id_to_rank_map=map_document_id_order(final_search_results),
+            display_doc_id_to_rank_map=map_document_id_order(displayed_search_results),
         )
 
         response_handler_manager = LLMResponseHandlerManager(
