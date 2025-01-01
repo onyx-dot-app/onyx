@@ -13,7 +13,7 @@ type formType = {
   [key: string]: any; // For additional credential fields
 };
 
-export default function CreateStdOAuthCredential({
+export function CreateStdOAuthCredential({
   sourceType,
   additionalFields,
 }: {

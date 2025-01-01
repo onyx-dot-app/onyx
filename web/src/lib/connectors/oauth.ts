@@ -1,4 +1,7 @@
+import useSWR from "swr";
 import { ValidSources } from "../types";
+import { OAuthDetails } from "./credentials";
+import { errorHandlingFetcher } from "../fetcher";
 
 export async function getConnectorOauthRedirectUrl(
   connector: ValidSources,
@@ -19,4 +22,11 @@ export async function getConnectorOauthRedirectUrl(
 
   const data = await response.json();
   return data.redirect_url as string;
+}
+
+export function useOAuthDetails(sourceType: ValidSources) {
+  return useSWR<OAuthDetails>(
+    `/api/connector/oauth/details/${sourceType}`,
+    errorHandlingFetcher
+  );
 }

@@ -2,7 +2,6 @@
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
-import { HealthCheckBanner } from "@/components/health/healthcheck";
 
 import Title from "@/components/ui/title";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -19,11 +18,7 @@ import AdvancedFormPage from "./pages/Advanced";
 import DynamicConnectionForm from "./pages/DynamicConnectorCreationForm";
 import CreateCredential from "@/components/credentials/actions/CreateCredential";
 import ModifyCredential from "@/components/credentials/actions/ModifyCredential";
-import {
-  ConfigurableSources,
-  oauthSupportedSources,
-  ValidSources,
-} from "@/lib/types";
+import { ConfigurableSources, oauthSupportedSources } from "@/lib/types";
 import {
   Credential,
   credentialTemplates,
@@ -41,7 +36,6 @@ import {
   ConnectorBase,
 } from "@/lib/connectors/connectors";
 import { Modal } from "@/components/Modal";
-import GDriveMain from "./pages/gdrive/GoogleDrivePage";
 import { GmailMain } from "./pages/gmail/GmailPage";
 import {
   useGmailCredentials,
@@ -58,8 +52,11 @@ import {
   NEXT_PUBLIC_TEST_ENV,
 } from "@/lib/constants";
 import TemporaryLoadingModal from "@/components/TemporaryLoadingModal";
-import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
-import CreateStdOAuthCredential from "@/components/credentials/actions/CreateStdOAuthCredential";
+import {
+  getConnectorOauthRedirectUrl,
+  useOAuthDetails,
+} from "@/lib/connectors/oauth";
+import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -152,7 +149,6 @@ export default function AddConnector({
     useState<Credential<any> | null>(null);
   const [createCredentialFormToggle, setCreateCredentialFormToggle] =
     useState(false);
-  console.log(createCredentialFormToggle);
 
   // Fetch credentials data
   const { data: credentials } = useSWR<Credential<any>[]>(
@@ -168,10 +164,7 @@ export default function AddConnector({
   );
 
   const { data: oauthDetails, isLoading: oauthDetailsLoading } =
-    useSWR<OAuthDetails>(
-      `/api/connector/oauth/details/${connector}`,
-      errorHandlingFetcher
-    );
+    useOAuthDetails(connector);
 
   // Get credential template and configuration
   const credentialTemplate = credentialTemplates[connector];
