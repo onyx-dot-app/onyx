@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,42 +8,38 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  LightBackgroundColors,
-  DarkBackgroundColors,
-  Shortcut,
-  StoredBackgroundColors,
-} from "./interfaces";
+import { Shortcut } from "./interfaces";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PencilIcon, PlusIcon } from "lucide-react";
+import Image from "next/image";
+
+const QuestionMarkIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="w-full h-full text-neutral-50"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
 
 export const ShortCut = ({
   shortCut,
   onEdit,
-  theme,
 }: {
   shortCut: Shortcut;
   onEdit: (shortcut: Shortcut) => void;
-  theme: string;
 }) => {
   return (
-    <div
-      className="w-24 h-24 flex-none rounded-xl shadow-lg relative group transition-all duration-300 ease-in-out hover:scale-105"
-      style={{
-        backgroundColor:
-          theme === "light"
-            ? LightBackgroundColors[shortCut.backgroundColor]
-            : DarkBackgroundColors[shortCut.backgroundColor],
-      }}
-    >
+    <div className="w-24 h-24 flex-none rounded-xl shadow-lg relative group transition-all duration-300 ease-in-out hover:scale-105 bg-white/10 backdrop-blur-sm">
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -57,11 +53,20 @@ export const ShortCut = ({
         onClick={() => window.open(shortCut.url, "_blank")}
         className="w-full h-full flex flex-col items-center justify-center cursor-pointer"
       >
-        <h1
-          className={`text-white w-full text-center  font-semibold text-sm truncate px-2 ${
-            theme === "light" ? "text-black" : "text-white"
-          }`}
-        >
+        <div className="w-8 h-8 mb-2 relative">
+          {shortCut.favicon ? (
+            <Image
+              src={shortCut.favicon}
+              alt={shortCut.name}
+              width={40}
+              height={40}
+              className="rounded-sm"
+            />
+          ) : (
+            <QuestionMarkIcon />
+          )}
+        </div>
+        <h1 className="text-white w-full text-center font-semibold text-sm truncate px-2">
           {shortCut.name}
         </h1>
       </div>
@@ -91,9 +96,7 @@ export const NewShortCutModal = ({
   onAdd,
   editingShortcut,
   onDelete,
-  theme,
 }: {
-  theme: string;
   isOpen: boolean;
   onClose: () => void;
   onDelete: (shortcut: Shortcut) => void;
@@ -102,16 +105,46 @@ export const NewShortCutModal = ({
 }) => {
   const [name, setName] = useState(editingShortcut?.name || "");
   const [url, setUrl] = useState(editingShortcut?.url || "");
-  const [backgroundColor, setBackgroundColor] =
-    useState<StoredBackgroundColors>(
-      editingShortcut?.backgroundColor || StoredBackgroundColors.BLUE
-    );
+  const [faviconError, setFaviconError] = useState(false);
+  const [isValidUrl, setIsValidUrl] = useState(false);
+
+  const validateUrl = (input: string) => {
+    try {
+      new URL(input);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onAdd({ name, url, backgroundColor });
-    onClose();
+    if (isValidUrl) {
+      const faviconUrl = `https://www.google.com/s2/favicons?domain=${
+        new URL(url).hostname
+      }&sz=64`;
+      onAdd({ name, url, favicon: faviconUrl });
+      onClose();
+    } else {
+      // Handle invalid URL submission (e.g., show an error message)
+      console.error("Invalid URL submitted");
+    }
   };
+
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newUrl = e.target.value;
+    setUrl(newUrl);
+    setIsValidUrl(validateUrl(newUrl));
+    setFaviconError(false);
+  };
+
+  useEffect(() => {
+    setIsValidUrl(validateUrl(url));
+  }, [url]);
+
+  const faviconUrl = isValidUrl
+    ? `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=64`
+    : "";
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -153,50 +186,43 @@ export const NewShortCutModal = ({
               <Input
                 id="url"
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                className="bg-neutral-800 border-neutral-700 text-white"
+                onChange={handleUrlChange}
+                className={`bg-neutral-800 border-neutral-700 text-white ${
+                  !isValidUrl && url ? "border-red-500" : ""
+                }`}
                 placeholder="https://example.com"
               />
+              {!isValidUrl && url && (
+                <p className="text-red-500 text-sm">Please enter a valid URL</p>
+              )}
             </div>
-            <div className="flex flex-col space-y-2">
-              <Label
-                htmlFor="color"
-                className="text-sm font-medium text-neutral-300"
-              >
-                Color
+            <div className="flex items-center space-x-2">
+              <Label className="text-sm font-medium text-neutral-300">
+                Favicon Preview:
               </Label>
-              <Select
-                onValueChange={(value: StoredBackgroundColors) =>
-                  setBackgroundColor(value)
-                }
-              >
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-white">
-                  <div className="flex items-center">
-                    <div
-                      className="w-4 h-4 rounded-full mr-2"
-                      style={{ backgroundColor }}
-                    ></div>
-                    <SelectValue placeholder="Select a color" />
+              <div className="w-8 h-8 relative flex items-center justify-center">
+                {isValidUrl && !faviconError ? (
+                  <Image
+                    src={faviconUrl}
+                    alt="Favicon"
+                    width={32}
+                    height={32}
+                    className="w-full h-full rounded-sm"
+                    onError={() => setFaviconError(true)}
+                  />
+                ) : (
+                  <div className="w-8 h-8">
+                    <QuestionMarkIcon />
                   </div>
-                </SelectTrigger>
-                <SelectContent className="bg-neutral-900  border-neutral-700">
-                  {Object.values(StoredBackgroundColors).map((color) => (
-                    <SelectItem
-                      key={color}
-                      value={color}
-                      className="text-white focus:bg-neutral-950 focus:text-neutral-100  cursor-pointer"
-                    >
-                      <div className="flex items-center">{color}</div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button
               type="submit"
               className="bg-blue-600 hover:bg-blue-700 text-white"
+              disabled={!isValidUrl || !name}
             >
               {editingShortcut ? "Save Changes" : "Add Shortcut"}
             </Button>

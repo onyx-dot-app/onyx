@@ -4,7 +4,6 @@ import { Shortcut } from "../../nrf/interfaces";
 
 interface ShortcutsDisplayProps {
   shortCuts: Shortcut[];
-  theme: string;
   showShortcuts: boolean;
   setEditingShortcut: (shortcut: Shortcut | null) => void;
   setShowShortCutModal: (show: boolean) => void;
@@ -12,7 +11,6 @@ interface ShortcutsDisplayProps {
 
 export const ShortcutsDisplay: React.FC<ShortcutsDisplayProps> = ({
   shortCuts,
-  theme,
   showShortcuts,
   setEditingShortcut,
   setShowShortCutModal,
@@ -32,7 +30,6 @@ export const ShortcutsDisplay: React.FC<ShortcutsDisplayProps> = ({
       {shortCuts.map((shortCut: Shortcut, index: number) => (
         <ShortCut
           key={index}
-          theme={theme}
           onEdit={() => {
             setEditingShortcut(shortCut);
             setShowShortCutModal(true);

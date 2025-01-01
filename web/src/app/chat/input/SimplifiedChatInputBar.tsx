@@ -173,7 +173,7 @@ export function SimplifiedChatInputBar({
           style={{ scrollbarWidth: "thin" }}
           role="textarea"
           aria-multiline
-          placeholder="Ask me anything.."
+          placeholder="Ask me anything..."
           value={message}
           onKeyDown={(event) => {
             if (

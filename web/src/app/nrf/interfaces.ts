@@ -1,7 +1,7 @@
 export interface Shortcut {
   name: string;
   url: string;
-  backgroundColor: StoredBackgroundColors;
+  favicon?: string;
 }
 
 // Start of Selection
@@ -42,7 +42,7 @@ export type BackgroundColors = LightBackgroundColors | DarkBackgroundColors;
 export interface Shortcut {
   name: string;
   url: string;
-  backgroundColor: StoredBackgroundColors;
+  favicon?: string;
 }
 
 export const darkImages = [

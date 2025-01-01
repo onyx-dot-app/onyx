@@ -327,7 +327,6 @@ export default function NRFPageNewDesign() {
 
               <ShortcutsDisplay
                 shortCuts={shortCuts}
-                theme={theme}
                 showShortcuts={showShortcuts}
                 setEditingShortcut={setEditingShortcut}
                 setShowShortCutModal={setShowShortCutModal}
@@ -338,7 +337,6 @@ export default function NRFPageNewDesign() {
       </Dropzone>
       {showShortCutModal && (
         <NewShortCutModal
-          theme={theme}
           onDelete={(shortcut: Shortcut) => {
             setShortCuts(
               shortCuts.filter((s: Shortcut) => s.name !== shortcut.name)
