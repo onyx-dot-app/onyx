@@ -114,6 +114,7 @@ def _fetch_channel_permissions(
 
 
 def slack_doc_sync(
+    tenant_id: str | None,
     cc_pair: ConnectorCredentialPair,
 ) -> list[DocExternalAccess]:
     """
