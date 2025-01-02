@@ -448,7 +448,8 @@ async def process_embed_request(
 ) -> EmbedResponse:
     if not embed_request.texts:
         raise HTTPException(status_code=400, detail="No texts to be embedded")
-    elif not all(embed_request.texts):
+
+    if not all(embed_request.texts):
         raise ValueError("Empty strings are not allowed for embedding.")
 
     try:
@@ -479,9 +480,12 @@ async def process_embed_request(
             detail=str(e),
         )
     except Exception as e:
-        exception_detail = f"Error during embedding process:\n{str(e)}"
-        logger.exception(exception_detail)
-        raise HTTPException(status_code=500, detail=exception_detail)
+        logger.exception(
+            f"Error during embedding process: provider={embed_request.provider_type} model={embed_request.model_name}"
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Error during embedding process: {e}"
+        )
 
 
 @router.post("/cross-encoder-scores")
