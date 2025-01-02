@@ -1,7 +1,7 @@
 import concurrent.futures
 
 import httpx
-from tenacity import retry
+from retry import retry
 
 from onyx.document_index.vespa.chunk_retrieval import (
     get_all_vespa_ids_for_document_id,
@@ -35,7 +35,8 @@ def _delete_vespa_doc_chunks(
     for chunk_id in doc_chunk_ids:
         try:
             _retryable_http_delete(
-                f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{chunk_id}"
+                http_client,
+                f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{chunk_id}",
             )
         except httpx.HTTPStatusError as e:
             logger.error(f"Failed to delete chunk, details: {e.response.text}")
