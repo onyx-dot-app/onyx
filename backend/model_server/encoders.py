@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from types import TracebackType
 from typing import cast
 from typing import Optional
@@ -328,6 +329,8 @@ async def embed_text(
         logger.error("No texts provided for embedding")
         raise ValueError("No texts provided for embedding.")
 
+    start = time.monotonic()
+
     total_chars = 0
     for text in texts:
         total_chars += len(text)
@@ -368,6 +371,11 @@ async def embed_text(
             logger.error(error_message)
             raise ValueError(error_message)
 
+        elapsed = time.monotonic() - start
+        logger.info(
+            f"Successfully embedded {len(texts)} texts with {total_chars} total characters "
+            f"with provider {provider_type} in {elapsed:.2f}"
+        )
     elif model_name is not None:
         logger.info(
             f"Embedding {len(texts)} texts with {total_chars} total characters with local model: {model_name}"
@@ -390,13 +398,17 @@ async def embed_text(
             for embedding in embeddings_vectors
         ]
 
+        elapsed = time.monotonic() - start
+        logger.info(
+            f"Successfully embedded {len(texts)} texts with {total_chars} total characters "
+            f"with local model {model_name} in {elapsed:.2f}"
+        )
     else:
         logger.error("Neither model name nor provider specified for embedding")
         raise ValueError(
             "Either model name or provider must be provided to run embeddings."
         )
 
-    logger.info(f"Successfully embedded {len(texts)} texts")
     return embeddings
 
 
