@@ -246,6 +246,7 @@ class OnyxCeleryQueues:
     VESPA_METADATA_SYNC = "vespa_metadata_sync"
     DOC_PERMISSIONS_UPSERT = "doc_permissions_upsert"
     CONNECTOR_DELETION = "connector_deletion"
+    LLM_MODEL_UPDATE = "llm_model_update"
 
     # Heavy queue
     CONNECTOR_PRUNING = "connector_pruning"
@@ -301,6 +302,7 @@ class OnyxCeleryTask:
     CHECK_FOR_PRUNING = "check_for_pruning"
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
+    CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
     MONITOR_VESPA_SYNC = "monitor_vespa_sync"
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (

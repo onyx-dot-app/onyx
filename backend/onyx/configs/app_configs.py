@@ -531,6 +531,9 @@ try:
 except json.JSONDecodeError:
     pass
 
+# LLM Model Update API endpoint
+LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")
+
 #####
 # Enterprise Edition Configs
 #####
