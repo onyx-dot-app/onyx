@@ -339,7 +339,6 @@ export function ChatInputBar({
                       key={index}
                       title={displayTitle}
                       onClick={() => {
-                        console.log("clicked");
                         selectChromeUrl(url);
                       }}
                       url={url}

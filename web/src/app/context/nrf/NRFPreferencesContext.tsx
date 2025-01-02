@@ -82,11 +82,7 @@ export function NRFPreferencesProvider({
     true
   );
 
-  // 2. Whenever theme or background changes, notify extension:
   useEffect(() => {
-    console.log("theme", theme);
-    console.log("defaultLightBackgroundUrl", defaultLightBackgroundUrl);
-    console.log("defaultDarkBackgroundUrl", defaultDarkBackgroundUrl);
     if (theme === "dark") {
       notifyExtensionOfThemeChange(theme, defaultDarkBackgroundUrl);
     } else {

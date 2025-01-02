@@ -197,15 +197,11 @@ export function useFilters(): FilterManager {
     const availableSourcesMetadata = availableSources.map(getSourceMetadata);
     let newSelectedSources: SourceMetadata[] = [];
     const sourcesParam = params.get("sources");
-    console.log("SOURCES PARAM", sourcesParam);
     if (sourcesParam) {
       const sourceNames = sourcesParam.split(",").map(decodeURIComponent);
       newSelectedSources = availableSourcesMetadata.filter((source) =>
         sourceNames.includes(source.internalName)
       );
-      console.log("Parsed sources:", newSelectedSources);
-    } else {
-      console.log("No sources parsed");
     }
 
     // Parse document sets

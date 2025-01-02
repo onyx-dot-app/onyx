@@ -406,31 +406,6 @@ export function ChatPage({
   const [chromSentUrls, setchromSentUrls] = useState<string[]>([]);
   const [selectedChromeUrls, setSelectedChromeUrls] = useState<string[]>([]);
 
-  // TODO: Enable in future iteration
-  // useEffect(() => {
-  //   function handleMessage(event: MessageEvent) {
-  //     // If you have a specific origin, check event.origin === "https://my-extension-domain.com"
-  //     if (event.data?.type === "PAGE_URL") {
-  //       // The extension is telling us the new URL
-  //       const newUrl = event.data.url;
-  //       console.log("Got a URL from the extension side panel:", newUrl);
-  //       if (newUrl && /^https?:\/\//.test(newUrl)) {
-  //         setchromSentUrls((prev) => [...prev.slice(-2), newUrl]);
-  //       }
-
-  //       // Use or store this URL as needed in your ChatPage
-  //       // e.g., set some local state or call a helper to do something with it
-  //       // setchromSentUrls(newUrl);
-  //     }
-  //   }
-
-  //   window.addEventListener("message", handleMessage);
-
-  //   return () => {
-  //     window.removeEventListener("message", handleMessage);
-  //   };
-  // }, []);
-
   useEffect(() => {
     const priorChatSessionId = chatSessionIdRef.current;
     const loadedSessionId = loadedIdSessionRef.current;
