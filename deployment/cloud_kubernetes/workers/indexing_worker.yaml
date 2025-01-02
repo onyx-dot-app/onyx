@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: celery-worker-indexing
-          image: onyxdotapp/onyx-backend-cloud:v0.14.0-cloud.beta.20
+          image: onyxdotapp/onyx-backend-cloud:v0.14.0-cloud.beta.21
           imagePullPolicy: IfNotPresent
           command:
             [
@@ -27,7 +27,7 @@ spec:
               "-Q",
               "connector_indexing",
               "--prefetch-multiplier=1",
-              "--concurrency=4",
+              "--concurrency=10",
             ]
           env:
             - name: REDIS_PASSWORD

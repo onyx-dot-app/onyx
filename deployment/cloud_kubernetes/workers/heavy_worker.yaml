@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: celery-worker-heavy
-          image: onyxdotapp/onyx-backend-cloud:v0.14.0-cloud.beta.20
+          image: onyxdotapp/onyx-backend-cloud:v0.14.0-cloud.beta.21
           imagePullPolicy: IfNotPresent
           command:
             [
