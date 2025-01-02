@@ -2,6 +2,7 @@ import re
 from collections import OrderedDict
 
 from onyx.connectors.models import Section
+from onyx.connectors.salesforce.utils import SalesforceObject
 
 # All of these types of keys are handled by specific fields in the doc
 # conversion process (E.g. URLs) or are not useful for the user (E.g. UUIDs)
@@ -102,6 +103,13 @@ def _extract_dict_text(raw_dict: dict) -> str:
     return natural_language_for_dict
 
 
+def extract_section(salesforce_object: SalesforceObject, base_url: str) -> Section:
+    return Section(
+        text=_extract_dict_text(salesforce_object.data),
+        link=f"{base_url}/{salesforce_object.id}",
+    )
+
+
 def _field_value_is_child_object(field_value: dict) -> bool:
     """
     Checks if the field value is a child object.
@@ -115,7 +123,7 @@ def _field_value_is_child_object(field_value: dict) -> bool:
     )
 
 
-def extract_sections(salesforce_object: dict, base_url: str) -> list[Section]:
+def _extract_sections(salesforce_object: dict, base_url: str) -> list[Section]:
     """
     This goes through the salesforce_object and extracts the top level fields as a Section.
     It also goes through the child objects and extracts them as Sections.
