@@ -1,6 +1,6 @@
 import React from "react";
-import { ShortCut, AddShortCut } from "../../nrf/ShortCuts";
-import { Shortcut } from "../../nrf/interfaces";
+import { ShortCut, AddShortCut } from "@/components/extension/Shortcuts";
+import { Shortcut } from "@/app/nrf/interfaces";
 
 interface ShortcutsDisplayProps {
   shortCuts: Shortcut[];

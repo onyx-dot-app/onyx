@@ -14,34 +14,28 @@ import { v4 as uuidv4 } from "uuid";
 import { Button } from "@/components/ui/button";
 import { SimplifiedChatInputBar } from "../chat/input/SimplifiedChatInputBar";
 import { Menu } from "lucide-react";
-import Link from "next/link";
 import { Shortcut } from "./interfaces";
-import { MaxShortcutsReachedModal, NewShortCutModal } from "./ShortCuts";
+import {
+  MaxShortcutsReachedModal,
+  NewShortCutModal,
+} from "@/components/extension/Shortcuts";
 import { Modal } from "@/components/Modal";
-import Title from "@/components/ui/title";
-import { useNightTime } from "./dateUtils";
+import { useNightTime } from "@/lib/dateUtils";
 import { useFilters } from "@/lib/hooks";
 import { uploadFilesForChat } from "../chat/lib";
 import { ChatFileType, FileDescriptor } from "../chat/interfaces";
 import { useChatContext } from "@/components/context/ChatContext";
 import Dropzone from "react-dropzone";
-import { useSendMessageToParent } from "./utils";
+import { useSendMessageToParent } from "@/lib/extension/utils";
 import {
   useNRFPreferences,
   NRFPreferencesProvider,
-} from "../context/nrf/NRFPreferencesContext";
+} from "@/components/context/NRFPreferencesContext";
 import { SettingsPanel } from "../components/nrf/SettingsPanel";
-import { Switch } from "@/components/ui/switch";
 import { ShortcutsDisplay } from "../components/nrf/ShortcutsDisplay";
 import LoginPanel from "../auth/login/LoginPage";
 import { AuthType } from "@/lib/constants";
-
-// Chrome Extension Utility
-function sendSetDefaultNewTabMessage(value: boolean) {
-  if (typeof window !== "undefined" && window.parent) {
-    window.parent.postMessage({ type: "SET_DEFAULT_NEW_TAB", value }, "*");
-  }
-}
+import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 
 export default function NRFPageNewDesign() {
   const {
@@ -50,7 +44,6 @@ export default function NRFPageNewDesign() {
     defaultDarkBackgroundUrl,
     shortcuts: shortCuts,
     setShortcuts: setShortCuts,
-    useOnyxAsNewTab,
     setUseOnyxAsNewTab,
     showShortcuts,
   } = useNRFPreferences();
@@ -163,7 +156,6 @@ export default function NRFPageNewDesign() {
 
   const [showLoginModal, setShowLoginModal] = useState<boolean>(!user);
 
-  const [authUrl, setAuthUrl] = useState<string | null>(null);
   const [authType, setAuthType] = useState<string | null>(null);
   const [fetchingAuth, setFetchingAuth] = useState(false);
 
@@ -175,7 +167,6 @@ export default function NRFPageNewDesign() {
       setFetchingAuth(true);
 
       try {
-        // 1) Fetch the auth type (e.g. "basic", "oidc", "cloud", "google_oauth", etc.)
         const res = await fetch("/api/auth/type", {
           method: "GET",
           credentials: "include",
@@ -185,36 +176,7 @@ export default function NRFPageNewDesign() {
         }
 
         const data = await res.json();
-        setAuthType(data.auth_type); // e.g. "basic", "oidc", "cloud", "google_oauth", etc.
-
-        // 2) For everything except "disabled" or "basic," fetch the authorization URL
-        if (data.auth_type !== "disabled" && data.auth_type !== "basic") {
-          let route = "";
-          if (data.auth_type === "oidc") {
-            route = "/api/auth/oidc/authorize";
-          } else if (data.auth_type === "google_oauth") {
-            route = "/api/auth/oauth/authorize";
-          } else if (data.auth_type === "saml") {
-            route = "/api/auth/saml/authorize";
-          } else if (data.auth_type === "cloud") {
-            // If your "cloud" mode reuses Google OAuth, then:
-            route = "/api/auth/oauth/authorize";
-          }
-
-          const urlWithNext = `${route}?next=${encodeURIComponent("/nrf")}`;
-          const authUrlRes = await fetch(urlWithNext, {
-            method: "GET",
-            credentials: "include",
-          });
-          if (!authUrlRes.ok) {
-            throw new Error(
-              `Failed to generate auth URL: ${authUrlRes.statusText}`
-            );
-          }
-
-          const authUrlData = await authUrlRes.json();
-          setAuthUrl(authUrlData.authorization_url);
-        }
+        setAuthType(data.auth_type);
       } catch (err) {
         console.error("Error fetching auth data:", err);
       } finally {
@@ -337,6 +299,7 @@ export default function NRFPageNewDesign() {
       </Dropzone>
       {showShortCutModal && (
         <NewShortCutModal
+          setPopup={setPopup}
           onDelete={(shortcut: Shortcut) => {
             setShortCuts(
               shortCuts.filter((s: Shortcut) => s.name !== shortcut.name)
@@ -364,27 +327,12 @@ export default function NRFPageNewDesign() {
           editingShortcut={editingShortcut}
         />
       )}
-      {/* Bottom-right container for the "Use Onyx as new tab" toggle */}
-      {/* NOTE: currently commented out  */}
-      {/* <div className="absolute bottom-4 right-4 z-10 flex items-center bg-white/80 backdrop-blur-sm p-2 rounded-lg">
-        <label
-          htmlFor="useOnyx"
-          className="cursor-pointer mr-2 text-black text-xs font-medium"
-        >
-          Use Onyx as default new tab
-        </label>
-        <Switch
-          id="useOnyx"
-          checked={useOnyxAsNewTab}
-          onCheckedChange={handleUseOnyxToggle}
-        />
-      </div> */}
       <SettingsPanel
         settingsOpen={settingsOpen}
         toggleSettings={toggleSettings}
         handleUseOnyxToggle={handleUseOnyxToggle}
       />
-      {/* Modal for confirming turn off */}
+
       <Dialog open={showTurnOffModal} onOpenChange={setShowTurnOffModal}>
         <DialogContent className="w-fit max-w-[95%]">
           <DialogHeader>
@@ -418,7 +366,7 @@ export default function NRFPageNewDesign() {
           ) : authType == "basic" ? (
             <LoginPanel
               showPageRedirect
-              authUrl={authUrl}
+              authUrl={null}
               authTypeMetadata={{
                 authType: authType as AuthType,
                 autoRedirect: false,

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { darkImages, lightImages, Shortcut } from "../../nrf/interfaces";
+import { darkImages, lightImages, Shortcut } from "@/app/nrf/interfaces";
 
 function notifyExtensionOfThemeChange(newTheme: string, newBgUrl: string) {
   if (typeof window !== "undefined" && window.parent) {

@@ -7,7 +7,7 @@ import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { cookies } from "next/headers";
 import { NEXT_PUBLIC_ENABLE_CHROME_EXTENSION } from "@/lib/constants";
 import NRFPage from "./NRFPage";
-import { NRFPreferencesProvider } from "../context/nrf/NRFPreferencesContext";
+import { NRFPreferencesProvider } from "../../components/context/NRFPreferencesContext";
 
 export default async function Page(props: {
   searchParams: Promise<{ [key: string]: string }>;

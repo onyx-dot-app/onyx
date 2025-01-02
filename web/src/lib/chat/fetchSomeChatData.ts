@@ -91,6 +91,7 @@ export async function fetchSomeChatData(
   const authDisabled = authTypeMetadata?.authType === "disabled";
 
   let user: User | null = null;
+
   if (fetchOptions.includes("user")) {
     user = results.shift();
     if (!authDisabled && !user) {

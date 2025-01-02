@@ -2,7 +2,7 @@ import React from "react";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { useNRFPreferences } from "../../context/nrf/NRFPreferencesContext";
+import { useNRFPreferences } from "../../../components/context/NRFPreferencesContext";
 import { darkImages, lightImages } from "../../nrf/interfaces";
 
 const SidebarSwitch = ({

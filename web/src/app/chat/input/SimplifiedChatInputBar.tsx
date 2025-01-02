@@ -8,7 +8,7 @@ import {
   InputBarPreviewImageProvider,
 } from "../files/InputBarPreview";
 import { SendIcon } from "@/components/icons/icons";
-import { HorizontalSourceSelector } from "@/app/nrf/HorizontalSourceSelector";
+import { HorizontalSourceSelector } from "@/components/search/filtering/HorizontalSourceSelector";
 import { Tag } from "@/lib/types";
 
 const MAX_INPUT_HEIGHT = 200;

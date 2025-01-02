@@ -8,11 +8,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Shortcut } from "./interfaces";
+import { Shortcut } from "@/app/nrf/interfaces";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PencilIcon, PlusIcon } from "lucide-react";
 import Image from "next/image";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 const QuestionMarkIcon = () => (
   <svg
@@ -96,12 +97,14 @@ export const NewShortCutModal = ({
   onAdd,
   editingShortcut,
   onDelete,
+  setPopup,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onDelete: (shortcut: Shortcut) => void;
   onAdd: (shortcut: Shortcut) => void;
   editingShortcut?: Shortcut | null;
+  setPopup: (popup: PopupSpec) => void;
 }) => {
   const [name, setName] = useState(editingShortcut?.name || "");
   const [url, setUrl] = useState(editingShortcut?.url || "");
@@ -126,8 +129,11 @@ export const NewShortCutModal = ({
       onAdd({ name, url, favicon: faviconUrl });
       onClose();
     } else {
-      // Handle invalid URL submission (e.g., show an error message)
       console.error("Invalid URL submitted");
+      setPopup({
+        type: "error",
+        message: "Please enter a valid URL",
+      });
     }
   };
 
