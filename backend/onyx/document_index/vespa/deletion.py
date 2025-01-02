@@ -17,8 +17,9 @@ CONTENT_SUMMARY = "content_summary"
 
 
 @retry(tries=10, delay=1, backoff=2)
-def _retryable_http_delete(http_client: httpx.Client, url: str) -> httpx.Response:
-    return http_client.delete(url)
+def _retryable_http_delete(http_client: httpx.Client, url: str) -> None:
+    res = http_client.delete(url)
+    res.raise_for_status()
 
 
 @retry(tries=3, delay=1, backoff=2)
@@ -33,10 +34,9 @@ def _delete_vespa_doc_chunks(
 
     for chunk_id in doc_chunk_ids:
         try:
-            res: httpx.Response = _retryable_http_delete(
+            _retryable_http_delete(
                 f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{chunk_id}"
             )
-            res.raise_for_status()
         except httpx.HTTPStatusError as e:
             logger.error(f"Failed to delete chunk, details: {e.response.text}")
             raise
