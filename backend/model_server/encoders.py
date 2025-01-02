@@ -320,8 +320,6 @@ async def embed_text(
     api_url: str | None,
     api_version: str | None,
 ) -> list[Embedding]:
-    logger.info(f"Embedding {len(texts)} texts with provider: {provider_type}")
-
     if not all(texts):
         logger.error("Empty strings provided for embedding")
         raise ValueError("Empty strings are not allowed for embedding.")
@@ -330,8 +328,15 @@ async def embed_text(
         logger.error("No texts provided for embedding")
         raise ValueError("No texts provided for embedding.")
 
+    total_chars = 0
+    for text in texts:
+        total_chars += len(text)
+
     if provider_type is not None:
-        logger.debug(f"Using cloud provider {provider_type} for embedding")
+        logger.info(
+            f"Embedding {len(texts)} texts with {total_chars} total characters with provider: {provider_type}"
+        )
+
         if api_key is None:
             logger.error("API key not provided for cloud model")
             raise RuntimeError("API key not provided for cloud model")
@@ -364,7 +369,10 @@ async def embed_text(
             raise ValueError(error_message)
 
     elif model_name is not None:
-        logger.debug(f"Using local model {model_name} for embedding")
+        logger.info(
+            f"Embedding {len(texts)} texts with {total_chars} total characters with local model: {model_name}"
+        )
+
         prefixed_texts = [f"{prefix}{text}" for text in texts] if prefix else texts
 
         local_model = get_embedding_model(
