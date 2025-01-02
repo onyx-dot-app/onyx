@@ -94,7 +94,7 @@ if LLM_MODEL_UPDATE_API_URL:
         {
             "name": "check-for-llm-model-update",
             "task": OnyxCeleryTask.CHECK_FOR_LLM_MODEL_UPDATE,
-            "schedule": timedelta(seconds=10),  # Check every hour
+            "schedule": timedelta(hours=1),  # Check every hour
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
                 "expires": BEAT_EXPIRES_DEFAULT,
