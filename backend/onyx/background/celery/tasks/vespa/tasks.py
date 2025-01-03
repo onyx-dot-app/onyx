@@ -777,6 +777,12 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
         n_permissions_sync = celery_get_queue_length(
             OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC, r_celery
         )
+        n_external_group_sync = celery_get_queue_length(
+            OnyxCeleryQueues.CONNECTOR_EXTERNAL_GROUP_SYNC, r_celery
+        )
+        n_permissions_upsert = celery_get_queue_length(
+            OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT, r_celery
+        )
 
         prefetched = celery_get_unacked_task_ids(
             OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
@@ -790,6 +796,8 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
             f"deletion={n_deletion} "
             f"pruning={n_pruning} "
             f"permissions_sync={n_permissions_sync} "
+            f"external_group_sync={n_external_group_sync} "
+            f"permissions_upsert={n_permissions_upsert} "
         )
 
         # scan and monitor activity to completion

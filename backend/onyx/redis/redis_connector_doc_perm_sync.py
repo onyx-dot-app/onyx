@@ -162,7 +162,7 @@ class RedisConnectorPermissionSync:
                 ),
                 queue=OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT,
                 task_id=custom_task_id,
-                priority=OnyxCeleryPriority.MEDIUM,
+                priority=OnyxCeleryPriority.HIGH,
             )
             async_results.append(result)
 
