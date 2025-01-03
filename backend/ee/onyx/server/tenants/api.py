@@ -6,6 +6,8 @@ from fastapi import Response
 from sqlalchemy.orm import Session
 
 from ee.onyx.auth.users import current_cloud_superuser
+from ee.onyx.auth.users import generate_anonymous_user_jwt_token
+from ee.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
 from ee.onyx.configs.app_configs import STRIPE_SECRET_KEY
 from ee.onyx.server.tenants.access import control_plane_dep
 from ee.onyx.server.tenants.billing import fetch_billing_information
@@ -17,9 +19,11 @@ from ee.onyx.server.tenants.provisioning import delete_user_from_control_plane
 from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
 from ee.onyx.server.tenants.user_mapping import remove_all_users_from_tenant
 from ee.onyx.server.tenants.user_mapping import remove_users_from_tenant
+from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import auth_backend
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import get_redis_strategy
+from onyx.auth.users import optional_user
 from onyx.auth.users import User
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.auth import get_user_count
@@ -36,9 +40,28 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 stripe.api_key = STRIPE_SECRET_KEY
-
 logger = setup_logger()
 router = APIRouter(prefix="/tenants")
+
+
+@router.post("/anonymous-user")
+async def login_as_anonymous_user(
+    tenant_id: str,
+    user: User | None = Depends(optional_user),
+) -> Response:
+    if not anonymous_user_enabled(tenant_id):
+        raise HTTPException(status_code=403, detail="Anonymous user is not enabled")
+    token = generate_anonymous_user_jwt_token(tenant_id)
+    print("TOKEN IS ", token)
+    response = Response()
+    response.set_cookie(
+        key=ANONYMOUS_USER_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+    )
+    return response
 
 
 @router.post("/product-gating")

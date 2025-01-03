@@ -88,7 +88,7 @@ export async function fetchChatData(searchParams: {
   const authDisabled = authTypeMetadata?.authType === "disabled";
 
   // TODO Validate need
-  if (!authDisabled && !user && !authTypeMetadata?.anonymousUserEnabled) {
+  if (!authDisabled && !user) {
     const headersList = await headers();
     const fullUrl = headersList.get("x-url") || "/chat";
     const searchParamsString = new URLSearchParams(

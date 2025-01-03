@@ -34,9 +34,10 @@ def load_settings() -> Settings:
 
 
 def store_settings(settings: Settings) -> None:
+    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get() if MULTI_TENANT else None
+    redis_client = get_redis_client(tenant_id=tenant_id)
+
     if settings.anonymous_user_enabled is not None:
-        # Only non-multi-tenant scenario can set the anonymous user enabled flag
-        redis_client = get_redis_client(tenant_id=None)
         redis_client.set(
             OnyxRedisLocks.ANONYMOUS_USER_ENABLED,
             "1" if settings.anonymous_user_enabled else "0",
