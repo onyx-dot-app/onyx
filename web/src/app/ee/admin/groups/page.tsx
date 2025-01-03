@@ -15,7 +15,6 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { Button } from "@/components/ui/button";
 
 import { useUser } from "@/components/user/UserProvider";
-import { Separator } from "@/components/ui/separator";
 
 const Main = () => {
   const { popup, setPopup } = usePopup();

@@ -12,12 +12,6 @@ interface UserPreferences {
   auto_scroll: boolean | null;
 }
 
-export enum UserStatus {
-  live = "live",
-  invited = "invited",
-  deactivated = "deactivated",
-}
-
 export enum UserRole {
   LIMITED = "limited",
   BASIC = "basic",
@@ -51,18 +45,37 @@ export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
 export interface User {
   id: string;
   email: string;
-  is_active: string;
-  is_superuser: string;
-  is_verified: string;
+  is_active: boolean;
+  is_superuser: boolean;
+  is_verified: boolean;
   role: UserRole;
   preferences: UserPreferences;
-  status: UserStatus;
   current_token_created_at?: Date;
   current_token_expiry_length?: number;
   oidc_expiry?: Date;
   is_cloud_superuser?: boolean;
   organization_name: string | null;
   is_anonymous_user?: boolean;
+}
+
+export interface AllUsersResponse {
+  accepted: User[];
+  invited: User[];
+  slack_users: User[];
+  accepted_pages: number;
+  invited_pages: number;
+  slack_users_pages: number;
+}
+
+export interface AcceptedUserSnapshot {
+  id: string;
+  email: string;
+  role: UserRole;
+  is_active: boolean;
+}
+
+export interface InvitedUserSnapshot {
+  email: string;
 }
 
 export interface MinimalUserSnapshot {

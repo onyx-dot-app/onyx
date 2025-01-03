@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from onyx.auth.schemas import UserRole
-from onyx.auth.schemas import UserStatus
+from onyx.db.models import User
 
 
 DataT = TypeVar("DataT")
@@ -35,7 +35,16 @@ class FullUserSnapshot(BaseModel):
     id: UUID
     email: str
     role: UserRole
-    status: UserStatus
+    is_active: bool
+
+    @classmethod
+    def from_user_model(cls, user: User) -> "FullUserSnapshot":
+        return cls(
+            id=user.id,
+            email=user.email,
+            role=user.role,
+            is_active=user.is_active,
+        )
 
 
 class InvitedUserSnapshot(BaseModel):

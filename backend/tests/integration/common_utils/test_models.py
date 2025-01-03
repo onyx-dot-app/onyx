@@ -37,6 +37,8 @@ class DATestUser(BaseModel):
     email: str
     password: str
     headers: dict
+    role: UserRole
+    is_active: bool
 
 
 class DATestPersonaCategory(BaseModel):

@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from fastapi import Body
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import Request
 from psycopg2.errors import UniqueViolation
 from pydantic import BaseModel
@@ -27,7 +28,6 @@ from onyx.auth.invited_users import write_invited_users
 from onyx.auth.noauth_user import fetch_no_auth_user
 from onyx.auth.noauth_user import set_no_auth_user_preferences
 from onyx.auth.schemas import UserRole
-from onyx.auth.schemas import UserStatus
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
@@ -45,10 +45,13 @@ from onyx.db.engine import get_session
 from onyx.db.models import AccessToken
 from onyx.db.models import User
 from onyx.db.users import delete_user_from_db
+from onyx.db.users import get_all_users
+from onyx.db.users import get_page_of_filtered_users
+from onyx.db.users import get_total_filtered_users_count
 from onyx.db.users import get_user_by_email
-from onyx.db.users import list_users
 from onyx.db.users import validate_user_role_update
 from onyx.key_value_store.factory import get_kv_store
+from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import UserByEmail
@@ -65,9 +68,7 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
-
 router = APIRouter()
-
 
 USERS_PAGE_SIZE = 10
 
@@ -113,21 +114,68 @@ def set_user_role(
     db_session.commit()
 
 
+@router.get("/manage/users/accepted")
+def list_accepted_users(
+    q: str | None = Query(default=None),
+    page_num: int = Query(0, ge=0),
+    page_size: int = Query(10, ge=1, le=1000),
+    roles: list[UserRole] = Query(default=[]),
+    is_active: bool | None = Query(default=None),
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> PaginatedReturn[FullUserSnapshot]:
+    filtered_accepted_users = get_page_of_filtered_users(
+        db_session=db_session,
+        page_size=page_size,
+        page_num=page_num,
+        email_filter_string=q,
+        is_active_filter=is_active,
+        roles_filter=roles,
+    )
+
+    total_accepted_users_count = get_total_filtered_users_count(
+        db_session=db_session,
+        email_filter_string=q,
+        is_active_filter=is_active,
+        roles_filter=roles,
+    )
+
+    if not filtered_accepted_users:
+        logger.info("No users found")
+        return PaginatedReturn(
+            items=[],
+            total_items=0,
+        )
+
+    return PaginatedReturn(
+        items=[
+            FullUserSnapshot.from_user_model(user) for user in filtered_accepted_users
+        ],
+        total_items=total_accepted_users_count,
+    )
+
+
+@router.get("/manage/users/invited")
+def list_invited_users(
+    _: User | None = Depends(current_admin_user),
+) -> list[InvitedUserSnapshot]:
+    invited_emails = get_invited_users()
+
+    return [InvitedUserSnapshot(email=email) for email in invited_emails]
+
+
 @router.get("/manage/users")
 def list_all_users(
     q: str | None = None,
     accepted_page: int | None = None,
     slack_users_page: int | None = None,
     invited_page: int | None = None,
-    user: User | None = Depends(current_curator_or_admin_user),
+    _: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> AllUsersResponse:
-    if not q:
-        q = ""
-
     users = [
         user
-        for user in list_users(db_session, email_filter_string=q)
+        for user in get_all_users(db_session, email_filter_string=q)
         if not is_api_key_email_address(user.email)
     ]
 
@@ -154,9 +202,7 @@ def list_all_users(
                     id=user.id,
                     email=user.email,
                     role=user.role,
-                    status=(
-                        UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED
-                    ),
+                    is_active=user.is_active,
                 )
                 for user in accepted_users
             ],
@@ -165,9 +211,7 @@ def list_all_users(
                     id=user.id,
                     email=user.email,
                     role=user.role,
-                    status=(
-                        UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED
-                    ),
+                    is_active=user.is_active,
                 )
                 for user in slack_users
             ],
@@ -184,7 +228,7 @@ def list_all_users(
                 id=user.id,
                 email=user.email,
                 role=user.role,
-                status=UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED,
+                is_active=user.is_active,
             )
             for user in accepted_users
         ][accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE],
@@ -193,7 +237,7 @@ def list_all_users(
                 id=user.id,
                 email=user.email,
                 role=user.role,
-                status=UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED,
+                is_active=user.is_active,
             )
             for user in slack_users
         ][
@@ -412,7 +456,7 @@ def list_all_users_basic_info(
     _: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
-    users = list_users(db_session)
+    users = get_all_users(db_session)
     return [MinimalUserSnapshot(id=user.id, email=user.email) for user in users]
 
 

@@ -13,7 +13,7 @@ import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelect
 import { SourceMetadata } from "./search/interfaces";
 import { destructureValue, structureValue } from "./llm/utils";
 import { ChatSession } from "@/app/chat/interfaces";
-import { UsersResponse } from "./users/interfaces";
+import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { PersonaCategory } from "@/app/admin/assistants/interfaces";
@@ -145,7 +145,7 @@ export function useFilters(): FilterManager {
 export const useUsers = () => {
   const url = "/api/manage/users";
 
-  const swrResponse = useSWR<UsersResponse>(url, errorHandlingFetcher);
+  const swrResponse = useSWR<AllUsersResponse>(url, errorHandlingFetcher);
 
   return {
     ...swrResponse,
