@@ -100,7 +100,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             source=DocumentSource.SALESFORCE,
             semantic_identifier=extracted_semantic_identifier,
             doc_updated_at=extracted_doc_updated_at,
-            # primary_owners=self._extract_primary_owners(sf_object),
+            primary_owners=self._extract_primary_owners(sf_object),
             metadata={},
         )
         return doc

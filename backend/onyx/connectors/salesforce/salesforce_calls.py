@@ -71,7 +71,8 @@ def get_all_children_of_sf_type(sf_client: Salesforce, sf_type: str) -> set[str]
 
 
 def _get_all_queryable_fields_of_sf_type(
-    sf_client: Salesforce, sf_type: str, is_compound: bool = False
+    sf_client: Salesforce,
+    sf_type: str,
 ) -> list[str]:
     object_description = _get_sf_type_object_json(sf_client, sf_type)
     fields: list[dict[str, Any]] = object_description["fields"]
@@ -86,17 +87,6 @@ def _get_all_queryable_fields_of_sf_type(
             valid_fields.add(field_name)
 
     return list(valid_fields - compound_field_names)
-    # fields_query = f"""
-    # SELECT QualifiedApiName
-    # FROM FieldDefinition
-    # WHERE EntityDefinition.QualifiedApiName = '{sf_type}'
-    # AND IsCompound = {'true' if is_compound else 'false'}
-    # """
-    # fields_results = sf_client.query(fields_query)
-    # field_names = []
-    # for field in fields_results["records"]:
-    #     field_names.append(field.get("QualifiedApiName"))
-    # return field_names
 
 
 def _check_if_object_type_is_empty(sf_client: Salesforce, sf_type: str) -> bool:
@@ -135,9 +125,7 @@ def _check_for_existing_csvs(sf_type: str) -> list[str] | None:
 
 def _build_bulk_query(sf_client: Salesforce, sf_type: str, time_filter: str) -> str:
     queryable_fields = _get_all_queryable_fields_of_sf_type(sf_client, sf_type)
-    query = f"SELECT {', '.join(queryable_fields)} FROM {sf_type}"
-    # if has_at_least_one_object_of_type(sf_type):
-    #     query += time_filter
+    query = f"SELECT {', '.join(queryable_fields)} FROM {sf_type}{time_filter}"
     return query
 
 
