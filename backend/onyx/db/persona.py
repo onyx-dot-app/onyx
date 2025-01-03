@@ -99,6 +99,9 @@ def _add_user_filters(
     return stmt.where(where_clause)
 
 
+# fetch_persona_by_id is used to fetch a persona by its ID. It is used to fetch a persona by its ID.
+
+
 def fetch_persona_by_id(
     db_session: Session, persona_id: int, user: User | None, get_editable: bool = True
 ) -> Persona:
