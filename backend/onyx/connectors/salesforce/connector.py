@@ -235,9 +235,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
 
 if __name__ == "__main__":
-    connector = SalesforceConnector(
-        requested_objects=os.environ["REQUESTED_OBJECTS"].split(",")
-    )
+    import time
+
+    connector = SalesforceConnector(requested_objects=["Account"])
 
     connector.load_credentials(
         {
@@ -246,5 +246,20 @@ if __name__ == "__main__":
             "sf_security_token": os.environ["SF_SECURITY_TOKEN"],
         }
     )
-    for doc in connector.load_from_state():
-        logger.info(doc)
+    start_time = time.time()
+    doc_count = 0
+    section_count = 0
+    text_count = 0
+    for doc_batch in connector.load_from_state():
+        doc_count += len(doc_batch)
+        print(f"doc_count: {doc_count}")
+        for doc in doc_batch:
+            section_count += len(doc.sections)
+            for section in doc.sections:
+                text_count += len(section.text)
+    end_time = time.time()
+
+    print(f"Doc count: {doc_count}")
+    print(f"Section count: {section_count}")
+    print(f"Text count: {text_count}")
+    print(f"Time taken: {end_time - start_time}")
