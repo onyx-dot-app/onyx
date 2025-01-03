@@ -88,7 +88,7 @@ logger = setup_logger()
     trail=False,
     bind=True,
 )
-def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> None:
+def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | None:
     """Runs periodically to check if any document needs syncing.
     Generates sets of tasks for Celery if syncing is needed."""
     time_start = time.monotonic()
@@ -103,7 +103,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> None:
     try:
         # these tasks should never overlap
         if not lock_beat.acquire(blocking=False):
-            return
+            return None
 
         with get_session_with_tenant(tenant_id) as db_session:
             try_generate_stale_document_sync_tasks(
@@ -166,7 +166,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> None:
 
     time_elapsed = time.monotonic() - time_start
     task_logger.debug(f"check_for_vespa_sync_task finished: elapsed={time_elapsed:.2f}")
-    return
+    return True
 
 
 def try_generate_stale_document_sync_tasks(
@@ -777,6 +777,12 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
         n_permissions_sync = celery_get_queue_length(
             OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC, r_celery
         )
+        n_external_group_sync = celery_get_queue_length(
+            OnyxCeleryQueues.CONNECTOR_EXTERNAL_GROUP_SYNC, r_celery
+        )
+        n_permissions_upsert = celery_get_queue_length(
+            OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT, r_celery
+        )
 
         prefetched = celery_get_unacked_task_ids(
             OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
@@ -790,6 +796,8 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
             f"deletion={n_deletion} "
             f"pruning={n_pruning} "
             f"permissions_sync={n_permissions_sync} "
+            f"external_group_sync={n_external_group_sync} "
+            f"permissions_upsert={n_permissions_upsert} "
         )
 
         # scan and monitor activity to completion

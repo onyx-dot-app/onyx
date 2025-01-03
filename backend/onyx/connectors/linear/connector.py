@@ -7,16 +7,23 @@ from typing import cast
 import requests
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import LINEAR_CLIENT_ID
+from onyx.configs.app_configs import LINEAR_CLIENT_SECRET
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    get_oauth_callback_uri,
+)
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
+from onyx.connectors.interfaces import OAuthConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import request_with_retries
 
 
 logger = setup_logger()
@@ -57,7 +64,7 @@ def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response
     )
 
 
-class LinearConnector(LoadConnector, PollConnector):
+class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -65,8 +72,68 @@ class LinearConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.linear_api_key: str | None = None
 
+    @classmethod
+    def oauth_id(cls) -> DocumentSource:
+        return DocumentSource.LINEAR
+
+    @classmethod
+    def oauth_authorization_url(
+        cls, base_domain: str, state: str, additional_kwargs: dict[str, str]
+    ) -> str:
+        if not LINEAR_CLIENT_ID:
+            raise ValueError("LINEAR_CLIENT_ID environment variable must be set")
+
+        callback_uri = get_oauth_callback_uri(base_domain, DocumentSource.LINEAR.value)
+        return (
+            f"https://linear.app/oauth/authorize"
+            f"?client_id={LINEAR_CLIENT_ID}"
+            f"&redirect_uri={callback_uri}"
+            f"&response_type=code"
+            f"&scope=read"
+            f"&state={state}"
+        )
+
+    @classmethod
+    def oauth_code_to_token(
+        cls, base_domain: str, code: str, additional_kwargs: dict[str, str]
+    ) -> dict[str, Any]:
+        data = {
+            "code": code,
+            "redirect_uri": get_oauth_callback_uri(
+                base_domain, DocumentSource.LINEAR.value
+            ),
+            "client_id": LINEAR_CLIENT_ID,
+            "client_secret": LINEAR_CLIENT_SECRET,
+            "grant_type": "authorization_code",
+        }
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+        response = request_with_retries(
+            method="POST",
+            url="https://api.linear.app/oauth/token",
+            data=data,
+            headers=headers,
+            backoff=0,
+            delay=0.1,
+        )
+        if not response.ok:
+            raise RuntimeError(f"Failed to exchange code for token: {response.text}")
+
+        token_data = response.json()
+
+        return {
+            "access_token": token_data["access_token"],
+        }
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self.linear_api_key = cast(str, credentials["linear_api_key"])
+        if "linear_api_key" in credentials:
+            self.linear_api_key = cast(str, credentials["linear_api_key"])
+        elif "access_token" in credentials:
+            self.linear_api_key = "Bearer " + cast(str, credentials["access_token"])
+        else:
+            # May need to handle case in the future if the OAuth flow expires
+            raise ConnectorMissingCredentialError("Linear")
+
         return None
 
     def _process_issues(

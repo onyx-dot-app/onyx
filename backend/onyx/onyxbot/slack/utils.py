@@ -375,7 +375,6 @@ def remove_slack_text_interactions(slack_str: str) -> str:
     slack_str = SlackTextCleaner.replace_tags_basic(slack_str)
     slack_str = SlackTextCleaner.replace_channels_basic(slack_str)
     slack_str = SlackTextCleaner.replace_special_mentions(slack_str)
-    slack_str = SlackTextCleaner.replace_links(slack_str)
     slack_str = SlackTextCleaner.replace_special_catchall(slack_str)
     slack_str = SlackTextCleaner.add_zero_width_whitespace_after_tag(slack_str)
     return slack_str

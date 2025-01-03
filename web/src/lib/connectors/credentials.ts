@@ -1,5 +1,16 @@
 import { ValidSources } from "../types";
 
+export interface OAuthAdditionalKwargDescription {
+  name: string;
+  display_name: string;
+  description: string;
+}
+
+export interface OAuthDetails {
+  oauth_enabled: boolean;
+  additional_kwargs: OAuthAdditionalKwargDescription[];
+}
+
 export interface CredentialBase<T> {
   credential_json: T;
   admin_public: boolean;
@@ -202,6 +213,10 @@ export interface EgnyteCredentialJson {
   access_token: string;
 }
 
+export interface AirtableCredentialJson {
+  airtable_access_token: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -309,6 +324,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
     domain: "",
     access_token: "",
   } as EgnyteCredentialJson,
+  airtable: {
+    airtable_access_token: "",
+  } as AirtableCredentialJson,
   xenforo: null,
   google_sites: null,
   file: null,

@@ -414,9 +414,19 @@ def on_setup_logging(
     task_logger.setLevel(loglevel)
     task_logger.propagate = False
 
-    # Hide celery task received and succeeded/failed messages
+    # hide celery task received spam
+    # e.g. "Task check_for_pruning[a1e96171-0ba8-4e00-887b-9fbf7442eab3] received"
     strategy.logger.setLevel(logging.WARNING)
+
+    # uncomment this to hide celery task succeeded/failed spam
+    # e.g. "Task check_for_pruning[a1e96171-0ba8-4e00-887b-9fbf7442eab3] succeeded in 0.03137450001668185s: None"
     trace.logger.setLevel(logging.WARNING)
+
+
+def set_task_finished_log_level(logLevel: int) -> None:
+    """call this to override the setLevel in on_setup_logging. We are interested
+    in the task timings in the cloud but it can be spammy for self hosted."""
+    trace.logger.setLevel(logLevel)
 
 
 class TenantContextFilter(logging.Filter):

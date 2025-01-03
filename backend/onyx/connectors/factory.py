@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceRequiringTenantContext
+from onyx.connectors.airtable.airtable_connector import AirtableConnector
 from onyx.connectors.asana.connector import AsanaConnector
 from onyx.connectors.axero.connector import AxeroConnector
 from onyx.connectors.blob.connector import BlobStorageConnector
@@ -103,6 +104,7 @@ def identify_connector_class(
         DocumentSource.FRESHDESK: FreshdeskConnector,
         DocumentSource.FIREFLIES: FirefliesConnector,
         DocumentSource.EGNYTE: EgnyteConnector,
+        DocumentSource.AIRTABLE: AirtableConnector,
     }
     connector_by_source = connector_map.get(source, {})
 

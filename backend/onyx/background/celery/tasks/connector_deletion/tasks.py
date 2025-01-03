@@ -34,7 +34,9 @@ class TaskDependencyError(RuntimeError):
     trail=False,
     bind=True,
 )
-def check_for_connector_deletion_task(self: Task, *, tenant_id: str | None) -> None:
+def check_for_connector_deletion_task(
+    self: Task, *, tenant_id: str | None
+) -> bool | None:
     r = get_redis_client(tenant_id=tenant_id)
 
     lock_beat: RedisLock = r.lock(
@@ -45,7 +47,7 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str | None) -> N
     try:
         # these tasks should never overlap
         if not lock_beat.acquire(blocking=False):
-            return
+            return None
 
         # collect cc_pair_ids
         cc_pair_ids: list[int] = []
@@ -80,6 +82,8 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str | None) -> N
     finally:
         if lock_beat.owned():
             lock_beat.release()
+
+    return True
 
 
 def try_generate_document_cc_pair_cleanup_tasks(

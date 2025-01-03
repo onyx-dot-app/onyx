@@ -4,8 +4,10 @@ from typing import Any
 from typing import cast
 from typing import TypeVar
 
+import requests
 from retry import retry
 
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -42,3 +44,48 @@ def retry_builder(
         return cast(F, wrapped_func)
 
     return retry_with_default
+
+
+def request_with_retries(
+    method: str,
+    url: str,
+    *,
+    data: dict[str, Any] | None = None,
+    headers: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+    timeout: int = REQUEST_TIMEOUT_SECONDS,
+    stream: bool = False,
+    tries: int = 8,
+    delay: float = 1,
+    backoff: float = 2,
+) -> requests.Response:
+    @retry(tries=tries, delay=delay, backoff=backoff, logger=cast(Logger, logger))
+    def _make_request() -> requests.Response:
+        response = requests.request(
+            method=method,
+            url=url,
+            data=data,
+            headers=headers,
+            params=params,
+            timeout=timeout,
+            stream=stream,
+        )
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError:
+            logger.exception(
+                "Request failed:\n%s",
+                {
+                    "method": method,
+                    "url": url,
+                    "data": data,
+                    "headers": headers,
+                    "params": params,
+                    "timeout": timeout,
+                    "stream": stream,
+                },
+            )
+            raise
+        return response
+
+    return _make_request()

@@ -62,6 +62,7 @@ export interface User {
   oidc_expiry?: Date;
   is_cloud_superuser?: boolean;
   organization_name: string | null;
+  is_anonymous_user?: boolean;
 }
 
 export interface MinimalUserSnapshot {
@@ -320,6 +321,7 @@ export enum ValidSources {
   Freshdesk = "freshdesk",
   Fireflies = "fireflies",
   Egnyte = "egnyte",
+  Airtable = "airtable",
 }
 
 export const validAutoSyncSources = [

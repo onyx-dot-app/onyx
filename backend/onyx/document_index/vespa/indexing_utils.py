@@ -64,10 +64,10 @@ def _does_document_exist(
     if doc_fetch_response.status_code != 200:
         logger.debug(f"Failed to check for document with URL {doc_url}")
         raise RuntimeError(
-            f"Unexpected fetch document by ID value from Vespa "
-            f"with error {doc_fetch_response.status_code}"
-            f"Index name: {index_name}"
-            f"Doc chunk id: {doc_chunk_id}"
+            f"Unexpected fetch document by ID value from Vespa: "
+            f"error={doc_fetch_response.status_code} "
+            f"index={index_name} "
+            f"doc_chunk_id={doc_chunk_id}"
         )
     return True
 

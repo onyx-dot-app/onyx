@@ -196,7 +196,6 @@ services:
       # Egnyte OAuth Configs
       - EGNYTE_CLIENT_ID=${EGNYTE_CLIENT_ID:-}
       - EGNYTE_CLIENT_SECRET=${EGNYTE_CLIENT_SECRET:-}
-      - EGNYTE_BASE_DOMAIN=${EGNYTE_BASE_DOMAIN:-}
       - EGNYTE_LOCALHOST_OVERRIDE=${EGNYTE_LOCALHOST_OVERRIDE:-}
       # Celery Configs (defaults are set in the supervisord.conf file.
       # prefer doing that to have one source of defaults)

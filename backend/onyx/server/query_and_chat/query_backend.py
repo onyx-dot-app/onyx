@@ -22,6 +22,7 @@ from onyx.db.chat import get_search_docs_for_chat_message
 from onyx.db.chat import get_valid_messages_from_query_sessions
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
+from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
@@ -48,6 +49,7 @@ def admin_search(
     question: AdminSearchRequest,
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant_id),
 ) -> AdminSearchResponse:
     query = question.query
     logger.notice(f"Received admin search query: {query}")
@@ -58,6 +60,7 @@ def admin_search(
         time_cutoff=question.filters.time_cutoff,
         tags=question.filters.tags,
         access_control_list=user_acl_filters,
+        tenant_id=tenant_id,
     )
     search_settings = get_current_search_settings(db_session)
     document_index = get_default_document_index(

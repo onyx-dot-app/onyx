@@ -1,3 +1,5 @@
+import os
+import sys
 import time
 from datetime import datetime
 from datetime import timezone
@@ -23,6 +25,7 @@ from onyx.background.indexing.job_client import SimpleJobClient
 from onyx.background.indexing.run_indexing import run_indexing_entrypoint
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
 from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
 from onyx.configs.constants import DocumentSource
@@ -71,14 +74,18 @@ logger = setup_logger()
 
 
 class IndexingCallback(IndexingHeartbeatInterface):
+    PARENT_CHECK_INTERVAL = 60
+
     def __init__(
         self,
+        parent_pid: int,
         stop_key: str,
         generator_progress_key: str,
         redis_lock: RedisLock,
         redis_client: Redis,
     ):
         super().__init__()
+        self.parent_pid = parent_pid
         self.redis_lock: RedisLock = redis_lock
         self.stop_key: str = stop_key
         self.generator_progress_key: str = generator_progress_key
@@ -89,12 +96,31 @@ class IndexingCallback(IndexingHeartbeatInterface):
         self.last_tag: str = "IndexingCallback.__init__"
         self.last_lock_reacquire: datetime = datetime.now(timezone.utc)
 
+        self.last_parent_check = time.monotonic()
+
     def should_stop(self) -> bool:
         if self.redis_client.exists(self.stop_key):
             return True
+
         return False
 
     def progress(self, tag: str, amount: int) -> None:
+        # rkuo: this shouldn't be necessary yet because we spawn the process this runs inside
+        # with daemon = True. It seems likely some indexing tasks will need to spawn other processes eventually
+        # so leave this code in until we're ready to test it.
+
+        # if self.parent_pid:
+        #     # check if the parent pid is alive so we aren't running as a zombie
+        #     now = time.monotonic()
+        #     if now - self.last_parent_check > IndexingCallback.PARENT_CHECK_INTERVAL:
+        #         try:
+        #             # this is unintuitive, but it checks if the parent pid is still running
+        #             os.kill(self.parent_pid, 0)
+        #         except Exception:
+        #             logger.exception("IndexingCallback - parent pid check exceptioned")
+        #             raise
+        #         self.last_parent_check = now
+
         try:
             self.redis_lock.reacquire()
             self.last_tag = tag
@@ -772,7 +798,6 @@ def connector_indexing_proxy_task(
         return
 
     task_logger.info(
-        f"Indexing proxy - spawn succeeded: attempt={index_attempt_id} "
         f"Indexing watchdog - spawn succeeded: attempt={index_attempt_id} "
         f"cc_pair={cc_pair_id} "
         f"search_settings={search_settings_id}"
@@ -789,23 +814,26 @@ def connector_indexing_proxy_task(
 
         # if the job is done, clean up and break
         if job.done():
-            if job.status == "error":
-                ignore_exitcode = False
+            try:
+                if job.status == "error":
+                    ignore_exitcode = False
 
-                exit_code: int | None = None
-                if job.process:
-                    exit_code = job.process.exitcode
+                    exit_code: int | None = None
+                    if job.process:
+                        exit_code = job.process.exitcode
 
-                # seeing odd behavior where spawned tasks usually return exit code 1 in the cloud,
-                # even though logging clearly indicates that they completed successfully
-                # to work around this, we ignore the job error state if the completion signal is OK
-                status_int = redis_connector_index.get_completion()
-                if status_int:
-                    status_enum = HTTPStatus(status_int)
-                    if status_enum == HTTPStatus.OK:
-                        ignore_exitcode = True
+                    # seeing odd behavior where spawned tasks usually return exit code 1 in the cloud,
+                    # even though logging clearly indicates successful completion
+                    # to work around this, we ignore the job error state if the completion signal is OK
+                    status_int = redis_connector_index.get_completion()
+                    if status_int:
+                        status_enum = HTTPStatus(status_int)
+                        if status_enum == HTTPStatus.OK:
+                            ignore_exitcode = True
 
-                if ignore_exitcode:
+                    if not ignore_exitcode:
+                        raise RuntimeError("Spawned task exceptioned.")
+
                     task_logger.warning(
                         "Indexing watchdog - spawned task has non-zero exit code "
                         "but completion signal is OK. Continuing...: "
@@ -815,18 +843,21 @@ def connector_indexing_proxy_task(
                         f"search_settings={search_settings_id} "
                         f"exit_code={exit_code}"
                     )
-                else:
-                    task_logger.error(
-                        "Indexing watchdog - spawned task exceptioned: "
-                        f"attempt={index_attempt_id} "
-                        f"tenant={tenant_id} "
-                        f"cc_pair={cc_pair_id} "
-                        f"search_settings={search_settings_id} "
-                        f"exit_code={exit_code} "
-                        f"error={job.exception()}"
-                    )
+            except Exception:
+                task_logger.error(
+                    "Indexing watchdog - spawned task exceptioned: "
+                    f"attempt={index_attempt_id} "
+                    f"tenant={tenant_id} "
+                    f"cc_pair={cc_pair_id} "
+                    f"search_settings={search_settings_id} "
+                    f"exit_code={exit_code} "
+                    f"error={job.exception()}"
+                )
 
-            job.release()
+                raise
+            finally:
+                job.release()
+
             break
 
         # if a termination signal is detected, clean up and break
@@ -911,7 +942,7 @@ def connector_indexing_task_wrapper(
             tenant_id,
             is_ee,
         )
-    except:
+    except Exception:
         logger.exception(
             f"connector_indexing_task exceptioned: "
             f"tenant={tenant_id} "
@@ -919,7 +950,14 @@ def connector_indexing_task_wrapper(
             f"cc_pair={cc_pair_id} "
             f"search_settings={search_settings_id}"
         )
-        raise
+
+        # There is a cloud related bug outside of our code
+        # where spawned tasks return with an exit code of 1.
+        # Unfortunately, exceptions also return with an exit code of 1,
+        # so just raising an exception isn't informative
+        # Exiting with 255 makes it possible to distinguish between normal exits
+        # and exceptions.
+        sys.exit(255)
 
     return result
 
@@ -991,7 +1029,17 @@ def connector_indexing_task(
             f"fence={redis_connector.stop.fence_key}"
         )
 
+    # this wait is needed to avoid a race condition where
+    # the primary worker sends the task and it is immediately executed
+    # before the primary worker can finalize the fence
+    start = time.monotonic()
     while True:
+        if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
+            raise ValueError(
+                f"connector_indexing_task - timed out waiting for fence to be ready: "
+                f"fence={redis_connector.permissions.fence_key}"
+            )
+
         if not redis_connector_index.fenced:  # The fence must exist
             raise ValueError(
                 f"connector_indexing_task - fence not found: fence={redis_connector_index.fence_key}"
@@ -1032,7 +1080,9 @@ def connector_indexing_task(
     if not acquired:
         logger.warning(
             f"Indexing task already running, exiting...: "
-            f"index_attempt={index_attempt_id} cc_pair={cc_pair_id} search_settings={search_settings_id}"
+            f"index_attempt={index_attempt_id} "
+            f"cc_pair={cc_pair_id} "
+            f"search_settings={search_settings_id}"
         )
         return None
 
@@ -1068,6 +1118,7 @@ def connector_indexing_task(
 
         # define a callback class
         callback = IndexingCallback(
+            os.getppid(),
             redis_connector.stop.fence_key,
             redis_connector_index.generator_progress_key,
             lock,
@@ -1101,8 +1152,19 @@ def connector_indexing_task(
             f"search_settings={search_settings_id}"
         )
         if attempt_found:
-            with get_session_with_tenant(tenant_id) as db_session:
-                mark_attempt_failed(index_attempt_id, db_session, failure_reason=str(e))
+            try:
+                with get_session_with_tenant(tenant_id) as db_session:
+                    mark_attempt_failed(
+                        index_attempt_id, db_session, failure_reason=str(e)
+                    )
+            except Exception:
+                logger.exception(
+                    "Indexing watchdog - transient exception looking up index attempt: "
+                    f"attempt={index_attempt_id} "
+                    f"tenant={tenant_id} "
+                    f"cc_pair={cc_pair_id} "
+                    f"search_settings={search_settings_id}"
+                )
 
         raise e
     finally:
