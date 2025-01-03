@@ -263,7 +263,7 @@ const SignedUpUserTable = ({
               <TableRow>
                 <TableCell colSpan={4} className="text-center">
                   <p className="pt-4 pb-4">
-                    {filters.roles?.length || filters.is_active
+                    {filters.roles?.length || filters.is_active !== undefined
                       ? "No users found matching your filters"
                       : `No users found matching "${q}"`}
                   </p>

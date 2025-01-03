@@ -34,10 +34,11 @@ const InvitedUserTable = ({
   isLoading,
   q,
 }: Props) => {
+  const [currentPageNum, setCurrentPageNum] = useState<number>(1);
+
   if (!users.length)
     return <p>Users that have been invited will show up here</p>;
 
-  const [currentPageNum, setCurrentPageNum] = useState<number>(1);
   const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
 
   // Filter users based on the search query
