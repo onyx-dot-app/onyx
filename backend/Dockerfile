@@ -1,4 +1,4 @@
-FROM python:3.11.7-slim-bookworm
+FROM python:3.11.11-slim-bookworm
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
@@ -27,10 +27,10 @@ RUN apt-get update && \
         zip \
         ca-certificates \
         libgnutls30=3.7.9-2+deb12u3 \
-        libblkid1=2.38.1-5+deb12u1 \
-        libmount1=2.38.1-5+deb12u1 \
-        libsmartcols1=2.38.1-5+deb12u1 \
-        libuuid1=2.38.1-5+deb12u1 \
+        libblkid1=2.38.1-5+deb12u2 \
+        libmount1=2.38.1-5+deb12u2 \
+        libsmartcols1=2.38.1-5+deb12u2 \
+        libuuid1=2.38.1-5+deb12u2 \
         libxmlsec1-dev \
         pkg-config \
         gcc && \

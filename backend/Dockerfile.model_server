@@ -1,4 +1,4 @@
-FROM python:3.11.7-slim-bookworm
+FROM python:3.11.11-slim-bookworm
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is for the Onyx model server which runs all of the \
@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir --upgrade \
         --timeout 30 \
         -r /tmp/requirements.txt
 
-RUN apt-get remove -y --allow-remove-essential perl-base && \ 
+RUN apt-get remove -y --allow-remove-essential perl-base && \
     apt-get autoremove -y
 
 # Pre-downloading models for setups with limited egress
