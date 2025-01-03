@@ -86,3 +86,6 @@ export const NEXT_PUBLIC_TEST_ENV =
 
 export const NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED =
   process.env.NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED?.toLowerCase() === "true";
+
+export const NEXT_PUBLIC_CLOUD_DOMAIN =
+  process.env.NEXT_PUBLIC_CLOUD_DOMAIN || "http://127.0.0.1:3000";

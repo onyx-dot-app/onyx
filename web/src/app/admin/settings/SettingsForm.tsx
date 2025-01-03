@@ -11,7 +11,11 @@ import React, { useContext, useState, useEffect } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { Modal } from "@/components/Modal";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import {
+  NEXT_PUBLIC_CLOUD_DOMAIN,
+  NEXT_PUBLIC_CLOUD_ENABLED,
+} from "@/lib/constants";
+import { ClipboardIcon } from "@/components/icons/icons";
 
 export function Checkbox({
   label,
@@ -219,19 +223,48 @@ export function SettingsForm() {
           handleToggleSettingsField("auto_scroll", e.target.checked)
         }
       />
-      {!NEXT_PUBLIC_CLOUD_ENABLED && (
-        <Checkbox
-          label="Anonymous Users"
-          sublabel="If set, users will not be required to sign in to use Danswer."
-          checked={settings.anonymous_user_enabled}
-          onChange={(e) =>
-            handleToggleSettingsField(
-              "anonymous_user_enabled",
-              e.target.checked
-            )
-          }
-        />
+
+      <Checkbox
+        label="Anonymous Users"
+        sublabel="If set, users will not be required to sign in to use Onyx."
+        checked={settings.anonymous_user_enabled}
+        onChange={(e) =>
+          handleToggleSettingsField("anonymous_user_enabled", e.target.checked)
+        }
+      />
+
+      {NEXT_PUBLIC_CLOUD_ENABLED && settings.anonymous_user_enabled && (
+        <div className="mt-2 ml-6 p-3 bg-gray-50 border border-gray-200 rounded-md text-sm">
+          <h4 className="font-medium mb-1">Anonymous User Invite Link</h4>
+          <p className="text-gray-600 text-xs mb-2">
+            This link directs non-authenticated users to your specific workspace
+            on our cloud platform.
+          </p>
+          <div className="flex items-center space-x-2">
+            <span className="flex-grow p-1.5 text-xs bg-white border rounded overflow-x-auto whitespace-nowrap">
+              {NEXT_PUBLIC_CLOUD_DOMAIN + `/auth/invite/`}
+            </span>
+            <Button
+              className="text-xs px-2 py-1 whitespace-nowrap"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(
+                  NEXT_PUBLIC_CLOUD_DOMAIN + `/auth/invite/`
+                );
+                setPopup({
+                  message: "Invite link copied!",
+                  type: "success",
+                });
+              }}
+            >
+              <ClipboardIcon className="h-3 w-3" />
+              Copy
+            </Button>
+          </div>
+        </div>
       )}
+
       {showConfirmModal && (
         <Modal
           width="max-w-3xl w-full"
@@ -241,7 +274,7 @@ export function SettingsForm() {
             <h2 className="text-xl font-bold">Enable Anonymous Users</h2>
             <p>
               Are you sure you want to enable anonymous users? This will allow
-              anyone to use Danswer without signing in.
+              anyone to use Onyx without signing in.
             </p>
             <div className="flex justify-end gap-2">
               <Button
