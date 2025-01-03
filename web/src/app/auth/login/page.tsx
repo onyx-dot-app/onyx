@@ -7,14 +7,8 @@ import {
   AuthTypeMetadata,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
-import { SignInButton } from "./SignInButton";
-import { EmailPasswordForm } from "./EmailPasswordForm";
-import Title from "@/components/ui/title";
-import Link from "next/link";
-import { LoginText } from "./LoginText";
 import { getSecondsUntilExpiration } from "@/lib/time";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import LoginPanel from "./LoginPage";
 
 const LoginPage = async (props: {

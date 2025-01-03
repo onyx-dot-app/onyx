@@ -33,7 +33,6 @@ export default async function Page(props: {
     tags,
     llmProviders,
     folders,
-    toggleSidebar,
     openedFolders,
     defaultAssistantId,
     shouldShowWelcomeModal,

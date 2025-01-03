@@ -108,8 +108,6 @@ export default function NRFPageNewDesign() {
   >([]);
 
   const handleImageUpload = async (acceptedFiles: File[]) => {
-    console.log("acceptedFiles", acceptedFiles);
-
     const tempFileDescriptors = acceptedFiles.map((file) => ({
       id: uuidv4(),
       type: file.type.startsWith("image/")
