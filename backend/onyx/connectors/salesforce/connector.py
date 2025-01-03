@@ -169,9 +169,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 logger.debug(
                     f"Added {len(new_ids)} new/updated records for {object_type}"
                 )
-                # Remove the csv file after it has been used
-                # to successfully update the db
-                os.remove(csv_path)
 
         logger.info(f"Found {len(updated_ids)} total updated records")
         logger.info(

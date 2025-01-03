@@ -203,7 +203,11 @@ def _update_relationship_tables(
         raise
 
 
-def update_sf_db_with_csv(object_type: str, csv_download_path: str) -> list[str]:
+def update_sf_db_with_csv(
+    object_type: str,
+    csv_download_path: str,
+    delete_csv_after_use: bool = True,
+) -> list[str]:
     """Update the SF DB with a CSV file using SQLite storage."""
     updated_ids = []
 
@@ -250,6 +254,11 @@ def update_sf_db_with_csv(object_type: str, csv_download_path: str) -> list[str]
                 updated_ids.append(id)
 
         conn.commit()
+
+    if delete_csv_after_use:
+        # Remove the csv file after it has been used
+        # to successfully update the db
+        os.remove(csv_download_path)
 
     return updated_ids
 
@@ -329,6 +338,9 @@ def get_affected_parent_ids_by_type(
         cursor = conn.cursor()
 
         for batch_ids in updated_ids_batches:
+            batch_ids = list(set(batch_ids) - updated_parent_ids)
+            if not batch_ids:
+                continue
             id_placeholders = ",".join(["?" for _ in batch_ids])
 
             for parent_type in parent_types:
