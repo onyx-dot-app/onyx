@@ -113,14 +113,14 @@ _VALID_SALESFORCE_IDS = [
 ]
 
 
-def clear_sf_db() -> None:
+def _clear_sf_db() -> None:
     """
     Clears the SF DB by deleting all files in the data directory.
     """
     shutil.rmtree(BASE_DATA_PATH, ignore_errors=True)
 
 
-def create_csv_file(
+def _create_csv_file(
     object_type: str, records: list[dict], filename: str = "test_data.csv"
 ) -> None:
     """
@@ -152,7 +152,7 @@ def create_csv_file(
     update_sf_db_with_csv(object_type, csv_path)
 
 
-def create_csv_with_example_data() -> None:
+def _create_csv_with_example_data() -> None:
     """
     Creates CSV files with example data, organized by object type.
     """
@@ -342,10 +342,10 @@ def create_csv_with_example_data() -> None:
 
     # Create CSV files for each object type
     for object_type, records in example_data.items():
-        create_csv_file(object_type, records)
+        _create_csv_file(object_type, records)
 
 
-def test_query() -> None:
+def _test_query() -> None:
     """
     Tests querying functionality by verifying:
     1. All expected Account IDs are found
@@ -428,7 +428,7 @@ def test_query() -> None:
     print("All query tests passed successfully!")
 
 
-def test_upsert() -> None:
+def _test_upsert() -> None:
     """
     Tests upsert functionality by:
     1. Updating an existing account
@@ -453,7 +453,7 @@ def test_upsert() -> None:
         },
     ]
 
-    create_csv_file("Account", update_data, "update_data.csv")
+    _create_csv_file("Account", update_data, "update_data.csv")
 
     # Verify the update worked
     updated_record = get_record(_VALID_SALESFORCE_IDS[0])
@@ -472,7 +472,7 @@ def test_upsert() -> None:
     print("All upsert tests passed successfully!")
 
 
-def test_relationships() -> None:
+def _test_relationships() -> None:
     """
     Tests relationship shelf updates and queries by:
     1. Creating test data with relationships
@@ -513,7 +513,7 @@ def test_relationships() -> None:
 
     # Create and update CSV files for each object type
     for object_type, records in test_data.items():
-        create_csv_file(object_type, records, "relationship_test.csv")
+        _create_csv_file(object_type, records, "relationship_test.csv")
 
     # Test relationship queries
     # All these objects should be children of Acme Inc.
@@ -535,7 +535,7 @@ def test_relationships() -> None:
     print("All relationship tests passed successfully!")
 
 
-def test_account_with_children() -> None:
+def _test_account_with_children() -> None:
     """
     Tests querying all accounts and retrieving their child objects.
     This test verifies that:
@@ -599,7 +599,7 @@ def test_account_with_children() -> None:
     print("All account with children tests passed successfully!")
 
 
-def test_relationship_updates() -> None:
+def _test_relationship_updates() -> None:
     """
     Tests that relationships are properly updated when a child object's parent reference changes.
     This test verifies:
@@ -616,7 +616,7 @@ def test_relationship_updates() -> None:
             "LastName": "Contact",
         }
     ]
-    create_csv_file("Contact", initial_contact, "initial_contact.csv")
+    _create_csv_file("Contact", initial_contact, "initial_contact.csv")
 
     # Verify initial relationship
     acme_children = get_child_ids(_VALID_SALESFORCE_IDS[0])
@@ -633,7 +633,7 @@ def test_relationship_updates() -> None:
             "LastName": "Contact",
         }
     ]
-    create_csv_file("Contact", updated_contact, "updated_contact.csv")
+    _create_csv_file("Contact", updated_contact, "updated_contact.csv")
 
     # Verify old relationship is removed
     acme_children = get_child_ids(_VALID_SALESFORCE_IDS[0])
@@ -648,7 +648,7 @@ def test_relationship_updates() -> None:
     print("All relationship update tests passed successfully!")
 
 
-def test_get_affected_parent_ids() -> None:
+def _test_get_affected_parent_ids() -> None:
     """
     Tests get_affected_parent_ids functionality by verifying:
     1. IDs that are directly in the parent_types list are included
@@ -683,7 +683,7 @@ def test_get_affected_parent_ids() -> None:
 
     # Create and update CSV files for test data
     for object_type, records in test_data.items():
-        create_csv_file(object_type, records)
+        _create_csv_file(object_type, records)
 
     # Test Case 1: Account directly in updated_ids and parent_types
     updated_ids = [_VALID_SALESFORCE_IDS[1]]  # Parent Account 2
@@ -733,18 +733,14 @@ def test_get_affected_parent_ids() -> None:
     print("All get_affected_parent_ids tests passed successfully!")
 
 
-def main_build() -> None:
-    clear_sf_db()
+def test_salesforce_sqlite() -> None:
+    _clear_sf_db()
     init_db()
-    create_csv_with_example_data()
-    test_query()
-    test_upsert()
-    test_relationships()
-    test_account_with_children()
-    test_relationship_updates()
-    test_get_affected_parent_ids()
-    clear_sf_db()
-
-
-if __name__ == "__main__":
-    main_build()
+    _create_csv_with_example_data()
+    _test_query()
+    _test_upsert()
+    _test_relationships()
+    _test_account_with_children()
+    _test_relationship_updates()
+    _test_get_affected_parent_ids()
+    _clear_sf_db()

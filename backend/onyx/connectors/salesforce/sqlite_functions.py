@@ -24,9 +24,9 @@ def get_db_connection(
         isolation_level: SQLite isolation level. None = default "DEFERRED",
             can be "IMMEDIATE" or "EXCLUSIVE" for more strict isolation.
     """
-    conn = sqlite3.connect(
-        get_sqlite_db_path(), timeout=60.0
-    )  # 60 second timeout for locks
+    # 60 second timeout for locks
+    conn = sqlite3.connect(get_sqlite_db_path(), timeout=60.0)
+
     if isolation_level is not None:
         conn.isolation_level = isolation_level
     try:
