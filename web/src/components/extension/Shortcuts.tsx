@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { PencilIcon, PlusIcon } from "lucide-react";
 import Image from "next/image";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { Modal } from "../Modal";
 
 const QuestionMarkIcon = () => (
   <svg
@@ -254,28 +255,18 @@ export const MaxShortcutsReachedModal = ({
   onClose: () => void;
 }) => {
   return (
-    <Dialog onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px] bg-neutral-900 text-white">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-center">
-            Maximum Shortcuts Reached
-          </DialogTitle>
-        </DialogHeader>
-        <div className="py-4">
-          <p className="text-center text-neutral-300">
-            You&apos;ve reached the maximum limit of 8 shortcuts. To add a new
-            shortcut, please remove an existing one.
-          </p>
-        </div>
-        <DialogFooter>
-          <Button
-            onClick={onClose}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            Got it
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      width="max-w-md"
+      title="Maximum Shortcuts Reached"
+      onOutsideClick={onClose}
+    >
+      <div className="flex flex-col gap-4">
+        <p className="text-left text-neutral-900">
+          You&apos;ve reached the maximum limit of 8 shortcuts. To add a new
+          shortcut, please remove an existing one.
+        </p>
+        <Button onClick={onClose}>Close</Button>
+      </div>
+    </Modal>
   );
 };

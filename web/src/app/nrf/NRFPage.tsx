@@ -37,7 +37,7 @@ import LoginPanel from "../auth/login/LoginPage";
 import { AuthType } from "@/lib/constants";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 
-export default function NRFPageNewDesign() {
+export default function NRFPage() {
   const {
     theme,
     defaultLightBackgroundUrl,
@@ -226,34 +226,16 @@ export default function NRFPageNewDesign() {
         transition: "background-image 0.3s ease",
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          right: 0,
-          padding: "16px",
-          zIndex: 10,
-        }}
-      >
+      <div className="absolute top-0 right-0 p-4 z-10">
         <button
           aria-label="Open settings"
           onClick={toggleSettings}
-          style={{
-            background: "rgba(255, 255, 255, 0.7)",
-            border: "none",
-            borderRadius: "50%",
-            padding: "10px",
-            cursor: "pointer",
-          }}
+          className="bg-white bg-opacity-70 rounded-full p-2.5 cursor-pointer hover:bg-opacity-80 transition-colors duration-200"
         >
           <Menu size={12} className="text-neutral-900" />
         </button>
       </div>
-      {showMaxShortcutsModal && (
-        <MaxShortcutsReachedModal
-          onClose={() => setShowMaxShortcutsModal(false)}
-        />
-      )}
+
       <Dropzone onDrop={handleImageUpload} noClick>
         {({ getRootProps }) => (
           <div
@@ -290,11 +272,24 @@ export default function NRFPageNewDesign() {
                 showShortcuts={showShortcuts}
                 setEditingShortcut={setEditingShortcut}
                 setShowShortCutModal={setShowShortCutModal}
+                openShortCutModal={() => {
+                  if (shortCuts.length >= 6) {
+                    setShowMaxShortcutsModal(true);
+                  } else {
+                    setEditingShortcut(null);
+                    setShowShortCutModal(true);
+                  }
+                }}
               />
             </div>
           </div>
         )}
       </Dropzone>
+      {showMaxShortcutsModal && (
+        <MaxShortcutsReachedModal
+          onClose={() => setShowMaxShortcutsModal(false)}
+        />
+      )}
       {showShortCutModal && (
         <NewShortCutModal
           setPopup={setPopup}
@@ -305,22 +300,21 @@ export default function NRFPageNewDesign() {
             setShowShortCutModal(false);
           }}
           isOpen={showShortCutModal}
-          onClose={() => setShowShortCutModal(false)}
+          onClose={() => {
+            setEditingShortcut(null);
+            setShowShortCutModal(false);
+          }}
           onAdd={(shortCut: Shortcut) => {
-            if (shortCuts.length >= 8) {
-              setShowMaxShortcutsModal(true);
+            if (editingShortcut) {
+              setShortCuts(
+                shortCuts
+                  .filter((s) => s.name !== editingShortcut.name)
+                  .concat(shortCut)
+              );
             } else {
-              if (editingShortcut) {
-                setShortCuts(
-                  shortCuts
-                    .filter((s) => s.name !== editingShortcut.name)
-                    .concat(shortCut)
-                );
-              } else {
-                setShortCuts([...shortCuts, shortCut]);
-              }
-              setShowShortCutModal(false);
+              setShortCuts([...shortCuts, shortCut]);
             }
+            setShowShortCutModal(false);
           }}
           editingShortcut={editingShortcut}
         />
@@ -403,7 +397,7 @@ export default function NRFPageNewDesign() {
 export function NRFPageWithProvider() {
   return (
     <NRFPreferencesProvider>
-      <NRFPageNewDesign />
+      <NRFPage />
     </NRFPreferencesProvider>
   );
 }

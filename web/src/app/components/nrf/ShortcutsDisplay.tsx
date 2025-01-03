@@ -7,6 +7,7 @@ interface ShortcutsDisplayProps {
   showShortcuts: boolean;
   setEditingShortcut: (shortcut: Shortcut | null) => void;
   setShowShortCutModal: (show: boolean) => void;
+  openShortCutModal: () => void;
 }
 
 export const ShortcutsDisplay: React.FC<ShortcutsDisplayProps> = ({
@@ -14,6 +15,7 @@ export const ShortcutsDisplay: React.FC<ShortcutsDisplayProps> = ({
   showShortcuts,
   setEditingShortcut,
   setShowShortCutModal,
+  openShortCutModal,
 }) => {
   return (
     <div
@@ -37,7 +39,7 @@ export const ShortcutsDisplay: React.FC<ShortcutsDisplayProps> = ({
           shortCut={shortCut}
         />
       ))}
-      <AddShortCut openShortCutModal={() => setShowShortCutModal(true)} />
+      <AddShortCut openShortCutModal={openShortCutModal} />
     </div>
   );
 };
