@@ -1,3 +1,5 @@
+import time
+
 from ee.onyx.db.external_perm import fetch_external_groups_for_user_email_and_group_ids
 from ee.onyx.external_permissions.salesforce.utils import (
     get_any_salesforce_client_for_doc_id,
@@ -7,6 +9,9 @@ from ee.onyx.external_permissions.salesforce.utils import get_salesforce_user_id
 from onyx.configs.app_configs import BLURB_SIZE
 from onyx.context.search.models import InferenceChunk
 from onyx.db.engine import get_session_context_manager
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 # Types
@@ -14,20 +19,39 @@ ChunkKey = tuple[str, int]  # (doc_id, chunk_id)
 ContentRange = tuple[int, int | None]  # (start_index, end_index) None means to the end
 
 
-def _get_objects_access_for_user_email_from_salesforce(
+def _get_dummy_object_access_map(
     object_ids: set[str], user_email: str, chunks: list[InferenceChunk]
+) -> dict[str, bool]:
+    time.sleep(0.15)
+    # return {object_id: True for object_id in object_ids}
+    import random
+
+    return {object_id: random.choice([True, False]) for object_id in object_ids}
+
+
+def _get_objects_access_for_user_email_from_salesforce(
+    object_ids: set[str],
+    user_email: str,
+    chunks: list[InferenceChunk],
 ) -> dict[str, bool]:
     """
     This function wraps the salesforce call as we may want to change how this
     is done in the future. (E.g. replace it with the above function)
     """
+    # This is cached in the function so the first query takes an extra 0.1-0.3 seconds
+    # but subsequent queries for this source are essentially instant
     first_doc_id = chunks[0].document_id
     with get_session_context_manager() as db_session:
         salesforce_client = get_any_salesforce_client_for_doc_id(
             db_session, first_doc_id
         )
 
+    # This is cached in the function so the first query takes an extra 0.1-0.3 seconds
+    # but subsequent queries by the same user are essentially instant
     user_id = get_salesforce_user_id(salesforce_client, user_email)
+
+    # This is the only query that is not cached in the function
+    # so it takes 0.1-0.2 seconds total
     object_id_to_access = get_objects_access_for_user_id(
         salesforce_client, user_id, list(object_ids)
     )
@@ -62,13 +86,13 @@ def _get_object_ranges_for_chunk(
     return object_ranges
 
 
-def _create_empty_censored_chunk(unfiltered_chunk: InferenceChunk) -> InferenceChunk:
+def _create_empty_censored_chunk(uncensored_chunk: InferenceChunk) -> InferenceChunk:
     """
     Create a copy of the unfiltered chunk where potentially sensitive content is removed
     to be added later if the user has access to each of the sub-objects
     """
     empty_censored_chunk = InferenceChunk(
-        **unfiltered_chunk.model_dump(),
+        **uncensored_chunk.model_dump(),
     )
     empty_censored_chunk.content = ""
     empty_censored_chunk.blurb = ""
@@ -78,7 +102,7 @@ def _create_empty_censored_chunk(unfiltered_chunk: InferenceChunk) -> InferenceC
 
 def _update_censored_chunk(
     censored_chunk: InferenceChunk,
-    unfiltered_chunk: InferenceChunk,
+    uncensored_chunk: InferenceChunk,
     content_range: ContentRange,
 ) -> InferenceChunk:
     """
@@ -87,15 +111,16 @@ def _update_censored_chunk(
     start_index, end_index = content_range
 
     # Update the content of the filtered chunk
-    permitted_content = unfiltered_chunk.content[start_index:end_index]
+    permitted_content = uncensored_chunk.content[start_index:end_index]
+    permitted_section_start_index = len(censored_chunk.content)
     censored_chunk.content = permitted_content + censored_chunk.content
 
     # Update the source links of the filtered chunk
-    if unfiltered_chunk.source_links is not None:
+    if uncensored_chunk.source_links is not None:
         if censored_chunk.source_links is None:
             censored_chunk.source_links = {}
-        link_content = unfiltered_chunk.source_links[start_index]
-        censored_chunk.source_links[len(censored_chunk.content)] = link_content
+        link_content = uncensored_chunk.source_links[start_index]
+        censored_chunk.source_links[permitted_section_start_index] = link_content
 
     # Update the blurb of the filtered chunk
     censored_chunk.blurb = censored_chunk.content[:BLURB_SIZE]
@@ -160,12 +185,13 @@ def censor_salesforce_chunks(
                     uncensored_chunks[chunk_key]
                 )
 
-            unfiltered_chunk = uncensored_chunks[chunk_key]
-            censored_chunks[chunk_key] = _update_censored_chunk(
+            uncensored_chunk = uncensored_chunks[chunk_key]
+            censored_chunk = _update_censored_chunk(
                 censored_chunk=censored_chunks[chunk_key],
-                unfiltered_chunk=unfiltered_chunk,
+                uncensored_chunk=uncensored_chunk,
                 content_range=content_range,
             )
+            censored_chunks[chunk_key] = censored_chunk
 
     return list(censored_chunks.values())
 

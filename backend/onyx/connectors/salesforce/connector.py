@@ -70,13 +70,34 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> list[BasicExpertInfo] | None:
         object_dict = sf_object.data
         if not (last_modified_by_id := object_dict.get("LastModifiedById")):
+            logger.warning(f"No LastModifiedById found for {sf_object.id}")
             return None
         if not (last_modified_by := get_record(last_modified_by_id)):
+            logger.warning(f"No LastModifiedBy found for {last_modified_by_id}")
             return None
-        if not (last_modified_by_name := last_modified_by.data.get("Name")):
+
+        user_data = last_modified_by.data
+        expert_info = BasicExpertInfo(
+            first_name=user_data.get("FirstName"),
+            last_name=user_data.get("LastName"),
+            email=user_data.get("Email"),
+            display_name=user_data.get("Name"),
+        )
+
+        # Check if all fields are None
+        if all(
+            value is None
+            for value in [
+                expert_info.first_name,
+                expert_info.last_name,
+                expert_info.email,
+                expert_info.display_name,
+            ]
+        ):
+            logger.warning(f"No identifying information found for user {user_data}")
             return None
-        primary_owners = [BasicExpertInfo(display_name=last_modified_by_name)]
-        return primary_owners
+
+        return [expert_info]
 
     def _convert_object_instance_to_document(
         self, sf_object: SalesforceObject

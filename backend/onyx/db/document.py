@@ -20,10 +20,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import null
 
 from onyx.configs.constants import DEFAULT_BOOST
+from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
+from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Document as DbDocument
@@ -632,3 +634,37 @@ def get_cc_pairs_for_document(
         .where(DocumentByConnectorCredentialPair.id == document_id)
     )
     return list(db_session.execute(stmt).scalars().all())
+
+
+def get_document_sources(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, DocumentSource]:
+    """Gets the sources for a list of document IDs.
+    Returns a dictionary mapping document ID to its source.
+    If a document has multiple sources (multiple CC pairs), returns the first one found.
+    """
+    stmt = (
+        select(
+            DocumentByConnectorCredentialPair.id,
+            Connector.source,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .join(
+            Connector,
+            ConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .distinct()
+    )
+
+    results = db_session.execute(stmt).all()
+    return {doc_id: source for doc_id, source in results}

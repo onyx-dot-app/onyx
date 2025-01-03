@@ -34,11 +34,11 @@ def _get_all_censoring_enabled_sources() -> set[DocumentSource]:
     """
     with get_session_context_manager() as db_session:
         enabled_sync_connectors = get_all_auto_sync_cc_pairs(db_session)
-    return {
-        cc_pair.connector.source
-        for cc_pair in enabled_sync_connectors
-        if cc_pair.connector.source in DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION
-    }
+        return {
+            cc_pair.connector.source
+            for cc_pair in enabled_sync_connectors
+            if cc_pair.connector.source in DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION
+        }
 
 
 # NOTE: This is only called if ee is enabled.

@@ -163,6 +163,7 @@ class SearchPipeline:
 
         # These chunks are ordered, deduped, and contain no large chunks
         retrieved_chunks = self._get_chunks()
+
         # If ee is enabled, censor the chunk sections based on user access
         # Otherwise, return the retrieved chunks
         censored_chunks = fetch_ee_implementation_or_noop(

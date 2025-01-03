@@ -77,16 +77,18 @@ def _get_all_queryable_fields_of_sf_type(
     object_description = _get_sf_type_object_json(sf_client, sf_type)
     fields: list[dict[str, Any]] = object_description["fields"]
     valid_fields: set[str] = set()
-    compound_field_names: set[str] = set()
+    field_names_to_remove: set[str] = set()
     for field in fields:
         if compound_field_name := field.get("compoundFieldName"):
-            compound_field_names.add(compound_field_name)
+            # We do want to get name fields even if they are compound
+            if not field.get("nameField"):
+                field_names_to_remove.add(compound_field_name)
         if field.get("type", "base64") == "base64":
             continue
         if field_name := field.get("name"):
             valid_fields.add(field_name)
 
-    return list(valid_fields - compound_field_names)
+    return list(valid_fields - field_names_to_remove)
 
 
 def _check_if_object_type_is_empty(sf_client: Salesforce, sf_type: str) -> bool:
