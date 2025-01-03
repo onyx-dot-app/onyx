@@ -46,7 +46,6 @@ from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
@@ -395,11 +394,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     # Explicitly set the Postgres schema for this session to ensure
                     # OAuth account creation happens in the correct tenant schema
-                    await db_session.execute(text(f'SET search_path = "{tenant_id}"'))
 
                     # Add OAuth account
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
-
                     await self.on_after_register(user, request)
 
             else:
@@ -418,7 +415,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
-
             if expires_at and TRACK_EXTERNAL_IDP_EXPIRY:
                 oidc_expiry = datetime.fromtimestamp(expires_at, tz=timezone.utc)
                 await self.user_db.update(
