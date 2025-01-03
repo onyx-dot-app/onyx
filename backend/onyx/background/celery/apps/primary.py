@@ -1,3 +1,4 @@
+import logging
 import multiprocessing
 from typing import Any
 from typing import cast
@@ -193,6 +194,10 @@ def on_setup_logging(
     loglevel: Any, logfile: Any, format: Any, colorize: Any, **kwargs: Any
 ) -> None:
     app_base.on_setup_logging(loglevel, logfile, format, colorize, **kwargs)
+
+    # this can be spammy, so just enable it in the cloud for now
+    if MULTI_TENANT:
+        app_base.set_task_finished_log_level(logging.INFO)
 
 
 class HubPeriodicTask(bootsteps.StartStopStep):

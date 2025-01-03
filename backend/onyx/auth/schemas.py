@@ -43,4 +43,7 @@ class UserCreate(schemas.BaseUserCreate):
 
 
 class UserUpdate(schemas.BaseUserUpdate):
-    role: UserRole
+    """
+    Role updates are not allowed through the user update endpoint for security reasons
+    Role changes should be handled through a separate, admin-only process
+    """

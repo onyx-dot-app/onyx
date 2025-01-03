@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_user
+from onyx.auth.users import current_chat_accesssible_user
 from onyx.db.engine import get_session_context_manager
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import ChatMessage
@@ -31,7 +31,7 @@ TOKEN_BUDGET_UNIT = 1_000
 
 
 def check_token_rate_limits(
-    user: User | None = Depends(current_user),
+    user: User | None = Depends(current_chat_accesssible_user),
 ) -> None:
     # short circuit if no rate limits are set up
     # NOTE: result of `any_rate_limit_exists` is cached, so this call is fast 99% of the time

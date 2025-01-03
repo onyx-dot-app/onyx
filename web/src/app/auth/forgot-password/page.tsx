@@ -26,72 +26,68 @@ const ForgotPasswordPage: React.FC = () => {
   return (
     <AuthFlowContainer>
       <div className="flex flex-col w-full justify-center">
-        <CardSection className="mt-4 w-full">
-          {" "}
-          <div className="flex">
-            <Title className="mb-2 mx-auto font-bold">Forgot Password</Title>
-          </div>
-          {isWorking && <Spinner />}
-          {popup}
-          <Formik
-            initialValues={{
-              email: "",
-            }}
-            validationSchema={Yup.object().shape({
-              email: Yup.string().email().required(),
-            })}
-            onSubmit={async (values) => {
-              setIsWorking(true);
-              try {
-                await forgotPassword(values.email);
-                setPopup({
-                  type: "success",
-                  message:
-                    "Password reset email sent. Please check your inbox.",
-                });
-              } catch (error) {
-                const errorMessage =
-                  error instanceof Error
-                    ? error.message
-                    : "An error occurred. Please try again.";
-                setPopup({
-                  type: "error",
-                  message: errorMessage,
-                });
-              } finally {
-                setIsWorking(false);
-              }
-            }}
-          >
-            {({ isSubmitting }) => (
-              <Form className="w-full flex flex-col items-stretch mt-2">
-                <TextFormField
-                  name="email"
-                  label="Email"
-                  type="email"
-                  placeholder="email@yourcompany.com"
-                />
+        <div className="flex">
+          <Title className="mb-2 mx-auto font-bold">Forgot Password</Title>
+        </div>
+        {isWorking && <Spinner />}
+        {popup}
+        <Formik
+          initialValues={{
+            email: "",
+          }}
+          validationSchema={Yup.object().shape({
+            email: Yup.string().email().required(),
+          })}
+          onSubmit={async (values) => {
+            setIsWorking(true);
+            try {
+              await forgotPassword(values.email);
+              setPopup({
+                type: "success",
+                message: "Password reset email sent. Please check your inbox.",
+              });
+            } catch (error) {
+              const errorMessage =
+                error instanceof Error
+                  ? error.message
+                  : "An error occurred. Please try again.";
+              setPopup({
+                type: "error",
+                message: errorMessage,
+              });
+            } finally {
+              setIsWorking(false);
+            }
+          }}
+        >
+          {({ isSubmitting }) => (
+            <Form className="w-full flex flex-col items-stretch mt-2">
+              <TextFormField
+                name="email"
+                label="Email"
+                type="email"
+                placeholder="email@yourcompany.com"
+              />
 
-                <div className="flex">
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="mx-auto w-full"
-                  >
-                    Reset Password
-                  </Button>
-                </div>
-              </Form>
-            )}
-          </Formik>
-          <div className="flex">
-            <Text className="mt-4 mx-auto">
-              <Link href="/auth/login" className="text-link font-medium">
-                Back to Login
-              </Link>
-            </Text>
-          </div>
-        </CardSection>
+              <div className="flex">
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="mx-auto w-full"
+                >
+                  Reset Password
+                </Button>
+              </div>
+            </Form>
+          )}
+        </Formik>
+        <div className="flex">
+          <Text className="mt-4 mx-auto">
+            <Link href="/auth/login" className="text-link font-medium">
+              Back to Login
+            </Link>
+          </Text>
+        </div>
       </div>
     </AuthFlowContainer>
   );

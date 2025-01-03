@@ -131,10 +131,15 @@ class EmbeddingModel:
                 tries=10, delay=10, exceptions=ModelServerRateLimitError
             )(final_make_request_func)
 
+        response: Response | None = None
+
         try:
             response = final_make_request_func()
             return EmbedResponse(**response.json())
         except requests.HTTPError as e:
+            if not response:
+                raise HTTPError("HTTP error occurred - response is None.") from e
+
             try:
                 error_detail = response.json().get("detail", str(e))
             except Exception:

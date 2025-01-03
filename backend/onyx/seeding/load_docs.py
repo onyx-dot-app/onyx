@@ -216,7 +216,7 @@ def seed_initial_documents(
     # Retries here because the index may take a few seconds to become ready
     # as we just sent over the Vespa schema and there is a slight delay
 
-    index_with_retries = retry_builder()(document_index.index)
+    index_with_retries = retry_builder(tries=15)(document_index.index)
     index_with_retries(chunks=chunks, fresh_index=cohere_enabled)
 
     # Mock a run for the UI even though it did not actually call out to anything

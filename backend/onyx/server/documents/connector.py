@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
+from onyx.auth.users import current_chat_accesssible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.background.celery.celery_utils import get_deletion_attempt_snapshot
@@ -1055,10 +1056,10 @@ class BasicCCPairInfo(BaseModel):
 
 @router.get("/connector-status")
 def get_basic_connector_indexing_status(
-    _: User = Depends(current_user),
+    _: User = Depends(current_chat_accesssible_user),
     db_session: Session = Depends(get_session),
 ) -> list[BasicCCPairInfo]:
-    cc_pairs = get_connector_credential_pairs(db_session)
+    cc_pairs = get_connector_credential_pairs(db_session, eager_load_connector=True)
     return [
         BasicCCPairInfo(
             has_successful_run=cc_pair.last_successful_index_time is not None,

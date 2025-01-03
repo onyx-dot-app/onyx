@@ -6,7 +6,7 @@ import { Credential } from "@/lib/connectors/credentials"; // Import Credential 
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
-  const loadStateConnectors = ["web", "xenforo", "file"];
+  const loadStateConnectors = ["web", "xenforo", "file", "airtable"];
   if (loadStateConnectors.includes(connector_name)) {
     return true;
   }
@@ -1055,6 +1055,28 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
       },
     ],
     advanced_values: [],
+  },
+  airtable: {
+    description: "Configure Airtable connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the base ID:",
+        label: "Base ID",
+        name: "base_id",
+        optional: false,
+        description: "The ID of the Airtable base to index.",
+      },
+      {
+        type: "text",
+        query: "Enter the table name or ID:",
+        label: "Table Name or Table ID",
+        name: "table_name_or_id",
+        optional: false,
+      },
+    ],
+    advanced_values: [],
+    overrideDefaultFreq: 60 * 60 * 24,
   },
 };
 export function createConnectorInitialValues(

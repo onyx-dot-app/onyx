@@ -1,3 +1,4 @@
+import asyncio
 import functools
 import threading
 from collections.abc import Callable
@@ -5,6 +6,7 @@ from typing import Any
 from typing import Optional
 
 import redis
+from redis import asyncio as aioredis
 from redis.client import Redis
 
 from onyx.configs.app_configs import REDIS_DB_NUMBER
@@ -196,3 +198,33 @@ def get_redis_client(*, tenant_id: str | None) -> Redis:
 # redis_client.set('key', 'value')
 # value = redis_client.get('key')
 # print(value.decode())  # Output: 'value'
+
+_async_redis_connection: aioredis.Redis | None = None
+_async_lock = asyncio.Lock()
+
+
+async def get_async_redis_connection() -> aioredis.Redis:
+    """
+    Provides a shared async Redis connection, using the same configs (host, port, SSL, etc.).
+    Ensures that the connection is created only once (lazily) and reused for all future calls.
+    """
+    global _async_redis_connection
+
+    # If we haven't yet created an async Redis connection, we need to create one
+    if _async_redis_connection is None:
+        # Acquire the lock to ensure that only one coroutine attempts to create the connection
+        async with _async_lock:
+            # Double-check inside the lock to avoid race conditions
+            if _async_redis_connection is None:
+                scheme = "rediss" if REDIS_SSL else "redis"
+                url = f"{scheme}://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER}"
+
+                # Create a new Redis connection (or connection pool) from the URL
+                _async_redis_connection = aioredis.from_url(
+                    url,
+                    password=REDIS_PASSWORD,
+                    max_connections=REDIS_POOL_MAX_CONNECTIONS,
+                )
+
+    # Return the established connection (or pool) for all future operations
+    return _async_redis_connection

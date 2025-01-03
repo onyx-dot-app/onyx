@@ -21,6 +21,7 @@ export default function FunctionalHeader({
   sidebarToggled,
   documentSidebarToggled,
   toggleUserSettings,
+  hideUserDropdown,
 }: {
   reset?: () => void;
   page: pageType;
@@ -30,6 +31,7 @@ export default function FunctionalHeader({
   setSharingModalVisible?: (value: SetStateAction<boolean>) => void;
   toggleSidebar?: () => void;
   toggleUserSettings?: () => void;
+  hideUserDropdown?: boolean;
 }) {
   const settings = useContext(SettingsContext);
   useEffect(() => {
@@ -106,7 +108,7 @@ export default function FunctionalHeader({
           </div>
 
           <div className="absolute right-0 mobile:top-2 desktop:top-0 flex">
-            {setSharingModalVisible && (
+            {setSharingModalVisible && !hideUserDropdown && (
               <div
                 onClick={() => setSharingModalVisible(true)}
                 className="mobile:hidden mr-2 my-auto rounded cursor-pointer hover:bg-hover-light"
@@ -114,8 +116,10 @@ export default function FunctionalHeader({
                 <FiShare2 size="18" />
               </div>
             )}
+
             <div className="mobile:hidden flex my-auto">
               <UserDropdown
+                hideUserDropdown={hideUserDropdown}
                 page={page}
                 toggleUserSettings={toggleUserSettings}
               />

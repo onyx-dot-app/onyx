@@ -31,7 +31,7 @@ INTENT_MODEL_TAG = "v1.0.3"
 DOC_EMBEDDING_CONTEXT_SIZE = 512
 
 # Used to distinguish alternative indices
-ALT_INDEX_SUFFIX = "__onyx_alt_index"
+ALT_INDEX_SUFFIX = "__danswer_alt_index"
 
 # Used for loading defaults for automatic deployments and dev flows
 # For local, use: mixedbread-ai/mxbai-rerank-xsmall-v1

@@ -1,66 +1,72 @@
-import re
-from typing import Union
-
-SF_JSON_FILTER = r"Id$|Date$|stamp$|url$"
-
-
-def _clean_salesforce_dict(data: Union[dict, list]) -> Union[dict, list]:
-    if isinstance(data, dict):
-        if "records" in data.keys():
-            data = data["records"]
-    if isinstance(data, dict):
-        if "attributes" in data.keys():
-            if isinstance(data["attributes"], dict):
-                data.update(data.pop("attributes"))
-
-    if isinstance(data, dict):
-        filtered_dict = {}
-        for key, value in data.items():
-            if not re.search(SF_JSON_FILTER, key, re.IGNORECASE):
-                if "__c" in key:  # remove the custom object indicator for display
-                    key = key[:-3]
-                if isinstance(value, (dict, list)):
-                    filtered_value = _clean_salesforce_dict(value)
-                    if filtered_value:  # Only add non-empty dictionaries or lists
-                        filtered_dict[key] = filtered_value
-                elif value is not None:
-                    filtered_dict[key] = value
-        return filtered_dict
-    elif isinstance(data, list):
-        filtered_list = []
-        for item in data:
-            if isinstance(item, (dict, list)):
-                filtered_item = _clean_salesforce_dict(item)
-                if filtered_item:  # Only add non-empty dictionaries or lists
-                    filtered_list.append(filtered_item)
-            elif item is not None:
-                filtered_list.append(filtered_item)
-        return filtered_list
-    else:
-        return data
+import os
+from dataclasses import dataclass
+from typing import Any
 
 
-def _json_to_natural_language(data: Union[dict, list], indent: int = 0) -> str:
-    result = []
-    indent_str = " " * indent
+@dataclass
+class SalesforceObject:
+    id: str
+    type: str
+    data: dict[str, Any]
 
-    if isinstance(data, dict):
-        for key, value in data.items():
-            if isinstance(value, (dict, list)):
-                result.append(f"{indent_str}{key}:")
-                result.append(_json_to_natural_language(value, indent + 2))
-            else:
-                result.append(f"{indent_str}{key}: {value}")
-    elif isinstance(data, list):
-        for item in data:
-            result.append(_json_to_natural_language(item, indent))
-    else:
-        result.append(f"{indent_str}{data}")
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ID": self.id,
+            "Type": self.type,
+            "Data": self.data,
+        }
 
-    return "\n".join(result)
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SalesforceObject":
+        return cls(
+            id=data["Id"],
+            type=data["Type"],
+            data=data,
+        )
 
 
-def extract_dict_text(raw_dict: dict) -> str:
-    processed_dict = _clean_salesforce_dict(raw_dict)
-    natural_language_dict = _json_to_natural_language(processed_dict)
-    return natural_language_dict
+# This defines the base path for all data files relative to this file
+# AKA BE CAREFUL WHEN MOVING THIS FILE
+BASE_DATA_PATH = os.path.join(os.path.dirname(__file__), "data")
+
+
+def get_sqlite_db_path() -> str:
+    """Get the path to the sqlite db file."""
+    return os.path.join(BASE_DATA_PATH, "salesforce_db.sqlite")
+
+
+def get_object_type_path(object_type: str) -> str:
+    """Get the directory path for a specific object type."""
+    type_dir = os.path.join(BASE_DATA_PATH, object_type)
+    os.makedirs(type_dir, exist_ok=True)
+    return type_dir
+
+
+_CHECKSUM_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345"
+_LOOKUP = {format(i, "05b"): _CHECKSUM_CHARS[i] for i in range(32)}
+
+
+def validate_salesforce_id(salesforce_id: str) -> bool:
+    """Validate the checksum portion of an 18-character Salesforce ID.
+
+    Args:
+        salesforce_id: An 18-character Salesforce ID
+
+    Returns:
+        bool: True if the checksum is valid, False otherwise
+    """
+    if len(salesforce_id) != 18:
+        return False
+
+    chunks = [salesforce_id[0:5], salesforce_id[5:10], salesforce_id[10:15]]
+
+    checksum = salesforce_id[15:18]
+    calculated_checksum = ""
+
+    for chunk in chunks:
+        result_string = "".join(
+            "1" if char.isupper() else "0" for char in reversed(chunk)
+        )
+        calculated_checksum += _LOOKUP[result_string]
+
+    return checksum == calculated_checksum
