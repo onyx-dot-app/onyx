@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.user_group import delete_user_group
 from ee.onyx.db.user_group import fetch_user_group
 from ee.onyx.db.user_group import mark_user_group_as_synced
+from ee.onyx.db.user_group import prepare_user_group_for_deletion
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import setup_logger
@@ -47,6 +48,9 @@ def monitor_usergroup_taskset(
     user_group = fetch_user_group(db_session=db_session, user_group_id=usergroup_id)
     if user_group:
         if user_group.is_up_for_deletion:
+            # this prepare should have been run when the deletion was scheduled,
+            # but run it again to be sure we're ready to go
+            prepare_user_group_for_deletion(db_session, usergroup_id)
             delete_user_group(db_session=db_session, user_group=user_group)
             task_logger.info(f"Deleted usergroup. id='{usergroup_id}'")
         else:
