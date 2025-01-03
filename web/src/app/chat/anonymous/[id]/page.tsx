@@ -23,13 +23,12 @@ export default async function Page({ params }: { params: { id: string } }) {
         console.error("Failed to login as anonymous user", response);
         throw new Error("Failed to login as anonymous user");
       }
-
-      console.log("Logged in as anonymous user");
+      // Redirect to the chat page and force a refresh
+      window.location.href = "/chat";
     } catch (error) {
       console.error("Error logging in as anonymous user:", error);
+      redirect("/chat?error=Failed to login as anonymous user");
     }
-    // Redirect to the chat page and force a refresh
-    window.location.href = "/chat";
   };
 
   useEffect(() => {
