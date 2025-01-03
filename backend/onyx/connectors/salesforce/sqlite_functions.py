@@ -40,20 +40,20 @@ def get_db_connection(
 
 def init_db() -> None:
     """Initialize the SQLite database with required tables if they don't exist."""
-    if os.path.exists(get_sqlite_db_path()):
-        return
-
     # Create database directory if it doesn't exist
     os.makedirs(os.path.dirname(get_sqlite_db_path()), exist_ok=True)
 
     with get_db_connection("EXCLUSIVE") as conn:
         cursor = conn.cursor()
 
-        # Enable WAL mode for better concurrent access and write performance
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA temp_store=MEMORY")
-        cursor.execute("PRAGMA cache_size=-2000000")  # Use 2GB memory for cache
+        db_exists = os.path.exists(get_sqlite_db_path())
+
+        if not db_exists:
+            # Enable WAL mode for better concurrent access and write performance
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA temp_store=MEMORY")
+            cursor.execute("PRAGMA cache_size=-2000000")  # Use 2GB memory for cache
 
         # Main table for storing Salesforce objects
         cursor.execute(
@@ -90,49 +90,69 @@ def init_db() -> None:
         """
         )
 
-        # Always recreate indexes to ensure they exist
-        cursor.execute("DROP INDEX IF EXISTS idx_object_type")
-        cursor.execute("DROP INDEX IF EXISTS idx_parent_id")
-        cursor.execute("DROP INDEX IF EXISTS idx_child_parent")
-        cursor.execute("DROP INDEX IF EXISTS idx_object_type_id")
-        cursor.execute("DROP INDEX IF EXISTS idx_relationship_types_lookup")
-
-        # Create covering indexes for common queries
+        # Create a table for User email to ID mapping if it doesn't exist
         cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_email_map (
+                email TEXT PRIMARY KEY,
+                user_id TEXT,  -- Nullable to allow for users without IDs
+                FOREIGN KEY (user_id) REFERENCES salesforce_objects(id)
+            ) WITHOUT ROWID
+        """
+        )
+
+        # Create indexes if they don't exist (SQLite ignores IF NOT EXISTS for indexes)
+        def create_index_if_not_exists(index_name: str, create_statement: str) -> None:
+            cursor.execute(
+                f"SELECT name FROM sqlite_master WHERE type='index' AND name='{index_name}'"
+            )
+            if not cursor.fetchone():
+                cursor.execute(create_statement)
+
+        create_index_if_not_exists(
+            "idx_object_type",
             """
             CREATE INDEX idx_object_type
             ON salesforce_objects(object_type, id)
             WHERE object_type IS NOT NULL
-        """
+            """,
         )
 
-        cursor.execute(
+        create_index_if_not_exists(
+            "idx_parent_id",
             """
             CREATE INDEX idx_parent_id
             ON relationships(parent_id, child_id)
-        """
+            """,
         )
 
-        cursor.execute(
+        create_index_if_not_exists(
+            "idx_child_parent",
             """
             CREATE INDEX idx_child_parent
             ON relationships(child_id)
             WHERE child_id IS NOT NULL
-        """
+            """,
         )
 
-        # New composite index for fast parent type lookups
-        cursor.execute(
+        create_index_if_not_exists(
+            "idx_relationship_types_lookup",
             """
             CREATE INDEX idx_relationship_types_lookup
             ON relationship_types(parent_type, child_id, parent_id)
-        """
+            """,
         )
 
         # Analyze tables to help query planner
         cursor.execute("ANALYZE relationships")
         cursor.execute("ANALYZE salesforce_objects")
         cursor.execute("ANALYZE relationship_types")
+        cursor.execute("ANALYZE user_email_map")
+
+        # If database already existed but user_email_map needs to be populated
+        cursor.execute("SELECT COUNT(*) FROM user_email_map")
+        if cursor.fetchone()[0] == 0:
+            _update_user_email_map(conn)
 
         conn.commit()
 
@@ -203,6 +223,22 @@ def _update_relationship_tables(
         raise
 
 
+def _update_user_email_map(conn: sqlite3.Connection) -> None:
+    """Update the user_email_map table with current User objects.
+    Called internally by update_sf_db_with_csv when User objects are updated.
+    """
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT OR REPLACE INTO user_email_map (email, user_id)
+        SELECT json_extract(data, '$.Email'), id
+        FROM salesforce_objects
+        WHERE object_type = 'User'
+        AND json_extract(data, '$.Email') IS NOT NULL
+        """
+    )
+
+
 def update_sf_db_with_csv(
     object_type: str,
     csv_download_path: str,
@@ -252,6 +288,10 @@ def update_sf_db_with_csv(
                 # Update relationships using the same connection
                 _update_relationship_tables(conn, id, parent_ids)
                 updated_ids.append(id)
+
+        # If we're updating User objects, update the email map
+        if object_type == "User":
+            _update_user_email_map(conn)
 
         conn.commit()
 
@@ -396,3 +436,38 @@ def has_at_least_one_object_of_type(object_type: str) -> bool:
         )
         count = cursor.fetchone()[0]
         return count > 0
+
+
+NULL_ID_STRING = "N/A"
+
+
+def get_user_id_by_email(email: str) -> str | None:
+    """Get the Salesforce User ID for a given email address.
+
+    Args:
+        email: The email address to look up
+
+    Returns:
+        A tuple of (was_found, user_id):
+            - was_found: True if the email exists in the table, False if not found
+            - user_id: The Salesforce User ID if exists, None otherwise
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id FROM user_email_map WHERE email = ?", (email,))
+        result = cursor.fetchone()
+        if result is None:
+            return None
+        return result[0]
+
+
+def update_email_to_id_table(email: str, id: str | None) -> None:
+    """Update the email to ID map table with a new email and ID."""
+    id_to_use = id or NULL_ID_STRING
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO user_email_map (email, user_id) VALUES (?, ?)",
+            (email, id_to_use),
+        )
+        conn.commit()

@@ -69,16 +69,16 @@ def _post_query_chunk_censoring(
     # For each source, filter out the chunks using the permission
     # check function for that source
     # TODO: Use a threadpool/multiprocessing to process the sources in parallel
-    for source, chunks in chunks_to_process.items():
-        permission_check_function = DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION[source]
+    for source, chunks_for_source in chunks_to_process.items():
+        censor_chunks_for_source = DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION[source]
         try:
-            filtered_chunks = permission_check_function(chunks, user.email)
+            censored_chunks = censor_chunks_for_source(chunks_for_source, user.email)
         except Exception as e:
-            logger.error(
+            logger.exception(
                 f"Failed to censor chunks for source {source} so throwing out all"
                 f" chunks for this source and continuing: {e}"
             )
             continue
-        chunks_to_keep.extend(filtered_chunks)
+        chunks_to_keep.extend(censored_chunks)
 
     return chunks_to_keep

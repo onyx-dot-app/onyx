@@ -1,8 +1,15 @@
 from simple_salesforce import Salesforce
 from sqlalchemy.orm import Session
 
+from onyx.connectors.salesforce.sqlite_functions import get_user_id_by_email
+from onyx.connectors.salesforce.sqlite_functions import init_db
+from onyx.connectors.salesforce.sqlite_functions import NULL_ID_STRING
+from onyx.connectors.salesforce.sqlite_functions import update_email_to_id_table
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document import get_cc_pairs_for_document
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 _ANY_SALESFORCE_CLIENT: Salesforce | None = None
 
@@ -34,21 +41,73 @@ def get_any_salesforce_client_for_doc_id(
     return _ANY_SALESFORCE_CLIENT
 
 
-_SALESFORCE_EMAIL_TO_ID_MAP: dict[str, str] = {}
+def _query_salesforce_user_id(sf_client: Salesforce, user_email: str) -> str | None:
+    query = f"SELECT Id FROM User WHERE Email = '{user_email}'"
+    result = sf_client.query(query)
+    if len(result["records"]) == 0:
+        return None
+    return result["records"][0]["Id"]
 
 
-def get_salesforce_user_id(salesforce_client: Salesforce, user_email: str) -> str:
+# This contains only the user_ids that we have found in Salesforce.
+# If we don't know their user_id, we don't store anything in the cache.
+_CACHED_SF_EMAIL_TO_ID_MAP: dict[str, str] = {}
+
+
+def get_salesforce_user_id_from_email(
+    sf_client: Salesforce,
+    user_email: str,
+) -> str | None:
     """
     We cache this so we don't have to query Salesforce for every query and salesforce
     user IDs never change.
     Memory usage is fine because we just store 2 small strings per user.
+
+    If the email is not in the cache, we check the local salesforce database for the info.
+    If the user is not found in the local salesforce database, we query Salesforce.
+    Whatever we get back from Salesforce is added to the database.
+    If no user_id is found, we add a NULL_ID_STRING to the database for that email so
+    we don't query Salesforce again (which is slow) but we still check the local salesforce
+    database every query until a user id is found. This is acceptable because the query time
+    is quite fast.
+    If a user_id is created in Salesforce, it will be added to the local salesforce database
+    next time the connector is run. Then that value will be found in this function and cached.
+
+    NOTE: First time this runs, it may be slow if it hasn't already been updated in the local
+    salesforce database. (Around 0.1-0.3 seconds)
+    If it's cached or stored in the local salesforce database, it's fast (<0.001 seconds).
     """
-    if user_email not in _SALESFORCE_EMAIL_TO_ID_MAP:
-        query = f"SELECT Id FROM User WHERE Email = '{user_email}'"
-        result = salesforce_client.query(query)
-        user_id = result["records"][0]["Id"]
-        _SALESFORCE_EMAIL_TO_ID_MAP[user_email] = user_id
-    return _SALESFORCE_EMAIL_TO_ID_MAP[user_email]
+    global _CACHED_SF_EMAIL_TO_ID_MAP
+    if user_email in _CACHED_SF_EMAIL_TO_ID_MAP:
+        if _CACHED_SF_EMAIL_TO_ID_MAP[user_email] is not None:
+            return _CACHED_SF_EMAIL_TO_ID_MAP[user_email]
+
+    db_exists = True
+    try:
+        # Check if the user is already in the database
+        user_id = get_user_id_by_email(user_email)
+    except Exception:
+        init_db()
+        try:
+            user_id = get_user_id_by_email(user_email)
+        except Exception as e:
+            logger.error(f"Error checking if user is in database: {e}")
+            user_id = None
+            db_exists = False
+
+    # If no entry is found in the database (indicated by user_id being None)...
+    if user_id is None:
+        # ...query Salesforce and store the result in the database
+        user_id = _query_salesforce_user_id(sf_client, user_email)
+        if db_exists:
+            update_email_to_id_table(user_email, user_id)
+        elif user_id is None:
+            return None
+    elif user_id == NULL_ID_STRING:
+        return None
+    # If the found user_id is real, cache it
+    _CACHED_SF_EMAIL_TO_ID_MAP[user_email] = user_id
+    return user_id
 
 
 _MAX_RECORD_IDS_PER_QUERY = 200

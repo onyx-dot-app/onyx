@@ -147,6 +147,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 f"Found {len(child_types)} child types for {parent_object_type}"
             )
 
+        # Always want to make sure user is grabbed for permissioning purposes
+        all_object_types.add("User")
+
         logger.info(f"Found total of {len(all_object_types)} object types to fetch")
         logger.debug(f"All object types: {all_object_types}")
 

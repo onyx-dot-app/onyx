@@ -5,7 +5,9 @@ from ee.onyx.external_permissions.salesforce.utils import (
     get_any_salesforce_client_for_doc_id,
 )
 from ee.onyx.external_permissions.salesforce.utils import get_objects_access_for_user_id
-from ee.onyx.external_permissions.salesforce.utils import get_salesforce_user_id
+from ee.onyx.external_permissions.salesforce.utils import (
+    get_salesforce_user_id_from_email,
+)
 from onyx.configs.app_configs import BLURB_SIZE
 from onyx.context.search.models import InferenceChunk
 from onyx.db.engine import get_session_context_manager
@@ -19,6 +21,7 @@ ChunkKey = tuple[str, int]  # (doc_id, chunk_id)
 ContentRange = tuple[int, int | None]  # (start_index, end_index) None means to the end
 
 
+# NOTE: Used for testing timing
 def _get_dummy_object_access_map(
     object_ids: set[str], user_email: str, chunks: list[InferenceChunk]
 ) -> dict[str, bool]:
@@ -33,7 +36,7 @@ def _get_objects_access_for_user_email_from_salesforce(
     object_ids: set[str],
     user_email: str,
     chunks: list[InferenceChunk],
-) -> dict[str, bool]:
+) -> dict[str, bool] | None:
     """
     This function wraps the salesforce call as we may want to change how this
     is done in the future. (E.g. replace it with the above function)
@@ -48,7 +51,14 @@ def _get_objects_access_for_user_email_from_salesforce(
 
     # This is cached in the function so the first query takes an extra 0.1-0.3 seconds
     # but subsequent queries by the same user are essentially instant
-    user_id = get_salesforce_user_id(salesforce_client, user_email)
+    start_time = time.time()
+    user_id = get_salesforce_user_id_from_email(salesforce_client, user_email)
+    end_time = time.time()
+    logger.info(
+        f"Time taken to get Salesforce user ID: {end_time - start_time} seconds"
+    )
+    if user_id is None:
+        return None
 
     # This is the only query that is not cached in the function
     # so it takes 0.1-0.2 seconds total
@@ -167,6 +177,11 @@ def censor_salesforce_chunks(
             user_email=user_email,
             chunks=chunks,
         )
+        if access_map is None:
+            # If the user is not found in Salesforce, access_map will be None
+            # so we should just return an empty list because no chunks will be
+            # censored
+            return []
 
     censored_chunks: dict[ChunkKey, InferenceChunk] = {}
     for object_id, content_list in object_to_content_map.items():
