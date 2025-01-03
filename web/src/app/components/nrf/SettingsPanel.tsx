@@ -75,14 +75,7 @@ export const SettingsPanel = ({
   } = useNRFPreferences();
 
   const toggleTheme = (newTheme: string) => {
-    let mode =
-      newTheme === "sync"
-        ? window.matchMedia("(prefers-color-scheme: dark)").matches
-          ? "dark"
-          : "light"
-        : newTheme;
-
-    setTheme(mode);
+    setTheme(newTheme);
   };
 
   const updateBackgroundUrl = (url: string) => {
@@ -145,13 +138,6 @@ export const SettingsPanel = ({
             value="dark"
             label="Dark theme"
             description="Dark theme"
-            groupValue={theme}
-            onChange={toggleTheme}
-          />
-          <RadioOption
-            value="sync"
-            label="Sync with device"
-            description="Sync with device"
             groupValue={theme}
             onChange={toggleTheme}
           />
