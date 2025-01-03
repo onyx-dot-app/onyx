@@ -62,7 +62,7 @@ def init_db() -> None:
                 id TEXT PRIMARY KEY,
                 object_type TEXT NOT NULL,
                 data TEXT NOT NULL,  -- JSON serialized data
-                last_modified INTEGER DEFAULT (unixepoch())  -- Add timestamp for better cache management
+                last_modified INTEGER DEFAULT (strftime('%s', 'now'))  -- Add timestamp for better cache management
             ) WITHOUT ROWID  -- Optimize for primary key lookups
         """
         )
