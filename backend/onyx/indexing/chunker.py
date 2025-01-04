@@ -108,6 +108,13 @@ def generate_large_chunks(chunks: list[DocAwareChunk]) -> list[DocAwareChunk]:
         for idx, i in enumerate(range(0, len(chunks), LARGE_CHUNK_RATIO))
         if len(chunks[i : i + LARGE_CHUNK_RATIO]) > 1
     ]
+    # Print chunk ID and large chunk reference IDs for each chunk
+    for chunk in large_chunks:
+        print(f"Chunk ID: {chunk.chunk_id}")
+        print("Large Chunk Reference IDs:")
+        for ref_id in chunk.large_chunk_reference_ids:
+            print(f"  - {ref_id}")
+        print("---")  # Separator for readability
     return large_chunks
 
 

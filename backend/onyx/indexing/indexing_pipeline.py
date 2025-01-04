@@ -468,10 +468,7 @@ def build_indexing_pipeline(
         multipass
         and
         # Only local models that supports larger context are from Nomic
-        (
-            embedder.provider_type is not None
-            or embedder.model_name.startswith("nomic-ai")
-        )
+        (embedder.model_name.startswith("nomic-ai"))
         and
         # Cohere does not support larger context they recommend not going above 512 tokens
         embedder.provider_type != EmbeddingProvider.COHERE
