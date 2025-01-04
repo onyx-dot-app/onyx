@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from onyx.context.search.models import InferenceChunk
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
-from onyx.indexing.models import IndexChunk
+from onyx.indexing.models import DocMetadataAwareIndexChunk
 
 
 DEFAULT_BATCH_SIZE = 30
@@ -37,7 +37,7 @@ def translate_boost_count_to_multiplier(boost: int) -> float:
 
 
 def get_uuid_from_chunk(
-    chunk: IndexChunk | InferenceChunk, mini_chunk_ind: int = 0
+    chunk: DocMetadataAwareIndexChunk, mini_chunk_ind: int = 0
 ) -> uuid.UUID:
     doc_str = (
         chunk.document_id
@@ -47,14 +47,38 @@ def get_uuid_from_chunk(
     # Web parsing URL duplicate catching
     if doc_str and doc_str[-1] == "/":
         doc_str = doc_str[:-1]
-    unique_identifier_string = "_".join(
-        [doc_str, str(chunk.chunk_id), str(mini_chunk_ind)]
+
+    chunk_index = (
+        "large_" + str(chunk.large_chunk_id)
+        if chunk.large_chunk_id
+        else str(chunk.chunk_id)
     )
-    if chunk.large_chunk_reference_ids:
-        unique_identifier_string += "_large" + "_".join(
-            [
-                str(referenced_chunk_id)
-                for referenced_chunk_id in chunk.large_chunk_reference_ids
-            ]
-        )
+    unique_identifier_string = "_".join([doc_str, chunk_index, str(mini_chunk_ind)])
+    if chunk.tenant_id:
+        unique_identifier_string += "_" + chunk.tenant_id
+
     return uuid.uuid5(uuid.NAMESPACE_X500, unique_identifier_string)
+
+
+# def get_uuid_from_chunk(
+#     chunk: IndexChunk | InferenceChunk, mini_chunk_ind: int = 0
+# ) -> uuid.UUID:
+#     doc_str = (
+#         chunk.document_id
+#         if isinstance(chunk, InferenceChunk)
+#         else chunk.source_document.id
+#     )
+#     # Web parsing URL duplicate catching
+#     if doc_str and doc_str[-1] == "/":
+#         doc_str = doc_str[:-1]
+#     unique_identifier_string = "_".join(
+#         [doc_str, str(chunk.chunk_id), str(mini_chunk_ind)]
+#     )
+#     if chunk.large_chunk_reference_ids:
+#         unique_identifier_string += "_large" + "_".join(
+#             [
+#                 str(referenced_chunk_id)
+#                 for referenced_chunk_id in chunk.large_chunk_reference_ids
+#             ]
+#         )
+#     return uuid.uuid5(uuid.NAMESPACE_X500, unique_identifier_string)

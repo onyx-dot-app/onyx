@@ -148,7 +148,6 @@ class Indexable(abc.ABC):
     def index(
         self,
         chunks: list[DocMetadataAwareIndexChunk],
-        fresh_index: bool = False,
     ) -> set[DocumentInsertionRecord]:
         """
         Takes a list of document chunks and indexes them in the document index
@@ -166,14 +165,9 @@ class Indexable(abc.ABC):
         only needs to index chunks into the PRIMARY index. Do not update the secondary index here,
         it is done automatically outside of this code.
 
-        NOTE: The fresh_index parameter, when set to True, assumes no documents have been previously
-        indexed for the given index/tenant. This can be used to optimize the indexing process for
-        new or empty indices.
-
         Parameters:
         - chunks: Document chunks with all of the information needed for indexing to the document
                 index.
-        - fresh_index: Boolean indicating whether this is a fresh index with no existing documents.
 
         Returns:
             List of document ids which map to unique documents and are used for deduping chunks

@@ -47,6 +47,8 @@ class DocAwareChunk(BaseChunk):
 
     mini_chunk_texts: list[str] | None
 
+    large_chunk_id: int | None
+
     large_chunk_reference_ids: list[int] = Field(default_factory=list)
 
     def to_short_descriptor(self) -> str:

@@ -612,3 +612,13 @@ def get_document(
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc: DbDocument | None = db_session.execute(stmt).scalar_one_or_none()
     return doc
+
+
+def fetch_chunk_counts_for_documents(
+    document_ids: list[str],
+    db_session: Session,
+) -> dict[str, int]:
+    stmt = select(DbDocument.id, DbDocument.chunk_count).where(
+        DbDocument.id.in_(document_ids)
+    )
+    return db_session.execute(stmt).all()

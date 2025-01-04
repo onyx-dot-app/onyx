@@ -20,6 +20,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 )
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
+from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import prepare_to_modify_documents
 from onyx.db.document import update_docs_last_modified__no_commit
@@ -379,6 +380,12 @@ def index_doc_batch(
                 document_ids=updatable_ids, db_session=db_session
             )
         }
+        document_id_to_chunk_count = {
+            document_id: chunk_count
+            for document_id, chunk_count in fetch_chunk_counts_for_documents(
+                document_ids=updatable_ids, db_session=db_session
+            )
+        }
 
         # we're concerned about race conditions where multiple simultaneous indexings might result
         # in one set of metadata overwriting another one in vespa.
@@ -410,7 +417,10 @@ def index_doc_batch(
         # A document will not be spread across different batches, so all the
         # documents with chunks in this set, are fully represented by the chunks
         # in this set
-        insertion_records = document_index.index(chunks=access_aware_chunks)
+        insertion_records = document_index.index(
+            chunks=access_aware_chunks,
+            document_id_to_chunk_count=document_id_to_chunk_count,
+        )
 
         successful_doc_ids = [record.document_id for record in insertion_records]
         successful_docs = [
