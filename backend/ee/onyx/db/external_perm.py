@@ -10,6 +10,7 @@ from onyx.access.utils import prefix_group_w_source
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import User__ExternalUserGroupId
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
+from onyx.db.users import get_user_by_email
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -106,3 +107,21 @@ def fetch_external_groups_for_user(
             User__ExternalUserGroupId.user_id == user_id
         )
     ).all()
+
+
+def fetch_external_groups_for_user_email_and_group_ids(
+    db_session: Session,
+    user_email: str,
+    group_ids: list[str],
+) -> list[User__ExternalUserGroupId]:
+    user = get_user_by_email(db_session=db_session, email=user_email)
+    if user is None:
+        return []
+    user_id = user.id
+    user_ext_groups = db_session.scalars(
+        select(User__ExternalUserGroupId).where(
+            User__ExternalUserGroupId.user_id == user_id,
+            User__ExternalUserGroupId.external_user_group_id.in_(group_ids),
+        )
+    ).all()
+    return list(user_ext_groups)

@@ -15,4 +15,5 @@ export const autoSyncConfigBySource: Record<
   google_drive: {},
   gmail: {},
   slack: {},
+  salesforce: {},
 };

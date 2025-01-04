@@ -77,25 +77,28 @@ def _get_all_queryable_fields_of_sf_type(
     object_description = _get_sf_type_object_json(sf_client, sf_type)
     fields: list[dict[str, Any]] = object_description["fields"]
     valid_fields: set[str] = set()
-    compound_field_names: set[str] = set()
+    field_names_to_remove: set[str] = set()
     for field in fields:
         if compound_field_name := field.get("compoundFieldName"):
-            compound_field_names.add(compound_field_name)
+            # We do want to get name fields even if they are compound
+            if not field.get("nameField"):
+                field_names_to_remove.add(compound_field_name)
         if field.get("type", "base64") == "base64":
             continue
         if field_name := field.get("name"):
             valid_fields.add(field_name)
 
-    return list(valid_fields - compound_field_names)
+    return list(valid_fields - field_names_to_remove)
 
 
-def _check_if_object_type_is_empty(sf_client: Salesforce, sf_type: str) -> bool:
+def _check_if_object_type_is_empty(
+    sf_client: Salesforce, sf_type: str, time_filter: str
+) -> bool:
     """
-    Send a small query to check if the object type is empty so we don't
-    perform extra bulk queries
+    Use the rest api to check to make sure the query will result in a non-empty response
     """
     try:
-        query = f"SELECT Count() FROM {sf_type} LIMIT 1"
+        query = f"SELECT Count() FROM {sf_type}{time_filter} LIMIT 1"
         result = sf_client.query(query)
         if result["totalSize"] == 0:
             return False
@@ -134,7 +137,7 @@ def _bulk_retrieve_from_salesforce(
     sf_type: str,
     time_filter: str,
 ) -> tuple[str, list[str] | None]:
-    if not _check_if_object_type_is_empty(sf_client, sf_type):
+    if not _check_if_object_type_is_empty(sf_client, sf_type, time_filter):
         return sf_type, None
 
     if existing_csvs := _check_for_existing_csvs(sf_type):
