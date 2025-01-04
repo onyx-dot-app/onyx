@@ -101,6 +101,7 @@ def get_salesforce_user_id_from_email(
         user_id = _query_salesforce_user_id(sf_client, user_email)
         if db_exists:
             update_email_to_id_table(user_email, user_id)
+            return user_id
         elif user_id is None:
             return None
     elif user_id == NULL_ID_STRING:
