@@ -41,9 +41,6 @@ from onyx.document_index.vespa.chunk_retrieval import query_vespa
 from onyx.document_index.vespa.deletion import delete_vespa_docs
 from onyx.document_index.vespa.indexing_utils import batch_index_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import clean_chunk_id_copy
-from onyx.document_index.vespa.indexing_utils import (
-    get_existing_documents_from_chunks,
-)
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
@@ -324,29 +321,16 @@ class VespaIndex(DocumentIndex):
             concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
             get_vespa_http_client() as http_client,
         ):
-            if not fresh_index:
-                # Check for existing documents, existing documents need to have all of their chunks deleted
-                # prior to indexing as the document size (num chunks) may have shrunk
-                first_chunks = [
-                    chunk for chunk in cleaned_chunks if chunk.chunk_id == 0
-                ]
-                for chunk_batch in batch_generator(first_chunks, BATCH_SIZE):
-                    existing_docs.update(
-                        get_existing_documents_from_chunks(
-                            chunks=chunk_batch,
-                            index_name=self.index_name,
-                            http_client=http_client,
-                            executor=executor,
-                        )
-                    )
+            # if not fresh_index:
 
-                for doc_id_batch in batch_generator(existing_docs, BATCH_SIZE):
-                    delete_vespa_docs(
-                        document_ids=doc_id_batch,
-                        index_name=self.index_name,
-                        http_client=http_client,
-                        executor=executor,
-                    )
+            # Delete old Vespa documents
+            # for doc_id_batch in batch_generator(existing_docs, BATCH_SIZE):
+            #     delete_vespa_docs(
+            #         document_ids=doc_id_batch,
+            #         index_name=self.index_name,
+            #         http_client=http_client,
+            #         executor=executor,
+            #     )
 
             for chunk_batch in batch_generator(cleaned_chunks, BATCH_SIZE):
                 batch_index_vespa_chunks(
