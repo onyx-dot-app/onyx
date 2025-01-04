@@ -90,7 +90,7 @@ export async function createChatSession(
     }
   );
   if (!createChatSessionResponse.ok) {
-    console.log(
+    console.error(
       `Failed to create chat session - ${createChatSessionResponse.status}`
     );
     throw Error("Failed to create chat session");

@@ -22,10 +22,6 @@ export const GET = async (request: NextRequest) => {
   });
 
   if (!response.ok) {
-    console.log(
-      `Error in ${connector} callback:`,
-      (await response.json()).detail
-    );
     return NextResponse.redirect(new URL("/auth/error", getDomain(request)));
   }
 

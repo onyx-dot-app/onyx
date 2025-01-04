@@ -130,7 +130,6 @@ export async function* handleSSEStream<T extends PacketType>(
       const data = JSON.parse(buffer) as T;
       yield data;
     } catch (error) {
-      console.log("Problematic remaining buffer:", buffer);
       console.error("Error parsing remaining buffer:", error);
     }
   }

@@ -81,7 +81,6 @@ function ToolForm({
             setDefinitionError(null);
           }
         } catch (error) {
-          console.log(error);
           setMethodSpecs(null);
           setDefinitionError("Invalid JSON format");
         }

@@ -546,16 +546,16 @@ export const AIMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Copy!">
+                          <CustomTooltip showTick line content="Copy">
                             <CopyButton content={content.toString()} />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Good response!">
+                          <CustomTooltip showTick line content="Good response">
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Bad response!">
+                          <CustomTooltip showTick line content="Bad response">
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -566,7 +566,7 @@ export const AIMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Regenerate!"
+                              content="Regenerate"
                             >
                               <RegenerateOption
                                 onDropdownVisibleChange={
@@ -631,18 +631,18 @@ export const AIMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Copy!">
+                          <CustomTooltip showTick line content="Copy">
                             <CopyButton content={content.toString()} />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Good response!">
+                          <CustomTooltip showTick line content="Good response">
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Bad response!">
+                          <CustomTooltip showTick line content="Bad response">
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -653,7 +653,7 @@ export const AIMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Regenerate!"
+                              content="Regenerate"
                             >
                               <RegenerateOption
                                 selectedAssistant={currentPersona!}
