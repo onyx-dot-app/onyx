@@ -1,8 +1,18 @@
 import re
-from collections import OrderedDict
 
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.models import Document
 from onyx.connectors.models import Section
+from onyx.connectors.salesforce.sqlite_functions import get_child_ids
+from onyx.connectors.salesforce.sqlite_functions import get_record
 from onyx.connectors.salesforce.utils import SalesforceObject
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+ID_PREFIX = "SALESFORCE_"
 
 # All of these types of keys are handled by specific fields in the doc
 # conversion process (E.g. URLs) or are not useful for the user (E.g. UUIDs)
@@ -103,54 +113,72 @@ def _extract_dict_text(raw_dict: dict) -> str:
     return natural_language_for_dict
 
 
-def extract_section(salesforce_object: SalesforceObject, base_url: str) -> Section:
+def _extract_section(salesforce_object: SalesforceObject, base_url: str) -> Section:
     return Section(
         text=_extract_dict_text(salesforce_object.data),
         link=f"{base_url}/{salesforce_object.id}",
     )
 
 
-def _field_value_is_child_object(field_value: dict) -> bool:
-    """
-    Checks if the field value is a child object.
-    """
-    return (
-        isinstance(field_value, OrderedDict)
-        and "records" in field_value.keys()
-        and isinstance(field_value["records"], list)
-        and len(field_value["records"]) > 0
-        and "Id" in field_value["records"][0].keys()
+def _extract_primary_owners(
+    sf_object: SalesforceObject,
+) -> list[BasicExpertInfo] | None:
+    object_dict = sf_object.data
+    if not (last_modified_by_id := object_dict.get("LastModifiedById")):
+        logger.warning(f"No LastModifiedById found for {sf_object.id}")
+        return None
+    if not (last_modified_by := get_record(last_modified_by_id)):
+        logger.warning(f"No LastModifiedBy found for {last_modified_by_id}")
+        return None
+
+    user_data = last_modified_by.data
+    expert_info = BasicExpertInfo(
+        first_name=user_data.get("FirstName"),
+        last_name=user_data.get("LastName"),
+        email=user_data.get("Email"),
+        display_name=user_data.get("Name"),
     )
 
+    # Check if all fields are None
+    if all(
+        value is None
+        for value in [
+            expert_info.first_name,
+            expert_info.last_name,
+            expert_info.email,
+            expert_info.display_name,
+        ]
+    ):
+        logger.warning(f"No identifying information found for user {user_data}")
+        return None
 
-def _extract_sections(salesforce_object: dict, base_url: str) -> list[Section]:
-    """
-    This goes through the salesforce_object and extracts the top level fields as a Section.
-    It also goes through the child objects and extracts them as Sections.
-    """
-    top_level_dict = {}
+    return [expert_info]
 
-    child_object_sections = []
-    for field_name, field_value in salesforce_object.items():
-        # If the field value is not a child object, add it to the top level dict
-        # to turn into text for the top level section
-        if not _field_value_is_child_object(field_value):
-            top_level_dict[field_name] = field_value
+
+def convert_sf_object_to_doc(
+    sf_object: SalesforceObject,
+    sf_instance: str,
+) -> Document:
+    object_dict = sf_object.data
+    salesforce_id = object_dict["Id"]
+    onyx_salesforce_id = f"{ID_PREFIX}{salesforce_id}"
+    base_url = f"https://{sf_instance}"
+    extracted_doc_updated_at = time_str_to_utc(object_dict["LastModifiedDate"])
+    extracted_semantic_identifier = object_dict.get("Name", "Unknown Object")
+
+    sections = [_extract_section(sf_object, base_url)]
+    for id in get_child_ids(sf_object.id):
+        if not (child_object := get_record(id)):
             continue
+        sections.append(_extract_section(child_object, base_url))
 
-        # If the field value is a child object, extract the child objects and add them as sections
-        for record in field_value["records"]:
-            child_object_id = record["Id"]
-            child_object_sections.append(
-                Section(
-                    text=f"Child Object(s): {field_name}\n{_extract_dict_text(record)}",
-                    link=f"{base_url}/{child_object_id}",
-                )
-            )
-
-    top_level_id = salesforce_object["Id"]
-    top_level_section = Section(
-        text=_extract_dict_text(top_level_dict),
-        link=f"{base_url}/{top_level_id}",
+    doc = Document(
+        id=onyx_salesforce_id,
+        sections=sections,
+        source=DocumentSource.SALESFORCE,
+        semantic_identifier=extracted_semantic_identifier,
+        doc_updated_at=extracted_doc_updated_at,
+        primary_owners=_extract_primary_owners(sf_object),
+        metadata={},
     )
-    return [top_level_section, *child_object_sections]
+    return doc

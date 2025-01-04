@@ -4,34 +4,29 @@ from typing import Any
 from simple_salesforce import Salesforce
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
-from onyx.connectors.salesforce.doc_conversion import extract_section
+from onyx.connectors.salesforce.doc_conversion import convert_sf_object_to_doc
+from onyx.connectors.salesforce.doc_conversion import ID_PREFIX
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
 from onyx.connectors.salesforce.salesforce_calls import get_all_children_of_sf_type
 from onyx.connectors.salesforce.sqlite_functions import get_affected_parent_ids_by_type
-from onyx.connectors.salesforce.sqlite_functions import get_child_ids
 from onyx.connectors.salesforce.sqlite_functions import get_record
 from onyx.connectors.salesforce.sqlite_functions import init_db
 from onyx.connectors.salesforce.sqlite_functions import update_sf_db_with_csv
-from onyx.connectors.salesforce.utils import SalesforceObject
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
 _DEFAULT_PARENT_OBJECT_TYPES = ["Account"]
-_ID_PREFIX = "SALESFORCE_"
 
 
 class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
@@ -64,67 +59,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         if self._sf_client is None:
             raise ConnectorMissingCredentialError("Salesforce")
         return self._sf_client
-
-    def _extract_primary_owners(
-        self, sf_object: SalesforceObject
-    ) -> list[BasicExpertInfo] | None:
-        object_dict = sf_object.data
-        if not (last_modified_by_id := object_dict.get("LastModifiedById")):
-            logger.warning(f"No LastModifiedById found for {sf_object.id}")
-            return None
-        if not (last_modified_by := get_record(last_modified_by_id)):
-            logger.warning(f"No LastModifiedBy found for {last_modified_by_id}")
-            return None
-
-        user_data = last_modified_by.data
-        expert_info = BasicExpertInfo(
-            first_name=user_data.get("FirstName"),
-            last_name=user_data.get("LastName"),
-            email=user_data.get("Email"),
-            display_name=user_data.get("Name"),
-        )
-
-        # Check if all fields are None
-        if all(
-            value is None
-            for value in [
-                expert_info.first_name,
-                expert_info.last_name,
-                expert_info.email,
-                expert_info.display_name,
-            ]
-        ):
-            logger.warning(f"No identifying information found for user {user_data}")
-            return None
-
-        return [expert_info]
-
-    def _convert_object_instance_to_document(
-        self, sf_object: SalesforceObject
-    ) -> Document:
-        object_dict = sf_object.data
-        salesforce_id = object_dict["Id"]
-        onyx_salesforce_id = f"{_ID_PREFIX}{salesforce_id}"
-        base_url = f"https://{self.sf_client.sf_instance}"
-        extracted_doc_updated_at = time_str_to_utc(object_dict["LastModifiedDate"])
-        extracted_semantic_identifier = object_dict.get("Name", "Unknown Object")
-
-        sections = [extract_section(sf_object, base_url)]
-        for id in get_child_ids(sf_object.id):
-            if not (child_object := get_record(id)):
-                continue
-            sections.append(extract_section(child_object, base_url))
-
-        doc = Document(
-            id=onyx_salesforce_id,
-            sections=sections,
-            source=DocumentSource.SALESFORCE,
-            semantic_identifier=extracted_semantic_identifier,
-            doc_updated_at=extracted_doc_updated_at,
-            primary_owners=self._extract_primary_owners(sf_object),
-            metadata={},
-        )
-        return doc
 
     def _fetch_from_salesforce(
         self,
@@ -217,7 +151,10 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     continue
 
                 docs_to_yield.append(
-                    self._convert_object_instance_to_document(parent_object)
+                    convert_sf_object_to_doc(
+                        sf_object=parent_object,
+                        sf_instance=self.sf_client.sf_instance,
+                    )
                 )
                 docs_processed += 1
 
@@ -246,7 +183,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             query_result = self.sf_client.query_all(query)
             doc_metadata_list.extend(
                 SlimDocument(
-                    id=f"{_ID_PREFIX}{instance_dict.get('Id', '')}",
+                    id=f"{ID_PREFIX}{instance_dict.get('Id', '')}",
                     perm_sync_data={},
                 )
                 for instance_dict in query_result["records"]
