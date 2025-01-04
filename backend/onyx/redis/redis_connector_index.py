@@ -32,8 +32,12 @@ class RedisConnectorIndex:
     TERMINATE_PREFIX = PREFIX + "_terminate"  # connectorindexing_terminate
 
     # used to signal the overall workflow is still active
-    # it's difficult to prevent
     ACTIVE_PREFIX = PREFIX + "_active"
+
+    # used to limit the number of simulataneous indexing workers at task runtime
+    SEMAPHORE_KEY = PREFIX + "_semaphore"
+    SEMAPHORE_LIMIT = 6
+    SEMAPHORE_TIMEOUT = 15 * 60  # 15 minutes
 
     def __init__(
         self,
@@ -59,6 +63,7 @@ class RedisConnectorIndex:
         )
         self.terminate_key = f"{self.TERMINATE_PREFIX}_{id}/{search_settings_id}"
         self.active_key = f"{self.ACTIVE_PREFIX}_{id}/{search_settings_id}"
+        self.semaphore_member: str | None = None
 
     @classmethod
     def fence_key_with_ids(cls, cc_pair_id: int, search_settings_id: int) -> str:
@@ -111,6 +116,59 @@ class RedisConnectorIndex:
         # We shouldn't need very long to terminate the spawned task.
         # 10 minute TTL is good.
         self.redis.set(f"{self.terminate_key}_{celery_task_id}", 0, ex=600)
+
+    def acquire_semaphore(self, celery_task_id: str) -> int:
+        """Used to limit the number of simultaneous indexing workers per tenant.
+        This semaphore does not need to be strongly consistent and is written as such.
+        """
+        self.semaphore_member = celery_task_id
+
+        redis_time_raw = self.redis.time()
+        redis_time = cast(tuple[int, int], redis_time_raw)
+        now = (
+            redis_time[0] + redis_time[1] / 1_000_000
+        )  # unix timestamp in floating point seconds
+
+        self.redis.zremrangebyscore(
+            RedisConnectorIndex.SEMAPHORE_KEY, "-inf", now - self.SEMAPHORE_TIMEOUT
+        )  # clean up old semaphore entries
+
+        # add ourselves to the semaphore and check our position/rank
+        self.redis.zadd(RedisConnectorIndex.SEMAPHORE_KEY, {self.semaphore_member: now})
+        rank_bytes = self.redis.zrank(
+            RedisConnectorIndex.SEMAPHORE_KEY, self.semaphore_member
+        )
+        rank = cast(int, rank_bytes)
+        if rank >= RedisConnectorIndex.SEMAPHORE_LIMIT:
+            # we're over the limit, acquiring the semaphore has failed.
+            self.redis.zrem(RedisConnectorIndex.SEMAPHORE_KEY, self.semaphore_member)
+
+        # return the rank ... we failed to acquire the semaphore if rank >= SEMAPHORE_LIMIT
+        return rank
+
+    def refresh_semaphore(self) -> bool:
+        if not self.semaphore_member:
+            return False
+
+        redis_time_raw = self.redis.time()
+        redis_time = cast(tuple[int, int], redis_time_raw)
+        now = (
+            redis_time[0] + redis_time[1] / 1_000_000
+        )  # unix timestamp in floating point seconds
+
+        reply = self.redis.zadd(
+            RedisConnectorIndex.SEMAPHORE_KEY, {self.semaphore_member: now}, xx=True
+        )
+        if reply is None:
+            return False
+
+        return True
+
+    def release_semaphore(self) -> None:
+        if not self.semaphore_member:
+            return
+
+        self.redis.zrem(RedisConnectorIndex.SEMAPHORE_KEY, self.semaphore_member)
 
     def set_active(self) -> None:
         """This sets a signal to keep the indexing flow from getting cleaned up within
@@ -172,6 +230,8 @@ class RedisConnectorIndex:
     @staticmethod
     def reset_all(r: redis.Redis) -> None:
         """Deletes all redis values for all connectors"""
+        r.delete(RedisConnectorIndex.SEMAPHORE_KEY)
+
         for key in r.scan_iter(RedisConnectorIndex.ACTIVE_PREFIX + "*"):
             r.delete(key)
 
