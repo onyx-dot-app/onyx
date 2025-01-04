@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { getXDaysAgo } from "./dateUtils";
-import { Separator } from "@/components/ui/separator";
 
 export const THIRTY_DAYS = "30d";
 
@@ -84,8 +83,16 @@ export const DateRangeSelector = memo(function DateRangeSelector({
             defaultMonth={value?.from}
             selected={value}
             onSelect={(range) => {
-              if (range?.from && range?.to) {
-                onValueChange({ from: range.from, to: range.to });
+              if (range?.from) {
+                if (range.to) {
+                  // Normal range selection when initialized with a range
+                  onValueChange({ from: range.from, to: range.to });
+                } else {
+                  // Single date selection when initilized without a range
+                  const to = new Date(range.from);
+                  const from = new Date(to.setDate(to.getDate() - 1));
+                  onValueChange({ from, to });
+                }
               }
             }}
             numberOfMonths={2}

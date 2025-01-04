@@ -193,6 +193,7 @@ class SessionType(str, Enum):
 class QAFeedbackType(str, Enum):
     LIKE = "like"  # User likes the answer, used for metrics
     DISLIKE = "dislike"  # User dislikes the answer, used for metrics
+    MIXED = "mixed"  # User likes some answers and dislikes other, used for chat session metrics
 
 
 class SearchFeedbackType(str, Enum):

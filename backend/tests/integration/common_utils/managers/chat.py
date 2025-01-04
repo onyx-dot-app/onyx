@@ -1,13 +1,18 @@
 import json
+from datetime import datetime
+from urllib.parse import urlencode
 from uuid import UUID
 
 import requests
 from requests.models import Response
 
+from ee.onyx.server.query_history.models import ChatSessionMinimal
+from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.models import RetrievalDetails
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
+from onyx.server.documents.models import PaginatedReturn
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -133,3 +138,37 @@ class ChatSessionManager:
             )
             for msg in response.json()["messages"]
         ]
+
+    @staticmethod
+    def get_chat_session_history(
+        user_performing_action: DATestUser,
+        page_size: int,
+        page_num: int,
+        feedback_type: QAFeedbackType | None = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+    ) -> PaginatedReturn[ChatSessionMinimal]:
+        query_params = {
+            "page_num": page_num,
+            "page_size": page_size,
+            "feedback_type": feedback_type if feedback_type else None,
+            "start_time": start_time if start_time else None,
+            "end_time": end_time if end_time else None,
+        }
+        # Remove None values
+        query_params = {
+            key: value for key, value in query_params.items() if value is not None
+        }
+
+        response = requests.get(
+            f"{API_SERVER_URL}/admin/chat-session-history?{urlencode(query_params, doseq=True)}",
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return PaginatedReturn(
+            items=[
+                ChatSessionMinimal(**chat_session) for chat_session in data["items"]
+            ],
+            total_items=data["total_items"],
+        )
