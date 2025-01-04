@@ -104,18 +104,10 @@ const Page = async (props: {
                 <span className="px-4 text-gray-500">or</span>
                 <div className="flex-grow border-t border-gray-300"></div>
               </div>
+
               <EmailPasswordForm shouldVerify={true} nextUrl={nextUrl} />
 
               <div className="flex mt-4 justify-between">
-                <Link
-                  href={`/auth/signup${
-                    searchParams?.next ? `?next=${searchParams.next}` : ""
-                  }`}
-                  className="text-link font-medium"
-                >
-                  Create an account
-                </Link>
-
                 {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
                   <Link
                     href="/auth/forgot-password"

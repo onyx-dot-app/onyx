@@ -1,14 +1,17 @@
 import asyncio
 import functools
+import json
 import threading
 from collections.abc import Callable
 from typing import Any
 from typing import Optional
 
 import redis
+from fastapi import Request
 from redis import asyncio as aioredis
 from redis.client import Redis
 
+from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REDIS_DB_NUMBER
 from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
 from onyx.configs.app_configs import REDIS_HOST
@@ -228,3 +231,31 @@ async def get_async_redis_connection() -> aioredis.Redis:
 
     # Return the established connection (or pool) for all future operations
     return _async_redis_connection
+
+
+async def retrieve_auth_token_data_from_redis(request: Request) -> dict | None:
+    token = request.cookies.get("fastapiusersauth")
+    if not token:
+        logger.debug("No auth token cookie found")
+        return None
+
+    try:
+        redis = await get_async_redis_connection()
+        redis_key = REDIS_AUTH_KEY_PREFIX + token
+        token_data_str = await redis.get(redis_key)
+
+        if not token_data_str:
+            logger.debug(f"Token key {redis_key} not found or expired in Redis")
+            return None
+
+        return json.loads(token_data_str)
+    except json.JSONDecodeError:
+        logger.error("Error decoding token data from Redis")
+        return None
+    except Exception as e:
+        logger.error(
+            f"Unexpected error in retrieve_auth_token_data_from_redis: {str(e)}"
+        )
+        raise ValueError(
+            f"Unexpected error in retrieve_auth_token_data_from_redis: {str(e)}"
+        )

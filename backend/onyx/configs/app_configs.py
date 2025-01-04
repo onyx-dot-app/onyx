@@ -188,9 +188,11 @@ REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
 
+
+REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
+
+
 # Rate limiting for auth endpoints
-
-
 RATE_LIMIT_WINDOW_SECONDS: int | None = None
 _rate_limit_window_seconds_str = os.environ.get("RATE_LIMIT_WINDOW_SECONDS")
 if _rate_limit_window_seconds_str is not None:
@@ -569,7 +571,6 @@ CONTROL_PLANE_API_BASE_URL = os.environ.get(
 
 # JWT configuration
 JWT_ALGORITHM = "HS256"
-
 
 #####
 # API Key Configs
