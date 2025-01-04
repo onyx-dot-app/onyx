@@ -3,7 +3,7 @@ import { FiPlusCircle, FiPlus, FiInfo, FiX, FiSearch } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { Persona } from "@/app/admin/assistants/interfaces";
 
-import { FilterManager } from "@/lib/hooks";
+import { FilterManager, LlmOverrideManager } from "@/lib/hooks";
 import { useChatContext } from "@/components/context/ChatContext";
 import { getFinalLLM } from "@/lib/llm/utils";
 import { ChatFileType, FileDescriptor } from "../interfaces";
@@ -31,9 +31,70 @@ import { ChatState } from "../types";
 import UnconfiguredProviderText from "@/components/chat_search/UnconfiguredProviderText";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { XIcon } from "lucide-react";
-import FiltersDisplay from "./FilterDisplay";
+import { fetchTitleFromUrl } from "@/lib/sources";
 
 const MAX_INPUT_HEIGHT = 200;
+
+const SelectedUrlChip = ({
+  url,
+  onRemove,
+}: {
+  url: string;
+  onRemove: (url: string) => void;
+}) => (
+  <div className="bg-white border border-gray-200 shadow-sm rounded-lg p-2 flex items-center space-x-2">
+    <img
+      src={`https://www.google.com/s2/favicons?domain=${new URL(url).hostname}`}
+      alt="Website favicon"
+      className="w-4 h-4"
+    />
+    <p className="text-sm font-medium text-gray-700 truncate">
+      {new URL(url).hostname}
+    </p>
+    <XIcon
+      onClick={() => onRemove(url)}
+      size={16}
+      className="text-text-400 hover:text-text-600 ml-auto cursor-pointer"
+    />
+  </div>
+);
+
+const SentUrlChip = ({
+  url,
+  onRemove,
+  onClick,
+  title,
+}: {
+  url: string;
+  onRemove: (url: string) => void;
+  onClick: () => void;
+  title: string;
+}) => {
+  return (
+    <button
+      className="bg-white/80 opacity-50 group-hover:opacity-100 border border-gray-200/50 shadow-sm rounded-lg p-2 flex items-center space-x-2  hover:bg-white hover:border-gray-200 transition-all duration-200"
+      onClick={onClick}
+    >
+      <img
+        src={`https://www.google.com/s2/favicons?domain=${
+          new URL(url).hostname
+        }`}
+        alt="Website favicon"
+        className="w-4 h-4 "
+      />
+      <p className="text-sm font-medium text-gray-600 truncate group-hover:text-gray-700">
+        {title}
+      </p>
+      <XIcon
+        onClick={(e) => {
+          onRemove(url);
+        }}
+        size={16}
+        className="text-text-300 hover:text-text-500 ml-auto transition-colors duration-200"
+      />
+    </button>
+  );
+};
 
 interface ChatInputBarProps {
   removeDocs: () => void;
@@ -46,6 +107,7 @@ interface ChatInputBarProps {
   stopGenerating: () => void;
   onSubmit: () => void;
   filterManager: FilterManager;
+  llmOverrideManager: LlmOverrideManager;
   chatState: ChatState;
   alternativeAssistant: Persona | null;
   // assistants
@@ -57,9 +119,17 @@ interface ChatInputBarProps {
   handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   toggleFilters?: () => void;
+  chromSentUrls?: string[];
+  removeChromeSentUrls: (chromSentUrl: string) => void;
+  selectedChromeUrls?: string[];
+  removeSelectedChromeUrl: (selectedChromeUrl: string) => void;
+  selectChromeUrl: (chromeUrl: string) => void;
 }
 
 export function ChatInputBar({
+  chromSentUrls,
+  selectedChromeUrls,
+  removeSelectedChromeUrl,
   removeDocs,
   openModelSettings,
   showDocs,
@@ -69,6 +139,7 @@ export function ChatInputBar({
   setMessage,
   stopGenerating,
   onSubmit,
+  removeChromeSentUrls,
   filterManager,
   chatState,
 
@@ -82,6 +153,7 @@ export function ChatInputBar({
   textAreaRef,
   alternativeAssistant,
   toggleFilters,
+  selectChromeUrl,
 }: ChatInputBarProps) {
   useEffect(() => {
     const textarea = textAreaRef.current;
@@ -217,6 +289,26 @@ export function ChatInputBar({
     }
   };
 
+  // We'll store dynamic titles in state, keyed by URL
+  const [fetchedTitles, setFetchedTitles] = useState<Record<string, string>>(
+    {}
+  );
+
+  useEffect(() => {
+    if (!chromSentUrls) return;
+
+    chromSentUrls.forEach((url) => {
+      // Already have it? Skip
+      if (fetchedTitles[url]) return;
+
+      fetchTitleFromUrl(url).then((title: string | null) => {
+        if (title) {
+          setFetchedTitles((prev) => ({ ...prev, [url]: title }));
+        }
+      });
+    });
+  }, [chromSentUrls, fetchedTitles]);
+
   return (
     <div id="onyx-chat-input">
       <div className="flex justify-center mx-auto">
@@ -228,6 +320,35 @@ export function ChatInputBar({
             mx-auto
           "
         >
+          {(chromSentUrls || selectedChromeUrls) && (
+            <div className="absolute inset-x-0 top-0 w-fit  flex gap-x-1 gap-y-1  flex-wrap   transform -translate-y-full">
+              {selectedChromeUrls &&
+                selectedChromeUrls.map((url, index) => (
+                  <SelectedUrlChip
+                    key={index}
+                    url={url}
+                    onRemove={removeSelectedChromeUrl}
+                  />
+                ))}
+              {chromSentUrls &&
+                chromSentUrls.map((url, index) => {
+                  const parsedUrl = new URL(url);
+                  const displayTitle = fetchedTitles[url] || parsedUrl.hostname;
+                  return (
+                    <SentUrlChip
+                      key={index}
+                      title={displayTitle}
+                      onClick={() => {
+                        selectChromeUrl(url);
+                      }}
+                      url={url}
+                      onRemove={removeChromeSentUrls}
+                    />
+                  );
+                })}
+            </div>
+          )}
+
           {showSuggestions && assistantTagOptions.length > 0 && (
             <div
               ref={suggestionsRef}
@@ -408,7 +529,7 @@ export function ChatInputBar({
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
-              placeholder="Ask me anything.."
+              placeholder="Ask me anything..."
               value={message}
               onKeyDown={(event) => {
                 if (
@@ -453,16 +574,6 @@ export function ChatInputBar({
                   onClick={toggleFilters}
                 />
               )}
-              {(filterManager.selectedSources.length > 0 ||
-                filterManager.selectedDocumentSets.length > 0 ||
-                filterManager.selectedTags.length > 0 ||
-                filterManager.timeRange) &&
-                toggleFilters && (
-                  <FiltersDisplay
-                    filterManager={filterManager}
-                    toggleFilters={toggleFilters}
-                  />
-                )}
             </div>
 
             <div className="absolute bottom-2.5 mobile:right-4 desktop:right-10">

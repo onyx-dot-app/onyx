@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { redirect, useRouter, useSearchParams } from "next/navigation";
 import {
   BackendChatSession,
   BackendMessage,
@@ -75,6 +75,7 @@ import {
   StreamStopInfo,
   StreamStopReason,
 } from "@/lib/search/interfaces";
+import { Filters } from "@/lib/search/interfaces";
 import { buildFilters } from "@/lib/search/utils";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
@@ -110,7 +111,7 @@ import AssistantBanner from "../../components/assistants/AssistantBanner";
 import TextView from "@/components/chat_search/TextView";
 import AssistantSelector from "@/components/chat_search/AssistantSelector";
 import { Modal } from "@/components/Modal";
-import { createPostponedAbortSignal } from "next/dist/server/app-render/dynamic-rendering";
+import { useSendMessageToParent } from "@/lib/extension/utils";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -206,6 +207,24 @@ export function ChatPage({
       const newSearchParams = new URLSearchParams(searchParams.toString());
       newSearchParams.delete(SEARCH_PARAM_NAMES.SEND_ON_LOAD);
 
+      filterManager.buildFiltersFromQueryString(
+        newSearchParams.toString(),
+        availableSources,
+        documentSets.map((ds) => ds.name),
+        tags
+      );
+      const fileDescriptorString = searchParams.get("files");
+      let overrideFileDescriptors: FileDescriptor[] = [];
+      if (fileDescriptorString) {
+        try {
+          overrideFileDescriptors = JSON.parse(
+            decodeURIComponent(fileDescriptorString)
+          );
+        } catch (error) {
+          console.error("Error parsing file descriptors:", error);
+        }
+      }
+
       // Update the URL without the send-on-load parameter
       router.replace(`?${newSearchParams.toString()}`, { scroll: false });
 
@@ -214,7 +233,8 @@ export function ChatPage({
 
       // If there's a message, submit it
       if (message) {
-        onSubmit({ messageOverride: message });
+        setSubmittedMessage(message);
+        onSubmit({ messageOverride: message, overrideFileDescriptors });
       }
     }
   }, [sendOnLoad, searchParams, router]);
@@ -302,14 +322,6 @@ export function ChatPage({
   const noAssistants = liveAssistant == null || liveAssistant == undefined;
 
   const availableSources = ccPairs.map((ccPair) => ccPair.source);
-  const [finalAvailableSources, finalAvailableDocumentSets] =
-    computeAvailableFilters({
-      selectedPersona: availableAssistants.find(
-        (assistant) => assistant.id === liveAssistant?.id
-      ),
-      availableSources: availableSources,
-      availableDocumentSets: documentSets,
-    });
 
   // always set the model override for the chat session, when an assistant, llm provider, or user preference exists
   useEffect(() => {
@@ -391,6 +403,9 @@ export function ChatPage({
 
   // this is triggered every time the user switches which chat
   // session they are using
+  const [chromSentUrls, setchromSentUrls] = useState<string[]>([]);
+  const [selectedChromeUrls, setSelectedChromeUrls] = useState<string[]>([]);
+
   useEffect(() => {
     const priorChatSessionId = chatSessionIdRef.current;
     const loadedSessionId = loadedIdSessionRef.current;
@@ -446,7 +461,7 @@ export function ChatPage({
         }
         return;
       }
-      setIsReady(true);
+      // setIsReady(true);
       const shouldScrollToBottom =
         visibleRange.get(existingChatSessionId) === undefined ||
         visibleRange.get(existingChatSessionId)?.end == 0;
@@ -1068,6 +1083,7 @@ export function ChatPage({
     alternativeAssistantOverride = null,
     modelOverRide,
     regenerationRequest,
+    overrideFileDescriptors,
   }: {
     messageIdToResend?: number;
     messageOverride?: string;
@@ -1077,6 +1093,7 @@ export function ChatPage({
     alternativeAssistantOverride?: Persona | null;
     modelOverRide?: LlmOverride;
     regenerationRequest?: RegenerationRequest | null;
+    overrideFileDescriptors?: FileDescriptor[];
   } = {}) => {
     let frozenSessionId = currentSessionId();
     updateCanContinue(false, frozenSessionId);
@@ -1218,7 +1235,7 @@ export function ChatPage({
         signal: controller.signal, // Add this line
         message: currMessage,
         alternateAssistantId: currentAssistantId,
-        fileDescriptors: currentMessageFiles,
+        fileDescriptors: overrideFileDescriptors || currentMessageFiles,
         parentMessageId:
           regenerationRequest?.parentMessage.messageId ||
           lastSuccessfulMessageId,
@@ -1803,6 +1820,7 @@ export function ChatPage({
     end: 0,
     mostVisibleMessageId: null,
   };
+  useSendMessageToParent();
 
   useEffect(() => {
     if (noAssistants) {
@@ -1877,6 +1895,7 @@ export function ChatPage({
 
     handleSlackChatRedirect();
   }, [searchParams, router]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey) {
@@ -1945,6 +1964,10 @@ export function ChatPage({
       });
     };
   }
+  if (!user) {
+    redirect("/auth/login");
+  }
+
   if (noAssistants)
     return (
       <>
@@ -2027,7 +2050,11 @@ export function ChatPage({
 
       {retrievalEnabled && documentSidebarToggled && settings?.isMobile && (
         <div className="md:hidden">
-          <Modal noPadding noScroll>
+          <Modal
+            onOutsideClick={() => setDocumentSidebarToggled(false)}
+            noPadding
+            noScroll
+          >
             <ChatFilters
               setPresentingDocument={setPresentingDocument}
               modal={true}
@@ -2234,7 +2261,7 @@ export function ChatPage({
                 />
               )}
 
-              {documentSidebarInitialWidth !== undefined && isReady ? (
+              {true ? (
                 <Dropzone onDrop={handleImageUpload} noClick>
                   {({ getRootProps }) => (
                     <div className="flex h-full w-full">
@@ -2315,7 +2342,8 @@ export function ChatPage({
                           {messageHistory.length === 0 &&
                             !isFetchingChatMessages &&
                             currentSessionChatState == "input" &&
-                            !loadingError && (
+                            !loadingError &&
+                            !submittedMessage && (
                               <div className="h-full w-[95%] mx-auto mt-12 flex flex-col justify-center items-center">
                                 <ChatIntro selectedPersona={liveAssistant} />
 
@@ -2332,7 +2360,7 @@ export function ChatPage({
                                   currentSessionChatState == "input" &&
                                   !loadingError &&
                                   allAssistants.length > 1 && (
-                                    <div className="mx-auto px-4 w-full max-w-[750px] flex flex-col items-center">
+                                    <div className="mobile:hidden mx-auto px-4 w-full max-w-[750px] flex flex-col items-center">
                                       <Separator className="mx-2 w-full my-12" />
                                       <div className="text-sm text-black font-medium mb-4">
                                         Recent Assistants
@@ -2351,7 +2379,7 @@ export function ChatPage({
 
                           <div
                             className={
-                              "-ml-4 w-full mx-auto " +
+                              "desktop:-ml-4 w-full mx-auto " +
                               "absolute mobile:top-0 desktop:top-12 left-0 " +
                               (settings?.enterpriseSettings
                                 ?.two_lines_for_chat_header
@@ -2762,6 +2790,34 @@ export function ChatPage({
                               </div>
                             )}
                             <ChatInputBar
+                              llmOverrideManager={llmOverrideManager}
+                              selectChromeUrl={(chromeUrl: string) => {
+                                setSelectedChromeUrls([
+                                  ...selectedChromeUrls,
+                                  chromeUrl,
+                                ]);
+                                setchromSentUrls((chromSentUrls: string[]) =>
+                                  chromSentUrls.filter(
+                                    (url) => url !== chromeUrl
+                                  )
+                                );
+                              }}
+                              selectedChromeUrls={selectedChromeUrls}
+                              removeSelectedChromeUrl={(chromeUrl: string) => {
+                                setSelectedChromeUrls(
+                                  selectedChromeUrls.filter(
+                                    (url) => url !== chromeUrl
+                                  )
+                                );
+                              }}
+                              chromSentUrls={chromSentUrls}
+                              removeChromeSentUrls={(chromSentUrl: string) => {
+                                setchromSentUrls(
+                                  chromSentUrls.filter(
+                                    (url) => url !== chromSentUrl
+                                  )
+                                );
+                              }}
                               removeDocs={() => {
                                 clearSelectedDocuments();
                               }}

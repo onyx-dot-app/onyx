@@ -4,8 +4,10 @@ import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { ChatProvider } from "@/components/context/ChatContext";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
-import WrappedChat from "./WrappedChat";
 import { cookies } from "next/headers";
+import { NEXT_PUBLIC_ENABLE_CHROME_EXTENSION } from "@/lib/constants";
+import NRFPage from "./NRFPage";
+import { NRFPreferencesProvider } from "../../components/context/NRFPreferencesContext";
 
 export default async function Page(props: {
   searchParams: Promise<{ [key: string]: string }>;
@@ -14,10 +16,13 @@ export default async function Page(props: {
   noStore();
   const requestCookies = await cookies();
   const data = await fetchChatData(searchParams);
-  const defaultSidebarOff = searchParams.defaultSidebarOff === "true";
 
   if ("redirect" in data) {
     redirect(data.redirect);
+  }
+
+  if (!NEXT_PUBLIC_ENABLE_CHROME_EXTENSION) {
+    redirect("/chat");
   }
 
   const {
@@ -28,7 +33,6 @@ export default async function Page(props: {
     tags,
     llmProviders,
     folders,
-    toggleSidebar,
     openedFolders,
     defaultAssistantId,
     shouldShowWelcomeModal,
@@ -36,29 +40,31 @@ export default async function Page(props: {
   } = data;
 
   return (
-    <>
+    <div className="w-full h-full bg-black">
       <InstantSSRAutoRefresh />
       {shouldShowWelcomeModal && (
         <WelcomeModal user={user} requestCookies={requestCookies} />
       )}
-      <ChatProvider
-        value={{
-          chatSessions,
-          availableSources,
-          ccPairs,
-          documentSets,
-          tags,
-          availableDocumentSets: documentSets,
-          availableTags: tags,
-          llmProviders,
-          folders,
-          openedFolders,
-          shouldShowWelcomeModal,
-          defaultAssistantId,
-        }}
-      >
-        <WrappedChat initiallyToggled={!defaultSidebarOff && toggleSidebar} />
-      </ChatProvider>
-    </>
+      <NRFPreferencesProvider>
+        <ChatProvider
+          value={{
+            chatSessions,
+            availableSources,
+            ccPairs,
+            documentSets,
+            tags,
+            availableDocumentSets: documentSets,
+            availableTags: tags,
+            llmProviders,
+            folders,
+            openedFolders,
+            shouldShowWelcomeModal,
+            defaultAssistantId,
+          }}
+        >
+          <NRFPage />
+        </ChatProvider>
+      </NRFPreferencesProvider>
+    </div>
   );
 }

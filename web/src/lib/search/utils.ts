@@ -1,4 +1,5 @@
-import { Tag, ValidSources } from "../types";
+import { getSourceMetadata } from "../sources";
+import { DocumentSet, Tag, ValidSources } from "../types";
 import {
   Filters,
   LoadedOnyxDocument,
