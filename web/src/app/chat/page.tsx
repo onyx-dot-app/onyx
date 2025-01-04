@@ -26,9 +26,7 @@ export default async function Page(props: {
     documentSets,
     tags,
     llmProviders,
-    folders,
     toggleSidebar,
-    openedFolders,
     defaultAssistantId,
     shouldShowWelcomeModal,
     ccPairs,
@@ -50,8 +48,6 @@ export default async function Page(props: {
           availableDocumentSets: documentSets,
           availableTags: tags,
           llmProviders,
-          folders,
-          openedFolders,
           shouldShowWelcomeModal,
           defaultAssistantId,
         }}

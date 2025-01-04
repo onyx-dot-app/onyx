@@ -313,6 +313,7 @@ class VespaIndex(DocumentIndex):
         with updating the associated permissions. Assumes that a document will not be split into
         multiple chunk batches calling this function multiple times, otherwise only the last set of
         chunks will be kept"""
+
         # IMPORTANT: This must be done one index at a time, do not use secondary index here
         cleaned_chunks = [clean_chunk_id_copy(chunk) for chunk in chunks]
 

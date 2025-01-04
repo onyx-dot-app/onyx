@@ -1,0 +1,9 @@
+# This file is used to seed the default chat folder for a user
+
+default_folder:
+  name: "Chat"
+  description: "This is the default chat folder for a user"
+
+
+  name: "Recent Documents"
+  description: "This is the default folder for users to store their recent documents"

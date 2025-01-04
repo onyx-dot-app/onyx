@@ -1,5 +1,12 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
-import { FiPlusCircle, FiPlus, FiInfo, FiX, FiSearch } from "react-icons/fi";
+import {
+  FiPlusCircle,
+  FiPlus,
+  FiInfo,
+  FiX,
+  FiSearch,
+  FiFolder,
+} from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { Persona } from "@/app/admin/assistants/interfaces";
 
@@ -30,12 +37,20 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { ChatState } from "../types";
 import UnconfiguredProviderText from "@/components/chat_search/UnconfiguredProviderText";
 import { useAssistants } from "@/components/context/AssistantsContext";
-import { XIcon } from "lucide-react";
+import AnimatedToggle from "@/components/search/SearchBar";
+import { Popup } from "@/components/admin/connectors/Popup";
+import { AssistantsTab } from "../modal/configuration/AssistantsTab";
+import { IconType } from "react-icons";
+import { LlmTab } from "../modal/configuration/LlmTab";
+import { FolderIcon, XIcon } from "lucide-react";
 import FiltersDisplay from "./FilterDisplay";
+import { UserFolder } from "@/app/my-documents/FilePicker";
 
 const MAX_INPUT_HEIGHT = 200;
 
 interface ChatInputBarProps {
+  removeFilters: () => void;
+
   removeDocs: () => void;
   openModelSettings: () => void;
   showDocs: () => void;
@@ -46,6 +61,8 @@ interface ChatInputBarProps {
   stopGenerating: () => void;
   onSubmit: () => void;
   filterManager: FilterManager;
+  folders: UserFolder[];
+  removeFolder: (folderId: number) => void;
   chatState: ChatState;
   alternativeAssistant: Persona | null;
   // assistants
@@ -57,10 +74,14 @@ interface ChatInputBarProps {
   handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   toggleFilters?: () => void;
+  toggleMyDocuments: () => void;
 }
 
 export function ChatInputBar({
+  removeFilters,
   removeDocs,
+  removeFolder,
+  folders,
   openModelSettings,
   showDocs,
   showConfigureAPIKey,
@@ -82,6 +103,7 @@ export function ChatInputBar({
   textAreaRef,
   alternativeAssistant,
   toggleFilters,
+  toggleMyDocuments,
 }: ChatInputBarProps) {
   useEffect(() => {
     const textarea = textAreaRef.current;
@@ -322,9 +344,35 @@ export function ChatInputBar({
               </div>
             )}
 
-            {(selectedDocuments.length > 0 || files.length > 0) && (
+            {(selectedDocuments.length > 0 ||
+              files.length > 0 ||
+              folders.length > 0) && (
               <div className="flex gap-x-2 px-2 pt-2">
                 <div className="flex gap-x-1 px-2 overflow-visible overflow-x-scroll items-end miniscroll">
+                  {folders.map((folder) => (
+                    <button
+                      key={folder.id}
+                      onClick={() =>
+                        window.open(`/my-documents?path=${folder.id}`, "_blank")
+                      }
+                      className="flex-none relative overflow-visible flex items-center gap-x-2 h-10 px-3 rounded-lg bg-background-150 hover:bg-background-200 transition-colors duration-300 cursor-pointer max-w-[150px]"
+                    >
+                      <FolderIcon size={20} />
+                      <span className="text-sm whitespace-nowrap overflow-hidden text-ellipsis">
+                        {folder.name}
+                      </span>
+                      <XIcon
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFolder(folder.id);
+                          // Remove this folder
+                        }}
+                        size={16}
+                        className="text-text-400 hover:text-text-600 ml-auto"
+                      />
+                    </button>
+                  ))}
+
                   {selectedDocuments.length > 0 && (
                     <button
                       onClick={showDocs}
@@ -445,6 +493,14 @@ export function ChatInputBar({
                   input.click();
                 }}
               />
+
+              <ChatInputOption
+                flexPriority="stiff"
+                name="Documents"
+                Icon={FiFolder}
+                onClick={toggleMyDocuments}
+              />
+
               {toggleFilters && (
                 <ChatInputOption
                   flexPriority="stiff"

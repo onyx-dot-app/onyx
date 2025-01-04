@@ -9,11 +9,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Download, XIcon, ZoomIn, ZoomOut } from "lucide-react";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { MinimalMarkdown } from "./MinimalMarkdown";
 
 interface TextViewProps {
-  presentingDocument: OnyxDocument;
+  presentingDocument: MinimalOnyxDocument;
   onClose: () => void;
 }
 export default function TextView({

@@ -1,16 +1,9 @@
 "use client";
 
 import React, { createContext, useContext, useState } from "react";
-import {
-  CCPairBasicInfo,
-  DocumentSet,
-  Tag,
-  User,
-  ValidSources,
-} from "@/lib/types";
+import { CCPairBasicInfo, DocumentSet, Tag, ValidSources } from "@/lib/types";
 import { ChatSession } from "@/app/chat/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { Folder } from "@/app/chat/folders/interfaces";
 
 interface ChatContextProps {
   chatSessions: ChatSession[];
@@ -21,8 +14,6 @@ interface ChatContextProps {
   availableDocumentSets: DocumentSet[];
   availableTags: Tag[];
   llmProviders: LLMProviderDescriptor[];
-  folders: Folder[];
-  openedFolders: Record<string, boolean>;
   shouldShowWelcomeModal?: boolean;
   shouldDisplaySourcesIncompleteModal?: boolean;
   defaultAssistantId?: number;

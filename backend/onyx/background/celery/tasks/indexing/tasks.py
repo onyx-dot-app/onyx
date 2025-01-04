@@ -963,7 +963,7 @@ def connector_indexing_task_wrapper(
 
 
 def connector_indexing_task(
-    index_attempt_id: int,
+    index_attempt_id: int | None,
     cc_pair_id: int,
     search_settings_id: int,
     tenant_id: str | None,
