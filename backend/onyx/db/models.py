@@ -504,6 +504,7 @@ class Document(Base):
     last_synced: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+
     # The following are not attached to User because the account/email may not be known
     # within Onyx
     # Something like the document creator

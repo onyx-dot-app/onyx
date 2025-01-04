@@ -42,11 +42,14 @@ from onyx.document_index.vespa.deletion import delete_vespa_docs
 from onyx.document_index.vespa.indexing_utils import batch_index_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import clean_chunk_id_copy
 from onyx.document_index.vespa.indexing_utils import (
-    get_existing_documents_from_chunks,
+    find_existing_docs_in_vespa_by_doc_id,
 )
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
+)
+from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
+    build_deletion_selection_query,
 )
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
@@ -307,47 +310,36 @@ class VespaIndex(DocumentIndex):
     def index(
         self,
         chunks: list[DocMetadataAwareIndexChunk],
-        fresh_index: bool = False,
     ) -> set[DocumentInsertionRecord]:
-        """Receive a list of chunks from a batch of documents and index the chunks into Vespa along
-        with updating the associated permissions. Assumes that a document will not be split into
-        multiple chunk batches calling this function multiple times, otherwise only the last set of
-        chunks will be kept"""
-        # IMPORTANT: This must be done one index at a time, do not use secondary index here
+        """
+        Index a list of chunks into Vespa. We rely on 'current_index_time'
+        to keep track of when each chunk was added/updated in the index. We also raise a ValueError
+        if any chunk is missing a 'current_index_time' timestamp.
+        """
+
+        # Clean chunks if needed (remove invalid chars, etc.)
         cleaned_chunks = [clean_chunk_id_copy(chunk) for chunk in chunks]
 
-        existing_docs: set[str] = set()
+        #  We will store the set of doc_ids that previously existed in Vespa
+        doc_ids_to_current_index_time = {
+            chunk.source_document.id: chunk.current_index_time
+            for chunk in cleaned_chunks
+        }
+        existing_doc_ids = set()
 
-        # NOTE: using `httpx` here since `requests` doesn't support HTTP2. This is beneficial for
-        # indexing / updates / deletes since we have to make a large volume of requests.
-        with (
-            concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
-            get_vespa_http_client() as http_client,
-        ):
-            if not fresh_index:
-                # Check for existing documents, existing documents need to have all of their chunks deleted
-                # prior to indexing as the document size (num chunks) may have shrunk
-                first_chunks = [
-                    chunk for chunk in cleaned_chunks if chunk.chunk_id == 0
-                ]
-                for chunk_batch in batch_generator(first_chunks, BATCH_SIZE):
-                    existing_docs.update(
-                        get_existing_documents_from_chunks(
-                            chunks=chunk_batch,
-                            index_name=self.index_name,
-                            http_client=http_client,
-                            executor=executor,
-                        )
-                    )
+        with get_vespa_http_client() as http_client, concurrent.futures.ThreadPoolExecutor(
+            max_workers=NUM_THREADS
+        ) as executor:
+            # a) Find which docs already exist in Vespa
+            existing_doc_ids = find_existing_docs_in_vespa_by_doc_id(
+                doc_ids=list(doc_ids_to_current_index_time.keys()),
+                index_name=self.index_name,
+                http_client=http_client,
+                executor=executor,
+            )
 
-                for doc_id_batch in batch_generator(existing_docs, BATCH_SIZE):
-                    delete_vespa_docs(
-                        document_ids=doc_id_batch,
-                        index_name=self.index_name,
-                        http_client=http_client,
-                        executor=executor,
-                    )
-
+            print("LIST OF EXISTING DOCS", existing_doc_ids)
+            # b) Feed new/updated chunks in batches
             for chunk_batch in batch_generator(cleaned_chunks, BATCH_SIZE):
                 batch_index_vespa_chunks(
                     chunks=chunk_batch,
@@ -357,14 +349,34 @@ class VespaIndex(DocumentIndex):
                     executor=executor,
                 )
 
-        all_doc_ids = {chunk.source_document.id for chunk in cleaned_chunks}
+            # c) Remove chunks with using versioning scheme 'current_index_time'
+            for doc_id in existing_doc_ids:
+                version_cutoff = int(doc_ids_to_current_index_time[doc_id].timestamp())
+                query_str = build_deletion_selection_query(
+                    doc_id=doc_id,
+                    version_cutoff=version_cutoff,
+                    doc_type=self.index_name,
+                )
+                delete_url = (
+                    f"{DOCUMENT_ID_ENDPOINT.format(index_name=self.index_name)}/"
+                    f"?{query_str}&cluster={DOCUMENT_INDEX_NAME}"
+                )
+                try:
+                    resp = http_client.delete(delete_url)
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError:
+                    logger.exception(
+                        f"Selection-based delete failed for doc_id='{doc_id}'"
+                    )
+                    raise
 
+        # Produce insertion records specifying which documents existed prior
         return {
             DocumentInsertionRecord(
                 document_id=doc_id,
-                already_existed=doc_id in existing_docs,
+                already_existed=(doc_id in existing_doc_ids),
             )
-            for doc_id in all_doc_ids
+            for doc_id in doc_ids_to_current_index_time
         }
 
     @staticmethod

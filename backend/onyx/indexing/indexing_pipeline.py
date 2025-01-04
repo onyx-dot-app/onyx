@@ -1,5 +1,7 @@
 import traceback
 from collections.abc import Callable
+from datetime import datetime
+from datetime import timezone
 from functools import partial
 from http import HTTPStatus
 from typing import Protocol
@@ -400,6 +402,8 @@ def index_doc_batch(
                     else DEFAULT_BOOST
                 ),
                 tenant_id=tenant_id,
+                # Use a timezone-aware datetime, here we set to current UTC time
+                current_index_time=datetime.now(tz=timezone.utc),
             )
             for chunk in chunks_with_embeddings
         ]
