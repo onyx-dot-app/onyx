@@ -418,14 +418,14 @@ def update_docs_last_modified__no_commit(
 
 def update_docs_chunk_count__no_commit(
     document_ids: list[str],
-    document_id_to_current_chunks_indexed: dict[str, int],
+    doc_id_to_chunk_count: dict[str, int],
     db_session: Session,
 ) -> None:
     documents_to_update = (
         db_session.query(DbDocument).filter(DbDocument.id.in_(document_ids)).all()
     )
     for doc in documents_to_update:
-        doc.chunk_count = document_id_to_current_chunks_indexed[doc.id]
+        doc.chunk_count = doc_id_to_chunk_count[doc.id]
 
 
 def mark_document_as_modified(

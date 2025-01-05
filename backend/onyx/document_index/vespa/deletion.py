@@ -5,7 +5,7 @@ from uuid import UUID
 import httpx
 from retry import retry
 
-from onyx.document_index.vespa.indexing_utils import _check_for_chunk_existence
+from onyx.document_index.vespa.indexing_utils import _does_doc_chunk_exist
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import NUM_THREADS
 from onyx.utils.logger import setup_logger
@@ -42,7 +42,7 @@ def delete_vespa_chunks(
     http_client: httpx.Client,
     executor: concurrent.futures.ThreadPoolExecutor | None = None,
 ) -> None:
-    if not _check_for_chunk_existence(doc_chunk_ids[0], index_name):
+    if not _does_doc_chunk_exist(doc_chunk_ids[0], index_name, http_client):
         raise ValueError(f"Chunk {doc_chunk_ids[0]} does not exist in Vespa!!!")
 
     external_executor = True

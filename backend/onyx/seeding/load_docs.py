@@ -25,6 +25,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.index_attempt import mock_successful_index_attempt
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import IndexBatchParams
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocMetadataAwareIndexChunk
@@ -220,10 +221,12 @@ def seed_initial_documents(
     index_with_retries = retry_builder(tries=15)(document_index.index)
     index_with_retries(
         chunks=chunks,
-        document_id_to_previous_chunks_indexed={},
-        document_id_to_current_chunks_indexed={},
-        large_chunks_enabled=False,
-        tenant_id=tenant_id,
+        index_batch_params=IndexBatchParams(
+            doc_id_to_previous_chunks_indexed={},
+            doc_id_to_current_chunks_indexed={},
+            large_chunks_enabled=False,
+            tenant_id=tenant_id,
+        ),
     )
 
     # Mock a run for the UI even though it did not actually call out to anything

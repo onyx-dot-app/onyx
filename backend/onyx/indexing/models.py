@@ -152,13 +152,3 @@ class IndexingSetting(EmbeddingModelDetail):
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
         )
-
-
-class MinimalDocChunkIDInformation(BaseModel):
-    doc_id: str
-    chunk_start_index: int
-
-
-class DocChunkIDInformation(MinimalDocChunkIDInformation):
-    old_version: bool
-    chunk_end_index: int

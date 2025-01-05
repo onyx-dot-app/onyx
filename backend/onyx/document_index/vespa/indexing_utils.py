@@ -13,7 +13,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 )
 from onyx.document_index.document_index_utils import get_uuid_from_chunk
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info_old
-from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
+from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
 from onyx.document_index.vespa.shared_utils.utils import remove_invalid_unicode_chars
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
@@ -45,21 +45,15 @@ from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import TITLE_EMBEDDING
 from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import MinimalDocChunkIDInformation
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
 @retry(tries=3, delay=1, backoff=2)
-def _does_document_exist(
-    doc_chunk_id: str,
-    index_name: str,
-    http_client: httpx.Client,
+def _does_doc_chunk_exist(
+    doc_chunk_id: uuid.UUID, index_name: str, http_client: httpx.Client
 ) -> bool:
-    """Returns whether the document already exists and the users/group whitelists
-    Specifically in this case, document refers to a vespa document which is equivalent to a Onyx
-    chunk. This checks for whether the chunk exists already in the index"""
     doc_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}"
     doc_fetch_response = http_client.get(doc_url)
     if doc_fetch_response.status_code == 404:
@@ -102,8 +96,8 @@ def get_existing_documents_from_chunks(
     try:
         chunk_existence_future = {
             executor.submit(
-                _does_document_exist,
-                str(get_uuid_from_chunk(chunk)),
+                _does_doc_chunk_exist,
+                get_uuid_from_chunk(chunk),
                 index_name,
                 http_client,
             ): chunk
@@ -254,29 +248,20 @@ def clean_chunk_id_copy(
     return clean_chunk
 
 
-def _check_for_chunk_existence(vespa_chunk_id: uuid.UUID, index_name: str) -> bool:
-    vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_chunk_id}"
-    # vesp aurl would be  http://localhost:8081/document/v1/default/danswer_chunk_nomic_ai_nomic_embed_text_v1/docid/
-    try:
-        with get_vespa_http_client() as http_client:
-            res = http_client.get(vespa_url)
-            return res.status_code == 200
-    except Exception:
-        logger.exception("Error checking for chunk existence")
-        return False
-
-
 def check_for_final_chunk_existence(
-    document_id_info: MinimalDocChunkIDInformation, start_index: int, index_name: str
+    minimal_doc_info: MinimalDocumentIndexingInfo,
+    start_index: int,
+    index_name: str,
+    http_client: httpx.Client,
 ) -> int:
     index = start_index
     while True:
         doc_chunk_id = get_uuid_from_chunk_info_old(
-            document_id=document_id_info.doc_id,
+            document_id=minimal_doc_info.doc_id,
             chunk_id=index,
             large_chunk_reference_ids=[],
         )
-        if not _check_for_chunk_existence(doc_chunk_id, index_name):
+        if not _does_doc_chunk_exist(doc_chunk_id, index_name, http_client):
             return index
 
         index += 1

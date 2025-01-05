@@ -17,13 +17,13 @@ from onyx.connectors.models import Document
 from onyx.db.engine import get_session_context_manager
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.vespa.index import VespaIndex
+from onyx.indexing.indexing_pipeline import IndexBatchParams
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.model_server_models import Embedding
-
 
 TOTAL_DOC_SETS = 8
 TOTAL_ACL_ENTRIES_PER_CATEGORY = 80
@@ -107,10 +107,12 @@ def do_insertion(
 ) -> None:
     insertion_records = vespa_index.index(
         chunks=all_chunks,
-        document_id_to_previous_chunks_indexed={},
-        document_id_to_current_chunks_indexed={},
-        tenant_id=POSTGRES_DEFAULT_SCHEMA,
-        large_chunks_enabled=False,
+        index_batch_params=IndexBatchParams(
+            doc_id_to_previous_chunks_indexed={},
+            doc_id_to_current_chunks_indexed={},
+            tenant_id=POSTGRES_DEFAULT_SCHEMA,
+            large_chunks_enabled=False,
+        ),
     )
     print(f"Indexed {len(insertion_records)} documents.")
     print(

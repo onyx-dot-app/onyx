@@ -36,6 +36,7 @@ from onyx.db.tag import create_or_add_document_tag
 from onyx.db.tag import create_or_add_document_tag_list
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentMetadata
+from onyx.document_index.interfaces import IndexBatchParams
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -372,17 +373,17 @@ def index_doc_batch(
     # NOTE: don't need to acquire till here, since this is when the actual race condition
     # with Vespa can occur.
     with prepare_to_modify_documents(db_session=db_session, document_ids=updatable_ids):
-        document_id_to_access_info = get_access_for_documents(
+        doc_id_to_access_info = get_access_for_documents(
             document_ids=updatable_ids, db_session=db_session
         )
-        document_id_to_document_set = {
+        doc_id_to_document_set = {
             document_id: document_sets
             for document_id, document_sets in fetch_document_sets_for_documents(
                 document_ids=updatable_ids, db_session=db_session
             )
         }
 
-        document_id_to_previous_chunks_indexed: dict[str, int | None] = {
+        doc_id_to_previous_chunks_indexed: dict[str, int | None] = {
             document_id: chunk_count
             for document_id, chunk_count in fetch_chunk_counts_for_documents(
                 document_ids=updatable_ids,
@@ -390,7 +391,7 @@ def index_doc_batch(
             )
         }
 
-        document_id_to_current_chunks_indexed: dict[str, int] = {
+        doc_id_to_current_chunks_indexed: dict[str, int] = {
             document_id: len(
                 [
                     chunk
@@ -409,11 +410,9 @@ def index_doc_batch(
         access_aware_chunks = [
             DocMetadataAwareIndexChunk.from_index_chunk(
                 index_chunk=chunk,
-                access=document_id_to_access_info.get(
-                    chunk.source_document.id, no_access
-                ),
+                access=doc_id_to_access_info.get(chunk.source_document.id, no_access),
                 document_sets=set(
-                    document_id_to_document_set.get(chunk.source_document.id, [])
+                    doc_id_to_document_set.get(chunk.source_document.id, [])
                 ),
                 boost=(
                     ctx.id_to_db_doc_map[chunk.source_document.id].boost
@@ -433,10 +432,12 @@ def index_doc_batch(
         # in this set
         insertion_records = document_index.index(
             chunks=access_aware_chunks,
-            document_id_to_previous_chunks_indexed=document_id_to_previous_chunks_indexed,
-            document_id_to_current_chunks_indexed=document_id_to_current_chunks_indexed,
-            tenant_id=tenant_id,
-            large_chunks_enabled=chunker.enable_large_chunks,
+            index_batch_params=IndexBatchParams(
+                doc_id_to_previous_chunks_indexed=doc_id_to_previous_chunks_indexed,
+                doc_id_to_current_chunks_indexed=doc_id_to_current_chunks_indexed,
+                tenant_id=tenant_id,
+                large_chunks_enabled=chunker.enable_large_chunks,
+            ),
         )
 
         successful_doc_ids = [record.document_id for record in insertion_records]
@@ -464,7 +465,7 @@ def index_doc_batch(
 
         update_docs_chunk_count__no_commit(
             document_ids=updatable_ids,
-            document_id_to_current_chunks_indexed=document_id_to_current_chunks_indexed,
+            doc_id_to_chunk_count=doc_id_to_current_chunks_indexed,
             db_session=db_session,
         )
 

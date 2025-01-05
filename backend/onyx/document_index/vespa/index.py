@@ -28,6 +28,9 @@ from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.document_index.document_index_utils import assemble_document_chunk_info
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentInsertionRecord
+from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
+from onyx.document_index.interfaces import IndexBatchParams
+from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
 from onyx.document_index.interfaces import UpdateRequest
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
@@ -68,9 +71,7 @@ from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.document_index.vespa_constants import VESPA_DIM_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
 from onyx.document_index.vespa_constants import YQL_BASE
-from onyx.indexing.models import DocChunkIDInformation
 from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import MinimalDocChunkIDInformation
 from onyx.key_value_store.factory import get_kv_store
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
@@ -308,15 +309,21 @@ class VespaIndex(DocumentIndex):
     def index(
         self,
         chunks: list[DocMetadataAwareIndexChunk],
-        document_id_to_previous_chunks_indexed: dict[str, int | None],
-        document_id_to_current_chunks_indexed: dict[str, int],
-        tenant_id: str | None,
-        large_chunks_enabled: bool,
+        index_batch_params: IndexBatchParams,
     ) -> set[DocumentInsertionRecord]:
         """Receive a list of chunks from a batch of documents and index the chunks into Vespa along
         with updating the associated permissions. Assumes that a document will not be split into
         multiple chunk batches calling this function multiple times, otherwise only the last set of
         chunks will be kept"""
+
+        doc_id_to_previous_chunks_indexed = (
+            index_batch_params.doc_id_to_previous_chunks_indexed
+        )
+        doc_id_to_current_chunks_indexed = (
+            index_batch_params.doc_id_to_current_chunks_indexed
+        )
+        tenant_id = index_batch_params.tenant_id
+        large_chunks_enabled = index_batch_params.large_chunks_enabled
 
         # IMPORTANT: This must be done one index at a time, do not use secondary index here
         cleaned_chunks = [clean_chunk_id_copy(chunk) for chunk in chunks]
@@ -329,60 +336,47 @@ class VespaIndex(DocumentIndex):
             concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
             get_vespa_http_client() as http_client,
         ):
-            # Ascertain which chunks are already in Vespa
-            doc_infos: list[DocChunkIDInformation] = []
-            for doc_id, _ in document_id_to_previous_chunks_indexed.items():
-                final_chunk_index = document_id_to_previous_chunks_indexed.get(
-                    doc_id, None
+            enriched_doc_infos: list[EnrichedDocumentIndexingInfo] = []
+            for document_id, _ in doc_id_to_previous_chunks_indexed.items():
+                last_indexed_chunk = doc_id_to_previous_chunks_indexed.get(
+                    document_id, None
                 )
-                old_version = False
-                if final_chunk_index is None:
-                    old_version = True
-                    doc_chunk_info = MinimalDocChunkIDInformation(
-                        doc_id=doc_id,
-                        chunk_start_index=document_id_to_current_chunks_indexed.get(
-                            doc_id, 0
+                is_old_version = False
+                if last_indexed_chunk is None:
+                    is_old_version = True
+                    minimal_doc_info = MinimalDocumentIndexingInfo(
+                        doc_id=document_id,
+                        chunk_start_index=doc_id_to_current_chunks_indexed.get(
+                            document_id, 0
                         ),
                     )
-                    final_chunk_index = check_for_final_chunk_existence(
-                        document_id_info=doc_chunk_info,
-                        start_index=document_id_to_current_chunks_indexed[doc_id],
+                    last_indexed_chunk = check_for_final_chunk_existence(
+                        minimal_doc_info=minimal_doc_info,
+                        start_index=doc_id_to_current_chunks_indexed[document_id],
                         index_name=self.index_name,
+                        http_client=http_client,
                     )
 
-                doc_chunk_info_with_index = DocChunkIDInformation(
-                    doc_id=doc_id,
-                    chunk_start_index=document_id_to_current_chunks_indexed.get(
-                        doc_id, 0
+                enriched_doc_info = EnrichedDocumentIndexingInfo(
+                    doc_id=document_id,
+                    chunk_start_index=doc_id_to_current_chunks_indexed.get(
+                        document_id, 0
                     ),
-                    chunk_end_index=final_chunk_index,
-                    old_version=old_version,
+                    chunk_end_index=last_indexed_chunk,
+                    old_version=is_old_version,
                 )
-                doc_infos.append(doc_chunk_info_with_index)
+                enriched_doc_infos.append(enriched_doc_info)
 
             # Now, for each doc, we know exactly where to start and end our deletion
-            # So let's genrate the chunk IDs for each chunk to delete
-            doc_chunk_ids_to_delete = assemble_document_chunk_info(
-                document_id_info_list=doc_infos,
+            # So let's generate the chunk IDs for each chunk to delete
+            chunks_to_delete = assemble_document_chunk_info(
+                enriched_document_info_list=enriched_doc_infos,
                 tenant_id=tenant_id,
                 large_chunks_enabled=large_chunks_enabled,
             )
 
-            # We need the number of chunks for the current docs
-            # (for referencing during this step and also for updating DB)
-
-            # For those that have no count info, we need to iterate through indices in chunks
-            # (starting past current number, until chunk does not exist)
-            # Then, we can add that to the document_id_to_chunk_count.
-
-            # Once we have all the chunk counts (and whether or not large chunks are enabled),
-            # we can generate the chunk IDs for every chunk and delete every single one.
-            # (though we'll need to track which ones are using the old system and which ones are using the new one)
-
             # Delete old Vespa documents
-            for doc_chunk_ids_batch in batch_generator(
-                doc_chunk_ids_to_delete, BATCH_SIZE
-            ):
+            for doc_chunk_ids_batch in batch_generator(chunks_to_delete, BATCH_SIZE):
                 delete_vespa_chunks(
                     doc_chunk_ids=doc_chunk_ids_batch,
                     index_name=self.index_name,
@@ -629,26 +623,6 @@ class VespaIndex(DocumentIndex):
                 )
 
         return total_chunks_updated
-
-    def delete(self, doc_ids: list[str]) -> None:
-        logger.info(f"Deleting {len(doc_ids)} documents from Vespa")
-
-        doc_ids = [replace_invalid_doc_id_characters(doc_id) for doc_id in doc_ids]
-
-        # NOTE: using `httpx` here since `requests` doesn't support HTTP2. This is beneficial for
-        # indexing / updates / deletes since we have to make a large volume of requests.
-        # TODO: incorporate
-
-        # with get_vespa_http_client() as http_client:
-        #     index_names = [self.index_name]
-        #     if self.secondary_index_name:
-        #         index_names.append(self.secondary_index_name)
-
-        # for index_name in index_names:
-        #     delete_vespa_chunks(
-        #         document_ids=doc_ids, index_name=index_name, http_client=http_client
-        #     )
-        return
 
     def delete_single(self, doc_id: str) -> int:
         """Possibly faster overall than the delete method due to using a single

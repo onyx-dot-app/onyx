@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
-from onyx.indexing.models import DocChunkIDInformation
+from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 
 
@@ -38,20 +38,21 @@ def translate_boost_count_to_multiplier(boost: int) -> float:
 
 
 def assemble_document_chunk_info(
-    document_id_info_list: list[DocChunkIDInformation],
+    enriched_document_info_list: list[EnrichedDocumentIndexingInfo],
     tenant_id: str | None,
     large_chunks_enabled: bool,
 ) -> list[UUID]:
     doc_chunk_ids = []
 
-    for document_id_info in document_id_info_list:
+    for enriched_document_info in enriched_document_info_list:
         for chunk_index in range(
-            document_id_info.chunk_start_index, document_id_info.chunk_end_index
+            enriched_document_info.chunk_start_index,
+            enriched_document_info.chunk_end_index,
         ):
-            if not document_id_info.old_version:
+            if not enriched_document_info.old_version:
                 doc_chunk_ids.append(
                     get_uuid_from_chunk_info(
-                        document_id=document_id_info.doc_id,
+                        document_id=enriched_document_info.doc_id,
                         chunk_id=chunk_index,
                         tenant_id=tenant_id,
                     )
@@ -59,7 +60,7 @@ def assemble_document_chunk_info(
             else:
                 doc_chunk_ids.append(
                     get_uuid_from_chunk_info_old(
-                        document_id=document_id_info.doc_id,
+                        document_id=enriched_document_info.doc_id,
                         chunk_id=chunk_index,
                     )
                 )
@@ -69,12 +70,12 @@ def assemble_document_chunk_info(
                 large_chunk_reference_ids = [
                     large_chunk_id + i
                     for i in range(4)
-                    if large_chunk_id + i < document_id_info.chunk_end_index
+                    if large_chunk_id + i < enriched_document_info.chunk_end_index
                 ]
-                if document_id_info.old_version:
+                if enriched_document_info.old_version:
                     doc_chunk_ids.append(
                         get_uuid_from_chunk_info_old(
-                            document_id=document_id_info.doc_id,
+                            document_id=enriched_document_info.doc_id,
                             chunk_id=large_chunk_id,
                             large_chunk_reference_ids=large_chunk_reference_ids,
                         )
@@ -82,7 +83,7 @@ def assemble_document_chunk_info(
                 else:
                     doc_chunk_ids.append(
                         get_uuid_from_chunk_info(
-                            document_id=document_id_info.doc_id,
+                            document_id=enriched_document_info.doc_id,
                             chunk_id=large_chunk_id,
                             tenant_id=tenant_id,
                             large_chunk_id=large_chunk_id,

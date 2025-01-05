@@ -36,6 +36,38 @@ class VespaChunkRequest:
 
 
 @dataclass
+class IndexBatchParams:
+    """
+    Information necessary for efficiently indexing a batch of documents
+    """
+
+    doc_id_to_previous_chunks_indexed: dict[str, int | None]
+    doc_id_to_current_chunks_indexed: dict[str, int]
+    tenant_id: str | None
+    large_chunks_enabled: bool
+
+
+@dataclass
+class MinimalDocumentIndexingInfo:
+    """
+    Minimal information necessary for indexing a document
+    """
+
+    doc_id: str
+    chunk_start_index: int
+
+
+@dataclass
+class EnrichedDocumentIndexingInfo(MinimalDocumentIndexingInfo):
+    """
+    Enriched information necessary for indexing a document, including version and chunk range.
+    """
+
+    old_version: bool
+    chunk_end_index: int
+
+
+@dataclass
 class DocumentMetadata:
     """
     Document information that needs to be inserted into Postgres on first time encountering this
@@ -148,10 +180,7 @@ class Indexable(abc.ABC):
     def index(
         self,
         chunks: list[DocMetadataAwareIndexChunk],
-        document_id_to_previous_chunks_indexed: dict[str, int | None],
-        document_id_to_current_chunks_indexed: dict[str, int],
-        tenant_id: str | None,
-        large_chunks_enabled: bool,
+        index_batch_params: IndexBatchParams,
     ) -> set[DocumentInsertionRecord]:
         """
         Takes a list of document chunks and indexes them in the document index
@@ -198,15 +227,15 @@ class Deletable(abc.ABC):
         """
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def delete(self, doc_ids: list[str]) -> None:
-        """
-        Given a list of document ids, hard delete them from the document index
+    # @abc.abstractmethod
+    # def delete(self, doc_ids: list[str]) -> None:
+    #     """
+    #     Given a list of document ids, hard delete them from the document index
 
-        Parameters:
-        - doc_ids: list of document ids as specified by the connector
-        """
-        raise NotImplementedError
+    #     Parameters:
+    #     - doc_ids: list of document ids as specified by the connector
+    #     """
+    #     raise NotImplementedError
 
 
 class Updatable(abc.ABC):
