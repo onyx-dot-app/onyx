@@ -1,5 +1,6 @@
 import math
 import uuid
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -40,7 +41,7 @@ def assemble_document_chunk_info(
     document_id_info_list: list[DocChunkIDInformation],
     tenant_id: str | None,
     large_chunks_enabled: bool,
-) -> list[uuid.UUID]:
+) -> list[UUID]:
     doc_chunk_ids = []
 
     for document_id_info in document_id_info_list:
@@ -97,7 +98,7 @@ def get_uuid_from_chunk_info(
     chunk_id: int,
     tenant_id: str | None,
     large_chunk_id: int | None = None,
-) -> uuid.UUID:
+) -> UUID:
     doc_str = document_id
 
     # Web parsing URL duplicate catching
@@ -116,7 +117,7 @@ def get_uuid_from_chunk_info(
 
 def get_uuid_from_chunk_info_old(
     *, document_id: str, chunk_id: int, large_chunk_reference_ids: list[int] = []
-) -> uuid.UUID:
+) -> UUID:
     doc_str = document_id
 
     # Web parsing URL duplicate catching
@@ -144,7 +145,7 @@ def get_uuid_from_chunk(chunk: DocMetadataAwareIndexChunk) -> uuid.UUID:
 
 def get_uuid_from_chunk_old(
     chunk: DocMetadataAwareIndexChunk, large_chunk_reference_ids: list[int] = []
-) -> uuid.UUID:
+) -> UUID:
     return get_uuid_from_chunk_info_old(
         document_id=chunk.source_document.id,
         chunk_id=chunk.chunk_id,

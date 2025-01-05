@@ -1,6 +1,6 @@
 import concurrent.futures
-import uuid
 from typing import cast
+from uuid import UUID
 
 import httpx
 from retry import retry
@@ -24,7 +24,7 @@ def _retryable_http_delete(http_client: httpx.Client, url: str) -> None:
 
 @retry(tries=3, delay=1, backoff=2)
 def _delete_vespa_chunk(
-    doc_chunk_id: uuid.UUID, index_name: str, http_client: httpx.Client
+    doc_chunk_id: UUID, index_name: str, http_client: httpx.Client
 ) -> None:
     try:
         _retryable_http_delete(
@@ -37,7 +37,7 @@ def _delete_vespa_chunk(
 
 
 def delete_vespa_chunks(
-    doc_chunk_ids: list[uuid.UUID],
+    doc_chunk_ids: list[UUID],
     index_name: str,
     http_client: httpx.Client,
     executor: concurrent.futures.ThreadPoolExecutor | None = None,
