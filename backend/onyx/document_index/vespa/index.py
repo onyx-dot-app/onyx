@@ -316,12 +316,8 @@ class VespaIndex(DocumentIndex):
         multiple chunk batches calling this function multiple times, otherwise only the last set of
         chunks will be kept"""
 
-        doc_id_to_previous_chunks_indexed = (
-            index_batch_params.doc_id_to_previous_chunks_indexed
-        )
-        doc_id_to_current_chunks_indexed = (
-            index_batch_params.doc_id_to_current_chunks_indexed
-        )
+        doc_id_to_previous_chunk_cnt = index_batch_params.doc_id_to_previous_chunk_cnt
+        doc_id_to_new_chunk_cnt = index_batch_params.doc_id_to_new_chunk_cnt
         tenant_id = index_batch_params.tenant_id
         large_chunks_enabled = index_batch_params.large_chunks_enabled
 
@@ -336,32 +332,33 @@ class VespaIndex(DocumentIndex):
             concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
             get_vespa_http_client() as http_client,
         ):
+            # We require the start and end index for each document in order to
+            # know precisely which chunks to delete. This information exists for
+            # documents that have `chunk_count` in the database, but not for
+            # `old_version` documents.
+
             enriched_doc_infos: list[EnrichedDocumentIndexingInfo] = []
-            for document_id, _ in doc_id_to_previous_chunks_indexed.items():
-                last_indexed_chunk = doc_id_to_previous_chunks_indexed.get(
-                    document_id, None
-                )
+            for document_id, _ in doc_id_to_previous_chunk_cnt.items():
+                last_indexed_chunk = doc_id_to_previous_chunk_cnt.get(document_id, None)
+                # If the document has no `chunk_count` in the database, we know that it
+                # has the old chunk ID system and we must check for the final chunk index
                 is_old_version = False
                 if last_indexed_chunk is None:
                     is_old_version = True
                     minimal_doc_info = MinimalDocumentIndexingInfo(
                         doc_id=document_id,
-                        chunk_start_index=doc_id_to_current_chunks_indexed.get(
-                            document_id, 0
-                        ),
+                        chunk_start_index=doc_id_to_new_chunk_cnt.get(document_id, 0),
                     )
                     last_indexed_chunk = check_for_final_chunk_existence(
                         minimal_doc_info=minimal_doc_info,
-                        start_index=doc_id_to_current_chunks_indexed[document_id],
+                        start_index=doc_id_to_new_chunk_cnt[document_id],
                         index_name=self.index_name,
                         http_client=http_client,
                     )
 
                 enriched_doc_info = EnrichedDocumentIndexingInfo(
                     doc_id=document_id,
-                    chunk_start_index=doc_id_to_current_chunks_indexed.get(
-                        document_id, 0
-                    ),
+                    chunk_start_index=doc_id_to_new_chunk_cnt.get(document_id, 0),
                     chunk_end_index=last_indexed_chunk,
                     old_version=is_old_version,
                 )

@@ -108,8 +108,8 @@ def do_insertion(
     insertion_records = vespa_index.index(
         chunks=all_chunks,
         index_batch_params=IndexBatchParams(
-            doc_id_to_previous_chunks_indexed={},
-            doc_id_to_current_chunks_indexed={},
+            doc_id_to_previous_chunk_cnt={},
+            doc_id_to_new_chunk_cnt={},
             tenant_id=POSTGRES_DEFAULT_SCHEMA,
             large_chunks_enabled=False,
         ),

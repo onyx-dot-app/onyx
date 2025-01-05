@@ -383,7 +383,7 @@ def index_doc_batch(
             )
         }
 
-        doc_id_to_previous_chunks_indexed: dict[str, int | None] = {
+        doc_id_to_previous_chunk_cnt: dict[str, int | None] = {
             document_id: chunk_count
             for document_id, chunk_count in fetch_chunk_counts_for_documents(
                 document_ids=updatable_ids,
@@ -391,7 +391,7 @@ def index_doc_batch(
             )
         }
 
-        doc_id_to_current_chunks_indexed: dict[str, int] = {
+        doc_id_to_new_chunk_cnt: dict[str, int] = {
             document_id: len(
                 [
                     chunk
@@ -433,8 +433,8 @@ def index_doc_batch(
         insertion_records = document_index.index(
             chunks=access_aware_chunks,
             index_batch_params=IndexBatchParams(
-                doc_id_to_previous_chunks_indexed=doc_id_to_previous_chunks_indexed,
-                doc_id_to_current_chunks_indexed=doc_id_to_current_chunks_indexed,
+                doc_id_to_previous_chunk_cnt=doc_id_to_previous_chunk_cnt,
+                doc_id_to_new_chunk_cnt=doc_id_to_new_chunk_cnt,
                 tenant_id=tenant_id,
                 large_chunks_enabled=chunker.enable_large_chunks,
             ),
@@ -465,7 +465,7 @@ def index_doc_batch(
 
         update_docs_chunk_count__no_commit(
             document_ids=updatable_ids,
-            doc_id_to_chunk_count=doc_id_to_current_chunks_indexed,
+            doc_id_to_chunk_count=doc_id_to_new_chunk_cnt,
             db_session=db_session,
         )
 

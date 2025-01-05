@@ -222,8 +222,8 @@ def seed_initial_documents(
     index_with_retries(
         chunks=chunks,
         index_batch_params=IndexBatchParams(
-            doc_id_to_previous_chunks_indexed={},
-            doc_id_to_current_chunks_indexed={},
+            doc_id_to_previous_chunk_cnt={},
+            doc_id_to_new_chunk_cnt={},
             large_chunks_enabled=False,
             tenant_id=tenant_id,
         ),
