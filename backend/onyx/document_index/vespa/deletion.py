@@ -1,8 +1,11 @@
 import concurrent.futures
+import uuid
+from typing import cast
 
 import httpx
 from retry import retry
 
+from onyx.document_index.vespa.indexing_utils import _check_for_chunk_existence
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import NUM_THREADS
 from onyx.utils.logger import setup_logger
@@ -21,12 +24,12 @@ def _retryable_http_delete(http_client: httpx.Client, url: str) -> None:
 
 @retry(tries=3, delay=1, backoff=2)
 def _delete_vespa_chunk(
-    doc_chunk_id: str, index_name: str, http_client: httpx.Client
+    doc_chunk_id: uuid.UUID, index_name: str, http_client: httpx.Client
 ) -> None:
     try:
         _retryable_http_delete(
             http_client,
-            f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}",
+            f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{cast(str, doc_chunk_id)}",
         )
     except httpx.HTTPStatusError as e:
         logger.error(f"Failed to delete chunk, details: {e.response.text}")
@@ -34,11 +37,14 @@ def _delete_vespa_chunk(
 
 
 def delete_vespa_chunks(
-    doc_chunk_ids: list[str],
+    doc_chunk_ids: list[uuid.UUID],
     index_name: str,
     http_client: httpx.Client,
     executor: concurrent.futures.ThreadPoolExecutor | None = None,
 ) -> None:
+    if not _check_for_chunk_existence(doc_chunk_ids[0], index_name):
+        raise ValueError(f"Chunk {doc_chunk_ids[0]} does not exist in Vespa!!!")
+
     external_executor = True
 
     if not executor:

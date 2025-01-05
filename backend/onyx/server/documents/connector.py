@@ -695,13 +695,13 @@ def create_connector_from_model(
             connector_data=connector_base,
         )
 
-        create_milestone_and_report(
-            user=user,
-            distinct_id=user.email if user else tenant_id or "N/A",
-            event_type=MilestoneRecordType.CREATED_CONNECTOR,
-            properties=None,
-            db_session=db_session,
-        )
+        # create_milestone_and_report(
+        #     user=user,
+        #     distinct_id=user.email if user else tenant_id or "N/A",
+        #     event_type=MilestoneRecordType.CREATED_CONNECTOR,
+        #     properties=None,
+        #     db_session=db_session,
+        # )
 
         return connector_response
     except ValueError as e:

@@ -148,6 +148,10 @@ class Indexable(abc.ABC):
     def index(
         self,
         chunks: list[DocMetadataAwareIndexChunk],
+        document_id_to_previous_chunks_indexed: dict[str, int | None],
+        document_id_to_current_chunks_indexed: dict[str, int],
+        tenant_id: str | None,
+        large_chunks_enabled: bool,
     ) -> set[DocumentInsertionRecord]:
         """
         Takes a list of document chunks and indexes them in the document index
@@ -168,6 +172,8 @@ class Indexable(abc.ABC):
         Parameters:
         - chunks: Document chunks with all of the information needed for indexing to the document
                 index.
+        - tenant_id: The tenant id of the user whose chunks are being indexed
+        - large_chunks_enabled: Whether large chunks are enabled
 
         Returns:
             List of document ids which map to unique documents and are used for deduping chunks

@@ -1,5 +1,6 @@
 import concurrent.futures
 import json
+import uuid
 from datetime import datetime
 from datetime import timezone
 from http import HTTPStatus
@@ -11,6 +12,8 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
 from onyx.document_index.document_index_utils import get_uuid_from_chunk
+from onyx.document_index.document_index_utils import get_uuid_from_chunk_info_old
+from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.utils import remove_invalid_unicode_chars
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
@@ -42,6 +45,7 @@ from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import TITLE_EMBEDDING
 from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.indexing.models import MinimalDocChunkIDInformation
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -183,7 +187,8 @@ def _index_vespa_chunk(
     if multitenant:
         if chunk.tenant_id:
             vespa_document_fields[TENANT_ID] = chunk.tenant_id
-
+    print("indeixng to vespa")
+    print(vespa_chunk_id)
     vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_chunk_id}"
     logger.debug(f'Indexing to URL "{vespa_url}"')
     res = http_client.post(
@@ -248,3 +253,31 @@ def clean_chunk_id_copy(
         }
     )
     return clean_chunk
+
+
+def _check_for_chunk_existence(vespa_chunk_id: uuid.UUID, index_name: str) -> bool:
+    vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_chunk_id}"
+    # vesp aurl would be  http://localhost:8081/document/v1/default/danswer_chunk_nomic_ai_nomic_embed_text_v1/docid/
+    try:
+        with get_vespa_http_client() as http_client:
+            res = http_client.get(vespa_url)
+            return res.status_code == 200
+    except Exception:
+        logger.exception("Error checking for chunk existence")
+        return False
+
+
+def check_for_final_chunk_existence(
+    document_id_info: MinimalDocChunkIDInformation, start_index: int, index_name: str
+) -> int:
+    index = start_index
+    while True:
+        doc_chunk_id = get_uuid_from_chunk_info_old(
+            document_id=document_id_info.doc_id,
+            chunk_id=index,
+            large_chunk_reference_ids=[],
+        )
+        if not _check_for_chunk_existence(doc_chunk_id, index_name):
+            return index
+
+        index += 1

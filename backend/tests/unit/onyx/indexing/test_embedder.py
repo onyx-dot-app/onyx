@@ -61,6 +61,7 @@ def test_default_indexing_embedder_embed_chunks(mock_embedding_model: Mock) -> N
             metadata_suffix_keyword="",
             mini_chunk_texts=None,
             large_chunk_reference_ids=[],
+            large_chunk_id=None,
         )
     ]
 

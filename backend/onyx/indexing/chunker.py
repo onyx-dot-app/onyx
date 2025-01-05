@@ -220,6 +220,7 @@ class Chunker:
                 metadata_suffix_semantic=metadata_suffix_semantic,
                 metadata_suffix_keyword=metadata_suffix_keyword,
                 mini_chunk_texts=self._get_mini_chunk_texts(text),
+                large_chunk_id=None,
             )
 
         for section_idx, section in enumerate(document.sections):

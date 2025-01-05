@@ -86,6 +86,7 @@ def _create_indexable_chunks(
             access=default_public_access,
             document_sets=set(),
             boost=DEFAULT_BOOST,
+            large_chunk_id=None,
         )
         chunks.append(chunk)
 
@@ -217,7 +218,13 @@ def seed_initial_documents(
     # as we just sent over the Vespa schema and there is a slight delay
 
     index_with_retries = retry_builder(tries=15)(document_index.index)
-    index_with_retries(chunks=chunks)
+    index_with_retries(
+        chunks=chunks,
+        document_id_to_previous_chunks_indexed={},
+        document_id_to_current_chunks_indexed={},
+        large_chunks_enabled=False,
+        tenant_id=tenant_id,
+    )
 
     # Mock a run for the UI even though it did not actually call out to anything
     mock_successful_index_attempt(

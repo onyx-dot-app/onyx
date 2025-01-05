@@ -154,9 +154,11 @@ class IndexingSetting(EmbeddingModelDetail):
         )
 
 
-class DocChunkIDInformation(BaseModel):
+class MinimalDocChunkIDInformation(BaseModel):
     doc_id: str
-    old_version: bool
     chunk_start_index: int
+
+
+class DocChunkIDInformation(MinimalDocChunkIDInformation):
+    old_version: bool
     chunk_end_index: int
-    large_chunk_id: int | None

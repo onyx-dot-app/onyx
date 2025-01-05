@@ -5,8 +5,6 @@ from sqlalchemy.orm import Session
 
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
-from onyx.document_index.vespa.indexing_utils import DOCUMENT_ID_ENDPOINT
-from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.indexing.models import DocChunkIDInformation
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 
@@ -38,67 +36,57 @@ def translate_boost_count_to_multiplier(boost: int) -> float:
     return 2 / (1 + math.exp(-1 * boost / 3))
 
 
-def _check_for_chunk_existence(vespa_chunk_id, index_name: str) -> bool:
-    vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_chunk_id}"
-    with get_vespa_http_client(no_timeout=True) as http_client:
-        res = http_client.get(vespa_url)
-        return res.status_code == 200
-
-
-def check_for_final_chunk_existence(
-    document_id_info: DocChunkIDInformation, start_index: int, index_name: str
-) -> int:
-    index = start_index
-    while True:
-        doc_chunk_id = get_uuid_from_chunk_info_old(
-            document_id=document_id_info.doc_id,
-            chunk_id=index,
-            large_chunk_reference_ids=[],
-        )
-        if not _check_for_chunk_existence(doc_chunk_id, index_name):
-            return index
-
-        index += 1
-
-
 def assemble_document_chunk_info(
     document_id_info_list: list[DocChunkIDInformation],
     tenant_id: str | None,
     large_chunks_enabled: bool,
-) -> list[uuid.UUID, None, None]:
+) -> list[uuid.UUID]:
     doc_chunk_ids = []
 
     for document_id_info in document_id_info_list:
-        for chunk_index in enumerate(
-            range(document_id_info.chunk_start_index, document_id_info.chunk_end_index)
+        for chunk_index in range(
+            document_id_info.chunk_start_index, document_id_info.chunk_end_index
         ):
-            doc_chunk_ids.append(
-                get_uuid_from_chunk_info(
-                    document_id=document_id_info.doc_id,
-                    chunk_id=chunk_index,
-                    tenant_id=tenant_id,
-                    large_chunk_id=document_id_info.large_chunk_id,
+            if not document_id_info.old_version:
+                doc_chunk_ids.append(
+                    get_uuid_from_chunk_info(
+                        document_id=document_id_info.doc_id,
+                        chunk_id=chunk_index,
+                        tenant_id=tenant_id,
+                    )
                 )
-            )
-
-            if (
-                large_chunks_enabled
-                and document_id_info.old_version
-                and chunk_index % 4 == 0
-            ):
-                chunk_id = chunk_index / 4
-                large_chunk_reference_ids = [
-                    chunk_id + i
-                    for i in range(4)
-                    if chunk_id + i < document_id_info.chunk_end_index
-                ]
+            else:
                 doc_chunk_ids.append(
                     get_uuid_from_chunk_info_old(
                         document_id=document_id_info.doc_id,
-                        chunk_id=chunk_id,
-                        large_chunk_reference_ids=large_chunk_reference_ids,
+                        chunk_id=chunk_index,
                     )
                 )
+
+            if large_chunks_enabled and chunk_index % 4 == 0:
+                large_chunk_id = int(chunk_index / 4)
+                large_chunk_reference_ids = [
+                    large_chunk_id + i
+                    for i in range(4)
+                    if large_chunk_id + i < document_id_info.chunk_end_index
+                ]
+                if document_id_info.old_version:
+                    doc_chunk_ids.append(
+                        get_uuid_from_chunk_info_old(
+                            document_id=document_id_info.doc_id,
+                            chunk_id=large_chunk_id,
+                            large_chunk_reference_ids=large_chunk_reference_ids,
+                        )
+                    )
+                else:
+                    doc_chunk_ids.append(
+                        get_uuid_from_chunk_info(
+                            document_id=document_id_info.doc_id,
+                            chunk_id=large_chunk_id,
+                            tenant_id=tenant_id,
+                            large_chunk_id=large_chunk_id,
+                        )
+                    )
 
     return doc_chunk_ids
 
@@ -127,7 +115,7 @@ def get_uuid_from_chunk_info(
 
 
 def get_uuid_from_chunk_info_old(
-    *, document_id: str, chunk_id: int, large_chunk_reference_ids: list[str] = []
+    *, document_id: str, chunk_id: int, large_chunk_reference_ids: list[int] = []
 ) -> uuid.UUID:
     doc_str = document_id
 
@@ -147,13 +135,18 @@ def get_uuid_from_chunk_info_old(
 
 def get_uuid_from_chunk(chunk: DocMetadataAwareIndexChunk) -> uuid.UUID:
     return get_uuid_from_chunk_info(
-        chunk.source_document.id, chunk.chunk_id, chunk.large_chunk_id, chunk.tenant_id
+        document_id=chunk.source_document.id,
+        chunk_id=chunk.chunk_id,
+        tenant_id=chunk.tenant_id,
+        large_chunk_id=chunk.large_chunk_id,
     )
 
 
 def get_uuid_from_chunk_old(
-    chunk: DocMetadataAwareIndexChunk, large_chunk_reference_ids: list[str] = []
+    chunk: DocMetadataAwareIndexChunk, large_chunk_reference_ids: list[int] = []
 ) -> uuid.UUID:
     return get_uuid_from_chunk_info_old(
-        chunk.source_document.id, chunk.chunk_id, large_chunk_reference_ids
+        document_id=chunk.source_document.id,
+        chunk_id=chunk.chunk_id,
+        large_chunk_reference_ids=large_chunk_reference_ids,
     )

@@ -23,6 +23,7 @@ from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import prepare_to_modify_documents
+from onyx.db.document import update_docs_chunk_count__no_commit
 from onyx.db.document import update_docs_last_modified__no_commit
 from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document import upsert_document_by_connector_credential_pair
@@ -380,11 +381,24 @@ def index_doc_batch(
                 document_ids=updatable_ids, db_session=db_session
             )
         }
-        document_id_to_chunk_count = {
+
+        document_id_to_previous_chunks_indexed: dict[str, int | None] = {
             document_id: chunk_count
             for document_id, chunk_count in fetch_chunk_counts_for_documents(
-                document_ids=updatable_ids, db_session=db_session
+                document_ids=updatable_ids,
+                db_session=db_session,
             )
+        }
+
+        document_id_to_current_chunks_indexed: dict[str, int] = {
+            document_id: len(
+                [
+                    chunk
+                    for chunk in chunks_with_embeddings
+                    if chunk.source_document.id == document_id
+                ]
+            )
+            for document_id in updatable_ids
         }
 
         # we're concerned about race conditions where multiple simultaneous indexings might result
@@ -419,7 +433,10 @@ def index_doc_batch(
         # in this set
         insertion_records = document_index.index(
             chunks=access_aware_chunks,
-            document_id_to_chunk_count=document_id_to_chunk_count,
+            document_id_to_previous_chunks_indexed=document_id_to_previous_chunks_indexed,
+            document_id_to_current_chunks_indexed=document_id_to_current_chunks_indexed,
+            tenant_id=tenant_id,
+            large_chunks_enabled=chunker.enable_large_chunks,
         )
 
         successful_doc_ids = [record.document_id for record in insertion_records]
@@ -445,6 +462,12 @@ def index_doc_batch(
             document_ids=last_modified_ids, db_session=db_session
         )
 
+        update_docs_chunk_count__no_commit(
+            document_ids=updatable_ids,
+            document_id_to_current_chunks_indexed=document_id_to_current_chunks_indexed,
+            db_session=db_session,
+        )
+
         db_session.commit()
 
     result = (
@@ -455,7 +478,7 @@ def index_doc_batch(
     return result
 
 
-def enable_large_chunks_and_multipass(
+def check_enable_large_chunks_and_multipass(
     embedder: IndexingEmbedder, db_session: Session
 ) -> tuple[bool, bool]:
     search_settings = get_current_search_settings(db_session)
@@ -489,7 +512,7 @@ def build_indexing_pipeline(
     callback: IndexingHeartbeatInterface | None = None,
 ) -> IndexingPipelineProtocol:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
-    multipass, enable_large_chunks = enable_large_chunks_and_multipass(
+    multipass, enable_large_chunks = check_enable_large_chunks_and_multipass(
         embedder, db_session
     )
 

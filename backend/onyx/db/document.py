@@ -416,6 +416,18 @@ def update_docs_last_modified__no_commit(
         doc.last_modified = now
 
 
+def update_docs_chunk_count__no_commit(
+    document_ids: list[str],
+    document_id_to_current_chunks_indexed: dict[str, int],
+    db_session: Session,
+) -> None:
+    documents_to_update = (
+        db_session.query(DbDocument).filter(DbDocument.id.in_(document_ids)).all()
+    )
+    for doc in documents_to_update:
+        doc.chunk_count = document_id_to_current_chunks_indexed[doc.id]
+
+
 def mark_document_as_modified(
     document_id: str,
     db_session: Session,
@@ -617,8 +629,20 @@ def get_document(
 def fetch_chunk_counts_for_documents(
     document_ids: list[str],
     db_session: Session,
-) -> dict[str, int]:
+) -> list[tuple[str, int | None]]:
+    """
+    Return a list of (document_id, chunk_count) tuples.
+    Note: chunk_count might be None if not set in DB,
+    so we declare it as Optional[int].
+    """
     stmt = select(DbDocument.id, DbDocument.chunk_count).where(
         DbDocument.id.in_(document_ids)
     )
-    return db_session.execute(stmt).all()
+
+    # results is a list of 'Row' objects, each containing two columns
+    results = db_session.execute(stmt).all()
+
+    # If DbDocument.id is guaranteed to be a string, you can just do row.id;
+    # otherwise cast to str if you need to be sure it's a string:
+    return [(str(row[0]), row[1]) for row in results]
+    # or row.id, row.chunk_count if they are named attributes in your ORM model

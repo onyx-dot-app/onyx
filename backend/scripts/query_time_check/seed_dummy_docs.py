@@ -68,6 +68,8 @@ def generate_dummy_chunk(
             mini_chunk_embeddings=[],
         ),
         title_embedding=generate_random_embedding(embedding_dim),
+        large_chunk_id=None,
+        large_chunk_reference_ids=[],
     )
 
     document_set_names = []
@@ -103,7 +105,13 @@ def generate_dummy_chunk(
 def do_insertion(
     vespa_index: VespaIndex, all_chunks: list[DocMetadataAwareIndexChunk]
 ) -> None:
-    insertion_records = vespa_index.index(all_chunks)
+    insertion_records = vespa_index.index(
+        chunks=all_chunks,
+        document_id_to_previous_chunks_indexed={},
+        document_id_to_current_chunks_indexed={},
+        tenant_id=POSTGRES_DEFAULT_SCHEMA,
+        large_chunks_enabled=False,
+    )
     print(f"Indexed {len(insertion_records)} documents.")
     print(
         f"New documents: {sum(1 for record in insertion_records if not record.already_existed)}"
