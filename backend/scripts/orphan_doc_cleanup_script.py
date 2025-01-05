@@ -58,11 +58,11 @@ def main() -> None:
 
             # Delete chunks from Vespa first
             print("Deleting orphaned document chunks from Vespa")
-            successfully_vespa_deleted_doc_ids = []
+            successfully_vespa_deleted_doc_ids: list[str] = []
             # Process documents in parallel using ThreadPoolExecutor
             with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
 
-                def process_doc(doc_id: str) -> bool:
+                def process_doc(doc_id: str) -> str | None:
                     # Check if document exists in Vespa first
                     try:
                         chunks = vespa_index.id_based_retrieval(
@@ -74,12 +74,12 @@ def main() -> None:
                         )
                         if not chunks:
                             print(f"Document {doc_id} not found in Vespa")
-                            return True
+                            return doc_id
                     except Exception as e:
                         print(
                             f"Error checking if document {doc_id} exists in Vespa: {e}"
                         )
-                        return False
+                        return None
 
                     try:
                         print(f"Deleting document {doc_id} in Vespa")
@@ -88,13 +88,13 @@ def main() -> None:
                             print(
                                 f"Deleted {chunks_deleted} chunks for document {doc_id}"
                             )
-                        return True
+                        return doc_id
                     except Exception as e:
                         print(
                             f"Error deleting document {doc_id} in Vespa and "
                             f"will not delete from Postgres: {e}"
                         )
-                        return False
+                        return None
 
                 # Submit all tasks and gather results
                 futures = [
