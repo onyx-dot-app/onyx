@@ -455,18 +455,9 @@ def index_doc_batch(
     return result
 
 
-def build_indexing_pipeline(
-    *,
-    embedder: IndexingEmbedder,
-    document_index: DocumentIndex,
-    db_session: Session,
-    chunker: Chunker | None = None,
-    ignore_time_skip: bool = False,
-    attempt_id: int | None = None,
-    tenant_id: str | None = None,
-    callback: IndexingHeartbeatInterface | None = None,
-) -> IndexingPipelineProtocol:
-    """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
+def enable_large_chunks_and_multipass(
+    embedder: IndexingEmbedder, db_session: Session
+) -> tuple[bool, bool]:
     search_settings = get_current_search_settings(db_session)
     multipass = (
         search_settings.multipass_indexing
@@ -482,6 +473,24 @@ def build_indexing_pipeline(
         and
         # Cohere does not support larger context they recommend not going above 512 tokens
         embedder.provider_type != EmbeddingProvider.COHERE
+    )
+    return multipass, enable_large_chunks
+
+
+def build_indexing_pipeline(
+    *,
+    embedder: IndexingEmbedder,
+    document_index: DocumentIndex,
+    db_session: Session,
+    chunker: Chunker | None = None,
+    ignore_time_skip: bool = False,
+    attempt_id: int | None = None,
+    tenant_id: str | None = None,
+    callback: IndexingHeartbeatInterface | None = None,
+) -> IndexingPipelineProtocol:
+    """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
+    multipass, enable_large_chunks = enable_large_chunks_and_multipass(
+        embedder, db_session
     )
 
     chunker = chunker or Chunker(

@@ -328,16 +328,16 @@ class VespaIndex(DocumentIndex):
                     old_doc_ids.add(doc_id)
 
             doc_chunk_ids_to_delete = []
-            # We need the chunk counts for the current docs (for referencing during this step
-            #  and also for updating DB)
+            # We need the number of chunks for the current docs
+            # (for referencing during this step and also for updating DB)
 
             # For those that have no count info, we need to iterate through indices in chunks
-            #  (starting past current number, until chunk does not exist)
+            # (starting past current number, until chunk does not exist)
             # Then, we can add that to the document_id_to_chunk_count.
 
             # Once we have all the chunk counts (and whether or not large chunks are enabled),
             # we can generate the chunk IDs for every chunk and delete every single one.
-            #  (though we'll need to trakc hwich ones are using hte old system and which ones are using the new one)
+            # (though we'll need to track which ones are using the old system and which ones are using the new one)
 
             # Delete old Vespa documents
             for doc_chunk_ids_batch in batch_generator(
