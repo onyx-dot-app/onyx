@@ -305,13 +305,6 @@ class VespaIndex(DocumentIndex):
                 f"Failed to prepare Vespa Onyx Indexes. Response: {response.text}"
             )
 
-    # class DocChunkIDInformation(BaseModel):
-    #     doc_id: str
-    #     old_version: bool
-    #     chunk_start_index: int
-    #     chunk_end_index: int
-    #     large_chunk_id: int | None
-
     def index(
         self,
         chunks: list[DocMetadataAwareIndexChunk],
