@@ -214,7 +214,7 @@ class Indexable(abc.ABC):
 
 class Deletable(abc.ABC):
     """
-    Class must implement the ability to delete document by their unique document ids.
+    Class must implement the ability to delete document by a given unique document id.
     """
 
     @abc.abstractmethod
@@ -226,16 +226,6 @@ class Deletable(abc.ABC):
         - doc_id: document id as specified by the connector
         """
         raise NotImplementedError
-
-    # @abc.abstractmethod
-    # def delete(self, doc_ids: list[str]) -> None:
-    #     """
-    #     Given a list of document ids, hard delete them from the document index
-
-    #     Parameters:
-    #     - doc_ids: list of document ids as specified by the connector
-    #     """
-    #     raise NotImplementedError
 
 
 class Updatable(abc.ABC):
