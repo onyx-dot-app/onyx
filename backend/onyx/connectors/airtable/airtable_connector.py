@@ -194,7 +194,7 @@ class AirtableConnector(LoadConnector):
         self,
         record: RecordDict,
         table_schema: TableSchema,
-        primary_field_name: str,
+        primary_field_name: str | None,
     ) -> Document:
         """Process a single Airtable record into a Document.
 
