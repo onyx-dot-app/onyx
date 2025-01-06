@@ -85,7 +85,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: ColorDiscordIcon,
     displayName: "Discord",
     category: SourceCategory.Messaging,
-    docs: "https://docs.danswer.dev/connectors/slack",
+    docs: "https://docs.danswer.dev/connectors/discord",
   },
   gmail: {
     icon: GmailIcon,

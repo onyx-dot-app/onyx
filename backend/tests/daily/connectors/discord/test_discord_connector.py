@@ -3,8 +3,8 @@ import time
 
 import pytest
 
-from danswer.connectors.discord.connector import DiscordConnector
-from danswer.connectors.models import Document
+from onyx.connectors.discord.connector import DiscordConnector
+from onyx.connectors.models import Document
 
 
 @pytest.fixture
@@ -19,12 +19,13 @@ def discord_connector() -> DiscordConnector:
     )
     connector.load_credentials(
         {
-            "discord_bot_token": os.environ.get("discord_bot_token"),
+            "discord_bot_token": os.environ.get("DISCORD_BOT_TOKEN"),
         }
     )
     return connector
 
 
+@pytest.mark.skip(reason="Test Discord is not setup yet!")
 def test_discord_poll_connector(discord_connector: DiscordConnector) -> None:
     end = time.time()
     start = end - 24 * 60 * 60 * 15  # 1 day
@@ -35,18 +36,14 @@ def test_discord_poll_connector(discord_connector: DiscordConnector) -> None:
     for doc_batch in discord_connector.poll_source(start, end):
         for doc in doc_batch:
             if "Channel" in doc.metadata:
+                assert isinstance(doc.metadata["Channel"], str)
                 channels.add(doc.metadata["Channel"])
             if "Thread" in doc.metadata:
+                assert isinstance(doc.metadata["Thread"], str)
                 threads.add(doc.metadata["Thread"])
             all_docs.append(doc)
 
-    assert (
-        len(all_docs) == 10
-    )  # might change based on the channels and servers being used
-
-    assert (
-        len(channels) == 2
-    )  # might change based on the channels and servers being used
-    assert (
-        len(threads) == 2
-    )  # might change based on the channels and servers being used
+    # might change based on the channels and servers being used
+    assert len(all_docs) == 10
+    assert len(channels) == 2
+    assert len(threads) == 2
