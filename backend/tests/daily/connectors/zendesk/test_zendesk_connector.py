@@ -73,6 +73,8 @@ def test_zendesk_connector_basic(
         assert target_doc.semantic_identifier == test_article["semantic_identifier"]
         assert target_doc.sections[0].link == test_article["sections"][0]["link"]
         assert target_doc.source == test_article["source"]
+        assert target_doc.primary_owners is not None
+        assert len(target_doc.primary_owners) == 1
         assert (
             target_doc.primary_owners[0].display_name
             == test_article["primary_owners"][0]["display_name"]
