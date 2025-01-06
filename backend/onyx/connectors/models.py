@@ -101,8 +101,11 @@ class DocumentBase(BaseModel):
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
     metadata: dict[str, str | list[str]]
+
     # UTC time
     doc_updated_at: datetime | None = None
+    chunk_count: int | None = None
+
     # Owner, creator, etc.
     primary_owners: list[BasicExpertInfo] | None = None
     # Assignee, space owner, etc.

@@ -109,7 +109,6 @@ def get_application() -> FastAPI:
         include_auth_router_with_prefix(
             application,
             saml_router,
-            prefix="/auth/saml",
         )
 
     # RBAC / group access control

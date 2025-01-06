@@ -4,6 +4,8 @@ https://confluence.atlassian.com/conf85/check-who-can-view-a-page-1283360557.htm
 """
 from typing import Any
 
+from ee.onyx.configs.app_configs import CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC
+from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.confluence.connector import ConfluenceConnector
@@ -31,13 +33,31 @@ def _get_server_space_permissions(
                 permission_category.get("spacePermissions", [])
             )
 
+    is_public = False
     user_names = set()
     group_names = set()
     for permission in viewspace_permissions:
-        if user_name := permission.get("userName"):
+        user_name = permission.get("userName")
+        if user_name:
             user_names.add(user_name)
-        if group_name := permission.get("groupName"):
+        group_name = permission.get("groupName")
+        if group_name:
             group_names.add(group_name)
+
+        # It seems that if anonymous access is turned on for the site and space,
+        # then the space is publicly accessible.
+        # For confluence server, we make a group that contains all users
+        # that exist in confluence and then just add that group to the space permissions
+        # if anonymous access is turned on for the site and space or we set is_public = True
+        # if they set the env variable CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC to True so
+        # that we can support confluence server deployments that want anonymous access
+        # to be public (we cant test this because its paywalled)
+        if user_name is None and group_name is None:
+            # Defaults to False
+            if CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC:
+                is_public = True
+            else:
+                group_names.add(ALL_CONF_EMAILS_GROUP_NAME)
 
     user_emails = set()
     for user_name in user_names:
@@ -50,11 +70,7 @@ def _get_server_space_permissions(
     return ExternalAccess(
         external_user_emails=user_emails,
         external_user_group_ids=group_names,
-        # TODO: Check if the space is publicly accessible
-        # Currently, we assume the space is not public
-        # We need to check if anonymous access is turned on for the site and space
-        # This information is paywalled so it remains unimplemented
-        is_public=False,
+        is_public=is_public,
     )
 
 
@@ -134,7 +150,7 @@ def _get_space_permissions(
 
 def _extract_read_access_restrictions(
     confluence_client: OnyxConfluence, restrictions: dict[str, Any]
-) -> ExternalAccess | None:
+) -> tuple[set[str], set[str]]:
     """
     Converts a page's restrictions dict into an ExternalAccess object.
     If there are no restrictions, then return None
@@ -177,21 +193,57 @@ def _extract_read_access_restrictions(
         group["name"] for group in read_access_group_jsons if group.get("name")
     ]
 
+    return set(read_access_user_emails), set(read_access_group_names)
+
+
+def _get_all_page_restrictions(
+    confluence_client: OnyxConfluence,
+    perm_sync_data: dict[str, Any],
+) -> ExternalAccess | None:
+    """
+    This function gets the restrictions for a page by taking the intersection
+    of the page's restrictions and the restrictions of all the ancestors
+    of the page.
+    If the page/ancestor has no restrictions, then it is ignored (no intersection).
+    If no restrictions are found anywhere, then return None, indicating that the page
+    should inherit the space's restrictions.
+    """
+    found_user_emails: set[str] = set()
+    found_group_names: set[str] = set()
+
+    found_user_emails, found_group_names = _extract_read_access_restrictions(
+        confluence_client=confluence_client,
+        restrictions=perm_sync_data.get("restrictions", {}),
+    )
+
+    ancestors: list[dict[str, Any]] = perm_sync_data.get("ancestors", [])
+    for ancestor in ancestors:
+        ancestor_user_emails, ancestor_group_names = _extract_read_access_restrictions(
+            confluence_client=confluence_client,
+            restrictions=ancestor.get("restrictions", {}),
+        )
+        if not ancestor_user_emails and not ancestor_group_names:
+            # This ancestor has no restrictions, so it has no effect on
+            # the page's restrictions, so we ignore it
+            continue
+
+        found_user_emails.intersection_update(ancestor_user_emails)
+        found_group_names.intersection_update(ancestor_group_names)
+
     # If there are no restrictions found, then the page
     # inherits the space's restrictions so return None
-    is_space_public = read_access_user_emails == [] and read_access_group_names == []
-    if is_space_public:
+    if not found_user_emails and not found_group_names:
         return None
 
     return ExternalAccess(
-        external_user_emails=set(read_access_user_emails),
-        external_user_group_ids=set(read_access_group_names),
+        external_user_emails=found_user_emails,
+        external_user_group_ids=found_group_names,
         # there is no way for a page to be individually public if the space isn't public
         is_public=False,
     )
 
 
-def _fetch_all_page_restrictions_for_space(
+def _fetch_all_page_restrictions(
     confluence_client: OnyxConfluence,
     slim_docs: list[SlimDocument],
     space_permissions_by_space_key: dict[str, ExternalAccess],
@@ -208,11 +260,11 @@ def _fetch_all_page_restrictions_for_space(
             raise ValueError(
                 f"No permission sync data found for document {slim_doc.id}"
             )
-        restrictions = _extract_read_access_restrictions(
+
+        if restrictions := _get_all_page_restrictions(
             confluence_client=confluence_client,
-            restrictions=slim_doc.perm_sync_data.get("restrictions", {}),
-        )
-        if restrictions:
+            perm_sync_data=slim_doc.perm_sync_data,
+        ):
             document_restrictions.append(
                 DocExternalAccess(
                     doc_id=slim_doc.id,
@@ -301,7 +353,7 @@ def confluence_doc_sync(
         slim_docs.extend(doc_batch)
 
     logger.debug("Fetching all page restrictions for space")
-    return _fetch_all_page_restrictions_for_space(
+    return _fetch_all_page_restrictions(
         confluence_client=confluence_connector.confluence_client,
         slim_docs=slim_docs,
         space_permissions_by_space_key=space_permissions_by_space_key,

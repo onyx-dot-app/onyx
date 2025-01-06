@@ -195,6 +195,10 @@ export interface AxeroCredentialJson {
   axero_api_token: string;
 }
 
+export interface DiscordCredentialJson {
+  discord_bot_token: string;
+}
+
 export interface FreshdeskCredentialJson {
   freshdesk_domain: string;
   freshdesk_password: string;
@@ -335,6 +339,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   web: null,
   not_applicable: null,
   ingestion_api: null,
+  discord: { discord_bot_token: "" } as DiscordCredentialJson,
 
   // NOTE: These are Special Cases
   google_drive: { google_tokens: "" } as GoogleDriveCredentialJson,
@@ -367,6 +372,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Slack
   slack_bot_token: "Slack Bot Token",
+
+  // Discord
+  discord_bot_token: "Discord Bot Token",
 
   // Gmail and Google Drive
   google_tokens: "Google Oauth Tokens",

@@ -335,6 +335,10 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
     if not celery_is_worker_primary(sender):
         return
 
+    if not hasattr(sender, "primary_worker_lock"):
+        # primary_worker_lock will not exist when MULTI_TENANT is True
+        return
+
     if not sender.primary_worker_lock:
         return
 

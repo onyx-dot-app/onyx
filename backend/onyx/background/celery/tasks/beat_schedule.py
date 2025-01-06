@@ -1,6 +1,7 @@
 from datetime import timedelta
 from typing import Any
 
+from onyx.configs.app_configs import LLM_MODEL_UPDATE_API_URL
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 
@@ -86,6 +87,20 @@ tasks_to_schedule = [
         },
     },
 ]
+
+# Only add the LLM model update task if the API URL is configured
+if LLM_MODEL_UPDATE_API_URL:
+    tasks_to_schedule.append(
+        {
+            "name": "check-for-llm-model-update",
+            "task": OnyxCeleryTask.CHECK_FOR_LLM_MODEL_UPDATE,
+            "schedule": timedelta(hours=1),  # Check every hour
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        }
+    )
 
 
 def get_tasks_to_schedule() -> list[dict[str, Any]]:

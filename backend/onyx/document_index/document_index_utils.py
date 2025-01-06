@@ -1,12 +1,13 @@
 import math
 import uuid
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.context.search.models import InferenceChunk
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
-from onyx.indexing.models import IndexChunk
+from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
+from onyx.indexing.models import DocMetadataAwareIndexChunk
 
 
 DEFAULT_BATCH_SIZE = 30
@@ -36,25 +37,118 @@ def translate_boost_count_to_multiplier(boost: int) -> float:
     return 2 / (1 + math.exp(-1 * boost / 3))
 
 
-def get_uuid_from_chunk(
-    chunk: IndexChunk | InferenceChunk, mini_chunk_ind: int = 0
-) -> uuid.UUID:
-    doc_str = (
-        chunk.document_id
-        if isinstance(chunk, InferenceChunk)
-        else chunk.source_document.id
-    )
+def assemble_document_chunk_info(
+    enriched_document_info_list: list[EnrichedDocumentIndexingInfo],
+    tenant_id: str | None,
+    large_chunks_enabled: bool,
+) -> list[UUID]:
+    doc_chunk_ids = []
+
+    for enriched_document_info in enriched_document_info_list:
+        for chunk_index in range(
+            enriched_document_info.chunk_start_index,
+            enriched_document_info.chunk_end_index,
+        ):
+            if not enriched_document_info.old_version:
+                doc_chunk_ids.append(
+                    get_uuid_from_chunk_info(
+                        document_id=enriched_document_info.doc_id,
+                        chunk_id=chunk_index,
+                        tenant_id=tenant_id,
+                    )
+                )
+            else:
+                doc_chunk_ids.append(
+                    get_uuid_from_chunk_info_old(
+                        document_id=enriched_document_info.doc_id,
+                        chunk_id=chunk_index,
+                    )
+                )
+
+            if large_chunks_enabled and chunk_index % 4 == 0:
+                large_chunk_id = int(chunk_index / 4)
+                large_chunk_reference_ids = [
+                    large_chunk_id + i
+                    for i in range(4)
+                    if large_chunk_id + i < enriched_document_info.chunk_end_index
+                ]
+                if enriched_document_info.old_version:
+                    doc_chunk_ids.append(
+                        get_uuid_from_chunk_info_old(
+                            document_id=enriched_document_info.doc_id,
+                            chunk_id=large_chunk_id,
+                            large_chunk_reference_ids=large_chunk_reference_ids,
+                        )
+                    )
+                else:
+                    doc_chunk_ids.append(
+                        get_uuid_from_chunk_info(
+                            document_id=enriched_document_info.doc_id,
+                            chunk_id=large_chunk_id,
+                            tenant_id=tenant_id,
+                            large_chunk_id=large_chunk_id,
+                        )
+                    )
+
+    return doc_chunk_ids
+
+
+def get_uuid_from_chunk_info(
+    *,
+    document_id: str,
+    chunk_id: int,
+    tenant_id: str | None,
+    large_chunk_id: int | None = None,
+) -> UUID:
+    doc_str = document_id
+
     # Web parsing URL duplicate catching
     if doc_str and doc_str[-1] == "/":
         doc_str = doc_str[:-1]
-    unique_identifier_string = "_".join(
-        [doc_str, str(chunk.chunk_id), str(mini_chunk_ind)]
+
+    chunk_index = (
+        "large_" + str(large_chunk_id) if large_chunk_id is not None else str(chunk_id)
     )
-    if chunk.large_chunk_reference_ids:
+    unique_identifier_string = "_".join([doc_str, chunk_index])
+    if tenant_id:
+        unique_identifier_string += "_" + tenant_id
+
+    return uuid.uuid5(uuid.NAMESPACE_X500, unique_identifier_string)
+
+
+def get_uuid_from_chunk_info_old(
+    *, document_id: str, chunk_id: int, large_chunk_reference_ids: list[int] = []
+) -> UUID:
+    doc_str = document_id
+
+    # Web parsing URL duplicate catching
+    if doc_str and doc_str[-1] == "/":
+        doc_str = doc_str[:-1]
+    unique_identifier_string = "_".join([doc_str, str(chunk_id), "0"])
+    if large_chunk_reference_ids:
         unique_identifier_string += "_large" + "_".join(
             [
                 str(referenced_chunk_id)
-                for referenced_chunk_id in chunk.large_chunk_reference_ids
+                for referenced_chunk_id in large_chunk_reference_ids
             ]
         )
     return uuid.uuid5(uuid.NAMESPACE_X500, unique_identifier_string)
+
+
+def get_uuid_from_chunk(chunk: DocMetadataAwareIndexChunk) -> uuid.UUID:
+    return get_uuid_from_chunk_info(
+        document_id=chunk.source_document.id,
+        chunk_id=chunk.chunk_id,
+        tenant_id=chunk.tenant_id,
+        large_chunk_id=chunk.large_chunk_id,
+    )
+
+
+def get_uuid_from_chunk_old(
+    chunk: DocMetadataAwareIndexChunk, large_chunk_reference_ids: list[int] = []
+) -> UUID:
+    return get_uuid_from_chunk_info_old(
+        document_id=chunk.source_document.id,
+        chunk_id=chunk.chunk_id,
+        large_chunk_reference_ids=large_chunk_reference_ids,
+    )

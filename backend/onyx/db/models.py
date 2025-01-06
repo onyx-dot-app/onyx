@@ -494,6 +494,10 @@ class Document(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Number of chunks in the document (in Vespa)
+    # Only null for documents indexed prior to this change
+    chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # last time any vespa relevant row metadata or the doc changed.
     # does not include last_synced
     last_modified: Mapped[datetime.datetime | None] = mapped_column(

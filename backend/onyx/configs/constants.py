@@ -76,7 +76,10 @@ KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_DOCUMENTS_SEEDED_KEY = "documents_seeded"
 
-CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 60
+# NOTE: we use this timeout / 4 in various places to refresh a lock
+# might be worth separating this timeout into separate timeouts for each situation
+CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
+
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 
 # needs to be long enough to cover the maximum time it takes to download an object
@@ -139,6 +142,7 @@ class DocumentSource(str, Enum):
     OCI_STORAGE = "oci_storage"
     XENFORO = "xenforo"
     NOT_APPLICABLE = "not_applicable"
+    DISCORD = "discord"
     FRESHDESK = "freshdesk"
     FIREFLIES = "fireflies"
     EGNYTE = "egnyte"
@@ -246,6 +250,7 @@ class OnyxCeleryQueues:
     VESPA_METADATA_SYNC = "vespa_metadata_sync"
     DOC_PERMISSIONS_UPSERT = "doc_permissions_upsert"
     CONNECTOR_DELETION = "connector_deletion"
+    LLM_MODEL_UPDATE = "llm_model_update"
 
     # Heavy queue
     CONNECTOR_PRUNING = "connector_pruning"
@@ -301,6 +306,7 @@ class OnyxCeleryTask:
     CHECK_FOR_PRUNING = "check_for_pruning"
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
+    CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
     MONITOR_VESPA_SYNC = "monitor_vespa_sync"
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (

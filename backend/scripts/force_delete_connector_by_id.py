@@ -72,7 +72,9 @@ def _unsafe_deletion(
             break
 
         document_ids = [document.id for document in documents]
-        document_index.delete(doc_ids=document_ids)
+        for doc_id in document_ids:
+            document_index.delete_single(doc_id)
+
         delete_documents_complete__no_commit(
             db_session=db_session,
             document_ids=document_ids,

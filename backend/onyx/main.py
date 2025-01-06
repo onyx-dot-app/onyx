@@ -157,7 +157,10 @@ def include_router_with_global_prefix_prepended(
 
 
 def include_auth_router_with_prefix(
-    application: FastAPI, router: APIRouter, prefix: str, tags: list[str] | None = None
+    application: FastAPI,
+    router: APIRouter,
+    prefix: str | None = None,
+    tags: list[str] | None = None,
 ) -> None:
     """Wrapper function to include an 'auth' router with prefix + rate-limiting dependencies."""
     final_tags = tags or ["auth"]

@@ -40,21 +40,24 @@ def send_email(
 
 
 def send_user_email_invite(user_email: str, current_user: User) -> None:
-    subject = "Invitation to Join Onyx Workspace"
+    subject = "Invitation to Join Onyx Organization"
     body = dedent(
         f"""\
         Hello,
 
-        You have been invited to join a workspace on Onyx.
+        You have been invited to join an organization on Onyx.
 
-        To join the workspace, please visit the following link:
+        To join the organization, please visit the following link:
 
-        {WEB_DOMAIN}/auth/login
+        {WEB_DOMAIN}/auth/signup?email={user_email}
+
+        You'll be asked to set a password or login with Google to complete your registration.
 
         Best regards,
         The Onyx Team
     """
     )
+
     send_email(user_email, subject, body, current_user.email)
 
 

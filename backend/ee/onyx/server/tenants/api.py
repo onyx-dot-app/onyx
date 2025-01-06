@@ -19,7 +19,7 @@ from ee.onyx.server.tenants.user_mapping import remove_all_users_from_tenant
 from ee.onyx.server.tenants.user_mapping import remove_users_from_tenant
 from onyx.auth.users import auth_backend
 from onyx.auth.users import current_admin_user
-from onyx.auth.users import get_jwt_strategy
+from onyx.auth.users import get_redis_strategy
 from onyx.auth.users import User
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.auth import get_user_count
@@ -112,7 +112,7 @@ async def impersonate_user(
         )
         if user_to_impersonate is None:
             raise HTTPException(status_code=404, detail="User not found")
-        token = await get_jwt_strategy().write_token(user_to_impersonate)
+        token = await get_redis_strategy().write_token(user_to_impersonate)
 
     response = await auth_backend.transport.get_login_response(token)
     response.set_cookie(

@@ -314,6 +314,7 @@ export enum ValidSources {
   GoogleSites = "google_sites",
   Loopio = "loopio",
   Dropbox = "dropbox",
+  Discord = "discord",
   Salesforce = "salesforce",
   Sharepoint = "sharepoint",
   Teams = "teams",

@@ -1,3 +1,4 @@
+import random
 import time
 import traceback
 from datetime import datetime
@@ -68,6 +69,7 @@ from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -76,6 +78,7 @@ from onyx.utils.variable_functionality import (
 )
 from onyx.utils.variable_functionality import global_version
 from onyx.utils.variable_functionality import noop_fallback
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -111,6 +114,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
             )
 
         # region document set scan
+        lock_beat.reacquire()
         document_set_ids: list[int] = []
         with get_session_with_tenant(tenant_id) as db_session:
             # check if any document sets are not synced
@@ -122,6 +126,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
                 document_set_ids.append(document_set.id)
 
         for document_set_id in document_set_ids:
+            lock_beat.reacquire()
             with get_session_with_tenant(tenant_id) as db_session:
                 try_generate_document_set_sync_tasks(
                     self.app, document_set_id, db_session, r, lock_beat, tenant_id
@@ -130,6 +135,8 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
 
         # check if any user groups are not synced
         if global_version.is_ee_version():
+            lock_beat.reacquire()
+
             try:
                 fetch_user_groups = fetch_versioned_implementation(
                     "onyx.db.user_group", "fetch_user_groups"
@@ -149,6 +156,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
                         usergroup_ids.append(usergroup.id)
 
                 for usergroup_id in usergroup_ids:
+                    lock_beat.reacquire()
                     with get_session_with_tenant(tenant_id) as db_session:
                         try_generate_user_group_sync_tasks(
                             self.app, usergroup_id, db_session, r, lock_beat, tenant_id
@@ -163,6 +171,12 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
     finally:
         if lock_beat.owned():
             lock_beat.release()
+        else:
+            task_logger.error(
+                "check_for_vespa_sync_task - Lock not owned on completion: "
+                f"tenant={tenant_id}"
+            )
+            redis_lock_dump(lock_beat, r)
 
     time_elapsed = time.monotonic() - time_start
     task_logger.debug(f"check_for_vespa_sync_task finished: elapsed={time_elapsed:.2f}")
@@ -748,7 +762,13 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
 
     Returns True if the task actually did work, False if it exited early to prevent overlap
     """
+    task_logger.info(f"monitor_vespa_sync starting: tenant={tenant_id}")
+
     time_start = time.monotonic()
+
+    timings: dict[str, float] = {}
+    timings["start"] = time_start
+
     r = get_redis_client(tenant_id=tenant_id)
 
     lock_beat: RedisLock = r.lock(
@@ -759,61 +779,76 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
     try:
         # prevent overlapping tasks
         if not lock_beat.acquire(blocking=False):
+            task_logger.info("monitor_vespa_sync exiting due to overlap")
             return False
 
         # print current queue lengths
-        r_celery = self.app.broker_connection().channel().client  # type: ignore
-        n_celery = celery_get_queue_length("celery", r_celery)
-        n_indexing = celery_get_queue_length(
-            OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
-        )
-        n_sync = celery_get_queue_length(OnyxCeleryQueues.VESPA_METADATA_SYNC, r_celery)
-        n_deletion = celery_get_queue_length(
-            OnyxCeleryQueues.CONNECTOR_DELETION, r_celery
-        )
-        n_pruning = celery_get_queue_length(
-            OnyxCeleryQueues.CONNECTOR_PRUNING, r_celery
-        )
-        n_permissions_sync = celery_get_queue_length(
-            OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC, r_celery
-        )
-        n_external_group_sync = celery_get_queue_length(
-            OnyxCeleryQueues.CONNECTOR_EXTERNAL_GROUP_SYNC, r_celery
-        )
-        n_permissions_upsert = celery_get_queue_length(
-            OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT, r_celery
-        )
+        phase_start = time.monotonic()
+        # we don't need every tenant polling redis for this info.
+        if not MULTI_TENANT or random.randint(1, 100) == 100:
+            r_celery = self.app.broker_connection().channel().client  # type: ignore
+            n_celery = celery_get_queue_length("celery", r_celery)
+            n_indexing = celery_get_queue_length(
+                OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
+            )
+            n_sync = celery_get_queue_length(
+                OnyxCeleryQueues.VESPA_METADATA_SYNC, r_celery
+            )
+            n_deletion = celery_get_queue_length(
+                OnyxCeleryQueues.CONNECTOR_DELETION, r_celery
+            )
+            n_pruning = celery_get_queue_length(
+                OnyxCeleryQueues.CONNECTOR_PRUNING, r_celery
+            )
+            n_permissions_sync = celery_get_queue_length(
+                OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC, r_celery
+            )
+            n_external_group_sync = celery_get_queue_length(
+                OnyxCeleryQueues.CONNECTOR_EXTERNAL_GROUP_SYNC, r_celery
+            )
+            n_permissions_upsert = celery_get_queue_length(
+                OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT, r_celery
+            )
 
-        prefetched = celery_get_unacked_task_ids(
-            OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
-        )
+            prefetched = celery_get_unacked_task_ids(
+                OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
+            )
 
-        task_logger.info(
-            f"Queue lengths: celery={n_celery} "
-            f"indexing={n_indexing} "
-            f"indexing_prefetched={len(prefetched)} "
-            f"sync={n_sync} "
-            f"deletion={n_deletion} "
-            f"pruning={n_pruning} "
-            f"permissions_sync={n_permissions_sync} "
-            f"external_group_sync={n_external_group_sync} "
-            f"permissions_upsert={n_permissions_upsert} "
-        )
+            task_logger.info(
+                f"Queue lengths: celery={n_celery} "
+                f"indexing={n_indexing} "
+                f"indexing_prefetched={len(prefetched)} "
+                f"sync={n_sync} "
+                f"deletion={n_deletion} "
+                f"pruning={n_pruning} "
+                f"permissions_sync={n_permissions_sync} "
+                f"external_group_sync={n_external_group_sync} "
+                f"permissions_upsert={n_permissions_upsert} "
+            )
+        timings["queues"] = time.monotonic() - phase_start
 
         # scan and monitor activity to completion
+        phase_start = time.monotonic()
         lock_beat.reacquire()
         if r.exists(RedisConnectorCredentialPair.get_fence_key()):
             monitor_connector_taskset(r)
+        timings["connector"] = time.monotonic() - phase_start
 
+        phase_start = time.monotonic()
         for key_bytes in r.scan_iter(RedisConnectorDelete.FENCE_PREFIX + "*"):
             lock_beat.reacquire()
             monitor_connector_deletion_taskset(tenant_id, key_bytes, r)
 
+        timings["connector_deletion"] = time.monotonic() - phase_start
+
+        phase_start = time.monotonic()
         for key_bytes in r.scan_iter(RedisDocumentSet.FENCE_PREFIX + "*"):
             lock_beat.reacquire()
             with get_session_with_tenant(tenant_id) as db_session:
                 monitor_document_set_taskset(tenant_id, key_bytes, r, db_session)
+        timings["document_set"] = time.monotonic() - phase_start
 
+        phase_start = time.monotonic()
         for key_bytes in r.scan_iter(RedisUserGroup.FENCE_PREFIX + "*"):
             lock_beat.reacquire()
             monitor_usergroup_taskset = fetch_versioned_implementation_with_fallback(
@@ -823,22 +858,29 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
             )
             with get_session_with_tenant(tenant_id) as db_session:
                 monitor_usergroup_taskset(tenant_id, key_bytes, r, db_session)
+        timings["usergroup"] = time.monotonic() - phase_start
 
+        phase_start = time.monotonic()
         for key_bytes in r.scan_iter(RedisConnectorPrune.FENCE_PREFIX + "*"):
             lock_beat.reacquire()
             with get_session_with_tenant(tenant_id) as db_session:
                 monitor_ccpair_pruning_taskset(tenant_id, key_bytes, r, db_session)
+        timings["pruning"] = time.monotonic() - phase_start
 
+        phase_start = time.monotonic()
         for key_bytes in r.scan_iter(RedisConnectorIndex.FENCE_PREFIX + "*"):
             lock_beat.reacquire()
             with get_session_with_tenant(tenant_id) as db_session:
                 monitor_ccpair_indexing_taskset(tenant_id, key_bytes, r, db_session)
+        timings["indexing"] = time.monotonic() - phase_start
 
+        phase_start = time.monotonic()
         for key_bytes in r.scan_iter(RedisConnectorPermissionSync.FENCE_PREFIX + "*"):
             lock_beat.reacquire()
             with get_session_with_tenant(tenant_id) as db_session:
                 monitor_ccpair_permissions_taskset(tenant_id, key_bytes, r, db_session)
 
+        timings["permissions"] = time.monotonic() - phase_start
     except SoftTimeLimitExceeded:
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
@@ -846,9 +888,24 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool:
     finally:
         if lock_beat.owned():
             lock_beat.release()
+        else:
+            t = timings
+            task_logger.error(
+                "monitor_vespa_sync - Lock not owned on completion: "
+                f"tenant={tenant_id} "
+                f"queues={t.get('queues')} "
+                f"connector={t.get('connector')} "
+                f"connector_deletion={t.get('connector_deletion')} "
+                f"document_set={t.get('document_set')} "
+                f"usergroup={t.get('usergroup')} "
+                f"pruning={t.get('pruning')} "
+                f"indexing={t.get('indexing')} "
+                f"permissions={t.get('permissions')}"
+            )
+            redis_lock_dump(lock_beat, r)
 
     time_elapsed = time.monotonic() - time_start
-    task_logger.debug(f"monitor_vespa_sync finished: elapsed={time_elapsed:.2f}")
+    task_logger.info(f"monitor_vespa_sync finished: elapsed={time_elapsed:.2f}")
     return True
 
 
@@ -897,6 +954,13 @@ def vespa_metadata_sync_task(
             # update db last. Worst case = we crash right before this and
             # the sync might repeat again later
             mark_document_as_synced(document_id, db_session)
+
+            redis_syncing_key = RedisConnectorCredentialPair.make_redis_syncing_key(
+                document_id
+            )
+            r = get_redis_client(tenant_id=tenant_id)
+            r.delete(redis_syncing_key)
+            # r.hdel(RedisConnectorCredentialPair.SYNCING_HASH, document_id)
 
             task_logger.info(f"doc={document_id} action=sync chunks={chunks_affected}")
     except SoftTimeLimitExceeded:

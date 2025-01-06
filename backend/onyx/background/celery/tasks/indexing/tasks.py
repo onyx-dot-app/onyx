@@ -5,7 +5,6 @@ from datetime import datetime
 from datetime import timezone
 from http import HTTPStatus
 from time import sleep
-from typing import cast
 
 import redis
 import sentry_sdk
@@ -63,6 +62,7 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_connector_index import RedisConnectorIndexPayload
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_pool import redis_lock_dump
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
@@ -95,6 +95,7 @@ class IndexingCallback(IndexingHeartbeatInterface):
 
         self.last_tag: str = "IndexingCallback.__init__"
         self.last_lock_reacquire: datetime = datetime.now(timezone.utc)
+        self.last_lock_monotonic = time.monotonic()
 
         self.last_parent_check = time.monotonic()
 
@@ -122,9 +123,15 @@ class IndexingCallback(IndexingHeartbeatInterface):
         #         self.last_parent_check = now
 
         try:
-            self.redis_lock.reacquire()
+            current_time = time.monotonic()
+            if current_time - self.last_lock_monotonic >= (
+                CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4
+            ):
+                self.redis_lock.reacquire()
+                self.last_lock_reacquire = datetime.now(timezone.utc)
+                self.last_lock_monotonic = time.monotonic()
+
             self.last_tag = tag
-            self.last_lock_reacquire = datetime.now(timezone.utc)
         except LockError:
             logger.exception(
                 f"IndexingCallback - lock.reacquire exceptioned: "
@@ -135,29 +142,7 @@ class IndexingCallback(IndexingHeartbeatInterface):
                 f"now={datetime.now(timezone.utc)}"
             )
 
-            # diagnostic logging for lock errors
-            name = self.redis_lock.name
-            ttl = self.redis_client.ttl(name)
-            locked = self.redis_lock.locked()
-            owned = self.redis_lock.owned()
-            local_token: str | None = self.redis_lock.local.token  # type: ignore
-
-            remote_token_raw = self.redis_client.get(self.redis_lock.name)
-            if remote_token_raw:
-                remote_token_bytes = cast(bytes, remote_token_raw)
-                remote_token = remote_token_bytes.decode("utf-8")
-            else:
-                remote_token = None
-
-            logger.warning(
-                f"IndexingCallback - lock diagnostics: "
-                f"name={name} "
-                f"locked={locked} "
-                f"owned={owned} "
-                f"local_token={local_token} "
-                f"remote_token={remote_token} "
-                f"ttl={ttl}"
-            )
+            redis_lock_dump(self.redis_lock, self.redis_client)
             raise
 
         self.redis_client.incrby(self.generator_progress_key, amount)
@@ -349,6 +334,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
         # Fail any index attempts in the DB that don't have fences
         # This shouldn't ever happen!
         with get_session_with_tenant(tenant_id) as db_session:
+            lock_beat.reacquire()
             unfenced_attempt_ids = get_unfenced_index_attempt_ids(
                 db_session, redis_client
             )
@@ -372,6 +358,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
 
         # we want to run this less frequently than the overall task
         if not redis_client.exists(OnyxRedisSignals.VALIDATE_INDEXING_FENCES):
+            lock_beat.reacquire()
             # clear any indexing fences that don't have associated celery tasks in progress
             # tasks can be in the queue in redis, in reserved tasks (prefetched by the worker),
             # or be currently executing
@@ -399,6 +386,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
                     "check_for_indexing - Lock not owned on completion: "
                     f"tenant={tenant_id}"
                 )
+                redis_lock_dump(lock_beat, redis_client)
 
     time_elapsed = time.monotonic() - time_start
     task_logger.debug(f"check_for_indexing finished: elapsed={time_elapsed:.2f}")

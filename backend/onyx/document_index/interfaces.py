@@ -36,6 +36,38 @@ class VespaChunkRequest:
 
 
 @dataclass
+class IndexBatchParams:
+    """
+    Information necessary for efficiently indexing a batch of documents
+    """
+
+    doc_id_to_previous_chunk_cnt: dict[str, int | None]
+    doc_id_to_new_chunk_cnt: dict[str, int]
+    tenant_id: str | None
+    large_chunks_enabled: bool
+
+
+@dataclass
+class MinimalDocumentIndexingInfo:
+    """
+    Minimal information necessary for indexing a document
+    """
+
+    doc_id: str
+    chunk_start_index: int
+
+
+@dataclass
+class EnrichedDocumentIndexingInfo(MinimalDocumentIndexingInfo):
+    """
+    Enriched information necessary for indexing a document, including version and chunk range.
+    """
+
+    old_version: bool
+    chunk_end_index: int
+
+
+@dataclass
 class DocumentMetadata:
     """
     Document information that needs to be inserted into Postgres on first time encountering this
@@ -148,7 +180,7 @@ class Indexable(abc.ABC):
     def index(
         self,
         chunks: list[DocMetadataAwareIndexChunk],
-        fresh_index: bool = False,
+        index_batch_params: IndexBatchParams,
     ) -> set[DocumentInsertionRecord]:
         """
         Takes a list of document chunks and indexes them in the document index
@@ -166,14 +198,11 @@ class Indexable(abc.ABC):
         only needs to index chunks into the PRIMARY index. Do not update the secondary index here,
         it is done automatically outside of this code.
 
-        NOTE: The fresh_index parameter, when set to True, assumes no documents have been previously
-        indexed for the given index/tenant. This can be used to optimize the indexing process for
-        new or empty indices.
-
         Parameters:
         - chunks: Document chunks with all of the information needed for indexing to the document
                 index.
-        - fresh_index: Boolean indicating whether this is a fresh index with no existing documents.
+        - tenant_id: The tenant id of the user whose chunks are being indexed
+        - large_chunks_enabled: Whether large chunks are enabled
 
         Returns:
             List of document ids which map to unique documents and are used for deduping chunks
@@ -185,7 +214,7 @@ class Indexable(abc.ABC):
 
 class Deletable(abc.ABC):
     """
-    Class must implement the ability to delete document by their unique document ids.
+    Class must implement the ability to delete document by a given unique document id.
     """
 
     @abc.abstractmethod
@@ -195,16 +224,6 @@ class Deletable(abc.ABC):
 
         Parameters:
         - doc_id: document id as specified by the connector
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def delete(self, doc_ids: list[str]) -> None:
-        """
-        Given a list of document ids, hard delete them from the document index
-
-        Parameters:
-        - doc_ids: list of document ids as specified by the connector
         """
         raise NotImplementedError
 

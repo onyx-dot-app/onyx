@@ -25,8 +25,12 @@ from onyx.configs.chat_configs import VESPA_SEARCHER_THREADS
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.document_index.document_index_utils import assemble_document_chunk_info
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentInsertionRecord
+from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
+from onyx.document_index.interfaces import IndexBatchParams
+from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
 from onyx.document_index.interfaces import UpdateRequest
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
@@ -38,12 +42,10 @@ from onyx.document_index.vespa.chunk_retrieval import (
     parallel_visit_api_retrieval,
 )
 from onyx.document_index.vespa.chunk_retrieval import query_vespa
-from onyx.document_index.vespa.deletion import delete_vespa_docs
+from onyx.document_index.vespa.deletion import delete_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import batch_index_vespa_chunks
+from onyx.document_index.vespa.indexing_utils import check_for_final_chunk_existence
 from onyx.document_index.vespa.indexing_utils import clean_chunk_id_copy
-from onyx.document_index.vespa.indexing_utils import (
-    get_existing_documents_from_chunks,
-)
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
@@ -307,12 +309,18 @@ class VespaIndex(DocumentIndex):
     def index(
         self,
         chunks: list[DocMetadataAwareIndexChunk],
-        fresh_index: bool = False,
+        index_batch_params: IndexBatchParams,
     ) -> set[DocumentInsertionRecord]:
         """Receive a list of chunks from a batch of documents and index the chunks into Vespa along
         with updating the associated permissions. Assumes that a document will not be split into
         multiple chunk batches calling this function multiple times, otherwise only the last set of
         chunks will be kept"""
+
+        doc_id_to_previous_chunk_cnt = index_batch_params.doc_id_to_previous_chunk_cnt
+        doc_id_to_new_chunk_cnt = index_batch_params.doc_id_to_new_chunk_cnt
+        tenant_id = index_batch_params.tenant_id
+        large_chunks_enabled = index_batch_params.large_chunks_enabled
+
         # IMPORTANT: This must be done one index at a time, do not use secondary index here
         cleaned_chunks = [clean_chunk_id_copy(chunk) for chunk in chunks]
 
@@ -324,29 +332,58 @@ class VespaIndex(DocumentIndex):
             concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
             get_vespa_http_client() as http_client,
         ):
-            if not fresh_index:
-                # Check for existing documents, existing documents need to have all of their chunks deleted
-                # prior to indexing as the document size (num chunks) may have shrunk
-                first_chunks = [
-                    chunk for chunk in cleaned_chunks if chunk.chunk_id == 0
-                ]
-                for chunk_batch in batch_generator(first_chunks, BATCH_SIZE):
-                    existing_docs.update(
-                        get_existing_documents_from_chunks(
-                            chunks=chunk_batch,
-                            index_name=self.index_name,
-                            http_client=http_client,
-                            executor=executor,
-                        )
-                    )
+            # We require the start and end index for each document in order to
+            # know precisely which chunks to delete. This information exists for
+            # documents that have `chunk_count` in the database, but not for
+            # `old_version` documents.
 
-                for doc_id_batch in batch_generator(existing_docs, BATCH_SIZE):
-                    delete_vespa_docs(
-                        document_ids=doc_id_batch,
+            enriched_doc_infos: list[EnrichedDocumentIndexingInfo] = []
+            for document_id, doc_count in doc_id_to_previous_chunk_cnt.items():
+                last_indexed_chunk = doc_id_to_previous_chunk_cnt.get(document_id, None)
+                # If the document has no `chunk_count` in the database, we know that it
+                # has the old chunk ID system and we must check for the final chunk index
+                is_old_version = False
+                if last_indexed_chunk is None:
+                    is_old_version = True
+                    minimal_doc_info = MinimalDocumentIndexingInfo(
+                        doc_id=document_id,
+                        chunk_start_index=doc_id_to_new_chunk_cnt.get(document_id, 0),
+                    )
+                    last_indexed_chunk = check_for_final_chunk_existence(
+                        minimal_doc_info=minimal_doc_info,
+                        start_index=doc_id_to_new_chunk_cnt[document_id],
                         index_name=self.index_name,
                         http_client=http_client,
-                        executor=executor,
                     )
+
+                # If the document has previously indexed chunks, we know it previously existed
+                if doc_count or last_indexed_chunk:
+                    existing_docs.add(document_id)
+
+                enriched_doc_info = EnrichedDocumentIndexingInfo(
+                    doc_id=document_id,
+                    chunk_start_index=doc_id_to_new_chunk_cnt.get(document_id, 0),
+                    chunk_end_index=last_indexed_chunk,
+                    old_version=is_old_version,
+                )
+                enriched_doc_infos.append(enriched_doc_info)
+
+            # Now, for each doc, we know exactly where to start and end our deletion
+            # So let's generate the chunk IDs for each chunk to delete
+            chunks_to_delete = assemble_document_chunk_info(
+                enriched_document_info_list=enriched_doc_infos,
+                tenant_id=tenant_id,
+                large_chunks_enabled=large_chunks_enabled,
+            )
+
+            # Delete old Vespa documents
+            for doc_chunk_ids_batch in batch_generator(chunks_to_delete, BATCH_SIZE):
+                delete_vespa_chunks(
+                    doc_chunk_ids=doc_chunk_ids_batch,
+                    index_name=self.index_name,
+                    http_client=http_client,
+                    executor=executor,
+                )
 
             for chunk_batch in batch_generator(cleaned_chunks, BATCH_SIZE):
                 batch_index_vespa_chunks(
@@ -587,24 +624,6 @@ class VespaIndex(DocumentIndex):
                 )
 
         return total_chunks_updated
-
-    def delete(self, doc_ids: list[str]) -> None:
-        logger.info(f"Deleting {len(doc_ids)} documents from Vespa")
-
-        doc_ids = [replace_invalid_doc_id_characters(doc_id) for doc_id in doc_ids]
-
-        # NOTE: using `httpx` here since `requests` doesn't support HTTP2. This is beneficial for
-        # indexing / updates / deletes since we have to make a large volume of requests.
-        with get_vespa_http_client() as http_client:
-            index_names = [self.index_name]
-            if self.secondary_index_name:
-                index_names.append(self.secondary_index_name)
-
-            for index_name in index_names:
-                delete_vespa_docs(
-                    document_ids=doc_ids, index_name=index_name, http_client=http_client
-                )
-        return
 
     def delete_single(self, doc_id: str) -> int:
         """Possibly faster overall than the delete method due to using a single

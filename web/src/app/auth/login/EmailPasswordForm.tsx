@@ -19,11 +19,13 @@ export function EmailPasswordForm({
   shouldVerify,
   referralSource,
   nextUrl,
+  defaultEmail,
 }: {
   isSignup?: boolean;
   shouldVerify?: boolean;
   referralSource?: string;
   nextUrl?: string | null;
+  defaultEmail?: string | null;
 }) {
   const { user } = useUser();
   const { popup, setPopup } = usePopup();
@@ -34,7 +36,7 @@ export function EmailPasswordForm({
       {popup}
       <Formik
         initialValues={{
-          email: "",
+          email: defaultEmail || "",
           password: "",
         }}
         validationSchema={Yup.object().shape({

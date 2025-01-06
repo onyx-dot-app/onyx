@@ -22,6 +22,10 @@ const Page = async (props: {
     ? searchParams?.next[0]
     : searchParams?.next || null;
 
+  const defaultEmail = Array.isArray(searchParams?.email)
+    ? searchParams?.email[0]
+    : searchParams?.email || null;
+
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
   // will not render
@@ -93,6 +97,7 @@ const Page = async (props: {
             isSignup
             shouldVerify={authTypeMetadata?.requiresVerification}
             nextUrl={nextUrl}
+            defaultEmail={defaultEmail}
           />
         </div>
       </>

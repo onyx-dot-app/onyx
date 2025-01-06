@@ -12,6 +12,7 @@ from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.db.models import Document
 from onyx.redis.redis_object_helper import RedisObjectHelper
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from onyx.utils.variable_functionality import global_version
@@ -73,6 +74,7 @@ class RedisUserGroup(RedisObjectHelper):
 
         stmt = construct_document_select_by_usergroup(int(self._id))
         for doc in db_session.scalars(stmt).yield_per(1):
+            doc = cast(Document, doc)
             current_time = time.monotonic()
             if current_time - last_lock_time >= (
                 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4

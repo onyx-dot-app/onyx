@@ -36,6 +36,7 @@ import {
   GoogleStorageIcon,
   ColorSlackIcon,
   XenforoIcon,
+  ColorDiscordIcon,
   FreshdeskIcon,
   FirefliesIcon,
   EgnyteIcon,
@@ -79,6 +80,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Messaging,
     docs: "https://docs.onyx.app/connectors/slack",
     oauthSupported: true,
+  },
+  discord: {
+    icon: ColorDiscordIcon,
+    displayName: "Discord",
+    category: SourceCategory.Messaging,
+    docs: "https://docs.onyx.app/connectors/discord",
   },
   gmail: {
     icon: GmailIcon,

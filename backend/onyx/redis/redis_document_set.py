@@ -13,6 +13,7 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.document_set import construct_document_select_by_docset
+from onyx.db.models import Document
 from onyx.redis.redis_object_helper import RedisObjectHelper
 
 
@@ -60,6 +61,7 @@ class RedisDocumentSet(RedisObjectHelper):
         async_results = []
         stmt = construct_document_select_by_docset(int(self._id), current_only=False)
         for doc in db_session.scalars(stmt).yield_per(1):
+            doc = cast(Document, doc)
             current_time = time.monotonic()
             if current_time - last_lock_time >= (
                 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4

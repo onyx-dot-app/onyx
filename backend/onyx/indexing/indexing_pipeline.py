@@ -20,8 +20,10 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 )
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
+from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import prepare_to_modify_documents
+from onyx.db.document import update_docs_chunk_count__no_commit
 from onyx.db.document import update_docs_last_modified__no_commit
 from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document import upsert_document_by_connector_credential_pair
@@ -34,6 +36,7 @@ from onyx.db.tag import create_or_add_document_tag
 from onyx.db.tag import create_or_add_document_tag_list
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentMetadata
+from onyx.document_index.interfaces import IndexBatchParams
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -370,14 +373,33 @@ def index_doc_batch(
     # NOTE: don't need to acquire till here, since this is when the actual race condition
     # with Vespa can occur.
     with prepare_to_modify_documents(db_session=db_session, document_ids=updatable_ids):
-        document_id_to_access_info = get_access_for_documents(
+        doc_id_to_access_info = get_access_for_documents(
             document_ids=updatable_ids, db_session=db_session
         )
-        document_id_to_document_set = {
+        doc_id_to_document_set = {
             document_id: document_sets
             for document_id, document_sets in fetch_document_sets_for_documents(
                 document_ids=updatable_ids, db_session=db_session
             )
+        }
+
+        doc_id_to_previous_chunk_cnt: dict[str, int | None] = {
+            document_id: chunk_count
+            for document_id, chunk_count in fetch_chunk_counts_for_documents(
+                document_ids=updatable_ids,
+                db_session=db_session,
+            )
+        }
+
+        doc_id_to_new_chunk_cnt: dict[str, int] = {
+            document_id: len(
+                [
+                    chunk
+                    for chunk in chunks_with_embeddings
+                    if chunk.source_document.id == document_id
+                ]
+            )
+            for document_id in updatable_ids
         }
 
         # we're concerned about race conditions where multiple simultaneous indexings might result
@@ -388,11 +410,9 @@ def index_doc_batch(
         access_aware_chunks = [
             DocMetadataAwareIndexChunk.from_index_chunk(
                 index_chunk=chunk,
-                access=document_id_to_access_info.get(
-                    chunk.source_document.id, no_access
-                ),
+                access=doc_id_to_access_info.get(chunk.source_document.id, no_access),
                 document_sets=set(
-                    document_id_to_document_set.get(chunk.source_document.id, [])
+                    doc_id_to_document_set.get(chunk.source_document.id, [])
                 ),
                 boost=(
                     ctx.id_to_db_doc_map[chunk.source_document.id].boost
@@ -410,7 +430,15 @@ def index_doc_batch(
         # A document will not be spread across different batches, so all the
         # documents with chunks in this set, are fully represented by the chunks
         # in this set
-        insertion_records = document_index.index(chunks=access_aware_chunks)
+        insertion_records = document_index.index(
+            chunks=access_aware_chunks,
+            index_batch_params=IndexBatchParams(
+                doc_id_to_previous_chunk_cnt=doc_id_to_previous_chunk_cnt,
+                doc_id_to_new_chunk_cnt=doc_id_to_new_chunk_cnt,
+                tenant_id=tenant_id,
+                large_chunks_enabled=chunker.enable_large_chunks,
+            ),
+        )
 
         successful_doc_ids = [record.document_id for record in insertion_records]
         successful_docs = [
@@ -435,6 +463,12 @@ def index_doc_batch(
             document_ids=last_modified_ids, db_session=db_session
         )
 
+        update_docs_chunk_count__no_commit(
+            document_ids=updatable_ids,
+            doc_id_to_chunk_count=doc_id_to_new_chunk_cnt,
+            db_session=db_session,
+        )
+
         db_session.commit()
 
     result = (
@@ -443,6 +477,28 @@ def index_doc_batch(
     )
 
     return result
+
+
+def check_enable_large_chunks_and_multipass(
+    embedder: IndexingEmbedder, db_session: Session
+) -> tuple[bool, bool]:
+    search_settings = get_current_search_settings(db_session)
+    multipass = (
+        search_settings.multipass_indexing
+        if search_settings
+        else ENABLE_MULTIPASS_INDEXING
+    )
+
+    enable_large_chunks = (
+        multipass
+        and
+        # Only local models that supports larger context are from Nomic
+        (embedder.model_name.startswith("nomic-ai"))
+        and
+        # Cohere does not support larger context they recommend not going above 512 tokens
+        embedder.provider_type != EmbeddingProvider.COHERE
+    )
+    return multipass, enable_large_chunks
 
 
 def build_indexing_pipeline(
@@ -457,24 +513,8 @@ def build_indexing_pipeline(
     callback: IndexingHeartbeatInterface | None = None,
 ) -> IndexingPipelineProtocol:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
-    search_settings = get_current_search_settings(db_session)
-    multipass = (
-        search_settings.multipass_indexing
-        if search_settings
-        else ENABLE_MULTIPASS_INDEXING
-    )
-
-    enable_large_chunks = (
-        multipass
-        and
-        # Only local models that supports larger context are from Nomic
-        (
-            embedder.provider_type is not None
-            or embedder.model_name.startswith("nomic-ai")
-        )
-        and
-        # Cohere does not support larger context they recommend not going above 512 tokens
-        embedder.provider_type != EmbeddingProvider.COHERE
+    multipass, enable_large_chunks = check_enable_large_chunks_and_multipass(
+        embedder, db_session
     )
 
     chunker = chunker or Chunker(

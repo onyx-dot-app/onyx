@@ -11,6 +11,7 @@ import React, { useContext, useState, useEffect } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { Modal } from "@/components/Modal";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 export function Checkbox({
   label,
@@ -218,14 +219,19 @@ export function SettingsForm() {
           handleToggleSettingsField("auto_scroll", e.target.checked)
         }
       />
-      <Checkbox
-        label="Anonymous Users"
-        sublabel="If set, users will not be required to sign in to use Danswer."
-        checked={settings.anonymous_user_enabled}
-        onChange={(e) =>
-          handleToggleSettingsField("anonymous_user_enabled", e.target.checked)
-        }
-      />
+      {!NEXT_PUBLIC_CLOUD_ENABLED && (
+        <Checkbox
+          label="Anonymous Users"
+          sublabel="If set, users will not be required to sign in to use Onyx."
+          checked={settings.anonymous_user_enabled}
+          onChange={(e) =>
+            handleToggleSettingsField(
+              "anonymous_user_enabled",
+              e.target.checked
+            )
+          }
+        />
+      )}
       {showConfirmModal && (
         <Modal
           width="max-w-3xl w-full"

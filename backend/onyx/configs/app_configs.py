@@ -54,6 +54,10 @@ MASK_CREDENTIAL_PREFIX = (
     os.environ.get("MASK_CREDENTIAL_PREFIX", "True").lower() != "false"
 )
 
+REDIS_AUTH_EXPIRE_TIME_SECONDS = int(
+    os.environ.get("REDIS_AUTH_EXPIRE_TIME_SECONDS") or 86400 * 7
+)  # 7 days
+
 SESSION_EXPIRE_TIME_SECONDS = int(
     os.environ.get("SESSION_EXPIRE_TIME_SECONDS") or 86400 * 7
 )  # 7 days
@@ -188,9 +192,11 @@ REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
 
+
+REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
+
+
 # Rate limiting for auth endpoints
-
-
 RATE_LIMIT_WINDOW_SECONDS: int | None = None
 _rate_limit_window_seconds_str = os.environ.get("RATE_LIMIT_WINDOW_SECONDS")
 if _rate_limit_window_seconds_str is not None:
@@ -531,6 +537,9 @@ try:
 except json.JSONDecodeError:
     pass
 
+# LLM Model Update API endpoint
+LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")
+
 #####
 # Enterprise Edition Configs
 #####
@@ -569,7 +578,6 @@ CONTROL_PLANE_API_BASE_URL = os.environ.get(
 
 # JWT configuration
 JWT_ALGORITHM = "HS256"
-
 
 #####
 # API Key Configs

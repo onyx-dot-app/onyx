@@ -1,11 +1,9 @@
 import concurrent.futures
+from uuid import UUID
 
 import httpx
 from retry import retry
 
-from onyx.document_index.vespa.chunk_retrieval import (
-    get_all_vespa_ids_for_document_id,
-)
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import NUM_THREADS
 from onyx.utils.logger import setup_logger
@@ -22,29 +20,21 @@ def _retryable_http_delete(http_client: httpx.Client, url: str) -> None:
     res.raise_for_status()
 
 
-@retry(tries=3, delay=1, backoff=2)
-def _delete_vespa_doc_chunks(
-    document_id: str, index_name: str, http_client: httpx.Client
+def _delete_vespa_chunk(
+    doc_chunk_id: UUID, index_name: str, http_client: httpx.Client
 ) -> None:
-    doc_chunk_ids = get_all_vespa_ids_for_document_id(
-        document_id=document_id,
-        index_name=index_name,
-        get_large_chunks=True,
-    )
-
-    for chunk_id in doc_chunk_ids:
-        try:
-            _retryable_http_delete(
-                http_client,
-                f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{chunk_id}",
-            )
-        except httpx.HTTPStatusError as e:
-            logger.error(f"Failed to delete chunk, details: {e.response.text}")
-            raise
+    try:
+        _retryable_http_delete(
+            http_client,
+            f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}",
+        )
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Failed to delete chunk, details: {e.response.text}")
+        raise
 
 
-def delete_vespa_docs(
-    document_ids: list[str],
+def delete_vespa_chunks(
+    doc_chunk_ids: list[UUID],
     index_name: str,
     http_client: httpx.Client,
     executor: concurrent.futures.ThreadPoolExecutor | None = None,
@@ -56,13 +46,13 @@ def delete_vespa_docs(
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS)
 
     try:
-        doc_deletion_future = {
+        chunk_deletion_future = {
             executor.submit(
-                _delete_vespa_doc_chunks, doc_id, index_name, http_client
-            ): doc_id
-            for doc_id in document_ids
+                _delete_vespa_chunk, doc_chunk_id, index_name, http_client
+            ): doc_chunk_id
+            for doc_chunk_id in doc_chunk_ids
         }
-        for future in concurrent.futures.as_completed(doc_deletion_future):
+        for future in concurrent.futures.as_completed(chunk_deletion_future):
             # Will raise exception if the deletion raised an exception
             future.result()
 

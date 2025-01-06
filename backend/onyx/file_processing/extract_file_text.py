@@ -67,7 +67,9 @@ def is_text_file_extension(file_name: str) -> bool:
 
 def get_file_ext(file_path_or_name: str | Path) -> str:
     _, extension = os.path.splitext(file_path_or_name)
-    return extension
+    # standardize all extensions to be lowercase so that checks against
+    # VALID_FILE_EXTENSIONS and similar will work as intended
+    return extension.lower()
 
 
 def is_valid_file_ext(ext: str) -> bool:

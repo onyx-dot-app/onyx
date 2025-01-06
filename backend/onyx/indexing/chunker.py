@@ -73,25 +73,25 @@ def _get_metadata_suffix_for_document_index(
     return metadata_semantic, metadata_keyword
 
 
-def _combine_chunks(chunks: list[DocAwareChunk], index: int) -> DocAwareChunk:
+def _combine_chunks(chunks: list[DocAwareChunk], large_chunk_id: int) -> DocAwareChunk:
     merged_chunk = DocAwareChunk(
         source_document=chunks[0].source_document,
-        chunk_id=index,
+        chunk_id=chunks[0].chunk_id,
         blurb=chunks[0].blurb,
         content=chunks[0].content,
         source_links=chunks[0].source_links or {},
-        section_continuation=(index > 0),
+        section_continuation=(chunks[0].chunk_id > 0),
         title_prefix=chunks[0].title_prefix,
         metadata_suffix_semantic=chunks[0].metadata_suffix_semantic,
         metadata_suffix_keyword=chunks[0].metadata_suffix_keyword,
-        large_chunk_reference_ids=[chunks[0].chunk_id],
+        large_chunk_reference_ids=[chunk.chunk_id for chunk in chunks],
         mini_chunk_texts=None,
+        large_chunk_id=large_chunk_id,
     )
 
     offset = 0
     for i in range(1, len(chunks)):
         merged_chunk.content += SECTION_SEPARATOR + chunks[i].content
-        merged_chunk.large_chunk_reference_ids.append(chunks[i].chunk_id)
 
         offset += len(SECTION_SEPARATOR) + len(chunks[i - 1].content)
         for link_offset, link_text in (chunks[i].source_links or {}).items():
@@ -103,11 +103,12 @@ def _combine_chunks(chunks: list[DocAwareChunk], index: int) -> DocAwareChunk:
 
 
 def generate_large_chunks(chunks: list[DocAwareChunk]) -> list[DocAwareChunk]:
-    large_chunks = [
-        _combine_chunks(chunks[i : i + LARGE_CHUNK_RATIO], idx)
-        for idx, i in enumerate(range(0, len(chunks), LARGE_CHUNK_RATIO))
-        if len(chunks[i : i + LARGE_CHUNK_RATIO]) > 1
-    ]
+    large_chunks = []
+    for idx, i in enumerate(range(0, len(chunks), LARGE_CHUNK_RATIO)):
+        chunk_group = chunks[i : i + LARGE_CHUNK_RATIO]
+        if len(chunk_group) > 1:
+            large_chunk = _combine_chunks(chunk_group, idx)
+            large_chunks.append(large_chunk)
     return large_chunks
 
 
@@ -219,6 +220,7 @@ class Chunker:
                 metadata_suffix_semantic=metadata_suffix_semantic,
                 metadata_suffix_keyword=metadata_suffix_keyword,
                 mini_chunk_texts=self._get_mini_chunk_texts(text),
+                large_chunk_id=None,
             )
 
         for section_idx, section in enumerate(document.sections):

@@ -89,11 +89,11 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
     app_base.wait_for_db(sender, **kwargs)
     app_base.wait_for_vespa(sender, **kwargs)
 
+    logger.info("Running as the primary celery worker.")
+
     # Less startup checks in multi-tenant case
     if MULTI_TENANT:
         return
-
-    logger.info("Running as the primary celery worker.")
 
     # This is singleton work that should be done on startup exactly once
     # by the primary worker. This is unnecessary in the multi tenant scenario
@@ -286,5 +286,6 @@ celery_app.autodiscover_tasks(
         "onyx.background.celery.tasks.pruning",
         "onyx.background.celery.tasks.shared",
         "onyx.background.celery.tasks.vespa",
+        "onyx.background.celery.tasks.llm_model_update",
     ]
 )

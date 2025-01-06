@@ -15,6 +15,12 @@ SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/ee/onyx/configs/saml_co
 CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
     os.environ.get("CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
 )
+# This is a boolean that determines if anonymous access is public
+# Default behavior is to not make the page public and instead add a group
+# that contains all the users that we found in Confluence
+CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC = (
+    os.environ.get("CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC", "").lower() == "true"
+)
 # In seconds, default is 5 minutes
 CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
