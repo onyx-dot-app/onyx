@@ -54,6 +54,8 @@ def admin_search(
     query = question.query
     logger.notice(f"Received admin search query: {query}")
     user_acl_filters = build_access_filters_for_user(user, db_session)
+
+    # If single-tenant, we do no want to filter by tenant_id (this field does not exist in Vespa)
     final_filters = IndexFilters(
         source_type=question.filters.source_type,
         document_set=question.filters.document_set,

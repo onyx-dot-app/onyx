@@ -59,6 +59,11 @@ data:
   JIRA_API_VERSION: ""
   WEB_CONNECTOR_VALIDATE_URLS: ""
   GONG_CONNECTOR_START_TIME: ""
+  OAUTH_CLIENT_ID: "8kCGjQEB4ClcqGIke3CVp43JwGgGBjdE"
+  OAUTH_CLIENT_SECRET: "yLc5wTudckrvgDSxAU4i9VQj-B-Lu-Avg-0hhjbXkPA0bccqczPe1vM2-0A4akcW"
+  OPENID_CONFIG_URL: "https://dev-a7gw8edn4r3t3c2d.us.auth0.com/.well-known/openid-configuration"
+
+  # Secret yLc5wTudckrvgDSxAU4i9VQj-B-Lu-Avg-0hhjbXkPA0bccqczPe1vM2-0A4akcW, client id , domain  dev-a7gw8edn4r3t3c2d.us.auth0.com
   NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP: ""
   MAX_DOCUMENT_CHARS: ""
   MAX_FILE_SIZE_BYTES: ""
