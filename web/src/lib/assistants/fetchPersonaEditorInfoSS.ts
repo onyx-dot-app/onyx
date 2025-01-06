@@ -26,7 +26,7 @@ export async function fetchAssistantEditorInfoSS(
   | [null, string]
 > {
   const tasks = [
-    fetchSS("/manage/indexing-status"),
+    fetchSS("/manage/connector-status"),
     fetchSS("/manage/document-set"),
     fetchSS("/llm/provider"),
     // duplicate fetch, but shouldn't be too big of a deal

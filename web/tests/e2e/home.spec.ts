@@ -16,7 +16,7 @@ test(
 
     await page.waitForURL("http://localhost:3000/auth/login?next=%2Fchat");
 
-    await expect(page).toHaveTitle("Danswer");
+    await expect(page).toHaveTitle("Onyx");
 
     await takeSnapshot(page, "Before login", testInfo);
 
@@ -27,5 +27,9 @@ test(
     await page.click('button[type="submit"]');
 
     await page.waitForURL("http://localhost:3000/chat");
+
+    await page.getByPlaceholder("Send a message or try using @ or /");
+
+    await expect(page.locator("body")).not.toContainText("Initializing Onyx");
   }
 );

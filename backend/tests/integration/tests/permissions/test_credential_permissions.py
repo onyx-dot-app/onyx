@@ -5,7 +5,7 @@ the permissions of the curator manipulating credentials.
 import pytest
 from requests.exceptions import HTTPError
 
-from danswer.server.documents.models import DocumentSource
+from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.user import DATestUser
 from tests.integration.common_utils.managers.user import UserManager

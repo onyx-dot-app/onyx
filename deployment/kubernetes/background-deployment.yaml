@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: background
-          image: danswer/danswer-backend:latest
+          image: onyxdotapp/onyx-backend:latest
           imagePullPolicy: IfNotPresent
           command:
             - "/bin/sh"
@@ -28,7 +28,7 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: danswer-secrets
+                  name: onyx-secrets
                   key: redis_password
           envFrom:
             - configMapRef:
@@ -43,6 +43,7 @@ spec:
       #     - name: my-ca-cert-volume
       #       mountPath: /etc/ssl/certs/custom-ca.crt
       #       subPath: my-ca.crt
+
       # Optional volume for CA certificate
       # volumes:
       #   - name: my-cas-cert-volume
@@ -51,3 +52,13 @@ spec:
       #       items:
       #         - key: my-ca.crt
       #           path: my-ca.crt
+
+      # Uncomment if you are using IAM auth for Postgres
+      #     volumeMounts:
+      #       - name: bundle-pem
+      #         mountPath: "/app/certs"
+      #         readOnly: true
+      # volumes:
+      #   - name: bundle-pem
+      #     secret:
+      #       secretName: bundle-pem-secret

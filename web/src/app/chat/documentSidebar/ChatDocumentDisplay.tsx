@@ -1,5 +1,5 @@
 import { SourceIcon } from "@/components/SourceIcon";
-import { DanswerDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import { FiTag } from "react-icons/fi";
 import { DocumentSelector } from "./DocumentSelector";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
@@ -7,15 +7,17 @@ import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBad
 import { MetadataBadge } from "@/components/MetadataBadge";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { Dispatch, SetStateAction } from "react";
+import { openDocument } from "@/lib/search/utils";
 
 interface DocumentDisplayProps {
   closeSidebar: () => void;
-  document: DanswerDocument;
+  document: OnyxDocument;
   modal?: boolean;
   isSelected: boolean;
   handleSelect: (documentId: string) => void;
   tokenLimitReached: boolean;
-  setPresentingDocument: Dispatch<SetStateAction<DanswerDocument | null>>;
+  hideSelection?: boolean;
+  setPresentingDocument: Dispatch<SetStateAction<OnyxDocument | null>>;
 }
 
 export function DocumentMetadataBlock({
@@ -23,7 +25,7 @@ export function DocumentMetadataBlock({
   document,
 }: {
   modal?: boolean;
-  document: DanswerDocument;
+  document: OnyxDocument;
 }) {
   const MAX_METADATA_ITEMS = 3;
   const metadataEntries = Object.entries(document.metadata);
@@ -61,6 +63,7 @@ export function ChatDocumentDisplay({
   closeSidebar,
   document,
   modal,
+  hideSelection,
   isSelected,
   handleSelect,
   tokenLimitReached,
@@ -72,27 +75,19 @@ export function ChatDocumentDisplay({
     return null;
   }
 
-  const handleViewFile = async () => {
-    if (document.link) {
-      window.open(document.link, "_blank");
-    } else {
-      closeSidebar();
-
-      setTimeout(async () => {
-        setPresentingDocument(document);
-      }, 100);
-    }
-  };
-
+  const hasMetadata =
+    document.updated_at || Object.keys(document.metadata).length > 0;
   return (
-    <div className={`opacity-100   ${modal ? "w-[90vw]" : "w-full"}`}>
+    <div
+      className={`max-w-[400px] opacity-100 ${modal ? "w-[90vw]" : "w-full"}`}
+    >
       <div
         className={`flex relative flex-col gap-0.5  rounded-xl mx-2 my-1 ${
           isSelected ? "bg-gray-200" : "hover:bg-background-125"
         }`}
       >
         <button
-          onClick={handleViewFile}
+          onClick={() => openDocument(document, setPresentingDocument)}
           className="cursor-pointer text-left flex flex-col px-2 py-1.5"
         >
           <div className="line-clamp-1 mb-1 flex h-6 items-center gap-2 text-xs">
@@ -110,15 +105,21 @@ export function ChatDocumentDisplay({
                 : document.semantic_identifier || document.document_id}
             </div>
           </div>
-          <DocumentMetadataBlock modal={modal} document={document} />
-          <div className="line-clamp-3 pt-2 text-sm font-normal leading-snug text-gray-600">
+          {hasMetadata && (
+            <DocumentMetadataBlock modal={modal} document={document} />
+          )}
+          <div
+            className={`line-clamp-3 text-sm font-normal leading-snug text-gray-600 ${
+              hasMetadata ? "mt-2" : ""
+            }`}
+          >
             {buildDocumentSummaryDisplay(
               document.match_highlights,
               document.blurb
             )}
           </div>
           <div className="absolute top-2 right-2">
-            {!isInternet && (
+            {!isInternet && !hideSelection && (
               <DocumentSelector
                 isSelected={isSelected}
                 handleSelect={() => handleSelect(document.document_id)}

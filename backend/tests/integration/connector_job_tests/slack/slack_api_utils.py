@@ -14,10 +14,10 @@ from uuid import uuid4
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from danswer.connectors.slack.connector import default_msg_filter
-from danswer.connectors.slack.connector import get_channel_messages
-from danswer.connectors.slack.utils import make_paginated_slack_api_call_w_retries
-from danswer.connectors.slack.utils import make_slack_api_call_w_retries
+from onyx.connectors.slack.connector import default_msg_filter
+from onyx.connectors.slack.connector import get_channel_messages
+from onyx.connectors.slack.utils import make_paginated_slack_api_call_w_retries
+from onyx.connectors.slack.utils import make_slack_api_call_w_retries
 
 
 def _get_slack_channel_id(channel: dict[str, Any]) -> str:

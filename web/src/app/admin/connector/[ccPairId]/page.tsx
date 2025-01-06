@@ -7,7 +7,10 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus } from "@/components/Status";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import CredentialSection from "@/components/credentials/CredentialSection";
-import { updateConnectorCredentialPairName } from "@/lib/connector";
+import {
+  updateConnectorCredentialPairName,
+  updateConnectorCredentialPairProperty,
+} from "@/lib/connector";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ValidSources } from "@/lib/types";
@@ -26,11 +29,32 @@ import { buildCCPairInfoUrl } from "./lib";
 import { CCPairFullInfo, ConnectorCredentialPairStatus } from "./types";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { Button } from "@/components/ui/button";
+import EditPropertyModal from "@/components/modals/EditPropertyModal";
+
+import * as Yup from "yup";
 
 // since the uploaded files are cleaned up after some period of time
 // re-indexing will not work for the file connector. Also, it would not
 // make sense to re-index, since the files will not have changed.
-const CONNECTOR_TYPES_THAT_CANT_REINDEX: ValidSources[] = ["file"];
+const CONNECTOR_TYPES_THAT_CANT_REINDEX: ValidSources[] = [ValidSources.File];
+
+// synchronize these validations with the SQLAlchemy connector class until we have a
+// centralized schema for both frontend and backend
+const RefreshFrequencySchema = Yup.object().shape({
+  propertyValue: Yup.number()
+    .typeError("Property value must be a valid number")
+    .integer("Property value must be an integer")
+    .min(60, "Property value must be greater than or equal to 60")
+    .required("Property value is required"),
+});
+
+const PruneFrequencySchema = Yup.object().shape({
+  propertyValue: Yup.number()
+    .typeError("Property value must be a valid number")
+    .integer("Property value must be an integer")
+    .min(86400, "Property value must be greater than or equal to 86400")
+    .required("Property value is required"),
+});
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const router = useRouter(); // Initialize the router
@@ -45,6 +69,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   );
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [editingRefreshFrequency, setEditingRefreshFrequency] = useState(false);
+  const [editingPruningFrequency, setEditingPruningFrequency] = useState(false);
   const { popup, setPopup } = usePopup();
 
   const finishConnectorDeletion = useCallback(() => {
@@ -90,6 +116,86 @@ function Main({ ccPairId }: { ccPairId: number }) {
     }
   };
 
+  const handleRefreshEdit = async () => {
+    setEditingRefreshFrequency(true);
+  };
+
+  const handlePruningEdit = async () => {
+    setEditingPruningFrequency(true);
+  };
+
+  const handleRefreshSubmit = async (
+    propertyName: string,
+    propertyValue: string
+  ) => {
+    const parsedRefreshFreq = parseInt(propertyValue, 10);
+
+    if (isNaN(parsedRefreshFreq)) {
+      setPopup({
+        message: "Invalid refresh frequency: must be an integer",
+        type: "error",
+      });
+      return;
+    }
+
+    try {
+      const response = await updateConnectorCredentialPairProperty(
+        ccPairId,
+        propertyName,
+        String(parsedRefreshFreq)
+      );
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      mutate(buildCCPairInfoUrl(ccPairId));
+      setPopup({
+        message: "Connector refresh frequency updated successfully",
+        type: "success",
+      });
+    } catch (error) {
+      setPopup({
+        message: "Failed to update connector refresh frequency",
+        type: "error",
+      });
+    }
+  };
+
+  const handlePruningSubmit = async (
+    propertyName: string,
+    propertyValue: string
+  ) => {
+    const parsedFreq = parseInt(propertyValue, 10);
+
+    if (isNaN(parsedFreq)) {
+      setPopup({
+        message: "Invalid pruning frequency: must be an integer",
+        type: "error",
+      });
+      return;
+    }
+
+    try {
+      const response = await updateConnectorCredentialPairProperty(
+        ccPairId,
+        propertyName,
+        String(parsedFreq)
+      );
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      mutate(buildCCPairInfoUrl(ccPairId));
+      setPopup({
+        message: "Connector pruning frequency updated successfully",
+        type: "success",
+      });
+    } catch (error) {
+      setPopup({
+        message: "Failed to update connector pruning frequency",
+        type: "error",
+      });
+    }
+  };
+
   if (isLoading) {
     return <ThreeDotsLoader />;
   }
@@ -114,9 +220,35 @@ function Main({ ccPairId }: { ccPairId: number }) {
     refresh_freq: refreshFreq,
     indexing_start: indexingStart,
   } = ccPair.connector;
+
   return (
     <>
       {popup}
+
+      {editingRefreshFrequency && (
+        <EditPropertyModal
+          propertyTitle="Refresh Frequency"
+          propertyDetails="How often the connector should refresh (in seconds)"
+          propertyName="refresh_frequency"
+          propertyValue={String(refreshFreq)}
+          validationSchema={RefreshFrequencySchema}
+          onSubmit={handleRefreshSubmit}
+          onClose={() => setEditingRefreshFrequency(false)}
+        />
+      )}
+
+      {editingPruningFrequency && (
+        <EditPropertyModal
+          propertyTitle="Pruning Frequency"
+          propertyDetails="How often the connector should be pruned (in seconds)"
+          propertyName="pruning_frequency"
+          propertyValue={String(pruneFreq)}
+          validationSchema={PruneFrequencySchema}
+          onSubmit={handlePruningSubmit}
+          onClose={() => setEditingPruningFrequency(false)}
+        />
+      )}
+
       <BackButton
         behaviorOverride={() => router.push("/admin/indexing/status")}
       />
@@ -125,7 +257,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <SourceIcon iconSize={32} sourceType={ccPair.connector.source} />
         </div>
 
-        <div className="ml-1">
+        <div className="ml-1 overflow-hidden text-ellipsis whitespace-nowrap flex-1 mr-4">
           <EditableStringFieldDisplay
             value={ccPair.name}
             isEditable={ccPair.is_editable_for_current_user}
@@ -213,6 +345,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
           pruneFreq={pruneFreq}
           indexingStart={indexingStart}
           refreshFreq={refreshFreq}
+          onRefreshEdit={handleRefreshEdit}
+          onPruningEdit={handlePruningEdit}
         />
       )}
 

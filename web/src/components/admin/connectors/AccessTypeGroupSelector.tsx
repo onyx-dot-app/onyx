@@ -8,7 +8,7 @@ import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import {
   AccessType,
-  ValidAutoSyncSources,
+  ValidAutoSyncSource,
   ConfigurableSources,
   validAutoSyncSources,
 } from "@/lib/types";
@@ -16,8 +16,8 @@ import { useUser } from "@/components/user/UserProvider";
 
 function isValidAutoSyncSource(
   value: ConfigurableSources
-): value is ValidAutoSyncSources {
-  return validAutoSyncSources.includes(value as ValidAutoSyncSources);
+): value is ValidAutoSyncSource {
+  return validAutoSyncSources.includes(value as ValidAutoSyncSource);
 }
 
 // This should be included for all forms that require groups / public access

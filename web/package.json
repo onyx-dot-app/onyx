@@ -1,6 +1,6 @@
 {
   "name": "qa",
-  "version": "0.2.0-dev",
+  "version": "1.0.0-dev",
   "version-comment": "version field must be SemVer or chromatic will barf",
   "private": true,
   "scripts": {
@@ -42,6 +42,7 @@
     "favicon-fetch": "^1.0.0",
     "formik": "^2.2.9",
     "js-cookie": "^3.0.5",
+    "katex": "^0.16.17",
     "lodash": "^4.17.21",
     "lucide-react": "^0.454.0",
     "mdast-util-find-and-replace": "^3.0.1",
@@ -59,8 +60,10 @@
     "react-markdown": "^9.0.1",
     "react-select": "^5.8.0",
     "recharts": "^2.13.1",
+    "rehype-katex": "^7.0.1",
     "rehype-prism-plus": "^2.0.0",
     "remark-gfm": "^4.0.0",
+    "remark-math": "^6.0.0",
     "semver": "^7.5.4",
     "sharp": "^0.33.5",
     "stripe": "^17.0.0",

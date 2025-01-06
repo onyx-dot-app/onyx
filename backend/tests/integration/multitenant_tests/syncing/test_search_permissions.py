@@ -1,4 +1,4 @@
-from danswer.db.models import UserRole
+from onyx.db.models import UserRole
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -16,12 +16,12 @@ def test_multi_tenant_access_control(reset_multitenant: None) -> None:
     # Create Tenant 1 and its Admin User
     TenantManager.create("tenant_dev1", "test1@test.com", "Data Plane Registration")
     test_user1: DATestUser = UserManager.create(name="test1", email="test1@test.com")
-    assert UserManager.verify_role(test_user1, UserRole.ADMIN)
+    assert UserManager.is_role(test_user1, UserRole.ADMIN)
 
     # Create Tenant 2 and its Admin User
     TenantManager.create("tenant_dev2", "test2@test.com", "Data Plane Registration")
     test_user2: DATestUser = UserManager.create(name="test2", email="test2@test.com")
-    assert UserManager.verify_role(test_user2, UserRole.ADMIN)
+    assert UserManager.is_role(test_user2, UserRole.ADMIN)
 
     # Create connectors for Tenant 1
     cc_pair_1: DATestCCPair = CCPairManager.create_from_scratch(

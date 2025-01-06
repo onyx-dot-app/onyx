@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx-stack.fullname" . }}-background
+  labels:
+    {{- include "onyx-stack.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.background.autoscaling.enabled }}
+  replicas: {{ .Values.background.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "onyx-stack.selectorLabels" . | nindent 6 }}
+      {{- if .Values.background.deploymentLabels }}
+      {{- toYaml .Values.background.deploymentLabels | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      {{- with .Values.background.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "onyx-stack.labels" . | nindent 8 }}
+        {{- with .Values.background.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.background.podSecurityContext | nindent 8 }}
+      containers:
+        - name: background
+          securityContext:
+            {{- toYaml .Values.background.securityContext | nindent 12 }}
+          image: "{{ .Values.background.image.repository }}:{{ .Values.background.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.background.image.pullPolicy }}
+          command: ["/usr/bin/supervisord"]
+          resources:
+            {{- toYaml .Values.background.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+          env:
+            - name: ENABLE_MULTIPASS_INDEXING
+              value: "{{ .Values.background.enableMiniChunk }}"
+            {{- include "onyx-stack.envSecrets" . | nindent 12}}

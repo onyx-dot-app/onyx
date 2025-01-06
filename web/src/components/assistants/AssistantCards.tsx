@@ -67,19 +67,6 @@ export const AssistantCard = ({
           </span>
         </div>
       </div>
-
-      {assistant.document_sets.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {assistant.document_sets.map((set) => (
-            <Bubble key={set.id} isSelected={false}>
-              <div className="flex items-center gap-1 text-xs">
-                <FiBookmark className="text-text-500" />
-                {set.name}
-              </div>
-            </Bubble>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

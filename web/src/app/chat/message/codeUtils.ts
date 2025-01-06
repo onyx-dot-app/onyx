@@ -59,3 +59,26 @@ export function extractCodeText(
 
   return codeText || "";
 }
+
+// We must preprocess LaTeX in the LLM output to avoid improper formatting
+export const preprocessLaTeX = (content: string) => {
+  // 1) Escape dollar signs used outside of LaTeX context
+  const escapedCurrencyContent = content.replace(
+    /\$(\d+(?:\.\d*)?)/g,
+    (_, p1) => `\\$${p1}`
+  );
+
+  // 2) Replace block-level LaTeX delimiters \[ \] with $$ $$
+  const blockProcessedContent = escapedCurrencyContent.replace(
+    /\\\[([\s\S]*?)\\\]/g,
+    (_, equation) => `$$${equation}$$`
+  );
+
+  // 3) Replace inline LaTeX delimiters \( \) with $ $
+  const inlineProcessedContent = blockProcessedContent.replace(
+    /\\\(([\s\S]*?)\\\)/g,
+    (_, equation) => `$${equation}$`
+  );
+
+  return inlineProcessedContent;
+};

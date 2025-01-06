@@ -1,13 +1,23 @@
 import { Citation } from "@/components/search/results/Citation";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import { LoadedDanswerDocument } from "@/lib/search/interfaces";
-import { getSourceMetadata } from "@/lib/sources";
+import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import { getSourceMetadata, SOURCE_METADATA_MAP } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
 import React, { memo } from "react";
 import isEqual from "lodash/isEqual";
+import { SlackIcon } from "@/components/icons/icons";
+import { SourceIcon } from "@/components/SourceIcon";
 
 export const MemoizedAnchor = memo(
-  ({ docs, updatePresentingDocument, children }: any) => {
+  ({
+    docs,
+    updatePresentingDocument,
+    children,
+  }: {
+    docs?: OnyxDocument[] | null;
+    updatePresentingDocument: (doc: OnyxDocument) => void;
+    children: React.ReactNode;
+  }) => {
     const value = children?.toString();
     if (value?.startsWith("[") && value?.endsWith("]")) {
       const match = value.match(/\[(\d+)\]/);
@@ -19,19 +29,11 @@ export const MemoizedAnchor = memo(
           ? new URL(associatedDoc.link).origin + "/favicon.ico"
           : "";
 
-        const getIcon = (sourceType: ValidSources, link: string) => {
-          return getSourceMetadata(sourceType).icon({ size: 18 });
-        };
-
         const icon =
-          associatedDoc?.source_type === "web" ? (
-            <WebResultIcon url={associatedDoc.link} />
-          ) : (
-            getIcon(
-              associatedDoc?.source_type || "web",
-              associatedDoc?.link || ""
-            )
-          );
+          (associatedDoc && (
+            <SourceIcon sourceType={associatedDoc?.source_type} iconSize={18} />
+          )) ||
+          null;
 
         return (
           <MemoizedLink
@@ -65,7 +67,7 @@ export const MemoizedLink = memo((props: any) => {
         url={document?.url}
         icon={document?.icon as React.ReactNode}
         link={rest?.href}
-        document={document as LoadedDanswerDocument}
+        document={document as LoadedOnyxDocument}
         updatePresentingDocument={updatePresentingDocument}
       >
         {rest.children}

@@ -5,9 +5,9 @@ from typing import Any
 
 import pytest
 
-from danswer.connectors.models import InputType
-from danswer.db.enums import AccessType
-from danswer.server.documents.models import DocumentSource
+from onyx.connectors.models import InputType
+from onyx.db.enums import AccessType
+from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -61,7 +61,6 @@ def test_slack_prune(
         input_type=InputType.POLL,
         source=DocumentSource.SLACK,
         connector_specific_config={
-            "workspace": "onyx-test-workspace",
             "channels": [public_channel["name"], private_channel["name"]],
         },
         access_type=AccessType.PUBLIC,
@@ -133,34 +132,34 @@ def test_slack_prune(
 
     # ----------------------TEST THE SETUP--------------------------
     # Search as admin with access to both channels
-    danswer_doc_message_strings = DocumentSearchManager.search_documents(
+    onyx_doc_message_strings = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=admin_user,
     )
     print(
         "\ntop_documents content before deleting for admin: ",
-        danswer_doc_message_strings,
+        onyx_doc_message_strings,
     )
 
     # Ensure admin user can see all messages
-    assert public_message in danswer_doc_message_strings
-    assert private_message in danswer_doc_message_strings
-    assert message_to_delete in danswer_doc_message_strings
+    assert public_message in onyx_doc_message_strings
+    assert private_message in onyx_doc_message_strings
+    assert message_to_delete in onyx_doc_message_strings
 
     # Search as test_user_1 with access to both channels
-    danswer_doc_message_strings = DocumentSearchManager.search_documents(
+    onyx_doc_message_strings = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=test_user_1,
     )
     print(
         "\ntop_documents content before deleting for test_user_1: ",
-        danswer_doc_message_strings,
+        onyx_doc_message_strings,
     )
 
     # Ensure test_user_1 can see all messages
-    assert public_message in danswer_doc_message_strings
-    assert private_message in danswer_doc_message_strings
-    assert message_to_delete in danswer_doc_message_strings
+    assert public_message in onyx_doc_message_strings
+    assert private_message in onyx_doc_message_strings
+    assert message_to_delete in onyx_doc_message_strings
 
     # ----------------------MAKE THE CHANGES--------------------------
     # Delete messages
@@ -179,32 +178,32 @@ def test_slack_prune(
     # ----------------------------VERIFY THE CHANGES---------------------------
     # Ensure admin user can't see deleted messages
     # Search as admin user with access to only the public channel
-    danswer_doc_message_strings = DocumentSearchManager.search_documents(
+    onyx_doc_message_strings = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=admin_user,
     )
     print(
         "\ntop_documents content after deleting for admin: ",
-        danswer_doc_message_strings,
+        onyx_doc_message_strings,
     )
 
     # Ensure admin can't see deleted messages
-    assert public_message in danswer_doc_message_strings
-    assert private_message in danswer_doc_message_strings
-    assert message_to_delete not in danswer_doc_message_strings
+    assert public_message in onyx_doc_message_strings
+    assert private_message in onyx_doc_message_strings
+    assert message_to_delete not in onyx_doc_message_strings
 
     # Ensure test_user_1 can't see deleted messages
     # Search as test_user_1 with access to only the public channel
-    danswer_doc_message_strings = DocumentSearchManager.search_documents(
+    onyx_doc_message_strings = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=test_user_1,
     )
     print(
         "\ntop_documents content after prune for test_user_1: ",
-        danswer_doc_message_strings,
+        onyx_doc_message_strings,
     )
 
     # Ensure test_user_1 can't see deleted messages
-    assert public_message in danswer_doc_message_strings
-    assert private_message in danswer_doc_message_strings
-    assert message_to_delete not in danswer_doc_message_strings
+    assert public_message in onyx_doc_message_strings
+    assert private_message in onyx_doc_message_strings
+    assert message_to_delete not in onyx_doc_message_strings

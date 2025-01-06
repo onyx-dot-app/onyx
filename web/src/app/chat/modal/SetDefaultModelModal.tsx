@@ -35,6 +35,13 @@ export function SetDefaultModelModal({
     const container = containerRef.current;
     const message = messageRef.current;
 
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+
     if (container && message) {
       const checkScrollable = () => {
         if (container.scrollHeight > container.clientHeight) {
@@ -45,9 +52,14 @@ export function SetDefaultModelModal({
       };
       checkScrollable();
       window.addEventListener("resize", checkScrollable);
-      return () => window.removeEventListener("resize", checkScrollable);
+      return () => {
+        window.removeEventListener("resize", checkScrollable);
+        window.removeEventListener("keydown", handleEscape);
+      };
     }
-  }, []);
+
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
 
   const defaultModelDestructured = defaultModel
     ? destructureValue(defaultModel)

@@ -2,8 +2,8 @@ from uuid import uuid4
 
 import requests
 
-from danswer.context.search.enums import RecencyBiasSetting
-from danswer.server.features.persona.models import PersonaSnapshot
+from onyx.context.search.enums import RecencyBiasSetting
+from onyx.server.features.persona.models import PersonaSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestPersona
@@ -42,7 +42,7 @@ class PersonaManager:
             "is_public": is_public,
             "llm_filter_extraction": llm_filter_extraction,
             "recency_bias": recency_bias,
-            "prompt_ids": prompt_ids or [],
+            "prompt_ids": prompt_ids or [0],
             "document_set_ids": document_set_ids or [],
             "tool_ids": tool_ids or [],
             "llm_model_provider_override": llm_model_provider_override,

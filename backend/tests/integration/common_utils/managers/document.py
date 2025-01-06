@@ -2,8 +2,8 @@ from uuid import uuid4
 
 import requests
 
-from danswer.configs.constants import DocumentSource
-from danswer.db.enums import AccessType
+from onyx.configs.constants import DocumentSource
+from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import NUM_DOCS
@@ -99,7 +99,7 @@ class DocumentManager:
             document = _generate_dummy_document(document_id, cc_pair.id)
             documents.append(document)
             response = requests.post(
-                f"{API_SERVER_URL}/danswer-api/ingestion",
+                f"{API_SERVER_URL}/onyx-api/ingestion",
                 json=document,
                 headers=api_key.headers if api_key else GENERAL_HEADERS,
             )
@@ -127,7 +127,7 @@ class DocumentManager:
         # Create and ingest some documents
         document: dict = _generate_dummy_document(document_id, cc_pair.id, content)
         response = requests.post(
-            f"{API_SERVER_URL}/danswer-api/ingestion",
+            f"{API_SERVER_URL}/onyx-api/ingestion",
             json=document,
             headers=api_key.headers if api_key else GENERAL_HEADERS,
         )

@@ -6,7 +6,7 @@ import { Credential } from "@/lib/connectors/credentials"; // Import Credential 
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
-  const loadStateConnectors = ["web", "xenforo", "file"];
+  const loadStateConnectors = ["web", "xenforo", "file", "airtable"];
   if (loadStateConnectors.includes(connector_name)) {
     return true;
   }
@@ -135,8 +135,7 @@ export const connectorConfigs: Record<
     values: [
       {
         type: "text",
-        query:
-          "Enter the website URL to scrape e.g. https://docs.danswer.dev/:",
+        query: "Enter the website URL to scrape e.g. https://docs.onyx.app/:",
         label: "Base URL",
         name: "base_url",
         optional: false,
@@ -246,8 +245,8 @@ export const connectorConfigs: Record<
                 label: "Include shared drives?",
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "This will allow Danswer to index everything in the shared drives you have access to."
-                    : "This will allow Danswer to index everything in your Organization's shared drives.";
+                    ? "This will allow Onyx to index everything in the shared drives you have access to."
+                    : "This will allow Onyx to index everything in your Organization's shared drives.";
                 },
                 name: "include_shared_drives",
                 default: false,
@@ -261,8 +260,8 @@ export const connectorConfigs: Record<
                 },
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "This will allow Danswer to index everything in your My Drive."
-                    : "This will allow Danswer to index everything in everyone's My Drives.";
+                    ? "This will allow Onyx to index everything in your My Drive."
+                    : "This will allow Onyx to index everything in everyone's My Drives.";
                 },
                 name: "include_my_drives",
                 default: false,
@@ -270,7 +269,7 @@ export const connectorConfigs: Record<
               {
                 type: "checkbox",
                 description:
-                  "This will allow Danswer to index all files shared with you.",
+                  "This will allow Onyx to index all files shared with you.",
                 label: "Include All Files Shared With You?",
                 name: "include_files_shared_with_me",
                 visibleCondition: (values, currentCredential) =>
@@ -435,7 +434,7 @@ export const connectorConfigs: Record<
   },
   jira: {
     description: "Configure Jira connector",
-    subtext: `Specify any link to a Jira page below and click "Index" to Index. Based on the provided link, we will index the ENTIRE PROJECT, not just the specified page. For example, entering https://danswer.atlassian.net/jira/software/projects/DAN/boards/1 and clicking the Index button will index the whole DAN Jira project.`,
+    subtext: `Specify any link to a Jira page below and click "Index" to Index. Based on the provided link, we will index the ENTIRE PROJECT, not just the specified page. For example, entering https://onyx.atlassian.net/jira/software/projects/DAN/boards/1 and clicking the Index button will index the whole DAN Jira project.`,
     values: [
       {
         type: "text",
@@ -465,7 +464,7 @@ export const connectorConfigs: Record<
         label: "Requested Objects",
         name: "requested_objects",
         optional: true,
-        description: `Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Danswer will default to indexing by 'Account'.
+        description: `Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Onyx will default to indexing by 'Account'.
 
 Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of 'Opportunities').`,
       },
@@ -482,8 +481,8 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
         name: "sites",
         optional: true,
         description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
-• Specifying 'https://danswerai.sharepoint.com/sites/support' for example will only index documents within this site.
-• Specifying 'https://danswerai.sharepoint.com/sites/support/subfolder' for example will only index documents within this folder.
+• Specifying 'https://onyxai.sharepoint.com/sites/support' for example will only index documents within this site.
+• Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example will only index documents within this folder.
 `,
       },
     ],
@@ -498,7 +497,7 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
         label: "Teams",
         name: "teams",
         optional: true,
-        description: `Specify 0 or more Teams to index. For example, specifying the Team 'Support' for the 'danswerai' Org will cause us to only index messages sent in channels belonging to the 'Support' Team. If no Teams are specified, all Teams in your organization will be indexed.`,
+        description: `Specify 0 or more Teams to index. For example, specifying the Team 'Support' for the 'onyxai' Org will cause us to only index messages sent in channels belonging to the 'Support' Team. If no Teams are specified, all Teams in your organization will be indexed.`,
       },
     ],
     advanced_values: [],
@@ -546,15 +545,7 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
   },
   slack: {
     description: "Configure Slack connector",
-    values: [
-      {
-        type: "text",
-        query: "Enter the Slack workspace:",
-        label: "Workspace",
-        name: "workspace",
-        optional: false,
-      },
-    ],
+    values: [],
     advanced_values: [
       {
         type: "list",
@@ -586,7 +577,7 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         label: "Base URL",
         name: "base_url",
         optional: false,
-        description: `Specify the base URL for your Slab team. This will look something like: https://danswer.slab.com/`,
+        description: `Specify the base URL for your Slab team. This will look something like: https://onyx.slab.com/`,
       },
     ],
     advanced_values: [],
@@ -1050,6 +1041,43 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     values: [],
     advanced_values: [],
   },
+  egnyte: {
+    description: "Configure Egnyte connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter folder path to index:",
+        label: "Folder Path",
+        name: "folder_path",
+        optional: true,
+        description:
+          "The folder path to index (e.g., '/Shared/Documents'). Leave empty to index everything.",
+      },
+    ],
+    advanced_values: [],
+  },
+  airtable: {
+    description: "Configure Airtable connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the base ID:",
+        label: "Base ID",
+        name: "base_id",
+        optional: false,
+        description: "The ID of the Airtable base to index.",
+      },
+      {
+        type: "text",
+        query: "Enter the table name or ID:",
+        label: "Table Name or Table ID",
+        name: "table_name_or_id",
+        optional: false,
+      },
+    ],
+    advanced_values: [],
+    overrideDefaultFreq: 60 * 60 * 24,
+  },
 };
 export function createConnectorInitialValues(
   connector: ConfigurableSources
@@ -1134,6 +1162,20 @@ export interface ConnectorBase<T> {
 export interface Connector<T> extends ConnectorBase<T> {
   id: number;
   credential_ids: number[];
+  time_created: string;
+  time_updated: string;
+}
+
+export interface ConnectorSnapshot {
+  id: number;
+  name: string;
+  source: ValidSources;
+  input_type: ValidInputTypes;
+  // connector_specific_config
+  refresh_freq: number | null;
+  prune_freq: number | null;
+  credential_ids: number[];
+  indexing_start: number | null;
   time_created: string;
   time_updated: string;
 }

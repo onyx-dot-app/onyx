@@ -38,8 +38,9 @@ export const LOGOUT_DISABLED =
 
 // Default sidebar open is true if the environment variable is not set
 export const NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN =
-  process.env.NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN?.toLowerCase() === "true" ??
-  true;
+  process.env.NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN?.toLowerCase() === "false"
+    ? false
+    : true;
 
 export const TOGGLED_CONNECTORS_COOKIE_NAME = "toggled_connectors";
 
@@ -76,3 +77,12 @@ export const REGISTRATION_URL =
 
 export const SERVER_SIDE_ONLY__CLOUD_ENABLED =
   process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
+
+export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
+  process.env.NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED?.toLowerCase() === "true";
+
+export const NEXT_PUBLIC_TEST_ENV =
+  process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";
+
+export const NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED =
+  process.env.NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED?.toLowerCase() === "true";

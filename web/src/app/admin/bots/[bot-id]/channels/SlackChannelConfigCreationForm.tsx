@@ -170,8 +170,8 @@ export const SlackChannelConfigCreationForm = ({
               const errorMsg = responseJson.detail || responseJson.message;
               setPopup({
                 message: isUpdate
-                  ? `Error updating DanswerBot config - ${errorMsg}`
-                  : `Error creating DanswerBot config - ${errorMsg}`,
+                  ? `Error updating OnyxBot config - ${errorMsg}`
+                  : `Error creating OnyxBot config - ${errorMsg}`,
                 type: "error",
               });
             }
@@ -188,7 +188,7 @@ export const SlackChannelConfigCreationForm = ({
                 <div className="mt-6">
                   <Label>Knowledge Sources</Label>
                   <SubLabel>
-                    Controls which information DanswerBot will pull from when
+                    Controls which information OnyxBot will pull from when
                     answering questions.
                   </SubLabel>
 
@@ -209,7 +209,7 @@ export const SlackChannelConfigCreationForm = ({
 
                     <TabsContent value="assistants">
                       <SubLabel>
-                        Select the assistant DanswerBot will use while answering
+                        Select the assistant OnyxBot will use while answering
                         questions in Slack.
                       </SubLabel>
                       <SelectorFormField
@@ -225,11 +225,11 @@ export const SlackChannelConfigCreationForm = ({
 
                     <TabsContent value="document_sets">
                       <SubLabel>
-                        Select the document sets DanswerBot will use while
+                        Select the document sets OnyxBot will use while
                         answering questions in Slack.
                       </SubLabel>
                       <SubLabel>
-                        Note: If No Document Sets are selected, DanswerBot will
+                        Note: If No Document Sets are selected, OnyxBot will
                         search through all connected documents.
                       </SubLabel>
                       <FieldArray
@@ -276,17 +276,11 @@ export const SlackChannelConfigCreationForm = ({
 
                 {showAdvancedOptions && (
                   <div className="mt-4">
-                    <BooleanFormField
-                      name="show_continue_in_web_ui"
-                      removeIndent
-                      label="Show Continue in Web UI button"
-                      tooltip="If set, will show a button at the bottom of the response that allows the user to continue the conversation in the Danswer Web UI"
-                    />
-                    <div className="w-64 mb-4 mt-4">
+                    <div className="w-64 mb-4">
                       <SelectorFormField
                         name="response_type"
                         label="Answer Type"
-                        tooltip="Controls the format of DanswerBot's responses."
+                        tooltip="Controls the format of OnyxBot's responses."
                         options={[
                           { name: "Standard", value: "citations" },
                           { name: "Detailed", value: "quotes" },
@@ -294,12 +288,18 @@ export const SlackChannelConfigCreationForm = ({
                       />
                     </div>
 
+                    <BooleanFormField
+                      name="show_continue_in_web_ui"
+                      removeIndent
+                      label="Show Continue in Web UI button"
+                      tooltip="If set, will show a button at the bottom of the response that allows the user to continue the conversation in the Onyx Web UI"
+                    />
                     <div className="flex flex-col space-y-3 mt-2">
                       <BooleanFormField
                         name="still_need_help_enabled"
                         removeIndent
                         label={'Give a "Still need help?" button'}
-                        tooltip={`DanswerBot's response will include a button at the bottom 
+                        tooltip={`OnyxBot's response will include a button at the bottom 
                       of the response that asks the user if they still need help.`}
                       />
                       {values.still_need_help_enabled && (
@@ -325,8 +325,8 @@ export const SlackChannelConfigCreationForm = ({
                       <BooleanFormField
                         name="answer_validity_check_enabled"
                         removeIndent
-                        label="Hide Non-Answers"
-                        tooltip="If set, will only answer questions that the model determines it can answer"
+                        label="Only respond if citations found"
+                        tooltip="If set, will only answer questions where the model successfully produces citations"
                       />
                       <BooleanFormField
                         name="questionmark_prefilter_enabled"
@@ -337,14 +337,14 @@ export const SlackChannelConfigCreationForm = ({
                       <BooleanFormField
                         name="respond_tag_only"
                         removeIndent
-                        label="Respond to @DanswerBot Only"
-                        tooltip="If set, DanswerBot will only respond when directly tagged"
+                        label="Respond to @OnyxBot Only"
+                        tooltip="If set, OnyxBot will only respond when directly tagged"
                       />
                       <BooleanFormField
                         name="respond_to_bots"
                         removeIndent
                         label="Respond to Bot messages"
-                        tooltip="If not set, DanswerBot will always ignore messages from Bots"
+                        tooltip="If not set, OnyxBot will always ignore messages from Bots"
                       />
                       <BooleanFormField
                         name="enable_auto_filters"
@@ -358,7 +358,7 @@ export const SlackChannelConfigCreationForm = ({
                           name="respond_member_group_list"
                           label="(Optional) Respond to Certain Users / Groups"
                           subtext={
-                            "If specified, DanswerBot responses will only " +
+                            "If specified, OnyxBot responses will only " +
                             "be visible to the members or groups in this list."
                           }
                           values={values}

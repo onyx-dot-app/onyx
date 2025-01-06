@@ -9,13 +9,13 @@ import requests
 
 from alembic import command
 from alembic.config import Config
-from danswer.configs.app_configs import POSTGRES_DB
-from danswer.configs.app_configs import POSTGRES_HOST
-from danswer.configs.app_configs import POSTGRES_PASSWORD
-from danswer.configs.app_configs import POSTGRES_PORT
-from danswer.configs.app_configs import POSTGRES_USER
-from danswer.document_index.vespa.index import DOCUMENT_ID_ENDPOINT
-from danswer.utils.logger import setup_logger
+from onyx.configs.app_configs import POSTGRES_DB
+from onyx.configs.app_configs import POSTGRES_HOST
+from onyx.configs.app_configs import POSTGRES_PASSWORD
+from onyx.configs.app_configs import POSTGRES_PORT
+from onyx.configs.app_configs import POSTGRES_USER
+from onyx.document_index.vespa.index import DOCUMENT_ID_ENDPOINT
+from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
@@ -94,25 +94,23 @@ def load_vespa(filename: str) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Danswer checkpoint saving and loading."
+    parser = argparse.ArgumentParser(description="Onyx checkpoint saving and loading.")
+    parser.add_argument(
+        "--save", action="store_true", help="Save Onyx state to directory."
     )
     parser.add_argument(
-        "--save", action="store_true", help="Save Danswer state to directory."
-    )
-    parser.add_argument(
-        "--load", action="store_true", help="Load Danswer state from save directory."
+        "--load", action="store_true", help="Load Onyx state from save directory."
     )
     parser.add_argument(
         "--postgres_container_name",
         type=str,
-        default="danswer-stack-relational_db-1",
+        default="onyx-stack-relational_db-1",
         help="Name of the postgres container to dump",
     )
     parser.add_argument(
         "--checkpoint_dir",
         type=str,
-        default=os.path.join("..", "danswer_checkpoint"),
+        default=os.path.join("..", "onyx_checkpoint"),
         help="A directory to store temporary files to.",
     )
 

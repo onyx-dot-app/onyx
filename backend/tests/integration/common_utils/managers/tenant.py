@@ -4,9 +4,9 @@ from datetime import timedelta
 import jwt
 import requests
 
-from danswer.server.manage.models import AllUsersResponse
-from danswer.server.models import FullUserSnapshot
-from danswer.server.models import InvitedUserSnapshot
+from onyx.server.manage.models import AllUsersResponse
+from onyx.server.models import FullUserSnapshot
+from onyx.server.models import InvitedUserSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser
@@ -69,8 +69,10 @@ class TenantManager:
         return AllUsersResponse(
             accepted=[FullUserSnapshot(**user) for user in data["accepted"]],
             invited=[InvitedUserSnapshot(**user) for user in data["invited"]],
+            slack_users=[FullUserSnapshot(**user) for user in data["slack_users"]],
             accepted_pages=data["accepted_pages"],
             invited_pages=data["invited_pages"],
+            slack_users_pages=data["slack_users_pages"],
         )
 
     @staticmethod

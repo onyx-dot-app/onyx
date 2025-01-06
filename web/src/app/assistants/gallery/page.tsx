@@ -5,6 +5,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 import WrappedAssistantsGallery from "./WrappedAssistantsGallery";
 import { cookies } from "next/headers";
+import { ChatProvider } from "@/components/context/ChatContext";
 
 export default async function GalleryPage(props: {
   searchParams: Promise<{ [key: string]: string }>;
@@ -26,22 +27,38 @@ export default async function GalleryPage(props: {
     openedFolders,
     toggleSidebar,
     shouldShowWelcomeModal,
+    availableSources,
+    ccPairs,
+    documentSets,
+    tags,
+    llmProviders,
+    defaultAssistantId,
   } = data;
 
   return (
-    <>
+    <ChatProvider
+      value={{
+        chatSessions,
+        availableSources,
+        ccPairs,
+        documentSets,
+        tags,
+        availableDocumentSets: documentSets,
+        availableTags: tags,
+        llmProviders,
+        folders,
+        openedFolders,
+        shouldShowWelcomeModal,
+        defaultAssistantId,
+      }}
+    >
       {shouldShowWelcomeModal && (
         <WelcomeModal user={user} requestCookies={requestCookies} />
       )}
 
       <InstantSSRAutoRefresh />
 
-      <WrappedAssistantsGallery
-        initiallyToggled={toggleSidebar}
-        chatSessions={chatSessions}
-        folders={folders}
-        openedFolders={openedFolders}
-      />
-    </>
+      <WrappedAssistantsGallery toggleSidebar={toggleSidebar} />
+    </ChatProvider>
   );
 }

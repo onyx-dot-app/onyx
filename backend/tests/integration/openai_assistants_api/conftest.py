@@ -10,6 +10,7 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.user import build_email
 from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user import UserRole
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -30,6 +31,8 @@ def admin_user() -> DATestUser | None:
                 email=build_email("admin_user"),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
+                role=UserRole.ADMIN,
+                is_active=True,
             )
         )
     except Exception:

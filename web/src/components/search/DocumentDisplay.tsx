@@ -1,10 +1,10 @@
 "use client";
 import React from "react";
 import {
-  DanswerDocument,
+  OnyxDocument,
   DocumentRelevance,
-  LoadedDanswerDocument,
-  SearchDanswerDocument,
+  LoadedOnyxDocument,
+  SearchOnyxDocument,
 } from "@/lib/search/interfaces";
 import { DocumentFeedbackBlock } from "./DocumentFeedbackBlock";
 import { useContext, useState } from "react";
@@ -21,13 +21,14 @@ import { CustomTooltip, TooltipGroup } from "../tooltip/CustomTooltip";
 import { WarningCircle } from "@phosphor-icons/react";
 import TextView from "../chat_search/TextView";
 import { SearchResultIcon } from "../SearchResultIcon";
+import { ValidSources } from "@/lib/types";
+import { openDocument } from "@/lib/search/utils";
 
 export const buildDocumentSummaryDisplay = (
   matchHighlights: string[],
   blurb: string
 ) => {
   if (!matchHighlights || matchHighlights.length === 0) {
-    // console.log("no match highlights", matchHighlights);
     return blurb;
   }
 
@@ -126,7 +127,7 @@ export const buildDocumentSummaryDisplay = (
 export function DocumentMetadataBlock({
   document,
 }: {
-  document: DanswerDocument;
+  document: OnyxDocument;
 }) {
   // don't display super long tags, as they are ugly
   const MAXIMUM_TAG_LENGTH = 40;
@@ -162,7 +163,7 @@ export function DocumentMetadataBlock({
 }
 
 interface DocumentDisplayProps {
-  document: SearchDanswerDocument;
+  document: SearchOnyxDocument;
   messageId: number | null;
   documentRank: number;
   isSelected: boolean;
@@ -190,7 +191,7 @@ export const DocumentDisplay = ({
     document.relevance_explanation ?? additional_relevance?.content;
   const settings = useContext(SettingsContext);
   const [presentingDocument, setPresentingDocument] =
-    useState<DanswerDocument | null>(null);
+    useState<OnyxDocument | null>(null);
 
   const handleViewFile = async () => {
     setPresentingDocument(document);
@@ -315,7 +316,7 @@ export const AgenticDocumentDisplay = ({
 }: DocumentDisplayProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [presentingDocument, setPresentingDocument] =
-    useState<DanswerDocument | null>(null);
+    useState<OnyxDocument | null>(null);
 
   const [alternativeToggled, setAlternativeToggled] = useState(false);
 
@@ -425,21 +426,28 @@ export function CompactDocumentCard({
   document,
   icon,
   url,
+  updatePresentingDocument,
 }: {
-  document: LoadedDanswerDocument;
+  document: OnyxDocument;
   icon?: React.ReactNode;
   url?: string;
+  updatePresentingDocument: (document: OnyxDocument) => void;
 }) {
   return (
-    <div className="max-w-[250px]  pb-0 pt-0 mt-0 flex gap-y-0  flex-col  content-start items-start gap-0 ">
-      <h3 className="text-sm font-semibold flex  items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
+    <div
+      onClick={() => {
+        openDocument(document, updatePresentingDocument);
+      }}
+      className="max-w-[250px] cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0  flex-col  content-start items-start gap-0 "
+    >
+      <div className="text-sm font-semibold flex  items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
         {icon}
         {(document.semantic_identifier || document.document_id).slice(0, 40)}
         {(document.semantic_identifier || document.document_id).length > 40 &&
           "..."}
-      </h3>
+      </div>
       {document.blurb && (
-        <p className="text-xs  mb-0 text-gray-600 line-clamp-2">
+        <p className="text-xs mb-0 text-gray-600 line-clamp-2">
           {document.blurb}
         </p>
       )}

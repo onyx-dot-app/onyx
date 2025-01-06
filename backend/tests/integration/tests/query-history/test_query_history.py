@@ -5,8 +5,8 @@ from datetime import timezone
 import pytest
 import requests
 
-from danswer.configs.constants import QAFeedbackType
-from danswer.configs.constants import SessionType
+from onyx.configs.constants import QAFeedbackType
+from onyx.configs.constants import SessionType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager

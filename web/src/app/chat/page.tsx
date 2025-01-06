@@ -31,7 +31,6 @@ export default async function Page(props: {
     openedFolders,
     defaultAssistantId,
     shouldShowWelcomeModal,
-    userInputPrompts,
     ccPairs,
   } = data;
 
@@ -53,7 +52,6 @@ export default async function Page(props: {
           llmProviders,
           folders,
           openedFolders,
-          userInputPrompts,
           shouldShowWelcomeModal,
           defaultAssistantId,
         }}

@@ -27,6 +27,7 @@ import {
   buildLatestMessageChain,
   checkAnyAssistantHasSearch,
   createChatSession,
+  deleteAllChatSessions,
   deleteChatSession,
   getCitedDocumentsFromMessage,
   getHumanAndAIMessageFromMessageNumber,
@@ -60,7 +61,7 @@ import { LlmOverride, useFilters, useLlmOverride } from "@/lib/hooks";
 import { computeAvailableFilters } from "@/lib/filters";
 import { ChatState, FeedbackType, RegenerationState } from "./types";
 import { ChatFilters } from "./documentSidebar/ChatFilters";
-import { DanswerInitializingLoader } from "@/components/DanswerInitializingLoader";
+import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { FeedbackModal } from "./modal/FeedbackModal";
 import { ShareChatSessionModal } from "./modal/ShareChatSessionModal";
 import { FiArrowDown } from "react-icons/fi";
@@ -69,7 +70,7 @@ import { AIMessage, HumanMessage } from "./message/Messages";
 import { StarterMessages } from "../../components/assistants/StarterMessage";
 import {
   AnswerPiecePacket,
-  DanswerDocument,
+  OnyxDocument,
   DocumentInfoPacket,
   StreamStopInfo,
   StreamStopReason,
@@ -135,7 +136,6 @@ export function ChatPage({
     llmProviders,
     folders,
     openedFolders,
-    userInputPrompts,
     defaultAssistantId,
     shouldShowWelcomeModal,
     refreshChatSessions,
@@ -273,6 +273,7 @@ export function ChatPage({
   };
 
   const llmOverrideManager = useLlmOverride(
+    llmProviders,
     modelVersionFromSearchParams || (user?.preferences.default_model ?? null),
     selectedChatSession,
     defaultTemperature
@@ -282,7 +283,7 @@ export function ChatPage({
     useState<Persona | null>(null);
 
   const [presentingDocument, setPresentingDocument] =
-    useState<DanswerDocument | null>(null);
+    useState<OnyxDocument | null>(null);
 
   const {
     visibleAssistants: assistants,
@@ -319,9 +320,9 @@ export function ChatPage({
     );
 
     if (personaDefault) {
-      llmOverrideManager.setLlmOverride(personaDefault);
+      llmOverrideManager.updateLLMOverride(personaDefault);
     } else if (user?.preferences.default_model) {
-      llmOverrideManager.setLlmOverride(
+      llmOverrideManager.updateLLMOverride(
         destructureValue(user?.preferences.default_model)
       );
     }
@@ -362,7 +363,7 @@ export function ChatPage({
 
   // this is used to track which assistant is being used to generate the current message
   // for example, this would come into play when:
-  // 1. default assistant is `Danswer`
+  // 1. default assistant is `Onyx`
   // 2. we "@"ed the `GPT` assistant and sent a message
   // 3. while the `GPT` assistant message is generating, we "@" the `Paraphrase` assistant
   const [alternativeGeneratingAssistant, setAlternativeGeneratingAssistant] =
@@ -471,13 +472,14 @@ export function ChatPage({
           loadedSessionId != null) &&
         !currentChatAnswering()
       ) {
-        updateCompleteMessageDetail(chatSession.chat_session_id, newMessageMap);
-
         const latestMessageId =
           newMessageHistory[newMessageHistory.length - 1]?.messageId;
+
         setSelectedMessageForDocDisplay(
           latestMessageId !== undefined ? latestMessageId : null
         );
+
+        updateCompleteMessageDetail(chatSession.chat_session_id, newMessageMap);
       }
 
       setChatSessionSharedStatus(chatSession.shared_status);
@@ -976,13 +978,14 @@ export function ChatPage({
 
   useEffect(() => {
     if (
+      !personaIncludesRetrieval &&
       (!selectedDocuments || selectedDocuments.length === 0) &&
       documentSidebarToggled &&
       !filtersToggled
     ) {
       setDocumentSidebarToggled(false);
     }
-  }, [selectedDocuments, filtersToggled]);
+  }, [chatSessionIdRef.current]);
 
   useEffect(() => {
     adjustDocumentSidebarWidth(); // Adjust the width on initial render
@@ -1079,10 +1082,17 @@ export function ChatPage({
     updateCanContinue(false, frozenSessionId);
 
     if (currentChatState() != "input") {
-      setPopup({
-        message: "Please wait for the response to complete",
-        type: "error",
-      });
+      if (currentChatState() == "uploading") {
+        setPopup({
+          message: "Please wait for the content to upload",
+          type: "error",
+        });
+      } else {
+        setPopup({
+          message: "Please wait for the response to complete",
+          type: "error",
+        });
+      }
 
       return;
     }
@@ -1181,7 +1191,7 @@ export function ChatPage({
       selectedDocuments.length > 0
         ? RetrievalType.SelectedDocs
         : RetrievalType.None;
-    let documents: DanswerDocument[] = selectedDocuments;
+    let documents: OnyxDocument[] = selectedDocuments;
     let aiMessageImages: FileDescriptor[] | null = null;
     let error: string | null = null;
     let stackTrace: string | null = null;
@@ -1194,7 +1204,6 @@ export function ChatPage({
       assistant_message_id: number;
       frozenMessageMap: Map<number, Message>;
     } = null;
-
     try {
       const mapKeys = Array.from(
         currentMessageMap(completeMessageDetail).keys()
@@ -1557,7 +1566,7 @@ export function ChatPage({
     }
   };
 
-  const handleImageUpload = (acceptedFiles: File[]) => {
+  const handleImageUpload = async (acceptedFiles: File[]) => {
     const [_, llmModel] = getFinalLLM(
       llmProviders,
       liveAssistant,
@@ -1597,8 +1606,9 @@ export function ChatPage({
         (file) => !tempFileDescriptors.some((newFile) => newFile.id === file.id)
       );
     };
+    updateChatState("uploading", currentSessionId());
 
-    uploadFilesForChat(acceptedFiles).then(([files, error]) => {
+    await uploadFilesForChat(acceptedFiles).then(([files, error]) => {
       if (error) {
         setCurrentMessageFiles((prev) => removeTempFiles(prev));
         setPopup({
@@ -1609,15 +1619,16 @@ export function ChatPage({
         setCurrentMessageFiles((prev) => [...removeTempFiles(prev), ...files]);
       }
     });
+    updateChatState("input", currentSessionId());
   };
-  const [showDocSidebar, setShowDocSidebar] = useState(false); // State to track if sidebar is open
+  const [showHistorySidebar, setShowHistorySidebar] = useState(false); // State to track if sidebar is open
 
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
   const [untoggled, setUntoggled] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
 
   const explicitlyUntoggle = () => {
-    setShowDocSidebar(false);
+    setShowHistorySidebar(false);
 
     setUntoggled(true);
     setTimeout(() => {
@@ -1636,7 +1647,7 @@ export function ChatPage({
     toggle();
   };
   const removeToggle = () => {
-    setShowDocSidebar(false);
+    setShowHistorySidebar(false);
     toggle(false);
   };
 
@@ -1646,10 +1657,11 @@ export function ChatPage({
   useSidebarVisibility({
     toggledSidebar,
     sidebarElementRef,
-    showDocSidebar,
-    setShowDocSidebar,
+    showDocSidebar: showHistorySidebar,
+    setShowDocSidebar: setShowHistorySidebar,
     setToggled: removeToggle,
     mobile: settings?.isMobile,
+    isAnonymousUser: user?.is_anonymous_user,
   });
 
   const autoScrollEnabled =
@@ -1827,6 +1839,7 @@ export function ChatPage({
 
   const innerSidebarElementRef = useRef<HTMLDivElement>(null);
   const [settingsToggled, setSettingsToggled] = useState(false);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
 
   const currentPersona = alternativeAssistant || liveAssistant;
   useEffect(() => {
@@ -1893,11 +1906,6 @@ export function ChatPage({
   const showShareModal = (chatSession: ChatSession) => {
     setSharedChatSession(chatSession);
   };
-  const [documentSelection, setDocumentSelection] = useState(false);
-  // const toggleDocumentSelectionAspects = () => {
-  //   setDocumentSelection((documentSelection) => !documentSelection);
-  //   setShowDocSidebar(false);
-  // };
 
   const toggleDocumentSidebar = () => {
     if (!documentSidebarToggled) {
@@ -1923,6 +1931,7 @@ export function ChatPage({
   interface RegenerationRequest {
     messageId: number;
     parentMessage: Message;
+    forceSearch?: boolean;
   }
 
   function createRegenerator(regenerationRequest: RegenerationRequest) {
@@ -1932,6 +1941,7 @@ export function ChatPage({
         modelOverRide,
         messageIdToResend: regenerationRequest.parentMessage.messageId,
         regenerationRequest,
+        forceSearch: regenerationRequest.forceSearch,
       });
     };
   }
@@ -1959,6 +1969,32 @@ export function ChatPage({
       {popup}
 
       <ChatPopup />
+
+      {showDeleteAllModal && (
+        <DeleteEntityModal
+          entityType="All Chats"
+          entityName="all your chat sessions"
+          onClose={() => setShowDeleteAllModal(false)}
+          additionalDetails="This action cannot be undone. All your chat sessions will be deleted."
+          onSubmit={async () => {
+            const response = await deleteAllChatSessions("Chat");
+            if (response.ok) {
+              setShowDeleteAllModal(false);
+              setPopup({
+                message: "All your chat sessions have been deleted.",
+                type: "success",
+              });
+              refreshChatSessions();
+              router.push("/chat");
+            } else {
+              setPopup({
+                message: "Failed to delete all chat sessions.",
+                type: "error",
+              });
+            }
+          }}
+        />
+      )}
 
       {currentFeedback && (
         <FeedbackModal
@@ -2070,6 +2106,7 @@ export function ChatPage({
           }
         />
       )}
+
       {sharingModalVisible && chatSessionIdRef.current !== null && (
         <ShareChatSessionModal
           message={message}
@@ -2098,7 +2135,7 @@ export function ChatPage({
                 duration-300
                 ease-in-out
                 ${
-                  !untoggled && (showDocSidebar || toggledSidebar)
+                  !untoggled && (showHistorySidebar || toggledSidebar)
                     ? "opacity-100 w-[250px] translate-x-0"
                     : "opacity-0 w-[200px] pointer-events-none -translate-x-10"
                 }`}
@@ -2111,8 +2148,8 @@ export function ChatPage({
                   page="chat"
                   ref={innerSidebarElementRef}
                   toggleSidebar={toggleSidebar}
-                  toggled={toggledSidebar && !settings?.isMobile}
-                  backgroundToggled={toggledSidebar || showDocSidebar}
+                  toggled={toggledSidebar}
+                  backgroundToggled={toggledSidebar || showHistorySidebar}
                   existingChats={chatSessions}
                   currentChatSession={selectedChatSession}
                   folders={folders}
@@ -2120,6 +2157,7 @@ export function ChatPage({
                   removeToggle={removeToggle}
                   showShareModal={showShareModal}
                   showDeleteModal={showDeleteModal}
+                  showDeleteAllModal={() => setShowDeleteAllModal(true)}
                 />
               </div>
             </div>
@@ -2132,7 +2170,6 @@ export function ChatPage({
                 fixed
                 right-0
                 z-[1000]
-
                 bg-background
                 h-screen
                 transition-all
@@ -2171,7 +2208,7 @@ export function ChatPage({
           )}
 
           <BlurBackground
-            visible={!untoggled && (showDocSidebar || toggledSidebar)}
+            visible={!untoggled && (showHistorySidebar || toggledSidebar)}
           />
 
           <div
@@ -2182,8 +2219,6 @@ export function ChatPage({
               {liveAssistant && (
                 <FunctionalHeader
                   toggleUserSettings={() => setUserSettingsToggled(true)}
-                  liveAssistant={liveAssistant}
-                  onAssistantChange={onAssistantChange}
                   sidebarToggled={toggledSidebar}
                   reset={() => setMessage("")}
                   page="chat"
@@ -2195,7 +2230,7 @@ export function ChatPage({
                   toggleSidebar={toggleSidebar}
                   currentChatSession={selectedChatSession}
                   documentSidebarToggled={documentSidebarToggled}
-                  llmOverrideManager={llmOverrideManager}
+                  hideUserDropdown={user?.is_anonymous_user}
                 />
               )}
 
@@ -2229,7 +2264,7 @@ export function ChatPage({
                           ref={scrollableDivRef}
                         >
                           {liveAssistant && onAssistantChange && (
-                            <div className="z-20 fixed top-4 pointer-events-none left-0 w-full flex justify-center overflow-visible">
+                            <div className="z-20 fixed top-0 pointer-events-none left-0 w-full flex justify-center overflow-visible">
                               {!settings?.isMobile && (
                                 <div
                                   style={{ transition: "width 0.30s ease-out" }}
@@ -2592,13 +2627,11 @@ export function ChatPage({
                                           previousMessage &&
                                           previousMessage.messageId
                                         ) {
-                                          onSubmit({
-                                            messageIdToResend:
-                                              previousMessage.messageId,
+                                          createRegenerator({
+                                            messageId: message.messageId,
+                                            parentMessage: parentMessage!,
                                             forceSearch: true,
-                                            alternativeAssistantOverride:
-                                              currentAlternativeAssistant,
-                                          });
+                                          })(llmOverrideManager.llmOverride);
                                         } else {
                                           setPopup({
                                             type: "error",
@@ -2732,11 +2765,9 @@ export function ChatPage({
                               removeDocs={() => {
                                 clearSelectedDocuments();
                               }}
-                              removeFilters={() => {
-                                filterManager.setSelectedSources([]);
-                                filterManager.setSelectedTags([]);
-                                filterManager.setSelectedDocumentSets([]);
-                                setDocumentSidebarToggled(false);
+                              showDocs={() => {
+                                setFiltersToggled(false);
+                                setDocumentSidebarToggled(true);
                               }}
                               showConfigureAPIKey={() =>
                                 setShowApiKeyModal(true)
@@ -2744,12 +2775,9 @@ export function ChatPage({
                               chatState={currentSessionChatState}
                               stopGenerating={stopGenerating}
                               openModelSettings={() => setSettingsToggled(true)}
-                              inputPrompts={userInputPrompts}
-                              showDocs={() => setDocumentSelection(true)}
                               selectedDocuments={selectedDocuments}
                               // assistant stuff
                               selectedAssistant={liveAssistant}
-                              setSelectedAssistant={onAssistantChange}
                               setAlternativeAssistant={setAlternativeAssistant}
                               alternativeAssistant={alternativeAssistant}
                               // end assistant stuff
@@ -2757,7 +2785,6 @@ export function ChatPage({
                               setMessage={setMessage}
                               onSubmit={onSubmit}
                               filterManager={filterManager}
-                              llmOverrideManager={llmOverrideManager}
                               files={currentMessageFiles}
                               setFiles={setCurrentMessageFiles}
                               toggleFilters={
@@ -2765,7 +2792,6 @@ export function ChatPage({
                               }
                               handleFileUpload={handleImageUpload}
                               textAreaRef={textAreaRef}
-                              chatSessionId={chatSessionIdRef.current!}
                             />
                             {enterpriseSettings &&
                               enterpriseSettings.custom_lower_disclaimer_content && (
@@ -2825,13 +2851,13 @@ export function ChatPage({
                         }`}
                   />
                   <div className="my-auto">
-                    <DanswerInitializingLoader />
+                    <OnyxInitializingLoader />
                   </div>
                 </div>
               )}
             </div>
           </div>
-          <FixedLogo backgroundToggled={toggledSidebar || showDocSidebar} />
+          <FixedLogo backgroundToggled={toggledSidebar || showHistorySidebar} />
         </div>
         {/* Right Sidebar - DocumentSidebar */}
       </div>

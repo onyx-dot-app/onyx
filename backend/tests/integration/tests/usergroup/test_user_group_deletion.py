@@ -8,7 +8,7 @@ This tests the deletion of a user group with the following foreign key constrain
 - token_rate_limit (Not Implemented)
 - persona
 """
-from danswer.server.documents.models import DocumentSource
+from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager

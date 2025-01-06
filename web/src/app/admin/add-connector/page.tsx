@@ -75,7 +75,8 @@ export default function Page() {
       },
       {} as Record<SourceCategory, SourceMetadata[]>
     );
-  }, [sources, searchTerm]);
+  }, [sources, filterSources, searchTerm]);
+
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       const filteredCategories = Object.entries(categorizedSources).filter(

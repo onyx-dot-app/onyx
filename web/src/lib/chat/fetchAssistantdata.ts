@@ -30,7 +30,7 @@ export async function fetchAssistantData(): Promise<AssistantData> {
 
     // Parallel fetch of additional data
     const [ccPairsResponse, llmProviders] = await Promise.all([
-      fetchSS("/manage/indexing-status").catch((error) => {
+      fetchSS("/manage/connector-status").catch((error) => {
         console.error("Failed to fetch connectors:", error);
         return null;
       }),

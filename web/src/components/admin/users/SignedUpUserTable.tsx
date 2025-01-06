@@ -1,16 +1,12 @@
 import {
   type User,
-  UserStatus,
   UserRole,
+  InvitedUserSnapshot,
   USER_ROLE_LABELS,
-  INVALID_ROLE_HOVER_TEXT,
 } from "@/lib/types";
+import { useState } from "react";
 import CenteredPageSelector from "./CenteredPageSelector";
-import { type PageSelectorProps } from "@/components/PageSelector";
-import { HidableSection } from "@/app/admin/assistants/HidableSection";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
-import useSWRMutation from "swr/mutation";
 import {
   Table,
   TableHead,
@@ -18,7 +14,14 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table";
-
+import { TableHeader } from "@/components/ui/table";
+import UserRoleDropdown from "./buttons/UserRoleDropdown";
+import DeleteUserButton from "./buttons/DeleteUserButton";
+import DeactivateUserButton from "./buttons/DeactivateUserButton";
+import usePaginatedFetch from "@/hooks/usePaginatedFetch";
+import { ThreeDotsLoader } from "@/components/Loading";
+import { ErrorCallout } from "@/components/ErrorCallout";
+import { InviteUserButton } from "./buttons/InviteUserButton";
 import {
   Select,
   SelectContent,
@@ -26,229 +29,62 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
-import { useState } from "react";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
-import { TableHeader } from "@/components/ui/table";
+
+const ITEMS_PER_PAGE = 10;
+const PAGES_PER_BATCH = 2;
+import { useUser } from "@/components/user/UserProvider";
+import { LeaveOrganizationButton } from "./buttons/LeaveOrganizationButton";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 interface Props {
-  users: Array<User>;
+  invitedUsers: InvitedUserSnapshot[];
   setPopup: (spec: PopupSpec) => void;
-  mutate: () => void;
+  q: string;
+  invitedUsersMutate: () => void;
 }
 
-const UserRoleDropdown = ({
-  user,
-  onSuccess,
-  onError,
-}: {
-  user: User;
-  onSuccess: () => void;
-  onError: (message: string) => void;
-}) => {
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [pendingRole, setPendingRole] = useState<string | null>(null);
-
-  const { trigger: setUserRole, isMutating: isSettingRole } = useSWRMutation(
-    "/api/manage/set-user-role",
-    userMutationFetcher,
-    { onSuccess, onError }
-  );
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-
-  const handleChange = (value: string) => {
-    if (value === user.role) return;
-    if (user.role === UserRole.CURATOR) {
-      setShowConfirmModal(true);
-      setPendingRole(value);
-    } else {
-      setUserRole({
-        user_email: user.email,
-        new_role: value,
-      });
-    }
-  };
-
-  const handleConfirm = () => {
-    if (pendingRole) {
-      setUserRole({
-        user_email: user.email,
-        new_role: pendingRole,
-      });
-    }
-    setShowConfirmModal(false);
-    setPendingRole(null);
-  };
-
-  return (
-    <>
-      <Select
-        value={user.role}
-        onValueChange={handleChange}
-        disabled={isSettingRole}
-      >
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {(Object.entries(USER_ROLE_LABELS) as [UserRole, string][]).map(
-            ([role, label]) => {
-              // Dont want to ever show external permissioned users because it's scary
-              if (role === UserRole.EXT_PERM_USER) return null;
-
-              // Only want to show limited users if paid enterprise features are enabled
-              // Also, dont want to show these other roles in general
-              const isNotVisibleRole =
-                (!isPaidEnterpriseFeaturesEnabled &&
-                  role === UserRole.GLOBAL_CURATOR) ||
-                role === UserRole.CURATOR ||
-                role === UserRole.LIMITED ||
-                role === UserRole.SLACK_USER;
-
-              // Always show the current role
-              const isCurrentRole = user.role === role;
-
-              return isNotVisibleRole && !isCurrentRole ? null : (
-                <SelectItem
-                  key={role}
-                  value={role}
-                  title={INVALID_ROLE_HOVER_TEXT[role] ?? ""}
-                  data-tooltip-delay="0"
-                >
-                  {label}
-                </SelectItem>
-              );
-            }
-          )}
-        </SelectContent>
-      </Select>
-      {showConfirmModal && (
-        <GenericConfirmModal
-          title="Change Curator Role"
-          message={`Warning: Switching roles from Curator to ${
-            USER_ROLE_LABELS[pendingRole as UserRole] ??
-            USER_ROLE_LABELS[user.role]
-          } will remove their status as individual curators from all groups.`}
-          confirmText={`Switch Role to ${
-            USER_ROLE_LABELS[pendingRole as UserRole] ??
-            USER_ROLE_LABELS[user.role]
-          }`}
-          onClose={() => setShowConfirmModal(false)}
-          onConfirm={handleConfirm}
-        />
-      )}
-    </>
-  );
-};
-
-const DeactivaterButton = ({
-  user,
-  deactivate,
-  setPopup,
-  mutate,
-}: {
-  user: User;
-  deactivate: boolean;
-  setPopup: (spec: PopupSpec) => void;
-  mutate: () => void;
-}) => {
-  const { trigger, isMutating } = useSWRMutation(
-    deactivate
-      ? "/api/manage/admin/deactivate-user"
-      : "/api/manage/admin/activate-user",
-    userMutationFetcher,
-    {
-      onSuccess: () => {
-        mutate();
-        setPopup({
-          message: `User ${deactivate ? "deactivated" : "activated"}!`,
-          type: "success",
-        });
-      },
-      onError: (errorMsg) =>
-        setPopup({ message: errorMsg.message, type: "error" }),
-    }
-  );
-  return (
-    <Button
-      className="w-min"
-      onClick={() => trigger({ user_email: user.email })}
-      disabled={isMutating}
-      size="sm"
-    >
-      {deactivate ? "Deactivate" : "Activate"}
-    </Button>
-  );
-};
-
-const DeleteUserButton = ({
-  user,
-  setPopup,
-  mutate,
-}: {
-  user: User;
-  setPopup: (spec: PopupSpec) => void;
-  mutate: () => void;
-}) => {
-  const { trigger, isMutating } = useSWRMutation(
-    "/api/manage/admin/delete-user",
-    userMutationFetcher,
-    {
-      onSuccess: () => {
-        mutate();
-        setPopup({
-          message: "User deleted successfully!",
-          type: "success",
-        });
-      },
-      onError: (errorMsg) =>
-        setPopup({
-          message: `Unable to delete user - ${errorMsg}`,
-          type: "error",
-        }),
-    }
-  );
-
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  return (
-    <>
-      {showDeleteModal && (
-        <DeleteEntityModal
-          entityType="user"
-          entityName={user.email}
-          onClose={() => setShowDeleteModal(false)}
-          onSubmit={() => trigger({ user_email: user.email, method: "DELETE" })}
-          additionalDetails="All data associated with this user will be deleted (including personas, tools and chat sessions)."
-        />
-      )}
-
-      <Button
-        className="w-min"
-        onClick={() => setShowDeleteModal(true)}
-        disabled={isMutating}
-        size="sm"
-        variant="destructive"
-      >
-        Delete
-      </Button>
-    </>
-  );
-};
-
 const SignedUpUserTable = ({
-  users,
+  invitedUsers,
   setPopup,
-  currentPage,
-  totalPages,
-  onPageChange,
-  mutate,
-}: Props & PageSelectorProps) => {
-  if (!users.length) return null;
+  q = "",
+  invitedUsersMutate,
+}: Props) => {
+  const [filters, setFilters] = useState<{
+    is_active?: boolean;
+    roles?: UserRole[];
+  }>({});
+
+  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
+
+  const {
+    currentPageData: pageOfUsers,
+    isLoading,
+    error,
+    currentPage,
+    totalPages,
+    goToPage,
+    refresh,
+  } = usePaginatedFetch<User>({
+    itemsPerPage: ITEMS_PER_PAGE,
+    pagesPerBatch: PAGES_PER_BATCH,
+    endpoint: "/api/manage/users/accepted",
+    query: q,
+    filter: filters,
+  });
+
+  const { user: currentUser } = useUser();
+
+  if (error) {
+    return (
+      <ErrorCallout
+        errorTitle="Error loading users"
+        errorMsg={error?.message}
+      />
+    );
+  }
 
   const handlePopup = (message: string, type: "success" | "error") => {
-    if (type === "success") mutate();
+    if (type === "success") refresh();
     setPopup({ message, type });
   };
 
@@ -257,69 +93,209 @@ const SignedUpUserTable = ({
   const onRoleChangeError = (errorMsg: string) =>
     handlePopup(`Unable to update user role - ${errorMsg}`, "error");
 
-  return (
-    <HidableSection sectionTitle="Current Users">
-      <>
-        {totalPages > 1 ? (
-          <CenteredPageSelector
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={onPageChange}
-          />
-        ) : null}
-        <Table className="overflow-visible">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Email</TableHead>
-              <TableHead className="text-center">Role</TableHead>
-              <TableHead className="text-center">Status</TableHead>
-              <TableHead>
-                <div className="flex">
-                  <div className="ml-auto">Actions</div>
+  const toggleRole = (roleEnum: UserRole) => {
+    setFilters((prev) => {
+      const currentRoles = prev.roles || [];
+      const newRoles = currentRoles.includes(roleEnum)
+        ? currentRoles.filter((r) => r !== roleEnum) // Remove role if already selected
+        : [...currentRoles, roleEnum]; // Add role if not selected
+
+      setSelectedRoles(newRoles); // Update selected roles state
+      return {
+        ...prev,
+        roles: newRoles,
+      };
+    });
+  };
+
+  const removeRole = (roleEnum: UserRole) => {
+    setSelectedRoles((prev) => prev.filter((role) => role !== roleEnum)); // Remove role from selected roles
+    toggleRole(roleEnum); // Deselect the role in filters
+  };
+
+  // --------------
+  // Render Functions
+  // --------------
+
+  const renderFilters = () => (
+    <>
+      <div className="flex items-center gap-4 py-4">
+        <Select
+          value={filters.is_active?.toString() || "all"}
+          onValueChange={(selectedStatus) =>
+            setFilters((prev) => {
+              if (selectedStatus === "all") {
+                const { is_active, ...rest } = prev;
+                return rest;
+              }
+              return {
+                ...prev,
+                is_active: selectedStatus === "true",
+              };
+            })
+          }
+        >
+          <SelectTrigger className="w-[260px] h-[34px] bg-neutral">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-neutral-50">
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="true">Active</SelectItem>
+            <SelectItem value="false">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value="roles">
+          <SelectTrigger className="w-[260px] h-[34px] bg-neutral">
+            <SelectValue>
+              {filters.roles?.length
+                ? `${filters.roles.length} role(s) selected`
+                : "All Roles"}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent className="bg-neutral-50">
+            {Object.entries(USER_ROLE_LABELS)
+              .filter(([role]) => role !== UserRole.EXT_PERM_USER)
+              .map(([role, label]) => (
+                <div
+                  key={role}
+                  className="flex items-center space-x-2 px-2 py-1.5 cursor-pointer hover:bg-gray-200"
+                  onClick={() => toggleRole(role as UserRole)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={filters.roles?.includes(role as UserRole) || false}
+                    onChange={(e) => e.stopPropagation()}
+                  />
+                  <label className="text-sm font-normal">{label}</label>
                 </div>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
+              ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex gap-2 py-1">
+        {selectedRoles.map((role) => (
+          <button
+            key={role}
+            className="border border-neutral-300 bg-neutral p-1 rounded text-sm hover:bg-neutral-200"
+            onClick={() => removeRole(role)}
+            style={{ padding: "2px 8px" }}
+          >
+            <span>{USER_ROLE_LABELS[role]}</span>
+            <span className="ml-3">&times;</span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+
+  const renderUserRoleDropdown = (user: User) => {
+    if (user.role === UserRole.SLACK_USER) {
+      return <p className="ml-2">Slack User</p>;
+    }
+    return (
+      <UserRoleDropdown
+        user={user}
+        onSuccess={onRoleChangeSuccess}
+        onError={onRoleChangeError}
+      />
+    );
+  };
+
+  const renderActionButtons = (user: User) => {
+    if (user.role === UserRole.SLACK_USER) {
+      return (
+        <InviteUserButton
+          user={user}
+          invited={invitedUsers.map((u) => u.email).includes(user.email)}
+          setPopup={setPopup}
+          mutate={[refresh, invitedUsersMutate]}
+        />
+      );
+    }
+    return NEXT_PUBLIC_CLOUD_ENABLED && user.id === currentUser?.id ? (
+      <LeaveOrganizationButton
+        user={user}
+        setPopup={setPopup}
+        mutate={refresh}
+      />
+    ) : (
+      <>
+        <DeactivateUserButton
+          user={user}
+          deactivate={user.is_active}
+          setPopup={setPopup}
+          mutate={refresh}
+        />
+        {!user.is_active && (
+          <DeleteUserButton user={user} setPopup={setPopup} mutate={refresh} />
+        )}
+      </>
+    );
+  };
+
+  return (
+    <>
+      {renderFilters()}
+      <Table className="overflow-visible">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Email</TableHead>
+            <TableHead className="text-center">Role</TableHead>
+            <TableHead className="text-center">Status</TableHead>
+            <TableHead>
+              <div className="flex">
+                <div className="ml-auto">Actions</div>
+              </div>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        {isLoading ? (
           <TableBody>
-            {users
-              // Dont want to show external permissioned users because it's scary
-              .filter((user) => user.role !== UserRole.EXT_PERM_USER)
-              .map((user) => (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center">
+                <ThreeDotsLoader />
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        ) : (
+          <TableBody>
+            {!pageOfUsers?.length ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center">
+                  <p className="pt-4 pb-4">
+                    {filters.roles?.length || filters.is_active !== undefined
+                      ? "No users found matching your filters"
+                      : `No users found matching "${q}"`}
+                  </p>
+                </TableCell>
+              </TableRow>
+            ) : (
+              pageOfUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>{user.email}</TableCell>
-                  <TableCell className="w-40 ">
-                    <UserRoleDropdown
-                      user={user}
-                      onSuccess={onRoleChangeSuccess}
-                      onError={onRoleChangeError}
-                    />
+                  <TableCell className="w-[180px]">
+                    {renderUserRoleDropdown(user)}
                   </TableCell>
-                  <TableCell className="text-center">
-                    <i>{user.status === "live" ? "Active" : "Inactive"}</i>
+                  <TableCell className="text-center w-[140px]">
+                    <i>{user.is_active ? "Active" : "Inactive"}</i>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end  gap-x-2">
-                      <DeactivaterButton
-                        user={user}
-                        deactivate={user.status === UserStatus.live}
-                        setPopup={setPopup}
-                        mutate={mutate}
-                      />
-                      {user.status == UserStatus.deactivated && (
-                        <DeleteUserButton
-                          user={user}
-                          setPopup={setPopup}
-                          mutate={mutate}
-                        />
-                      )}
-                    </div>
+                  <TableCell className="text-right w-[200px]">
+                    {renderActionButtons(user)}
                   </TableCell>
                 </TableRow>
-              ))}
+              ))
+            )}
           </TableBody>
-        </Table>
-      </>
-    </HidableSection>
+        )}
+      </Table>
+      {totalPages > 1 && (
+        <CenteredPageSelector
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={goToPage}
+        />
+      )}
+    </>
   );
 };
 

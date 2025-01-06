@@ -10,6 +10,7 @@ import Link from "next/link";
 import { SourceIcon } from "@/components/SourceIcon";
 import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
+import { ValidSources } from "@/lib/types";
 
 const Main = () => {
   const {
@@ -38,23 +39,21 @@ const Main = () => {
       {/* {popup} */}
 
       <p className="mb-2 text-sm text-muted-foreground">
-        Setup Slack bots that connect to Danswer. Once setup, you will be able
-        to ask questions to Danswer directly from Slack. Additionally, you can:
+        Setup Slack bots that connect to Onyx. Once setup, you will be able to
+        ask questions to Onyx directly from Slack. Additionally, you can:
       </p>
 
       <div className="mb-2">
         <ul className="list-disc mt-2 ml-4 text-sm text-muted-foreground">
           <li>
-            Setup DanswerBot to automatically answer questions in certain
-            channels.
+            Setup OnyxBot to automatically answer questions in certain channels.
           </li>
           <li>
-            Choose which document sets DanswerBot should answer from, depending
-            on the channel the question is being asked.
+            Choose which document sets OnyxBot should answer from, depending on
+            the channel the question is being asked.
           </li>
           <li>
-            Directly message DanswerBot to search just as you would in the web
-            UI.
+            Directly message OnyxBot to search just as you would in the web UI.
           </li>
         </ul>
       </div>
@@ -63,13 +62,13 @@ const Main = () => {
         Follow the{" "}
         <a
           className="text-blue-500 hover:underline"
-          href="https://docs.danswer.dev/slack_bot_setup"
+          href="https://docs.onyx.app/slack_bot_setup"
           target="_blank"
           rel="noopener noreferrer"
         >
           guide{" "}
         </a>
-        found in the Danswer documentation to get started!
+        found in the Onyx documentation to get started!
       </p>
 
       <Link
@@ -103,7 +102,7 @@ const Page = () => {
   return (
     <div className="container mx-auto">
       <AdminPageTitle
-        icon={<SourceIcon iconSize={36} sourceType={"slack"} />}
+        icon={<SourceIcon iconSize={36} sourceType={ValidSources.Slack} />}
         title="Slack Bots"
       />
       <InstantSSRAutoRefresh />

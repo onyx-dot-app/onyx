@@ -47,12 +47,8 @@ export function Modal({
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (
-      onOutsideClick &&
-      modalRef.current &&
-      !modalRef.current.contains(e.target as Node) &&
-      !isEventWithinRef(e.nativeEvent, modalRef)
-    ) {
+    // Only close if the user clicked exactly on the overlay (and not on a child element).
+    if (onOutsideClick && e.target === e.currentTarget) {
       onOutsideClick();
     }
   };
@@ -99,7 +95,7 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="w-full overflow-y-hidden flex flex-col h-full justify-stretch">
+        <div className="w-full overflow-y-auto overflow-x-visible p-1 flex flex-col h-full justify-stretch">
           {title && (
             <>
               <div className="flex mb-4">
@@ -117,7 +113,7 @@ export function Modal({
           )}
           <div
             className={cn(
-              noScroll ? "overflow-auto" : "overflow-x-hidden",
+              noScroll ? "overflow-auto" : "overflow-x-visible",
               height || "max-h-[60vh]"
             )}
           >

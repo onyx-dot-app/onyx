@@ -1,4 +1,4 @@
-import { DanswerDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import { ChatDocumentDisplay } from "./ChatDocumentDisplay";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
@@ -17,22 +17,23 @@ import { SourceSelector } from "../shared_chat_search/SearchFilters";
 import { XIcon } from "@/components/icons/icons";
 
 interface ChatFiltersProps {
-  filterManager: FilterManager;
+  filterManager?: FilterManager;
   closeSidebar: () => void;
   selectedMessage: Message | null;
-  selectedDocuments: DanswerDocument[] | null;
-  toggleDocumentSelection: (document: DanswerDocument) => void;
+  selectedDocuments: OnyxDocument[] | null;
+  toggleDocumentSelection: (document: OnyxDocument) => void;
   clearSelectedDocuments: () => void;
   selectedDocumentTokens: number;
   maxTokens: number;
   initialWidth: number;
   isOpen: boolean;
+  isSharedChat?: boolean;
   modal: boolean;
   ccPairs: CCPairBasicInfo[];
   tags: Tag[];
   documentSets: DocumentSet[];
   showFilters: boolean;
-  setPresentingDocument: Dispatch<SetStateAction<DanswerDocument | null>>;
+  setPresentingDocument: Dispatch<SetStateAction<OnyxDocument | null>>;
 }
 
 export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
@@ -48,6 +49,7 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
       selectedDocumentTokens,
       maxTokens,
       initialWidth,
+      isSharedChat,
       isOpen,
       ccPairs,
       tags,
@@ -84,8 +86,8 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
 
     return (
       <div
-        id="danswer-chat-sidebar"
-        className={`relative py-2 max-w-full ${
+        id="onyx-chat-sidebar"
+        className={`relative bg-background max-w-full ${
           !modal ? "border-l h-full border-sidebar-border" : ""
         }`}
         onClick={(e) => {
@@ -122,10 +124,10 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
             <div className="overflow-y-auto -mx-1 sm:mx-0 flex-grow gap-y-0 default-scrollbar dark-scrollbar flex flex-col">
               {showFilters ? (
                 <SourceSelector
+                  {...filterManager!}
                   modal={modal}
                   tagsOnLeft={true}
                   filtersUntoggled={false}
-                  {...filterManager}
                   availableDocumentSets={documentSets}
                   existingSources={ccPairs.map((ccPair) => ccPair.source)}
                   availableTags={tags}
@@ -157,6 +159,7 @@ export const ChatFilters = forwardRef<HTMLDivElement, ChatFiltersProps>(
                               )!
                             );
                           }}
+                          hideSelection={isSharedChat}
                           tokenLimitReached={tokenLimitReached}
                         />
                       </div>

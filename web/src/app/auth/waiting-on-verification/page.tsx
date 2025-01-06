@@ -8,7 +8,7 @@ import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { User } from "@/lib/types";
 import Text from "@/components/ui/text";
 import { RequestNewVerificationEmail } from "./RequestNewVerificationEmail";
-import { Logo } from "@/components/Logo";
+import { Logo } from "@/components/logo/Logo";
 
 export default async function Page() {
   // catch cases where the backend is completely unreachable here
@@ -27,13 +27,13 @@ export default async function Page() {
 
   if (!currentUser) {
     if (authTypeMetadata?.authType === "disabled") {
-      return redirect("/");
+      return redirect("/chat");
     }
     return redirect("/auth/login");
   }
 
   if (!authTypeMetadata?.requiresVerification || currentUser.is_verified) {
-    return redirect("/");
+    return redirect("/chat");
   }
 
   return (

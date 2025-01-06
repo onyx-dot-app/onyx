@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import faviconFetch from "favicon-fetch";
 import { SourceIcon } from "./SourceIcon";
+import { ValidSources } from "@/lib/types";
 
 const CACHE_DURATION = 24 * 60 * 60 * 1000;
 
@@ -45,7 +46,7 @@ export function SearchResultIcon({ url }: { url: string }) {
   }, [url]);
 
   if (!faviconUrl) {
-    return <SourceIcon sourceType="web" iconSize={18} />;
+    return <SourceIcon sourceType={ValidSources.Web} iconSize={18} />;
   }
 
   return (

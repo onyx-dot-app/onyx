@@ -6,8 +6,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Example Danswer Widget",
-  description: "Example Danswer Widget",
+  title: "Example Onyx Widget",
+  description: "Example Onyx Widget",
 };
 
 export default function RootLayout({

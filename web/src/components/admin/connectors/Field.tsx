@@ -29,6 +29,7 @@ import { useRef, useState } from "react";
 import remarkGfm from "remark-gfm";
 import { EditIcon } from "@/components/icons/icons";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export function SectionHeader({
   children,
@@ -109,7 +110,7 @@ export function ToolTipDetails({
   return (
     <TooltipProvider>
       <Tooltip>
-        <TooltipTrigger>
+        <TooltipTrigger type="button">
           <FiInfo size={12} />
         </TooltipTrigger>
         <TooltipContent side="top" align="center">
@@ -143,8 +144,10 @@ export function TextFormField({
   small,
   removeLabel,
   min,
+  includeForgotPassword,
   onChange,
   width,
+  vertical,
 }: {
   value?: string;
   name: string;
@@ -168,8 +171,10 @@ export function TextFormField({
   explanationLink?: string;
   small?: boolean;
   min?: number;
+  includeForgotPassword?: boolean;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   width?: string;
+  vertical?: boolean;
 }) {
   let heightString = defaultHeight || "";
   if (isTextArea && !heightString) {
@@ -209,14 +214,20 @@ export function TextFormField({
 
   return (
     <div className={`w-full ${width}`}>
-      <div className="flex gap-x-2 items-center">
-        {!removeLabel && (
-          <Label className={sizeClass.label} small={small}>
-            {label}
-          </Label>
-        )}
-        {optional ? <span>(optional) </span> : ""}
-        {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
+      <div
+        className={`flex ${
+          vertical ? "flex-col" : "flex-row"
+        } gap-x-2 items-start`}
+      >
+        <div className="flex gap-x-2 items-center">
+          {!removeLabel && (
+            <Label className={sizeClass.label} small={small}>
+              {label}
+            </Label>
+          )}
+          {optional ? <span>(optional) </span> : ""}
+          {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
+        </div>
         {error ? (
           <ManualErrorMessage>{error}</ManualErrorMessage>
         ) : (
@@ -230,13 +241,14 @@ export function TextFormField({
         )}
       </div>
       {subtext && <SubLabel>{subtext}</SubLabel>}
-      <div className={`w-full flex ${includeRevert && "gap-x-2"}`}>
+      <div className={`w-full flex ${includeRevert && "gap-x-2"} relative`}>
         <Field
           onChange={handleChange}
           min={min}
           as={isTextArea ? "textarea" : "input"}
           type={type}
           defaultValue={value}
+          data-testid={name}
           name={name}
           id={name}
           className={`
@@ -260,6 +272,14 @@ export function TextFormField({
           placeholder={placeholder}
           autoComplete={autoCompleteDisabled ? "off" : undefined}
         />
+        {includeForgotPassword && (
+          <Link
+            href="/auth/forgot-password"
+            className="absolute right-3 top-1/2 mt-[3px] transform -translate-y-1/2 text-xs text-blue-500 cursor-pointer"
+          >
+            Forgot password?
+          </Link>
+        )}
       </div>
 
       {explanationText && (

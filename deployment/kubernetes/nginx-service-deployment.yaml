@@ -10,7 +10,7 @@ spec:
       protocol: TCP
       port: 80
       targetPort: 80
-    - name: danswer
+    - name: onyx
       protocol: TCP
       port: 3000
       targetPort: 80
@@ -31,25 +31,25 @@ spec:
         app: nginx
     spec:
       containers:
-      - name: nginx
-        image: nginx:1.23.4-alpine
-        ports:
-        - containerPort: 80
-        env:
-        - name: DOMAIN
-          valueFrom:
-            configMapKeyRef:
-              name: env-configmap
-              key: DOMAIN
-        volumeMounts:
-        - name: nginx-conf
-          mountPath: /etc/nginx/conf.d
-        command:
-        - /bin/sh
-        - -c
-        - |
-          while :; do sleep 6h & wait $$!; nginx -s reload; done & nginx -g "daemon off;"
+        - name: nginx
+          image: nginx:1.23.4-alpine
+          ports:
+            - containerPort: 80
+          env:
+            - name: DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: env-configmap
+                  key: DOMAIN
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+          command:
+            - /bin/sh
+            - -c
+            - |
+              while :; do sleep 6h & wait $$!; nginx -s reload; done & nginx -g "daemon off;"
       volumes:
-      - name: nginx-conf
-        configMap:
-          name: nginx-configmap
+        - name: nginx-conf
+          configMap:
+            name: nginx-configmap

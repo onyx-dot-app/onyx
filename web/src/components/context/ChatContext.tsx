@@ -9,11 +9,8 @@ import {
   ValidSources,
 } from "@/lib/types";
 import { ChatSession } from "@/app/chat/interfaces";
-import { Persona } from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Folder } from "@/app/chat/folders/interfaces";
-import { InputPrompt } from "@/app/admin/prompt-library/interfaces";
-import { personaComparator } from "@/app/admin/assistants/lib";
 
 interface ChatContextProps {
   chatSessions: ChatSession[];
@@ -26,7 +23,6 @@ interface ChatContextProps {
   llmProviders: LLMProviderDescriptor[];
   folders: Folder[];
   openedFolders: Record<string, boolean>;
-  userInputPrompts: InputPrompt[];
   shouldShowWelcomeModal?: boolean;
   shouldDisplaySourcesIncompleteModal?: boolean;
   defaultAssistantId?: number;

@@ -6,7 +6,7 @@ from typing import Tuple
 
 import requests
 
-from danswer.file_store.models import FileDescriptor
+from onyx.file_store.models import FileDescriptor
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser

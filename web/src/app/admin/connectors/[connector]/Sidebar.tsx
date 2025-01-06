@@ -2,7 +2,7 @@ import { useFormContext } from "@/components/context/FormContext";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 
 import { SettingsIcon } from "@/components/icons/icons";
-import { Logo } from "@/components/Logo";
+import { Logo } from "@/components/logo/Logo";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import Link from "next/link";
@@ -62,11 +62,11 @@ export default function Sidebar() {
   ];
 
   return (
-    <div className="flex flex-none w-[250px] bg-background text-default">
+    <div className="flex flex-none w-[250px] text-default">
       <div
         className={`
                   fixed
-                  bg-background-100
+                  bg-background-sidebar
                   h-screen
                   transition-all
                   bg-opacity-80
@@ -85,7 +85,7 @@ export default function Sidebar() {
               {enterpriseSettings && enterpriseSettings.application_name ? (
                 <HeaderTitle>{enterpriseSettings.application_name}</HeaderTitle>
               ) : (
-                <HeaderTitle>Danswer</HeaderTitle>
+                <HeaderTitle>Onyx</HeaderTitle>
               )}
             </div>
           </div>

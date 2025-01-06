@@ -3,7 +3,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 
 import { EmbeddingModelSelection } from "../EmbeddingModelSelectionForm";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Text from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, WarningCircle } from "@phosphor-icons/react";
@@ -158,6 +158,26 @@ export default function EmbeddingForm() {
     searchSettings?.multipass_indexing !=
       advancedEmbeddingDetails.multipass_indexing;
 
+  const updateSearch = useCallback(async () => {
+    if (!selectedProvider) {
+      return false;
+    }
+    const searchSettings = combineSearchSettings(
+      selectedProvider,
+      advancedEmbeddingDetails,
+      rerankingDetails,
+      selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null
+    );
+
+    const response = await updateSearchSettings(searchSettings);
+    if (response.ok) {
+      return true;
+    } else {
+      setPopup({ message: "Failed to update search settings", type: "error" });
+      return false;
+    }
+  }, [selectedProvider, advancedEmbeddingDetails, rerankingDetails, setPopup]);
+
   const ReIndexingButton = useMemo(() => {
     const ReIndexingButtonComponent = ({
       needsReIndex,
@@ -206,7 +226,7 @@ export default function EmbeddingForm() {
     };
     ReIndexingButtonComponent.displayName = "ReIndexingButton";
     return ReIndexingButtonComponent;
-  }, [needsReIndex]);
+  }, [needsReIndex, updateSearch]);
 
   if (!selectedProvider) {
     return <ThreeDotsLoader />;
@@ -220,23 +240,6 @@ export default function EmbeddingForm() {
       ...values,
       model_name: newModel,
     }));
-  };
-
-  const updateSearch = async () => {
-    const searchSettings = combineSearchSettings(
-      selectedProvider,
-      advancedEmbeddingDetails,
-      rerankingDetails,
-      selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null
-    );
-
-    const response = await updateSearchSettings(searchSettings);
-    if (response.ok) {
-      return true;
-    } else {
-      setPopup({ message: "Failed to update search settings", type: "error" });
-      return false;
-    }
   };
 
   const navigateToEmbeddingPage = (changedResource: string) => {

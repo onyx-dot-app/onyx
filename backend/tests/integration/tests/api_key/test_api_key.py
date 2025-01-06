@@ -1,6 +1,6 @@
 import requests
 
-from danswer.auth.schemas import UserRole
+from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -26,13 +26,6 @@ def test_limited(reset: None) -> None:
         headers=api_key.headers,
     )
     assert response.status_code == 200
-
-    # test basic endpoints
-    response = requests.get(
-        f"{API_SERVER_URL}/input_prompt",
-        headers=api_key.headers,
-    )
-    assert response.status_code == 403
 
     # test admin endpoints
     response = requests.get(

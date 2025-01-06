@@ -94,7 +94,22 @@ export function TagFilter({
               <div
                 key={tag.tag_key + tag.tag_value}
                 onClick={() => onSelectTag(tag)}
-                className="max-w-full break-all line-clamp-1 text-ellipsis flex text-sm border border-border py-0.5 px-2 rounded cursor-pointer bg-background hover:bg-hover"
+                className={`
+                max-w-full 
+                break-all 
+                line-clamp-1 
+                text-ellipsis 
+                flex 
+                text-sm 
+                border 
+                border-border 
+                py-0.5 
+                px-2 
+                rounded 
+                cursor-pointer 
+                bg-background-search-filter 
+                hover:bg-background-search-filter-dropdown
+                `}
               >
                 {tag.tag_key}
                 <b>=</b>
@@ -121,7 +136,7 @@ export function TagFilter({
         >
           <div
             ref={popupRef}
-            className="p-2 border border-border rounded shadow-lg w-72 bg-background"
+            className="p-2 border border-border rounded shadow-lg w-72 bg-background-search-filter"
           >
             <div className="flex border-b border-border font-medium pb-1 text-xs mb-2">
               <FiTag className="mr-1 my-auto" />
@@ -144,7 +159,11 @@ export function TagFilter({
                     cursor-pointer 
                     bg-background 
                     hover:bg-hover
-                    ${selectedTags.includes(tag) ? "bg-hover" : ""}
+                    ${
+                      selectedTags.includes(tag)
+                        ? "bg-background-search-filter-dropdown"
+                        : ""
+                    }
                   `}
                   >
                     {tag.tag_key}

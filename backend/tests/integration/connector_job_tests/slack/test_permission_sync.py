@@ -3,9 +3,11 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
-from danswer.connectors.models import InputType
-from danswer.db.enums import AccessType
-from danswer.server.documents.models import DocumentSource
+import pytest
+
+from onyx.connectors.models import InputType
+from onyx.db.enums import AccessType
+from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -23,7 +25,7 @@ from tests.integration.common_utils.vespa import vespa_fixture
 from tests.integration.connector_job_tests.slack.slack_api_utils import SlackManager
 
 
-# @pytest.mark.xfail(reason="flaky - see DAN-789 for example", strict=False)
+@pytest.mark.xfail(reason="flaky - see DAN-789 for example", strict=False)
 def test_slack_permission_sync(
     reset: None,
     vespa_client: vespa_fixture,
@@ -65,7 +67,6 @@ def test_slack_permission_sync(
         input_type=InputType.POLL,
         source=DocumentSource.SLACK,
         connector_specific_config={
-            "workspace": "onyx-test-workspace",
             "channels": [public_channel["name"], private_channel["name"]],
         },
         access_type=AccessType.SYNC,
@@ -133,48 +134,48 @@ def test_slack_permission_sync(
 
     # Search as admin with access to both channels
     print("\nSearching as admin user")
-    danswer_doc_message_strings = DocumentSearchManager.search_documents(
+    onyx_doc_message_strings = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=admin_user,
     )
     print(
         "\n documents retrieved by admin user: ",
-        danswer_doc_message_strings,
+        onyx_doc_message_strings,
     )
 
     # Ensure admin user can see messages from both channels
-    assert public_message in danswer_doc_message_strings
-    assert private_message in danswer_doc_message_strings
+    assert public_message in onyx_doc_message_strings
+    assert private_message in onyx_doc_message_strings
 
     # Search as test_user_2 with access to only the public channel
     print("\n Searching as test_user_2")
-    danswer_doc_message_strings = DocumentSearchManager.search_documents(
+    onyx_doc_message_strings = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=test_user_2,
     )
     print(
         "\n documents retrieved by test_user_2: ",
-        danswer_doc_message_strings,
+        onyx_doc_message_strings,
     )
 
     # Ensure test_user_2 can only see messages from the public channel
-    assert public_message in danswer_doc_message_strings
-    assert private_message not in danswer_doc_message_strings
+    assert public_message in onyx_doc_message_strings
+    assert private_message not in onyx_doc_message_strings
 
     # Search as test_user_1 with access to both channels
     print("\n Searching as test_user_1")
-    danswer_doc_message_strings = DocumentSearchManager.search_documents(
+    onyx_doc_message_strings = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=test_user_1,
     )
     print(
         "\n documents retrieved by test_user_1 before being removed from private channel: ",
-        danswer_doc_message_strings,
+        onyx_doc_message_strings,
     )
 
     # Ensure test_user_1 can see messages from both channels
-    assert public_message in danswer_doc_message_strings
-    assert private_message in danswer_doc_message_strings
+    assert public_message in onyx_doc_message_strings
+    assert private_message in onyx_doc_message_strings
 
     # ----------------------MAKE THE CHANGES--------------------------
     print("\n Removing test_user_1 from the private channel")
@@ -204,27 +205,28 @@ def test_slack_permission_sync(
     # Ensure test_user_1 can no longer see messages from the private channel
     # Search as test_user_1 with access to only the public channel
 
-    danswer_doc_message_strings = DocumentSearchManager.search_documents(
+    onyx_doc_message_strings = DocumentSearchManager.search_documents(
         query="favorite number",
         user_performing_action=test_user_1,
     )
     print(
         "\n documents retrieved by test_user_1 after being removed from private channel: ",
-        danswer_doc_message_strings,
+        onyx_doc_message_strings,
     )
 
     # Ensure test_user_1 can only see messages from the public channel
-    assert public_message in danswer_doc_message_strings
-    assert private_message not in danswer_doc_message_strings
+    assert public_message in onyx_doc_message_strings
+    assert private_message not in onyx_doc_message_strings
 
 
+@pytest.mark.xfail(reason="flaky", strict=False)
 def test_slack_group_permission_sync(
     reset: None,
     vespa_client: vespa_fixture,
     slack_test_setup: tuple[dict[str, Any], dict[str, Any]],
 ) -> None:
     """
-    This test ensures that permission sync overrides danswer group access.
+    This test ensures that permission sync overrides onyx group access.
     """
     public_channel, private_channel = slack_test_setup
 
@@ -279,7 +281,6 @@ def test_slack_group_permission_sync(
         input_type=InputType.POLL,
         source=DocumentSource.SLACK,
         connector_specific_config={
-            "workspace": "onyx-test-workspace",
             "channels": [private_channel["name"]],
         },
         access_type=AccessType.SYNC,

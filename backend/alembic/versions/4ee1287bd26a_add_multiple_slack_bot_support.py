@@ -10,8 +10,8 @@ from typing import cast
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
-from danswer.key_value_store.factory import get_kv_store
-from danswer.db.models import SlackBot
+from onyx.key_value_store.factory import get_kv_store
+from onyx.db.models import SlackBot
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.

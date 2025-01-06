@@ -20,7 +20,7 @@ INDEXING_MODEL_SERVER_PORT = int(
     os.environ.get("INDEXING_MODEL_SERVER_PORT") or MODEL_SERVER_PORT
 )
 
-# Danswer custom Deep Learning Models
+# Onyx custom Deep Learning Models
 CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
 CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
 INTENT_MODEL_VERSION = "danswer/hybrid-intent-token-classifier"
@@ -56,12 +56,12 @@ INDEXING_ONLY = os.environ.get("INDEXING_ONLY", "").lower() == "true"
 
 # The process needs to have this for the log file to write to
 # otherwise, it will not create additional log files
-LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "danswer"
+LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "onyx"
 
 # Enable generating persistent log files for local dev environments
 DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true"
 # notset, debug, info, notice, warning, error, or critical
-LOG_LEVEL = os.environ.get("LOG_LEVEL", "notice")
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "info")
 
 # Timeout for API-based embedding models
 # NOTE: does not apply for Google VertexAI, since the python client doesn't

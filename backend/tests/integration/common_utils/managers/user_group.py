@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import requests
 
-from ee.danswer.server.user_group.models import UserGroup
+from ee.onyx.server.user_group.models import UserGroup
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import MAX_DELAY

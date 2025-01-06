@@ -102,9 +102,9 @@ const ExpandableContentWrapper: React.FC<ExpandableContentWrapperProps> = ({
         </div>
       </CardHeader>
       <Card
-        className={`!rounded-none w-full ${
-          expanded ? "max-h-[600px]" : "max-h-[300px] h"
-        } p-0 relative overflow-x-scroll overflow-y-scroll mx-auto`}
+        className={`!rounded-none p-0 relative mx-auto w-full ${
+          expanded ? "max-h-[600px]" : "max-h-[300px] h-full"
+        } `}
       >
         <CardContent className="p-0">
           <ContentComponent

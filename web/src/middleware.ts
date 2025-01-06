@@ -12,9 +12,10 @@ export const config = {
     "/admin/whitelabeling/:path*",
     "/admin/performance/custom-analytics/:path*",
     "/admin/standard-answer/:path*",
+    "/assistants/stats/:path*",
 
     // Cloud only
-    "/admin/cloud-settings/:path*",
+    "/admin/billing/:path*",
   ],
 };
 

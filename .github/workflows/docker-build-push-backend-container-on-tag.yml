@@ -6,7 +6,7 @@ on:
       - "*"
 
 env:
-  REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'danswer/danswer-backend-cloud' || 'danswer/danswer-backend' }}
+  REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
   LATEST_TAG: ${{ contains(github.ref_name, 'latest') }}
 
 jobs:
@@ -44,7 +44,7 @@ jobs:
             ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
             ${{ env.LATEST_TAG == 'true' && format('{0}:latest', env.REGISTRY_IMAGE) || '' }}
           build-args: |
-            DANSWER_VERSION=${{ github.ref_name }}
+            ONYX_VERSION=${{ github.ref_name }}
 
       # trivy has their own rate limiting issues causing this action to flake
       # we worked around it by hardcoding to different db repos in env
@@ -57,7 +57,7 @@ jobs:
           TRIVY_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db:2"
           TRIVY_JAVA_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-java-db:1"
         with:
-          # To run locally: trivy image --severity HIGH,CRITICAL danswer/danswer-backend
+          # To run locally: trivy image --severity HIGH,CRITICAL onyxdotapp/onyx-backend
           image-ref: docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
           severity: "CRITICAL,HIGH"
           trivyignores: ./backend/.trivyignore

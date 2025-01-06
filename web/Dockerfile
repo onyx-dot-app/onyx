@@ -1,16 +1,16 @@
 FROM node:20-alpine AS base
 
-LABEL com.danswer.maintainer="founders@danswer.ai"
-LABEL com.danswer.description="This image is the web/frontend container of Danswer which \
-contains code for both the Community and Enterprise editions of Danswer. If you do not \
+LABEL com.onyx.maintainer="founders@onyx.app"
+LABEL com.onyx.description="This image is the web/frontend container of Onyx which \
+contains code for both the Community and Enterprise editions of Onyx. If you do not \
 have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
 Edition features outside of personal development or testing purposes. Please reach out to \
-founders@danswer.ai for more information. Please visit https://github.com/danswer-ai/danswer"
+founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
 
-# Default DANSWER_VERSION, typically overriden during builds by GitHub Actions.
-ARG DANSWER_VERSION=0.8-dev
-ENV DANSWER_VERSION=${DANSWER_VERSION}
-RUN echo "DANSWER_VERSION: ${DANSWER_VERSION}"
+# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
+ARG ONYX_VERSION=0.8-dev
+ENV ONYX_VERSION=${ONYX_VERSION}
+RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
 # Step 1. Install dependencies + rebuild the source code only when needed
 FROM base AS builder
@@ -66,11 +66,17 @@ ARG NEXT_PUBLIC_POSTHOG_HOST
 ENV NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY}
 ENV NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}
 
+ARG NEXT_PUBLIC_CLOUD_ENABLED
+ENV NEXT_PUBLIC_CLOUD_ENABLED=${NEXT_PUBLIC_CLOUD_ENABLED}
+
 ARG NEXT_PUBLIC_SENTRY_DSN
 ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN} 
 
 ARG NEXT_PUBLIC_GTM_ENABLED
 ENV NEXT_PUBLIC_GTM_ENABLED=${NEXT_PUBLIC_GTM_ENABLED}
+
+ARG NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED
+ENV NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED}
 
 RUN npx next build
 
@@ -138,11 +144,17 @@ ARG NEXT_PUBLIC_POSTHOG_HOST
 ENV NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY}
 ENV NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}
 
+ARG NEXT_PUBLIC_CLOUD_ENABLED
+ENV NEXT_PUBLIC_CLOUD_ENABLED=${NEXT_PUBLIC_CLOUD_ENABLED}
+
 ARG NEXT_PUBLIC_SENTRY_DSN
 ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN} 
 
 ARG NEXT_PUBLIC_GTM_ENABLED
 ENV NEXT_PUBLIC_GTM_ENABLED=${NEXT_PUBLIC_GTM_ENABLED}
+
+ARG NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED
+ENV NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED}
 
 # Note: Don't expose ports here, Compose will handle that for us if necessary. 
 # If you want to run this without compose, specify the ports to 

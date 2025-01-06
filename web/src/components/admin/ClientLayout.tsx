@@ -30,7 +30,7 @@ import { User } from "@/lib/types";
 import { usePathname } from "next/navigation";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { useContext } from "react";
-import { Cloud } from "@phosphor-icons/react";
+import { MdOutlineCreditCard } from "react-icons/md";
 
 export function ClientLayout({
   user,
@@ -58,7 +58,7 @@ export function ClientLayout({
   return (
     <div className="h-screen overflow-y-hidden">
       <div className="flex h-full">
-        <div className="flex-none text-text-settings-sidebar bg-background-sidebar w-[250px] z-20 pt-4 pb-8 h-full border-r border-border miniscroll overflow-auto">
+        <div className="flex-none text-text-settings-sidebar bg-background-sidebar w-[250px] overflow-x-hidden z-20 pt-2 pb-8 h-full border-r border-border miniscroll overflow-auto">
           <AdminSidebar
             collections={[
               {
@@ -168,18 +168,6 @@ export function ClientLayout({
                             </div>
                           ),
                           link: "/admin/tools",
-                        },
-                        {
-                          name: (
-                            <div className="flex">
-                              <ClosedBookIcon
-                                className="text-icon-settings-sidebar"
-                                size={18}
-                              />
-                              <div className="ml-1">Prompt Library</div>
-                            </div>
-                          ),
-                          link: "/admin/prompt-library",
                         },
                       ]
                     : []),
@@ -398,14 +386,14 @@ export function ClientLayout({
                               {
                                 name: (
                                   <div className="flex">
-                                    <Cloud
+                                    <MdOutlineCreditCard
                                       className="text-icon-settings-sidebar"
                                       size={18}
                                     />
-                                    <div className="ml-1">Cloud Settings</div>
+                                    <div className="ml-1">Billing</div>
                                   </div>
                                 ),
-                                link: "/admin/cloud-settings",
+                                link: "/admin/billing",
                               },
                             ]
                           : []),
@@ -417,7 +405,7 @@ export function ClientLayout({
           />
         </div>
         <div className="pb-8 relative h-full overflow-y-auto w-full">
-          <div className="fixed bg-background left-0 gap-x-4 mb-8 px-4 py-2 w-full items-center flex justify-end">
+          <div className="fixed left-0 gap-x-4 px-2 top-2 h-8 px-0 mb-auto w-full items-start flex justify-end">
             <UserDropdown />
           </div>
           <div className="pt-20 flex overflow-y-auto overflow-x-hidden h-full px-4 md:px-12">

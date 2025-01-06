@@ -1,12 +1,12 @@
-import { DanswerDocument } from "./search/interfaces";
+import { OnyxDocument } from "./search/interfaces";
 
 export function removeDuplicateDocs(
-  documents: DanswerDocument[],
+  documents: OnyxDocument[],
   agentic?: boolean,
   relevance?: any
 ) {
   const seen = new Set<string>();
-  const output: DanswerDocument[] = [];
+  const output: OnyxDocument[] = [];
   documents.forEach((document) => {
     if (
       document.document_id &&

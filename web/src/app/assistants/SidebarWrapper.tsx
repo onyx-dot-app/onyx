@@ -20,26 +20,22 @@ import { useRouter } from "next/navigation";
 import { pageType } from "../chat/sessionSidebar/types";
 import FixedLogo from "../chat/shared_chat_search/FixedLogo";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { useChatContext } from "@/components/context/ChatContext";
 
 interface SidebarWrapperProps<T extends object> {
-  chatSessions?: ChatSession[];
-  folders?: Folder[];
   initiallyToggled: boolean;
-  openedFolders?: { [key: number]: boolean };
   page: pageType;
   size?: "sm" | "lg";
   children: ReactNode;
 }
 
 export default function SidebarWrapper<T extends object>({
-  chatSessions,
   initiallyToggled,
-  folders,
-  openedFolders,
   page,
   size = "sm",
   children,
 }: SidebarWrapperProps<T>) {
+  const { chatSessions, folders, openedFolders } = useChatContext();
   const [toggledSidebar, setToggledSidebar] = useState(initiallyToggled);
   const [showDocSidebar, setShowDocSidebar] = useState(false); // State to track if sidebar is open
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
@@ -132,7 +128,7 @@ export default function SidebarWrapper<T extends object>({
         </div>
       </div>
 
-      <div className="absolute h-svh left-0 w-full top-0">
+      <div className="absolute h-svh px-2 left-0 w-full top-0">
         <FunctionalHeader
           sidebarToggled={toggledSidebar}
           toggleSidebar={toggleSidebar}

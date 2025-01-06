@@ -1,16 +1,21 @@
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SourceIcon } from "@/components/SourceIcon";
-import { DanswerDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import { truncateString } from "@/lib/utils";
+import { openDocument } from "@/lib/search/utils";
 
-export default function SourceCard({ doc }: { doc: DanswerDocument }) {
+export default function SourceCard({
+  doc,
+  setPresentingDocument,
+}: {
+  doc: OnyxDocument;
+  setPresentingDocument?: (document: OnyxDocument) => void;
+}) {
   return (
-    <a
+    <div
       key={doc.document_id}
-      href={doc.link || undefined}
-      target="_blank"
-      rel="noopener"
-      className="flex flex-col gap-0.5 rounded-sm px-3 py-2.5 hover:bg-background-125 bg-background-100 w-[200px]"
+      onClick={() => openDocument(doc, setPresentingDocument)}
+      className="cursor-pointer text-left overflow-hidden flex flex-col gap-0.5 rounded-sm px-3 py-2.5 hover:bg-background-125 bg-background-100 w-[200px]"
     >
       <div className="line-clamp-1 font-semibold text-ellipsis  text-text-900  flex h-6 items-center gap-2 text-sm">
         {doc.is_internet || doc.source_type === "web" ? (
@@ -24,14 +29,14 @@ export default function SourceCard({ doc }: { doc: DanswerDocument }) {
       <div className="line-clamp-2 text-sm font-normal leading-snug text-text-700">
         {doc.blurb}
       </div>
-    </a>
+    </div>
   );
 }
 
 interface SeeMoreBlockProps {
   documentSelectionToggled: boolean;
   toggleDocumentSelection?: () => void;
-  uniqueSources: DanswerDocument["source_type"][];
+  uniqueSources: OnyxDocument["source_type"][];
 }
 
 export function SeeMoreBlock({
@@ -44,29 +49,27 @@ export function SeeMoreBlock({
       onClick={toggleDocumentSelection}
       className={`
         ${documentSelectionToggled ? "border-border-100 border" : ""}
-        cursor-pointer w-[150px] rounded-sm flex-none transition-all duration-500 hover:bg-background-125 bg-text-100 px-3 py-2.5
+        cursor-pointer rounded-sm flex-none transition-all duration-500 hover:bg-background-125 bg-text-100 px-3 py-2.5
       `}
     >
-      <div className="line-clamp-1 font-semibold text-ellipsis text-text-900 flex h-6 items-center justify-between text-sm">
-        <p className="mr-0 flex-shrink-0">
+      <div className="flex h-6 items-center text-sm">
+        <p className="flex-1 mr-1 font-semibold text-text-900 overflow-hidden text-ellipsis whitespace-nowrap">
           {documentSelectionToggled ? "Hide sources" : "See context"}
         </p>
-        <div className="flex -space-x-3 flex-shrink-0 overflow-hidden">
-          {uniqueSources.map((sourceType, ind) => (
-            <div
-              key={ind}
-              className="inline-block bg-background-100 rounded-full p-0.5"
-              style={{ zIndex: uniqueSources.length - ind }}
-            >
-              <div className="bg-background-100 rounded-full">
-                <SourceIcon sourceType={sourceType} iconSize={20} />
-              </div>
+        <div className="flex-shrink-0 flex items-center">
+          {uniqueSources.slice(0, 3).map((sourceType, ind) => (
+            <div key={ind} className="inline-block ml-1">
+              <SourceIcon sourceType={sourceType} iconSize={16} />
             </div>
           ))}
+          {uniqueSources.length > 3 && (
+            <span className="text-xs text-text-700 font-semibold ml-1">
+              +{uniqueSources.length - 3}
+            </span>
+          )}
         </div>
       </div>
-      <div className="line-clamp-2 text-sm font-semibold"></div>
-      <div className="line-clamp-2 text-sm font-normal leading-snug text-text-700">
+      <div className="line-clamp-2 text-sm font-normal leading-snug text-text-700 mt-1">
         See more
       </div>
     </div>
