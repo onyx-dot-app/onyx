@@ -60,6 +60,7 @@ def build_vespa_filters(
 
     filter_str = f"!({HIDDEN}=true) and " if not include_hidden else ""
 
+    # If running in multi-tenant mode, we may want to filter by tenant_id
     if filters.tenant_id and MULTI_TENANT:
         filter_str += f'({TENANT_ID} contains "{filters.tenant_id}") and '
 
