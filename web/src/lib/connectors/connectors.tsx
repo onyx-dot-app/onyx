@@ -1042,7 +1042,6 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         name: "server_ids",
         description: `Specify 0 or more server ids to include. Only channels inside them will be used for indexing`,
         optional: true,
-        transform: (values) => values.map((value) => value.trim()),
       },
       {
         type: "list",
@@ -1051,7 +1050,6 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         name: "channel_names",
         description: `Specify 0 or more channels to index. For example, specifying the channel "support" will cause us to only index all content within the "#support" channel. If no channels are specified, all channels the bot has access to will be indexed.`,
         optional: true,
-        transform: (values) => values.map((value) => value.trim()),
       },
       {
         type: "text",

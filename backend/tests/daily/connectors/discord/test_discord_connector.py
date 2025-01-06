@@ -13,8 +13,8 @@ def discord_connector() -> DiscordConnector:
     channel_names: str | None = os.environ.get("channel_names", None)
 
     connector = DiscordConnector(
-        server_ids=server_ids.split(",") if server_ids else None,
-        channel_names=channel_names.split(",") if channel_names else None,
+        server_ids=server_ids.split(",") if server_ids else [],
+        channel_names=channel_names.split(",") if channel_names else [],
         start_date=os.environ.get("start_date", None),
     )
     connector.load_credentials(

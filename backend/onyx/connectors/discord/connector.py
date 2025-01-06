@@ -31,7 +31,8 @@ _SNIPPET_LENGTH = 30
 
 
 def _convert_message_to_document(
-    message: DiscordMessage, sections: list[Section]
+    message: DiscordMessage,
+    sections: list[Section],
 ) -> Document:
     """
     Convert a discord message to a document
@@ -109,6 +110,11 @@ async def _fetch_documents_from_channel(
     start_time: datetime | None,
     end_time: datetime | None,
 ) -> AsyncIterable[Document]:
+    # Discord's epoch starts at 2015-01-01
+    discord_epoch = datetime(2015, 1, 1, tzinfo=timezone.utc)
+    if start_time and start_time < discord_epoch:
+        start_time = discord_epoch
+
     async for channel_message in channel.history(
         after=start_time,
         before=end_time,
@@ -165,11 +171,11 @@ async def _fetch_documents_from_channel(
 
 def _manage_async_retrieval(
     token: str,
+    requested_start_date_string: str,
+    channel_names: list[str],
+    server_ids: list[int],
     start: datetime | None = None,
     end: datetime | None = None,
-    requested_start_date_string: str | None = None,
-    channel_names: list[str] | None = None,
-    server_ids: list[int] | None = None,
 ) -> Iterable[Document]:
     # parse requested_start_date_string to datetime
     pull_date: datetime | None = (
@@ -193,12 +199,16 @@ def _manage_async_retrieval(
             await discord_client.wait_until_ready()
 
             filtered_channels: list[TextChannel] = await _fetch_filtered_channels(
-                discord_client, server_ids=server_ids, channel_names=channel_names
+                discord_client=discord_client,
+                server_ids=server_ids,
+                channel_names=channel_names,
             )
 
             for channel in filtered_channels:
                 async for doc in _fetch_documents_from_channel(
-                    channel, start_time=start_time, end_time=end_time
+                    channel=channel,
+                    start_time=start_time,
+                    end_time=end_time,
                 ):
                     yield doc
 
@@ -227,18 +237,18 @@ def _manage_async_retrieval(
 class DiscordConnector(PollConnector, LoadConnector):
     def __init__(
         self,
-        batch_size: int = INDEX_BATCH_SIZE,
-        server_ids: list[str] | None = None,
-        channel_names: list[str] | None = None,
+        server_ids: list[str] = [],
+        channel_names: list[str] = [],
         start_date: str | None = None,  # YYYY-MM-DD
+        batch_size: int = INDEX_BATCH_SIZE,
     ):
         self.batch_size = batch_size
-        self.channel_names: list[str] | None = channel_names
-        self.server_ids: list[int] | None = (
-            [int(server_id) for server_id in server_ids] if server_ids else None
+        self.channel_names: list[str] = channel_names if channel_names else []
+        self.server_ids: list[int] = (
+            [int(server_id) for server_id in server_ids] if server_ids else []
         )
         self._discord_bot_token: str | None = None
-        self.requested_start_date_string = start_date
+        self.requested_start_date_string: str = start_date or ""
 
     @property
     def discord_bot_token(self) -> str:
@@ -250,17 +260,19 @@ class DiscordConnector(PollConnector, LoadConnector):
         self._discord_bot_token = credentials["discord_bot_token"]
         return None
 
-    def poll_source(
-        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    def _manage_doc_batching(
+        self,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> GenerateDocumentsOutput:
         doc_batch = []
         for doc in _manage_async_retrieval(
             token=self.discord_bot_token,
-            start=datetime.fromtimestamp(start, tz=timezone.utc),
-            end=datetime.fromtimestamp(end, tz=timezone.utc),
             requested_start_date_string=self.requested_start_date_string,
             channel_names=self.channel_names,
             server_ids=self.server_ids,
+            start=start,
+            end=end,
         ):
             doc_batch.append(doc)
             if len(doc_batch) >= self.batch_size:
@@ -269,22 +281,17 @@ class DiscordConnector(PollConnector, LoadConnector):
 
         if doc_batch:
             yield doc_batch
+
+    def poll_source(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> GenerateDocumentsOutput:
+        return self._manage_doc_batching(
+            datetime.fromtimestamp(start, tz=timezone.utc),
+            datetime.fromtimestamp(end, tz=timezone.utc),
+        )
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        doc_batch = []
-        for doc in _manage_async_retrieval(
-            token=self.discord_bot_token,
-            requested_start_date_string=self.requested_start_date_string,
-            channel_names=self.channel_names,
-            server_ids=self.server_ids,
-        ):
-            doc_batch.append(doc)
-            if len(doc_batch) >= self.batch_size:
-                yield doc_batch
-                doc_batch = []
-
-        if doc_batch:
-            yield doc_batch
+        return self._manage_doc_batching(None, None)
 
 
 if __name__ == "__main__":
@@ -292,15 +299,16 @@ if __name__ == "__main__":
     import time
 
     end = time.time()
-    start = end - 24 * 60 * 60 * 1  # 1 day
-    server_ids: str | None = os.environ.get("server_ids", None)  # "1,2,3"
-    channel_names: str | None = os.environ.get(
-        "channel_names", None
-    )  # "channel1,channel2"
+    # 1 day
+    start = end - 24 * 60 * 60 * 1
+    # "1,2,3"
+    server_ids: str | None = os.environ.get("server_ids", None)
+    # "channel1,channel2"
+    channel_names: str | None = os.environ.get("channel_names", None)
 
     connector = DiscordConnector(
-        server_ids=server_ids.split(",") if server_ids else None,
-        channel_names=channel_names.split(",") if channel_names else None,
+        server_ids=server_ids.split(",") if server_ids else [],
+        channel_names=channel_names.split(",") if channel_names else [],
         start_date=os.environ.get("start_date", None),
     )
     connector.load_credentials(
