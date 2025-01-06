@@ -83,7 +83,7 @@ const EditRow = ({
             </div>
           </TooltipTrigger>
           {!documentSet.is_up_to_date && (
-            <TooltipContent maxWidth="max-w-sm">
+            <TooltipContent width="max-w-sm">
               <div className="flex break-words break-keep whitespace-pre-wrap items-start">
                 <InfoIcon className="mr-2 mt-0.5" />
                 Cannot update while syncing! Wait for the sync to finish, then
@@ -314,7 +314,7 @@ const Main = () => {
       <Text className="mb-3">
         <b>Document Sets</b> allow you to group logically connected documents
         into a single bundle. These can then be used as a filter when performing
-        searches to control the scope of information Danswer searches over.
+        searches to control the scope of information Onyx searches over.
       </Text>
 
       <div className="mb-3"></div>

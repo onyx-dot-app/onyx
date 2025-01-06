@@ -1,7 +1,6 @@
 "use client";
 
 import { withFormik, FormikProps, FormikErrors, Form, Field } from "formik";
-
 import { Button } from "@/components/ui/button";
 
 const WHITESPACE_SPLIT = /\s+/;
@@ -30,9 +29,21 @@ const AddUserFormRenderer = ({
   touched,
   errors,
   isSubmitting,
+  handleSubmit,
 }: FormikProps<FormValues>) => (
-  <Form className="w-full">
-    <Field id="emails" name="emails" as="textarea" className="w-full p-4" />
+  <Form className="w-full" onSubmit={handleSubmit}>
+    <Field
+      id="emails"
+      name="emails"
+      as="textarea"
+      className="w-full p-4"
+      onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handleSubmit();
+        }
+      }}
+    />
     {touched.emails && errors.emails && (
       <div className="text-error text-sm">{errors.emails}</div>
     )}

@@ -1,3 +1,16 @@
+import {
+  CloudEmbeddingProvider,
+  HostedEmbeddingModel,
+} from "@/components/embedding/interfaces";
+
+import {
+  AdvancedSearchConfiguration,
+  SavedSearchSettings,
+} from "../interfaces";
+
+import { EmbeddingProvider } from "@/components/embedding/interfaces";
+import { RerankingDetails } from "../interfaces";
+
 export const deleteSearchSettings = async (search_settings_id: number) => {
   const response = await fetch(`/api/search-settings/delete-search-settings`, {
     method: "DELETE",
@@ -41,4 +54,21 @@ export const testEmbedding = async ({
   });
 
   return testResponse;
+};
+
+// We use a spread operation to merge properties from multiple objects into a single object.
+// Advanced embedding details may update default values.
+// Do NOT modify the order unless you are positive the new hierarchy is correct.
+export const combineSearchSettings = (
+  selectedProvider: CloudEmbeddingProvider | HostedEmbeddingModel,
+  advancedEmbeddingDetails: AdvancedSearchConfiguration,
+  rerankingDetails: RerankingDetails,
+  provider_type: EmbeddingProvider | null
+): SavedSearchSettings => {
+  return {
+    ...selectedProvider,
+    ...advancedEmbeddingDetails,
+    ...rerankingDetails,
+    provider_type: provider_type,
+  };
 };

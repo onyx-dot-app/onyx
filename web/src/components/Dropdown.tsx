@@ -10,6 +10,8 @@ import {
 import { ChevronDownIcon } from "./icons/icons";
 import { FiCheck, FiChevronDown } from "react-icons/fi";
 import { Popover } from "./popover/Popover";
+import { createPortal } from "react-dom";
+import { useDropdownPosition } from "@/lib/dropdown";
 
 export interface Option<T> {
   name: string;
@@ -60,6 +62,7 @@ export function SearchMultiSelectDropdown({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownMenuRef = useRef<HTMLDivElement>(null);
 
   const handleSelect = (option: StringOrNumberOption) => {
     onSelect(option);
@@ -75,7 +78,9 @@ export function SearchMultiSelectDropdown({
     const handleClickOutside = (event: MouseEvent) => {
       if (
         dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
+        !dropdownRef.current.contains(event.target as Node) &&
+        dropdownMenuRef.current &&
+        !dropdownMenuRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
       }
@@ -87,105 +92,103 @@ export function SearchMultiSelectDropdown({
     };
   }, []);
 
+  useDropdownPosition({ isOpen, dropdownRef, dropdownMenuRef });
+
   return (
-    <div className="relative inline-block text-left w-full" ref={dropdownRef}>
+    <div className="relative text-left w-full" ref={dropdownRef}>
       <div>
         <input
           type="text"
           placeholder="Search..."
           value={searchTerm}
           onChange={(e: ChangeEvent<HTMLInputElement>) => {
-            if (!searchTerm) {
+            setSearchTerm(e.target.value);
+            if (e.target.value) {
               setIsOpen(true);
-            }
-            if (!e.target.value) {
+            } else {
               setIsOpen(false);
             }
-            setSearchTerm(e.target.value);
           }}
           onFocus={() => setIsOpen(true)}
           className={`inline-flex 
-          justify-between 
-          w-full 
-          px-4 
-          py-2 
-          text-sm 
-          bg-background
-          border
-          border-border
-          rounded-md 
-          shadow-sm 
-          `}
-          onClick={(e) => e.stopPropagation()}
+            justify-between 
+            w-full 
+            px-4 
+            py-2 
+            text-sm 
+            bg-background
+            border
+            border-border
+            rounded-md 
+            shadow-sm 
+            `}
         />
         <button
           type="button"
           className={`absolute top-0 right-0 
-            text-sm 
-            h-full px-2 border-l border-border`}
-          aria-expanded="true"
+              text-sm 
+              h-full px-2 border-l border-border`}
+          aria-expanded={isOpen}
           aria-haspopup="true"
           onClick={() => setIsOpen(!isOpen)}
         >
-          <ChevronDownIcon className="my-auto" />
+          <ChevronDownIcon className="my-auto w-4 h-4" />
         </button>
       </div>
 
-      {isOpen && (
-        <div
-          className={`origin-top-right
-            absolute
-            left-0
-            mt-3
-            w-full
-            rounded-md
-            shadow-lg
-            bg-background
-            border
-            border-border
-            max-h-80
-            overflow-y-auto
-            overscroll-contain`}
-        >
+      {isOpen &&
+        createPortal(
           <div
-            role="menu"
-            aria-orientation="vertical"
-            aria-labelledby="options-menu"
+            ref={dropdownMenuRef}
+            className={`origin-top-right
+                rounded-md
+                shadow-lg
+                bg-background
+                border
+                border-border
+                max-h-80
+                overflow-y-auto
+                overscroll-contain`}
           >
-            {filteredOptions.length ? (
-              filteredOptions.map((option, index) =>
-                itemComponent ? (
-                  <div
-                    key={option.name}
-                    onClick={() => {
-                      setIsOpen(false);
-                      handleSelect(option);
-                    }}
-                  >
-                    {itemComponent({ option })}
-                  </div>
-                ) : (
-                  <StandardDropdownOption
-                    key={index}
-                    option={option}
-                    index={index}
-                    handleSelect={handleSelect}
-                  />
+            <div
+              role="menu"
+              aria-orientation="vertical"
+              aria-labelledby="options-menu"
+            >
+              {filteredOptions.length ? (
+                filteredOptions.map((option, index) =>
+                  itemComponent ? (
+                    <div
+                      key={option.name}
+                      onClick={() => {
+                        handleSelect(option);
+                      }}
+                    >
+                      {itemComponent({ option })}
+                    </div>
+                  ) : (
+                    <StandardDropdownOption
+                      key={index}
+                      option={option}
+                      index={index}
+                      handleSelect={handleSelect}
+                    />
+                  )
                 )
-              )
-            ) : (
-              <button
-                key={0}
-                className={`w-full text-left block px-4 py-2.5 text-sm hover:bg-hover`}
-                role="menuitem"
-                onClick={() => setIsOpen(false)}
-              >
-                No matches found...
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+              ) : (
+                <button
+                  key={0}
+                  className={`w-full text-left block px-4 py-2.5 text-sm hover:bg-hover`}
+                  role="menuitem"
+                  onClick={() => setIsOpen(false)}
+                >
+                  No matches found...
+                </button>
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

@@ -33,18 +33,19 @@ import {
 } from "@/components/ui/select";
 
 export function AssistantGalleryCard({
+  onlyAssistant,
   assistant,
   user,
   setPopup,
   selectedAssistant,
 }: {
+  onlyAssistant: boolean;
   assistant: Persona;
   user: User | null;
   setPopup: (popup: PopupSpec) => void;
   selectedAssistant: boolean;
 }) {
   const { data: categories } = useCategories();
-
   const { refreshUser } = useUser();
 
   return (
@@ -83,10 +84,7 @@ export function AssistantGalleryCard({
 								"
                 icon={FiMinus}
                 onClick={async () => {
-                  if (
-                    user.preferences?.chosen_assistants &&
-                    user.preferences?.chosen_assistants.length === 1
-                  ) {
+                  if (onlyAssistant) {
                     setPopup({
                       message: `Cannot remove "${assistant.name}" - you must have at least one assistant.`,
                       type: "error",
@@ -148,7 +146,7 @@ export function AssistantGalleryCard({
       </div>
       <p className="text-sm mt-2">{assistant.description}</p>
       <p className="text-subtle text-sm my-2">
-        Author: {assistant.owner?.email || "Danswer"}
+        Author: {assistant.owner?.email || "Onyx"}
       </p>
       {assistant.tools.length > 0 && (
         <AssistantTools list assistant={assistant} />
@@ -356,6 +354,7 @@ export function AssistantsGallery() {
             >
               {defaultAssistants.map((assistant) => (
                 <AssistantGalleryCard
+                  onlyAssistant={visibleAssistants.length === 1}
                   selectedAssistant={visibleAssistants.includes(assistant)}
                   key={assistant.id}
                   assistant={assistant}
@@ -389,6 +388,7 @@ export function AssistantsGallery() {
             >
               {nonDefaultAssistants.map((assistant) => (
                 <AssistantGalleryCard
+                  onlyAssistant={visibleAssistants.length === 1}
                   selectedAssistant={visibleAssistants.includes(assistant)}
                   key={assistant.id}
                   assistant={assistant}

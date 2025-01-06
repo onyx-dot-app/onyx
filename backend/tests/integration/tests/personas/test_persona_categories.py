@@ -44,6 +44,7 @@ def test_persona_category_management(reset: None) -> None:
             category=updated_persona_category,
             user_performing_action=regular_user,
         )
+    assert exc_info.value.response is not None
     assert exc_info.value.response.status_code == 403
 
     assert PersonaCategoryManager.verify(

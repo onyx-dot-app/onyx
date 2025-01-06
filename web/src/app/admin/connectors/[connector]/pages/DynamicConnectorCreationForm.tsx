@@ -11,8 +11,6 @@ import { RenderField } from "./FieldRendering";
 
 export interface DynamicConnectionFormProps {
   config: ConnectionConfiguration;
-  selectedFiles: File[];
-  setSelectedFiles: Dispatch<SetStateAction<File[]>>;
   values: any;
   connector: ConfigurableSources;
   currentCredential: Credential<any> | null;
@@ -20,8 +18,6 @@ export interface DynamicConnectionFormProps {
 
 const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
   config,
-  selectedFiles,
-  setSelectedFiles,
   values,
   connector,
   currentCredential,
@@ -48,8 +44,6 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
               key={field.name}
               field={field}
               values={values}
-              selectedFiles={selectedFiles}
-              setSelectedFiles={setSelectedFiles}
               connector={connector}
               currentCredential={currentCredential}
             />
@@ -73,8 +67,6 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
                     key={field.name}
                     field={field}
                     values={values}
-                    selectedFiles={selectedFiles}
-                    setSelectedFiles={setSelectedFiles}
                     connector={connector}
                     currentCredential={currentCredential}
                   />

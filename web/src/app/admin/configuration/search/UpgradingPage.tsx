@@ -68,10 +68,11 @@ export default function UpgradingPage({
   const statusOrder: Record<ValidStatuses, number> = useMemo(
     () => ({
       failed: 0,
-      completed_with_errors: 1,
-      not_started: 2,
-      in_progress: 3,
-      success: 4,
+      canceled: 1,
+      completed_with_errors: 2,
+      not_started: 3,
+      in_progress: 4,
+      success: 5,
     }),
     []
   );
@@ -160,7 +161,7 @@ export default function UpgradingPage({
                     reindexingProgress={sortedReindexingProgress}
                   />
                 ) : (
-                  <ErrorCallout errorTitle="Failed to fetch re-indexing progress" />
+                  <ErrorCallout errorTitle="Failed to fetch reindexing progress" />
                 )}
               </>
             ) : (
@@ -170,7 +171,7 @@ export default function UpgradingPage({
                 </h3>
                 <p className="mb-4 text-text-800">
                   You&apos;re currently switching embedding models, but there
-                  are no connectors to re-index. This means the transition will
+                  are no connectors to reindex. This means the transition will
                   be quick and seamless!
                 </p>
                 <p className="text-text-600">

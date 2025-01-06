@@ -56,6 +56,29 @@ export const buildDateString = (date: Date | null) => {
       )} days ago`
     : "Select a time range";
 };
+
+export const getDateRangeString = (from: Date | null, to: Date | null) => {
+  if (!from || !to) return null;
+
+  const now = new Date();
+  const fromDiffMs = now.getTime() - from.getTime();
+  const toDiffMs = now.getTime() - to.getTime();
+
+  const fromDiffDays = Math.floor(fromDiffMs / (1000 * 60 * 60 * 24));
+  const toDiffDays = Math.floor(toDiffMs / (1000 * 60 * 60 * 24));
+
+  const fromString = getTimeAgoString(from);
+  const toString = getTimeAgoString(to);
+
+  if (fromString === toString) return fromString;
+
+  if (toDiffDays === 0) {
+    return `${fromString} - Today`;
+  }
+
+  return `${fromString} - ${toString}`;
+};
+
 export const getTimeAgoString = (date: Date | null) => {
   if (!date) return null;
 

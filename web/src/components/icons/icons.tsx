@@ -39,6 +39,10 @@ import Image, { StaticImageData } from "next/image";
 import jiraSVG from "../../../public/Jira.svg";
 import confluenceSVG from "../../../public/Confluence.svg";
 import openAISVG from "../../../public/Openai.svg";
+import amazonSVG from "../../../public/Amazon.svg";
+import geminiSVG from "../../../public/Gemini.svg";
+import metaSVG from "../../../public/Meta.svg";
+import mistralSVG from "../../../public/Mistral.svg";
 import openSourceIcon from "../../../public/OpenSource.png";
 import litellmIcon from "../../../public/LiteLLM.jpg";
 
@@ -48,6 +52,7 @@ import asanaIcon from "../../../public/Asana.png";
 import anthropicSVG from "../../../public/Anthropic.svg";
 import nomicSVG from "../../../public/nomic.svg";
 import microsoftIcon from "../../../public/microsoft.png";
+import microsoftSVG from "../../../public/Microsoft.svg";
 import mixedBreadSVG from "../../../public/Mixedbread.png";
 
 import OCIStorageSVG from "../../../public/OCI.svg";
@@ -61,8 +66,10 @@ import document360Icon from "../../../public/Document360.png";
 import googleSitesIcon from "../../../public/GoogleSites.png";
 import zendeskIcon from "../../../public/Zendesk.svg";
 import dropboxIcon from "../../../public/Dropbox.png";
+import egnyteIcon from "../../../public/Egnyte.png";
 import slackIcon from "../../../public/Slack.png";
 import discordIcon from "../../../public/discord.png";
+import airtableIcon from "../../../public/Airtable.svg";
 
 import s3Icon from "../../../public/S3.png";
 import r2Icon from "../../../public/r2.png";
@@ -73,15 +80,16 @@ import firefliesIcon from "../../../public/Fireflies.png";
 import sharepointIcon from "../../../public/Sharepoint.png";
 import teamsIcon from "../../../public/Teams.png";
 import mediawikiIcon from "../../../public/MediaWiki.svg";
-import wikipediaIcon from "../../../public/Wikipedia.svg";
-
+import wikipediaIcon from "../../../public/Wikipedia.png";
 import discourseIcon from "../../../public/Discourse.png";
 import clickupIcon from "../../../public/Clickup.svg";
 import cohereIcon from "../../../public/Cohere.svg";
 import voyageIcon from "../../../public/Voyage.png";
 import googleIcon from "../../../public/Google.webp";
 import xenforoIcon from "../../../public/Xenforo.svg";
-import { FaRobot } from "react-icons/fa";
+import { FaGithub, FaRobot } from "react-icons/fa";
+
+import { cn } from "@/lib/utils";
 
 export interface IconProps {
   size?: number;
@@ -97,12 +105,14 @@ export const LogoIcon = ({
   className = defaultTailwindCSS,
   src,
 }: LogoIconProps) => (
-  <div
+  <Image
     style={{ width: `${size}px`, height: `${size}px` }}
     className={`w-[${size}px] h-[${size}px] ` + className}
-  >
-    <Image src={src} alt="Logo" width="96" height="96" />
-  </div>
+    src={src}
+    alt="Logo"
+    width="96"
+    height="96"
+  />
 );
 
 export const AssistantsIconSkeleton = ({
@@ -486,13 +496,6 @@ export const XSquareIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => {
   return <XSquare size={size} className={className} />;
-};
-
-export const GlobeIcon = ({
-  size = 16,
-  className = defaultTailwindCSSBlue,
-}: IconProps) => {
-  return <FiGlobe size={size} className={className} />;
 };
 
 export const FileIcon = ({
@@ -1048,8 +1051,15 @@ export const GithubIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => (
-  <LogoIcon size={size} className={className} src="/Github.png" />
+  <FaGithub size={size} className={cn(className, "text-black")} />
 );
+
+export const GlobeIcon = ({
+  size = 16,
+  className = defaultTailwindCSSBlue,
+}: IconProps) => {
+  return <FiGlobe size={size} className={className} />;
+};
 
 export const GmailIcon = ({
   size = 16,
@@ -1110,6 +1120,35 @@ export const OpenAIIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => <LogoIcon size={size} className={className} src={openAISVG} />;
+
+export const GeminiIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => <LogoIcon size={size} className={className} src={geminiSVG} />;
+
+export const AmazonIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => <LogoIcon size={size} className={className} src={amazonSVG} />;
+
+export const MetaIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => <LogoIcon size={size} className={className} src={metaSVG} />;
+
+export const MicrosoftIconSVG = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={microsoftSVG} />
+);
+
+export const MistralIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={mistralSVG} />
+);
 
 export const VoyageIcon = ({
   size = 16,
@@ -2628,7 +2667,7 @@ export const OpenIcon = ({
       <path
         fill="none"
         stroke="currentColor"
-        stroke-linecap="round"
+        strokeLinecap="round"
         stroke-linejoin="round"
         d="M7 13.5a9.26 9.26 0 0 0-5.61-2.95a1 1 0 0 1-.89-1V1.5A1 1 0 0 1 1.64.51A9.3 9.3 0 0 1 7 3.43zm0 0a9.26 9.26 0 0 1 5.61-2.95a1 1 0 0 0 .89-1V1.5a1 1 0 0 0-1.14-.99A9.3 9.3 0 0 0 7 3.43z"
       />
@@ -2652,7 +2691,7 @@ export const DexpandTwoIcon = ({
       <path
         fill="none"
         stroke="currentColor"
-        stroke-linecap="round"
+        strokeLinecap="round"
         stroke-linejoin="round"
         d="m.5 13.5l5-5m-4 0h4v4m8-12l-5 5m4 0h-4v-4"
       />
@@ -2676,7 +2715,7 @@ export const ExpandTwoIcon = ({
       <path
         fill="none"
         stroke="currentColor"
-        stroke-linecap="round"
+        strokeLinecap="round"
         stroke-linejoin="round"
         d="m8.5 5.5l5-5m-4 0h4v4m-8 4l-5 5m4 0h-4v-4"
       />
@@ -2700,10 +2739,63 @@ export const DownloadCSVIcon = ({
       <path
         fill="none"
         stroke="currentColor"
-        stroke-linecap="round"
+        strokeLinecap="round"
         stroke-linejoin="round"
         d="M.5 10.5v1a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-1M4 6l3 3.5L10 6M7 9.5v-9"
       />
     </svg>
+  );
+};
+
+export const UserIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] ` + className}
+      xmlns="http://www.w3.org/2000/svg"
+      width="200"
+      height="200"
+      viewBox="0 0 24 24"
+    >
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        stroke-linejoin="round"
+        stroke-width="1.5"
+        d="M19.618 21.25c0-3.602-4.016-6.53-7.618-6.53c-3.602 0-7.618 2.928-7.618 6.53M12 11.456a4.353 4.353 0 1 0 0-8.706a4.353 4.353 0 0 0 0 8.706"
+      />
+    </svg>
+  );
+};
+
+export const EgnyteIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <div
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] ` + className}
+    >
+      <Image src={egnyteIcon} alt="Egnyte" width="96" height="96" />
+    </div>
+  );
+};
+
+export const AirtableIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <div
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`w-[${size}px] h-[${size}px] ` + className}
+    >
+      <Image src={airtableIcon} alt="Airtable" width="96" height="96" />
+    </div>
   );
 };

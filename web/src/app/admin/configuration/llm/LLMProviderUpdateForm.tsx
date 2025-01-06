@@ -278,7 +278,6 @@ export function LLMProviderUpdateForm({
           {!(hideAdvanced && llmProviderDescriptor.name != "azure") && (
             <>
               <Separator />
-
               {llmProviderDescriptor.llm_names.length > 0 ? (
                 <SelectorFormField
                   name="default_model_name"
@@ -298,7 +297,6 @@ export function LLMProviderUpdateForm({
                   placeholder="E.g. gpt-4"
                 />
               )}
-
               {llmProviderDescriptor.deployment_name_required && (
                 <TextFormField
                   small={hideAdvanced}
@@ -307,7 +305,6 @@ export function LLMProviderUpdateForm({
                   placeholder="Deployment Name"
                 />
               )}
-
               {!llmProviderDescriptor.single_model_supported &&
                 (llmProviderDescriptor.llm_names.length > 0 ? (
                   <SelectorFormField
@@ -344,7 +341,6 @@ export function LLMProviderUpdateForm({
                   />
                 </>
               )}
-
               {showAdvancedOptions && (
                 <>
                   {llmProviderDescriptor.llm_names.length > 0 && (

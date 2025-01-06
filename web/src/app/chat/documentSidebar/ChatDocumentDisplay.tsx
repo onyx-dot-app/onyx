@@ -1,133 +1,133 @@
-import { HoverPopup } from "@/components/HoverPopup";
 import { SourceIcon } from "@/components/SourceIcon";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { DanswerDocument } from "@/lib/search/interfaces";
-import { FiInfo, FiRadio } from "react-icons/fi";
+import { OnyxDocument } from "@/lib/search/interfaces";
+import { FiTag } from "react-icons/fi";
 import { DocumentSelector } from "./DocumentSelector";
-import {
-  DocumentMetadataBlock,
-  buildDocumentSummaryDisplay,
-} from "@/components/search/DocumentDisplay";
-import { InternetSearchIcon } from "@/components/InternetSearchIcon";
+import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
+import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
+import { MetadataBadge } from "@/components/MetadataBadge";
+import { WebResultIcon } from "@/components/WebResultIcon";
+import { Dispatch, SetStateAction } from "react";
+import { openDocument } from "@/lib/search/utils";
 
 interface DocumentDisplayProps {
-  document: DanswerDocument;
-  queryEventId: number | null;
-  isAIPick: boolean;
+  closeSidebar: () => void;
+  document: OnyxDocument;
+  modal?: boolean;
   isSelected: boolean;
   handleSelect: (documentId: string) => void;
-  setPopup: (popupSpec: PopupSpec | null) => void;
   tokenLimitReached: boolean;
+  hideSelection?: boolean;
+  setPresentingDocument: Dispatch<SetStateAction<OnyxDocument | null>>;
+}
+
+export function DocumentMetadataBlock({
+  modal,
+  document,
+}: {
+  modal?: boolean;
+  document: OnyxDocument;
+}) {
+  const MAX_METADATA_ITEMS = 3;
+  const metadataEntries = Object.entries(document.metadata);
+
+  return (
+    <div className="flex items-center overflow-hidden">
+      {document.updated_at && (
+        <DocumentUpdatedAtBadge updatedAt={document.updated_at} modal={modal} />
+      )}
+
+      {metadataEntries.length > 0 && (
+        <>
+          <div className="mx-1 h-4 border-l border-border" />
+          <div className="flex items-center overflow-hidden">
+            {metadataEntries
+              .slice(0, MAX_METADATA_ITEMS)
+              .map(([key, value], index) => (
+                <MetadataBadge
+                  key={index}
+                  icon={FiTag}
+                  value={`${key}=${value}`}
+                />
+              ))}
+            {metadataEntries.length > MAX_METADATA_ITEMS && (
+              <span className="ml-1 text-xs text-gray-500">...</span>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 export function ChatDocumentDisplay({
+  closeSidebar,
   document,
-  queryEventId,
-  isAIPick,
+  modal,
+  hideSelection,
   isSelected,
   handleSelect,
-  setPopup,
   tokenLimitReached,
+  setPresentingDocument,
 }: DocumentDisplayProps) {
   const isInternet = document.is_internet;
-  // Consider reintroducing null scored docs in the future
 
   if (document.score === null) {
     return null;
   }
 
+  const hasMetadata =
+    document.updated_at || Object.keys(document.metadata).length > 0;
   return (
     <div
-      key={document.semantic_identifier}
-      className={`p-2 w-[325px] justify-start rounded-md ${
-        isSelected ? "bg-background-200" : "bg-background-125"
-      } text-sm mx-3`}
+      className={`max-w-[400px] opacity-100 ${modal ? "w-[90vw]" : "w-full"}`}
     >
-      <div className="flex relative justify-start overflow-y-visible">
-        <a
-          href={document.link}
-          target="_blank"
-          className={
-            "rounded-lg flex font-bold flex-shrink truncate" +
-            (document.link ? "" : "pointer-events-none")
-          }
-          rel="noreferrer"
+      <div
+        className={`flex relative flex-col gap-0.5  rounded-xl mx-2 my-1 ${
+          isSelected ? "bg-gray-200" : "hover:bg-background-125"
+        }`}
+      >
+        <button
+          onClick={() => openDocument(document, setPresentingDocument)}
+          className="cursor-pointer text-left flex flex-col px-2 py-1.5"
         >
-          {isInternet ? (
-            <InternetSearchIcon url={document.link} />
-          ) : (
-            <SourceIcon sourceType={document.source_type} iconSize={18} />
-          )}
-          <p className="overflow-hidden text-left text-ellipsis mx-2 my-auto text-sm">
-            {document.semantic_identifier || document.document_id}
-          </p>
-        </a>
-        {document.score !== null && (
-          <div className="my-auto">
-            {isAIPick && (
-              <div className="w-4 h-4 my-auto mr-1 flex flex-col">
-                <HoverPopup
-                  mainContent={<FiRadio className="text-gray-500 my-auto" />}
-                  popupContent={
-                    <div className="text-xs text-gray-300 w-36 flex">
-                      <div className="flex mx-auto">
-                        <div className="w-3 h-3 flex flex-col my-auto mr-1">
-                          <FiInfo className="my-auto" />
-                        </div>
-                        <div className="my-auto">The AI liked this doc!</div>
-                      </div>
-                    </div>
-                  }
-                  direction="bottom"
-                  style="dark"
-                />
-              </div>
+          <div className="line-clamp-1 mb-1 flex h-6 items-center gap-2 text-xs">
+            {document.is_internet || document.source_type === "web" ? (
+              <WebResultIcon url={document.link} />
+            ) : (
+              <SourceIcon sourceType={document.source_type} iconSize={18} />
             )}
-            <div
-              className={`
-                text-xs
-                text-emphasis
-                bg-hover
-                rounded
-                p-0.5
-                w-fit
-                my-auto
-                select-none
-                my-auto
-                mr-2`}
-            >
-              {Math.abs(document.score).toFixed(2)}
+            <div className="line-clamp-1 text-text-900 text-sm font-semibold">
+              {(document.semantic_identifier || document.document_id).length >
+              (modal ? 30 : 40)
+                ? `${(document.semantic_identifier || document.document_id)
+                    .slice(0, modal ? 30 : 40)
+                    .trim()}...`
+                : document.semantic_identifier || document.document_id}
             </div>
           </div>
-        )}
-
-        {!isInternet && (
-          <DocumentSelector
-            isSelected={isSelected}
-            handleSelect={() => handleSelect(document.document_id)}
-            isDisabled={tokenLimitReached && !isSelected}
-          />
-        )}
-      </div>
-      <div>
-        <div className="mt-1">
-          <DocumentMetadataBlock document={document} />
-        </div>
-      </div>
-      <p className="line-clamp-3 pl-1 pt-2 mb-1 text-start break-words">
-        {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
-        test
-      </p>
-      <div className="mb-2">
-        {/* 
-        // TODO: find a way to include this
-        {queryEventId && (
-          <DocumentFeedbackBlock
-            documentId={document.document_id}
-            queryId={queryEventId}
-            setPopup={setPopup}
-          />
-        )} */}
+          {hasMetadata && (
+            <DocumentMetadataBlock modal={modal} document={document} />
+          )}
+          <div
+            className={`line-clamp-3 text-sm font-normal leading-snug text-gray-600 ${
+              hasMetadata ? "mt-2" : ""
+            }`}
+          >
+            {buildDocumentSummaryDisplay(
+              document.match_highlights,
+              document.blurb
+            )}
+          </div>
+          <div className="absolute top-2 right-2">
+            {!isInternet && !hideSelection && (
+              <DocumentSelector
+                isSelected={isSelected}
+                handleSelect={() => handleSelect(document.document_id)}
+                isDisabled={tokenLimitReached && !isSelected}
+              />
+            )}
+          </div>
+        </button>
       </div>
     </div>
   );

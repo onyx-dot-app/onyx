@@ -4,7 +4,7 @@ name: Backport on Merge
 
 on:
   pull_request:
-    types: [closed]  # Later we check for merge so only PRs that go in can get backported
+    types: [closed] # Later we check for merge so only PRs that go in can get backported
 
 permissions:
   contents: write
@@ -26,9 +26,9 @@ jobs:
       - name: Set up Git user
         run: |
           git config user.name "Richard Kuo [bot]"
-          git config user.email "rkuo[bot]@danswer.ai"
+          git config user.email "rkuo[bot]@onyx.app"
           git fetch --prune
-      
+
       - name: Check for Backport Checkbox
         id: checkbox-check
         run: |
@@ -51,14 +51,14 @@ jobs:
           # Fetch latest tags for beta and stable
           LATEST_BETA_TAG=$(git tag -l "v[0-9]*.[0-9]*.[0-9]*-beta.[0-9]*" | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$" | grep -v -- "-cloud" | sort -Vr | head -n 1)
           LATEST_STABLE_TAG=$(git tag -l "v[0-9]*.[0-9]*.[0-9]*" | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | sort -Vr | head -n 1)
-          
+
           # Handle case where no beta tags exist
           if [[ -z "$LATEST_BETA_TAG" ]]; then
             NEW_BETA_TAG="v1.0.0-beta.1"
           else
             NEW_BETA_TAG=$(echo $LATEST_BETA_TAG | awk -F '[.-]' '{print $1 "." $2 "." $3 "-beta." ($NF+1)}')
           fi
-          
+
           # Increment latest stable tag
           NEW_STABLE_TAG=$(echo $LATEST_STABLE_TAG | awk -F '.' '{print $1 "." $2 "." ($3+1)}')
           echo "latest_beta_tag=$LATEST_BETA_TAG" >> $GITHUB_OUTPUT
@@ -80,10 +80,10 @@ jobs:
         run: |
           set -e
           echo "Backporting to beta ${{ steps.list-branches.outputs.beta }} and stable ${{ steps.list-branches.outputs.stable }}"
-          
+
           # Echo the merge commit SHA
           echo "Merge commit SHA: ${{ github.event.pull_request.merge_commit_sha }}"
-          
+
           # Fetch all history for all branches and tags
           git fetch --prune
 
@@ -98,7 +98,7 @@ jobs:
             echo "Cherry-pick to beta failed due to conflicts."
             exit 1
           }
-          
+
           # Create new beta branch/tag
           git tag ${{ steps.list-branches.outputs.new_beta_tag }}
           # Push the changes and tag to the beta branch using PAT
@@ -110,13 +110,13 @@ jobs:
           echo "Last 5 commits on stable branch:"
           git log -n 5 --pretty=format:"%H"
           echo ""  # Newline for formatting
-          
+
           # Cherry-pick the merge commit from the merged PR
           git cherry-pick -m 1 ${{ github.event.pull_request.merge_commit_sha }} || {
             echo "Cherry-pick to stable failed due to conflicts."
             exit 1
           }
-          
+
           # Create new stable branch/tag
           git tag ${{ steps.list-branches.outputs.new_stable_tag }}
           # Push the changes and tag to the stable branch using PAT

@@ -1,0 +1,108 @@
+[
+  {
+    "name": "Document Management - Explorer",
+    "path": "documents/explorer",
+    "pageTitle": "Document Explorer"
+  },
+  {
+    "name": "Connectors - Add Connector",
+    "path": "add-connector",
+    "pageTitle": "Add Connector",
+    "options": {
+      "subHeaderText": "Storage"
+    }
+  },
+  {
+    "name": "Custom Assistants - Assistants",
+    "path": "assistants",
+    "pageTitle": "Assistants",
+    "options": {
+      "paragraphText": "Assistants are a way to build custom search/question-answering experiences for different use cases."
+    }
+  },
+  {
+    "name": "Configuration - Document Processing",
+    "path": "configuration/document-processing",
+    "pageTitle": "Document Processing"
+  },
+  {
+    "name": "Document Management - Document Sets",
+    "path": "documents/sets",
+    "pageTitle": "Document Sets",
+    "options": {
+      "paragraphText": "Document Sets allow you to group logically connected documents into a single bundle. These can then be used as a filter when performing searches to control the scope of information Onyx searches over."
+    }
+  },
+  {
+    "name": "Custom Assistants - Slack Bots",
+    "path": "bots",
+    "pageTitle": "Slack Bots",
+    "options": {
+      "paragraphText": "Setup Slack bots that connect to Onyx. Once setup, you will be able to ask questions to Onyx directly from Slack. Additionally, you can:"
+    }
+  },
+  {
+    "name": "Custom Assistants - Standard Answers",
+    "path": "standard-answer",
+    "pageTitle": "Standard Answers"
+  },
+  {
+    "name": "Performance - Usage Statistics",
+    "path": "performance/usage",
+    "pageTitle": "Usage Statistics"
+  },
+  {
+    "name": "Document Management - Feedback",
+    "path": "documents/feedback",
+    "pageTitle": "Document Feedback",
+    "options": {
+      "subHeaderText": "Most Liked Documents"
+    }
+  },
+  {
+    "name": "Configuration - LLM",
+    "path": "configuration/llm",
+    "pageTitle": "LLM Setup"
+  },
+  {
+    "name": "Connectors - Existing Connectors",
+    "path": "indexing/status",
+    "pageTitle": "Existing Connectors"
+  },
+  {
+    "name": "User Management - Groups",
+    "path": "groups",
+    "pageTitle": "Manage User Groups"
+  },
+  {
+    "name": "Performance - Whitelabeling",
+    "path": "whitelabeling",
+    "pageTitle": "Whitelabeling"
+  },
+  {
+    "name": "Configuration - Search Settings",
+    "path": "configuration/search",
+    "pageTitle": "Search Settings",
+    "options": {
+      "subHeaderText": "Embedding Model"
+    }
+  },
+  {
+    "name": "Custom Assistants - Tools",
+    "path": "tools",
+    "pageTitle": "Tools",
+    "options": {
+      "paragraphText": "Tools allow assistants to retrieve information or take actions."
+    }
+  },
+  {
+    "name": "User Management - Token Rate Limits",
+    "path": "token-rate-limits",
+    "pageTitle": "Token Rate Limits",
+    "options": {
+      "paragraphText": "Token rate limits enable you control how many tokens can be spent in a given time period. With token rate limits, you can:",
+      "buttonName": "Create a Token Rate Limit",
+      "subHeaderText": "Global Token Rate Limits"
+    }
+  }
+]

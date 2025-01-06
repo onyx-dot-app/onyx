@@ -2,18 +2,17 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: env-configmap
-data: 
-
+data:
   # Auth Setting, also check the secrets file
-  AUTH_TYPE: "disabled"  # Change this for production uses unless Danswer is only accessible behind VPN
-  ENCRYPTION_KEY_SECRET: ""  # This should not be specified directly in the yaml, this is just for reference
-  SESSION_EXPIRE_TIME_SECONDS: "86400"  # 1 Day Default
-  VALID_EMAIL_DOMAINS: ""  # Can be something like danswer.ai, as an extra double-check
+  AUTH_TYPE: "disabled" # Change this for production uses unless Onyx is only accessible behind VPN
+  ENCRYPTION_KEY_SECRET: "" # This should not be specified directly in the yaml, this is just for reference
+  SESSION_EXPIRE_TIME_SECONDS: "86400" # 1 Day Default
+  VALID_EMAIL_DOMAINS: "" # Can be something like onyx.app, as an extra double-check
   SMTP_SERVER: "" # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
   SMTP_PORT: "" # For sending verification emails, if unspecified then defaults to '587'
-  SMTP_USER: ""  # 'your-email@company.com'
-  SMTP_PASS: ""  # 'your-gmail-password'
-  EMAIL_FROM: ""  # 'your-email@company.com' SMTP_USER missing used instead
+  SMTP_USER: "" # 'your-email@company.com'
+  SMTP_PASS: "" # 'your-gmail-password'
+  EMAIL_FROM: "" # 'your-email@company.com' SMTP_USER missing used instead
   CORS_ALLOWED_ORIGIN: ""
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""
@@ -61,23 +60,25 @@ data:
   WEB_CONNECTOR_VALIDATE_URLS: ""
   GONG_CONNECTOR_START_TIME: ""
   NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP: ""
-  # DanswerBot SlackBot Configs
+  MAX_DOCUMENT_CHARS: ""
+  MAX_FILE_SIZE_BYTES: ""
+  # OnyxBot SlackBot Configs
   DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   DANSWER_BOT_DISPLAY_ERROR_MSGS: ""
   DANSWER_BOT_RESPOND_EVERY_CHANNEL: ""
-  DANSWER_BOT_DISABLE_COT: ""  # Currently unused
+  DANSWER_BOT_DISABLE_COT: "" # Currently unused
   NOTIFY_SLACKBOT_NO_ANSWER: ""
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
-  # https://docs.danswer.dev/more/telemetry
+  # https://docs.onyx.app/more/telemetry
   DISABLE_TELEMETRY: ""
   LOG_LEVEL: ""
   LOG_ALL_MODEL_INTERACTIONS: ""
   LOG_DANSWER_MODEL_INTERACTIONS: ""
   LOG_VESPA_TIMING_INFORMATION: ""
   # Shared or Non-backend Related
-  INTERNAL_URL: "http://api-server-service:80"  # for web server
-  WEB_DOMAIN: "http://localhost:3000"  # for web server and api server
-  DOMAIN: "localhost"  # for nginx
+  INTERNAL_URL: "http://api-server-service:80" # for web server
+  WEB_DOMAIN: "http://localhost:3000" # for web server and api server
+  DOMAIN: "localhost" # for nginx
   # Chat Configs
   HARD_DELETE_CHATS: ""

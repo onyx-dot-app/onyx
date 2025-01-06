@@ -20,8 +20,6 @@ import {
 interface TabsFieldProps {
   tabField: TabOption;
   values: any;
-  selectedFiles: File[];
-  setSelectedFiles: Dispatch<SetStateAction<File[]>>;
   connector: ConfigurableSources;
   currentCredential: Credential<any> | null;
 }
@@ -29,8 +27,6 @@ interface TabsFieldProps {
 const TabsField: FC<TabsFieldProps> = ({
   tabField,
   values,
-  selectedFiles,
-  setSelectedFiles,
   connector,
   currentCredential,
 }) => {
@@ -101,8 +97,6 @@ const TabsField: FC<TabsFieldProps> = ({
                     key={subField.name}
                     field={subField}
                     values={values}
-                    selectedFiles={selectedFiles}
-                    setSelectedFiles={setSelectedFiles}
                     connector={connector}
                     currentCredential={currentCredential}
                   />
@@ -119,8 +113,6 @@ const TabsField: FC<TabsFieldProps> = ({
 interface RenderFieldProps {
   field: any;
   values: any;
-  selectedFiles: File[];
-  setSelectedFiles: Dispatch<SetStateAction<File[]>>;
   connector: ConfigurableSources;
   currentCredential: Credential<any> | null;
 }
@@ -128,8 +120,6 @@ interface RenderFieldProps {
 export const RenderField: FC<RenderFieldProps> = ({
   field,
   values,
-  selectedFiles,
-  setSelectedFiles,
   connector,
   currentCredential,
 }) => {
@@ -147,8 +137,6 @@ export const RenderField: FC<RenderFieldProps> = ({
       <TabsField
         tabField={field}
         values={values}
-        selectedFiles={selectedFiles}
-        setSelectedFiles={setSelectedFiles}
         connector={connector}
         currentCredential={currentCredential}
       />
@@ -157,15 +145,10 @@ export const RenderField: FC<RenderFieldProps> = ({
 
   const fieldContent = (
     <>
-      {field.type === "file" ? (
-        <FileUpload
-          name={field.name}
-          selectedFiles={selectedFiles}
-          setSelectedFiles={setSelectedFiles}
-        />
-      ) : field.type === "zip" ? (
+      {field.type === "zip" || field.type === "file" ? (
         <FileInput
           name={field.name}
+          isZip={field.type === "zip"}
           label={label}
           optional={field.optional}
           description={description}

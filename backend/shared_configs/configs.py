@@ -20,7 +20,7 @@ INDEXING_MODEL_SERVER_PORT = int(
     os.environ.get("INDEXING_MODEL_SERVER_PORT") or MODEL_SERVER_PORT
 )
 
-# Danswer custom Deep Learning Models
+# Onyx custom Deep Learning Models
 CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
 CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
 INTENT_MODEL_VERSION = "danswer/hybrid-intent-token-classifier"
@@ -56,12 +56,12 @@ INDEXING_ONLY = os.environ.get("INDEXING_ONLY", "").lower() == "true"
 
 # The process needs to have this for the log file to write to
 # otherwise, it will not create additional log files
-LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "danswer"
+LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "onyx"
 
 # Enable generating persistent log files for local dev environments
 DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true"
 # notset, debug, info, notice, warning, error, or critical
-LOG_LEVEL = os.environ.get("LOG_LEVEL", "notice")
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "info")
 
 # Timeout for API-based embedding models
 # NOTE: does not apply for Google VertexAI, since the python client doesn't
@@ -164,9 +164,19 @@ SUPPORTED_EMBEDDING_MODELS = [
         index_name="danswer_chunk_cohere_embed_english_v3_0",
     ),
     SupportedEmbeddingModel(
+        name="cohere/embed-english-v3.0",
+        dim=1024,
+        index_name="danswer_chunk_embed_english_v3_0",
+    ),
+    SupportedEmbeddingModel(
         name="cohere/embed-english-light-v3.0",
         dim=384,
         index_name="danswer_chunk_cohere_embed_english_light_v3_0",
+    ),
+    SupportedEmbeddingModel(
+        name="cohere/embed-english-light-v3.0",
+        dim=384,
+        index_name="danswer_chunk_embed_english_light_v3_0",
     ),
     SupportedEmbeddingModel(
         name="openai/text-embedding-3-large",
@@ -174,9 +184,19 @@ SUPPORTED_EMBEDDING_MODELS = [
         index_name="danswer_chunk_openai_text_embedding_3_large",
     ),
     SupportedEmbeddingModel(
+        name="openai/text-embedding-3-large",
+        dim=3072,
+        index_name="danswer_chunk_text_embedding_3_large",
+    ),
+    SupportedEmbeddingModel(
         name="openai/text-embedding-3-small",
         dim=1536,
         index_name="danswer_chunk_openai_text_embedding_3_small",
+    ),
+    SupportedEmbeddingModel(
+        name="openai/text-embedding-3-small",
+        dim=1536,
+        index_name="danswer_chunk_text_embedding_3_small",
     ),
     SupportedEmbeddingModel(
         name="google/text-embedding-004",
@@ -184,9 +204,19 @@ SUPPORTED_EMBEDDING_MODELS = [
         index_name="danswer_chunk_google_text_embedding_004",
     ),
     SupportedEmbeddingModel(
+        name="google/text-embedding-004",
+        dim=768,
+        index_name="danswer_chunk_text_embedding_004",
+    ),
+    SupportedEmbeddingModel(
         name="google/textembedding-gecko@003",
         dim=768,
         index_name="danswer_chunk_google_textembedding_gecko_003",
+    ),
+    SupportedEmbeddingModel(
+        name="google/textembedding-gecko@003",
+        dim=768,
+        index_name="danswer_chunk_textembedding_gecko_003",
     ),
     SupportedEmbeddingModel(
         name="voyage/voyage-large-2-instruct",
@@ -194,15 +224,30 @@ SUPPORTED_EMBEDDING_MODELS = [
         index_name="danswer_chunk_voyage_large_2_instruct",
     ),
     SupportedEmbeddingModel(
+        name="voyage/voyage-large-2-instruct",
+        dim=1024,
+        index_name="danswer_chunk_large_2_instruct",
+    ),
+    SupportedEmbeddingModel(
         name="voyage/voyage-light-2-instruct",
         dim=384,
         index_name="danswer_chunk_voyage_light_2_instruct",
+    ),
+    SupportedEmbeddingModel(
+        name="voyage/voyage-light-2-instruct",
+        dim=384,
+        index_name="danswer_chunk_light_2_instruct",
     ),
     # Self-hosted models
     SupportedEmbeddingModel(
         name="nomic-ai/nomic-embed-text-v1",
         dim=768,
         index_name="danswer_chunk_nomic_ai_nomic_embed_text_v1",
+    ),
+    SupportedEmbeddingModel(
+        name="nomic-ai/nomic-embed-text-v1",
+        dim=768,
+        index_name="danswer_chunk_nomic_embed_text_v1",
     ),
     SupportedEmbeddingModel(
         name="intfloat/e5-base-v2",

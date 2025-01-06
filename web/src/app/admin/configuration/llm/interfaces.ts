@@ -1,9 +1,14 @@
 import {
   AnthropicIcon,
+  AmazonIcon,
   AWSIcon,
   AzureIcon,
   CPUIcon,
+  MicrosoftIconSVG,
+  MistralIcon,
+  MetaIcon,
   OpenAIIcon,
+  GeminiIcon,
   OpenSourceIcon,
 } from "@/components/icons/icons";
 import { FaRobot } from "react-icons/fa";
@@ -67,10 +72,30 @@ export interface LLMProviderDescriptor {
   display_model_names: string[] | null;
 }
 
-export const getProviderIcon = (providerName: string) => {
+export const getProviderIcon = (providerName: string, modelName?: string) => {
   switch (providerName) {
     case "openai":
-      return OpenAIIcon;
+      // Special cases for openai based on modelName
+      if (modelName?.toLowerCase().includes("amazon")) {
+        return AmazonIcon;
+      }
+      if (modelName?.toLowerCase().includes("phi")) {
+        return MicrosoftIconSVG;
+      }
+      if (modelName?.toLowerCase().includes("mistral")) {
+        return MistralIcon;
+      }
+      if (modelName?.toLowerCase().includes("llama")) {
+        return MetaIcon;
+      }
+      if (modelName?.toLowerCase().includes("gemini")) {
+        return GeminiIcon;
+      }
+      if (modelName?.toLowerCase().includes("claude")) {
+        return AnthropicIcon;
+      }
+
+      return OpenAIIcon; // Default for openai
     case "anthropic":
       return AnthropicIcon;
     case "bedrock":
@@ -81,3 +106,6 @@ export const getProviderIcon = (providerName: string) => {
       return CPUIcon;
   }
 };
+
+export const isAnthropic = (provider: string, modelName: string) =>
+  provider === "anthropic" || modelName.toLowerCase().includes("claude");

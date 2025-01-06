@@ -1,0 +1,20 @@
+{
+  "strict": true,
+  "debug": false,
+  "idp": {
+    "entityId": "<Provide This from IDP>",
+    "singleSignOnService": {
+      "url": "<Replace this with your IDP URL> https://trial-1234567.okta.com/home/trial-1234567_onyx/somevalues/somevalues",
+      "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
+    },
+    "x509cert": "<Provide this>"
+  },
+  "sp": {
+    "entityId": "<Provide This from IDP>",
+    "assertionConsumerService": {
+      "url": "http://127.0.0.1:3000/auth/saml/callback",
+      "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+    },
+    "x509cert": "<Provide this>"
+  }
+}

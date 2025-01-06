@@ -1,3 +1,4 @@
+import asyncio
 import time
 from collections.abc import Callable
 from collections.abc import Generator
@@ -7,7 +8,7 @@ from typing import Any
 from typing import cast
 from typing import TypeVar
 
-from danswer.utils.logger import setup_logger
+from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
@@ -21,21 +22,39 @@ def simple_log_function_time(
     include_args: bool = False,
 ) -> Callable[[F], F]:
     def decorator(func: F) -> F:
-        @wraps(func)
-        def wrapped_func(*args: Any, **kwargs: Any) -> Any:
-            start_time = time.time()
-            result = func(*args, **kwargs)
-            elapsed_time_str = str(time.time() - start_time)
-            log_name = func_name or func.__name__
-            args_str = f" args={args} kwargs={kwargs}" if include_args else ""
-            final_log = f"{log_name}{args_str} took {elapsed_time_str} seconds"
-            if debug_only:
-                logger.debug(final_log)
-            else:
-                logger.notice(final_log)
+        if asyncio.iscoroutinefunction(func):
 
-            return result
+            @wraps(func)
+            async def wrapped_async_func(*args: Any, **kwargs: Any) -> Any:
+                start_time = time.time()
+                result = await func(*args, **kwargs)
+                elapsed_time_str = str(time.time() - start_time)
+                log_name = func_name or func.__name__
+                args_str = f" args={args} kwargs={kwargs}" if include_args else ""
+                final_log = f"{log_name}{args_str} took {elapsed_time_str} seconds"
+                if debug_only:
+                    logger.debug(final_log)
+                else:
+                    logger.notice(final_log)
+                return result
 
-        return cast(F, wrapped_func)
+            return cast(F, wrapped_async_func)
+        else:
+
+            @wraps(func)
+            def wrapped_sync_func(*args: Any, **kwargs: Any) -> Any:
+                start_time = time.time()
+                result = func(*args, **kwargs)
+                elapsed_time_str = str(time.time() - start_time)
+                log_name = func_name or func.__name__
+                args_str = f" args={args} kwargs={kwargs}" if include_args else ""
+                final_log = f"{log_name}{args_str} took {elapsed_time_str} seconds"
+                if debug_only:
+                    logger.debug(final_log)
+                else:
+                    logger.notice(final_log)
+                return result
+
+            return cast(F, wrapped_sync_func)
 
     return decorator

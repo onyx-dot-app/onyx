@@ -2,10 +2,11 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+import pytest
 import requests
 
-from danswer.configs.constants import QAFeedbackType
-from danswer.configs.constants import SessionType
+from onyx.configs.constants import QAFeedbackType
+from onyx.configs.constants import SessionType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -16,7 +17,8 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def test_query_history_endpoints(reset: None) -> None:
+@pytest.fixture
+def setup_chat_session(reset: None) -> tuple[DATestUser, str]:
     # Create admin user and required resources
     admin_user: DATestUser = UserManager.create(name="admin_user")
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
@@ -46,16 +48,29 @@ def test_query_history_endpoints(reset: None) -> None:
         user_performing_action=admin_user,
     )
 
-    # Test get chat session history endpoint
-    end_time = datetime.now(tz=timezone.utc)
-    start_time = end_time - timedelta(days=1)
+    messages = ChatSessionManager.get_chat_history(
+        chat_session=chat_session,
+        user_performing_action=admin_user,
+    )
+
+    # Add another message to the chat session
+    ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="What about Q2 revenue?",
+        user_performing_action=admin_user,
+        parent_message_id=messages[-1].id,
+    )
+
+    return admin_user, str(chat_session.id)
+
+
+def test_chat_history_endpoints(
+    reset: None, setup_chat_session: tuple[DATestUser, str]
+) -> None:
+    admin_user, first_chat_id = setup_chat_session
 
     response = requests.get(
         f"{API_SERVER_URL}/admin/chat-session-history",
-        params={
-            "start": start_time.isoformat(),
-            "end": end_time.isoformat(),
-        },
         headers=admin_user.headers,
     )
     assert response.status_code == 200
@@ -66,7 +81,6 @@ def test_query_history_endpoints(reset: None) -> None:
 
     # Verify the first chat session details
     first_session = history_response[0]
-    first_chat_id = first_session["id"]
     assert first_session["user_email"] == admin_user.email
     assert first_session["name"] == "Test chat session"
     assert first_session["first_user_message"] == "What was the Q1 revenue?"
@@ -74,7 +88,22 @@ def test_query_history_endpoints(reset: None) -> None:
     assert first_session["assistant_id"] == 0
     assert first_session["feedback_type"] is None
     assert first_session["flow_type"] == SessionType.CHAT.value
-    assert first_session["conversation_length"] == 2  # User message + AI response
+    assert first_session["conversation_length"] == 4  # 2 User messages + 2 AI responses
+
+    # Test date filtering - should return no results
+    past_end = datetime.now(tz=timezone.utc) - timedelta(days=1)
+    past_start = past_end - timedelta(days=1)
+    response = requests.get(
+        f"{API_SERVER_URL}/admin/chat-session-history",
+        params={
+            "start": past_start.isoformat(),
+            "end": past_end.isoformat(),
+        },
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 200
+    history_response = response.json()
+    assert len(history_response) == 0
 
     # Test get specific chat session endpoint
     response = requests.get(
@@ -89,7 +118,25 @@ def test_query_history_endpoints(reset: None) -> None:
     assert len(session_details["messages"]) > 0
     assert session_details["flow_type"] == SessionType.CHAT.value
 
-    # Test CSV export endpoint
+    # Test filtering by feedback
+    response = requests.get(
+        f"{API_SERVER_URL}/admin/chat-session-history",
+        params={
+            "feedback_type": QAFeedbackType.LIKE.value,
+        },
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 200
+    history_response = response.json()
+    assert len(history_response) == 0
+
+
+def test_chat_history_csv_export(
+    reset: None, setup_chat_session: tuple[DATestUser, str]
+) -> None:
+    admin_user, _ = setup_chat_session
+
+    # Test CSV export endpoint with date filtering
     response = requests.get(
         f"{API_SERVER_URL}/admin/query-history-csv",
         headers=admin_user.headers,
@@ -100,20 +147,26 @@ def test_query_history_endpoints(reset: None) -> None:
 
     # Verify CSV content
     csv_content = response.content.decode()
+    csv_lines = csv_content.strip().split("\n")
+    assert len(csv_lines) == 3  # Header + 2 QA pairs
     assert "chat_session_id" in csv_content
     assert "user_message" in csv_content
     assert "ai_response" in csv_content
+    assert "What was the Q1 revenue?" in csv_content
+    assert "What about Q2 revenue?" in csv_content
 
-    # Test filtering by feedback
+    # Test CSV export with date filtering - should return no results
+    past_end = datetime.now(tz=timezone.utc) - timedelta(days=1)
+    past_start = past_end - timedelta(days=1)
     response = requests.get(
-        f"{API_SERVER_URL}/admin/chat-session-history",
+        f"{API_SERVER_URL}/admin/query-history-csv",
         params={
-            "feedback_type": QAFeedbackType.LIKE.value,
-            "start": start_time.isoformat(),
-            "end": end_time.isoformat(),
+            "start": past_start.isoformat(),
+            "end": past_end.isoformat(),
         },
         headers=admin_user.headers,
     )
     assert response.status_code == 200
-    history_response = response.json()
-    assert len(history_response) == 0
+    csv_content = response.content.decode()
+    csv_lines = csv_content.strip().split("\n")
+    assert len(csv_lines) == 1  # Only header, no data rows

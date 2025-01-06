@@ -9,7 +9,7 @@ import json
 from typing import cast
 from alembic import op
 import sqlalchemy as sa
-from danswer.key_value_store.factory import get_kv_store
+from onyx.key_value_store.factory import get_kv_store
 
 # revision identifiers, used by Alembic.
 revision = "703313b75876"

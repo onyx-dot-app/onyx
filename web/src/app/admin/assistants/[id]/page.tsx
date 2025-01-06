@@ -25,6 +25,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
         <CardSection>
           <AssistantEditor
             {...values}
+            admin
             defaultPublic={true}
             redirectType={SuccessfulPersonaUpdateRedirectType.ADMIN}
           />

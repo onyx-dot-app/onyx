@@ -8,14 +8,24 @@ import {
   FiGlobe,
 } from "react-icons/fi";
 import { FeedbackType } from "../types";
-import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  memo,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import {
-  DanswerDocument,
-  FilteredDanswerDocument,
+  OnyxDocument,
+  FilteredOnyxDocument,
+  LoadedOnyxDocument,
 } from "@/lib/search/interfaces";
 import { SearchSummary } from "./SearchSummary";
-import { SourceIcon } from "@/components/SourceIcon";
+
 import { SkippedSearch } from "./SkippedSearch";
 import remarkGfm from "remark-gfm";
 import { CopyButton } from "@/components/CopyButton";
@@ -36,8 +46,6 @@ import "prismjs/themes/prism-tomorrow.css";
 import "./custom-code-styles.css";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { Citation } from "@/components/search/results/Citation";
-import { DocumentMetadataBlock } from "@/components/search/DocumentDisplay";
 
 import { LikeFeedback, DislikeFeedback } from "@/components/icons/icons";
 import {
@@ -52,16 +60,22 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useMouseTracking } from "./hooks";
-import { InternetSearchIcon } from "@/components/InternetSearchIcon";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import GeneratingImageDisplay from "../tools/GeneratingImageDisplay";
 import RegenerateOption from "../RegenerateOption";
 import { LlmOverride } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
-import { MemoizedLink, MemoizedParagraph } from "./MemoizedTextComponents";
-import { extractCodeText } from "./codeUtils";
+import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
+import { extractCodeText, preprocessLaTeX } from "./codeUtils";
 import ToolResult from "../../../components/tools/ToolResult";
 import CsvContent from "../../../components/tools/CSVContent";
+import SourceCard, {
+  SeeMoreBlock,
+} from "@/components/chat_search/sources/SourceCard";
+
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -88,7 +102,7 @@ function FileDisplay({
     <>
       {nonImgFiles && nonImgFiles.length > 0 && (
         <div
-          id="danswer-file"
+          id="onyx-file"
           className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}
         >
           <div className="flex flex-col gap-2">
@@ -109,7 +123,7 @@ function FileDisplay({
 
       {imageFiles && imageFiles.length > 0 && (
         <div
-          id="danswer-image"
+          id="onyx-image"
           className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}
         >
           <div className="flex flex-col gap-2">
@@ -155,6 +169,7 @@ function FileDisplay({
 export const AIMessage = ({
   regenerate,
   overriddenModel,
+  selectedMessageForDocDisplay,
   continueGenerating,
   shared,
   isActive,
@@ -162,6 +177,7 @@ export const AIMessage = ({
   alternativeAssistant,
   docs,
   messageId,
+  documentSelectionToggled,
   content,
   files,
   selectedDocuments,
@@ -178,22 +194,27 @@ export const AIMessage = ({
   currentPersona,
   otherMessagesCanSwitchTo,
   onMessageSelection,
+  setPresentingDocument,
+  index,
 }: {
+  index?: number;
+  selectedMessageForDocDisplay?: number | null;
   shared?: boolean;
   isActive?: boolean;
   continueGenerating?: () => void;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (messageId: number) => void;
-  selectedDocuments?: DanswerDocument[] | null;
+  selectedDocuments?: OnyxDocument[] | null;
   toggleDocumentSelection?: () => void;
-  docs?: DanswerDocument[] | null;
+  docs?: OnyxDocument[] | null;
   alternativeAssistant?: Persona | null;
   currentPersona: Persona;
   messageId: number | null;
   content: string | JSX.Element;
+  documentSelectionToggled?: boolean;
   files?: FileDescriptor[];
   query?: string;
-  citedDocuments?: [string, DanswerDocument][] | null;
+  citedDocuments?: [string, OnyxDocument][] | null;
   toolCall?: ToolCallMetadata | null;
   isComplete?: boolean;
   hasDocs?: boolean;
@@ -204,8 +225,10 @@ export const AIMessage = ({
   retrievalDisabled?: boolean;
   overriddenModel?: string;
   regenerate?: (modelOverRide: LlmOverride) => Promise<void>;
+  setPresentingDocument?: (document: OnyxDocument) => void;
 }) => {
   const toolCallGenerating = toolCall && !toolCall.tool_result;
+
   const processContent = (content: string | JSX.Element) => {
     if (typeof content !== "string") {
       return content;
@@ -224,12 +247,16 @@ export const AIMessage = ({
 
       const lastMatch = matches[matches.length - 1];
       if (!lastMatch.endsWith("```")) {
-        return content;
+        return preprocessLaTeX(content);
       }
     }
 
-    return content + (!isComplete && !toolCallGenerating ? " [*]() " : "");
+    return (
+      preprocessLaTeX(content) +
+      (!isComplete && !toolCallGenerating ? " [*]() " : "")
+    );
   };
+
   const finalContent = processContent(content as string);
 
   const [isRegenerateHovered, setIsRegenerateHovered] = useState(false);
@@ -266,7 +293,7 @@ export const AIMessage = ({
     content = trimIncompleteCodeSection(content);
   }
 
-  let filteredDocs: FilteredDanswerDocument[] = [];
+  let filteredDocs: FilteredOnyxDocument[] = [];
 
   if (docs) {
     filteredDocs = docs
@@ -279,7 +306,7 @@ export const AIMessage = ({
       .filter((doc) => {
         return citedDocumentIds.includes(doc.document_id);
       })
-      .map((doc: DanswerDocument, ind: number) => {
+      .map((doc: OnyxDocument, ind: number) => {
         return {
           ...doc,
           included: selectedDocumentIds.includes(doc.document_id),
@@ -287,18 +314,36 @@ export const AIMessage = ({
       });
   }
 
+  const paragraphCallback = useCallback(
+    (props: any) => <MemoizedParagraph>{props.children}</MemoizedParagraph>,
+    []
+  );
+
+  const anchorCallback = useCallback(
+    (props: any) => (
+      <MemoizedAnchor
+        updatePresentingDocument={setPresentingDocument!}
+        docs={docs}
+      >
+        {props.children}
+      </MemoizedAnchor>
+    ),
+    [docs]
+  );
+
   const currentMessageInd = messageId
     ? otherMessagesCanSwitchTo?.indexOf(messageId)
     : undefined;
+
   const uniqueSources: ValidSources[] = Array.from(
     new Set((docs || []).map((doc) => doc.source_type))
   ).slice(0, 3);
 
   const markdownComponents = useMemo(
     () => ({
-      a: MemoizedLink,
-      p: MemoizedParagraph,
-      code: ({ node, className, children, ...props }: any) => {
+      a: anchorCallback,
+      p: paragraphCallback,
+      code: ({ node, className, children }: any) => {
         const codeText = extractCodeText(
           node,
           finalContent as string,
@@ -312,7 +357,7 @@ export const AIMessage = ({
         );
       },
     }),
-    [finalContent]
+    [anchorCallback, paragraphCallback, finalContent]
   );
 
   const renderedMarkdown = useMemo(() => {
@@ -320,8 +365,8 @@ export const AIMessage = ({
       <ReactMarkdown
         className="prose max-w-full text-base"
         components={markdownComponents}
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[[rehypePrism, { ignoreMissing: true }]]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
       >
         {finalContent as string}
       </ReactMarkdown>
@@ -336,9 +381,9 @@ export const AIMessage = ({
 
   return (
     <div
-      id="danswer-ai-message"
+      id="onyx-ai-message"
       ref={trackedElementRef}
-      className={"py-5 ml-4 px-5 relative flex "}
+      className={`py-5 ml-4 px-5 relative flex `}
     >
       <div
         className={`mx-auto ${
@@ -358,20 +403,16 @@ export const AIMessage = ({
                   <div className="max-w-message-max break-words">
                     {!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
                       <>
-                        {query !== undefined &&
-                          handleShowRetrieved !== undefined &&
-                          !retrievalDisabled && (
-                            <div className="mb-1">
-                              <SearchSummary
-                                query={query}
-                                finished={toolCall?.tool_result != undefined}
-                                hasDocs={hasDocs || false}
-                                messageId={messageId}
-                                handleShowRetrieved={handleShowRetrieved}
-                                handleSearchQueryEdit={handleSearchQueryEdit}
-                              />
-                            </div>
-                          )}
+                        {query !== undefined && !retrievalDisabled && (
+                          <div className="mb-1">
+                            <SearchSummary
+                              index={index || 0}
+                              query={query}
+                              finished={toolCall?.tool_result != undefined}
+                              handleSearchQueryEdit={handleSearchQueryEdit}
+                            />
+                          </div>
+                        )}
                         {handleForceSearch &&
                           content &&
                           query === undefined &&
@@ -423,6 +464,37 @@ export const AIMessage = ({
                         />
                       )}
 
+                    {docs && docs.length > 0 && (
+                      <div className="mt-2 -mx-8 w-full mb-4 flex relative">
+                        <div className="w-full">
+                          <div className="px-8 flex gap-x-2">
+                            {!settings?.isMobile &&
+                              docs.length > 0 &&
+                              docs
+                                .slice(0, 2)
+                                .map((doc, ind) => (
+                                  <SourceCard
+                                    doc={doc}
+                                    key={ind}
+                                    setPresentingDocument={
+                                      setPresentingDocument
+                                    }
+                                  />
+                                ))}
+                            <SeeMoreBlock
+                              documentSelectionToggled={
+                                (documentSelectionToggled &&
+                                  selectedMessageForDocDisplay === messageId) ||
+                                false
+                              }
+                              toggleDocumentSelection={toggleDocumentSelection}
+                              uniqueSources={uniqueSources}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {content || files ? (
                       <>
                         <FileDisplay files={files || []} />
@@ -437,80 +509,6 @@ export const AIMessage = ({
                       </>
                     ) : isComplete ? null : (
                       <></>
-                    )}
-                    {isComplete && docs && docs.length > 0 && (
-                      <div className="mt-2 -mx-8 w-full mb-4 flex relative">
-                        <div className="w-full">
-                          <div className="px-8 flex gap-x-2">
-                            {!settings?.isMobile &&
-                              filteredDocs.length > 0 &&
-                              filteredDocs.slice(0, 2).map((doc, ind) => (
-                                <div
-                                  key={doc.document_id}
-                                  className={`w-[200px] rounded-lg flex-none transition-all duration-500 hover:bg-background-125 bg-text-100 px-4 pb-2 pt-1 border-b
-                              `}
-                                >
-                                  <a
-                                    href={doc.link || undefined}
-                                    target="_blank"
-                                    className="text-sm flex w-full pt-1 gap-x-1.5 overflow-hidden justify-between font-semibold text-text-700"
-                                    rel="noreferrer"
-                                  >
-                                    <Citation link={doc.link} index={ind + 1} />
-                                    <p className="shrink truncate ellipsis break-all">
-                                      {doc.semantic_identifier ||
-                                        doc.document_id}
-                                    </p>
-                                    <div className="ml-auto flex-none">
-                                      {doc.is_internet ? (
-                                        <InternetSearchIcon url={doc.link} />
-                                      ) : (
-                                        <SourceIcon
-                                          sourceType={doc.source_type}
-                                          iconSize={18}
-                                        />
-                                      )}
-                                    </div>
-                                  </a>
-                                  <div className="flex overscroll-x-scroll mt-.5">
-                                    <DocumentMetadataBlock document={doc} />
-                                  </div>
-                                  <div className="line-clamp-3 text-xs break-words pt-1">
-                                    {doc.blurb}
-                                  </div>
-                                </div>
-                              ))}
-                            <div
-                              onClick={() => {
-                                if (toggleDocumentSelection) {
-                                  toggleDocumentSelection();
-                                }
-                              }}
-                              key={-1}
-                              className="cursor-pointer w-[200px] rounded-lg flex-none transition-all duration-500 hover:bg-background-125 bg-text-100 px-4 py-2 border-b"
-                            >
-                              <div className="text-sm flex justify-between font-semibold text-text-700">
-                                <p className="line-clamp-1">See context</p>
-                                <div className="flex gap-x-1">
-                                  {uniqueSources.map((sourceType, ind) => {
-                                    return (
-                                      <div key={ind} className="flex-none">
-                                        <SourceIcon
-                                          sourceType={sourceType}
-                                          iconSize={18}
-                                        />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                              <div className="line-clamp-3 text-xs break-words pt-1">
-                                See more
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
                     )}
                   </div>
 
@@ -548,16 +546,16 @@ export const AIMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Copy!">
+                          <CustomTooltip showTick line content="Copy">
                             <CopyButton content={content.toString()} />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Good response!">
+                          <CustomTooltip showTick line content="Good response">
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Bad response!">
+                          <CustomTooltip showTick line content="Bad response">
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -568,7 +566,7 @@ export const AIMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Regenerate!"
+                              content="Regenerate"
                             >
                               <RegenerateOption
                                 onDropdownVisibleChange={
@@ -633,18 +631,18 @@ export const AIMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Copy!">
+                          <CustomTooltip showTick line content="Copy">
                             <CopyButton content={content.toString()} />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Good response!">
+                          <CustomTooltip showTick line content="Good response">
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Bad response!">
+                          <CustomTooltip showTick line content="Bad response">
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -655,7 +653,7 @@ export const AIMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Regenerate!"
+                              content="Regenerate"
                             >
                               <RegenerateOption
                                 selectedAssistant={currentPersona!}
@@ -769,7 +767,7 @@ export const HumanMessage = ({
 
   return (
     <div
-      id="danswer-human-message"
+      id="onyx-human-message"
       className="pt-5 pb-1 px-2 lg:px-5 flex -mr-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -819,6 +817,7 @@ export const HumanMessage = ({
                         outline-none 
                         placeholder-gray-400 
                         resize-none
+                        text-text-editing-message
                         pl-4
                         overflow-y-auto
                         pr-12 
@@ -877,7 +876,6 @@ export const HumanMessage = ({
                           py-2 
                           px-3 
                           w-fit 
-                          bg-hover
                           bg-background-strong 
                           text-sm
                           rounded-lg
@@ -903,15 +901,13 @@ export const HumanMessage = ({
                         <TooltipProvider delayDuration={1000}>
                           <Tooltip>
                             <TooltipTrigger>
-                              <button
-                                className="hover:bg-hover p-1.5 rounded"
+                              <HoverableIcon
+                                icon={<FiEdit2 className="text-gray-600" />}
                                 onClick={() => {
                                   setIsEditing(true);
                                   setIsHovered(false);
                                 }}
-                              >
-                                <FiEdit2 className="!h-4 !w-4" />
-                              </button>
+                              />
                             </TooltipTrigger>
                             <TooltipContent>Edit</TooltipContent>
                           </Tooltip>

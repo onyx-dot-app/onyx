@@ -157,7 +157,7 @@ export const HealthCheckBanner = () => {
         <p className="font-bold pb-1">The backend is currently unavailable.</p>
 
         <p className="px-1">
-          If this is your initial setup or you just updated your Danswer
+          If this is your initial setup or you just updated your Onyx
           deployment, this is likely because the backend is still starting up.
           Give it a minute or two, and then refresh the page. If that does not
           work, make sure the backend is setup and/or contact an administrator.

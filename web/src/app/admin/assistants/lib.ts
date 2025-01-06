@@ -259,9 +259,8 @@ export async function updatePersona(
 ): Promise<[Response, Response | null]> {
   const { id, existingPromptId } = personaUpdateRequest;
 
-  // first update prompt
   let promptResponse;
-  let promptId;
+  let promptId: number | null = null;
   if (existingPromptId !== undefined) {
     promptResponse = await updatePrompt({
       promptId: existingPromptId,
@@ -278,9 +277,10 @@ export async function updatePersona(
       taskPrompt: personaUpdateRequest.task_prompt,
       includeCitations: personaUpdateRequest.include_citations,
     });
-    promptId = promptResponse.ok ? (await promptResponse.json()).id : null;
+    promptId = promptResponse.ok
+      ? ((await promptResponse.json()).id as number)
+      : null;
   }
-
   let fileId = null;
   if (personaUpdateRequest.uploaded_image) {
     fileId = await uploadFile(personaUpdateRequest.uploaded_image);
@@ -290,7 +290,7 @@ export async function updatePersona(
   }
 
   const updatePersonaResponse =
-    promptResponse.ok && promptId
+    promptResponse.ok && promptId !== null
       ? await fetch(`/api/persona/${id}`, {
           method: "PATCH",
           headers: {

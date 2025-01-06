@@ -1,27 +1,35 @@
 // ➕ Add this line
 import { test, expect, takeSnapshot } from "@chromatic-com/playwright";
+import { TEST_CREDENTIALS } from "./constants";
 
 // Then use as normal 👇
-test("Homepage", async ({ page }, testInfo) => {
-  // Test redirect to login, and redirect to search after login
+test(
+  "Homepage",
+  {
+    tag: "@guest",
+  },
+  async ({ page }, testInfo) => {
+    // Test redirect to login, and redirect to search after login
+    const { email, password } = TEST_CREDENTIALS;
 
-  // move these into a constants file or test fixture soon
-  let email = "admin_user@test.com";
-  let password = "test";
+    await page.goto("http://localhost:3000/chat");
 
-  await page.goto("http://localhost:3000/search");
+    await page.waitForURL("http://localhost:3000/auth/login?next=%2Fchat");
 
-  await page.waitForURL("http://localhost:3000/auth/login?next=%2Fsearch");
+    await expect(page).toHaveTitle("Onyx");
 
-  await expect(page).toHaveTitle("Danswer");
+    await takeSnapshot(page, "Before login", testInfo);
 
-  await takeSnapshot(page, "Before login", testInfo);
+    await page.fill("#email", email);
+    await page.fill("#password", password);
 
-  await page.fill("#email", email);
-  await page.fill("#password", password);
+    // Click the login button
+    await page.click('button[type="submit"]');
 
-  // Click the login button
-  await page.click('button[type="submit"]');
+    await page.waitForURL("http://localhost:3000/chat");
 
-  await page.waitForURL("http://localhost:3000/search");
-});
+    await page.getByPlaceholder("Send a message or try using @ or /");
+
+    await expect(page.locator("body")).not.toContainText("Initializing Onyx");
+  }
+);

@@ -271,7 +271,7 @@ export const GmailJsonUploadSection = ({
         <a
           className="text-link"
           target="_blank"
-          href="https://docs.danswer.dev/connectors/gmail#authorization"
+          href="https://docs.onyx.app/connectors/gmail#authorization"
           rel="noreferrer"
         >
           here

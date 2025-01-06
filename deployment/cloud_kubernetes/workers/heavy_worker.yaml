@@ -14,13 +14,13 @@ spec:
     spec:
       containers:
         - name: celery-worker-heavy
-          image: danswer/danswer-backend-cloud:v0.12.0-cloud.beta.12
+          image: onyxdotapp/onyx-backend-cloud:v0.14.0-cloud.beta.21
           imagePullPolicy: IfNotPresent
           command:
             [
               "celery",
               "-A",
-              "danswer.background.celery.versioned_apps.heavy",
+              "onyx.background.celery.versioned_apps.heavy",
               "worker",
               "--loglevel=INFO",
               "--hostname=heavy@%n",
@@ -31,9 +31,9 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: danswer-secrets
+                  name: onyx-secrets
                   key: redis_password
-            - name: DANSWER_VERSION
+            - name: ONYX_VERSION
               value: "v0.11.0-cloud.beta.8"
           envFrom:
             - configMapRef:

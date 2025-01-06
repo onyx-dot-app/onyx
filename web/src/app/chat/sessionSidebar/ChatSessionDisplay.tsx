@@ -191,7 +191,6 @@ export function ChatSessionDisplay({
                         </div>
                       </CustomTooltip>
                     )}
-
                     <div>
                       {search ? (
                         showDeleteModal && (

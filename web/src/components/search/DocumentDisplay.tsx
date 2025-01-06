@@ -1,9 +1,10 @@
 "use client";
-
+import React from "react";
 import {
-  DanswerDocument,
+  OnyxDocument,
   DocumentRelevance,
-  SearchDanswerDocument,
+  LoadedOnyxDocument,
+  SearchOnyxDocument,
 } from "@/lib/search/interfaces";
 import { DocumentFeedbackBlock } from "./DocumentFeedbackBlock";
 import { useContext, useState } from "react";
@@ -11,19 +12,23 @@ import { PopupSpec } from "../admin/connectors/Popup";
 import { DocumentUpdatedAtBadge } from "./DocumentUpdatedAtBadge";
 import { SourceIcon } from "../SourceIcon";
 import { MetadataBadge } from "../MetadataBadge";
-import { BookIcon, LightBulbIcon } from "../icons/icons";
+import { BookIcon, GlobeIcon, LightBulbIcon, SearchIcon } from "../icons/icons";
 
 import { FaStar } from "react-icons/fa";
 import { FiTag } from "react-icons/fi";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { CustomTooltip, TooltipGroup } from "../tooltip/CustomTooltip";
 import { WarningCircle } from "@phosphor-icons/react";
+import TextView from "../chat_search/TextView";
+import { SearchResultIcon } from "../SearchResultIcon";
+import { ValidSources } from "@/lib/types";
+import { openDocument } from "@/lib/search/utils";
 
 export const buildDocumentSummaryDisplay = (
   matchHighlights: string[],
   blurb: string
 ) => {
-  if (matchHighlights.length === 0) {
+  if (!matchHighlights || matchHighlights.length === 0) {
     return blurb;
   }
 
@@ -122,7 +127,7 @@ export const buildDocumentSummaryDisplay = (
 export function DocumentMetadataBlock({
   document,
 }: {
-  document: DanswerDocument;
+  document: OnyxDocument;
 }) {
   // don't display super long tags, as they are ugly
   const MAXIMUM_TAG_LENGTH = 40;
@@ -158,7 +163,7 @@ export function DocumentMetadataBlock({
 }
 
 interface DocumentDisplayProps {
-  document: SearchDanswerDocument;
+  document: SearchOnyxDocument;
   messageId: number | null;
   documentRank: number;
   isSelected: boolean;
@@ -185,6 +190,12 @@ export const DocumentDisplay = ({
   const relevance_explanation =
     document.relevance_explanation ?? additional_relevance?.content;
   const settings = useContext(SettingsContext);
+  const [presentingDocument, setPresentingDocument] =
+    useState<OnyxDocument | null>(null);
+
+  const handleViewFile = async () => {
+    setPresentingDocument(document);
+  };
 
   return (
     <div
@@ -216,19 +227,22 @@ export const DocumentDisplay = ({
         }`}
       >
         <div className="flex relative">
-          <a
-            className={`rounded-lg flex font-bold text-link max-w-full ${
-              document.link ? "" : "pointer-events-none"
-            }`}
-            href={document.link}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            className={`rounded-lg flex font-bold text-link max-w-full`}
+            onClick={() => {
+              if (document.link) {
+                window.open(document.link, "_blank");
+              } else {
+                handleViewFile();
+              }
+            }}
           >
             <SourceIcon sourceType={document.source_type} iconSize={22} />
             <p className="truncate text-wrap break-all ml-2 my-auto line-clamp-1 text-base max-w-full">
               {document.semantic_identifier || document.document_id}
             </p>
-          </a>
+          </button>
           <div className="ml-auto flex items-center">
             <TooltipGroup>
               {isHovered && messageId && (
@@ -251,7 +265,11 @@ export const DocumentDisplay = ({
                   >
                     <CustomTooltip showTick line content="Toggle content">
                       <LightBulbIcon
-                        className={`${settings?.isMobile && alternativeToggled ? "text-green-600" : "text-blue-600"} my-auto ml-2 h-4 w-4 cursor-pointer`}
+                        className={`${
+                          settings?.isMobile && alternativeToggled
+                            ? "text-green-600"
+                            : "text-blue-600"
+                        } my-auto ml-2 h-4 w-4 cursor-pointer`}
                       />
                     </CustomTooltip>
                   </button>
@@ -262,6 +280,13 @@ export const DocumentDisplay = ({
         <div className="mt-1">
           <DocumentMetadataBlock document={document} />
         </div>
+
+        {presentingDocument && (
+          <TextView
+            presentingDocument={presentingDocument}
+            onClose={() => setPresentingDocument(null)}
+          />
+        )}
 
         <p
           style={{ transition: "height 0.30s ease-in-out" }}
@@ -290,11 +315,14 @@ export const AgenticDocumentDisplay = ({
   setPopup,
 }: DocumentDisplayProps) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [presentingDocument, setPresentingDocument] =
+    useState<OnyxDocument | null>(null);
 
   const [alternativeToggled, setAlternativeToggled] = useState(false);
 
   const relevance_explanation =
     document.relevance_explanation ?? additional_relevance?.content;
+
   return (
     <div
       key={document.semantic_identifier}
@@ -308,22 +336,29 @@ export const AgenticDocumentDisplay = ({
       }}
     >
       <div
-        className={`collapsible ${!hide && "collapsible-closed overflow-y-auto border-transparent"}`}
+        className={`collapsible ${
+          !hide && "collapsible-closed overflow-y-auto border-transparent"
+        }`}
       >
         <div className="flex relative">
-          <a
+          <button
+            type="button"
             className={`rounded-lg flex font-bold text-link max-w-full ${
               document.link ? "" : "pointer-events-none"
             }`}
-            href={document.link}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={() => {
+              if (document.link) {
+                window.open(document.link, "_blank");
+              } else {
+                setPresentingDocument(document);
+              }
+            }}
           >
             <SourceIcon sourceType={document.source_type} iconSize={22} />
             <p className="truncate text-wrap break-all ml-2 my-auto line-clamp-1 text-base max-w-full">
               {document.semantic_identifier || document.document_id}
             </p>
-          </a>
+          </button>
 
           <div className="ml-auto items-center flex">
             <TooltipGroup>
@@ -356,6 +391,12 @@ export const AgenticDocumentDisplay = ({
         <div className="mt-1">
           <DocumentMetadataBlock document={document} />
         </div>
+        {presentingDocument && (
+          <TextView
+            presentingDocument={presentingDocument}
+            onClose={() => setPresentingDocument(null)}
+          />
+        )}
 
         <div className="pt-2 break-words flex gap-x-2">
           <p
@@ -380,3 +421,45 @@ export const AgenticDocumentDisplay = ({
     </div>
   );
 };
+
+export function CompactDocumentCard({
+  document,
+  icon,
+  url,
+  updatePresentingDocument,
+}: {
+  document: OnyxDocument;
+  icon?: React.ReactNode;
+  url?: string;
+  updatePresentingDocument: (document: OnyxDocument) => void;
+}) {
+  return (
+    <div
+      onClick={() => {
+        openDocument(document, updatePresentingDocument);
+      }}
+      className="max-w-[250px] cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0  flex-col  content-start items-start gap-0 "
+    >
+      <div className="text-sm font-semibold flex  items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
+        {icon}
+        {(document.semantic_identifier || document.document_id).slice(0, 40)}
+        {(document.semantic_identifier || document.document_id).length > 40 &&
+          "..."}
+      </div>
+      {document.blurb && (
+        <p className="text-xs mb-0 text-gray-600 line-clamp-2">
+          {document.blurb}
+        </p>
+      )}
+      {document.updated_at && (
+        <div className=" flex mt-0 pt-0 items-center justify-between w-full ">
+          {!isNaN(new Date(document.updated_at).getTime()) && (
+            <span className="text-xs text-gray-500">
+              Updated {new Date(document.updated_at).toLocaleDateString()}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

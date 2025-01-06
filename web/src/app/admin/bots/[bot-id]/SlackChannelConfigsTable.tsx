@@ -50,7 +50,7 @@ export function SlackChannelConfigsTable({
           <TableHeader>
             <TableRow>
               <TableHead>Channel</TableHead>
-              <TableHead>Persona</TableHead>
+              <TableHead>Assistant</TableHead>
               <TableHead>Document Sets</TableHead>
               <TableHead>Delete</TableHead>
             </TableRow>
@@ -60,28 +60,30 @@ export function SlackChannelConfigsTable({
               .slice(numToDisplay * (page - 1), numToDisplay * page)
               .map((slackChannelConfig) => {
                 return (
-                  <TableRow key={slackChannelConfig.id}>
+                  <TableRow
+                    key={slackChannelConfig.id}
+                    className="cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => {
+                      window.location.href = `/admin/bots/${slackBotId}/channels/${slackChannelConfig.id}`;
+                    }}
+                  >
                     <TableCell>
                       <div className="flex gap-x-2">
-                        <Link
-                          className="cursor-pointer my-auto"
-                          href={`/admin/bots/${slackBotId}/channels/${slackChannelConfig.id}`}
-                        >
+                        <div className="my-auto">
                           <EditIcon />
-                        </Link>
+                        </div>
                         <div className="my-auto">
                           {"#" + slackChannelConfig.channel_config.channel_name}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       {slackChannelConfig.persona &&
                       !isPersonaASlackBotPersona(slackChannelConfig.persona) ? (
                         <Link
                           href={`/admin/assistants/${slackChannelConfig.persona.id}`}
                           className="text-blue-500 flex hover:underline"
                         >
-                          <FiArrowUpRight className="my-auto mr-1" />
                           {slackChannelConfig.persona.name}
                         </Link>
                       ) : (
@@ -98,10 +100,11 @@ export function SlackChannelConfigsTable({
                           : "-"}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <div
                         className="cursor-pointer hover:text-destructive"
-                        onClick={async () => {
+                        onClick={async (e) => {
+                          e.stopPropagation();
                           const response = await deleteSlackChannelConfig(
                             slackChannelConfig.id
                           );
@@ -135,7 +138,7 @@ export function SlackChannelConfigsTable({
                   className="text-center text-muted-foreground"
                 >
                   Please add a New Slack Bot Configuration to begin chatting
-                  with Danswer!
+                  with Onyx!
                 </TableCell>
               </TableRow>
             )}

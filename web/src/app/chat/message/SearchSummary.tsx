@@ -41,18 +41,14 @@ export function ShowHideDocsButton({
 }
 
 export function SearchSummary({
+  index,
   query,
-  hasDocs,
   finished,
-  messageId,
-  handleShowRetrieved,
   handleSearchQueryEdit,
 }: {
+  index: number;
   finished: boolean;
   query: string;
-  hasDocs: boolean;
-  messageId: number | null;
-  handleShowRetrieved: (messageId: number | null) => void;
   handleSearchQueryEdit?: (query: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -98,7 +94,14 @@ export function SearchSummary({
         !text-sm !line-clamp-1 !break-all px-0.5`}
         ref={searchingForRef}
       >
-        {finished ? "Searched" : "Searching"} for: <i> {finalQuery}</i>
+        {finished ? "Searched" : "Searching"} for:{" "}
+        <i>
+          {index === 1
+            ? finalQuery.length > 50
+              ? `${finalQuery.slice(0, 50)}...`
+              : finalQuery
+            : finalQuery}
+        </i>
       </div>
     </div>
   );

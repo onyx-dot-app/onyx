@@ -38,6 +38,7 @@ import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
 import { AddTokenRateLimitForm } from "./AddTokenRateLimitForm";
 import { GenericTokenRateLimitTable } from "@/app/admin/token-rate-limits/TokenRateLimitTables";
 import { useUser } from "@/components/user/UserProvider";
+import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
 
 interface GroupDisplayProps {
   users: User[];
@@ -68,8 +69,13 @@ const UserRoleDropdown = ({
     return user.role;
   });
   const [isSettingRole, setIsSettingRole] = useState(false);
+  const [showDemoteConfirm, setShowDemoteConfirm] = useState(false);
+  const [pendingRoleChange, setPendingRoleChange] = useState<string | null>(
+    null
+  );
+  const { user: currentUser } = useUser();
 
-  const handleChange = async (value: string) => {
+  const applyRoleChange = async (value: string) => {
     if (value === localRole) return;
     if (value === UserRole.BASIC || value === UserRole.CURATOR) {
       setIsSettingRole(true);
@@ -95,31 +101,61 @@ const UserRoleDropdown = ({
     }
   };
 
-  const isEditable =
-    (user.role === UserRole.BASIC || user.role === UserRole.CURATOR) && isAdmin;
+  const handleChange = (value: string) => {
+    if (value === UserRole.BASIC && user.id === currentUser?.id) {
+      setPendingRoleChange(value);
+      setShowDemoteConfirm(true);
+    } else {
+      applyRoleChange(value);
+    }
+  };
 
-  if (isEditable) {
-    return (
-      <div className="w-40">
-        Select group
-        <Select
-          value={localRole}
-          onValueChange={handleChange}
-          disabled={isSettingRole}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select role" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={UserRole.BASIC}>Basic</SelectItem>
-            <SelectItem value={UserRole.CURATOR}>Curator</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-    );
-  } else {
-    return <div>{USER_ROLE_LABELS[localRole]}</div>;
-  }
+  const isEditable =
+    user.role === UserRole.BASIC || user.role === UserRole.CURATOR;
+
+  return (
+    <>
+      {/* Confirmation modal - only shown when users try to demote themselves */}
+      {showDemoteConfirm && pendingRoleChange && (
+        <GenericConfirmModal
+          title="Remove Yourself as a Curator for this Group?"
+          message="Are you sure you want to change your role to Basic? This will remove your ability to curate this group."
+          confirmText="Yes, set me to Basic"
+          onClose={() => {
+            // Cancel the role change if user dismisses modal
+            setShowDemoteConfirm(false);
+            setPendingRoleChange(null);
+          }}
+          onConfirm={() => {
+            // Apply the role change if user confirms
+            setShowDemoteConfirm(false);
+            applyRoleChange(pendingRoleChange);
+            setPendingRoleChange(null);
+          }}
+        />
+      )}
+
+      {isEditable ? (
+        <div className="w-40">
+          <Select
+            value={localRole}
+            onValueChange={handleChange}
+            disabled={isSettingRole}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select role" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={UserRole.BASIC}>Basic</SelectItem>
+              <SelectItem value={UserRole.CURATOR}>Curator</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      ) : (
+        <div>{USER_ROLE_LABELS[localRole]}</div>
+      )}
+    </>
+  );
 };
 
 export const GroupDisplay = ({
@@ -133,10 +169,7 @@ export const GroupDisplay = ({
   const [addConnectorFormVisible, setAddConnectorFormVisible] = useState(false);
   const [addRateLimitFormVisible, setAddRateLimitFormVisible] = useState(false);
 
-  const { isLoadingUser, isAdmin } = useUser();
-  if (isLoadingUser) {
-    return <></>;
-  }
+  const { isAdmin } = useUser();
 
   const handlePopup = (message: string, type: "success" | "error") => {
     setPopup({ message, type });

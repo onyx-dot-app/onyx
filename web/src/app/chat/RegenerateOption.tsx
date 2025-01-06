@@ -14,7 +14,6 @@ import { destructureValue, getFinalLLM, structureValue } from "@/lib/llm/utils";
 import { useState } from "react";
 import { Hoverable } from "@/components/Hoverable";
 import { Popover } from "@/components/popover/Popover";
-import { StarFeedback } from "@/components/icons/icons";
 import { IconType } from "react-icons";
 import { FiRefreshCw } from "react-icons/fi";
 
@@ -125,9 +124,9 @@ export default function RegenerateOption({
   onHoverChange: (isHovered: boolean) => void;
   onDropdownVisibleChange: (isVisible: boolean) => void;
 }) {
-  const llmOverrideManager = useLlmOverride();
-
   const { llmProviders } = useChatContext();
+  const llmOverrideManager = useLlmOverride(llmProviders);
+
   const [_, llmName] = getFinalLLM(llmProviders, selectedAssistant, null);
 
   const llmOptionsByProvider: {

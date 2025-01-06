@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from danswer.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.confluence.connector import ConfluenceConnector
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def confluence_connector() -> ConfluenceConnector:
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_confluence_connector_basic(

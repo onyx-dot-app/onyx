@@ -81,13 +81,22 @@ export function EditableStringFieldDisplay({
         value={editableValue}
         onChange={handleValueChange}
         onKeyDown={handleKeyDown}
-        className={cn(textClassName, isEditing ? "block" : "hidden")}
+        className={cn(
+          textClassName,
+          "text-3xl font-bold text-text-800",
+          "user-text",
+          isEditing ? "block" : "hidden"
+        )}
         style={{ fontSize: `${scale}rem` }}
       />
       {!isEditing && (
         <span
           onClick={() => isEditable && setIsEditing(true)}
-          className={cn(textClassName, "cursor-pointer")}
+          className={cn(
+            textClassName,
+            "text-3xl font-bold text-text-800",
+            "cursor-pointer user-text"
+          )}
           style={{ fontSize: `${scale}rem` }}
         >
           {value}
@@ -121,7 +130,7 @@ export function EditableStringFieldDisplay({
           style={{ fontSize: `${scale}rem` }}
         >
           {isEditable && (
-            <EditIcon className={`visible ml-2`} size={8 * scale} />
+            <EditIcon className={`visible ml-2`} size={12 * scale} />
           )}
         </h1>
       )}

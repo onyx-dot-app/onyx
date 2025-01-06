@@ -1,3 +1,5 @@
+import { Persona } from "@/app/admin/assistants/interfaces";
+
 export interface GridShape {
   encodedGrid: number;
   filledSquares: number;
@@ -45,7 +47,9 @@ export function generateRandomIconShape(): GridShape {
       if (grid[row][col]) {
         const x = col * 12;
         const y = row * 12;
-        path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${y + 12} Z `;
+        path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${
+          y + 12
+        } Z `;
       }
     }
   }
@@ -94,7 +98,9 @@ export function createSVG(
       if (grid[row][col]) {
         const x = col * 12;
         const y = row * 12;
-        path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${y + 12} Z `;
+        path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${
+          y + 12
+        } Z `;
       }
     }
   }
@@ -132,3 +138,32 @@ function shuffleArray(array: any[]) {
     [array[i], array[j]] = [array[j], array[i]];
   }
 }
+
+// This is used for rendering a persona in the shared chat display
+export const constructMiniFiedPersona = (
+  assistant_icon_color: string | null,
+  assistant_icon_shape: number | null,
+  name: string,
+  id: number
+): Persona => {
+  return {
+    id,
+    name,
+    icon_color: assistant_icon_color ?? undefined,
+    icon_shape: assistant_icon_shape ?? undefined,
+    is_visible: true,
+    is_public: true,
+    display_priority: 0,
+    description: "",
+    document_sets: [],
+    prompts: [],
+    tools: [],
+    search_start_date: null,
+    owner: null,
+    starter_messages: null,
+    builtin_persona: false,
+    is_default_persona: false,
+    users: [],
+    groups: [],
+  };
+};

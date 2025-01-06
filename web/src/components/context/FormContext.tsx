@@ -20,7 +20,7 @@ interface FormContextType {
   allowAdvanced: boolean;
   setAllowAdvanced: React.Dispatch<React.SetStateAction<boolean>>;
   allowCreate: boolean;
-  setAlowCreate: React.Dispatch<React.SetStateAction<boolean>>;
+  setAllowCreate: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const FormContext = createContext<FormContextType | undefined>(undefined);
@@ -39,7 +39,7 @@ export const FormProvider: React.FC<{
   const [formValues, setFormValues] = useState<Record<string, any>>({});
 
   const [allowAdvanced, setAllowAdvanced] = useState(false);
-  const [allowCreate, setAlowCreate] = useState(false);
+  const [allowCreate, setAllowCreate] = useState(false);
 
   const nextFormStep = (values = "") => {
     setFormStep((prevStep) => prevStep + 1);
@@ -88,7 +88,7 @@ export const FormProvider: React.FC<{
     allowAdvanced,
     setAllowAdvanced,
     allowCreate,
-    setAlowCreate,
+    setAllowCreate,
   };
 
   return (

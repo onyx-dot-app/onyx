@@ -14,8 +14,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from danswer.server.documents.models import DocumentSource
-from danswer.utils.logger import setup_logger
+from onyx.server.documents.models import DocumentSource
+from onyx.utils.logger import setup_logger
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -135,7 +135,7 @@ def test_web_pruning(reset: None, vespa_client: vespa_fixture) -> None:
                 user_performing_action=admin_user,
             )
 
-            CCPairManager.wait_for_indexing(
+            CCPairManager.wait_for_indexing_completion(
                 cc_pair_1, now, timeout=60, user_performing_action=admin_user
             )
 

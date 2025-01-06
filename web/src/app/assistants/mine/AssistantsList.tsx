@@ -6,6 +6,7 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
+  FiBarChart,
   FiEdit2,
   FiList,
   FiMinus,
@@ -59,8 +60,9 @@ import { MakePublicAssistantModal } from "@/app/chat/modal/MakePublicAssistantMo
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { useUser } from "@/components/user/UserProvider";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
-function DraggableAssistantListItem(props: any) {
+function DraggableAssistantListItem({ ...props }: any) {
   const {
     attributes,
     listeners,
@@ -100,6 +102,7 @@ function AssistantListItem({
   deleteAssistant,
   shareAssistant,
   isDragging,
+  onlyAssistant,
 }: {
   assistant: Persona;
   user: User | null;
@@ -109,14 +112,15 @@ function AssistantListItem({
   shareAssistant: Dispatch<SetStateAction<Persona | null>>;
   setPopup: (popupSpec: PopupSpec | null) => void;
   isDragging?: boolean;
+  onlyAssistant: boolean;
 }) {
   const { refreshUser } = useUser();
   const router = useRouter();
   const [showSharingModal, setShowSharingModal] = useState(false);
 
+  const isEnterpriseEnabled = usePaidEnterpriseFeaturesEnabled();
   const isOwnedByUser = checkUserOwnsAssistant(user, assistant);
-  const currentChosenAssistants = user?.preferences
-    ?.chosen_assistants as number[];
+  const { isAdmin } = useUser();
 
   return (
     <>
@@ -192,13 +196,14 @@ function AssistantListItem({
                     key="remove"
                     className="flex items-center gap-x-2 px-4 py-2 hover:bg-gray-100 w-full text-left"
                     onClick={async () => {
-                      if (currentChosenAssistants?.length === 1) {
+                      if (onlyAssistant) {
                         setPopup({
                           message: `Cannot remove "${assistant.name}" - you must have at least one assistant.`,
                           type: "error",
                         });
                         return;
                       }
+
                       const success = await removeAssistantFromList(
                         assistant.id
                       );
@@ -242,6 +247,18 @@ function AssistantListItem({
                     <FiPlus size={18} className="text-text-800" /> Add
                   </button>
                 ),
+
+                (isOwnedByUser || isAdmin) && isEnterpriseEnabled ? (
+                  <button
+                    key="view-stats"
+                    className="flex items-center gap-x-2 px-4 py-2 hover:bg-gray-100 w-full text-left"
+                    onClick={() =>
+                      router.push(`/assistants/stats/${assistant.id}`)
+                    }
+                  >
+                    <FiBarChart size={18} /> View Stats
+                  </button>
+                ) : null,
                 isOwnedByUser ? (
                   <button
                     key="delete"
@@ -372,7 +389,6 @@ export function AssistantsList() {
           }}
         />
       )}
-
       {makePublicPersona && (
         <MakePublicAssistantModal
           isPublic={makePublicPersona.is_public}
@@ -432,6 +448,7 @@ export function AssistantsList() {
             <div className="w-full items-center py-4">
               {currentlyVisibleAssistants.map((assistant, index) => (
                 <DraggableAssistantListItem
+                  onlyAssistant={currentlyVisibleAssistants.length === 1}
                   deleteAssistant={setDeletingPersona}
                   shareAssistant={setMakePublicPersona}
                   key={assistant.id}
@@ -461,6 +478,7 @@ export function AssistantsList() {
             <div className="w-full p-4">
               {ownedButHiddenAssistants.map((assistant, index) => (
                 <AssistantListItem
+                  onlyAssistant={currentlyVisibleAssistants.length === 1}
                   deleteAssistant={setDeletingPersona}
                   shareAssistant={setMakePublicPersona}
                   key={assistant.id}

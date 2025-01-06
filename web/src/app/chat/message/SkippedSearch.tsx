@@ -1,26 +1,6 @@
 import { EmphasizedClickable } from "@/components/BasicClickable";
 import { FiBook } from "react-icons/fi";
 
-function ForceSearchButton({
-  messageId,
-  handleShowRetrieved,
-}: {
-  messageId: number | null;
-  isCurrentlyShowingRetrieved: boolean;
-  handleShowRetrieved: (messageId: number | null) => void;
-}) {
-  return (
-    <div
-      className="ml-auto my-auto"
-      onClick={() => handleShowRetrieved(messageId)}
-    >
-      <EmphasizedClickable>
-        <div className="w-24 text-xs">Force Search</div>
-      </EmphasizedClickable>
-    </div>
-  );
-}
-
 export function SkippedSearch({
   handleForceSearch,
 }: {

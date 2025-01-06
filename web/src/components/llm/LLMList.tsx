@@ -1,10 +1,15 @@
 import React from "react";
 import { getDisplayNameForModel } from "@/lib/hooks";
-import { checkLLMSupportsImageInput, structureValue } from "@/lib/llm/utils";
+import {
+  checkLLMSupportsImageInput,
+  destructureValue,
+  structureValue,
+} from "@/lib/llm/utils";
 import {
   getProviderIcon,
   LLMProviderDescriptor,
 } from "@/app/admin/configuration/llm/interfaces";
+import { Persona } from "@/app/admin/assistants/interfaces";
 
 interface LlmListProps {
   llmProviders: LLMProviderDescriptor[];
@@ -14,9 +19,11 @@ interface LlmListProps {
   scrollable?: boolean;
   hideProviderIcon?: boolean;
   requiresImageGeneration?: boolean;
+  currentAssistant?: Persona;
 }
 
 export const LlmList: React.FC<LlmListProps> = ({
+  currentAssistant,
   llmProviders,
   currentLlm,
   onSelect,
@@ -49,7 +56,7 @@ export const LlmList: React.FC<LlmListProps> = ({
               llmProvider.provider,
               modelName
             ),
-            icon: getProviderIcon(llmProvider.provider),
+            icon: getProviderIcon(llmProvider.provider, modelName),
           });
         }
       }
@@ -63,24 +70,11 @@ export const LlmList: React.FC<LlmListProps> = ({
   return (
     <div
       className={`${
-        scrollable ? "max-h-[200px] include-scrollbar" : "max-h-[300px]"
-      } bg-background-175  flex flex-col gap-y-1 overflow-y-scroll`}
+        scrollable
+          ? "max-h-[200px] default-scrollbar overflow-x-hidden"
+          : "max-h-[300px]"
+      } bg-background-175 flex flex-col gap-y-1 overflow-y-scroll`}
     >
-      {userDefault && (
-        <button
-          type="button"
-          key={-1}
-          className={`w-full py-1.5 px-2 text-sm ${
-            currentLlm == null
-              ? "bg-background-200"
-              : "bg-background hover:bg-background-100"
-          } text-left rounded`}
-          onClick={() => onSelect(null)}
-        >
-          User Default (currently {getDisplayNameForModel(userDefault)})
-        </button>
-      )}
-
       {llmOptions.map(({ name, icon, value }, index) => {
         if (!requiresImageGeneration || checkLLMSupportsImageInput(name)) {
           return (
@@ -96,6 +90,25 @@ export const LlmList: React.FC<LlmListProps> = ({
             >
               {icon({ size: 16 })}
               {getDisplayNameForModel(name)}
+              {(() => {
+                if (
+                  currentAssistant?.llm_model_version_override === name &&
+                  userDefault &&
+                  name === destructureValue(userDefault).modelName
+                ) {
+                  return " (assistant + user default)";
+                } else if (
+                  currentAssistant?.llm_model_version_override === name
+                ) {
+                  return " (assistant)";
+                } else if (
+                  userDefault &&
+                  name === destructureValue(userDefault).modelName
+                ) {
+                  return " (user default)";
+                }
+                return "";
+              })()}
             </button>
           );
         }

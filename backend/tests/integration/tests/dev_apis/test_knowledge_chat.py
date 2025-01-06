@@ -1,6 +1,6 @@
 import requests
 
-from danswer.configs.constants import MessageType
+from onyx.configs.constants import MessageType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager

@@ -108,6 +108,8 @@ module.exports = {
         "background-search-filter": "var(--background-100)",
         "background-search-filter-dropdown": "var(--background-100)",
 
+        "user-bubble": "var(--user-bubble)",
+
         // colors for sidebar in chat, search, and manage settings
         "background-sidebar": "var(--background-100)",
         "background-chatbar": "var(--background-100)",
@@ -141,6 +143,14 @@ module.exports = {
         // Background for chat messages (user bubbles)
         user: "var(--user-bubble)",
 
+        "userdropdown-background": "var(--background-150)",
+        "text-mobile-sidebar-toggled": "var(--text-800)",
+        "text-mobile-sidebar-untoggled": "var(--text-500)",
+        "text-editing-message": "var(--text-800)",
+        "background-sidebar": "var(--background-100)",
+        "background-search-filter": "var(--background-100)",
+        "background-search-filter-dropdown": "var(--background-hover)",
+
         "background-toggle": "var(--background-100)",
 
         // Colors for the search toggle buttons
@@ -171,6 +181,37 @@ module.exports = {
         "text-800": "var(--text-800)",
         "text-900": "var(--text-900)",
         "text-950": "var(--text-950)",
+        // Light mode
+        // Light mode
+        "calendar-bg-selected": "var(--background-800)",
+        "calendar-bg-outside-selected": "var(--background-200)",
+        "calendar-text-muted": "var(--text-400)",
+        "calendar-text-selected": "var(--white)",
+        "calendar-range-middle": "var(--neutral-800)",
+        "calendar-range-end": "var(--white)",
+        "calendar-text-in-range": "var(--text-200)",
+        "calendar-text-end": "var(--text-900)",
+
+        // Dark mode
+        "calendar-bg-outside-selected-dark": "var(--background-700)",
+        "calendar-text-muted-dark": "var(--text-500)",
+        "calendar-text-selected-dark": "var(--white)",
+        "calendar-range-middle-dark": "var(--background-800)",
+        "calendar-text-in-range-dark": "var(--text-200)",
+
+        // Hover effects
+        "calendar-hover-bg": "var(--background-200)",
+        "calendar-hover-bg-dark": "var(--background-700)",
+        "calendar-hover-text": "var(--text-800)",
+        "calendar-hover-text-dark": "var(--text-200)",
+
+        // Today's date
+        "calendar-today-bg": "var(--background-100)",
+        "calendar-today-bg-dark": "var(--background-800)",
+        "calendar-today-text": "var(--text-800)",
+        "calendar-today-text-dark": "var(--text-200)",
+        "calendar-background-selected": "var(--white)",
+        "calendar-ring-selected": "var(--background-900)",
 
         "user-text": "var(--text-800)",
 
@@ -307,6 +348,7 @@ module.exports = {
         "tremor-full": "9999px",
       },
       fontSize: {
+        "2xs": "0.625rem",
         "code-sm": "small",
         "tremor-label": ["0.75rem"],
         "tremor-default": ["0.875rem", { lineHeight: "1.25rem" }],
@@ -319,6 +361,39 @@ module.exports = {
       },
       fontStyle: {
         "token-italic": "italic",
+      },
+      calendar: {
+        // Light mode
+        "bg-selected": "#4B5563",
+        "bg-outside-selected": "rgba(75, 85, 99, 0.2)",
+        "text-muted": "#6B7280",
+        "text-selected": "#FFFFFF",
+        "range-start": "#000000",
+        "range-middle": "#F3F4F6",
+        "range-end": "#000000",
+        "text-in-range": "#1F2937",
+
+        // Dark mode
+        "bg-selected-dark": "#6B7280",
+        "bg-outside-selected-dark": "rgba(107, 114, 128, 0.2)",
+        "text-muted-dark": "#9CA3AF",
+        "text-selected-dark": "#F3F4F6",
+        "range-start-dark": "#374151",
+        "range-middle-dark": "#4B5563",
+        "range-end-dark": "#374151",
+        "text-in-range-dark": "#E5E7EB",
+
+        // Hover effects
+        "hover-bg": "#9CA3AF",
+        "hover-bg-dark": "#6B7280",
+        "hover-text": "#374151",
+        "hover-text-dark": "#E5E7EB",
+
+        // Today's date
+        "today-bg": "#D1D5DB",
+        "today-bg-dark": "#4B5563",
+        "today-text": "#374151",
+        "today-text-dark": "#D1D5DB",
       },
     },
   },

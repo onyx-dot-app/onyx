@@ -8,43 +8,42 @@ on:
   workflow_dispatch:
     inputs:
       hotfix_commit:
-        description: 'Hotfix commit hash'
+        description: "Hotfix commit hash"
         required: true
       hotfix_suffix:
-        description: 'Hotfix branch suffix (e.g. hotfix/v0.8-{suffix})'
+        description: "Hotfix branch suffix (e.g. hotfix/v0.8-{suffix})"
         required: true
       release_branch_pattern:
-        description: 'Release branch pattern (regex)'
+        description: "Release branch pattern (regex)"
         required: true
-        default: 'release/.*'
+        default: "release/.*"
       auto_merge:
-        description: 'Automatically merge the hotfix PRs'
+        description: "Automatically merge the hotfix PRs"
         required: true
         type: choice
-        default: 'true'
+        default: "true"
         options:
           - true
           - false
-          
+
 jobs:
   hotfix_release_branches:
     permissions: write-all
     # See https://runs-on.com/runners/linux/
     # use a lower powered instance since this just does i/o to docker hub
-    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}"]
     steps:
-    
       # needs RKUO_DEPLOY_KEY for write access to merge PR's
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           ssh-key: "${{ secrets.RKUO_DEPLOY_KEY }}"
           fetch-depth: 0
-          
+
       - name: Set up Git user
         run: |
           git config user.name "Richard Kuo [bot]"
-          git config user.email "rkuo[bot]@danswer.ai"
+          git config user.email "rkuo[bot]@onyx.app"
 
       - name: Fetch All Branches
         run: |
@@ -62,10 +61,10 @@ jobs:
             echo "No release branches found matching pattern '${{ github.event.inputs.release_branch_pattern }}'."
             exit 1
           fi
-          
+
           echo "Found release branches:"
           echo "$BRANCHES"
-          
+
           # Join the branches into a single line separated by commas
           BRANCHES_JOINED=$(echo "$BRANCHES" | tr '\n' ',' | sed 's/,$//')
 

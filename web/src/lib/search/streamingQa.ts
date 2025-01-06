@@ -4,9 +4,9 @@ import {
 } from "@/app/chat/interfaces";
 import {
   AnswerPiecePacket,
-  DanswerDocument,
-  DocumentInfoPacket,
+  OnyxDocument,
   ErrorMessagePacket,
+  DocumentInfoPacket,
   Quote,
   QuotesInfoPacket,
   RelevanceChunk,
@@ -37,7 +37,7 @@ export const searchRequestStreamed = async ({
 }: SearchRequestArgs) => {
   let answer = "";
   let quotes: Quote[] | null = null;
-  let relevantDocuments: DanswerDocument[] | null = null;
+  let relevantDocuments: OnyxDocument[] | null = null;
 
   try {
     const filters = buildFilters(sources, documentSets, timeRange, tags);
@@ -91,6 +91,7 @@ export const searchRequestStreamed = async ({
         | DocumentInfoPacket
         | LLMRelevanceFilterPacket
         | BackendMessage
+        | DocumentInfoPacket
         | RelevanceChunk
       >(decoder.decode(value, { stream: true }), previousPartialChunk);
       if (!completedChunks.length && !partialChunk) {
@@ -136,7 +137,7 @@ export const searchRequestStreamed = async ({
         // These all come together
         if (Object.hasOwn(chunk, "top_documents")) {
           chunk = chunk as DocumentInfoPacket;
-          const topDocuments = chunk.top_documents as DanswerDocument[] | null;
+          const topDocuments = chunk.top_documents as OnyxDocument[] | null;
           if (topDocuments) {
             relevantDocuments = topDocuments;
             updateDocs(relevantDocuments);

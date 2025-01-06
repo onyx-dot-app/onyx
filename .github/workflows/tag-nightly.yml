@@ -2,53 +2,52 @@ name: Nightly Tag Push
 
 on:
   schedule:
-    - cron: '0 10 * * *' # Runs every day at 2 AM PST / 3 AM PDT / 10 AM UTC
+    - cron: "0 10 * * *" # Runs every day at 2 AM PST / 3 AM PDT / 10 AM UTC
 
 permissions:
-  contents: write  # Allows pushing tags to the repository
+  contents: write # Allows pushing tags to the repository
 
 jobs:
   create-and-push-tag:
-    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}"]
 
     steps:
-    # actions using GITHUB_TOKEN cannot trigger another workflow, but we do want this to trigger docker pushes
-    # see https://github.com/orgs/community/discussions/27028#discussioncomment-3254367 for the workaround we
-    # implement here which needs an actual user's deploy key
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        ssh-key: "${{ secrets.RKUO_DEPLOY_KEY }}"
+      # actions using GITHUB_TOKEN cannot trigger another workflow, but we do want this to trigger docker pushes
+      # see https://github.com/orgs/community/discussions/27028#discussioncomment-3254367 for the workaround we
+      # implement here which needs an actual user's deploy key
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ssh-key: "${{ secrets.RKUO_DEPLOY_KEY }}"
 
-    - name: Set up Git user
-      run: |
-        git config user.name "Richard Kuo [bot]"
-        git config user.email "rkuo[bot]@danswer.ai"
+      - name: Set up Git user
+        run: |
+          git config user.name "Richard Kuo [bot]"
+          git config user.email "rkuo[bot]@onyx.app"
 
-    - name: Check for existing nightly tag
-      id: check_tag
-      run: |
-        if git tag --points-at HEAD --list "nightly-latest*" | grep -q .; then
-          echo "A tag starting with 'nightly-latest' already exists on HEAD."
-          echo "tag_exists=true" >> $GITHUB_OUTPUT
-        else
-          echo "No tag starting with 'nightly-latest' exists on HEAD."
-          echo "tag_exists=false" >> $GITHUB_OUTPUT
-        fi
-        
-    # don't tag again if HEAD already has a nightly-latest tag on it
-    - name: Create Nightly Tag
-      if: steps.check_tag.outputs.tag_exists == 'false'
-      env:
-        DATE: ${{ github.run_id }}
-      run: |
-        TAG_NAME="nightly-latest-$(date +'%Y%m%d')"
-        echo "Creating tag: $TAG_NAME"
-        git tag $TAG_NAME
+      - name: Check for existing nightly tag
+        id: check_tag
+        run: |
+          if git tag --points-at HEAD --list "nightly-latest*" | grep -q .; then
+            echo "A tag starting with 'nightly-latest' already exists on HEAD."
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "No tag starting with 'nightly-latest' exists on HEAD."
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+          fi
 
-    - name: Push Tag
-      if: steps.check_tag.outputs.tag_exists == 'false'
-      run: |
-        TAG_NAME="nightly-latest-$(date +'%Y%m%d')"
-        git push origin $TAG_NAME
-        
+      # don't tag again if HEAD already has a nightly-latest tag on it
+      - name: Create Nightly Tag
+        if: steps.check_tag.outputs.tag_exists == 'false'
+        env:
+          DATE: ${{ github.run_id }}
+        run: |
+          TAG_NAME="nightly-latest-$(date +'%Y%m%d')"
+          echo "Creating tag: $TAG_NAME"
+          git tag $TAG_NAME
+
+      - name: Push Tag
+        if: steps.check_tag.outputs.tag_exists == 'false'
+        run: |
+          TAG_NAME="nightly-latest-$(date +'%Y%m%d')"
+          git push origin $TAG_NAME

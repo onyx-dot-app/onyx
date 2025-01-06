@@ -1,6 +1,7 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { User } from "../types";
 import { checkUserIsNoAuthUser } from "../user";
+import { personaComparator } from "@/app/admin/assistants/lib";
 
 export function checkUserOwnsAssistant(user: User | null, assistant: Persona) {
   return checkUserIdOwnsAssistant(user?.id, assistant);
@@ -116,4 +117,32 @@ export function getUserCreatedAssistants(
   return assistants.filter((assistant) =>
     checkUserOwnsAssistant(user, assistant)
   );
+}
+
+// Filter assistants based on connector status, image compatibility and visibility
+export function filterAssistants(
+  assistants: Persona[],
+  hasAnyConnectors: boolean,
+  hasImageCompatibleModel: boolean
+): Persona[] {
+  let filteredAssistants = assistants.filter(
+    (assistant) => assistant.is_visible
+  );
+
+  if (!hasAnyConnectors) {
+    filteredAssistants = filteredAssistants.filter(
+      (assistant) => assistant.num_chunks === 0
+    );
+  }
+
+  if (!hasImageCompatibleModel) {
+    filteredAssistants = filteredAssistants.filter(
+      (assistant) =>
+        !assistant.tools.some(
+          (tool) => tool.in_code_tool_id === "ImageGenerationTool"
+        )
+    );
+  }
+
+  return filteredAssistants.sort(personaComparator);
 }

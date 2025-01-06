@@ -5,7 +5,7 @@ import sys
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from danswer.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import ConnectorCredentialPairStatus
 
 # Modify sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -15,30 +15,30 @@ sys.path.append(parent_dir)
 # pylint: disable=E402
 # flake8: noqa: E402
 
-# Now import Danswer modules
-from danswer.db.models import (
+# Now import Onyx modules
+from onyx.db.models import (
     DocumentSet__ConnectorCredentialPair,
     UserGroup__ConnectorCredentialPair,
 )
-from danswer.db.connector import fetch_connector_by_id
-from danswer.db.document import get_documents_for_connector_credential_pair
-from danswer.db.index_attempt import (
+from onyx.db.connector import fetch_connector_by_id
+from onyx.db.document import get_documents_for_connector_credential_pair
+from onyx.db.index_attempt import (
     delete_index_attempts,
     cancel_indexing_attempts_for_ccpair,
 )
-from danswer.db.models import ConnectorCredentialPair
-from danswer.document_index.interfaces import DocumentIndex
-from danswer.utils.logger import setup_logger
-from danswer.configs.constants import DocumentSource
-from danswer.db.connector_credential_pair import (
+from onyx.db.models import ConnectorCredentialPair
+from onyx.document_index.interfaces import DocumentIndex
+from onyx.utils.logger import setup_logger
+from onyx.configs.constants import DocumentSource
+from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id,
     get_connector_credential_pair,
 )
-from danswer.db.engine import get_session_context_manager
-from danswer.document_index.factory import get_default_document_index
-from danswer.file_store.file_store import get_default_file_store
-from danswer.document_index.document_index_utils import get_both_index_names
-from danswer.db.document import delete_documents_complete__no_commit
+from onyx.db.engine import get_session_context_manager
+from onyx.document_index.factory import get_default_document_index
+from onyx.file_store.file_store import get_default_file_store
+from onyx.document_index.document_index_utils import get_both_index_names
+from onyx.db.document import delete_documents_complete__no_commit
 
 # pylint: enable=E402
 # flake8: noqa: E402
@@ -72,7 +72,9 @@ def _unsafe_deletion(
             break
 
         document_ids = [document.id for document in documents]
-        document_index.delete(doc_ids=document_ids)
+        for doc_id in document_ids:
+            document_index.delete_single(doc_id)
+
         delete_documents_complete__no_commit(
             db_session=db_session,
             document_ids=document_ids,
@@ -128,7 +130,7 @@ def _unsafe_deletion(
 def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
     user_input = input(
         "DO NOT USE THIS UNLESS YOU KNOW WHAT YOU ARE DOING. \
-        IT MAY CAUSE ISSUES with your Danswer instance! \
+        IT MAY CAUSE ISSUES with your Onyx instance! \
         Are you SURE you want to continue? (enter 'Y' to continue): "
     )
     if user_input != "Y":

@@ -1,5 +1,6 @@
 import asyncio
 from logging.config import fileConfig
+from typing import Literal
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -7,8 +8,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.schema import SchemaItem
 
 from alembic import context
-from danswer.db.engine import build_connection_string
-from danswer.db.models import PublicBase
+from onyx.db.engine import build_connection_string
+from onyx.db.models import PublicBase
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -37,8 +38,15 @@ EXCLUDE_TABLES = {"kombu_queue", "kombu_message"}
 
 def include_object(
     object: SchemaItem,
-    name: str,
-    type_: str,
+    name: str | None,
+    type_: Literal[
+        "schema",
+        "table",
+        "column",
+        "index",
+        "unique_constraint",
+        "foreign_key_constraint",
+    ],
     reflected: bool,
     compare_to: SchemaItem | None,
 ) -> bool:

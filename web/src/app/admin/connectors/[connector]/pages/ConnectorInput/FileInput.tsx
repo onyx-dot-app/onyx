@@ -7,6 +7,7 @@ interface FileInputProps {
   label: string;
   optional?: boolean;
   description?: string;
+  isZip?: boolean;
 }
 
 export default function FileInput({
@@ -14,6 +15,7 @@ export default function FileInput({
   label,
   optional = false,
   description,
+  isZip = false, // Default to false for multiple file uploads
 }: FileInputProps) {
   const [field, meta, helpers] = useField(name);
 
@@ -28,10 +30,22 @@ export default function FileInput({
       </label>
       {description && <CredentialSubText>{description}</CredentialSubText>}
       <FileUpload
-        selectedFiles={field.value ? [field.value] : []}
+        selectedFiles={
+          Array.isArray(field.value)
+            ? field.value
+            : field.value
+              ? [field.value]
+              : []
+        }
         setSelectedFiles={(files: File[]) => {
-          helpers.setValue(files[0] || null);
+          if (isZip) {
+            helpers.setValue(files[0] || null);
+          } else {
+            helpers.setValue(files);
+          }
         }}
+        multiple={!isZip} // Allow multiple files if not a zip
+        accept={isZip ? ".zip" : undefined} // Only accept zip files if isZip is true
       />
       {meta.touched && meta.error && (
         <div className="text-red-500 text-sm mt-1">{meta.error}</div>

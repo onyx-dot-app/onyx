@@ -13,8 +13,8 @@ import {
   FetchAssistantsResponse,
   fetchAssistantsSS,
 } from "@/lib/assistants/fetchAssistantsSS";
-import FunctionalHeader from "@/components/chat_search/Header";
 import { defaultPersona } from "@/app/admin/assistants/lib";
+import { constructMiniFiedPersona } from "@/lib/assistantIconUtils";
 
 async function getSharedChat(chatId: string) {
   const response = await fetchSS(
@@ -34,7 +34,6 @@ export default async function Page(props: {
     getAuthTypeMetadataSS(),
     getCurrentUserSS(),
     getSharedChat(params.chatId),
-    fetchAssistantsSS(),
   ];
 
   // catch cases where the backend is completely unreachable here
@@ -50,8 +49,6 @@ export default async function Page(props: {
   const authTypeMetadata = results[0] as AuthTypeMetadata | null;
   const user = results[1] as User | null;
   const chatSession = results[2] as BackendChatSession | null;
-  const assistantsResponse = results[3] as FetchAssistantsResponse | null;
-  const [availableAssistants, error] = assistantsResponse ?? [[], null];
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
@@ -61,22 +58,13 @@ export default async function Page(props: {
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
     return redirect("/auth/waiting-on-verification");
   }
-  // prettier-ignore
-  const persona: Persona =
-    chatSession?.persona_id && availableAssistants?.length
-      ? (availableAssistants.find((p) => p.id === chatSession.persona_id) ??
-        defaultPersona)
-      : (availableAssistants?.[0] ?? defaultPersona);
 
-  return (
-    <div>
-      <div className="absolute top-0 z-40 w-full">
-        <FunctionalHeader page="shared" />
-      </div>
-
-      <div className="flex relative bg-background text-default overflow-hidden pt-16 h-screen">
-        <SharedChatDisplay chatSession={chatSession} persona={persona} />
-      </div>
-    </div>
+  const persona: Persona = constructMiniFiedPersona(
+    chatSession?.persona_icon_color ?? null,
+    chatSession?.persona_icon_shape ?? null,
+    chatSession?.persona_name ?? "",
+    chatSession?.persona_id ?? 0
   );
+
+  return <SharedChatDisplay chatSession={chatSession} persona={persona} />;
 }

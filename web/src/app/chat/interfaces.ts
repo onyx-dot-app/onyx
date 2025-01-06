@@ -1,7 +1,7 @@
 import {
-  DanswerDocument,
+  OnyxDocument,
   Filters,
-  SearchDanswerDocument,
+  SearchOnyxDocument,
   StreamStopReason,
 } from "@/lib/search/interfaces";
 
@@ -72,7 +72,7 @@ export interface ChatSession {
 
 export interface SearchSession {
   search_session_id: string;
-  documents: SearchDanswerDocument[];
+  documents: SearchOnyxDocument[];
   messages: BackendMessage[];
   description: string;
 }
@@ -83,7 +83,7 @@ export interface Message {
   type: "user" | "assistant" | "system" | "error";
   retrievalType?: RetrievalType;
   query?: string | null;
-  documents?: DanswerDocument[] | null;
+  documents?: OnyxDocument[] | null;
   citations?: CitationMap;
   files: FileDescriptor[];
   toolCall: ToolCallMetadata | null;
@@ -102,6 +102,8 @@ export interface BackendChatSession {
   description: string;
   persona_id: number;
   persona_name: string;
+  persona_icon_color: string | null;
+  persona_icon_shape: number | null;
   messages: BackendMessage[];
   time_created: string;
   shared_status: ChatSessionSharedStatus;
@@ -116,7 +118,7 @@ export interface BackendMessage {
   latest_child_message: number | null;
   message: string;
   rephrased_query: string | null;
-  context_docs: { top_documents: DanswerDocument[] } | null;
+  context_docs: { top_documents: OnyxDocument[] } | null;
   message_type: "user" | "assistant" | "system";
   time_sent: string;
   citations: CitationMap;
@@ -132,7 +134,7 @@ export interface MessageResponseIDInfo {
 }
 
 export interface DocumentsResponse {
-  top_documents: DanswerDocument[];
+  top_documents: OnyxDocument[];
   rephrased_query: string | null;
 }
 

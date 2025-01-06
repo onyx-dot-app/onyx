@@ -1,11 +1,11 @@
 "use client";
 import { Separator } from "@/components/ui/separator";
-import { FiX } from "react-icons/fi";
 import { IconProps, XIcon } from "./icons/icons";
 import { useRef } from "react";
 import { isEventWithinRef } from "@/lib/contains";
 import ReactDOM from "react-dom";
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface ModalProps {
   icon?: ({ size, className }: IconProps) => JSX.Element;
@@ -18,6 +18,8 @@ interface ModalProps {
   hideDividerForTitle?: boolean;
   hideCloseButton?: boolean;
   noPadding?: boolean;
+  height?: string;
+  noScroll?: boolean;
 }
 
 export function Modal({
@@ -28,9 +30,11 @@ export function Modal({
   width,
   titleSize,
   hideDividerForTitle,
+  height,
   noPadding,
   icon,
   hideCloseButton,
+  noScroll,
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -43,12 +47,8 @@ export function Modal({
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (
-      onOutsideClick &&
-      modalRef.current &&
-      !modalRef.current.contains(e.target as Node) &&
-      !isEventWithinRef(e.nativeEvent, modalRef)
-    ) {
+    // Only close if the user clicked exactly on the overlay (and not on a child element).
+    if (onOutsideClick && e.target === e.currentTarget) {
       onOutsideClick();
     }
   };
@@ -56,8 +56,10 @@ export function Modal({
   const modalContent = (
     <div
       onMouseDown={handleMouseDown}
-      className={`fixed inset-0 bg-black bg-opacity-25 backdrop-blur-sm h-full
-        flex items-center justify-center z-[9999] transition-opacity duration-300 ease-in-out`}
+      className={cn(
+        `fixed inset-0 bg-black bg-opacity-25 backdrop-blur-sm h-full
+        flex items-center justify-center z-[9999] transition-opacity duration-300 ease-in-out`
+      )}
     >
       <div
         ref={modalRef}
@@ -66,11 +68,21 @@ export function Modal({
             e.stopPropagation();
           }
         }}
-        className={`bg-background text-emphasis rounded shadow-2xl 
-          transform transition-all duration-300 ease-in-out
+        className={`
+          bg-background 
+          text-emphasis 
+          rounded 
+          shadow-2xl 
+          transform 
+          transition-all 
+          duration-300 
+          ease-in-out
+          relative
+          overflow-visible
           ${width ?? "w-11/12 max-w-4xl"}
           ${noPadding ? "" : "p-10"}
-          ${className || ""}`}
+          ${className || ""}
+        `}
       >
         {onOutsideClick && !hideCloseButton && (
           <div className="absolute top-2 right-2">
@@ -83,8 +95,7 @@ export function Modal({
             </button>
           </div>
         )}
-
-        <div className="w-full flex flex-col h-full justify-stretch">
+        <div className="w-full overflow-y-auto overflow-x-visible p-1 flex flex-col h-full justify-stretch">
           {title && (
             <>
               <div className="flex mb-4">
@@ -100,7 +111,14 @@ export function Modal({
               {!hideDividerForTitle && <Separator />}
             </>
           )}
-          <div className="max-h-[60vh] overflow-y-scroll">{children}</div>
+          <div
+            className={cn(
+              noScroll ? "overflow-auto" : "overflow-x-visible",
+              height || "max-h-[60vh]"
+            )}
+          >
+            {children}
+          </div>
         </div>
       </div>
     </div>

@@ -9,12 +9,12 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import table, column, String, Integer, Boolean
 
-from danswer.db.search_settings import (
+from onyx.db.search_settings import (
     get_new_default_embedding_model,
     get_old_default_embedding_model,
     user_has_overridden_embedding_model,
 )
-from danswer.db.models import IndexModelStatus
+from onyx.db.models import IndexModelStatus
 
 # revision identifiers, used by Alembic.
 revision = "dbaa756c2ccf"

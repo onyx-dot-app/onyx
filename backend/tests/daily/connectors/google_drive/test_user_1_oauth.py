@@ -3,8 +3,8 @@ from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-from danswer.connectors.google_drive.connector import GoogleDriveConnector
-from danswer.connectors.models import Document
+from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.models import Document
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_retrieved_docs_match_expected,
@@ -20,15 +20,15 @@ from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FIL
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_all(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_all")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=TEST_USER_1_EMAIL,
         include_files_shared_with_me=True,
         include_shared_drives=True,
@@ -60,15 +60,15 @@ def test_all(
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_shared_drives_only(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_drives_only")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=TEST_USER_1_EMAIL,
         include_files_shared_with_me=False,
         include_shared_drives=True,
@@ -95,15 +95,15 @@ def test_shared_drives_only(
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_shared_with_me_only(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_with_me_only")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=TEST_USER_1_EMAIL,
         include_files_shared_with_me=True,
         include_shared_drives=False,
@@ -128,15 +128,15 @@ def test_shared_with_me_only(
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_my_drive_only(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_my_drive_only")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=TEST_USER_1_EMAIL,
         include_files_shared_with_me=False,
         include_shared_drives=False,
@@ -158,15 +158,15 @@ def test_my_drive_only(
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_shared_my_drive_folder(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_my_drive_folder")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=TEST_USER_1_EMAIL,
         include_files_shared_with_me=False,
         include_shared_drives=False,
@@ -190,15 +190,15 @@ def test_shared_my_drive_folder(
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_shared_drive_folder(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_drive_folder")
-    connector = google_drive_oauth_connector_factory(
+    connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=TEST_USER_1_EMAIL,
         include_files_shared_with_me=False,
         include_shared_drives=False,

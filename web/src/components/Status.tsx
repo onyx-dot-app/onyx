@@ -52,7 +52,7 @@ export function IndexAttemptStatus({
         popupContent={
           <div className="w-64 p-2 break-words overflow-hidden whitespace-normal">
             The indexing attempt completed, but some errors were encountered
-            during the rrun.
+            during the run.
             <br />
             <br />
             Click View Errors for more details.
@@ -76,6 +76,12 @@ export function IndexAttemptStatus({
     badge = (
       <Badge variant="purple" icon={FiClock}>
         Scheduled
+      </Badge>
+    );
+  } else if (status === "canceled") {
+    badge = (
+      <Badge variant="canceled" icon={FiClock}>
+        Canceled
       </Badge>
     );
   } else {

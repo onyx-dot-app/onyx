@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-from danswer.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
+from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
 
 # revision identifiers, used by Alembic.
 revision = "1f60f60c3401"

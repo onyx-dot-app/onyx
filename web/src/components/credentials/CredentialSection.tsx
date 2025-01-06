@@ -28,6 +28,12 @@ import {
   ConfluenceCredentialJson,
   Credential,
 } from "@/lib/connectors/credentials";
+import {
+  getConnectorOauthRedirectUrl,
+  useOAuthDetails,
+} from "@/lib/connectors/oauth";
+import { Spinner } from "@/components/Spinner";
+import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 
 export default function CredentialSection({
   ccPair,
@@ -38,11 +44,6 @@ export default function CredentialSection({
   sourceType: ValidSources;
   refresh: () => void;
 }) {
-  const makeShowCreateCredential = () => {
-    setShowModifyCredential(false);
-    setShowCreateCredential(true);
-  };
-
   const { data: credentials } = useSWR<Credential<ConfluenceCredentialJson>[]>(
     buildSimilarCredentialInfoURL(sourceType),
     errorHandlingFetcher,
@@ -53,6 +54,28 @@ export default function CredentialSection({
     errorHandlingFetcher,
     { refreshInterval: 5000 }
   );
+  const { data: oauthDetails, isLoading: oauthDetailsLoading } =
+    useOAuthDetails(sourceType);
+
+  const makeShowCreateCredential = async () => {
+    if (oauthDetailsLoading || !oauthDetails) {
+      return;
+    }
+
+    if (oauthDetails.oauth_enabled) {
+      if (oauthDetails.additional_kwargs.length > 0) {
+        setShowCreateCredential(true);
+      } else {
+        const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, {});
+        if (redirectUrl) {
+          window.location.href = redirectUrl;
+        }
+      }
+    } else {
+      setShowModifyCredential(false);
+      setShowCreateCredential(true);
+    }
+  };
 
   const onSwap = async (
     selectedCredential: Credential<any>,
@@ -150,9 +173,6 @@ export default function CredentialSection({
           title="Update Credentials"
         >
           <ModifyCredential
-            showCreate={() => {
-              setShowCreateCredential(true);
-            }}
             close={closeModifyCredential}
             source={sourceType}
             attachedConnector={ccPair.connector}
@@ -190,13 +210,26 @@ export default function CredentialSection({
           className="max-w-3xl rounded-lg"
           title={`Create ${getSourceDisplayName(sourceType)} Credential`}
         >
-          <CreateCredential
-            sourceType={sourceType}
-            swapConnector={ccPair.connector}
-            setPopup={setPopup}
-            onSwap={onSwap}
-            onClose={closeCreateCredential}
-          />
+          {oauthDetailsLoading ? (
+            <Spinner />
+          ) : (
+            <>
+              {oauthDetails && oauthDetails.oauth_enabled ? (
+                <CreateStdOAuthCredential
+                  sourceType={sourceType}
+                  additionalFields={oauthDetails.additional_kwargs}
+                />
+              ) : (
+                <CreateCredential
+                  sourceType={sourceType}
+                  swapConnector={ccPair.connector}
+                  setPopup={setPopup}
+                  onSwap={onSwap}
+                  onClose={closeCreateCredential}
+                />
+              )}
+            </>
+          )}
         </Modal>
       )}
     </div>

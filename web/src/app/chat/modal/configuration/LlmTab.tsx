@@ -35,25 +35,9 @@ export const LlmTab = forwardRef<HTMLDivElement, LlmTabProps>(
       checkPersonaRequiresImageGeneration(currentAssistant);
 
     const { llmProviders } = useChatContext();
-    const { setLlmOverride, temperature, setTemperature } = llmOverrideManager;
+    const { updateLLMOverride, temperature, updateTemperature } =
+      llmOverrideManager;
     const [isTemperatureExpanded, setIsTemperatureExpanded] = useState(false);
-    const [localTemperature, setLocalTemperature] = useState<number>(
-      temperature || 0
-    );
-    const debouncedSetTemperature = useCallback(
-      (value: number) => {
-        const debouncedFunction = debounce((value: number) => {
-          setTemperature(value);
-        }, 300);
-        return debouncedFunction(value);
-      },
-      [setTemperature]
-    );
-
-    const handleTemperatureChange = (value: number) => {
-      setLocalTemperature(value);
-      debouncedSetTemperature(value);
-    };
 
     return (
       <div className="w-full">
@@ -76,7 +60,7 @@ export const LlmTab = forwardRef<HTMLDivElement, LlmTabProps>(
             if (value == null) {
               return;
             }
-            setLlmOverride(destructureValue(value));
+            updateLLMOverride(destructureValue(value));
             if (chatSessionId) {
               updateModelOverrideForChatSession(chatSessionId, value as string);
             }
@@ -108,26 +92,26 @@ export const LlmTab = forwardRef<HTMLDivElement, LlmTabProps>(
                 <input
                   type="range"
                   onChange={(e) =>
-                    handleTemperatureChange(parseFloat(e.target.value))
+                    updateTemperature(parseFloat(e.target.value))
                   }
                   className="w-full p-2 border border-border rounded-md"
                   min="0"
                   max="2"
                   step="0.01"
-                  value={localTemperature}
+                  value={temperature || 0}
                 />
                 <div
                   className="absolute text-sm"
                   style={{
-                    left: `${(localTemperature || 0) * 50}%`,
+                    left: `${(temperature || 0) * 50}%`,
                     transform: `translateX(-${Math.min(
-                      Math.max((localTemperature || 0) * 50, 10),
+                      Math.max((temperature || 0) * 50, 10),
                       90
                     )}%)`,
                     top: "-1.5rem",
                   }}
                 >
-                  {localTemperature}
+                  {temperature}
                 </div>
               </div>
             </>

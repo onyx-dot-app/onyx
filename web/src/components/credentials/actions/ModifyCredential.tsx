@@ -35,6 +35,9 @@ const CredentialSelectionTable = ({
     number | null
   >(null);
 
+  // rkuo: this appears to merge editableCredentials into credentials so we get a single list
+  // of credentials to display
+  // Pretty sure this merging should be done outside of this UI component
   const allCredentials = React.useMemo(() => {
     const credMap = new Map(editableCredentials.map((cred) => [cred.id, cred]));
     credentials.forEach((cred) => {
@@ -144,15 +147,12 @@ export default function ModifyCredential({
   attachedConnector,
   credentials,
   editableCredentials,
-  source,
   defaultedCredential,
-
   onSwap,
   onSwitch,
-  onCreateNew = () => null,
   onEditCredential,
   onDeleteCredential,
-  showCreate,
+  onCreateNew,
 }: {
   close?: () => void;
   showIfEmpty?: boolean;
@@ -161,13 +161,11 @@ export default function ModifyCredential({
   credentials: Credential<any>[];
   editableCredentials: Credential<any>[];
   source: ValidSources;
-
   onSwitch?: (newCredential: Credential<any>) => void;
   onSwap?: (newCredential: Credential<any>, connectorId: number) => void;
   onCreateNew?: () => void;
   onDeleteCredential: (credential: Credential<any | null>) => void;
   onEditCredential?: (credential: Credential<ConfluenceCredentialJson>) => void;
-  showCreate?: () => void;
 }) {
   const [selectedCredential, setSelectedCredential] =
     useState<Credential<any> | null>(null);
@@ -244,10 +242,10 @@ export default function ModifyCredential({
 
         {!showIfEmpty && (
           <div className="flex mt-8 justify-between">
-            {showCreate ? (
+            {onCreateNew ? (
               <Button
                 onClick={() => {
-                  showCreate();
+                  onCreateNew();
                 }}
                 className="bg-neutral-500 disabled:border-transparent 
               transition-colors duration-150 ease-in disabled:bg-neutral-300 

@@ -9,13 +9,13 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from danswer.db.engine import get_sqlalchemy_engine
-from danswer.db.enums import IndexingStatus
-from danswer.db.index_attempt import create_index_attempt
-from danswer.db.index_attempt import create_index_attempt_error
-from danswer.db.models import IndexAttempt
-from danswer.db.search_settings import get_current_search_settings
-from danswer.server.documents.models import DocumentSource
+from onyx.db.engine import get_sqlalchemy_engine
+from onyx.db.enums import IndexingStatus
+from onyx.db.index_attempt import create_index_attempt
+from onyx.db.index_attempt import create_index_attempt_error
+from onyx.db.models import IndexAttempt
+from onyx.db.search_settings import get_current_search_settings
+from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import NUM_DOCS
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -27,78 +27,6 @@ from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import DATestUserGroup
 from tests.integration.common_utils.vespa import vespa_fixture
-
-
-def test_connector_creation(reset: None) -> None:
-    # Creating an admin user (first user created is automatically an admin)
-    admin_user: DATestUser = UserManager.create(name="admin_user")
-
-    # create connectors
-    cc_pair_1 = CCPairManager.create_from_scratch(
-        source=DocumentSource.INGESTION_API,
-        user_performing_action=admin_user,
-    )
-
-    cc_pair_info = CCPairManager.get_single(
-        cc_pair_1.id, user_performing_action=admin_user
-    )
-    assert cc_pair_info
-    assert cc_pair_info.creator
-    assert str(cc_pair_info.creator) == admin_user.id
-    assert cc_pair_info.creator_email == admin_user.email
-
-
-# TODO(rkuo): will enable this once i have credentials on github
-# def test_overlapping_connector_creation(reset: None) -> None:
-#     # Creating an admin user (first user created is automatically an admin)
-#     admin_user: DATestUser = UserManager.create(name="admin_user")
-
-#     config = {
-#         "wiki_base": os.environ["CONFLUENCE_TEST_SPACE_URL"],
-#         "space": os.environ["CONFLUENCE_TEST_SPACE"],
-#         "is_cloud": True,
-#         "page_id": "",
-#     }
-
-#     credential = {
-#         "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
-#         "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN"],
-#     }
-
-#     # store the time before we create the connector so that we know after
-#     # when the indexing should have started
-#     now = datetime.now(timezone.utc)
-
-#     # create connector
-#     cc_pair_1 = CCPairManager.create_from_scratch(
-#         source=DocumentSource.CONFLUENCE,
-#         connector_specific_config=config,
-#         credential_json=credential,
-#         user_performing_action=admin_user,
-#     )
-
-#     CCPairManager.wait_for_indexing(
-#         cc_pair_1, now, timeout=60, user_performing_action=admin_user
-#     )
-
-#     cc_pair_2 = CCPairManager.create_from_scratch(
-#         source=DocumentSource.CONFLUENCE,
-#         connector_specific_config=config,
-#         credential_json=credential,
-#         user_performing_action=admin_user,
-#     )
-
-#     CCPairManager.wait_for_indexing(
-#         cc_pair_2, now, timeout=60, user_performing_action=admin_user
-#     )
-
-#     info_1 = CCPairManager.get_single(cc_pair_1.id)
-#     assert info_1
-
-#     info_2 = CCPairManager.get_single(cc_pair_2.id)
-#     assert info_2
-
-#     assert info_1.num_docs_indexed == info_2.num_docs_indexed
 
 
 def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
