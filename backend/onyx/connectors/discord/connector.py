@@ -239,7 +239,8 @@ class DiscordConnector(PollConnector, LoadConnector):
         self,
         server_ids: list[str] = [],
         channel_names: list[str] = [],
-        start_date: str | None = None,  # YYYY-MM-DD
+        # YYYY-MM-DD
+        start_date: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ):
         self.batch_size = batch_size
