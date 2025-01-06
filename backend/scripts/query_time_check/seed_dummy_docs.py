@@ -10,6 +10,7 @@ Then run test_query_times.py to test query times.
 """
 import random
 from datetime import datetime
+from datetime import timezone
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
@@ -96,6 +97,7 @@ def generate_dummy_chunk(
         document_sets={document_set for document_set in document_set_names},
         boost=random.randint(-1, 1),
         tenant_id=POSTGRES_DEFAULT_SCHEMA,
+        current_index_time=datetime.now(tz=timezone.utc),
     )
 
 

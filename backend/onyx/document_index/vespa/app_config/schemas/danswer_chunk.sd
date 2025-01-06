@@ -10,6 +10,9 @@ schema DANSWER_CHUNK_NAME {
         field chunk_id type int {
             indexing: summary | attribute
         }
+        field current_index_time type int {
+            indexing: summary | attribute
+        }
         # Displayed in the UI as the main identifier for the doc
         field semantic_identifier type string {
             indexing: summary | attribute

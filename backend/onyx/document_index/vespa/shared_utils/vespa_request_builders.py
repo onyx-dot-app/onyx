@@ -1,12 +1,14 @@
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from urllib.parse import urlencode
 
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import CHUNK_ID
+from onyx.document_index.vespa_constants import CURRENT_INDEX_TIME
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
 from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
@@ -106,3 +108,24 @@ def build_vespa_id_based_retrieval_yql(
 
     id_based_retrieval_yql_section += ")"
     return id_based_retrieval_yql_section
+
+
+def build_deletion_selection_query(
+    doc_id: str, version_cutoff: int, doc_type: str
+) -> str:
+    """
+    Build a Vespa selection expression that includes:
+      - {doc_type}.document_id == <doc_id>
+      - {doc_type}.current_index_time < version_cutoff
+
+    Returns the URL-encoded selection query parameter.
+    """
+    # Escape single quotes by doubling them for Vespa selection expressions
+    escaped_doc_id = doc_id.replace("'", "''")
+
+    filter_str = (
+        f"({doc_type}.document_id=='{escaped_doc_id}') and "
+        f"({doc_type}.{CURRENT_INDEX_TIME} < {version_cutoff})"
+    )
+
+    return urlencode({"selection": filter_str})
