@@ -68,7 +68,7 @@ import zendeskIcon from "../../../public/Zendesk.svg";
 import dropboxIcon from "../../../public/Dropbox.png";
 import egnyteIcon from "../../../public/Egnyte.png";
 import slackIcon from "../../../public/Slack.png";
-import discordIcon from "../../../public/discord.png";
+import discordIcon from "../../../public/Discord.png";
 import airtableIcon from "../../../public/Airtable.svg";
 
 import s3Icon from "../../../public/S3.png";
