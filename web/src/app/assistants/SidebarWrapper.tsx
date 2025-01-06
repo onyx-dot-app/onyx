@@ -2,8 +2,6 @@
 
 import { HistorySidebar } from "@/app/chat/sessionSidebar/HistorySidebar";
 import { ChatSession } from "@/app/chat/interfaces";
-import { Folder } from "@/app/chat/folders/interfaces";
-import { User } from "@/lib/types";
 import Cookies from "js-cookie";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 import {
@@ -35,7 +33,7 @@ export default function SidebarWrapper<T extends object>({
   size = "sm",
   children,
 }: SidebarWrapperProps<T>) {
-  const { chatSessions, folders, openedFolders } = useChatContext();
+  const { chatSessions } = useChatContext();
   const [toggledSidebar, setToggledSidebar] = useState(initiallyToggled);
   const [showDocSidebar, setShowDocSidebar] = useState(false); // State to track if sidebar is open
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
@@ -122,8 +120,6 @@ export default function SidebarWrapper<T extends object>({
             toggled={toggledSidebar}
             existingChats={chatSessions}
             currentChatSession={null}
-            folders={folders}
-            openedFolders={openedFolders}
           />
         </div>
       </div>

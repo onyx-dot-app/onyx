@@ -1,19 +1,12 @@
-import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
-import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
-import { unstable_noStore as noStore } from "next/cache";
+import WrappedDocuments from "./WrappedDocuments";
 import { redirect } from "next/navigation";
-import WrappedAssistantsGallery from "./WrappedAssistantsGallery";
-import { cookies } from "next/headers";
 import { ChatProvider } from "@/components/context/ChatContext";
 
 export default async function GalleryPage(props: {
   searchParams: Promise<{ [key: string]: string }>;
 }) {
-  noStore();
-
   const searchParams = await props.searchParams;
-  const requestCookies = await cookies();
   const data = await fetchChatData(searchParams);
 
   if ("redirect" in data) {
@@ -21,7 +14,6 @@ export default async function GalleryPage(props: {
   }
 
   const {
-    user,
     chatSessions,
     toggleSidebar,
     shouldShowWelcomeModal,
@@ -48,13 +40,7 @@ export default async function GalleryPage(props: {
         defaultAssistantId,
       }}
     >
-      {shouldShowWelcomeModal && (
-        <WelcomeModal user={user} requestCookies={requestCookies} />
-      )}
-
-      <InstantSSRAutoRefresh />
-
-      <WrappedAssistantsGallery toggleSidebar={toggleSidebar} />
+      <WrappedDocuments initiallyToggled={toggleSidebar} />
     </ChatProvider>
   );
 }

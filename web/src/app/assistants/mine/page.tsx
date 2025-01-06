@@ -24,8 +24,6 @@ export default async function GalleryPage(props: {
   const {
     user,
     chatSessions,
-    folders,
-    openedFolders,
     toggleSidebar,
     shouldShowWelcomeModal,
     availableSources,
@@ -47,8 +45,6 @@ export default async function GalleryPage(props: {
         availableDocumentSets: documentSets,
         availableTags: tags,
         llmProviders,
-        folders,
-        openedFolders,
         shouldShowWelcomeModal,
         defaultAssistantId,
       }}

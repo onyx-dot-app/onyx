@@ -375,10 +375,8 @@ def check_drive_tokens(
     return AuthStatus(authenticated=True)
 
 
-@router.post("/admin/connector/file/upload")
 def upload_files(
     files: list[UploadFile],
-    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
     for file in files:
@@ -406,6 +404,15 @@ def upload_files(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return FileUploadResponse(file_paths=deduped_file_paths)
+
+
+@router.post("/admin/connector/file/upload")
+def upload_files_api(
+    files: list[UploadFile],
+    _: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> FileUploadResponse:
+    return upload_files(files, db_session)
 
 
 # Retrieves most recent failure cases for connectors that are currently failing

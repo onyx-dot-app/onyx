@@ -7,9 +7,6 @@ const getPaginationOptions = (
   pageCount: number
 ): number[] => {
   const paginationOptions = [currentPage];
-  // if (currentPage !== 1) {
-  //   paginationOptions.push(currentPage)
-  // }
 
   let offset = 1;
 

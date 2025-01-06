@@ -53,7 +53,6 @@ from onyx.server.documents.document import router as document_router
 from onyx.server.documents.indexing import router as indexing_router
 from onyx.server.documents.standard_oauth import router as oauth_router
 from onyx.server.features.document_set.api import router as document_set_router
-from onyx.server.features.folder.api import router as folder_router
 from onyx.server.features.notifications.api import router as notification_router
 from onyx.server.features.persona.api import admin_router as admin_persona_router
 from onyx.server.features.persona.api import basic_router as persona_router
@@ -91,6 +90,7 @@ from onyx.server.settings.api import basic_router as settings_router
 from onyx.server.token_rate_limits.api import (
     router as token_rate_limit_settings_router,
 )
+from onyx.server.user_documents.api import router as user_documents_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
@@ -270,8 +270,6 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, user_router)
     include_router_with_global_prefix_prepended(application, credential_router)
     include_router_with_global_prefix_prepended(application, cc_pair_router)
-    include_router_with_global_prefix_prepended(application, folder_router)
-    include_router_with_global_prefix_prepended(application, document_set_router)
     include_router_with_global_prefix_prepended(application, search_settings_router)
     include_router_with_global_prefix_prepended(
         application, slack_bot_management_router
@@ -286,15 +284,18 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, onyx_api_router)
     include_router_with_global_prefix_prepended(application, gpts_router)
     include_router_with_global_prefix_prepended(application, settings_router)
+    include_router_with_global_prefix_prepended(application, user_documents_router)
+
     include_router_with_global_prefix_prepended(application, settings_admin_router)
     include_router_with_global_prefix_prepended(application, llm_admin_router)
     include_router_with_global_prefix_prepended(application, llm_router)
     include_router_with_global_prefix_prepended(application, embedding_admin_router)
     include_router_with_global_prefix_prepended(application, embedding_router)
+    include_router_with_global_prefix_prepended(application, document_set_router)
+    include_router_with_global_prefix_prepended(application, indexing_router)
     include_router_with_global_prefix_prepended(
         application, token_rate_limit_settings_router
     )
-    include_router_with_global_prefix_prepended(application, indexing_router)
     include_router_with_global_prefix_prepended(
         application, get_full_openai_assistants_api_router()
     )

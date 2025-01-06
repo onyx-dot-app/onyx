@@ -153,7 +153,7 @@ class OnyxConfluence(Confluence):
         try:
             response = self.get(url, params=params)
         except HTTPError as e:
-            if e.response.status_code == 403:
+            if e.response is not None and e.response.status_code == 403:
                 raise ApiPermissionError(
                     "The calling user does not have permission", reason=e
                 )

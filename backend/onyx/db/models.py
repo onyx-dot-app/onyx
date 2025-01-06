@@ -129,6 +129,55 @@ Auth/Authz (users, permissions, access) Tables
 """
 
 
+class UserFolder(Base):
+    __tablename__ = "user_folder"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_folder.id"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        default=datetime.datetime.utcnow
+    )
+
+    user: Mapped["User"] = relationship(back_populates="folders")
+    parent: Mapped["UserFolder"] = relationship(
+        remote_side=[id], back_populates="children"
+    )
+    children: Mapped[list["UserFolder"]] = relationship(back_populates="parent")
+    files: Mapped[list["UserFile"]] = relationship(back_populates="folder")
+    chat_sessions: Mapped[list["ChatSession"]] = relationship(back_populates="folder")
+
+
+class UserDocument(str, Enum):
+    CHAT = "chat"
+    RECENT = "recent"
+    FILE = "file"
+
+
+class UserFile(Base):
+    __tablename__ = "user_file"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("user.id"), nullable=False)
+    parent_folder_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_folder.id"), nullable=True
+    )
+    # file_type: Mapped[UserDocument] = mapped_column(Enum(UserDocument), native_enum=False, nullable=False)
+
+    file_id: Mapped[str] = mapped_column(nullable=False)
+    document_id: Mapped[str] = mapped_column(nullable=False)
+    name: Mapped[str] = mapped_column(nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        default=datetime.datetime.utcnow
+    )
+
+    user: Mapped["User"] = relationship(back_populates="files")
+    folder: Mapped["UserFolder"] = relationship(back_populates="files")
+
+
 class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
     # even an almost empty token from keycloak will not fit the default 1024 bytes
     access_token: Mapped[str] = mapped_column(Text, nullable=False)  # type: ignore
@@ -178,9 +227,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         "ChatSession", back_populates="user"
     )
-    chat_folders: Mapped[list["ChatFolder"]] = relationship(
-        "ChatFolder", back_populates="user"
-    )
 
     prompts: Mapped[list["Prompt"]] = relationship("Prompt", back_populates="user")
 
@@ -197,6 +243,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         back_populates="creator",
         primaryjoin="User.id == foreign(ConnectorCredentialPair.creator_id)",
     )
+
+    folders: Mapped[list["UserFolder"]] = relationship(
+        "UserFolder", back_populates="user"
+    )
+    files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
 
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
@@ -998,7 +1049,7 @@ class ChatSession(Base):
         default=ChatSessionSharedStatus.PRIVATE,
     )
     folder_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_folder.id"), nullable=True
+        ForeignKey("user_folder.id", ondelete="SET NULL"), nullable=True
     )
 
     current_alternate_model: Mapped[str | None] = mapped_column(String, default=None)
@@ -1028,8 +1079,8 @@ class ChatSession(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     user: Mapped[User] = relationship("User", back_populates="chat_sessions")
-    folder: Mapped["ChatFolder"] = relationship(
-        "ChatFolder", back_populates="chat_sessions"
+    folder: Mapped["UserFolder"] = relationship(
+        "UserFolder", back_populates="chat_sessions"
     )
     messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage", back_populates="chat_session", cascade="all, delete-orphan"
@@ -1115,33 +1166,6 @@ class ChatMessage(Base):
         secondary=ChatMessage__StandardAnswer.__table__,
         back_populates="chat_messages",
     )
-
-
-class ChatFolder(Base):
-    """For organizing chat sessions"""
-
-    __tablename__ = "chat_folder"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    # Only null if auth is off
-    user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
-    )
-    name: Mapped[str | None] = mapped_column(String, nullable=True)
-    display_priority: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
-
-    user: Mapped[User] = relationship("User", back_populates="chat_folders")
-    chat_sessions: Mapped[list["ChatSession"]] = relationship(
-        "ChatSession", back_populates="folder"
-    )
-
-    def __lt__(self, other: Any) -> bool:
-        if not isinstance(other, ChatFolder):
-            return NotImplemented
-        if self.display_priority == other.display_priority:
-            # Bigger ID (created later) show earlier
-            return self.id > other.id
-        return self.display_priority < other.display_priority
 
 
 """

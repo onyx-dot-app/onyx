@@ -110,7 +110,7 @@ import AssistantBanner from "../../components/assistants/AssistantBanner";
 import TextView from "@/components/chat_search/TextView";
 import AssistantSelector from "@/components/chat_search/AssistantSelector";
 import { Modal } from "@/components/Modal";
-import { createPostponedAbortSignal } from "next/dist/server/app-render/dynamic-rendering";
+import { FilePicker, UserFile, UserFolder } from "../my-documents/FilePicker";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -134,8 +134,6 @@ export function ChatPage({
     tags,
     documentSets,
     llmProviders,
-    folders,
-    openedFolders,
     defaultAssistantId,
     shouldShowWelcomeModal,
     refreshChatSessions,
@@ -200,6 +198,11 @@ export function ChatPage({
     SEARCH_PARAM_NAMES.STRUCTURED_MODEL
   );
 
+  const [myDocumentsToggled, setMyDocumentsToggled] = useState(false);
+
+  const toggleMyDocuments = () => {
+    setMyDocumentsToggled(!myDocumentsToggled);
+  };
   // Effect to handle sendOnLoad
   useEffect(() => {
     if (sendOnLoad) {
@@ -1928,6 +1931,36 @@ export function ChatPage({
     }
   };
 
+  const [allFolders, setAllFolders] = useState<UserFolder[]>([]);
+  const [allFiles, setAllFiles] = useState<UserFile[]>([]);
+  useEffect(() => {
+    const loadFileSystem = async () => {
+      const res = await fetch("/api/user/file-system");
+      const data = await res.json();
+      const folders = data.folders.map((f: any) => ({
+        id: f.id,
+        name: f.name,
+        parent_id: f.parent_id,
+      }));
+      const files = data.files.map((f: any) => ({
+        id: f.id,
+        name: f.name,
+        parent_id: f.parent_id,
+      }));
+
+      setAllFolders(folders);
+      setAllFiles(files);
+    };
+    loadFileSystem();
+  }, []);
+
+  const [folders, setFolders] = useState<UserFolder[]>([]);
+  const [userFiles, setUserFiles] = useState<UserFile[]>([]);
+
+  const removeFolder = (folderId: number) => {
+    setFolders((prev) => prev.filter((f) => f.id !== folderId));
+  };
+
   interface RegenerationRequest {
     messageId: number;
     parentMessage: Message;
@@ -1969,6 +2002,21 @@ export function ChatPage({
       {popup}
 
       <ChatPopup />
+      {myDocumentsToggled && (
+        <FilePicker
+          allFolders={allFolders}
+          setSelectedFolders={(folders) => setFolders(folders)}
+          setUserFiles={(userFiles) => {
+            setUserFiles(userFiles);
+          }}
+          allFiles={allFiles}
+          isOpen={myDocumentsToggled}
+          userFiles={userFiles}
+          selectedFolders={folders}
+          onClose={() => setMyDocumentsToggled(false)}
+          onSave={() => {}}
+        />
+      )}
 
       {showDeleteAllModal && (
         <DeleteEntityModal
@@ -2143,17 +2191,13 @@ export function ChatPage({
               <div className="w-full relative">
                 <HistorySidebar
                   explicitlyUntoggle={explicitlyUntoggle}
-                  stopGenerating={stopGenerating}
                   reset={() => setMessage("")}
                   page="chat"
                   ref={innerSidebarElementRef}
                   toggleSidebar={toggleSidebar}
-                  toggled={toggledSidebar}
-                  backgroundToggled={toggledSidebar || showHistorySidebar}
+                  toggled={toggledSidebar && !settings?.isMobile}
                   existingChats={chatSessions}
                   currentChatSession={selectedChatSession}
-                  folders={folders}
-                  openedFolders={openedFolders}
                   removeToggle={removeToggle}
                   showShareModal={showShareModal}
                   showDeleteModal={showDeleteModal}
@@ -2761,7 +2805,22 @@ export function ChatPage({
                                 </button>
                               </div>
                             )}
+
                             <ChatInputBar
+                              removeUserFile={(userFileId) => {
+                                setUserFiles(
+                                  userFiles.filter(
+                                    (file) => file.id !== userFileId
+                                  )
+                                );
+                              }}
+                              removeFilters={() => {
+                                setFiltersToggled(false);
+                              }}
+                              userFiles={userFiles}
+                              folders={folders}
+                              removeFolder={removeFolder}
+                              toggleMyDocuments={toggleMyDocuments}
                               removeDocs={() => {
                                 clearSelectedDocuments();
                               }}
@@ -2857,6 +2916,7 @@ export function ChatPage({
               )}
             </div>
           </div>
+
           <FixedLogo backgroundToggled={toggledSidebar || showHistorySidebar} />
         </div>
         {/* Right Sidebar - DocumentSidebar */}

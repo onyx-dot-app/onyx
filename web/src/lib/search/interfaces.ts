@@ -45,12 +45,15 @@ export interface QuotesInfoPacket {
   quotes: Quote[];
 }
 
-export interface OnyxDocument {
+export interface MinimalOnyxDocument {
   document_id: string;
+  semantic_identifier: string | null;
+}
+
+export interface OnyxDocument extends MinimalOnyxDocument {
   link: string;
   source_type: ValidSources;
   blurb: string;
-  semantic_identifier: string | null;
   boost: number;
   hidden: boolean;
   score: number;
