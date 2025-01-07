@@ -128,12 +128,16 @@ file_text_template = "This is file {}"
 _VALID_PREFIX = "file_"
 
 
+def filter_invalid_prefixes(names: set[str]) -> set[str]:
+    return {name for name in names if name.startswith(_VALID_PREFIX)}
+
+
 def print_discrepencies(
     expected: set[str],
     retrieved: set[str],
 ) -> None:
     # Filter retrieved set to only include valid prefixed items
-    filtered_retrieved = {name for name in retrieved if name.startswith(_VALID_PREFIX)}
+    filtered_retrieved = filter_invalid_prefixes(retrieved)
     if expected != filtered_retrieved:
         print(expected)
         print(filtered_retrieved)
