@@ -308,7 +308,10 @@ class FailedConnectorIndexingStatus(BaseModel):
 
 
 class ConnectorStatus(BaseModel):
-    """Represents the minimal indexing status of a connector"""
+    """
+    Represents the status of a connector,
+    including indexing status elated information
+    """
 
     cc_pair_id: int
     name: str | None
@@ -329,9 +332,6 @@ class ConnectorIndexingStatus(ConnectorStatus):
     latest_index_attempt: IndexAttemptSnapshot | None
     docs_indexed: int
     in_progress: bool
-
-    # index attempt in db can be marked successful while celery/redis
-    # is still running/cleaning up
 
 
 class ConnectorCredentialPairIdentifier(BaseModel):
