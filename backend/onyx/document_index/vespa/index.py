@@ -578,7 +578,6 @@ class VespaIndex(DocumentIndex):
         with get_vespa_http_client(http2=False) as http_client:
             for index_name in index_names:
                 large_chunks_enabled = False
-
                 with get_session_with_tenant(tenant_id=tenant_id) as db_session:
                     multipass_config = check_enable_large_chunks_and_multipass(
                         db_session=db_session,
