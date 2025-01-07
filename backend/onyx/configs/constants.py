@@ -47,6 +47,12 @@ POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME = "celery_worker_primary"
 POSTGRES_CELERY_WORKER_LIGHT_APP_NAME = "celery_worker_light"
 POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
 POSTGRES_CELERY_WORKER_INDEXING_APP_NAME = "celery_worker_indexing"
+POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
+POSTGRES_CELERY_BEAT_APP_NAME = "celery_beat"
+POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME = "celery_worker_primary"
+POSTGRES_CELERY_WORKER_LIGHT_APP_NAME = "celery_worker_light"
+POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
+POSTGRES_CELERY_WORKER_INDEXING_APP_NAME = "celery_worker_indexing"
 POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME = "celery_worker_indexing_child"
 POSTGRES_PERMISSIONS_APP_NAME = "permissions"
 POSTGRES_UNKNOWN_APP_NAME = "unknown"
@@ -260,6 +266,9 @@ class OnyxCeleryQueues:
     # Indexing queue
     CONNECTOR_INDEXING = "connector_indexing"
 
+    # Monitoring queue
+    MONITORING = "monitoring"
+
 
 class OnyxRedisLocks:
     PRIMARY_WORKER = "da_lock:primary_worker"
@@ -308,6 +317,7 @@ class OnyxCeleryTask:
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
     MONITOR_VESPA_SYNC = "monitor_vespa_sync"
+    MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"
