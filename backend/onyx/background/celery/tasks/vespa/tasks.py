@@ -992,10 +992,8 @@ def vespa_metadata_sync_task(
             )
 
             # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
-            # TODO: fix hte large chunks enabled
             chunks_affected = retry_index.update_single(
                 document_id,
-                large_chunks_enabled=False,
                 tenant_id=tenant_id,
                 chunk_count=doc.chunk_count,
                 fields=fields,

@@ -118,7 +118,6 @@ def document_by_cc_pair_cleanup_task(
                 # TODO: fix the large chunks enabled
                 chunks_affected = retry_index.update_single(
                     document_id,
-                    large_chunks_enabled=False,
                     tenant_id=tenant_id,
                     chunk_count=doc.chunk_count,
                     fields=fields,

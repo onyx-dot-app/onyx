@@ -48,11 +48,11 @@ class RetryDocumentIndex:
     def update_single(
         self,
         doc_id: str,
-        large_chunks_enabled: bool,
         tenant_id: str | None,
         chunk_count: int | None,
         fields: VespaDocumentFields,
     ) -> int:
+        print("Update single")
         return self.index.update_single(
             doc_id,
             tenant_id=tenant_id,

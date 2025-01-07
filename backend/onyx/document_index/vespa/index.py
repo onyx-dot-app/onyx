@@ -601,6 +601,7 @@ class VespaIndex(DocumentIndex):
                 doc_chunk_count += len(doc_chunk_ids)
 
                 for doc_chunk_id in doc_chunk_ids:
+                    print("THIS ONE is being updated")
                     self.update_single_chunk(
                         doc_chunk_id=doc_chunk_id, index_name=index_name, fields=fields
                     )
