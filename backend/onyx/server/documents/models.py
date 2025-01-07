@@ -307,29 +307,31 @@ class FailedConnectorIndexingStatus(BaseModel):
     credential_id: int
 
 
-class ConnectorIndexingStatus(BaseModel):
-    """Represents the latest indexing status of a connector"""
+class ConnectorStatus(BaseModel):
+    """Represents the minimal indexing status of a connector"""
 
     cc_pair_id: int
     name: str | None
-    cc_pair_status: ConnectorCredentialPairStatus
     connector: ConnectorSnapshot
     credential: CredentialSnapshot
-    owner: str
-    groups: list[int]
     access_type: AccessType
+    groups: list[int]
+
+
+class ConnectorIndexingStatus(ConnectorStatus):
+    """Represents the full indexing status of a connector"""
+
+    cc_pair_status: ConnectorCredentialPairStatus
+    owner: str
     last_finished_status: IndexingStatus | None
     last_status: IndexingStatus | None
     last_success: datetime | None
-    docs_indexed: int
-    error_msg: str | None
     latest_index_attempt: IndexAttemptSnapshot | None
-    deletion_attempt: DeletionAttemptSnapshot | None
-    is_deletable: bool
+    docs_indexed: int
+    in_progress: bool
 
     # index attempt in db can be marked successful while celery/redis
-    # is stil running/cleaning up
-    in_progress: bool
+    # is still running/cleaning up
 
 
 class ConnectorCredentialPairIdentifier(BaseModel):

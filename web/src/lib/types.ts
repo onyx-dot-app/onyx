@@ -130,27 +130,26 @@ export interface IndexAttemptSnapshot {
   time_updated: string;
 }
 
-export interface ConnectorIndexingStatus<
-  ConnectorConfigType,
-  ConnectorCredentialType,
-> {
+export interface ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
   cc_pair_id: number;
   name: string | null;
-  cc_pair_status: ConnectorCredentialPairStatus;
   connector: Connector<ConnectorConfigType>;
   credential: Credential<ConnectorCredentialType>;
   access_type: AccessType;
-  owner: string;
   groups: number[];
-  last_finished_status: ValidStatuses | null;
-  last_status: ValidStatuses | null;
+}
+
+export interface ConnectorIndexingStatus<
+  ConnectorConfigType,
+  ConnectorCredentialType,
+> extends ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
+  // Inlcude data only necessary for indexing statuses in admin page
   last_success: string | null;
-  docs_indexed: number;
-  error_msg: string;
+  last_status: ValidStatuses | null;
+  last_finished_status: ValidStatuses | null;
+  cc_pair_status: ConnectorCredentialPairStatus;
   latest_index_attempt: IndexAttemptSnapshot | null;
-  deletion_attempt: DeletionAttemptSnapshot | null;
-  is_deletable: boolean;
-  in_progress: boolean;
+  docs_indexed: number;
 }
 
 export interface OAuthPrepareAuthorizationResponse {
