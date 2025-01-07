@@ -183,7 +183,7 @@ class OnyxConfluence(Confluence):
             limit = _DEFAULT_PAGINATION_LIMIT
 
         connection_char = "&" if "?" in url_suffix else "?"
-        url_suffix += f"???????{connection_char}limit={limit}"
+        url_suffix += f"{connection_char}limit={limit}"
 
         while url_suffix:
             logger.debug(f"Making confluence call to {url_suffix}")
