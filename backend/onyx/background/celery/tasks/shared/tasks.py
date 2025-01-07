@@ -80,7 +80,13 @@ def document_by_cc_pair_cleanup_task(
                 # delete it from vespa and the db
                 action = "delete"
 
-                chunks_affected = retry_index.delete_single(document_id)
+                # TODO: fix the large chunks enabled
+                chunks_affected = retry_index.delete_single(
+                    document_id,
+                    large_chunks_enabled=False,
+                    tenant_id=tenant_id,
+                    chunk_count=None,
+                )
                 delete_documents_complete__no_commit(
                     db_session=db_session,
                     document_ids=[document_id],
@@ -110,7 +116,14 @@ def document_by_cc_pair_cleanup_task(
                 )
 
                 # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
-                chunks_affected = retry_index.update_single(document_id, fields=fields)
+                # TODO: fix the large chunks enabled
+                chunks_affected = retry_index.update_single(
+                    document_id,
+                    large_chunks_enabled=False,
+                    tenant_id=tenant_id,
+                    chunk_count=doc.chunk_count,
+                    fields=fields,
+                )
 
                 # there are still other cc_pair references to the doc, so just resync to Vespa
                 delete_document_by_connector_credential_pair__no_commit(

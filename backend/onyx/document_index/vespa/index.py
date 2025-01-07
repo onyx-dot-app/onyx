@@ -13,11 +13,11 @@ from datetime import timedelta
 from typing import BinaryIO
 from typing import cast
 from typing import List
+from uuid import UUID
 
 import httpx  # type: ignore
 import requests  # type: ignore
 
-from onyx.configs.app_configs import DOCUMENT_INDEX_NAME
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
@@ -336,37 +336,21 @@ class VespaIndex(DocumentIndex):
             # know precisely which chunks to delete. This information exists for
             # documents that have `chunk_count` in the database, but not for
             # `old_version` documents.
-
-            enriched_doc_infos: list[EnrichedDocumentIndexingInfo] = []
-            for document_id, doc_count in doc_id_to_previous_chunk_cnt.items():
-                last_indexed_chunk = doc_id_to_previous_chunk_cnt.get(document_id, None)
-                # If the document has no `chunk_count` in the database, we know that it
-                # has the old chunk ID system and we must check for the final chunk index
-                is_old_version = False
-                if last_indexed_chunk is None:
-                    is_old_version = True
-                    minimal_doc_info = MinimalDocumentIndexingInfo(
-                        doc_id=document_id,
-                        chunk_start_index=doc_id_to_new_chunk_cnt.get(document_id, 0),
-                    )
-                    last_indexed_chunk = check_for_final_chunk_existence(
-                        minimal_doc_info=minimal_doc_info,
-                        start_index=doc_id_to_new_chunk_cnt[document_id],
-                        index_name=self.index_name,
-                        http_client=http_client,
-                    )
-
-                # If the document has previously indexed chunks, we know it previously existed
-                if doc_count or last_indexed_chunk:
-                    existing_docs.add(document_id)
-
-                enriched_doc_info = EnrichedDocumentIndexingInfo(
-                    doc_id=document_id,
-                    chunk_start_index=doc_id_to_new_chunk_cnt.get(document_id, 0),
-                    chunk_end_index=last_indexed_chunk,
-                    old_version=is_old_version,
+            enriched_doc_infos: list[EnrichedDocumentIndexingInfo] = [
+                VespaIndex.enrich_basic_chunk_info(
+                    index_name=self.index_name,
+                    http_client=http_client,
+                    document_id=doc_id,
+                    previous_chunk_count=doc_id_to_previous_chunk_cnt.get(doc_id),
+                    new_chunk_count=doc_id_to_new_chunk_cnt.get(doc_id, 0),
                 )
-                enriched_doc_infos.append(enriched_doc_info)
+                for doc_id in doc_id_to_new_chunk_cnt.keys()
+            ]
+
+            for cleaned_doc_info in enriched_doc_infos:
+                # If the document has previously indexed chunks, we know it previously existed
+                if cleaned_doc_info.chunk_end_index:
+                    existing_docs.add(cleaned_doc_info.doc_id)
 
             # Now, for each doc, we know exactly where to start and end our deletion
             # So let's generate the chunk IDs for each chunk to delete
@@ -537,19 +521,12 @@ class VespaIndex(DocumentIndex):
             time.monotonic() - update_start,
         )
 
-    def update_single(self, doc_id: str, fields: VespaDocumentFields) -> int:
-        """Note: if the document id does not exist, the update will be a no-op and the
-        function will complete with no errors or exceptions.
-        Handle other exceptions if you wish to implement retry behavior
-        """
+    def update_single_chunk(
+        self, doc_chunk_id: UUID, index_name: str, fields: VespaDocumentFields
+    ) -> None:
+        """Update a single chunk in Vespa using its chunk ID."""
 
-        total_chunks_updated = 0
-
-        # Handle Vespa character limitations
-        # Mutating update_request but it's not used later anyway
-        normalized_doc_id = replace_invalid_doc_id_characters(doc_id)
-
-        # Build the _VespaUpdateRequest objects
+        # Build the update request
         update_dict: dict[str, dict] = {"fields": {}}
         if fields.boost is not None:
             update_dict["fields"][BOOST] = {"assign": fields.boost}
@@ -566,7 +543,39 @@ class VespaIndex(DocumentIndex):
 
         if not update_dict["fields"]:
             logger.error("Update request received but nothing to update")
-            return 0
+            return
+
+        with get_vespa_http_client(http2=False) as http_client:
+            vespa_url = (
+                f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}"
+            )
+
+            try:
+                logger.debug(f'update_single PUT on URL "{vespa_url}"')
+                resp = http_client.put(
+                    vespa_url,
+                    headers={"Content-Type": "application/json"},
+                    json=update_dict,
+                )
+                resp.raise_for_status()
+
+            except httpx.HTTPStatusError as e:
+                logger.error(f"Failed to update chunk, details: {e.response.text}")
+                raise
+
+    def update_single(
+        self,
+        doc_id: str,
+        large_chunks_enabled: bool,
+        chunk_count: int | None,
+        tenant_id: str | None,
+        fields: VespaDocumentFields,
+    ) -> int:
+        """Note: if the document id does not exist, the update will be a no-op and the
+        function will complete with no errors or exceptions.
+        Handle other exceptions if you wish to implement retry behavior
+        """
+        doc_chunk_count = 0
 
         index_names = [self.index_name]
         if self.secondary_index_name:
@@ -574,65 +583,37 @@ class VespaIndex(DocumentIndex):
 
         with get_vespa_http_client(http2=False) as http_client:
             for index_name in index_names:
-                params = httpx.QueryParams(
-                    {
-                        "selection": f"{index_name}.document_id=='{normalized_doc_id}'",
-                        "cluster": DOCUMENT_INDEX_NAME,
-                    }
+                enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
+                    index_name=index_name,
+                    http_client=http_client,
+                    document_id=doc_id,
+                    previous_chunk_count=chunk_count,
+                    new_chunk_count=0,
                 )
-
-                while True:
-                    try:
-                        vespa_url = (
-                            f"{DOCUMENT_ID_ENDPOINT.format(index_name=self.index_name)}"
-                        )
-                        logger.debug(f'update_single PUT on URL "{vespa_url}"')
-                        resp = http_client.put(
-                            vespa_url,
-                            params=params,
-                            headers={"Content-Type": "application/json"},
-                            json=update_dict,
-                        )
-
-                        resp.raise_for_status()
-                    except httpx.HTTPStatusError as e:
-                        logger.error(
-                            f"Failed to update chunks, details: {e.response.text}"
-                        )
-                        raise
-
-                    resp_data = resp.json()
-
-                    if "documentCount" in resp_data:
-                        chunks_updated = resp_data["documentCount"]
-                        total_chunks_updated += chunks_updated
-
-                    # Check for continuation token to handle pagination
-                    if "continuation" not in resp_data:
-                        break  # Exit loop if no continuation token
-
-                    if not resp_data["continuation"]:
-                        break  # Exit loop if continuation token is empty
-
-                    params = params.set("continuation", resp_data["continuation"])
-
-                logger.debug(
-                    f"VespaIndex.update_single: "
-                    f"index={index_name} "
-                    f"doc={normalized_doc_id} "
-                    f"chunks_updated={total_chunks_updated}"
+                doc_chunk_ids = assemble_document_chunk_info(
+                    enriched_document_info_list=[enriched_doc_infos],
+                    tenant_id=tenant_id,
+                    large_chunks_enabled=large_chunks_enabled,
                 )
+                doc_chunk_count += len(doc_chunk_ids)
 
-        return total_chunks_updated
+                for doc_chunk_id in doc_chunk_ids:
+                    self.update_single_chunk(
+                        doc_chunk_id=doc_chunk_id, index_name=index_name, fields=fields
+                    )
+        return doc_chunk_count
 
-    def delete_single(self, doc_id: str) -> int:
+    def delete_single(
+        self,
+        doc_id: str,
+        large_chunks_enabled: bool,
+        tenant_id: str | None,
+        chunk_count: int | None,
+    ) -> int:
         """Possibly faster overall than the delete method due to using a single
         delete call with a selection query."""
 
         total_chunks_deleted = 0
-
-        # Vespa deletion is poorly documented ... luckily we found this
-        # https://docs.vespa.ai/en/operations/batch-delete.html#example
 
         doc_id = replace_invalid_doc_id_characters(doc_id)
 
@@ -642,53 +623,34 @@ class VespaIndex(DocumentIndex):
         if self.secondary_index_name:
             index_names.append(self.secondary_index_name)
 
-        with get_vespa_http_client(http2=False) as http_client:
+        with get_vespa_http_client(
+            http2=False
+        ) as http_client, concurrent.futures.ThreadPoolExecutor(
+            max_workers=NUM_THREADS
+        ) as executor:
             for index_name in index_names:
-                params = httpx.QueryParams(
-                    {
-                        "selection": f"{index_name}.document_id=='{doc_id}'",
-                        "cluster": DOCUMENT_INDEX_NAME,
-                    }
+                enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
+                    index_name=index_name,
+                    http_client=http_client,
+                    document_id=doc_id,
+                    previous_chunk_count=chunk_count,
+                    new_chunk_count=0,
                 )
-
-                while True:
-                    try:
-                        vespa_url = (
-                            f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}"
-                        )
-                        logger.debug(f'delete_single DELETE on URL "{vespa_url}"')
-                        resp = http_client.delete(
-                            vespa_url,
-                            params=params,
-                        )
-                        resp.raise_for_status()
-                    except httpx.HTTPStatusError as e:
-                        logger.error(
-                            f"Failed to delete chunk, details: {e.response.text}"
-                        )
-                        raise
-
-                    resp_data = resp.json()
-
-                    if "documentCount" in resp_data:
-                        chunks_deleted = resp_data["documentCount"]
-                        total_chunks_deleted += chunks_deleted
-
-                    # Check for continuation token to handle pagination
-                    if "continuation" not in resp_data:
-                        break  # Exit loop if no continuation token
-
-                    if not resp_data["continuation"]:
-                        break  # Exit loop if continuation token is empty
-
-                    params = params.set("continuation", resp_data["continuation"])
-
-                logger.debug(
-                    f"VespaIndex.delete_single: "
-                    f"index={index_name} "
-                    f"doc={doc_id} "
-                    f"chunks_deleted={total_chunks_deleted}"
+                chunks_to_delete = assemble_document_chunk_info(
+                    enriched_document_info_list=[enriched_doc_infos],
+                    tenant_id=tenant_id,
+                    large_chunks_enabled=large_chunks_enabled,
                 )
+                for doc_chunk_ids_batch in batch_generator(
+                    chunks_to_delete, BATCH_SIZE
+                ):
+                    total_chunks_deleted += len(doc_chunk_ids_batch)
+                    delete_vespa_chunks(
+                        doc_chunk_ids=doc_chunk_ids_batch,
+                        index_name=index_name,
+                        http_client=http_client,
+                        executor=executor,
+                    )
 
         return total_chunks_deleted
 
@@ -786,6 +748,40 @@ class VespaIndex(DocumentIndex):
         }
 
         return query_vespa(params)
+
+    @classmethod
+    def enrich_basic_chunk_info(
+        cls,
+        index_name: str,
+        http_client: httpx.Client,
+        document_id: str,
+        previous_chunk_count: int | None = None,
+        new_chunk_count: int = 0,
+    ) -> EnrichedDocumentIndexingInfo:
+        last_indexed_chunk = previous_chunk_count
+
+        # If the document has no `chunk_count` in the database, we know that it
+        # has the old chunk ID system and we must check for the final chunk index
+        is_old_version = False
+        if last_indexed_chunk is None:
+            is_old_version = True
+            minimal_doc_info = MinimalDocumentIndexingInfo(
+                doc_id=document_id, chunk_start_index=new_chunk_count
+            )
+            last_indexed_chunk = check_for_final_chunk_existence(
+                minimal_doc_info=minimal_doc_info,
+                start_index=new_chunk_count,
+                index_name=index_name,
+                http_client=http_client,
+            )
+
+        enriched_doc_info = EnrichedDocumentIndexingInfo(
+            doc_id=document_id,
+            chunk_start_index=new_chunk_count,
+            chunk_end_index=last_indexed_chunk,
+            old_version=is_old_version,
+        )
+        return enriched_doc_info
 
     @classmethod
     def delete_entries_by_tenant_id(cls, tenant_id: str, index_name: str) -> None:

@@ -83,11 +83,11 @@ def main() -> None:
 
                     try:
                         print(f"Deleting document {doc_id} in Vespa")
-                        chunks_deleted = vespa_index.delete_single(doc_id)
-                        if chunks_deleted > 0:
-                            print(
-                                f"Deleted {chunks_deleted} chunks for document {doc_id}"
-                            )
+                        # chunks_deleted = vespa_index.delete_single(doc_id)
+                        # if chunks_deleted > 0:
+                        #     print(
+                        #         f"Deleted {chunks_deleted} chunks for document {doc_id}"
+                        #     )
                         return doc_id
                     except Exception as e:
                         print(
