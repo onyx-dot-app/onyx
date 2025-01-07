@@ -438,6 +438,8 @@ def has_at_least_one_object_of_type(object_type: str) -> bool:
         return count > 0
 
 
+# NULL_ID_STRING is used to indicate that the user ID was queried but not found
+# As opposed to None because it has yet to be queried at all
 NULL_ID_STRING = "N/A"
 
 
