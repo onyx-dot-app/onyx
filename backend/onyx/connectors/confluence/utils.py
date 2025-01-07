@@ -34,9 +34,9 @@ def get_user_email_from_username__server(
         except Exception:
             # For now, we'll just return a string that indicates failure
             # We may want to revert to returning None in the future
-            # email = None
-            email = f"FAILED TO GET CONFLUENCE EMAIL FOR {user_name}"
-            logger.warning(f"failed to get confluence email for {user_name}")
+            email = None
+            # email = f"FAILED TO GET CONFLUENCE EMAIL FOR {user_name}"
+            # logger.warning(f"failed to get confluence email for {user_name}")
         _USER_EMAIL_CACHE[user_name] = email
     return _USER_EMAIL_CACHE[user_name]
 
