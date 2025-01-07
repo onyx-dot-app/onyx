@@ -34,10 +34,16 @@ def onyx_redis(command: str) -> int:
 
     r = Redis(connection_pool=pool)
 
-    if command == "purge_connectorsync":
+    if command == "purge_connectorsync_taskset":
         """Purge connector tasksets. Used when the tasks represented in the tasksets
         have been purged."""
         return purge_by_match_and_type("*connectorsync_taskset*", "set", r)
+    elif command == "purge_documentset_taskset":
+        return purge_by_match_and_type("*documentset_taskset*", "set", r)
+    elif command == "purge_usergroup_taskset":
+        return purge_by_match_and_type("*usergroup_taskset*", "set", r)
+    else:
+        pass
 
     return 255
 
