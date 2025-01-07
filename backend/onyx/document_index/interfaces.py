@@ -109,7 +109,7 @@ class UpdateRequest:
     Does not update any of the None fields
     """
 
-    document_ids: list[str]
+    minimal_document_indexing_info: list[MinimalDocumentIndexingInfo]
     # all other fields except these 4 will always be left alone by the update request
     access: DocumentAccess | None = None
     document_sets: set[str] | None = None
@@ -221,7 +221,6 @@ class Deletable(abc.ABC):
     def delete_single(
         self,
         doc_id: str,
-        large_chunks_enabled: bool,
         tenant_id: str | None,
         chunk_count: int | None,
     ) -> int:
@@ -248,7 +247,6 @@ class Updatable(abc.ABC):
     def update_single(
         self,
         doc_id: str,
-        large_chunks_enabled: bool,
         chunk_count: int | None,
         tenant_id: str | None,
         fields: VespaDocumentFields,
@@ -270,7 +268,9 @@ class Updatable(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def update(self, update_requests: list[UpdateRequest]) -> None:
+    def update(
+        self, update_requests: list[UpdateRequest], tenant_id: str | None
+    ) -> None:
         """
         Updates some set of chunks. The document and fields to update are specified in the update
         requests. Each update request in the list applies its changes to a list of document ids.

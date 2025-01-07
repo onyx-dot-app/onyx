@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
-from onyx.configs.app_configs import ENABLE_MULTIPASS_INDEXING
 from onyx.configs.app_configs import INDEXING_EXCEPTION_LIMIT
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.constants import DEFAULT_BOOST
@@ -31,12 +30,14 @@ from onyx.db.document import upsert_documents
 from onyx.db.document_set import fetch_document_sets_for_documents
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.models import Document as DBDocument
-from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import create_or_add_document_tag
 from onyx.db.tag import create_or_add_document_tag_list
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
+from onyx.document_index.vespa.indexing_utils import (
+    check_enable_large_chunks_and_multipass,
+)
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -44,7 +45,6 @@ from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
-from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
 
@@ -479,28 +479,6 @@ def index_doc_batch(
     return result
 
 
-def check_enable_large_chunks_and_multipass(
-    embedder: IndexingEmbedder, db_session: Session
-) -> tuple[bool, bool]:
-    search_settings = get_current_search_settings(db_session)
-    multipass = (
-        search_settings.multipass_indexing
-        if search_settings
-        else ENABLE_MULTIPASS_INDEXING
-    )
-
-    enable_large_chunks = (
-        multipass
-        and
-        # Only local models that supports larger context are from Nomic
-        (embedder.model_name.startswith("nomic-ai"))
-        and
-        # Cohere does not support larger context they recommend not going above 512 tokens
-        embedder.provider_type != EmbeddingProvider.COHERE
-    )
-    return multipass, enable_large_chunks
-
-
 def build_indexing_pipeline(
     *,
     embedder: IndexingEmbedder,
@@ -513,14 +491,14 @@ def build_indexing_pipeline(
     callback: IndexingHeartbeatInterface | None = None,
 ) -> IndexingPipelineProtocol:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
-    multipass, enable_large_chunks = check_enable_large_chunks_and_multipass(
-        embedder, db_session
+    multipass_config = check_enable_large_chunks_and_multipass(
+        db_session, primary_index=True
     )
 
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
-        enable_multipass=multipass,
-        enable_large_chunks=enable_large_chunks,
+        enable_multipass=multipass_config.multipass_indexing,
+        enable_large_chunks=multipass_config.enable_large_chunks,
         # after every doc, update status in case there are a bunch of really long docs
         callback=callback,
     )

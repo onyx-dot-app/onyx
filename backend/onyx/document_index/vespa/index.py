@@ -25,6 +25,7 @@ from onyx.configs.chat_configs import VESPA_SEARCHER_THREADS
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.db.engine import get_session_with_tenant
 from onyx.document_index.document_index_utils import assemble_document_chunk_info
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentInsertionRecord
@@ -36,14 +37,14 @@ from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
 from onyx.document_index.vespa.chunk_retrieval import (
-    get_all_vespa_ids_for_document_id,
-)
-from onyx.document_index.vespa.chunk_retrieval import (
     parallel_visit_api_retrieval,
 )
 from onyx.document_index.vespa.chunk_retrieval import query_vespa
 from onyx.document_index.vespa.deletion import delete_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import batch_index_vespa_chunks
+from onyx.document_index.vespa.indexing_utils import (
+    check_enable_large_chunks_and_multipass,
+)
 from onyx.document_index.vespa.indexing_utils import check_for_final_chunk_existence
 from onyx.document_index.vespa.indexing_utils import clean_chunk_id_copy
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
@@ -431,21 +432,21 @@ class VespaIndex(DocumentIndex):
                         failure_msg = f"Failed to update document: {future_to_document_id[future]}"
                         raise requests.HTTPError(failure_msg) from e
 
-    def update(self, update_requests: list[UpdateRequest]) -> None:
+    def update(
+        self, update_requests: list[UpdateRequest], tenant_id: str | None
+    ) -> None:
         logger.debug(f"Updating {len(update_requests)} documents in Vespa")
 
         # Handle Vespa character limitations
         # Mutating update_requests but it's not used later anyway
         for update_request in update_requests:
-            update_request.document_ids = [
-                replace_invalid_doc_id_characters(doc_id)
-                for doc_id in update_request.document_ids
-            ]
+            for doc_info in update_request.minimal_document_indexing_info:
+                doc_info.doc_id = replace_invalid_doc_id_characters(doc_info.doc_id)
 
         update_start = time.monotonic()
 
         processed_updates_requests: list[_VespaUpdateRequest] = []
-        all_doc_chunk_ids: dict[str, list[str]] = {}
+        all_doc_chunk_ids: dict[str, list[UUID]] = {}
 
         # Fetch all chunks for each document ahead of time
         index_names = [self.index_name]
@@ -453,30 +454,24 @@ class VespaIndex(DocumentIndex):
             index_names.append(self.secondary_index_name)
 
         chunk_id_start_time = time.monotonic()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
-            future_to_doc_chunk_ids = {
-                executor.submit(
-                    get_all_vespa_ids_for_document_id,
-                    document_id=document_id,
-                    index_name=index_name,
-                    filters=None,
-                    get_large_chunks=True,
-                ): (document_id, index_name)
-                for index_name in index_names
-                for update_request in update_requests
-                for document_id in update_request.document_ids
-            }
-            for future in concurrent.futures.as_completed(future_to_doc_chunk_ids):
-                document_id, index_name = future_to_doc_chunk_ids[future]
-                try:
-                    doc_chunk_ids = future.result()
-                    if document_id not in all_doc_chunk_ids:
-                        all_doc_chunk_ids[document_id] = []
-                    all_doc_chunk_ids[document_id].extend(doc_chunk_ids)
-                except Exception as e:
-                    logger.error(
-                        f"Error retrieving chunk IDs for document {document_id} in index {index_name}: {e}"
-                    )
+        with get_vespa_http_client() as http_client:
+            for update_request in update_requests:
+                for doc_info in update_request.minimal_document_indexing_info:
+                    for index_name in index_names:
+                        doc_chunk_info = self.enrich_basic_chunk_info(
+                            index_name=index_name,
+                            http_client=http_client,
+                            document_id=doc_info.doc_id,
+                            previous_chunk_count=doc_info.chunk_start_index,
+                            new_chunk_count=0,
+                        )
+                        doc_chunk_ids = assemble_document_chunk_info(
+                            enriched_document_info_list=[doc_chunk_info],
+                            tenant_id=tenant_id,
+                            large_chunks_enabled=False,
+                        )
+                        all_doc_chunk_ids[doc_info.doc_id] = doc_chunk_ids
+
         logger.debug(
             f"Took {time.monotonic() - chunk_id_start_time:.2f} seconds to fetch all Vespa chunk IDs"
         )
@@ -505,11 +500,11 @@ class VespaIndex(DocumentIndex):
                 logger.error("Update request received but nothing to update")
                 continue
 
-            for document_id in update_request.document_ids:
-                for doc_chunk_id in all_doc_chunk_ids[document_id]:
+            for doc_info in update_request.minimal_document_indexing_info:
+                for doc_chunk_id in all_doc_chunk_ids[doc_info.doc_id]:
                     processed_updates_requests.append(
                         _VespaUpdateRequest(
-                            document_id=document_id,
+                            document_id=doc_info.doc_id,
                             url=f"{DOCUMENT_ID_ENDPOINT.format(index_name=self.index_name)}/{doc_chunk_id}",
                             update_request=update_dict,
                         )
@@ -566,7 +561,6 @@ class VespaIndex(DocumentIndex):
     def update_single(
         self,
         doc_id: str,
-        large_chunks_enabled: bool,
         chunk_count: int | None,
         tenant_id: str | None,
         fields: VespaDocumentFields,
@@ -583,6 +577,15 @@ class VespaIndex(DocumentIndex):
 
         with get_vespa_http_client(http2=False) as http_client:
             for index_name in index_names:
+                large_chunks_enabled = False
+
+                with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+                    multipass_config = check_enable_large_chunks_and_multipass(
+                        db_session=db_session,
+                        primary_index=index_name == self.index_name,
+                    )
+                    large_chunks_enabled = multipass_config.enable_large_chunks
+
                 enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
                     index_name=index_name,
                     http_client=http_client,
@@ -601,12 +604,12 @@ class VespaIndex(DocumentIndex):
                     self.update_single_chunk(
                         doc_chunk_id=doc_chunk_id, index_name=index_name, fields=fields
                     )
+
         return doc_chunk_count
 
     def delete_single(
         self,
         doc_id: str,
-        large_chunks_enabled: bool,
         tenant_id: str | None,
         chunk_count: int | None,
     ) -> int:
@@ -629,6 +632,14 @@ class VespaIndex(DocumentIndex):
             max_workers=NUM_THREADS
         ) as executor:
             for index_name in index_names:
+                large_chunks_enabled = False
+                with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+                    multipass_config = check_enable_large_chunks_and_multipass(
+                        db_session=db_session,
+                        primary_index=index_name == self.index_name,
+                    )
+                    large_chunks_enabled = multipass_config.enable_large_chunks
+
                 enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
                     index_name=index_name,
                     http_client=http_client,

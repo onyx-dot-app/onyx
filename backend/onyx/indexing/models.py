@@ -154,3 +154,8 @@ class IndexingSetting(EmbeddingModelDetail):
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
         )
+
+
+class MultipassConfig(BaseModel):
+    multipass_indexing: bool
+    enable_large_chunks: bool

@@ -31,13 +31,11 @@ class RetryDocumentIndex:
     def delete_single(
         self,
         doc_id: str,
-        large_chunks_enabled: bool,
         tenant_id: str | None,
         chunk_count: int | None,
     ) -> int:
         return self.index.delete_single(
             doc_id,
-            large_chunks_enabled=large_chunks_enabled,
             tenant_id=tenant_id,
             chunk_count=chunk_count,
         )
@@ -57,7 +55,6 @@ class RetryDocumentIndex:
     ) -> int:
         return self.index.update_single(
             doc_id,
-            large_chunks_enabled=large_chunks_enabled,
             tenant_id=tenant_id,
             chunk_count=chunk_count,
             fields=fields,
