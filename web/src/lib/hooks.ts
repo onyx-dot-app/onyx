@@ -95,14 +95,9 @@ export const useConnectorCredentialIndexingStatus = (
   };
 };
 
-export const useConnectorStatus = (
-  refreshInterval = 30000, // 30 seconds
-  getEditable = false
-) => {
+export const useConnectorStatus = (refreshInterval = 30000) => {
   const { mutate } = useSWRConfig();
-  const url = `${CONNECTOR_STATUS_URL}${
-    getEditable ? "?get_editable=true" : ""
-  }`;
+  const url = CONNECTOR_STATUS_URL;
   const swrResponse = useSWR<ConnectorStatus<any, any>[]>(
     url,
     errorHandlingFetcher,
@@ -116,7 +111,7 @@ export const useConnectorStatus = (
 };
 
 export const useBasicConnectorStatus = () => {
-  const url = "/api/manage/admin/connector/status";
+  const url = "/api/manage/admin/connector-status";
   const swrResponse = useSWR<CCPairBasicInfo[]>(url, errorHandlingFetcher);
   return {
     ...swrResponse,

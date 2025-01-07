@@ -501,14 +501,10 @@ def get_currently_failed_indexing_status(
 def get_connector_status(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    get_editable: bool = Query(
-        False, description="If true, return editable document sets"
-    ),
 ) -> list[ConnectorStatus]:
     cc_pairs = get_connector_credential_pairs(
         db_session=db_session,
         user=user,
-        get_editable=get_editable,
     )
 
     group_cc_pair_relationships = get_cc_pair_groups_for_ids(
