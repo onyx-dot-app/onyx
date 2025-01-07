@@ -136,15 +136,13 @@ def print_discrepencies(
     expected: set[str],
     retrieved: set[str],
 ) -> None:
-    # Filter retrieved set to only include valid prefixed items
-    filtered_retrieved = filter_invalid_prefixes(retrieved)
-    if expected != filtered_retrieved:
+    if expected != retrieved:
         print(expected)
-        print(filtered_retrieved)
+        print(retrieved)
         print("Extra:")
-        print(filtered_retrieved - expected)
+        print(retrieved - expected)
         print("Missing:")
-        print(expected - filtered_retrieved)
+        print(expected - retrieved)
 
 
 def _get_expected_file_content(file_id: int) -> str:

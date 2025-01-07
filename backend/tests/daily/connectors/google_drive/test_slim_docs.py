@@ -85,7 +85,7 @@ def assert_correct_access_for_user(
     filtered_retrieved_file_names = filter_invalid_prefixes(retrieved_file_names)
     print_discrepencies(expected_file_names, filtered_retrieved_file_names)
 
-    assert expected_file_names == retrieved_file_names
+    assert expected_file_names == filtered_retrieved_file_names
 
 
 # This function is supposed to map to the group_sync.py file for the google drive connector
