@@ -136,7 +136,7 @@ class Verifiable(abc.ABC):
         index_name: str,
         secondary_index_name: str | None,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
         self.index_name = index_name
@@ -221,6 +221,7 @@ class Deletable(abc.ABC):
     def delete_single(
         self,
         doc_id: str,
+        *,
         tenant_id: str | None,
         chunk_count: int | None,
     ) -> int:
@@ -247,8 +248,9 @@ class Updatable(abc.ABC):
     def update_single(
         self,
         doc_id: str,
-        chunk_count: int | None,
+        *,
         tenant_id: str | None,
+        chunk_count: int | None,
         fields: VespaDocumentFields,
     ) -> int:
         """
@@ -269,7 +271,7 @@ class Updatable(abc.ABC):
 
     @abc.abstractmethod
     def update(
-        self, update_requests: list[UpdateRequest], tenant_id: str | None
+        self, update_requests: list[UpdateRequest], *, tenant_id: str | None
     ) -> None:
         """
         Updates some set of chunks. The document and fields to update are specified in the update

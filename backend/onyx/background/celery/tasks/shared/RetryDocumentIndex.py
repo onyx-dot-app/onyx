@@ -31,6 +31,7 @@ class RetryDocumentIndex:
     def delete_single(
         self,
         doc_id: str,
+        *,
         tenant_id: str | None,
         chunk_count: int | None,
     ) -> int:
@@ -48,11 +49,11 @@ class RetryDocumentIndex:
     def update_single(
         self,
         doc_id: str,
+        *,
         tenant_id: str | None,
         chunk_count: int | None,
         fields: VespaDocumentFields,
     ) -> int:
-        print("Update single")
         return self.index.update_single(
             doc_id,
             tenant_id=tenant_id,

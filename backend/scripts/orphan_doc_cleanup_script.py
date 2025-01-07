@@ -15,6 +15,7 @@ from onyx.db.engine import get_session_context_manager  # noqa: E402
 from onyx.db.document import delete_documents_complete__no_commit  # noqa: E402
 from onyx.db.search_settings import get_current_search_settings  # noqa: E402
 from onyx.document_index.vespa.index import VespaIndex  # noqa: E402
+from onyx.db.document import get_document  # noqa: E402
 
 BATCH_SIZE = 100
 
@@ -63,6 +64,10 @@ def main() -> None:
             with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
 
                 def process_doc(doc_id: str) -> str | None:
+                    document = get_document(doc_id, db_session)
+                    if not document:
+                        print(f"Document {doc_id} not found in Postgres")
+                        return None
                     # Check if document exists in Vespa first
                     try:
                         chunks = vespa_index.id_based_retrieval(
@@ -83,11 +88,13 @@ def main() -> None:
 
                     try:
                         print(f"Deleting document {doc_id} in Vespa")
-                        # chunks_deleted = vespa_index.delete_single(doc_id)
-                        # if chunks_deleted > 0:
-                        #     print(
-                        #         f"Deleted {chunks_deleted} chunks for document {doc_id}"
-                        #     )
+                        chunks_deleted = vespa_index.delete_single(
+                            doc_id, tenant_id=None, chunk_count=document.chunk_count
+                        )
+                        if chunks_deleted > 0:
+                            print(
+                                f"Deleted {chunks_deleted} chunks for document {doc_id}"
+                            )
                         return doc_id
                     except Exception as e:
                         print(

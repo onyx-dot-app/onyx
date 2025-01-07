@@ -433,7 +433,7 @@ class VespaIndex(DocumentIndex):
                         raise requests.HTTPError(failure_msg) from e
 
     def update(
-        self, update_requests: list[UpdateRequest], tenant_id: str | None
+        self, update_requests: list[UpdateRequest], *, tenant_id: str | None
     ) -> None:
         logger.debug(f"Updating {len(update_requests)} documents in Vespa")
 
@@ -561,6 +561,7 @@ class VespaIndex(DocumentIndex):
     def update_single(
         self,
         doc_id: str,
+        *,
         chunk_count: int | None,
         tenant_id: str | None,
         fields: VespaDocumentFields,
@@ -610,6 +611,7 @@ class VespaIndex(DocumentIndex):
     def delete_single(
         self,
         doc_id: str,
+        *,
         tenant_id: str | None,
         chunk_count: int | None,
     ) -> int:
@@ -795,7 +797,12 @@ class VespaIndex(DocumentIndex):
         return enriched_doc_info
 
     @classmethod
-    def delete_entries_by_tenant_id(cls, tenant_id: str, index_name: str) -> None:
+    def delete_entries_by_tenant_id(
+        cls,
+        *,
+        tenant_id: str,
+        index_name: str,
+    ) -> None:
         """
         Deletes all entries in the specified index with the given tenant_id.
 

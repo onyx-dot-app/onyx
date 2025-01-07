@@ -5,6 +5,7 @@ import sys
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
+from onyx.db.document import delete_documents_complete__no_commit
 from onyx.db.enums import ConnectorCredentialPairStatus
 
 # Modify sys.path
@@ -70,14 +71,17 @@ def _unsafe_deletion(
         if not documents:
             break
 
-        # document_ids = [document.id for document in documents]
-        # for doc_id in document_ids:
-        #     document_index.delete_single(doc_id)
+        for document in documents:
+            document_index.delete_single(
+                doc_id=document.id,
+                tenant_id=None,
+                chunk_count=document.chunk_count,
+            )
 
-        # delete_documents_complete__no_commit(
-        #     db_session=db_session,
-        #     document_ids=document_ids,
-        # )
+        delete_documents_complete__no_commit(
+            db_session=db_session,
+            document_ids=[document.id for document in documents],
+        )
 
         num_docs_deleted += len(documents)
 
@@ -215,6 +219,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "connector_id", type=int, help="The ID of the connector to delete"
     )
+
     args = parser.parse_args()
     with get_session_context_manager() as db_session:
         _delete_connector(args.connector_id, db_session)
