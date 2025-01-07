@@ -205,6 +205,7 @@ class OnyxConfluence(Confluence):
                 # with the replacement expansion and try again
                 # If that fails, raise the error
                 if _PROBLEMATIC_EXPANSIONS not in url_suffix:
+                    logger.error(f"Raw Response Text: {raw_response.text}")
                     logger.error(f"Full Response: {raw_response.__dict__}")
                     logger.exception(
                         f"Error in confluence call to {url_suffix} \n Error: {e}"
