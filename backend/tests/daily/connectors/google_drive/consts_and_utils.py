@@ -124,14 +124,25 @@ file_name_template = "file_{}.txt"
 file_text_template = "This is file {}"
 
 
-def print_discrepencies(expected: set[str], retrieved: set[str]) -> None:
-    if expected != retrieved:
+def print_discrepencies(
+    expected: set[str],
+    retrieved: set[str],
+    valid_prefixes: set[str],
+) -> None:
+    # Filter retrieved set to only include valid prefixed items
+    filtered_retrieved = {
+        name
+        for name in retrieved
+        if any(name.startswith(prefix) for prefix in valid_prefixes)
+    }
+
+    if expected != filtered_retrieved:
         print(expected)
-        print(retrieved)
+        print(filtered_retrieved)
         print("Extra:")
-        print(retrieved - expected)
+        print(filtered_retrieved - expected)
         print("Missing:")
-        print(expected - retrieved)
+        print(expected - filtered_retrieved)
 
 
 def get_file_content(file_id: int) -> str:
@@ -142,7 +153,9 @@ def get_file_content(file_id: int) -> str:
 
 
 def assert_retrieved_docs_match_expected(
-    retrieved_docs: list[Document], expected_file_ids: Sequence[int]
+    retrieved_docs: list[Document],
+    expected_file_ids: Sequence[int],
+    valid_prefixes: set[str] = {"file_"},
 ) -> None:
     expected_file_names = {
         file_name_template.format(file_id) for file_id in expected_file_ids
@@ -158,9 +171,9 @@ def assert_retrieved_docs_match_expected(
     )
 
     # Check file names
-    print_discrepencies(expected_file_names, retrieved_file_names)
+    print_discrepencies(expected_file_names, retrieved_file_names, valid_prefixes)
     assert expected_file_names == retrieved_file_names
 
     # Check file texts
-    print_discrepencies(expected_file_texts, retrieved_texts)
+    print_discrepencies(expected_file_texts, retrieved_texts, valid_prefixes)
     assert expected_file_texts == retrieved_texts
