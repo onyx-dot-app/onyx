@@ -71,9 +71,6 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
         lock: RedisLock,
         tenant_id: str | None,
     ) -> tuple[int, int] | None:
-        # an arbitrary number in seconds to prevent the same doc from syncing repeatedly
-        24 * 60 * 60
-
         last_lock_time = time.monotonic()
 
         async_results = []
@@ -101,6 +98,9 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
             # check if we should skip the document (typically because it's already syncing)
             if doc.id in self.skip_docs:
                 continue
+
+            # an arbitrary number in seconds to prevent the same doc from syncing repeatedly
+            # SYNC_EXPIRATION = 24 * 60 * 60
 
             # a quick hack that can be uncommented to prevent a doc from resyncing over and over
             # redis_syncing_key = self.make_redis_syncing_key(doc.id)
