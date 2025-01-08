@@ -337,12 +337,13 @@ class VespaIndex(DocumentIndex):
             # know precisely which chunks to delete. This information exists for
             # documents that have `chunk_count` in the database, but not for
             # `old_version` documents.
+
             enriched_doc_infos: list[EnrichedDocumentIndexingInfo] = [
                 VespaIndex.enrich_basic_chunk_info(
                     index_name=self.index_name,
                     http_client=http_client,
                     document_id=doc_id,
-                    previous_chunk_count=doc_id_to_previous_chunk_cnt.get(doc_id),
+                    previous_chunk_count=doc_id_to_previous_chunk_cnt.get(doc_id, 0),
                     new_chunk_count=doc_id_to_new_chunk_cnt.get(doc_id, 0),
                 )
                 for doc_id in doc_id_to_new_chunk_cnt.keys()
@@ -518,10 +519,10 @@ class VespaIndex(DocumentIndex):
 
     def update_single_chunk(
         self,
-        doc_chunk_id: UUID,  # The chunk ID, presumably your docid in Vespa
-        index_name: str,  # The Vespa doc type name (must match schema)
-        fields: VespaDocumentFields,  # Your container of fields to update
-        doc_id: str,  # Possibly used for logging
+        doc_chunk_id: UUID,
+        index_name: str,
+        fields: VespaDocumentFields,
+        doc_id: str,
     ) -> None:
         """
         Update a single "chunk" (document) in Vespa using its chunk ID.
@@ -559,27 +560,7 @@ class VespaIndex(DocumentIndex):
         #    Also note the "?create=true" so that partial updates upsert.
         vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}?create=true"
 
-        logger.info("Vespa partial-update payload: %s", update_dict)
-        logger.info('Attempting PUT to URL: "%s"', vespa_url)
-
         with get_vespa_http_client(http2=False) as http_client:
-            # --- (Optional) Check the doc before updating ---
-            try:
-                before_resp = http_client.get(vespa_url)
-                before_resp.raise_for_status()
-                before_doc_json = before_resp.json()
-                # You might not want to log large fields like embeddings, etc.
-                # If so, pop them out before logging:
-                before_doc_json.pop("embeddings", None)
-                before_doc_json.pop("title_embedding", None)
-                logger.info("Document before update [%s]: %s", doc_id, before_doc_json)
-            except httpx.HTTPError:
-                logger.warning(
-                    "Document %s did not exist prior to update (this might be normal if it's new).",
-                    doc_chunk_id,
-                )
-
-            # --- Perform the partial update ---
             try:
                 resp = http_client.put(
                     vespa_url,
@@ -588,28 +569,9 @@ class VespaIndex(DocumentIndex):
                 )
                 resp.raise_for_status()
             except httpx.HTTPStatusError as e:
-                logger.error(
-                    "Failed to update doc chunk %s (doc_id=%s). Details: %s",
-                    doc_chunk_id,
-                    doc_id,
-                    e.response.text,
-                )
+                error_message = f"Failed to update doc chunk {doc_chunk_id} (doc_id={doc_id}). Details: {e.response.text}"
+                logger.error(error_message)
                 raise
-
-            # --- (Optional) Check the doc after updating ---
-            try:
-                after_resp = http_client.get(vespa_url)
-                after_resp.raise_for_status()
-                after_doc_json = after_resp.json()
-                after_doc_json.pop("embeddings", None)
-                after_doc_json.pop("title_embedding", None)
-                logger.info("Document after update [%s]: %s", doc_id, after_doc_json)
-            except httpx.HTTPError as e:
-                logger.warning(
-                    "Failed fetching document after update for %s: %s",
-                    doc_chunk_id,
-                    str(e),
-                )
 
     def update_single(
         self,
@@ -623,8 +585,6 @@ class VespaIndex(DocumentIndex):
         function will complete with no errors or exceptions.
         Handle other exceptions if you wish to implement retry behavior
         """
-        logger.info(f"RIGHT NOW UPDATING document {doc_id} with fields {fields}")
-        logger.info(fields.__dict__)
 
         doc_chunk_count = 0
 
@@ -640,7 +600,6 @@ class VespaIndex(DocumentIndex):
                         primary_index=index_name == self.index_name,
                     )
                     large_chunks_enabled = multipass_config.enable_large_chunks
-
                 enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
                     index_name=index_name,
                     http_client=http_client,
@@ -648,8 +607,6 @@ class VespaIndex(DocumentIndex):
                     previous_chunk_count=chunk_count,
                     new_chunk_count=0,
                 )
-                logger.info("ENRICHED DOC INFO")
-                logger.info(enriched_doc_infos)
 
                 doc_chunk_ids = get_document_chunk_ids(
                     enriched_document_info_list=[enriched_doc_infos],
@@ -711,9 +668,6 @@ class VespaIndex(DocumentIndex):
                     previous_chunk_count=chunk_count,
                     new_chunk_count=0,
                 )
-                print("the enriched doc info", enriched_doc_infos)
-                # for   doc_info in enriched_doc_infos:
-                #     print(doc_info.__dict__)
                 chunks_to_delete = get_document_chunk_ids(
                     enriched_document_info_list=[enriched_doc_infos],
                     tenant_id=tenant_id,
@@ -722,7 +676,6 @@ class VespaIndex(DocumentIndex):
                 for doc_chunk_ids_batch in batch_generator(
                     chunks_to_delete, BATCH_SIZE
                 ):
-                    print("DELETING CHUNK")
                     total_chunks_deleted += len(doc_chunk_ids_batch)
                     delete_vespa_chunks(
                         doc_chunk_ids=doc_chunk_ids_batch,

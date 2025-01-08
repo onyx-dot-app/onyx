@@ -685,23 +685,22 @@ def get_document_sources(
 def fetch_chunk_counts_for_documents(
     document_ids: list[str],
     db_session: Session,
-) -> list[tuple[str, int | None]]:
+) -> list[tuple[str, int]]:
     """
     Return a list of (document_id, chunk_count) tuples.
-    Note: chunk_count might be None if not set in DB,
-    so we declare it as Optional[int].
+    If a document_id is not found in the database, it will be returned with a chunk_count of 0.
     """
     stmt = select(DbDocument.id, DbDocument.chunk_count).where(
         DbDocument.id.in_(document_ids)
     )
 
-    # results is a list of 'Row' objects, each containing two columns
     results = db_session.execute(stmt).all()
 
-    # If DbDocument.id is guaranteed to be a string, you can just do row.id;
-    # otherwise cast to str if you need to be sure it's a string:
-    return [(str(row[0]), row[1]) for row in results]
-    # or row.id, row.chunk_count if they are named attributes in your ORM model
+    # Create a dictionary of document_id to chunk_count
+    chunk_counts = {str(row.id): row.chunk_count or 0 for row in results}
+
+    # Return a list of tuples, using 0 for documents not found in the database
+    return [(doc_id, chunk_counts.get(doc_id, 0)) for doc_id in document_ids]
 
 
 def fetch_chunk_count_for_document(

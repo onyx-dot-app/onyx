@@ -8,7 +8,7 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.indexing.models import DocMetadataAwareIndexChunk
-
+from shared_configs.configs import MULTI_TENANT
 
 DEFAULT_BATCH_SIZE = 30
 DEFAULT_INDEX_NAME = "danswer_chunk"
@@ -113,10 +113,11 @@ def get_uuid_from_chunk_info(
         "large_" + str(large_chunk_id) if large_chunk_id is not None else str(chunk_id)
     )
     unique_identifier_string = "_".join([doc_str, chunk_index])
-    if tenant_id:
+    if tenant_id and MULTI_TENANT:
         unique_identifier_string += "_" + tenant_id
 
-    return uuid.uuid5(uuid.NAMESPACE_X500, unique_identifier_string)
+    uuid_value = uuid.uuid5(uuid.NAMESPACE_X500, unique_identifier_string)
+    return uuid_value
 
 
 def get_uuid_from_chunk_info_old(
