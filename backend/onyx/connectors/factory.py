@@ -29,9 +29,11 @@ from onyx.connectors.google_site.connector import GoogleSitesConnector
 from onyx.connectors.guru.connector import GuruConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.interfaces import ConnectorValidator
 from onyx.connectors.interfaces import EventConnector
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
+from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.loopio.connector import LoopioConnector
 from onyx.connectors.mediawiki.wiki import MediaWikiConnector
@@ -57,82 +59,84 @@ class ConnectorMissingException(Exception):
     pass
 
 
-def identify_connector_class(
+_CONNECTOR_MAP: dict[DocumentSource, Type[BaseConnector]] = {
+    DocumentSource.WEB: WebConnector,
+    DocumentSource.FILE: LocalFileConnector,
+    DocumentSource.SLACK: SlackPollConnector,
+    DocumentSource.GITHUB: GithubConnector,
+    DocumentSource.GMAIL: GmailConnector,
+    DocumentSource.GITLAB: GitlabConnector,
+    DocumentSource.GOOGLE_DRIVE: GoogleDriveConnector,
+    DocumentSource.BOOKSTACK: BookstackConnector,
+    DocumentSource.CONFLUENCE: ConfluenceConnector,
+    DocumentSource.JIRA: JiraConnector,
+    DocumentSource.PRODUCTBOARD: ProductboardConnector,
+    DocumentSource.SLAB: SlabConnector,
+    DocumentSource.NOTION: NotionConnector,
+    DocumentSource.ZULIP: ZulipConnector,
+    DocumentSource.GURU: GuruConnector,
+    DocumentSource.LINEAR: LinearConnector,
+    DocumentSource.HUBSPOT: HubSpotConnector,
+    DocumentSource.DOCUMENT360: Document360Connector,
+    DocumentSource.GONG: GongConnector,
+    DocumentSource.GOOGLE_SITES: GoogleSitesConnector,
+    DocumentSource.ZENDESK: ZendeskConnector,
+    DocumentSource.LOOPIO: LoopioConnector,
+    DocumentSource.DROPBOX: DropboxConnector,
+    DocumentSource.SHAREPOINT: SharepointConnector,
+    DocumentSource.TEAMS: TeamsConnector,
+    DocumentSource.SALESFORCE: SalesforceConnector,
+    DocumentSource.DISCOURSE: DiscourseConnector,
+    DocumentSource.AXERO: AxeroConnector,
+    DocumentSource.CLICKUP: ClickupConnector,
+    DocumentSource.MEDIAWIKI: MediaWikiConnector,
+    DocumentSource.WIKIPEDIA: WikipediaConnector,
+    DocumentSource.ASANA: AsanaConnector,
+    DocumentSource.S3: BlobStorageConnector,
+    DocumentSource.R2: BlobStorageConnector,
+    DocumentSource.GOOGLE_CLOUD_STORAGE: BlobStorageConnector,
+    DocumentSource.OCI_STORAGE: BlobStorageConnector,
+    DocumentSource.XENFORO: XenforoConnector,
+    DocumentSource.DISCORD: DiscordConnector,
+    DocumentSource.FRESHDESK: FreshdeskConnector,
+    DocumentSource.FIREFLIES: FirefliesConnector,
+    DocumentSource.EGNYTE: EgnyteConnector,
+    DocumentSource.AIRTABLE: AirtableConnector,
+}
+
+
+class ConnectorCannotHandleInputTypeException(Exception):
+    pass
+
+
+_INPUT_TYPE_MAP: dict[
+    InputType,
+    Type[
+        LoadConnector
+        | PollConnector
+        | EventConnector
+        | ConnectorValidator
+        | SlimConnector
+    ],
+] = {
+    InputType.LOAD_STATE: LoadConnector,
+    InputType.POLL: PollConnector,
+    InputType.EVENT: EventConnector,
+    InputType.VALIDATE_CONFIGURATION: ConnectorValidator,
+    InputType.SLIM_RETRIEVAL: SlimConnector,
+}
+
+
+def connector_can_handle_type(
+    connector: Type[BaseConnector], input_type: InputType
+) -> bool:
+    return issubclass(connector, _INPUT_TYPE_MAP[input_type])
+
+
+def get_connector_class(
     source: DocumentSource,
-    input_type: InputType | None = None,
-) -> Type[BaseConnector]:
-    connector_map = {
-        DocumentSource.WEB: WebConnector,
-        DocumentSource.FILE: LocalFileConnector,
-        DocumentSource.SLACK: {
-            InputType.POLL: SlackPollConnector,
-            InputType.SLIM_RETRIEVAL: SlackPollConnector,
-        },
-        DocumentSource.GITHUB: GithubConnector,
-        DocumentSource.GMAIL: GmailConnector,
-        DocumentSource.GITLAB: GitlabConnector,
-        DocumentSource.GOOGLE_DRIVE: GoogleDriveConnector,
-        DocumentSource.BOOKSTACK: BookstackConnector,
-        DocumentSource.CONFLUENCE: ConfluenceConnector,
-        DocumentSource.JIRA: JiraConnector,
-        DocumentSource.PRODUCTBOARD: ProductboardConnector,
-        DocumentSource.SLAB: SlabConnector,
-        DocumentSource.NOTION: NotionConnector,
-        DocumentSource.ZULIP: ZulipConnector,
-        DocumentSource.GURU: GuruConnector,
-        DocumentSource.LINEAR: LinearConnector,
-        DocumentSource.HUBSPOT: HubSpotConnector,
-        DocumentSource.DOCUMENT360: Document360Connector,
-        DocumentSource.GONG: GongConnector,
-        DocumentSource.GOOGLE_SITES: GoogleSitesConnector,
-        DocumentSource.ZENDESK: ZendeskConnector,
-        DocumentSource.LOOPIO: LoopioConnector,
-        DocumentSource.DROPBOX: DropboxConnector,
-        DocumentSource.SHAREPOINT: SharepointConnector,
-        DocumentSource.TEAMS: TeamsConnector,
-        DocumentSource.SALESFORCE: SalesforceConnector,
-        DocumentSource.DISCOURSE: DiscourseConnector,
-        DocumentSource.AXERO: AxeroConnector,
-        DocumentSource.CLICKUP: ClickupConnector,
-        DocumentSource.MEDIAWIKI: MediaWikiConnector,
-        DocumentSource.WIKIPEDIA: WikipediaConnector,
-        DocumentSource.ASANA: AsanaConnector,
-        DocumentSource.S3: BlobStorageConnector,
-        DocumentSource.R2: BlobStorageConnector,
-        DocumentSource.GOOGLE_CLOUD_STORAGE: BlobStorageConnector,
-        DocumentSource.OCI_STORAGE: BlobStorageConnector,
-        DocumentSource.XENFORO: XenforoConnector,
-        DocumentSource.DISCORD: DiscordConnector,
-        DocumentSource.FRESHDESK: FreshdeskConnector,
-        DocumentSource.FIREFLIES: FirefliesConnector,
-        DocumentSource.EGNYTE: EgnyteConnector,
-        DocumentSource.AIRTABLE: AirtableConnector,
-    }
-    connector_by_source = connector_map.get(source, {})
-
-    if isinstance(connector_by_source, dict):
-        if input_type is None:
-            # If not specified, default to most exhaustive update
-            connector = connector_by_source.get(InputType.LOAD_STATE)
-        else:
-            connector = connector_by_source.get(input_type)
-    else:
-        connector = connector_by_source
-    if connector is None:
-        raise ConnectorMissingException(f"Connector not found for source={source}")
-
-    if any(
-        [
-            input_type == InputType.LOAD_STATE
-            and not issubclass(connector, LoadConnector),
-            input_type == InputType.POLL and not issubclass(connector, PollConnector),
-            input_type == InputType.EVENT and not issubclass(connector, EventConnector),
-        ]
-    ):
-        raise ConnectorMissingException(
-            f"Connector for source={source} does not accept input_type={input_type}"
-        )
-    return connector
+) -> Type[BaseConnector] | None:
+    return _CONNECTOR_MAP.get(source)
 
 
 def instantiate_connector(
@@ -143,7 +147,14 @@ def instantiate_connector(
     credential: Credential,
     tenant_id: str | None = None,
 ) -> BaseConnector:
-    connector_class = identify_connector_class(source, input_type)
+    connector_class = get_connector_class(source)
+    if connector_class is None:
+        raise ConnectorMissingException(f"Connector not found for source={source}")
+
+    if not connector_can_handle_type(connector_class, input_type):
+        raise ConnectorCannotHandleInputTypeException(
+            f"Connector {connector_class} does not accept input_type={input_type}"
+        )
 
     if source in DocumentSourceRequiringTenantContext:
         connector_specific_config["tenant_id"] = tenant_id

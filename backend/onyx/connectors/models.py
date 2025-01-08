@@ -15,6 +15,7 @@ class InputType(str, Enum):
     POLL = "poll"  # e.g. calling an API to get all documents in the last hour
     EVENT = "event"  # e.g. registered an endpoint as a listener, and processing connector events
     SLIM_RETRIEVAL = "slim_retrieval"
+    VALIDATE_CONFIGURATION = "validate_configuration"  # for validating connector configuration and credentials
 
 
 class ConnectorMissingCredentialError(PermissionError):

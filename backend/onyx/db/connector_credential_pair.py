@@ -11,6 +11,12 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSourceRequiringTenantContext
+from onyx.connectors.factory import connector_can_handle_type
+from onyx.connectors.factory import get_connector_class
+from onyx.connectors.interfaces import BaseConnectorException
+from onyx.connectors.interfaces import ConnectorValidator
+from onyx.connectors.models import InputType
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.enums import AccessType
@@ -24,6 +30,7 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
+from onyx.server.documents.models import ConnectorCreateAndAssociateRequest
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -83,6 +90,71 @@ def _add_user_filters(
         where_clause |= ConnectorCredentialPair.access_type == AccessType.SYNC
 
     return stmt.where(where_clause)
+
+
+def validate_connector_configuration(
+    connector_data: ConnectorCreateAndAssociateRequest,
+    user: User,
+    db_session: Session,
+    tenant_id: str,
+) -> None:
+    """Validates the connector configuration by attempting to initialize and validate the connector.
+    If validation succeeds or if the connector doesn't implement validation, returns success.
+    If validation fails, raises an HTTPException with the error details."""
+    # Get the validator connector class
+    if not (connector_class := get_connector_class(connector_data.source)):
+        raise HTTPException(
+            status_code=500,
+            detail="Connector class not found.",
+        )
+    if not connector_can_handle_type(connector_class, InputType.VALIDATE_CONFIGURATION):
+        # Connector has no validator. Skipping validation.
+        return
+
+    # Get the credential
+    credential = fetch_credential_by_id(
+        credential_id=connector_data.credential_id,
+        user=user,
+        db_session=db_session,
+    )
+    if not credential:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Credential {connector_data.credential_id} not found",
+        )
+
+    # Initialize the connector
+    if tenant_id and connector_data.source in DocumentSourceRequiringTenantContext:
+        connector_data.connector_specific_config["tenant_id"] = tenant_id
+
+    try:
+        connector = connector_class(**connector_data.connector_specific_config)
+
+        # Load credentials
+        connector.load_credentials(credential.credential_json)
+
+        # This should raise an exception if the configuration is invalid
+        if isinstance(connector, ConnectorValidator):
+            # This should raise an exception if the configuration is invalid
+            connector.validate_connector_configuration()
+    except BaseConnectorException as e:
+        # Handle predicted connector validation errors
+        exception_string = (
+            f"Connector Validation Failed with configuration: {connector_data.connector_specific_config} \n"
+            f"Error: {e}"
+        )
+        logger.exception(exception_string)
+        raise HTTPException(
+            status_code=401,
+            detail=e.build_error_msg(),
+        )
+    except Exception as e:
+        # Handle unexpected exceptions during connector validation
+        logger.exception(f"Error validating connector configuration: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error validating connector configuration: {e}",
+        )
 
 
 def get_connector_credential_pairs(

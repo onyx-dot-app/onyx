@@ -68,6 +68,7 @@ from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
+from onyx.db.connector_credential_pair import validate_connector_configuration
 from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import cleanup_google_drive_credentials
 from onyx.db.credentials import create_credential
@@ -697,9 +698,15 @@ def create_connector_and_associate_credential(
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse:
-    try:
-        _validate_connector_allowed(connector_data.source)
+    _validate_connector_allowed(connector_data.source)
+    validate_connector_configuration(
+        connector_data=connector_data,
+        db_session=db_session,
+        user=user,
+        tenant_id=tenant_id,
+    )
 
+    try:
         fetch_ee_implementation_or_noop(
             "onyx.db.user_group", "validate_object_creation_for_user", None
         )(
