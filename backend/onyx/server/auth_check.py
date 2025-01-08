@@ -46,6 +46,8 @@ PUBLIC_ENDPOINT_SPECS = [
     # oauth
     ("/auth/oauth/authorize", {"GET"}),
     ("/auth/oauth/callback", {"GET"}),
+    # anonymous user on cloud
+    ("/tenants/anonymous-user", {"POST"}),
 ]
 
 

@@ -31,7 +31,6 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
     FENCE_PREFIX = PREFIX + "_fence"
     TASKSET_PREFIX = PREFIX + "_taskset"
 
-    # SYNCING_HASH = PREFIX + ":vespa_syncing"
     SYNCING_PREFIX = PREFIX + ":vespa_syncing"
 
     def __init__(self, tenant_id: str | None, id: int) -> None:
@@ -62,6 +61,7 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
 
     @staticmethod
     def make_redis_syncing_key(doc_id: str) -> str:
+        """used to create a key in redis to block a doc from syncing"""
         return f"{RedisConnectorCredentialPair.SYNCING_PREFIX}:{doc_id}"
 
     def generate_tasks(
@@ -79,8 +79,6 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
         This works because the dirty state of a document is in the DB, so more docs
         get picked up after the limited set of tasks is complete.
         """
-        # an arbitrary number in seconds to prevent the same doc from syncing repeatedly
-        SYNC_EXPIRATION = 24 * 60 * 60
 
         last_lock_time = time.monotonic()
 
@@ -110,13 +108,14 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
             if doc.id in self.skip_docs:
                 continue
 
-            # is the document sync already queued?
-            # if redis_client.hexists(doc.id):
-            #     continue
+            # an arbitrary number in seconds to prevent the same doc from syncing repeatedly
+            # SYNC_EXPIRATION = 24 * 60 * 60
 
-            redis_syncing_key = self.make_redis_syncing_key(doc.id)
-            if redis_client.exists(redis_syncing_key):
-                continue
+            # a quick hack that can be uncommented to prevent a doc from resyncing over and over
+            # redis_syncing_key = self.make_redis_syncing_key(doc.id)
+            # if redis_client.exists(redis_syncing_key):
+            #     continue
+            # redis_client.set(redis_syncing_key, custom_task_id, ex=SYNC_EXPIRATION)
 
             # celery's default task id format is "dd32ded3-00aa-4884-8b21-42f8332e7fac"
             # the key for the result is "celery-task-meta-dd32ded3-00aa-4884-8b21-42f8332e7fac"
@@ -129,13 +128,6 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
             redis_client.sadd(
                 RedisConnectorCredentialPair.get_taskset_key(), custom_task_id
             )
-
-            # track the doc.id in redis so that we don't resubmit it repeatedly
-            # redis_client.hset(
-            #     self.SYNCING_HASH, doc.id, custom_task_id
-            # )
-
-            redis_client.set(redis_syncing_key, custom_task_id, ex=SYNC_EXPIRATION)
 
             # Priority on sync's triggered by new indexing should be medium
             result = celery_app.send_task(

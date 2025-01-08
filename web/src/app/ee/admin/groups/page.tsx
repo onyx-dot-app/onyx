@@ -6,11 +6,7 @@ import { UserGroupCreationForm } from "./UserGroupCreationForm";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";
-import {
-  useConnectorCredentialIndexingStatus,
-  useUserGroups,
-  useUsers,
-} from "@/lib/hooks";
+import { useConnectorStatus, useUserGroups, useUsers } from "@/lib/hooks";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { Button } from "@/components/ui/button";
 
@@ -26,7 +22,7 @@ const Main = () => {
     data: ccPairs,
     isLoading: isCCPairsLoading,
     error: ccPairsError,
-  } = useConnectorCredentialIndexingStatus();
+  } = useConnectorStatus();
 
   const {
     data: users,

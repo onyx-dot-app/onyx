@@ -80,6 +80,7 @@ from onyx.db.auth import get_user_db
 from onyx.db.auth import SQLAlchemyUserAdminDB
 from onyx.db.engine import get_async_session
 from onyx.db.engine import get_async_session_with_tenant
+from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User
@@ -144,11 +145,8 @@ def user_needs_to_be_verified() -> bool:
     return False
 
 
-def anonymous_user_enabled() -> bool:
-    if MULTI_TENANT:
-        return False
-
-    redis_client = get_redis_client(tenant_id=None)
+def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
+    redis_client = get_redis_client(tenant_id=tenant_id)
     value = redis_client.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
 
     if value is None:
@@ -773,9 +771,10 @@ async def current_limited_user(
 
 async def current_chat_accesssible_user(
     user: User | None = Depends(optional_user),
+    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> User | None:
     return await double_check_user(
-        user, allow_anonymous_access=anonymous_user_enabled()
+        user, allow_anonymous_access=anonymous_user_enabled(tenant_id=tenant_id)
     )
 
 

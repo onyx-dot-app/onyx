@@ -13,6 +13,7 @@ import Link from "next/link";
 import { SignInButton } from "../login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
+import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -67,6 +68,7 @@ const Page = async (props: {
   return (
     <AuthFlowContainer authState="signup">
       <HealthCheckBanner />
+      <AuthErrorDisplay searchParams={searchParams} />
 
       <>
         <div className="absolute top-10x w-full"></div>

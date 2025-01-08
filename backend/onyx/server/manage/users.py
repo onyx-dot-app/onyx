@@ -41,6 +41,7 @@ from onyx.configs.constants import AuthType
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_total_users_count
 from onyx.db.engine import CURRENT_TENANT_ID_CONTEXTVAR
+from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.models import AccessToken
 from onyx.db.models import User
@@ -525,6 +526,7 @@ def get_current_token_creation(
 def verify_user_logged_in(
     user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
+    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> UserInfo:
     # NOTE: this does not use `current_user` / `current_admin_user` because we don't want
     # to enforce user verification here - the frontend always wants to get the info about
@@ -535,7 +537,7 @@ def verify_user_logged_in(
         if AUTH_TYPE == AuthType.DISABLED:
             store = get_kv_store()
             return fetch_no_auth_user(store)
-        if anonymous_user_enabled():
+        if anonymous_user_enabled(tenant_id=tenant_id):
             store = get_kv_store()
             return fetch_no_auth_user(store, anonymous_user_enabled=True)
 

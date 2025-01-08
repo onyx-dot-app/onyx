@@ -6,18 +6,19 @@ from fastapi import Request
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 
+from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import RATE_LIMIT_MAX_REQUESTS
 from onyx.configs.app_configs import RATE_LIMIT_WINDOW_SECONDS
 from onyx.redis.redis_pool import get_async_redis_connection
 
 
-async def setup_limiter() -> None:
+async def setup_auth_limiter() -> None:
     # Use the centralized async Redis connection
     redis = await get_async_redis_connection()
     await FastAPILimiter.init(redis)
 
 
-async def close_limiter() -> None:
+async def close_auth_limiter() -> None:
     # This closes the FastAPILimiter connection so we don't leave open connections to Redis.
     await FastAPILimiter.close()
 
@@ -32,14 +33,14 @@ async def rate_limit_key(request: Request) -> str:
 
 
 def get_auth_rate_limiters() -> List[Callable]:
-    if not (RATE_LIMIT_MAX_REQUESTS and RATE_LIMIT_WINDOW_SECONDS):
+    if not AUTH_RATE_LIMITING_ENABLED:
         return []
 
     return [
         Depends(
             RateLimiter(
-                times=RATE_LIMIT_MAX_REQUESTS,
-                seconds=RATE_LIMIT_WINDOW_SECONDS,
+                times=RATE_LIMIT_MAX_REQUESTS or 100,
+                seconds=RATE_LIMIT_WINDOW_SECONDS or 60,
                 # Use the custom key function to distinguish users
                 identifier=rate_limit_key,
             )

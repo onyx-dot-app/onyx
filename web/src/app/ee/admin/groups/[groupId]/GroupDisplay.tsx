@@ -12,6 +12,7 @@ import {
   UserGroup,
   UserRole,
   USER_ROLE_LABELS,
+  ConnectorStatus,
 } from "@/lib/types";
 import { AddConnectorForm } from "./AddConnectorForm";
 import { Separator } from "@/components/ui/separator";
@@ -42,7 +43,7 @@ import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
 
 interface GroupDisplayProps {
   users: User[];
-  ccPairs: ConnectorIndexingStatus<any, any>[];
+  ccPairs: ConnectorStatus<any, any>[];
   userGroup: UserGroup;
   refreshUserGroup: () => void;
 }

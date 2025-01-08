@@ -355,5 +355,20 @@
                 "PYTHONPATH": "."
             },
         },
+        {
+            "name": "Install Python Requirements",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "bash",
+            "runtimeArgs": [
+                "-c",
+                "pip install -r backend/requirements/default.txt && pip install -r backend/requirements/dev.txt && pip install -r backend/requirements/ee.txt && pip install -r backend/requirements/model_server.txt"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "presentation": {
+                 "group": "3"
+            }
+        },
     ]
 }

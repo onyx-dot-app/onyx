@@ -186,9 +186,18 @@ class OnyxConfluence(Confluence):
         url_suffix += f"{connection_char}limit={limit}"
 
         while url_suffix:
+            logger.debug(f"Making confluence call to {url_suffix}")
             try:
-                logger.debug(f"Making confluence call to {url_suffix}")
-                next_response = self.get(url_suffix)
+                raw_response = self.get(
+                    path=url_suffix,
+                    advanced_mode=True,
+                )
+            except Exception as e:
+                logger.exception(f"Error in confluence call to {url_suffix}")
+                raise e
+
+            try:
+                raw_response.raise_for_status()
             except Exception as e:
                 logger.warning(f"Error in confluence call to {url_suffix}")
 
@@ -196,8 +205,14 @@ class OnyxConfluence(Confluence):
                 # with the replacement expansion and try again
                 # If that fails, raise the error
                 if _PROBLEMATIC_EXPANSIONS not in url_suffix:
-                    logger.exception(f"Error in confluence call to {url_suffix}")
+                    logger.exception(
+                        f"Error in confluence call to {url_suffix} \n"
+                        f"Raw Response Text: {raw_response.text} \n"
+                        f"Full Response: {raw_response.__dict__} \n"
+                        f"Error: {e} \n"
+                    )
                     raise e
+
                 logger.warning(
                     f"Replacing {_PROBLEMATIC_EXPANSIONS} with {_REPLACEMENT_EXPANSIONS}"
                     " and trying again."
@@ -207,6 +222,14 @@ class OnyxConfluence(Confluence):
                     _REPLACEMENT_EXPANSIONS,
                 )
                 continue
+
+            try:
+                next_response = raw_response.json()
+            except Exception as e:
+                logger.exception(
+                    f"Failed to parse response as JSON. Response: {raw_response.__dict__}"
+                )
+                raise e
 
             # yield the results individually
             yield from next_response.get("results", [])

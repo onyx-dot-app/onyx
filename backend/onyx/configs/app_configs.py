@@ -195,7 +195,6 @@ REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
 
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
 
-
 # Rate limiting for auth endpoints
 RATE_LIMIT_WINDOW_SECONDS: int | None = None
 _rate_limit_window_seconds_str = os.environ.get("RATE_LIMIT_WINDOW_SECONDS")
@@ -213,6 +212,7 @@ if _rate_limit_max_requests_str is not None:
     except ValueError:
         pass
 
+AUTH_RATE_LIMITING_ENABLED = RATE_LIMIT_MAX_REQUESTS and RATE_LIMIT_WINDOW_SECONDS
 # Used for general redis things
 REDIS_DB_NUMBER = int(os.environ.get("REDIS_DB_NUMBER", 0))
 

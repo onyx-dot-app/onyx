@@ -30,6 +30,7 @@ def _build_group_member_email_map(
                 )
         if not email:
             # If we still don't have an email, skip this user
+            logger.warning(f"user result missing email field: {user_result}")
             continue
 
         for group in confluence_client.paginated_groups_by_user_retrieval(user):

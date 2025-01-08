@@ -1,5 +1,7 @@
+from datetime import datetime
 from functools import lru_cache
 
+import jwt
 import requests
 from fastapi import Depends
 from fastapi import HTTPException
@@ -20,6 +22,7 @@ from ee.onyx.server.seeding import get_seed_config
 from ee.onyx.utils.secrets import extract_hashed_cookie
 from onyx.auth.users import current_admin_user
 from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.constants import AuthType
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
@@ -118,3 +121,17 @@ async def current_cloud_superuser(
             detail="Access denied. User must be a cloud superuser to perform this action.",
         )
     return user
+
+
+def generate_anonymous_user_jwt_token(tenant_id: str) -> str:
+    payload = {
+        "tenant_id": tenant_id,
+        # Token does not expire
+        "iat": datetime.utcnow(),  # Issued at time
+    }
+
+    return jwt.encode(payload, USER_AUTH_SECRET, algorithm="HS256")
+
+
+def decode_anonymous_user_jwt_token(token: str) -> dict:
+    return jwt.decode(token, USER_AUTH_SECRET, algorithms=["HS256"])

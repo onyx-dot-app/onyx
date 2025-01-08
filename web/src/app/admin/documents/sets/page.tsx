@@ -14,8 +14,7 @@ import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { useConnectorCredentialIndexingStatus } from "@/lib/hooks";
-import { ConnectorIndexingStatus, DocumentSet } from "@/lib/types";
+import { DocumentSet } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
@@ -99,7 +98,6 @@ const EditRow = ({
 
 interface DocumentFeedbackTableProps {
   documentSets: DocumentSet[];
-  ccPairs: ConnectorIndexingStatus<any, any>[];
   refresh: () => void;
   refreshEditable: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
@@ -275,6 +273,7 @@ const Main = () => {
     error: documentSetsError,
     refreshDocumentSets,
   } = useDocumentSets();
+
   const {
     data: editableDocumentSets,
     isLoading: isEditableDocumentSetsLoading,
@@ -282,17 +281,7 @@ const Main = () => {
     refreshDocumentSets: refreshEditableDocumentSets,
   } = useDocumentSets(true);
 
-  const {
-    data: ccPairs,
-    isLoading: isCCPairsLoading,
-    error: ccPairsError,
-  } = useConnectorCredentialIndexingStatus();
-
-  if (
-    isDocumentSetsLoading ||
-    isCCPairsLoading ||
-    isEditableDocumentSetsLoading
-  ) {
+  if (isDocumentSetsLoading || isEditableDocumentSetsLoading) {
     return <ThreeDotsLoader />;
   }
 
@@ -302,10 +291,6 @@ const Main = () => {
 
   if (editableDocumentSetsError || !editableDocumentSets) {
     return <div>Error: {editableDocumentSetsError}</div>;
-  }
-
-  if (ccPairsError || !ccPairs) {
-    return <div>Error: {ccPairsError}</div>;
   }
 
   return (
@@ -331,7 +316,6 @@ const Main = () => {
           <DocumentSetTable
             documentSets={documentSets}
             editableDocumentSets={editableDocumentSets}
-            ccPairs={ccPairs}
             refresh={refreshDocumentSets}
             refreshEditable={refreshEditableDocumentSets}
             setPopup={setPopup}

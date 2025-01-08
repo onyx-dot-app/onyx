@@ -4,19 +4,15 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { LoadingAnimation } from "@/components/Loading";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { ConnectorIndexingStatus } from "@/lib/types";
+import { CCPairBasicInfo } from "@/lib/types";
 import {
   Credential,
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
 } from "@/lib/connectors/credentials";
 import { GmailAuthSection, GmailJsonUploadSection } from "./Credential";
-import {
-  usePublicCredentials,
-  useConnectorCredentialIndexingStatus,
-} from "@/lib/hooks";
+import { usePublicCredentials, useBasicConnectorStatus } from "@/lib/hooks";
 import Title from "@/components/ui/title";
-import { GmailConfig } from "@/lib/connectors/connectors";
 import { useUser } from "@/components/user/UserProvider";
 
 export const GmailMain = () => {
@@ -42,7 +38,7 @@ export const GmailMain = () => {
     data: connectorIndexingStatuses,
     isLoading: isConnectorIndexingStatusesLoading,
     error: connectorIndexingStatusesError,
-  } = useConnectorCredentialIndexingStatus();
+  } = useBasicConnectorStatus();
 
   const {
     data: credentialsData,
@@ -116,13 +112,11 @@ export const GmailMain = () => {
       credential.credential_json?.google_service_account_key &&
       credential.source === "gmail"
   );
-  const gmailConnectorIndexingStatuses: ConnectorIndexingStatus<
-    GmailConfig,
-    GmailCredentialJson
-  >[] = connectorIndexingStatuses.filter(
-    (connectorIndexingStatus) =>
-      connectorIndexingStatus.connector.source === "gmail"
-  );
+
+  const gmailConnectorIndexingStatuses: CCPairBasicInfo[] =
+    connectorIndexingStatuses.filter(
+      (connectorIndexingStatus) => connectorIndexingStatus.source === "gmail"
+    );
 
   return (
     <>

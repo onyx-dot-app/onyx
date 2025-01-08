@@ -1933,3 +1933,13 @@ class UserTenantMapping(Base):
 
     email: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+
+
+# This is a mapping from tenant IDs to anonymous user paths
+class TenantAnonymousUserPath(Base):
+    __tablename__ = "tenant_anonymous_user_path"
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
+    anonymous_user_path: Mapped[str] = mapped_column(
+        String, nullable=False, unique=True
+    )

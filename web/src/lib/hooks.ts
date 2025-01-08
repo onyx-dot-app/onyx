@@ -5,6 +5,8 @@ import {
   DocumentBoostStatus,
   Tag,
   UserGroup,
+  ConnectorStatus,
+  CCPairBasicInfo,
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
@@ -71,6 +73,7 @@ export const useObjectState = <T>(
 };
 
 const INDEXING_STATUS_URL = "/api/manage/admin/connector/indexing-status";
+const CONNECTOR_STATUS_URL = "/api/manage/admin/connector/status";
 
 export const useConnectorCredentialIndexingStatus = (
   refreshInterval = 30000, // 30 seconds
@@ -86,6 +89,30 @@ export const useConnectorCredentialIndexingStatus = (
     { refreshInterval: refreshInterval }
   );
 
+  return {
+    ...swrResponse,
+    refreshIndexingStatus: () => mutate(url),
+  };
+};
+
+export const useConnectorStatus = (refreshInterval = 30000) => {
+  const { mutate } = useSWRConfig();
+  const url = CONNECTOR_STATUS_URL;
+  const swrResponse = useSWR<ConnectorStatus<any, any>[]>(
+    url,
+    errorHandlingFetcher,
+    { refreshInterval: refreshInterval }
+  );
+
+  return {
+    ...swrResponse,
+    refreshIndexingStatus: () => mutate(url),
+  };
+};
+
+export const useBasicConnectorStatus = () => {
+  const url = "/api/manage/admin/connector-status";
+  const swrResponse = useSWR<CCPairBasicInfo[]>(url, errorHandlingFetcher);
   return {
     ...swrResponse,
     refreshIndexingStatus: () => mutate(url),

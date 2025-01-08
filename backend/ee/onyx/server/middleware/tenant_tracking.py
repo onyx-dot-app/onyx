@@ -7,6 +7,8 @@ from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
 
+from ee.onyx.auth.users import decode_anonymous_user_jwt_token
+from ee.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
 from onyx.auth.api_key import extract_tenant_from_api_key_header
 from onyx.db.engine import is_valid_schema_name
 from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
@@ -47,6 +49,16 @@ async def _get_tenant_id_from_request(
     tenant_id = extract_tenant_from_api_key_header(request)
     if tenant_id:
         return tenant_id
+
+    # Check for anonymous user cookie
+    anonymous_user_cookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME)
+    if anonymous_user_cookie:
+        try:
+            anonymous_user_data = decode_anonymous_user_jwt_token(anonymous_user_cookie)
+            return anonymous_user_data.get("tenant_id", POSTGRES_DEFAULT_SCHEMA)
+        except Exception as e:
+            logger.error(f"Error decoding anonymous user cookie: {str(e)}")
+            # Continue and attempt to authenticate
 
     try:
         # Look up token data in Redis

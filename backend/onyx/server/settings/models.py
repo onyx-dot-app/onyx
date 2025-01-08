@@ -50,3 +50,4 @@ class Settings(BaseModel):
 class UserSettings(Settings):
     notifications: list[Notification]
     needs_reindexing: bool
+    tenant_id: str | None = None

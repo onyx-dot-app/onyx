@@ -199,7 +199,17 @@ export function ChatPage({
   const modelVersionFromSearchParams = searchParams.get(
     SEARCH_PARAM_NAMES.STRUCTURED_MODEL
   );
+  const [showHistorySidebar, setShowHistorySidebar] = useState(false); // State to track if sidebar is open
 
+  useEffect(() => {
+    if (user?.is_anonymous_user) {
+      Cookies.set(
+        SIDEBAR_TOGGLED_COOKIE_NAME,
+        String(!toggledSidebar).toLocaleLowerCase()
+      );
+      toggle(false);
+    }
+  }, [user]);
   // Effect to handle sendOnLoad
   useEffect(() => {
     if (sendOnLoad) {
@@ -1621,7 +1631,6 @@ export function ChatPage({
     });
     updateChatState("input", currentSessionId());
   };
-  const [showHistorySidebar, setShowHistorySidebar] = useState(false); // State to track if sidebar is open
 
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
   const [untoggled, setUntoggled] = useState(false);
@@ -1636,6 +1645,9 @@ export function ChatPage({
     }, 200);
   };
   const toggleSidebar = () => {
+    if (user?.is_anonymous_user) {
+      return;
+    }
     Cookies.set(
       SIDEBAR_TOGGLED_COOKIE_NAME,
       String(!toggledSidebar).toLocaleLowerCase()
