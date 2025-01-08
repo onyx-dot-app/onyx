@@ -5,6 +5,8 @@
 # For local dev, often user Authentication is not needed
 AUTH_TYPE=disabled
 
+# Skip warm up for dev
+SKIP_WARM_UP=True
 
 # Always keep these on for Dev
 # Logs all model prompts to stdout
