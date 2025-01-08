@@ -813,6 +813,13 @@ class IndexAttempt(Base):
             "connector_credential_pair_id",
             "time_created",
         ),
+        Index(
+            "ix_index_attempt_ccpair_search_settings_time_updated",
+            "connector_credential_pair_id",
+            "search_settings_id",
+            "time_updated",
+            unique=False,
+        ),
     )
 
     def __repr__(self) -> str:
