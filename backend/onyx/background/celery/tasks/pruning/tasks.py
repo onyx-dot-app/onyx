@@ -280,6 +280,9 @@ def connector_pruning_generator_task(
                 InputType.SLIM_RETRIEVAL,
                 cc_pair.connector.connector_specific_config,
                 cc_pair.credential,
+                tenant_id,
+                connector_id,
+                credential_id,
             )
 
             callback = IndexingCallback(

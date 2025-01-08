@@ -1,6 +1,4 @@
 import io
-import ipaddress
-import socket
 from datetime import datetime
 from datetime import timezone
 from enum import Enum
@@ -23,7 +21,6 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_ID
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
-from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
@@ -33,10 +30,14 @@ from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
+from onyx.db.document import get_document_ids_for_connector_credential_pair
+from onyx.db.engine import get_session_with_tenant
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
+from onyx.utils.url_frontier import URLFrontier
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
 
@@ -54,47 +55,19 @@ class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
     UPLOAD = "upload"
 
 
-def protected_url_check(url: str) -> None:
-    """Couple considerations:
-    - DNS mapping changes over time so we don't want to cache the results
-    - Fetching this is assumed to be relatively fast compared to other bottlenecks like reading
-      the page or embedding the contents
-    - To be extra safe, all IPs associated with the URL must be global
-    - This is to prevent misuse and not explicit attacks
-    """
-    if not WEB_CONNECTOR_VALIDATE_URLS:
-        return
-
-    parse = urlparse(url)
-    if parse.scheme != "http" and parse.scheme != "https":
-        raise ValueError("URL must be of scheme https?://")
-
-    if not parse.hostname:
-        raise ValueError("URL must include a hostname")
-
-    try:
-        # This may give a large list of IP addresses for domains with extensive DNS configurations
-        # such as large distributed systems of CDNs
-        info = socket.getaddrinfo(parse.hostname, None)
-    except socket.gaierror as e:
-        raise ConnectionError(f"DNS resolution failed for {parse.hostname}: {e}")
-
-    for address in info:
-        ip = address[4][0]
-        if not ipaddress.ip_address(ip).is_global:
-            raise ValueError(
-                f"Non-global IP address detected: {ip}, skipping page {url}. "
-                f"The Web Connector is not allowed to read loopback, link-local, or private ranges"
-            )
-
-
-def check_internet_connection(url: str) -> None:
+def check_internet_connection(url: str, frontier: URLFrontier) -> None:
     try:
         response = requests.get(url, timeout=3)
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         # Extract status code from the response, defaulting to -1 if response is None
         status_code = e.response.status_code if e.response is not None else -1
+        if status_code == 429:
+            retry_after = e.response.headers.get("Retry-After", 5)
+            frontier.handle_ratelimit(url, retry_after)
+            raise Exception(
+                f"Rate limited for {url}. Retry after {retry_after} seconds"
+            )
         error_msg = {
             400: "Bad Request",
             401: "Unauthorized",
@@ -230,10 +203,16 @@ class WebConnector(LoadConnector, SlimConnector):
         web_connector_type: str = WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value,
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
+        tenant_id: str = POSTGRES_DEFAULT_SCHEMA,
+        connector_id: int | None = None,
+        credential_id: int | None = None,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
         self.batch_size = batch_size
         self.recursive = False
+        self.tenant_id = tenant_id
+        self.connector_id = connector_id
+        self.credential_id = credential_id
 
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
@@ -266,13 +245,14 @@ class WebConnector(LoadConnector, SlimConnector):
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Traverses through all pages found on the website
         and converts them into documents"""
-        visited_links: set[str] = set()
-        to_visit: list[str] = self.to_visit_list
-
-        if not to_visit:
+        if not self.to_visit_list:
             raise ValueError("No URLs to visit")
 
-        base_url = to_visit[0]  # For the recursive case
+        frontier = URLFrontier()
+        for url in self.to_visit_list:
+            frontier.add_url(url)
+
+        base_url = self.to_visit_list[0]  # For the recursive case
         doc_batch: list[Document] = []
 
         # Needed to report error
@@ -281,23 +261,16 @@ class WebConnector(LoadConnector, SlimConnector):
 
         playwright, context = start_playwright()
         restart_playwright = False
-        while to_visit:
-            current_url = to_visit.pop()
-            if current_url in visited_links:
-                continue
-            visited_links.add(current_url)
+        while frontier.has_next_url():
+            current_url = frontier.get_next_url()
 
-            try:
-                protected_url_check(current_url)
-            except Exception as e:
-                last_error = f"Invalid URL {current_url} due to {e}"
-                logger.warning(last_error)
+            if not current_url:
                 continue
 
             logger.info(f"Visiting {current_url}")
 
             try:
-                check_internet_connection(current_url)
+                check_internet_connection(current_url, frontier)
                 if restart_playwright:
                     playwright, context = start_playwright()
                     restart_playwright = False
@@ -305,6 +278,18 @@ class WebConnector(LoadConnector, SlimConnector):
                 if current_url.split(".")[-1] == "pdf":
                     # PDF files are not checked for links
                     response = requests.get(current_url)
+                    if response.status_code == 429:
+                        frontier.handle_ratelimit(
+                            current_url, int(response.headers.get("Retry-After", 5))
+                        )
+                        continue
+                    if response.status_code != 200:
+                        last_error = (
+                            f"Failed to fetch '{current_url}': {response.status_code}"
+                        )
+                        logger.error(last_error)
+                        continue
+
                     page_text, metadata = read_pdf_file(
                         file=io.BytesIO(response.content)
                     )
@@ -328,6 +313,12 @@ class WebConnector(LoadConnector, SlimConnector):
 
                 page = context.new_page()
                 page_response = page.goto(current_url)
+                if not page_response:
+                    last_error = f"Failed to fetch '{current_url}'"
+                    logger.error(last_error)
+                    continue
+
+                retry_after = page_response.header_value("Retry-After")
                 last_modified = (
                     page_response.header_value("Last-Modified")
                     if page_response
@@ -336,12 +327,8 @@ class WebConnector(LoadConnector, SlimConnector):
                 final_page = page.url
                 if final_page != current_url:
                     logger.info(f"Redirected to {final_page}")
-                    protected_url_check(final_page)
-                    current_url = final_page
-                    if current_url in visited_links:
-                        logger.info("Redirected page already indexed")
-                        continue
-                    visited_links.add(current_url)
+                    frontier.add_url(final_page)
+                    continue
 
                 content = page.content()
                 soup = BeautifulSoup(content, "html.parser")
@@ -349,12 +336,15 @@ class WebConnector(LoadConnector, SlimConnector):
                 if self.recursive:
                     internal_links = get_internal_links(base_url, current_url, soup)
                     for link in internal_links:
-                        if link not in visited_links:
-                            to_visit.append(link)
+                        frontier.add_url(link)
 
                 if page_response and str(page_response.status)[0] in ("4", "5"):
                     last_error = f"Skipped indexing {current_url} due to HTTP {page_response.status} response"
                     logger.info(last_error)
+                    if page_response.status == 429:
+                        frontier.handle_ratelimit(
+                            current_url, int(retry_after) if retry_after else 5
+                        )
                     continue
 
                 parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
@@ -406,107 +396,44 @@ class WebConnector(LoadConnector, SlimConnector):
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateSlimDocumentOutput:
-        visited_links: set[str] = set()
-        to_visit: list[str] = self.to_visit_list
+        frontier = URLFrontier()
+        slim_doc_batch: list[SlimDocument] = []
 
-        if not to_visit:
-            raise ValueError("No URLs to visit")
+        if self.connector_id is None or self.credential_id is None:
+            raise ValueError(
+                "Connector and Credential IDs are required for slim documents"
+            )
 
-        base_url = to_visit[0]  # For the recursive case
-        doc_batch: list[SlimDocument] = []
+        with get_session_with_tenant(self.tenant_id) as db_session:
+            for doc_id in get_document_ids_for_connector_credential_pair(
+                db_session, self.connector_id, self.credential_id
+            ):
+                frontier.add_url(doc_id)
 
-        # Needed to report error
-        at_least_one_doc = False
-        last_error = None
+        while frontier.has_next_url():
+            current_url = frontier.get_next_url()
+            if current_url is None:
+                continue
+            try:
+                check_internet_connection(current_url, frontier=frontier)
+            except Exception as e:
+                logger.exception(f"Failed to fetch '{current_url}': {e}")
+                continue
+            slim_doc_batch.append(SlimDocument(id=current_url))
+            if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:
+                yield slim_doc_batch
+                slim_doc_batch = []
 
-        playwright, context = start_playwright()
-        restart_playwright = False
-        try:
-            while to_visit:
-                current_url = to_visit.pop()
-                if current_url in visited_links:
-                    continue
-                visited_links.add(current_url)
-
-                try:
-                    protected_url_check(current_url)
-                except Exception as e:
-                    last_error = f"Invalid URL {current_url} due to {e}"
-                    logger.warning(last_error)
-                    continue
-
-                logger.info(f"Visiting {current_url}")
-
-                try:
-                    check_internet_connection(current_url)
-                    if restart_playwright:
-                        playwright, context = start_playwright()
-                        restart_playwright = False
-
-                    if current_url.split(".")[-1] == "pdf":
-                        # PDF files are not checked for links
-                        doc_batch.append(
-                            SlimDocument(
-                                id=current_url,
-                            )
-                        )
-                        continue
-                    page = context.new_page()
-                    page_response = page.goto(current_url)
-                    final_page = page.url
-                    if final_page != current_url:
-                        logger.info(f"Redirected to {final_page}")
-                        protected_url_check(final_page)
-                        current_url = final_page
-                        if current_url in visited_links:
-                            logger.info("Redirected page already indexed")
-                            continue
-                        visited_links.add(current_url)
-                    if page_response and str(page_response.status)[0] in ("4", "5"):
-                        last_error = f"Skipped indexing {current_url} due to HTTP {page_response.status} response"
-                        logger.info(last_error)
-                        continue
-                    content = page.content()
-                    soup = BeautifulSoup(content, "html.parser")
-                    if self.recursive:
-                        internal_links = get_internal_links(base_url, current_url, soup)
-                        for link in internal_links:
-                            if link not in visited_links:
-                                to_visit.append(link)
-                    doc_batch.append(
-                        SlimDocument(
-                            id=current_url,
-                        )
-                    )
-                    page.close()
-                except Exception as e:
-                    last_error = f"Failed to fetch '{current_url}': {e}"
-                    logger.exception(last_error)
-                    playwright.stop()
-                    restart_playwright = True
-                    continue
-
-                if len(doc_batch) >= _SLIM_BATCH_SIZE:
-                    playwright.stop()
-                    restart_playwright = True
-                    at_least_one_doc = True
-                    yield doc_batch
-                    doc_batch = []
-
-            if doc_batch:
-                at_least_one_doc = True
-                yield doc_batch
-
-            if not at_least_one_doc:
-                if last_error:
-                    raise RuntimeError(last_error)
-                raise RuntimeError("No valid pages found.")
-        finally:
-            # Ensure playwright is stopped in case of an exception
-            playwright.stop()
+        if slim_doc_batch:
+            yield slim_doc_batch
 
 
 if __name__ == "__main__":
     connector = WebConnector("https://docs.onyx.app/")
     document_batches = connector.load_from_state()
-    print(next(document_batches))
+    cnt = 0
+    for batch in document_batches:
+        for doc in batch:
+            cnt += 1
+            print(doc.id)
+    print(f"Total documents: {cnt}")

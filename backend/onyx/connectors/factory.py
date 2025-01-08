@@ -4,6 +4,7 @@ from typing import Type
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSourceRequiringConnectorAndCredentialId
 from onyx.configs.constants import DocumentSourceRequiringTenantContext
 from onyx.connectors.asana.connector import AsanaConnector
 from onyx.connectors.axero.connector import AxeroConnector
@@ -138,11 +139,17 @@ def instantiate_connector(
     connector_specific_config: dict[str, Any],
     credential: Credential,
     tenant_id: str | None = None,
+    connector_id: int | None = None,
+    credential_id: int | None = None,
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
 
     if source in DocumentSourceRequiringTenantContext:
         connector_specific_config["tenant_id"] = tenant_id
+
+    if source in DocumentSourceRequiringConnectorAndCredentialId:
+        connector_specific_config["connector_id"] = connector_id
+        connector_specific_config["credential_id"] = credential_id
 
     connector = connector_class(**connector_specific_config)
     new_credentials = connector.load_credentials(credential.credential_json)

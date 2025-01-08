@@ -141,7 +141,13 @@ class DocumentSource(str, Enum):
     EGNYTE = "egnyte"
 
 
-DocumentSourceRequiringTenantContext: list[DocumentSource] = [DocumentSource.FILE]
+DocumentSourceRequiringTenantContext: list[DocumentSource] = [
+    DocumentSource.FILE,
+    DocumentSource.WEB,
+]
+DocumentSourceRequiringConnectorAndCredentialId: list[DocumentSource] = [
+    DocumentSource.WEB
+]
 
 
 class NotificationType(str, Enum):
