@@ -990,10 +990,6 @@ def vespa_metadata_sync_task(
                 boost=doc.boost,
                 hidden=doc.hidden,
             )
-            logger.info("\n\n\n\n\n\n\n\nuPDATING DOCUMENT")
-            logger.info(document_id)
-            logger.info(fields)
-            logger.info(doc_access)
 
             # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
             chunks_affected = retry_index.update_single(

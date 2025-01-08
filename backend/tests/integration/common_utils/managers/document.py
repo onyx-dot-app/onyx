@@ -23,7 +23,6 @@ def _verify_document_permissions(
 ) -> None:
     acl_keys = set(retrieved_doc.get("access_control_list", {}).keys())
     print(f"ACL keys: {acl_keys}")
-    print(f"Full retrieved document: {retrieved_doc}")
 
     if cc_pair.access_type == AccessType.PUBLIC:
         if "PUBLIC" not in acl_keys:
@@ -158,11 +157,6 @@ class DocumentManager:
     ) -> None:
         doc_ids = [document.id for document in cc_pair.documents]
         retrieved_docs_dict = vespa_client.get_documents_by_id(doc_ids)["documents"]
-        print(f"from the doc ids {doc_ids}")
-
-        print("--------------------------------")
-        for doc in retrieved_docs_dict:
-            print(f"document iD: {doc['fields']['document_id']} and {doc['id']}")
 
         retrieved_docs = {
             doc["fields"]["document_id"]: doc["fields"] for doc in retrieved_docs_dict

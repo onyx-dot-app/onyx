@@ -66,7 +66,6 @@ def main() -> None:
                 def process_doc(doc_id: str) -> str | None:
                     document = get_document(doc_id, db_session)
                     if not document:
-                        print(f"Document {doc_id} not found in Postgres")
                         return None
                     # Check if document exists in Vespa first
                     try:

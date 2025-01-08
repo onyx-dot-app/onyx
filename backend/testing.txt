@@ -1,0 +1,140 @@
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] doc_id test-doc-010f8ddf-f065-421e-8b5f-dba2e51409ac, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] doc_id test-doc-15d0dcd4-afd0-41c0-ac3a-f062d7d54ae9, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] doc_id test-doc-9666258c-a25a-4290-9050-951dd054f0b3, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] doc_id test-doc-49b93c6c-0625-474e-a29b-10533384c461, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] Doc ID: test-doc-010f8ddf-f065-421e-8b5f-dba2e51409ac and id is c4e99738-6467-5a14-a151-d2d68173d286
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] document_id test-doc-010f8ddf-f065-421e-8b5f-dba2e51409ac, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] doc_id test-doc-99aacccf-d43f-46f8-8fd3-979a4a58f248, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] doc_id test-doc-48b1c08c-2625-4a79-b5a8-57f96648f547, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] doc_id test-doc-3340635d-6077-4feb-8553-0618c0a249c7, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] Doc ID: test-doc-010f8ddf-f065-421e-8b5f-dba2e51409ac and id is c4e99738-6467-5a14-a151-d2d68173d286
+[2025-01-08 12:25:51] Doc ID: test-doc-15d0dcd4-afd0-41c0-ac3a-f062d7d54ae9 and id is ea672bb3-2d07-51c5-a39a-5f5bd7219fab
+[2025-01-08 12:25:51] document_id test-doc-15d0dcd4-afd0-41c0-ac3a-f062d7d54ae9, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] Doc ID: test-doc-9666258c-a25a-4290-9050-951dd054f0b3 and id is b518bd97-dda4-5241-8dcf-60164e0a6baa
+[2025-01-08 12:25:51] Doc ID: test-doc-15d0dcd4-afd0-41c0-ac3a-f062d7d54ae9 and id is ea672bb3-2d07-51c5-a39a-5f5bd7219fab
+[2025-01-08 12:25:51] doc_id test-doc-aea1f8b8-f1a7-4071-a9c2-492a372512a3, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] document_id test-doc-010f8ddf-f065-421e-8b5f-dba2e51409ac, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] document_id test-doc-9666258c-a25a-4290-9050-951dd054f0b3, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] document_id test-doc-15d0dcd4-afd0-41c0-ac3a-f062d7d54ae9, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] Doc ID: test-doc-9666258c-a25a-4290-9050-951dd054f0b3 and id is b518bd97-dda4-5241-8dcf-60164e0a6baa
+[2025-01-08 12:25:51] doc_id test-doc-c0cda300-a641-449e-b53f-8572735899dc, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] document_id test-doc-9666258c-a25a-4290-9050-951dd054f0b3, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] Doc ID: test-doc-49b93c6c-0625-474e-a29b-10533384c461 and id is d88662bf-f859-58cc-84b6-f04257838115
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] document_id test-doc-49b93c6c-0625-474e-a29b-10533384c461, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] doc_id test-doc-e91efe25-09d0-4f1f-8adb-f62ae8bd1f43, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] Doc ID: test-doc-49b93c6c-0625-474e-a29b-10533384c461 and id is d88662bf-f859-58cc-84b6-f04257838115
+[2025-01-08 12:25:51] Doc ID: test-doc-3340635d-6077-4feb-8553-0618c0a249c7 and id is 3d01e4cc-0c5f-57ad-8139-fbc7edce37cc
+[2025-01-08 12:25:51] document_id test-doc-49b93c6c-0625-474e-a29b-10533384c461, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] Doc ID: test-doc-99aacccf-d43f-46f8-8fd3-979a4a58f248 and id is 619fc1a8-74e3-57fe-95dc-1ac48d9ead3e
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] document_id test-doc-3340635d-6077-4feb-8553-0618c0a249c7, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] document_id test-doc-99aacccf-d43f-46f8-8fd3-979a4a58f248, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] Doc ID: test-doc-aea1f8b8-f1a7-4071-a9c2-492a372512a3 and id is b15838ad-4607-5815-9079-6c37a6688836
+[2025-01-08 12:25:51] Doc ID: test-doc-99aacccf-d43f-46f8-8fd3-979a4a58f248 and id is 619fc1a8-74e3-57fe-95dc-1ac48d9ead3e
+[2025-01-08 12:25:51] Doc ID: test-doc-3340635d-6077-4feb-8553-0618c0a249c7 and id is 3d01e4cc-0c5f-57ad-8139-fbc7edce37cc
+[2025-01-08 12:25:51] Doc ID: test-doc-c0cda300-a641-449e-b53f-8572735899dc and id is 91971d6a-e954-5c17-a3f4-88b9e7090adf
+[2025-01-08 12:25:51] doc_id test-doc-010f8ddf-f065-421e-8b5f-dba2e51409ac, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] document_id test-doc-aea1f8b8-f1a7-4071-a9c2-492a372512a3, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] document_id test-doc-3340635d-6077-4feb-8553-0618c0a249c7, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] document_id test-doc-99aacccf-d43f-46f8-8fd3-979a4a58f248, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] Doc ID: test-doc-aea1f8b8-f1a7-4071-a9c2-492a372512a3 and id is b15838ad-4607-5815-9079-6c37a6688836
+[2025-01-08 12:25:51] document_id test-doc-c0cda300-a641-449e-b53f-8572735899dc, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] doc_id test-doc-15d0dcd4-afd0-41c0-ac3a-f062d7d54ae9, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] document_id test-doc-aea1f8b8-f1a7-4071-a9c2-492a372512a3, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] Doc ID: test-doc-c0cda300-a641-449e-b53f-8572735899dc and id is 91971d6a-e954-5c17-a3f4-88b9e7090adf
+[2025-01-08 12:25:51] Doc ID: test-doc-48b1c08c-2625-4a79-b5a8-57f96648f547 and id is 1175290a-e73b-59ae-a00b-155603488490
+[2025-01-08 12:25:51] doc_id test-doc-48b1c08c-2625-4a79-b5a8-57f96648f547, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] doc_id test-doc-3340635d-6077-4feb-8553-0618c0a249c7, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] document_id test-doc-c0cda300-a641-449e-b53f-8572735899dc, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] document_id test-doc-48b1c08c-2625-4a79-b5a8-57f96648f547, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] doc_id test-doc-49b93c6c-0625-474e-a29b-10533384c461, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] Doc ID: test-doc-48b1c08c-2625-4a79-b5a8-57f96648f547 and id is 1175290a-e73b-59ae-a00b-155603488490
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] document_id test-doc-48b1c08c-2625-4a79-b5a8-57f96648f547, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] Doc ID: test-doc-010f8ddf-f065-421e-8b5f-dba2e51409ac and id is c4e99738-6467-5a14-a151-d2d68173d286
+[2025-01-08 12:25:51] Doc ID: test-doc-3340635d-6077-4feb-8553-0618c0a249c7 and id is 3d01e4cc-0c5f-57ad-8139-fbc7edce37cc
+[2025-01-08 12:25:51] OLD? UPDATE SINGLE
+[2025-01-08 12:25:51] Doc ID: test-doc-e91efe25-09d0-4f1f-8adb-f62ae8bd1f43 and id is 9188e172-07ff-547f-8ecc-f8ce25c181b0
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] document_id test-doc-3340635d-6077-4feb-8553-0618c0a249c7, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] document_id test-doc-010f8ddf-f065-421e-8b5f-dba2e51409ac, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] document_id test-doc-e91efe25-09d0-4f1f-8adb-f62ae8bd1f43, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] Doc ID: test-doc-15d0dcd4-afd0-41c0-ac3a-f062d7d54ae9 and id is ea672bb3-2d07-51c5-a39a-5f5bd7219fab
+[2025-01-08 12:25:51] doc_id test-doc-9666258c-a25a-4290-9050-951dd054f0b3, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:51] Doc ID: test-doc-010f8ddf-f065-421e-8b5f-dba2e51409ac and id is c4e99738-6467-5a14-a151-d2d68173d286
+[2025-01-08 12:25:51] Doc ID: test-doc-e91efe25-09d0-4f1f-8adb-f62ae8bd1f43 and id is 9188e172-07ff-547f-8ecc-f8ce25c181b0
+[2025-01-08 12:25:51] document_id test-doc-15d0dcd4-afd0-41c0-ac3a-f062d7d54ae9, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] Doc ID: test-doc-48b1c08c-2625-4a79-b5a8-57f96648f547 and id is 1175290a-e73b-59ae-a00b-155603488490
+[2025-01-08 12:25:51] document_id test-doc-e91efe25-09d0-4f1f-8adb-f62ae8bd1f43, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] Doc ID: test-doc-15d0dcd4-afd0-41c0-ac3a-f062d7d54ae9 and id is ea672bb3-2d07-51c5-a39a-5f5bd7219fab
+[2025-01-08 12:25:51] Doc ID: test-doc-3340635d-6077-4feb-8553-0618c0a249c7 and id is 3d01e4cc-0c5f-57ad-8139-fbc7edce37cc
+[2025-01-08 12:25:51] document_id test-doc-010f8ddf-f065-421e-8b5f-dba2e51409ac, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] document_id test-doc-48b1c08c-2625-4a79-b5a8-57f96648f547, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] document_id test-doc-3340635d-6077-4feb-8553-0618c0a249c7, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] Doc ID: test-doc-49b93c6c-0625-474e-a29b-10533384c461 and id is d88662bf-f859-58cc-84b6-f04257838115
+[2025-01-08 12:25:51] document_id test-doc-15d0dcd4-afd0-41c0-ac3a-f062d7d54ae9, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] document_id test-doc-49b93c6c-0625-474e-a29b-10533384c461, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] Doc ID: test-doc-49b93c6c-0625-474e-a29b-10533384c461 and id is d88662bf-f859-58cc-84b6-f04257838115
+[2025-01-08 12:25:51] Doc ID: test-doc-48b1c08c-2625-4a79-b5a8-57f96648f547 and id is 1175290a-e73b-59ae-a00b-155603488490
+[2025-01-08 12:25:51] document_id test-doc-49b93c6c-0625-474e-a29b-10533384c461, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] document_id test-doc-48b1c08c-2625-4a79-b5a8-57f96648f547, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] called in update_single
+[2025-01-08 12:25:51] Doc ID: test-doc-9666258c-a25a-4290-9050-951dd054f0b3 and id is b518bd97-dda4-5241-8dcf-60164e0a6baa
+[2025-01-08 12:25:51] document_id test-doc-9666258c-a25a-4290-9050-951dd054f0b3, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:51] Doc ID: test-doc-9666258c-a25a-4290-9050-951dd054f0b3 and id is b518bd97-dda4-5241-8dcf-60164e0a6baa
+[2025-01-08 12:25:51] document_id test-doc-9666258c-a25a-4290-9050-951dd054f0b3, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:52] OLD? UPDATE SINGLE
+[2025-01-08 12:25:52] doc_id test-doc-aea1f8b8-f1a7-4071-a9c2-492a372512a3, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:52] OLD? UPDATE SINGLE
+[2025-01-08 12:25:52] OLD? UPDATE SINGLE
+[2025-01-08 12:25:52] doc_id test-doc-99aacccf-d43f-46f8-8fd3-979a4a58f248, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:52] doc_id test-doc-c0cda300-a641-449e-b53f-8572735899dc, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:52] OLD? UPDATE SINGLE
+[2025-01-08 12:25:52] doc_id test-doc-e91efe25-09d0-4f1f-8adb-f62ae8bd1f43, chunk_count 1, tenant_id None, fields VespaDocumentFields(access=DocumentAccess(external_user_emails=set(), external_user_group_ids=set(), is_public=True, user_emails={'admin_user@test.com'}, user_groups={'test-user-group-c0453b8b-0090-4d0f-8672-e08091908c52'}), document_sets=set(), boost=0, hidden=False)
+[2025-01-08 12:25:52] called in update_single
+[2025-01-08 12:25:52] called in update_single
+[2025-01-08 12:25:52] called in update_single
+[2025-01-08 12:25:52] Doc ID: test-doc-c0cda300-a641-449e-b53f-8572735899dc and id is 91971d6a-e954-5c17-a3f4-88b9e7090adf
+[2025-01-08 12:25:52] Doc ID: test-doc-99aacccf-d43f-46f8-8fd3-979a4a58f248 and id is 619fc1a8-74e3-57fe-95dc-1ac48d9ead3e
+[2025-01-08 12:25:52] document_id test-doc-c0cda300-a641-449e-b53f-8572735899dc, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:52] Doc ID: test-doc-aea1f8b8-f1a7-4071-a9c2-492a372512a3 and id is b15838ad-4607-5815-9079-6c37a6688836
+[2025-01-08 12:25:52] document_id test-doc-99aacccf-d43f-46f8-8fd3-979a4a58f248, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:52] Doc ID: test-doc-c0cda300-a641-449e-b53f-8572735899dc and id is 91971d6a-e954-5c17-a3f4-88b9e7090adf
+[2025-01-08 12:25:52] Doc ID: test-doc-99aacccf-d43f-46f8-8fd3-979a4a58f248 and id is 619fc1a8-74e3-57fe-95dc-1ac48d9ead3e
+[2025-01-08 12:25:52] document_id test-doc-aea1f8b8-f1a7-4071-a9c2-492a372512a3, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:52] document_id test-doc-c0cda300-a641-449e-b53f-8572735899dc, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:52] document_id test-doc-99aacccf-d43f-46f8-8fd3-979a4a58f248, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:52] Doc ID: test-doc-aea1f8b8-f1a7-4071-a9c2-492a372512a3 and id is b15838ad-4607-5815-9079-6c37a6688836
+[2025-01-08 12:25:52] document_id test-doc-aea1f8b8-f1a7-4071-a9c2-492a372512a3, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:52] called in update_single
+[2025-01-08 12:25:52] Doc ID: test-doc-e91efe25-09d0-4f1f-8adb-f62ae8bd1f43 and id is 9188e172-07ff-547f-8ecc-f8ce25c181b0
+[2025-01-08 12:25:52] document_id test-doc-e91efe25-09d0-4f1f-8adb-f62ae8bd1f43, chunk_id 0, tenant_id public, large_chunk_id None
+[2025-01-08 12:25:52] Doc ID: test-doc-e91efe25-09d0-4f1f-8adb-f62ae8bd1f43 and id is 9188e172-07ff-547f-8ecc-f8ce25c181b0
+[2025-01-08 12:25:52] document_id test-doc-e91efe25-09d0-4f1f-8adb-f62ae8bd1f43, chunk_id 0, tenant_id public, large_chunk_id None
