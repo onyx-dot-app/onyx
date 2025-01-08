@@ -526,10 +526,8 @@ class VespaIndex(DocumentIndex):
     ) -> None:
         """
         Update a single "chunk" (document) in Vespa using its chunk ID.
-        Requires that 'index_name' matches the document type in your Vespa schema.
         """
 
-        # 1) Build the partial-update JSON
         update_dict: dict[str, dict] = {"fields": {}}
 
         if fields.boost is not None:
@@ -542,7 +540,7 @@ class VespaIndex(DocumentIndex):
             }
 
         if fields.access is not None:
-            # Another WeightedSet<string>
+            # Similar to above
             update_dict["fields"][ACCESS_CONTROL_LIST] = {
                 "assign": {acl_entry: 1 for acl_entry in fields.access.to_acl()}
             }
@@ -554,10 +552,6 @@ class VespaIndex(DocumentIndex):
             logger.error("Update request received but nothing to update.")
             return
 
-        # 2) Construct the correct doc URL
-        #    Make sure DOCUMENT_ID_ENDPOINT includes something like:
-        #      http://<host>:<port>/document/v1/{namespace}/{doc_type}/docid
-        #    Also note the "?create=true" so that partial updates upsert.
         vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}?create=true"
 
         with get_vespa_http_client(http2=False) as http_client:
@@ -637,7 +631,6 @@ class VespaIndex(DocumentIndex):
         tenant_id: str | None,
         chunk_count: int | None,
     ) -> int:
-        print("\n\n\n\n\n\n\n\nDELETE")
         total_chunks_deleted = 0
 
         doc_id = replace_invalid_doc_id_characters(doc_id)
