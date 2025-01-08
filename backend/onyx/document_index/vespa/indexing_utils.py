@@ -297,7 +297,7 @@ def can_use_large_chunks(multipass: bool, search_settings: SearchSettings) -> bo
     )
 
 
-def check_enable_large_chunks_and_multipass(
+def get_multipass_config(
     db_session: Session, primary_index: bool = True
 ) -> MultipassConfig:
     """

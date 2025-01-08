@@ -36,7 +36,7 @@ from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.vespa.indexing_utils import (
-    check_enable_large_chunks_and_multipass,
+    get_multipass_config,
 )
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import IndexingEmbedder
@@ -491,9 +491,7 @@ def build_indexing_pipeline(
     callback: IndexingHeartbeatInterface | None = None,
 ) -> IndexingPipelineProtocol:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
-    multipass_config = check_enable_large_chunks_and_multipass(
-        db_session, primary_index=True
-    )
+    multipass_config = get_multipass_config(db_session, primary_index=True)
 
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,

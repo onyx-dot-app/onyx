@@ -37,7 +37,10 @@ def translate_boost_count_to_multiplier(boost: int) -> float:
     return 2 / (1 + math.exp(-1 * boost / 3))
 
 
-def assemble_document_chunk_info(
+# Assembles a list of Vespa chunk IDs for a document
+# given the required context. This can be used to directly query
+# Vespa's Document API.
+def get_document_chunk_ids(
     enriched_document_info_list: list[EnrichedDocumentIndexingInfo],
     tenant_id: str | None,
     large_chunks_enabled: bool,

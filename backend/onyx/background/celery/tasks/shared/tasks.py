@@ -80,7 +80,6 @@ def document_by_cc_pair_cleanup_task(
                 # delete it from vespa and the db
                 action = "delete"
 
-                # TODO: fix the large chunks enabled
                 chunks_affected = retry_index.delete_single(
                     document_id,
                     tenant_id=tenant_id,
@@ -115,7 +114,6 @@ def document_by_cc_pair_cleanup_task(
                 )
 
                 # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
-                # TODO: fix the large chunks enabled
                 chunks_affected = retry_index.update_single(
                     document_id,
                     tenant_id=tenant_id,
