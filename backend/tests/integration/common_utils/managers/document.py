@@ -21,8 +21,10 @@ def _verify_document_permissions(
     group_names: list[str] | None = None,
     doc_creating_user: DATestUser | None = None,
 ) -> None:
-    acl_keys = set(retrieved_doc["access_control_list"].keys())
+    acl_keys = set(retrieved_doc.get("access_control_list", {}).keys())
     print(f"ACL keys: {acl_keys}")
+    print(f"Full retrieved document: {retrieved_doc}")
+
     if cc_pair.access_type == AccessType.PUBLIC:
         if "PUBLIC" not in acl_keys:
             raise ValueError(
@@ -39,11 +41,14 @@ def _verify_document_permissions(
 
     if group_names is not None:
         expected_group_keys = {f"group:{group_name}" for group_name in group_names}
+        print(f"Expected group keys: {expected_group_keys}")
         found_group_keys = {key for key in acl_keys if key.startswith("group:")}
+        print(f"Found group keys: {found_group_keys}")
         if found_group_keys != expected_group_keys:
             raise ValueError(
-                f"Document {retrieved_doc['document_id']} has incorrect group ACL keys. Found: {found_group_keys}, \n"
-                f"Expected: {expected_group_keys}"
+                f"Document {retrieved_doc['document_id']} has incorrect group ACL keys. "
+                f"Expected: {expected_group_keys}  Found: {found_group_keys}\n"
+                f"All ACL keys: {acl_keys}"
             )
 
     if doc_set_names is not None:

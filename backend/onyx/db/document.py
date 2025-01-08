@@ -702,3 +702,11 @@ def fetch_chunk_counts_for_documents(
     # otherwise cast to str if you need to be sure it's a string:
     return [(str(row[0]), row[1]) for row in results]
     # or row.id, row.chunk_count if they are named attributes in your ORM model
+
+
+def fetch_chunk_count_for_document(
+    document_id: str,
+    db_session: Session,
+) -> int | None:
+    stmt = select(DbDocument.chunk_count).where(DbDocument.id == document_id)
+    return db_session.execute(stmt).scalar_one_or_none()
