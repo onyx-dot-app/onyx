@@ -10,7 +10,6 @@ from celery import Task
 from pydantic import BaseModel
 from redis import Redis
 from sqlalchemy import select
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
@@ -32,48 +31,44 @@ _CONNECTOR_INDEX_ATTEMPT_KEY_FMT = (
 )
 
 
-def _mark_metric_as_emitted(redis_client: Redis, key: str) -> None:
+def _mark_metric_as_emitted(redis_std: Redis, key: str) -> None:
     """Mark a metric as having been emitted by setting a Redis key with expiration"""
-    redis_client.set(key, "1", ex=3600)  # Expire after 1 hour
+    redis_std.set(key, "1", ex=24 * 60 * 60)  # Expire after 1 day
 
 
-def _has_metric_been_emitted(redis_client: Redis, key: str) -> bool:
+def _has_metric_been_emitted(redis_std: Redis, key: str) -> bool:
     """Check if a metric has been emitted by checking for existence of Redis key"""
-    return bool(redis_client.exists(key))
+    return bool(redis_std.exists(key))
 
 
 class Metric(BaseModel):
-    key: str
+    key: str | None  # only required if we need to store that we have emitted this metric
     name: str
     value: Any
     tags: dict[str, str]
 
     def log(self) -> None:
         """Log the metric in a standardized format"""
-        task_logger.info(
-            json.dumps(
-                {
-                    "metric": self.name,
-                    "key": self.key,
-                    "value": self.value,
-                    "tags": self.tags,
-                }
-            )
-        )
+        data = {
+            "metric": self.name,
+            "value": self.value,
+            "tags": self.tags,
+        }
+        task_logger.info(json.dumps(data))
 
     def emit(self) -> None:
+        data = {
+            "metric": self.name,
+            "value": self.value,
+            "tags": self.tags,
+        }
         optional_telemetry(
             record_type=RecordType.USAGE,
-            data={
-                "metric": self.name,
-                "key": self.key,
-                "value": self.value,
-                "tags": self.tags,
-            },
+            data=data,
         )
 
 
-def _collect_queue_metrics(r_celery: Redis) -> list[Metric]:
+def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
     """Collect metrics about queue lengths for different Celery queues"""
     metrics = []
     queue_mappings = {
@@ -90,9 +85,9 @@ def _collect_queue_metrics(r_celery: Redis) -> list[Metric]:
     for name, queue in queue_mappings.items():
         metrics.append(
             Metric(
-                key="celery_queue_length",
+                key=None,
                 name=name,
-                value=celery_get_queue_length(queue, r_celery),
+                value=celery_get_queue_length(queue, redis_celery),
                 tags={"queue": name},
             )
         )
@@ -100,9 +95,7 @@ def _collect_queue_metrics(r_celery: Redis) -> list[Metric]:
     return metrics
 
 
-def _collect_connector_metrics(
-    db_session: Session, redis_client: Redis
-) -> list[dict[str, Any]]:
+def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Metric]:
     """Collect metrics about connector runs from the past hour"""
     one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
 
@@ -113,7 +106,7 @@ def _collect_connector_metrics(
     for cc_pair in cc_pairs:
         base_tags = {
             "source": cc_pair.connector.source,
-            "connector_id": cc_pair.connector.id,
+            "connector_id": str(cc_pair.connector.id),
         }
 
         # Get most recent attempt in the last hour
@@ -137,12 +130,16 @@ def _collect_connector_metrics(
             continue
 
         # check if we already emitted a metric for this index attempt
-        if redis_client.exists(
-            _CONNECTOR_INDEX_ATTEMPT_KEY_FMT.format(
-                cc_pair_id=cc_pair.id,
-                index_attempt_id=recent_attempt.id,
+        metric_key = _CONNECTOR_INDEX_ATTEMPT_KEY_FMT.format(
+            cc_pair_id=cc_pair.id,
+            index_attempt_id=recent_attempt.id,
+        )
+        if _has_metric_been_emitted(redis_std, metric_key):
+            task_logger.info(
+                f"Skipping metric for connector {cc_pair.connector.id} "
+                f"index attempt {recent_attempt.id} because it has already been "
+                "emitted"
             )
-        ):
             continue
 
         # Connector start latency
@@ -166,14 +163,15 @@ def _collect_connector_metrics(
         ).total_seconds()
 
         metrics.append(
-            {
-                "metric": "connector_start_latency",
-                "value": start_latency,
-                "tags": {
+            Metric(
+                key=metric_key,
+                name="connector_start_latency",
+                value=start_latency,
+                tags={
                     **base_tags,
-                    "index_attempt_id": recent_attempt.id,
+                    "index_attempt_id": str(recent_attempt.id),
                 },
-            }
+            )
         )
 
         # Connector run success/failure
@@ -183,78 +181,24 @@ def _collect_connector_metrics(
             IndexingStatus.CANCELED,
         ]:
             metrics.append(
-                {
-                    "metric": "connector_run_succeeded",
-                    "value": (
-                        1 if recent_attempt.status == IndexingStatus.SUCCESS else 0
-                    ),
-                    "tags": {
+                Metric(
+                    key=metric_key,
+                    name="connector_run_succeeded",
+                    value=(1 if recent_attempt.status == IndexingStatus.SUCCESS else 0),
+                    tags={
                         **base_tags,
-                        "index_attempt_id": recent_attempt.id,
+                        "index_attempt_id": str(recent_attempt.id),
                     },
-                }
+                )
             )
 
     return metrics
 
 
-def _collect_sync_metrics(db_session: Session) -> list[dict[str, Any]]:
+def _collect_sync_metrics(db_session: Session) -> list[Metric]:
     """Collect metrics about document set and group syncing speed"""
-    # Get average sync speed for document sets
-    doc_sync_speed = db_session.execute(
-        text(
-            """
-            SELECT
-                AVG(EXTRACT(EPOCH FROM (time_completed - time_started))) as avg_duration,
-                COUNT(*) as doc_count
-            FROM document_set_sync_attempt
-            WHERE time_completed IS NOT NULL
-            AND time_started >= NOW() - INTERVAL '1 hour'
-        """
-        )
-    ).first()
-
-    # Get average sync speed for group syncs
-    group_sync_speed = db_session.execute(
-        text(
-            """
-            SELECT
-                AVG(EXTRACT(EPOCH FROM (time_completed - time_started))) as avg_duration,
-                COUNT(*) as group_count
-            FROM external_group_sync_attempt
-            WHERE time_completed IS NOT NULL
-            AND time_started >= NOW() - INTERVAL '1 hour'
-        """
-        )
-    ).first()
-
-    metrics = []
-
-    if doc_sync_speed and doc_sync_speed.doc_count > 0:
-        metrics.append(
-            {
-                "metric": "syncing_speed",
-                "value": doc_sync_speed.avg_duration,
-                "tags": {
-                    "sync_type": "document_set",
-                    "count": doc_sync_speed.doc_count,
-                },
-            }
-        )
-
-    if group_sync_speed and group_sync_speed.group_count > 0:
-        metrics.append(
-            {
-                "metric": "syncing_speed",
-                "value": group_sync_speed.avg_duration,
-                "tags": {
-                    "sync_type": "external_group",
-                    "count": group_sync_speed.group_count,
-                },
-            }
-        )
-
-    return metrics
+    # TODO: Implement this
+    return []
 
 
 @shared_task(
@@ -275,13 +219,13 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
 
     try:
         # Get Redis client for Celery broker
-        r_celery = self.app.broker_connection().channel().client  # type: ignore
-        r_std = get_redis_client()
+        redis_celery = self.app.broker_connection().channel().client  # type: ignore
+        redis_std = get_redis_client(tenant_id=tenant_id)
 
         # Define metric collection functions and their dependencies
         metric_functions: list[Callable[[], list[Metric]]] = [
-            lambda: _collect_queue_metrics(r_celery),
-            lambda: _collect_connector_metrics(db_session, r_std),
+            lambda: _collect_queue_metrics(redis_celery),
+            lambda: _collect_connector_metrics(db_session, redis_std),
             lambda: _collect_sync_metrics(db_session),
         ]
         # Collect and log each metric
@@ -291,6 +235,8 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
                 for metric in metrics:
                     metric.log()
                     metric.emit()
+                    if metric.key:
+                        _mark_metric_as_emitted(redis_std, metric.key)
 
         task_logger.info("Successfully collected background process metrics")
 
