@@ -18,7 +18,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _VIEWSPACE_PERMISSION_TYPE = "VIEWSPACE"
-_REQUEST_PAGINATION_LIMIT = 500
+_REQUEST_PAGINATION_LIMIT = 5000
 
 
 def _get_server_space_permissions(
@@ -112,20 +112,40 @@ def _get_cloud_space_permissions(
 def _get_space_permissions(
     confluence_client: OnyxConfluence,
     is_cloud: bool,
-    space_key: str,
-) -> ExternalAccess:
+) -> dict[str, ExternalAccess]:
     logger.debug("Getting space permissions")
-    # Gets the permissions for each space
-    if is_cloud:
-        space_permissions = _get_cloud_space_permissions(
-            confluence_client=confluence_client, space_key=space_key
+    # Gets all the spaces in the Confluence instance
+    all_space_keys = []
+    start = 0
+    while True:
+        spaces_batch = confluence_client.get_all_spaces(
+            start=start, limit=_REQUEST_PAGINATION_LIMIT
         )
-    else:
-        space_permissions = _get_server_space_permissions(
-            confluence_client=confluence_client, space_key=space_key
-        )
+        for space in spaces_batch.get("results", []):
+            all_space_keys.append(space.get("key"))
 
-    return space_permissions
+        if len(spaces_batch.get("results", [])) < _REQUEST_PAGINATION_LIMIT:
+            break
+
+        start += len(spaces_batch.get("results", []))
+
+    # Gets the permissions for each space
+    logger.debug(f"Got {len(all_space_keys)} spaces from confluence")
+    space_permissions_by_space_key: dict[str, ExternalAccess] = {}
+    for space_key in all_space_keys:
+        if is_cloud:
+            space_permissions = _get_cloud_space_permissions(
+                confluence_client=confluence_client, space_key=space_key
+            )
+        else:
+            space_permissions = _get_server_space_permissions(
+                confluence_client=confluence_client, space_key=space_key
+            )
+
+        # Stores the permissions for each space
+        space_permissions_by_space_key[space_key] = space_permissions
+
+    return space_permissions_by_space_key
 
 
 def _extract_read_access_restrictions(
@@ -221,15 +241,6 @@ def _get_all_page_restrictions(
         # there is no way for a page to be individually public if the space isn't public
         is_public=False,
     )
-
-
-def _build_page_restriction_map(
-    confluence_client: OnyxConfluence,
-    slim_docs: list[SlimDocument],
-) -> dict[str, DocExternalAccess | None]:
-    """
-    Builds a map of page ids to their restrictions
-    """
 
 
 def _fetch_all_page_restrictions(
@@ -330,38 +341,16 @@ def confluence_doc_sync(
 
     is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)
 
-    slim_docs: list[SlimDocument] = []
-    logger.info("Fetching all slim documents from confluence")
-    for doc_batch in confluence_connector.retrieve_all_slim_documents():
-        logger.debug(f"Got {len(doc_batch)} slim documents from confluence")
-        slim_docs.extend(doc_batch)
-
-    all_space_keys: set[str] = set()
-    id_restriction_map: dict[str, DocExternalAccess | None] = {}
-    for doc in slim_docs:
-        if doc.perm_sync_data is None:
-            raise ValueError(f"No permission sync data found for document {doc.id}")
-
-        all_space_keys.add(doc.perm_sync_data.get("space_key"))
-        id_restriction_map.update()
-        id_restriction_map[
-            doc.perm_sync_data.get("confluence_id")
-        ] = _get_all_page_restrictions(
-            confluence_client=confluence_connector.confluence_client,
-            perm_sync_data=doc.perm_sync_data,
-        )
-
-    space_permissions_by_space_key: dict[str, ExternalAccess] = {}
-    for space_key in all_space_keys:
-        space_permissions_by_space_key[space_key] = _get_space_permissions(
-            confluence_client=confluence_connector.confluence_client,
-            is_cloud=is_cloud,
-        )
-
     space_permissions_by_space_key = _get_space_permissions(
         confluence_client=confluence_connector.confluence_client,
         is_cloud=is_cloud,
     )
+
+    slim_docs = []
+    logger.debug("Fetching all slim documents from confluence")
+    for doc_batch in confluence_connector.retrieve_all_slim_documents():
+        logger.debug(f"Got {len(doc_batch)} slim documents from confluence")
+        slim_docs.extend(doc_batch)
 
     logger.debug("Fetching all page restrictions for space")
     return _fetch_all_page_restrictions(
