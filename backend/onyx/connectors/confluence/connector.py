@@ -52,6 +52,7 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
     "space",
     "restrictions.read.restrictions.user",
     "restrictions.read.restrictions.group",
+    # "ancestors",
     "ancestors.restrictions.read.restrictions.user",
     "ancestors.restrictions.read.restrictions.group",
 ]
@@ -325,11 +326,13 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             # These will be used by doc_sync.py to sync permissions
             page_restrictions = page.get("restrictions")
             page_space_key = page.get("space", {}).get("key")
-            page_ancestors = page.get("ancestors", [])
+            page_ancestors = page.get("ancestors")
             page_perm_sync_data = {
-                "restrictions": page_restrictions or {},
+                "confluence_id": page["id"],
+                "title": page["title"],
+                "restrictions": page_restrictions,
                 "space_key": page_space_key,
-                "ancestors": page_ancestors or [],
+                "ancestors": page_ancestors,
             }
 
             doc_metadata_list.append(
@@ -354,13 +357,20 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                 if not attachment_restrictions:
                     attachment_restrictions = page_restrictions
 
+                attachment_ancestors = attachment.get("ancestors")
+                if not attachment_ancestors:
+                    attachment_ancestors = page_ancestors
+
                 attachment_space_key = attachment.get("space", {}).get("key")
                 if not attachment_space_key:
                     attachment_space_key = page_space_key
 
                 attachment_perm_sync_data = {
-                    "restrictions": attachment_restrictions or {},
+                    "title": attachment["title"],
+                    "confluence_id": attachment["id"],
+                    "restrictions": attachment_restrictions,
                     "space_key": attachment_space_key,
+                    "ancestors": attachment_ancestors,
                 }
 
                 doc_metadata_list.append(
