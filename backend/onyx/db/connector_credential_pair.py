@@ -39,6 +39,7 @@ def _add_user_filters(
     if user is None or user.role == UserRole.ADMIN:
         return stmt
 
+    stmt = stmt.distinct()
     UG__CCpair = aliased(UserGroup__ConnectorCredentialPair)
     User__UG = aliased(User__UserGroup)
 
