@@ -79,6 +79,7 @@ def _add_user_filters(
     - if we are not editing, we return all Personas directly connected to the user
     """
 
+    # If user is None, this is an anonymous user and we should only show public Personas
     if user is None:
         where_clause = Persona.is_public == True  # noqa: E712
         return stmt.where(where_clause)
