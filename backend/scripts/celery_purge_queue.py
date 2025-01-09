@@ -27,7 +27,11 @@ def celery_purge_queue(queue: str, tenant_id: str) -> None:
     """Purging a celery queue is extremely difficult because the queue is a list
     and the only way an item can be removed from a list is by VALUE, which is
     a linear scan.  Therefore, to purge the list of many values is roughly
-    n^2."""
+    n^2.
+
+    The other alternative is to pop values and push them back, but that raises
+    questions about behavior while operating on a live queue.
+    """
 
     pool = RedisPool.create_pool(
         host="127.0.0.1",
