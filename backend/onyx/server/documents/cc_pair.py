@@ -164,17 +164,12 @@ def update_cc_pair_status(
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
-    """This method may wait up to 30 seconds if pausing the connector due to the need to
-    terminate tasks in progress. Tasks are not guaranteed to terminate within the
-    timeout.
+    """This method returns nearly immediately. It simply sets some signals and
+    optimistically assumes any running background processes will clean themselves up.
+    This is done to improve the perceived end user experience.
 
     Returns HTTPStatus.OK if everything finished.
-    Returns HTTPStatus.ACCEPTED if the connector is being paused, but background tasks
-    did not finish within the timeout.
     """
-    WAIT_TIMEOUT = 15.0
-    still_terminating = False
-
     cc_pair = get_connector_credential_pair_from_id(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
@@ -195,66 +190,28 @@ def update_cc_pair_status(
 
         redis_connector = RedisConnector(tenant_id, cc_pair_id)
 
-        try:
-            redis_connector.stop.set_fence(True)
-            while True:
-                logger.debug(
-                    f"Wait for indexing soft termination starting: cc_pair={cc_pair_id}"
-                )
-                wait_succeeded = redis_connector.wait_for_indexing_termination(
-                    search_settings_list, WAIT_TIMEOUT
-                )
-                if wait_succeeded:
-                    logger.debug(
-                        f"Wait for indexing soft termination succeeded: cc_pair={cc_pair_id}"
-                    )
-                    break
+        redis_connector.stop.set_fence(True)
+        while True:
+            for search_settings in search_settings_list:
+                redis_connector_index = redis_connector.new_index(search_settings.id)
+                if not redis_connector_index.fenced:
+                    continue
 
-                logger.debug(
-                    "Wait for indexing soft termination timed out. "
-                    f"Moving to hard termination: cc_pair={cc_pair_id} timeout={WAIT_TIMEOUT:.2f}"
-                )
+                index_payload = redis_connector_index.payload
+                if not index_payload:
+                    continue
 
-                for search_settings in search_settings_list:
-                    redis_connector_index = redis_connector.new_index(
-                        search_settings.id
-                    )
-                    if not redis_connector_index.fenced:
-                        continue
+                if not index_payload.celery_task_id:
+                    continue
 
-                    index_payload = redis_connector_index.payload
-                    if not index_payload:
-                        continue
+                # Revoke the task to prevent it from running
+                primary_app.control.revoke(index_payload.celery_task_id)
 
-                    if not index_payload.celery_task_id:
-                        continue
+                # If it is running, then signaling for termination will get the
+                # watchdog thread to kill the spawned task
+                redis_connector_index.set_terminate(index_payload.celery_task_id)
 
-                    # Revoke the task to prevent it from running
-                    primary_app.control.revoke(index_payload.celery_task_id)
-
-                    # If it is running, then signaling for termination will get the
-                    # watchdog thread to kill the spawned task
-                    redis_connector_index.set_terminate(index_payload.celery_task_id)
-
-                logger.debug(
-                    f"Wait for indexing hard termination starting: cc_pair={cc_pair_id}"
-                )
-                wait_succeeded = redis_connector.wait_for_indexing_termination(
-                    search_settings_list, WAIT_TIMEOUT
-                )
-                if wait_succeeded:
-                    logger.debug(
-                        f"Wait for indexing hard termination succeeded: cc_pair={cc_pair_id}"
-                    )
-                    break
-
-                logger.debug(
-                    f"Wait for indexing hard termination timed out: cc_pair={cc_pair_id}"
-                )
-                still_terminating = True
-                break
-        finally:
-            redis_connector.stop.set_fence(False)
+            break
 
     update_connector_credential_pair_from_id(
         db_session=db_session,
@@ -263,14 +220,6 @@ def update_cc_pair_status(
     )
 
     db_session.commit()
-
-    if still_terminating:
-        return JSONResponse(
-            status_code=HTTPStatus.ACCEPTED,
-            content={
-                "message": "Request accepted, background task termination still in progress"
-            },
-        )
 
     return JSONResponse(
         status_code=HTTPStatus.OK, content={"message": str(HTTPStatus.OK)}
