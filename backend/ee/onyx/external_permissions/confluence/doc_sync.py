@@ -67,6 +67,13 @@ def _get_server_space_permissions(
         else:
             logger.warning(f"Email for user {user_name} not found in Confluence")
 
+    if not user_emails and not group_names:
+        logger.warning(
+            "No user emails or group names found in Confluence space permissions"
+            f"\nSpace key: {space_key}"
+            f"\nSpace permissions: {space_permissions}"
+        )
+
     return ExternalAccess(
         external_user_emails=user_emails,
         external_user_group_ids=group_names,

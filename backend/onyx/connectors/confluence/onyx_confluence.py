@@ -121,6 +121,7 @@ def handle_confluence_rate_limit(confluence_call: F) -> F:
 
 
 _DEFAULT_PAGINATION_LIMIT = 1000
+_MINIMUM_PAGINATION_LIMIT = 50
 
 
 class OnyxConfluence(Confluence):
@@ -204,24 +205,41 @@ class OnyxConfluence(Confluence):
                 # If the problematic expansion is in the url, replace it
                 # with the replacement expansion and try again
                 # If that fails, raise the error
-                if _PROBLEMATIC_EXPANSIONS not in url_suffix:
-                    logger.exception(
+                if _PROBLEMATIC_EXPANSIONS in url_suffix:
+                    logger.warning(
+                        f"Replacing {_PROBLEMATIC_EXPANSIONS} with {_REPLACEMENT_EXPANSIONS}"
+                        " and trying again."
+                    )
+                    url_suffix = url_suffix.replace(
+                        _PROBLEMATIC_EXPANSIONS,
+                        _REPLACEMENT_EXPANSIONS,
+                    )
+                    continue
+                if (
+                    raw_response.status_code == 500
+                    and limit > _MINIMUM_PAGINATION_LIMIT
+                ):
+                    new_limit = limit // 2
+                    logger.warning(
                         f"Error in confluence call to {url_suffix} \n"
                         f"Raw Response Text: {raw_response.text} \n"
                         f"Full Response: {raw_response.__dict__} \n"
                         f"Error: {e} \n"
+                        f"Reducing limit from {limit} to {new_limit} and trying again."
                     )
-                    raise e
+                    url_suffix = url_suffix.replace(
+                        f"limit={limit}", f"limit={new_limit}"
+                    )
+                    limit = new_limit
+                    continue
 
-                logger.warning(
-                    f"Replacing {_PROBLEMATIC_EXPANSIONS} with {_REPLACEMENT_EXPANSIONS}"
-                    " and trying again."
+                logger.exception(
+                    f"Error in confluence call to {url_suffix} \n"
+                    f"Raw Response Text: {raw_response.text} \n"
+                    f"Full Response: {raw_response.__dict__} \n"
+                    f"Error: {e} \n"
                 )
-                url_suffix = url_suffix.replace(
-                    _PROBLEMATIC_EXPANSIONS,
-                    _REPLACEMENT_EXPANSIONS,
-                )
-                continue
+                raise e
 
             try:
                 next_response = raw_response.json()
