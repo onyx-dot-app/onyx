@@ -24,6 +24,7 @@ def _add_user_filters(
     if user is None or user.role == UserRole.ADMIN:
         return stmt
 
+    stmt = stmt.distinct()
     TRLimit_UG = aliased(TokenRateLimit__UserGroup)
     User__UG = aliased(User__UserGroup)
 

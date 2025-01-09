@@ -50,6 +50,7 @@ def _add_user_filters(
     if user is None or user.role == UserRole.ADMIN:
         return stmt
 
+    stmt = stmt.distinct()
     DocByCC = aliased(DocumentByConnectorCredentialPair)
     CCPair = aliased(ConnectorCredentialPair)
     UG__CCpair = aliased(UserGroup__ConnectorCredentialPair)

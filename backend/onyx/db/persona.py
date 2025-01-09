@@ -49,6 +49,7 @@ def _add_user_filters(
     if user is None or user.role == UserRole.ADMIN:
         return stmt
 
+    stmt = stmt.distinct()
     Persona__UG = aliased(Persona__UserGroup)
     User__UG = aliased(User__UserGroup)
     """

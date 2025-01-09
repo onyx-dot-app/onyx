@@ -74,6 +74,7 @@ def _add_user_filters(
         # Basic users can only access credentials that are owned by them
         return stmt.where(Credential.user_id == user.id)
 
+    stmt = stmt.distinct()
     """
     THIS PART IS FOR CURATORS AND GLOBAL CURATORS
     Here we select cc_pairs by relation:

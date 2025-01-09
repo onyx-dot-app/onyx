@@ -40,6 +40,7 @@ def _add_user_filters(
     if user is None or user.role == UserRole.ADMIN:
         return stmt
 
+    stmt = stmt.distinct()
     DocumentSet__UG = aliased(DocumentSet__UserGroup)
     User__UG = aliased(User__UserGroup)
     """
