@@ -10,6 +10,10 @@ from typing import cast
 
 from redis import Redis
 
+from onyx.configs.app_configs import REDIS_DB_NUMBER
+from onyx.configs.app_configs import REDIS_HOST
+from onyx.configs.app_configs import REDIS_PASSWORD
+from onyx.configs.app_configs import REDIS_PORT
 from onyx.redis.redis_pool import RedisPool
 
 # Configure the logger
@@ -26,11 +30,18 @@ BATCH_DEFAULT = 1000
 
 
 def onyx_redis(
-    command: str, batch: int, dry_run: bool, host: str, port: int, password: str | None
+    command: str,
+    batch: int,
+    dry_run: bool,
+    host: str,
+    port: int,
+    db: int,
+    password: str | None,
 ) -> int:
     pool = RedisPool.create_pool(
         host=host,
         port=port,
+        db=db,
         password=password if password else "",
         ssl=True,
         ssl_cert_reqs="optional",
@@ -130,7 +141,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--host",
         type=str,
-        default="127.0.0.1",
+        default=REDIS_HOST,
         help="The redis host",
         required=False,
     )
@@ -138,15 +149,23 @@ if __name__ == "__main__":
     parser.add_argument(
         "--port",
         type=int,
-        default="6380",
+        default=REDIS_PORT,
         help="The redis port",
+        required=False,
+    )
+
+    parser.add_argument(
+        "--db",
+        type=int,
+        default=REDIS_DB_NUMBER,
+        help="The redis db",
         required=False,
     )
 
     parser.add_argument(
         "--password",
         type=str,
-        default=None,
+        default=REDIS_PASSWORD,
         help="The redis password",
         required=False,
     )
@@ -173,6 +192,7 @@ if __name__ == "__main__":
         dry_run=args.dry_run,
         host=args.host,
         port=args.port,
+        db=args.db,
         password=args.password,
     )
     sys.exit(exitcode)
