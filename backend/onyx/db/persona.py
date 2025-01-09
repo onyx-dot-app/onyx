@@ -17,6 +17,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.chat_configs import BING_API_KEY
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
@@ -46,7 +47,7 @@ def _add_user_filters(
     stmt: Select, user: User | None, get_editable: bool = True
 ) -> Select:
     # If user is None, assume the user is an admin or auth is disabled
-    if user is None or user.role == UserRole.ADMIN:
+    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
 
     Persona__UG = aliased(Persona__UserGroup)
@@ -77,6 +78,11 @@ def _add_user_filters(
     for (as well as public Personas)
     - if we are not editing, we return all Personas directly connected to the user
     """
+
+    if user is None:
+        where_clause = Persona.is_public == True  # noqa: E712
+        return stmt.where(where_clause)
+
     where_clause = User__UserGroup.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:
         where_clause &= User__UserGroup.is_curator == True  # noqa: E712

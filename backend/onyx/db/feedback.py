@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.db.chat import get_chat_message
@@ -47,7 +48,7 @@ def _add_user_filters(
     stmt: Select, user: User | None, get_editable: bool = True
 ) -> Select:
     # If user is None, assume the user is an admin or auth is disabled
-    if user is None or user.role == UserRole.ADMIN:
+    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
 
     DocByCC = aliased(DocumentByConnectorCredentialPair)
@@ -83,6 +84,12 @@ def _add_user_filters(
     - if we are not editing, we show all objects in the groups the user is a curator
     for (as well as public objects as well)
     """
+
+    # If user is None, this is an anonymous user and we should only show public documents
+    if user is None:
+        where_clause = CCPair.access_type == AccessType.PUBLIC
+        return stmt.where(where_clause)
+
     where_clause = User__UG.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:
         where_clause &= User__UG.is_curator == True  # noqa: E712

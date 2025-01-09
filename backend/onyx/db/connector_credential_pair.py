@@ -10,6 +10,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
@@ -28,7 +29,6 @@ from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
-
 logger = setup_logger()
 
 
@@ -36,7 +36,7 @@ def _add_user_filters(
     stmt: Select, user: User | None, get_editable: bool = True
 ) -> Select:
     # If user is None, assume the user is an admin or auth is disabled
-    if user is None or user.role == UserRole.ADMIN:
+    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
 
     UG__CCpair = aliased(UserGroup__ConnectorCredentialPair)
@@ -62,6 +62,12 @@ def _add_user_filters(
     - if we are not editing, we show all cc_pairs in the groups the user is a curator
     for (as well as public cc_pairs)
     """
+
+    # If user is None, this is an anonymous user and we should only show public cc_pairs
+    if user is None:
+        where_clause = ConnectorCredentialPair.access_type == AccessType.PUBLIC
+        return stmt.where(where_clause)
+
     where_clause = User__UG.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:
         where_clause &= User__UG.is_curator == True  # noqa: E712

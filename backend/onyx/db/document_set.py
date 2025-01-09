@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.enums import AccessType
@@ -37,7 +38,7 @@ def _add_user_filters(
     stmt: Select, user: User | None, get_editable: bool = True
 ) -> Select:
     # If user is None, assume the user is an admin or auth is disabled
-    if user is None or user.role == UserRole.ADMIN:
+    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
 
     DocumentSet__UG = aliased(DocumentSet__UserGroup)
@@ -60,6 +61,12 @@ def _add_user_filters(
     - if we are not editing, we show all DocumentSets in the groups the user is a curator
     for (as well as public DocumentSets)
     """
+
+    # If user is None, this is an anonymous user and we should only show public DocumentSets
+    if user is None:
+        where_clause = DocumentSetDBModel.is_public == True  # noqa: E712
+        return stmt.where(where_clause)
+
     where_clause = User__UserGroup.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:
         where_clause &= User__UserGroup.is_curator == True  # noqa: E712
