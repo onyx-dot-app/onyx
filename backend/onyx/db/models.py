@@ -818,6 +818,7 @@ class IndexAttempt(Base):
             "connector_credential_pair_id",
             "search_settings_id",
             desc("time_updated"),
+            unique=False,
         ),
     )
 
