@@ -21,7 +21,7 @@ from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 def _add_user_filters(
     stmt: Select, user: User | None, get_editable: bool = True
 ) -> Select:
-    # If user is None, assume the user is an admin or auth is disabled
+    # If user is None and auth is disabled, assume the user is an admin
     if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
 
