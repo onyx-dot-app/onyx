@@ -1,4 +1,6 @@
 # Tool to run helpful operations on Redis in production
+# This is targeted for internal usage and may not have all the necessary parameters
+# for general usage across custom deployments
 import argparse
 import logging
 import sys
@@ -19,20 +21,29 @@ logging.basicConfig(
 
 logger = getLogger(__name__)
 
-REDIS_PASSWORD = ""
+SCAN_ITER_COUNT = 10000
+BATCH_DEFAULT = 1000
 
 
-def onyx_redis(command: str, batch: int, dry_run: bool) -> int:
+def onyx_redis(
+    command: str, batch: int, dry_run: bool, host: str, port: int, password: str | None
+) -> int:
     pool = RedisPool.create_pool(
-        host="127.0.0.1",
-        port=6380,
-        password=REDIS_PASSWORD,
+        host=host,
+        port=port,
+        password=password if password else "",
         ssl=True,
         ssl_cert_reqs="optional",
         ssl_ca_certs=None,
     )
 
     r = Redis(connection_pool=pool)
+
+    try:
+        r.ping()
+    except:
+        logger.exception("Redis ping exceptioned")
+        raise
 
     if command == "purge_connectorsync_taskset":
         """Purge connector tasksets. Used when the tasks represented in the tasksets
@@ -56,6 +67,14 @@ def onyx_redis(command: str, batch: int, dry_run: bool) -> int:
     return 255
 
 
+def flush_batch_delete(batch_keys: list[bytes], r: Redis) -> None:
+    logger.info(f"Flushing {len(batch_keys)} operations to Redis.")
+    with r.pipeline() as pipe:
+        for batch_key in batch_keys:
+            pipe.delete(batch_key)
+        pipe.execute()
+
+
 def purge_by_match_and_type(
     match_pattern: str, match_type: str, batch_size: int, dry_run: bool, r: Redis
 ) -> int:
@@ -73,7 +92,7 @@ def purge_by_match_and_type(
 
     count = 0
     batch_keys: list[bytes] = []
-    for key in r.scan_iter(match_pattern, count=10000, _type=match_type):
+    for key in r.scan_iter(match_pattern, count=SCAN_ITER_COUNT, _type=match_type):
         # key_type = r.type(key)
         # if key_type != match_type.encode("utf-8"):
         #     continue
@@ -90,22 +109,14 @@ def purge_by_match_and_type(
 
         batch_keys.append(key)
         if len(batch_keys) >= batch_size:
-            logger.info(f"Flushing {len(batch_keys)} operations to Redis.")
-            with r.pipeline() as pipe:
-                for batch_key in batch_keys:
-                    pipe.delete(batch_key)
-                pipe.execute()
+            flush_batch_delete(batch_keys, r)
             batch_keys.clear()
 
     if len(batch_keys) >= batch_size:
-        logger.info(f"Flushing {len(batch_keys)} operations to Redis.")
-        with r.pipeline() as pipe:
-            for batch_key in batch_keys:
-                pipe.delete(batch_key)
-            pipe.execute()
+        flush_batch_delete(batch_keys, r)
         batch_keys.clear()
 
-    logger.info(f"Found {count} matches.")
+    logger.info(f"Deleted {count} matches.")
 
     elapsed = time.monotonic() - start
     logger.info(f"Time elapsed: {elapsed:.2f}s")
@@ -115,13 +126,39 @@ def purge_by_match_and_type(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Onyx Redis Manager")
     parser.add_argument("--command", type=str, help="Operation to run", required=True)
+
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        help="The redis host",
+        required=False,
+    )
+
+    parser.add_argument(
+        "--port",
+        type=int,
+        default="6380",
+        help="The redis port",
+        required=False,
+    )
+
+    parser.add_argument(
+        "--password",
+        type=str,
+        default=None,
+        help="The redis password",
+        required=False,
+    )
+
     parser.add_argument(
         "--batch",
         type=int,
-        default=1000,
+        default=BATCH_DEFAULT,
         help="Size of operation batches to send to Redis",
         required=False,
     )
+
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -130,5 +167,12 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    exitcode = onyx_redis(command=args.command, batch=args.batch, dry_run=args.dry_run)
+    exitcode = onyx_redis(
+        command=args.command,
+        batch=args.batch,
+        dry_run=args.dry_run,
+        host=args.host,
+        port=args.port,
+        password=args.password,
+    )
     sys.exit(exitcode)
