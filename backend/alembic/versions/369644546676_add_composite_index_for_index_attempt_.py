@@ -6,6 +6,7 @@ Create Date: 2025-01-08 15:38:17.224380
 
 """
 from alembic import op
+from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision = "369644546676"
@@ -18,7 +19,11 @@ def upgrade() -> None:
     op.create_index(
         "ix_index_attempt_ccpair_search_settings_time_updated",
         "index_attempt",
-        ["connector_credential_pair_id", "search_settings_id", "time_updated"],
+        [
+            "connector_credential_pair_id",
+            "search_settings_id",
+            text("time_updated DESC"),
+        ],
         unique=False,
     )
 
