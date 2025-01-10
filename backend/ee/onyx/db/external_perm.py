@@ -6,7 +6,7 @@ from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.access.utils import prefix_group_w_source
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import User__ExternalUserGroupId
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
@@ -58,7 +58,7 @@ def replace_user__ext_group_for_cc_pair(
     all_group_member_emails = set()
     for external_group in group_defs:
         for user_email in external_group.user_emails:
-            all_group_member_emails.add(user_email)
+            all_group_member_emails.add(user_email.lower())
 
     # batch add users if they don't exist and get their ids
     all_group_members = batch_add_ext_perm_user_if_not_exists(
@@ -84,12 +84,14 @@ def replace_user__ext_group_for_cc_pair(
                     f" with email {user_email} not found"
                 )
                 continue
+            external_group_id = build_ext_group_name_for_onyx(
+                ext_group_name=external_group.id,
+                source=source,
+            )
             new_external_permissions.append(
                 User__ExternalUserGroupId(
                     user_id=user_id,
-                    external_user_group_id=prefix_group_w_source(
-                        external_group.id, source
-                    ),
+                    external_user_group_id=external_group_id,
                     cc_pair_id=cc_pair_id,
                 )
             )

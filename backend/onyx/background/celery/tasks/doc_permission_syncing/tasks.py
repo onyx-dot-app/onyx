@@ -391,5 +391,7 @@ def update_external_document_permissions_task(
             )
         return True
     except Exception:
-        logger.exception("Error Syncing Document Permissions")
+        logger.exception(
+            f"Error Syncing Document Permissions: connector_id={connector_id} doc_id={doc_id}"
+        )
         return False
