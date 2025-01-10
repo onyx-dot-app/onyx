@@ -183,14 +183,14 @@ def update_cc_pair_status(
             detail="Connection not found for current user's permissions",
         )
 
+    redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if status_update_request.status == ConnectorCredentialPairStatus.PAUSED:
+        redis_connector.stop.set_fence(True)
+
         search_settings_list: list[SearchSettings] = get_active_search_settings(
             db_session
         )
 
-        redis_connector = RedisConnector(tenant_id, cc_pair_id)
-
-        redis_connector.stop.set_fence(True)
         while True:
             for search_settings in search_settings_list:
                 redis_connector_index = redis_connector.new_index(search_settings.id)
@@ -212,6 +212,8 @@ def update_cc_pair_status(
                 redis_connector_index.set_terminate(index_payload.celery_task_id)
 
             break
+    else:
+        redis_connector.stop.set_fence(False)
 
     update_connector_credential_pair_from_id(
         db_session=db_session,

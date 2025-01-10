@@ -362,7 +362,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       <div className="flex mt-4">
         <div className="mx-auto">
           {ccPair.is_editable_for_current_user && (
-            <DeletionButton ccPair={ccPair} />
+            <DeletionButton ccPair={ccPair} refresh={refresh} />
           )}
         </div>
       </div>
