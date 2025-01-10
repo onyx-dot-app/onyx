@@ -60,7 +60,7 @@ export const FeedbackModal = ({
             {feedbackType === "like" ? (
               <FilledLikeIcon
                 size={20}
-                className="text-green-500 my-auto mr-2"
+                className="text-green-600 my-auto mr-2"
               />
             ) : (
               <FilledLikeIcon
@@ -76,8 +76,8 @@ export const FeedbackModal = ({
           {predefinedFeedbackOptions.map((feedback, index) => (
             <button
               key={index}
-              className={`bg-border hover:bg-hover text-default py-2 px-4 rounded m-1 
-                ${predefinedFeedback === feedback && "ring-2 ring-accent"}`}
+              className={`bg-background-dark hover:bg-hover text-default py-2 px-4 rounded m-1 
+                ${predefinedFeedback === feedback && "ring-2 ring-accent/20"}`}
               onClick={() => handlePredefinedFeedback(feedback)}
             >
               {feedback}

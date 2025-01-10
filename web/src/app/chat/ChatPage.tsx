@@ -47,6 +47,7 @@ import {
 import {
   Dispatch,
   SetStateAction,
+  use,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -58,7 +59,7 @@ import { SEARCH_PARAM_NAMES, shouldSubmitOnLoad } from "./searchParams";
 import { useDocumentSelection } from "./useDocumentSelection";
 import { LlmOverride, useFilters, useLlmOverride } from "@/lib/hooks";
 import { ChatState, FeedbackType, RegenerationState } from "./types";
-import { ChatFilters } from "./documentSidebar/ChatFilters";
+import { DocumentResults } from "./documentSidebar/DocumentResults";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { FeedbackModal } from "./modal/FeedbackModal";
 import { ShareChatSessionModal } from "./modal/ShareChatSessionModal";
@@ -103,16 +104,15 @@ import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import BlurBackground from "./shared_chat_search/BlurBackground";
 import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
 import { useAssistants } from "@/components/context/AssistantsContext";
-import { Separator } from "@/components/ui/separator";
-import AssistantBanner from "../../components/assistants/AssistantBanner";
 import TextView from "@/components/chat_search/TextView";
-import AssistantSelector from "@/components/chat_search/AssistantSelector";
 import { Modal } from "@/components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import {
   CHROME_MESSAGE,
   SUBMIT_MESSAGE_TYPES,
 } from "@/lib/extension/constants";
+import AssistantModal from "../assistants/mine/AssistantModal";
+import { getSourceMetadata } from "@/lib/sources";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -140,10 +140,14 @@ export function ChatPage({
     llmProviders,
     folders,
     openedFolders,
-    defaultAssistantId,
     shouldShowWelcomeModal,
     refreshChatSessions,
   } = useChatContext();
+
+  const defaultAssistantIdRaw = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+  const defaultAssistantId = defaultAssistantIdRaw
+    ? parseInt(defaultAssistantIdRaw)
+    : undefined;
 
   function useScreenSize() {
     const [screenSize, setScreenSize] = useState({
@@ -198,9 +202,6 @@ export function ChatPage({
   const slackChatId = searchParams.get("slackChatId");
   const existingChatIdRaw = searchParams.get("chatId");
 
-  const modelVersionFromSearchParams = searchParams.get(
-    SEARCH_PARAM_NAMES.STRUCTURED_MODEL
-  );
   const [showHistorySidebar, setShowHistorySidebar] = useState(false); // State to track if sidebar is open
 
   useEffect(() => {
@@ -235,7 +236,6 @@ export function ChatPage({
 
     // If there's a message, submit it
     if (message) {
-      console.log("SUBMITTING MESSAGE");
       setSubmittedMessage(message);
       onSubmit({ messageOverride: message, overrideFileDescriptors });
     }
@@ -296,9 +296,8 @@ export function ChatPage({
 
   const llmOverrideManager = useLlmOverride(
     llmProviders,
-    modelVersionFromSearchParams || (user?.preferences.default_model ?? null),
-    selectedChatSession,
-    defaultTemperature
+    user?.preferences.default_model,
+    selectedChatSession
   );
 
   const [alternativeAssistant, setAlternativeAssistant] =
@@ -324,6 +323,8 @@ export function ChatPage({
   const noAssistants = liveAssistant == null || liveAssistant == undefined;
 
   const availableSources = ccPairs.map((ccPair) => ccPair.source);
+  const uniqueSources = Array.from(new Set(availableSources));
+  const sources = uniqueSources.map((source) => getSourceMetadata(source));
 
   // always set the model override for the chat session, when an assistant, llm provider, or user preference exists
   useEffect(() => {
@@ -536,7 +537,7 @@ export function ChatPage({
 
     initialSessionFetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [existingChatSessionId]);
+  }, [existingChatSessionId, searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID)]);
 
   const [message, setMessage] = useState(
     searchParams.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
@@ -1566,6 +1567,7 @@ export function ChatPage({
       setSelectedMessageForDocDisplay(finalMessage.message_id);
     }
     setAlternativeGeneratingAssistant(null);
+    setSubmittedMessage("");
   };
 
   const onFeedback = async (
@@ -1957,25 +1959,13 @@ export function ChatPage({
   const showShareModal = (chatSession: ChatSession) => {
     setSharedChatSession(chatSession);
   };
+  const [showAssistantsModal, setShowAssistantsModal] = useState(false);
 
   const toggleDocumentSidebar = () => {
     if (!documentSidebarToggled) {
-      setFiltersToggled(false);
       setDocumentSidebarToggled(true);
-    } else if (!filtersToggled) {
-      setDocumentSidebarToggled(false);
     } else {
-      setFiltersToggled(false);
-    }
-  };
-  const toggleFilters = () => {
-    if (!documentSidebarToggled) {
-      setFiltersToggled(true);
-      setDocumentSidebarToggled(true);
-    } else if (filtersToggled) {
       setDocumentSidebarToggled(false);
-    } else {
-      setFiltersToggled(true);
     }
   };
 
@@ -2087,15 +2077,10 @@ export function ChatPage({
             noPadding
             noScroll
           >
-            <ChatFilters
+            <DocumentResults
               setPresentingDocument={setPresentingDocument}
               modal={true}
-              filterManager={filterManager}
-              ccPairs={ccPairs}
-              tags={tags}
-              documentSets={documentSets}
               ref={innerSidebarElementRef}
-              showFilters={filtersToggled}
               closeSidebar={() => {
                 setDocumentSidebarToggled(false);
               }}
@@ -2177,6 +2162,10 @@ export function ChatPage({
         />
       )}
 
+      {showAssistantsModal && (
+        <AssistantModal hideModal={() => setShowAssistantsModal(false)} />
+      )}
+
       <div className="fixed inset-0 flex flex-col text-default">
         <div className="h-[100dvh] overflow-y-hidden">
           <div className="w-full">
@@ -2201,6 +2190,8 @@ export function ChatPage({
             >
               <div className="w-full relative">
                 <HistorySidebar
+                  setShowAssistantsModal={setShowAssistantsModal}
+                  assistants={assistants}
                   explicitlyUntoggle={explicitlyUntoggle}
                   stopGenerating={stopGenerating}
                   reset={() => setMessage("")}
@@ -2209,6 +2200,7 @@ export function ChatPage({
                   toggleSidebar={toggleSidebar}
                   toggled={toggledSidebar}
                   backgroundToggled={toggledSidebar || showHistorySidebar}
+                  currentAssistantId={liveAssistant?.id}
                   existingChats={chatSessions}
                   currentChatSession={selectedChatSession}
                   folders={folders}
@@ -2244,16 +2236,13 @@ export function ChatPage({
                 ${documentSidebarToggled ? "w-[400px]" : "w-[0px]"}
             `}
             >
-              <ChatFilters
+              <DocumentResults
                 setPresentingDocument={setPresentingDocument}
                 modal={false}
-                filterManager={filterManager}
-                ccPairs={ccPairs}
-                tags={tags}
-                documentSets={documentSets}
                 ref={innerSidebarElementRef}
-                showFilters={filtersToggled}
-                closeSidebar={() => setDocumentSidebarToggled(false)}
+                closeSidebar={() =>
+                  setTimeout(() => setDocumentSidebarToggled(false), 300)
+                }
                 selectedMessage={aiMessage}
                 selectedDocuments={selectedDocuments}
                 toggleDocumentSelection={toggleDocumentSelection}
@@ -2288,7 +2277,6 @@ export function ChatPage({
                   }
                   toggleSidebar={toggleSidebar}
                   currentChatSession={selectedChatSession}
-                  documentSidebarToggled={documentSidebarToggled}
                   hideUserDropdown={user?.is_anonymous_user}
                 />
               )}
@@ -2326,7 +2314,7 @@ export function ChatPage({
                           className={`w-full h-[calc(100vh-160px)] flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative`}
                           ref={scrollableDivRef}
                         >
-                          {liveAssistant && onAssistantChange && (
+                          {liveAssistant && (
                             <div className="z-20 fixed top-0 pointer-events-none left-0 w-full flex justify-center overflow-visible">
                               {!settings?.isMobile && (
                                 <div
@@ -2343,44 +2331,16 @@ export function ChatPage({
                               `}
                                 ></div>
                               )}
-
-                              <AssistantSelector
-                                isMobile={settings?.isMobile!}
-                                liveAssistant={liveAssistant}
-                                onAssistantChange={onAssistantChange}
-                                llmOverrideManager={llmOverrideManager}
-                              />
-                              {!settings?.isMobile && (
-                                <div
-                                  style={{ transition: "width 0.30s ease-out" }}
-                                  className={`
-                                    flex-none 
-                                    overflow-y-hidden 
-                                    transition-all 
-                                    duration-300 
-                                    ease-in-out
-                                    h-full
-                                    pointer-events-none
-                                    ${
-                                      documentSidebarToggled && retrievalEnabled
-                                        ? "w-[400px]"
-                                        : "w-[0px]"
-                                    }
-                                `}
-                                ></div>
-                              )}
                             </div>
                           )}
-
                           {/* ChatBanner is a custom banner that displays a admin-specified message at 
                       the top of the chat page. Oly used in the EE version of the app. */}
-
                           {messageHistory.length === 0 &&
                             !isFetchingChatMessages &&
                             currentSessionChatState == "input" &&
                             !loadingError &&
                             !submittedMessage && (
-                              <div className="h-full w-[95%] mx-auto mt-12 flex flex-col justify-center items-center">
+                              <div className="h-full w-[95%] mx-auto flex flex-col justify-center items-center">
                                 <ChatIntro selectedPersona={liveAssistant} />
 
                                 <StarterMessages
@@ -2391,37 +2351,17 @@ export function ChatPage({
                                     })
                                   }
                                 />
-
-                                {!isFetchingChatMessages &&
-                                  currentSessionChatState == "input" &&
-                                  !loadingError &&
-                                  allAssistants.length > 1 && (
-                                    <div className="mobile:hidden mx-auto px-4 w-full max-w-[750px] flex flex-col items-center">
-                                      <Separator className="mx-2 w-full my-12" />
-                                      <div className="text-sm text-black font-medium mb-4">
-                                        Recent Assistants
-                                      </div>
-                                      <AssistantBanner
-                                        mobile={settings?.isMobile}
-                                        recentAssistants={recentAssistants}
-                                        liveAssistant={liveAssistant}
-                                        allAssistants={allAssistants}
-                                        onAssistantChange={onAssistantChange}
-                                      />
-                                    </div>
-                                  )}
                               </div>
                             )}
-
                           <div
                             key={currentSessionId()}
                             className={
                               "desktop:-ml-4 w-full mx-auto " +
-                              "absolute mobile:top-0 desktop:top-12 left-0 " +
+                              "absolute mobile:top-0 desktop:top-0 left-0 " +
                               (settings?.enterpriseSettings
                                 ?.two_lines_for_chat_header
-                                ? "mt-20 "
-                                : "mt-8") +
+                                ? "pt-20 "
+                                : "pt-8") +
                               (hasPerformedInitialScroll ? "" : "invisible")
                             }
                           >
@@ -2601,6 +2541,7 @@ export function ChatPage({
                                         ) {
                                           toggleDocumentSidebar();
                                         }
+
                                         setSelectedMessageForDocDisplay(
                                           message.messageId
                                         );
@@ -2827,13 +2768,14 @@ export function ChatPage({
                               </div>
                             )}
                             <ChatInputBar
+                              toggleDocumentSidebar={toggleDocumentSidebar}
+                              availableSources={sources}
+                              availableDocumentSets={documentSets}
+                              availableTags={tags}
+                              filterManager={filterManager}
                               llmOverrideManager={llmOverrideManager}
                               removeDocs={() => {
                                 clearSelectedDocuments();
-                              }}
-                              showDocs={() => {
-                                setFiltersToggled(false);
-                                setDocumentSidebarToggled(true);
                               }}
                               showConfigureAPIKey={() =>
                                 setShowApiKeyModal(true)
@@ -2851,9 +2793,6 @@ export function ChatPage({
                               onSubmit={onSubmit}
                               files={currentMessageFiles}
                               setFiles={setCurrentMessageFiles}
-                              toggleFilters={
-                                retrievalEnabled ? toggleFilters : undefined
-                              }
                               handleFileUpload={handleImageUpload}
                               textAreaRef={textAreaRef}
                             />
@@ -2883,23 +2822,6 @@ export function ChatPage({
                           </div>
                         </div>
                       </div>
-                      {!settings?.isMobile && (
-                        <div
-                          style={{ transition: "width 0.30s ease-out" }}
-                          className={`
-                          flex-none 
-                          overflow-y-hidden 
-                          transition-all 
-                          duration-300 
-                          ease-in-out
-                          ${
-                            documentSidebarToggled && retrievalEnabled
-                              ? "w-[400px]"
-                              : "w-[0px]"
-                          }
-                      `}
-                        ></div>
-                      )}
                     </div>
                   )}
                 </Dropzone>

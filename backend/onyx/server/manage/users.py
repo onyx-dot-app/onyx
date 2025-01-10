@@ -673,6 +673,47 @@ def update_user_default_model(
     db_session.commit()
 
 
+class PinnedAssistantsRequest(BaseModel):
+    assistant_id: int
+
+
+@router.patch("/user/pinned-assistants/{assistant_id}")
+def update_user_pinned_assistants(
+    assistant_id: int,
+    pinned: bool,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            pinned_assistants = no_auth_user.preferences.pinned_assistants or []
+            if pinned and assistant_id not in pinned_assistants:
+                pinned_assistants.append(assistant_id)
+            elif not pinned and assistant_id in pinned_assistants:
+                pinned_assistants.remove(assistant_id)
+            no_auth_user.preferences.pinned_assistants = pinned_assistants
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    pinned_assistants = UserInfo.from_model(user).preferences.pinned_assistants or []
+    if pinned:
+        if assistant_id not in pinned_assistants:
+            pinned_assistants.append(assistant_id)
+    else:
+        if assistant_id in pinned_assistants:
+            pinned_assistants.remove(assistant_id)
+    db_session.execute(
+        update(User)
+        .where(User.id == user.id)  # type: ignore
+        .values(pinned_assistants=pinned_assistants)
+    )
+    db_session.commit()
+
+
 class ChosenAssistantsRequest(BaseModel):
     chosen_assistants: list[int]
 

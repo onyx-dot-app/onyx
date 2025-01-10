@@ -18,10 +18,10 @@ export default async function Page() {
     );
   } else {
     body = (
-      <div className="w-full my-16">
+      <div className="w-full py-16">
         <div className="px-32">
           <div className="mx-auto container">
-            <CardSection>
+            <CardSection className="!border-none !bg-transparent !ring-none">
               <AssistantEditor
                 {...values}
                 defaultPublic={false}
@@ -35,21 +35,5 @@ export default async function Page() {
     );
   }
 
-  return (
-    <div>
-      <HeaderWrapper>
-        <div className="h-full flex flex-col">
-          <div className="flex my-auto">
-            <LargeBackButton />
-
-            <h1 className="flex text-xl text-strong font-bold my-auto">
-              New Assistant
-            </h1>
-          </div>
-        </div>
-      </HeaderWrapper>
-
-      {body}
-    </div>
-  );
+  return <div>{body}</div>;
 }

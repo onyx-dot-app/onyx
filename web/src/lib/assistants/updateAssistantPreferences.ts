@@ -28,6 +28,25 @@ export async function updateAssistantVisibility(
   return response.ok;
 }
 
+export const toggleAssistantPinnedStatus = async (
+  assistantId: number,
+  isPinned: boolean
+) => {
+  const response = await fetch(
+    `/api/user/pinned-assistants/${assistantId}?pinned=${isPinned}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        assistant_id: assistantId,
+      }),
+    }
+  );
+  return response;
+};
+
 export async function removeAssistantFromList(
   assistantId: number
 ): Promise<boolean> {

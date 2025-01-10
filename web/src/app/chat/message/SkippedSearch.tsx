@@ -1,3 +1,4 @@
+import { BasicClickable } from "@/components/BasicClickable";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 import { FiBook } from "react-icons/fi";
 
@@ -21,12 +22,20 @@ export function SkippedSearch({
             line
             wrap
           >
-            <button
-              onClick={handleForceSearch}
-              className="ml-auto mr-4 text-xs desktop:hidden underline-dotted decoration-dotted underline cursor-pointer"
-            >
-              Force search?
-            </button>
+            <>
+              <BasicClickable
+                onClick={handleForceSearch}
+                className="ml-auto mr-4 text-xs mobile:hidden bg-background/80 rounded-md px-2 py-1 cursor-pointer"
+              >
+                Force search?
+              </BasicClickable>
+              <button
+                onClick={handleForceSearch}
+                className="ml-auto mr-4 text-xs desktop:hidden underline-dotted decoration-dotted underline cursor-pointer"
+              >
+                Force search?
+              </button>
+            </>
           </CustomTooltip>
         </div>
       </div>

@@ -1,9 +1,9 @@
 "use client";
 
-import { FiEdit, FiFolderPlus } from "react-icons/fi";
+import { FiEdit, FiFolderPlus, FiMoreHorizontal } from "react-icons/fi";
 import React, { ForwardedRef, forwardRef, useContext, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChatSession } from "../interfaces";
 import { NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA } from "@/lib/constants";
 import { Folder } from "../folders/interfaces";
@@ -11,10 +11,21 @@ import { createFolder } from "../folders/FolderManagement";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
-import { AssistantsIconSkeleton } from "@/components/icons/icons";
+import {
+  AssistantsIconSkeleton,
+  NewChatIcon,
+  OnyxIcon,
+  PinnedIcon,
+  PlusIcon,
+} from "@/components/icons/icons";
 import { PagesTab } from "./PagesTab";
 import { pageType } from "./types";
 import LogoWithText from "@/components/header/LogoWithText";
+import { Persona } from "@/app/admin/assistants/interfaces";
+import { FaSearch } from "react-icons/fa";
+import { useAssistants } from "@/components/context/AssistantsContext";
+import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import { buildChatUrl } from "../lib";
 
 interface HistorySidebarProps {
   page: pageType;
@@ -32,16 +43,21 @@ interface HistorySidebarProps {
   explicitlyUntoggle: () => void;
   showDeleteAllModal?: () => void;
   backgroundToggled?: boolean;
+  assistants: Persona[];
+  currentAssistantId?: number | null;
+  setShowAssistantsModal?: (show: boolean) => void;
 }
 
 export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
   (
     {
       reset = () => null,
+      setShowAssistantsModal = () => null,
       toggled,
       page,
       existingChats,
       currentChatSession,
+      assistants,
       folders,
       openedFolders,
       explicitlyUntoggle,
@@ -52,9 +68,11 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
       showDeleteModal,
       showDeleteAllModal,
       backgroundToggled,
+      currentAssistantId,
     },
     ref: ForwardedRef<HTMLDivElement>
   ) => {
+    const searchParams = useSearchParams();
     const router = useRouter();
     const { popup, setPopup } = usePopup();
 
@@ -62,6 +80,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
     const [newFolderId, setNewFolderId] = useState<number | null>(null);
 
     const currentChatId = currentChatSession?.id;
+    const { pinnedAssistants } = useAssistants();
 
     // NOTE: do not do something like the below - assume that the parent
     // will handle properly refreshing the existingChats
@@ -115,7 +134,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
           {page == "chat" && (
             <div className="mx-3 mt-4 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
               <Link
-                className=" w-full p-2 bg-white border-border border rounded items-center hover:bg-background-200 cursor-pointer transition-all duration-150 flex gap-x-2"
+                className="w-full p-2 rounded items-center  cursor-pointer transition-all duration-150 flex gap-x-2"
                 href={
                   `/${page}` +
                   (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA &&
@@ -132,43 +151,58 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                   }
                 }}
               >
-                <FiEdit className="flex-none text-text-history-sidebar-button" />
-                <p className="my-auto flex items-center text-sm">New Chat</p>
-              </Link>
-              <button
-                onClick={() =>
-                  createFolder("New Folder")
-                    .then((folderId) => {
-                      router.refresh();
-                      setNewFolderId(folderId);
-                    })
-                    .catch((error) => {
-                      console.error("Failed to create folder:", error);
-                      setPopup({
-                        message: `Failed to create folder: ${error.message}`,
-                        type: "error",
-                      });
-                    })
-                }
-                className="w-full p-2 bg-white border-border border rounded items-center  hover:bg-background-history-sidebar-button-hover cursor-pointer transition-all duration-150 flex gap-x-2"
-              >
-                <FiFolderPlus className="my-auto text-text-history-sidebar-button" />
-                <p className="my-auto flex items-center text-sm">New Folder</p>
-              </button>
-
-              <Link
-                href="/assistants/mine"
-                className="w-full p-2 bg-white border-border border rounded items-center hover:bg-background-history-sidebar-button-hover cursor-pointer transition-all duration-150 flex gap-x-2"
-              >
-                <AssistantsIconSkeleton className="h-4 w-4 my-auto text-text-history-sidebar-button" />
-                <p className="my-auto flex items-center text-sm">
-                  Manage Assistants
+                <NewChatIcon
+                  size={20}
+                  className="flex-none text-text-history-sidebar-button"
+                />
+                <p className="my-auto flex items-center text-base">
+                  Start New Chat
                 </p>
               </Link>
             </div>
           )}
-          <div className="border-b border-divider-history-sidebar-bar pb-4 mx-3" />
+
+          <div className="my-2 mx-3">
+            <div className="flex text-sm gap-x-2 mx-2 items-center">
+              <PinnedIcon
+                className="text-text-history-sidebar-button"
+                size={12}
+              />
+              Pinned
+            </div>
+            <div className="flex flex-col gap-y-1 mt-2">
+              {pinnedAssistants.slice(0, 3).map((assistant) => (
+                <button
+                  onClick={() => {
+                    router.push(buildChatUrl(searchParams, null, assistant.id));
+
+                    // router.push(`/${page}?assistantId=${assistant.id}`);
+                  }}
+                  className={`cursor-pointer hover:bg-hover-light ${
+                    currentAssistantId === assistant.id ? "bg-hover-light" : ""
+                  } flex items-center gap-x-2 py-1 px-2 rounded-md`}
+                  key={assistant.id}
+                >
+                  <AssistantIcon
+                    assistant={assistant}
+                    size={16}
+                    className="flex-none"
+                  />
+                  <p className="text-base text-black">{assistant.name}</p>
+                </button>
+              ))}
+              <button
+                onClick={() => setShowAssistantsModal(true)}
+                className="cursor-pointer hover:bg-hover-light flex items-center gap-x-2 py-1 px-2 rounded-md"
+              >
+                <FiMoreHorizontal size={16} className="flex-none" />
+                <p className="text-base text-black">More Assistants</p>
+              </button>
+            </div>
+          </div>
+
           <PagesTab
+            setNewFolderId={setNewFolderId}
             newFolderId={newFolderId}
             showDeleteModal={showDeleteModal}
             showShareModal={showShareModal}
@@ -177,7 +211,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             existingChats={existingChats}
             currentChatId={currentChatId}
             folders={folders}
-            openedFolders={openedFolders}
             showDeleteAllModal={showDeleteAllModal}
           />
         </div>

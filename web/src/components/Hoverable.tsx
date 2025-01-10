@@ -32,7 +32,7 @@ export const HoverableIcon: React.FC<{
 }> = ({ icon, onClick }) => {
   return (
     <div
-      className="hover:bg-hover p-1.5 rounded h-fit cursor-pointer"
+      className="hover:bg-background-chat-hover p-1.5 rounded h-fit cursor-pointer"
       onClick={onClick}
     >
       {icon}

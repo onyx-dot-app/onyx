@@ -31,10 +31,6 @@ export default async function Page() {
   return (
     <div className="w-full">
       <BackButton />
-      <AdminPageTitle
-        title="Create a New Assistant"
-        icon={<RobotIcon size={32} />}
-      />
       {body}
     </div>
   );

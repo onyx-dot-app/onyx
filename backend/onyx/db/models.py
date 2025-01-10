@@ -162,6 +162,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     recent_assistants: Mapped[list[dict]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=list, server_default="[]"
     )
+    pinned_assistants: Mapped[list[int] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True, default=None
+    )
 
     oidc_expiry: Mapped[datetime.datetime] = mapped_column(
         TIMESTAMPAware(timezone=True), nullable=True

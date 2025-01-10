@@ -48,19 +48,5 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
     );
   }
 
-  return (
-    <div>
-      <HeaderWrapper>
-        <div className="h-full flex flex-col">
-          <div className="flex my-auto">
-            <LargeBackButton />
-            <h1 className="flex text-xl text-strong font-bold my-auto">
-              Edit Assistant
-            </h1>
-          </div>
-        </div>
-      </HeaderWrapper>
-      {body}
-    </div>
-  );
+  return <div>{body}</div>;
 }

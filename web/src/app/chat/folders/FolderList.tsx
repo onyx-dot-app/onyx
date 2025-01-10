@@ -296,7 +296,7 @@ const FolderItem = ({
 
       {/* Expanded Folder Content */}
       {isExpanded && folders && (
-        <div className={"ml-2 pl-2 border-l border-border"}>
+        <div className={"mr-4 pl-2 border-l border-border"}>
           {folders.map((chatSession) => (
             <ChatSessionDisplay
               key={chatSession.id}

@@ -22,6 +22,8 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { WarningCircle } from "@phosphor-icons/react";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 
+import { FaHashtag } from "react-icons/fa";
+
 export function ChatSessionDisplay({
   chatSession,
   search,
@@ -48,19 +50,7 @@ export function ChatSessionDisplay({
     useState(false);
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [chatName, setChatName] = useState(chatSession.name);
-  const [delayedSkipGradient, setDelayedSkipGradient] = useState(skipGradient);
   const settings = useContext(SettingsContext);
-
-  useEffect(() => {
-    if (skipGradient) {
-      setDelayedSkipGradient(true);
-    } else {
-      const timer = setTimeout(() => {
-        setDelayedSkipGradient(skipGradient);
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [skipGradient]);
 
   const onRename = async () => {
     const response = await renameChatSession(chatSession.id, chatName);
@@ -92,7 +82,7 @@ export function ChatSessionDisplay({
       )}
 
       <Link
-        className="flex my-1 group relative"
+        className="flex group relative"
         key={chatSession.id}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => {
@@ -122,9 +112,10 @@ export function ChatSessionDisplay({
           );
         }}
       >
-        <BasicSelectable padding="extra" fullWidth selected={isSelected}>
+        <BasicSelectable fullWidth selected={isSelected}>
           <>
-            <div className="flex relative">
+            <div className="flex relative gap-x-2">
+              <FaHashtag size={12} className="flex-none my-auto" />
               {isRenamingChat ? (
                 <input
                   value={chatName}
@@ -145,7 +136,7 @@ export function ChatSessionDisplay({
                     ${
                       isSelected
                         ? "to-background-chat-selected"
-                        : "group-hover:to-background-chat-hover"
+                        : "group-hover:to-background-chat-hover to-background-sidebar"
                     } `}
                   />
                 </p>

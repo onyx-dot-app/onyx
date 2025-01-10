@@ -1,9 +1,5 @@
 "use client";
 
-import { HistorySidebar } from "@/app/chat/sessionSidebar/HistorySidebar";
-import { ChatSession } from "@/app/chat/interfaces";
-import { Folder } from "@/app/chat/folders/interfaces";
-import { User } from "@/lib/types";
 import Cookies from "js-cookie";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 import {
@@ -24,31 +20,19 @@ import { useChatContext } from "@/components/context/ChatContext";
 
 interface SidebarWrapperProps<T extends object> {
   initiallyToggled: boolean;
-  page: pageType;
   size?: "sm" | "lg";
   children: ReactNode;
 }
 
 export default function SidebarWrapper<T extends object>({
   initiallyToggled,
-  page,
   size = "sm",
   children,
 }: SidebarWrapperProps<T>) {
-  const { chatSessions, folders, openedFolders } = useChatContext();
   const [toggledSidebar, setToggledSidebar] = useState(initiallyToggled);
   const [showDocSidebar, setShowDocSidebar] = useState(false); // State to track if sidebar is open
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
   const [untoggled, setUntoggled] = useState(false);
-
-  const explicitlyUntoggle = () => {
-    setShowDocSidebar(false);
-
-    setUntoggled(true);
-    setTimeout(() => {
-      setUntoggled(false);
-    }, 200);
-  };
 
   const toggleSidebar = useCallback(() => {
     Cookies.set(
@@ -72,7 +56,6 @@ export default function SidebarWrapper<T extends object>({
     mobile: settings?.isMobile,
   });
 
-  const innerSidebarElementRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -113,22 +96,10 @@ export default function SidebarWrapper<T extends object>({
                 : "opacity-0 w-[200px] pointer-events-none -translate-x-10"
             }`}
       >
-        <div className="w-full relative">
-          <HistorySidebar
-            page={page}
-            explicitlyUntoggle={explicitlyUntoggle}
-            ref={innerSidebarElementRef}
-            toggleSidebar={toggleSidebar}
-            toggled={toggledSidebar}
-            existingChats={chatSessions}
-            currentChatSession={null}
-            folders={folders}
-            openedFolders={openedFolders}
-          />
-        </div>
+        <div className="w-full relative"></div>
       </div>
 
-      <div className="absolute h-svh px-2 left-0 w-full top-0">
+      <div className="absolute px-2 left-0 w-full top-0">
         <FunctionalHeader
           sidebarToggled={toggledSidebar}
           toggleSidebar={toggleSidebar}

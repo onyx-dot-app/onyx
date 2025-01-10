@@ -19,11 +19,7 @@ import React, {
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
-import {
-  OnyxDocument,
-  FilteredOnyxDocument,
-  LoadedOnyxDocument,
-} from "@/lib/search/interfaces";
+import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
 import { SearchSummary } from "./SearchSummary";
 
 import { SkippedSearch } from "./SkippedSearch";
@@ -111,7 +107,6 @@ function FileDisplay({
                 <div key={file.id} className="w-fit">
                   <DocumentPreview
                     fileName={file.name || file.id}
-                    maxWidth="max-w-64"
                     alignBubble={alignBubble}
                   />
                 </div>
@@ -393,13 +388,14 @@ export const AIMessage = ({
         <div className={`lg:mr-12 ${!shared && "mobile:ml-0 md:ml-8"}`}>
           <div className="flex">
             <AssistantIcon
-              size="small"
+              className="mobile:hidden"
+              size={24}
               assistant={alternativeAssistant || currentPersona}
             />
 
             <div className="w-full">
               <div className="max-w-message-max break-words">
-                <div className="w-full lg:ml-4">
+                <div className="w-full desktop:ml-4">
                   <div className="max-w-message-max break-words">
                     {!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
                       <>
@@ -796,7 +792,6 @@ export const HumanMessage = ({
                       border 
                       border-border 
                       rounded-lg 
-                      bg-background-emphasis
                       pb-2
                       [&:has(textarea:focus)]::ring-1
                       [&:has(textarea:focus)]::ring-black
@@ -812,7 +807,6 @@ export const HumanMessage = ({
                         border-0
                         rounded-lg 
                         overflow-y-hidden
-                        bg-background-emphasis 
                         whitespace-normal 
                         break-word
                         overscroll-contain
@@ -822,6 +816,7 @@ export const HumanMessage = ({
                         text-text-editing-message
                         pl-4
                         overflow-y-auto
+                        bg-background
                         pr-12 
                         py-4`}
                         aria-multiline
@@ -895,7 +890,7 @@ export const HumanMessage = ({
                   </div>
                 ) : typeof content === "string" ? (
                   <>
-                    <div className="ml-auto mr-1 my-auto">
+                    <div className="ml-auto flex items-center mr-1 h-fit my-auto">
                       {onEdit &&
                       isHovered &&
                       !isEditing &&

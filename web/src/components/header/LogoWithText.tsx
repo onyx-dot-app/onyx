@@ -105,7 +105,7 @@ export default function LogoWithText({
               >
                 <NewChatIcon
                   className="ml-2 flex-none text-text-700 hover:text-text-600 transition-colors duration-300"
-                  size={20}
+                  size={24}
                 />
               </Link>
             </TooltipTrigger>

@@ -11,6 +11,7 @@ export function Popover({
   popover,
   side,
   align,
+  contentClassName,
   sideOffset,
   alignOffset,
   matchWidth,
@@ -23,6 +24,7 @@ export function Popover({
   popover: JSX.Element;
   side?: "top" | "right" | "bottom" | "left";
   align?: "start" | "center" | "end";
+  contentClassName?: string;
   sideOffset?: number;
   alignOffset?: number;
   matchWidth?: boolean;
@@ -53,10 +55,11 @@ export function Popover({
       </RadixPopover.Trigger>
       <RadixPopover.Portal>
         <RadixPopover.Content
-          className={
-            "PopoverContent z-[100] " +
-            (matchWidth ? " PopoverContentMatchWidth" : "")
-          }
+          className={`
+            PopoverContent z-[100] 
+            ${contentClassName}
+            ${matchWidth ? " PopoverContentMatchWidth" : ""}
+          `}
           asChild
           side={side}
           align={align}

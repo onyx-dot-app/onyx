@@ -29,18 +29,13 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
             defaultPublic={true}
             redirectType={SuccessfulPersonaUpdateRedirectType.ADMIN}
           />
-        </CardSection>
-
-        <div className="mt-12">
           <Title>Delete Assistant</Title>
 
-          <div className="flex mt-6">
-            <DeletePersonaButton
-              personaId={values.existingPersona!.id}
-              redirectType={SuccessfulPersonaUpdateRedirectType.ADMIN}
-            />
-          </div>
-        </div>
+          <DeletePersonaButton
+            personaId={values.existingPersona!.id}
+            redirectType={SuccessfulPersonaUpdateRedirectType.ADMIN}
+          />
+        </CardSection>
       </>
     );
   }

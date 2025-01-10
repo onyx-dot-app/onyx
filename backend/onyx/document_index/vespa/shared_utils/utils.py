@@ -69,3 +69,6 @@ def get_vespa_http_client(no_timeout: bool = False, http2: bool = True) -> httpx
         timeout=None if no_timeout else VESPA_REQUEST_TIMEOUT,
         http2=http2,
     )
+
+
+# from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client

@@ -19,14 +19,12 @@ export default function FunctionalHeader({
   toggleSidebar = () => null,
   reset = () => null,
   sidebarToggled,
-  documentSidebarToggled,
   toggleUserSettings,
   hideUserDropdown,
 }: {
   reset?: () => void;
   page: pageType;
   sidebarToggled?: boolean;
-  documentSidebarToggled?: boolean;
   currentChatSession?: ChatSession | null | undefined;
   setSharingModalVisible?: (value: SetStateAction<boolean>) => void;
   toggleSidebar?: () => void;
@@ -135,7 +133,7 @@ export default function FunctionalHeader({
               }
             >
               <div className="cursor-pointer ml-2 mr-4 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
-                <NewChatIcon size={20} />
+                <NewChatIcon size={40} />
               </div>
             </Link>
             <div
@@ -149,7 +147,6 @@ export default function FunctionalHeader({
             duration-300 
             ease-in-out
             h-full
-            ${documentSidebarToggled ? "w-[400px]" : "w-[0px]"}
             `}
             />
           </div>
@@ -160,11 +157,7 @@ export default function FunctionalHeader({
               h-20 absolute top-0 z-10 w-full sm:w-[90%] lg:w-[70%]
               bg-gradient-to-b via-50% z-[-1] from-background via-background to-background/10 flex
               transition-all duration-300 ease-in-out
-              ${
-                documentSidebarToggled
-                  ? "left-[200px] transform -translate-x-[calc(50%+100px)]"
-                  : "left-1/2 transform -translate-x-1/2"
-              }
+              left-1/2 transform -translate-x-1/2
             `}
             />
           )}
