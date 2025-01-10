@@ -584,7 +584,8 @@ def validate_indexing_fence(
         # it would be odd to get here as there isn't that much that can go wrong during
         # initial fence setup, but it's still worth making sure we can recover
         logger.info(
-            f"validate_indexing_fence - Resetting fence in basic state without any activity: fence={fence_key}"
+            f"validate_indexing_fence - "
+            f"Resetting fence in basic state without any activity: fence={fence_key}"
         )
         redis_connector_index.reset()
         return
@@ -895,6 +896,9 @@ def connector_indexing_proxy_task(
     while True:
         sleep(5)
 
+        # renew watchdog signal (this has a shorter timeout than set_active)
+        redis_connector_index.set_watchdog(True)
+
         # renew active signal
         redis_connector_index.set_active()
 
@@ -1001,6 +1005,7 @@ def connector_indexing_proxy_task(
             )
             continue
 
+    redis_connector_index.set_watchdog(False)
     task_logger.info(
         f"Indexing watchdog - finished: attempt={index_attempt_id} "
         f"cc_pair={cc_pair_id} "

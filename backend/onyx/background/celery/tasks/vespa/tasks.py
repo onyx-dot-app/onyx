@@ -652,7 +652,7 @@ def monitor_ccpair_indexing_taskset(
     composite_id = RedisConnector.get_id_from_fence_key(fence_key)
     if composite_id is None:
         task_logger.warning(
-            f"monitor_ccpair_indexing_taskset: could not parse composite_id from {fence_key}"
+            f"Connector indexing: could not parse composite_id from {fence_key}"
         )
         return
 
@@ -702,6 +702,7 @@ def monitor_ccpair_indexing_taskset(
     # inner/outer/inner double check pattern to avoid race conditions when checking for
     # bad state
 
+    # Verify: if the generator isn't complete, the task must not be in READY state
     # inner = get_completion / generator_complete not signaled
     # outer = result.state in READY state
     status_int = redis_connector_index.get_completion()
@@ -747,7 +748,7 @@ def monitor_ccpair_indexing_taskset(
                             )
                 except Exception:
                     task_logger.exception(
-                        "monitor_ccpair_indexing_taskset - transient exception marking index attempt as failed: "
+                        "Connector indexing - Transient exception marking index attempt as failed: "
                         f"attempt={payload.index_attempt_id} "
                         f"tenant={tenant_id} "
                         f"cc_pair={cc_pair_id} "
@@ -755,6 +756,20 @@ def monitor_ccpair_indexing_taskset(
                     )
 
                 redis_connector_index.reset()
+        return
+
+    if redis_connector_index.watchdog_signaled():
+        # if the generator is complete, don't clean up until the watchdog has exited
+        task_logger.info(
+            f"Connector indexing - Waiting for watchdog to exit: "
+            f"attempt={payload.index_attempt_id} "
+            f"cc_pair={cc_pair_id} "
+            f"search_settings={search_settings_id} "
+            f"progress={progress} "
+            f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
+            f"elapsed_started={elapsed_started_str}"
+        )
+
         return
 
     status_enum = HTTPStatus(status_int)
@@ -775,9 +790,13 @@ def monitor_ccpair_indexing_taskset(
 
 @shared_task(name=OnyxCeleryTask.MONITOR_VESPA_SYNC, soft_time_limit=300, bind=True)
 def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool | None:
-    """This is a celery beat task that monitors and finalizes metadata sync tasksets.
+    """This is a celery beat task that monitors and finalizes various long running tasks.
+
+    The name monitor_vespa_sync is a bit of a misnomer since it checks many different tasks
+    now. Should change that at some point.
+
     It scans for fence values and then gets the counts of any associated tasksets.
-    If the count is 0, that means all tasks finished and we should clean up.
+    For many tasks, the count is 0, that means all tasks finished and we should clean up.
 
     This task lock timeout is CELERY_METADATA_SYNC_BEAT_LOCK_TIMEOUT seconds, so don't
     do anything too expensive in this function!
@@ -962,6 +981,8 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool | None:
 def vespa_metadata_sync_task(
     self: Task, document_id: str, tenant_id: str | None
 ) -> bool:
+    start = time.monotonic()
+
     try:
         with get_session_with_tenant(tenant_id) as db_session:
             curr_ind_name, sec_ind_name = get_both_index_names(db_session)
@@ -1012,7 +1033,13 @@ def vespa_metadata_sync_task(
             # r = get_redis_client(tenant_id=tenant_id)
             # r.delete(redis_syncing_key)
 
-            task_logger.info(f"doc={document_id} action=sync chunks={chunks_affected}")
+            elapsed = time.monotonic() - start
+            task_logger.info(
+                f"doc={document_id} "
+                f"action=sync "
+                f"chunks={chunks_affected} "
+                f"elapsed={elapsed:.2f}"
+            )
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
     except Exception as ex:

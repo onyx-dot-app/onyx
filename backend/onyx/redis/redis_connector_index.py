@@ -32,8 +32,12 @@ class RedisConnectorIndex:
     TERMINATE_PREFIX = PREFIX + "_terminate"  # connectorindexing_terminate
 
     # used to signal the overall workflow is still active
-    # it's difficult to prevent
+    # there are gaps in time between states where we need some slack
+    # to correctly transition
     ACTIVE_PREFIX = PREFIX + "_active"
+
+    # used to signal that the watchdog is running
+    WATCHDOG_PREFIX = PREFIX + "_watchdog"
 
     def __init__(
         self,
@@ -59,6 +63,7 @@ class RedisConnectorIndex:
         )
         self.terminate_key = f"{self.TERMINATE_PREFIX}_{id}/{search_settings_id}"
         self.active_key = f"{self.ACTIVE_PREFIX}_{id}/{search_settings_id}"
+        self.watchdog_key = f"{self.WATCHDOG_PREFIX}_{id}/{search_settings_id}"
 
     @classmethod
     def fence_key_with_ids(cls, cc_pair_id: int, search_settings_id: int) -> str:
@@ -111,6 +116,21 @@ class RedisConnectorIndex:
         # We shouldn't need very long to terminate the spawned task.
         # 10 minute TTL is good.
         self.redis.set(f"{self.terminate_key}_{celery_task_id}", 0, ex=600)
+
+    def set_watchdog(self, value: bool) -> None:
+        """Signal the state of the watchdog."""
+        if not value:
+            self.redis.delete(self.watchdog_key)
+            return
+
+        self.redis.set(self.watchdog_key, 0, ex=300)
+
+    def watchdog_signaled(self) -> bool:
+        """Check the state of the watchdog."""
+        if self.redis.exists(self.watchdog_key):
+            return True
+
+        return False
 
     def set_active(self) -> None:
         """This sets a signal to keep the indexing flow from getting cleaned up within
