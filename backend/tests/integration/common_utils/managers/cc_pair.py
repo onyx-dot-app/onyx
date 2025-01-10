@@ -68,6 +68,37 @@ class CCPairManager:
         credential_json: dict[str, Any] | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> DATestCCPair:
+        credential = CredentialManager.create(
+            credential_json=credential_json,
+            name=name,
+            source=source,
+            curator_public=(access_type == AccessType.PUBLIC),
+            groups=groups,
+            user_performing_action=user_performing_action,
+        )
+        cc_pair = ConnectorManager.create_and_link_to_credential(
+            credential_id=credential.id,
+            name=name,
+            source=source,
+            input_type=input_type,
+            connector_specific_config=connector_specific_config,
+            access_type=access_type,
+            groups=groups,
+            user_performing_action=user_performing_action,
+        )
+        return cc_pair
+
+    @staticmethod
+    def old_create_from_scratch(
+        name: str | None = None,
+        access_type: AccessType = AccessType.PUBLIC,
+        groups: list[int] | None = None,
+        source: DocumentSource = DocumentSource.FILE,
+        input_type: InputType = InputType.LOAD_STATE,
+        connector_specific_config: dict[str, Any] | None = None,
+        credential_json: dict[str, Any] | None = None,
+        user_performing_action: DATestUser | None = None,
+    ) -> DATestCCPair:
         connector = ConnectorManager.create(
             name=name,
             source=source,

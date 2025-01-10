@@ -366,7 +366,7 @@ def add_credential_to_connector(
     auto_sync_options: dict | None = None,
     initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
     last_successful_index_time: datetime | None = None,
-) -> StatusResponse:
+) -> int:
     connector = fetch_connector_by_id(connector_id, db_session)
     credential = fetch_credential_by_id(
         credential_id,
@@ -408,10 +408,9 @@ def add_credential_to_connector(
         .one_or_none()
     )
     if existing_association is not None:
-        return StatusResponse(
-            success=False,
-            message=f"Connector {connector_id} already has Credential {credential_id}",
-            data=connector_id,
+        raise HTTPException(
+            status_code=400,
+            detail=f"Connector {connector_id} already has Credential {credential_id}",
         )
 
     association = ConnectorCredentialPair(
@@ -436,11 +435,7 @@ def add_credential_to_connector(
 
     db_session.commit()
 
-    return StatusResponse(
-        success=True,
-        message=f"Creating new association between Connector {connector_id} and Credential {credential_id}",
-        data=association.id,
-    )
+    return association.id
 
 
 def remove_credential_from_connector(

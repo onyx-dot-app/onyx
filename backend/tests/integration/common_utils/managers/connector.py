@@ -5,15 +5,56 @@ import requests
 
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
+from onyx.server.documents.models import ConnectorCreateAndAssociateRequest
 from onyx.server.documents.models import ConnectorUpdateRequest
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestConnector
 from tests.integration.common_utils.test_models import DATestUser
 
 
 class ConnectorManager:
+    @staticmethod
+    def create_and_link_to_credential(
+        credential_id: int,
+        name: str | None = None,
+        source: DocumentSource = DocumentSource.FILE,
+        input_type: InputType = InputType.LOAD_STATE,
+        connector_specific_config: dict[str, Any] | None = None,
+        access_type: AccessType = AccessType.PUBLIC,
+        groups: list[int] | None = None,
+        user_performing_action: DATestUser | None = None,
+    ) -> DATestCCPair:
+        name = f"{name}-connector" if name else f"test-connector-{uuid4()}"
+        connector_create_and_associate_request = ConnectorCreateAndAssociateRequest(
+            name=name,
+            source=source,
+            input_type=input_type,
+            connector_specific_config=connector_specific_config or {},
+            access_type=access_type,
+            groups=groups or [],
+            credential_id=credential_id,
+        )
+        response = requests.post(
+            url=f"{API_SERVER_URL}/manage/admin/create-and-link-connector",
+            json=connector_create_and_associate_request.model_dump(),
+            headers=user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+        response_data = response.json()
+        return DATestCCPair(
+            id=response_data["data"]["cc_pair_id"],
+            name=name,
+            connector_id=response_data["data"]["connector_id"],
+            credential_id=credential_id,
+            access_type=access_type,
+            groups=groups or [],
+        )
+
     @staticmethod
     def create(
         name: str | None = None,

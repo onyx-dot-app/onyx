@@ -10,6 +10,7 @@ from fastapi import Request
 from fastapi import Response
 from fastapi import UploadFile
 from google.oauth2.credentials import Credentials  # type: ignore
+from psycopg2 import IntegrityError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -94,6 +95,7 @@ from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_connector import RedisConnector
 from onyx.server.documents.models import AuthStatus
 from onyx.server.documents.models import AuthUrl
+from onyx.server.documents.models import ConnectorCreateAndAssociateRequest
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.server.documents.models import ConnectorIndexingStatus
 from onyx.server.documents.models import ConnectorSnapshot
@@ -722,6 +724,75 @@ def _validate_connector_allowed(source: DocumentSource) -> None:
     )
 
 
+@router.post("/admin/create-and-link-connector")
+def create_connector_and_associate_credential(
+    connector_data: ConnectorCreateAndAssociateRequest,
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> StatusResponse:
+    try:
+        _validate_connector_allowed(connector_data.source)
+
+        fetch_ee_implementation_or_noop(
+            "onyx.db.user_group", "validate_object_creation_for_user", None
+        )(
+            db_session=db_session,
+            user=user,
+            target_group_ids=connector_data.groups,
+            object_is_public=connector_data.access_type == AccessType.PUBLIC,
+            object_is_perm_sync=connector_data.access_type == AccessType.SYNC,
+        )
+        connector_base = connector_data.to_connector_base()
+        connector_response = create_connector(
+            db_session=db_session,
+            connector_data=connector_base,
+        )
+        connector_id = int(connector_response.id)
+
+        # If a credential_id is provided, associate it with the connector
+        if connector_data.credential_id is not None:
+            try:
+                cc_pair_id = add_credential_to_connector(
+                    db_session=db_session,
+                    user=user,
+                    connector_id=connector_id,
+                    credential_id=connector_data.credential_id,
+                    cc_pair_name=connector_data.name,
+                    access_type=connector_data.access_type,
+                    auto_sync_options=connector_data.auto_sync_options,
+                    groups=connector_data.groups,
+                )
+            except IntegrityError as e:
+                # If credential association fails, delete the connector and raise error
+                delete_connector(db_session=db_session, connector_id=connector_id)
+                logger.exception(f"Error associating credential with connector: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Failed to associate credential with connector",
+                )
+
+        create_milestone_and_report(
+            user=user,
+            distinct_id=user.email if user else tenant_id or "N/A",
+            event_type=MilestoneRecordType.CREATED_CONNECTOR,
+            properties=None,
+            db_session=db_session,
+        )
+
+        return StatusResponse(
+            success=True,
+            message="Connector created successfully",
+            data={
+                "cc_pair_id": cc_pair_id,
+                "connector_id": connector_id,
+            },
+        )
+    except ValueError as e:
+        logger.error(f"Error creating connector: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/admin/connector")
 def create_connector_from_model(
     connector_data: ConnectorUpdateRequest,
@@ -795,7 +866,7 @@ def create_connector_with_mock_credential(
             db_session=db_session,
         )
 
-        response = add_credential_to_connector(
+        cc_pair_id = add_credential_to_connector(
             db_session=db_session,
             user=user,
             connector_id=cast(int, connector_response.id),  # will aways be an int
@@ -813,7 +884,14 @@ def create_connector_with_mock_credential(
             db_session=db_session,
         )
 
-        return response
+        return StatusResponse(
+            success=True,
+            message="Connector created successfully",
+            data={
+                "cc_pair_id": cc_pair_id,
+                "connector_id": connector_response.id,
+            },
+        )
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

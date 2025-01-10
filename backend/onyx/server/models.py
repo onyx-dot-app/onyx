@@ -1,5 +1,4 @@
 from typing import Generic
-from typing import Optional
 from typing import TypeVar
 from uuid import UUID
 
@@ -14,8 +13,8 @@ DataT = TypeVar("DataT")
 
 class StatusResponse(BaseModel, Generic[DataT]):
     success: bool
-    message: Optional[str] = None
-    data: Optional[DataT] = None
+    message: str | None = None
+    data: DataT | None = None
 
 
 class ApiKey(BaseModel):
