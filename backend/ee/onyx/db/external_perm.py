@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.db.models import User
 from onyx.db.models import User__ExternalUserGroupId
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
 from onyx.db.users import get_user_by_email
@@ -58,11 +59,13 @@ def replace_user__ext_group_for_cc_pair(
     all_group_member_emails = set()
     for external_group in group_defs:
         for user_email in external_group.user_emails:
-            all_group_member_emails.add(user_email.lower())
+            all_group_member_emails.add(user_email)
 
     # batch add users if they don't exist and get their ids
-    all_group_members = batch_add_ext_perm_user_if_not_exists(
-        db_session=db_session, emails=list(all_group_member_emails)
+    all_group_members: list[User] = batch_add_ext_perm_user_if_not_exists(
+        db_session=db_session,
+        # NOTE: this function handles case sensitivity for emails
+        emails=list(all_group_member_emails),
     )
 
     delete_user__ext_group_for_cc_pair__no_commit(
