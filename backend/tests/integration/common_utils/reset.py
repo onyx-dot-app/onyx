@@ -63,57 +63,57 @@ def _run_migrations(
     logging.getLogger("alembic").setLevel(logging.INFO)
 
 
-def reset_postgres(
-    database: str = "postgres", config_name: str = "alembic", setup_onyx: bool = True
+def downgrade_postgres(
+    database: str = "postgres",
+    config_name: str = "alembic",
+    revision: str = "base",
+    clear_data: bool = False,
 ) -> None:
-    """Reset the Postgres database."""
+    """Downgrade Postgres database to base state."""
+    if clear_data:
+        if revision != "base":
+            logger.warning("Clearing data without rolling back to base state")
+        # Delete all rows to allow migrations to be rolled back
+        conn = psycopg2.connect(
+            dbname=database,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD,
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+        )
+        cur = conn.cursor()
 
-    # NOTE: need to delete all rows to allow migrations to be rolled back
-    # as there are a few downgrades that don't properly handle data in tables
-    conn = psycopg2.connect(
-        dbname=database,
-        user=POSTGRES_USER,
-        password=POSTGRES_PASSWORD,
-        host=POSTGRES_HOST,
-        port=POSTGRES_PORT,
-    )
-    cur = conn.cursor()
+        # Disable triggers to prevent foreign key constraints from being checked
+        cur.execute("SET session_replication_role = 'replica';")
 
-    # Disable triggers to prevent foreign key constraints from being checked
-    cur.execute("SET session_replication_role = 'replica';")
-
-    # Fetch all table names in the current database
-    cur.execute(
+        # Fetch all table names in the current database
+        cur.execute(
+            """
+            SELECT tablename
+            FROM pg_tables
+            WHERE schemaname = 'public'
         """
-        SELECT tablename
-        FROM pg_tables
-        WHERE schemaname = 'public'
-    """
-    )
+        )
 
-    tables = cur.fetchall()
+        tables = cur.fetchall()
 
-    for table in tables:
-        table_name = table[0]
+        for table in tables:
+            table_name = table[0]
 
-        # Don't touch migration history
-        if table_name == "alembic_version":
-            continue
+            # Don't touch migration history or Kombu
+            if table_name in ("alembic_version", "kombu_message", "kombu_queue"):
+                continue
 
-        # Don't touch Kombu
-        if table_name == "kombu_message" or table_name == "kombu_queue":
-            continue
+            cur.execute(f'DELETE FROM "{table_name}"')
 
-        cur.execute(f'DELETE FROM "{table_name}"')
+        # Re-enable triggers
+        cur.execute("SET session_replication_role = 'origin';")
 
-    # Re-enable triggers
-    cur.execute("SET session_replication_role = 'origin';")
+        conn.commit()
+        cur.close()
+        conn.close()
 
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    # downgrade to base + upgrade back to head
+    # Downgrade to base
     conn_str = build_connection_string(
         db=database,
         user=POSTGRES_USER,
@@ -126,20 +126,43 @@ def reset_postgres(
         conn_str,
         config_name,
         direction="downgrade",
-        revision="base",
+        revision=revision,
+    )
+
+
+def upgrade_postgres(
+    database: str = "postgres", config_name: str = "alembic", revision: str = "head"
+) -> None:
+    """Upgrade Postgres database to latest version."""
+    conn_str = build_connection_string(
+        db=database,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+        host=POSTGRES_HOST,
+        port=POSTGRES_PORT,
+        db_api=SYNC_DB_API,
     )
     _run_migrations(
         conn_str,
         config_name,
         direction="upgrade",
-        revision="head",
+        revision=revision,
     )
-    if not setup_onyx:
-        return
 
-    # do the same thing as we do on API server startup
-    with get_session_context_manager() as db_session:
-        setup_postgres(db_session)
+
+def reset_postgres(
+    database: str = "postgres",
+    config_name: str = "alembic",
+    setup_onyx: bool = True,
+) -> None:
+    """Reset the Postgres database."""
+    downgrade_postgres(
+        database=database, config_name=config_name, revision="base", clear_data=True
+    )
+    upgrade_postgres(database=database, config_name=config_name, revision="head")
+    if setup_onyx:
+        with get_session_context_manager() as db_session:
+            setup_postgres(db_session)
 
 
 def reset_vespa() -> None:
