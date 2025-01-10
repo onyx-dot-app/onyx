@@ -142,19 +142,20 @@ def put_llm_provider(
             detail=f"LLM Provider with name {llm_provider.name} already exists",
         )
 
-    # Ensure default_model_name and fast_default_model_name are in display_model_names
-    # This is necessary for custom models and Bedrock/Azure models
-    if llm_provider.display_model_names is None:
-        llm_provider.display_model_names = []
+    if llm_provider.display_model_names is not None:
+        # Ensure default_model_name and fast_default_model_name are in display_model_names
+        # This is necessary for custom models and Bedrock/Azure models
+        if llm_provider.default_model_name not in llm_provider.display_model_names:
+            llm_provider.display_model_names.append(llm_provider.default_model_name)
 
-    if llm_provider.default_model_name not in llm_provider.display_model_names:
-        llm_provider.display_model_names.append(llm_provider.default_model_name)
-
-    if (
-        llm_provider.fast_default_model_name
-        and llm_provider.fast_default_model_name not in llm_provider.display_model_names
-    ):
-        llm_provider.display_model_names.append(llm_provider.fast_default_model_name)
+        if (
+            llm_provider.fast_default_model_name
+            and llm_provider.fast_default_model_name
+            not in llm_provider.display_model_names
+        ):
+            llm_provider.display_model_names.append(
+                llm_provider.fast_default_model_name
+            )
 
     try:
         return upsert_llm_provider(
