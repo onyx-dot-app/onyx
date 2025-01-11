@@ -11,11 +11,13 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.onyx_confluence import build_confluence_client
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.onyx_confluence import validate_connector_configuration
 from onyx.connectors.confluence.utils import attachment_to_content
 from onyx.connectors.confluence.utils import build_confluence_document_id
 from onyx.connectors.confluence.utils import datetime_from_string
 from onyx.connectors.confluence.utils import extract_text_from_confluence_html
 from onyx.connectors.confluence.utils import validate_attachment_filetype
+from onyx.connectors.interfaces import ConnectorValidator
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -76,7 +78,9 @@ _FULL_EXTENSION_FILTER_STRING = "".join(
 )
 
 
-class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
+class ConfluenceConnector(
+    LoadConnector, PollConnector, SlimConnector, ConnectorValidator
+):
     def __init__(
         self,
         wiki_base: str,
@@ -144,6 +148,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             credentials=credentials,
             is_cloud=self.is_cloud,
             wiki_base=self.wiki_base,
+            test_query=self.base_cql_page_query,
         )
         return None
 
@@ -378,3 +383,20 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                 doc_metadata_list = doc_metadata_list[_SLIM_DOC_BATCH_SIZE:]
 
         yield doc_metadata_list
+
+    def validate_connector_configuration(self) -> None:
+        """
+        This will raise an exception if either the
+        credentials or the connector configuration are invalid.
+
+        This is determined by trying to connect to Confluence
+        and retrieving a list of spaces (with a limit of 1 so it
+        doesn't take too long).
+        """
+        validate_connector_configuration(
+            confluence_client=self.confluence_client,
+            # Let it retry but it shouldn't be too long
+            max_backoff_retries=2,
+            max_backoff_seconds=2,
+            test_query=self.base_cql_page_query,
+        )

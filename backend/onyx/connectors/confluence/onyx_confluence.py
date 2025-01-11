@@ -9,7 +9,11 @@ from urllib.parse import quote
 
 from atlassian import Confluence  # type:ignore
 from requests import HTTPError
+from requests.exceptions import MissingSchema
 
+from onyx.connectors.interfaces import InvalidConnectorConfigurationException
+from onyx.connectors.interfaces import InvalidConnectorException
+from onyx.connectors.interfaces import InvalidCredentialsException
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -385,23 +389,55 @@ class OnyxConfluence(Confluence):
         return response
 
 
-def _validate_connector_configuration(
-    credentials: dict[str, Any],
-    is_cloud: bool,
-    wiki_base: str,
+def validate_connector_configuration(
+    confluence_client: OnyxConfluence,
+    max_backoff_retries: int,
+    max_backoff_seconds: int,
+    test_query: str,
 ) -> None:
-    # test connection with direct client, no retries
-    confluence_client_with_minimal_retries = Confluence(
-        api_version="cloud" if is_cloud else "latest",
-        url=wiki_base.rstrip("/"),
-        username=credentials["confluence_username"] if is_cloud else None,
-        password=credentials["confluence_access_token"] if is_cloud else None,
-        token=credentials["confluence_access_token"] if not is_cloud else None,
-        backoff_and_retry=True,
-        max_backoff_retries=6,
-        max_backoff_seconds=10,
-    )
-    spaces = confluence_client_with_minimal_retries.get_all_spaces(limit=1)
+    """
+    This function will test the connection to Confluence by retrieving a list of spaces.
+    If no spaces are found, it will raise an exception.
+    """
+    # We want to test the connection with the base client, not the wrapped one
+    # because the wrapped one has retries built in and we want this to be fast
+    try:
+        confluence_client_with_minimal_retries = Confluence(
+            api_version=confluence_client.api_version,
+            url=confluence_client.url,
+            username=confluence_client.username,
+            password=confluence_client.password,
+            token=confluence_client.token
+            if hasattr(confluence_client, "token")
+            else None,
+            backoff_and_retry=True,
+            max_backoff_retries=max_backoff_retries,
+            max_backoff_seconds=max_backoff_seconds,
+        )
+        response = confluence_client_with_minimal_retries.get(
+            f"rest/api/content/search?cql={test_query}&limit=1",
+            advanced_mode=True,
+        )
+        response.raise_for_status()
+    except Exception as e:
+        if isinstance(e, HTTPError):
+            if e.response.status_code == 403:
+                raise InvalidCredentialsException(str(e))
+            if e.response.status_code in [401, 404]:
+                raise InvalidConnectorConfigurationException(str(e))
+        elif isinstance(e, MissingSchema):
+            raise InvalidConnectorConfigurationException(str(e))
+
+        raise InvalidConnectorException(str(e))
+
+    # All confluence clients should be able to retrieve at least one space
+    # If not, there is an issue with the credentials or the connector configuration
+    pages = response.json().get("results", [])
+    if not pages:
+        raise InvalidConnectorConfigurationException(
+            f"No pages found for query {test_query}! "
+            "check your connector Space/Page/CQL Query Settings "
+        )
 
     # uncomment the following for testing
     # the following is an attempt to retrieve the user's timezone
@@ -410,25 +446,14 @@ def _validate_connector_configuration(
     # space_key = spaces["results"][0]["key"]
     # space_details = confluence_client_with_minimal_retries.cql(f"space.key={space_key}+AND+type=space")
 
-    if not spaces:
-        raise RuntimeError(
-            f"No spaces found at {wiki_base}! "
-            "Check your credentials and wiki_base and make sure "
-            "is_cloud is set correctly."
-        )
-
 
 def build_confluence_client(
     credentials: dict[str, Any],
     is_cloud: bool,
     wiki_base: str,
+    test_query: str,
 ) -> OnyxConfluence:
-    _validate_connector_configuration(
-        credentials=credentials,
-        is_cloud=is_cloud,
-        wiki_base=wiki_base,
-    )
-    return OnyxConfluence(
+    onyx_confluence_client = OnyxConfluence(
         api_version="cloud" if is_cloud else "latest",
         # Remove trailing slash from wiki_base if present
         url=wiki_base.rstrip("/"),
@@ -441,3 +466,10 @@ def build_confluence_client(
         max_backoff_seconds=60,
         cloud=is_cloud,
     )
+    validate_connector_configuration(
+        confluence_client=onyx_confluence_client,
+        max_backoff_retries=6,
+        max_backoff_seconds=10,
+        test_query=test_query,
+    )
+    return onyx_confluence_client

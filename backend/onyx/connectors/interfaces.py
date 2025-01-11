@@ -15,6 +15,34 @@ GenerateDocumentsOutput = Iterator[list[Document]]
 GenerateSlimDocumentOutput = Iterator[list[SlimDocument]]
 
 
+class BaseConnectorException(Exception):
+    """Base exception for connector-related errors."""
+
+    def build_error_msg(self) -> str:
+        raise NotImplementedError
+
+
+class InvalidCredentialsException(BaseConnectorException):
+    """Exception raised when connector credentials are invalid."""
+
+    def build_error_msg(self) -> str:
+        return f"Invalid credentials:\n {self.args[0]}"
+
+
+class InvalidConnectorConfigurationException(BaseConnectorException):
+    """Exception raised when connector configuration is invalid."""
+
+    def build_error_msg(self) -> str:
+        return f"Invalid connector configuration:\n {self.args[0]}"
+
+
+class InvalidConnectorException(BaseConnectorException):
+    """Exception raised when validation fails and we arent sure what is invalid."""
+
+    def build_error_msg(self) -> str:
+        return f"Invalid credentials or connector configuration:\n {self.args[0]}"
+
+
 class BaseConnector(abc.ABC):
     REDIS_KEY_PREFIX = "da_connector_data:"
 
@@ -102,4 +130,13 @@ class OAuthConnector(BaseConnector):
 class EventConnector(BaseConnector):
     @abc.abstractmethod
     def handle_event(self, event: Any) -> GenerateDocumentsOutput:
+        raise NotImplementedError
+
+
+class ConnectorValidator(BaseConnector):
+    @abc.abstractmethod
+    def validate_connector_configuration(self) -> None:
+        """Validates the connector configuration and credentials.
+        Should raise an exception if the configuration is invalid.
+        Otherwise, it should return None."""
         raise NotImplementedError

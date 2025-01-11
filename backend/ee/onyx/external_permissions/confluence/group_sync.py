@@ -48,6 +48,7 @@ def confluence_group_sync(
         credentials=cc_pair.credential.credential_json,
         is_cloud=cc_pair.connector.connector_specific_config.get("is_cloud", False),
         wiki_base=cc_pair.connector.connector_specific_config["wiki_base"],
+        test_query="type=page",
     )
 
     group_member_email_map = _build_group_member_email_map(
