@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import text
 
 from onyx.configs.constants import DEFAULT_BOOST
@@ -6,6 +7,9 @@ from tests.integration.common_utils.reset import downgrade_postgres
 from tests.integration.common_utils.reset import upgrade_postgres
 
 
+@pytest.mark.skip(
+    reason="Migration test no longer needed - migration has been applied to production"
+)
 def test_fix_capitalization_migration() -> None:
     """Test that the be2ab2aa50ee migration correctly lowercases external_user_group_ids"""
     # Reset the database and run migrations up to the second to last migration

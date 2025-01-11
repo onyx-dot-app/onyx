@@ -337,7 +337,7 @@ class OnyxConfluence(Confluence):
         fetch the permissions of a space.
         This is better logging than calling the get_space_permissions method
         because it returns a jsonrpc response.
-        TODO: Make this call the these endpoints for newer confluence versions:
+        TODO: Make this call these endpoints for newer confluence versions:
         - /rest/api/space/{spaceKey}/permissions
         - /rest/api/space/{spaceKey}/permissions/anonymous
         """
