@@ -270,7 +270,10 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
             continue
 
         # Check if we already emitted a metric for this sync record
-        metric_key = f"sync_speed:{sync_record.sync_type}:{sync_record.entity_id}:{sync_record.id}"
+        metric_key = (
+            f"sync_speed:{sync_record.sync_type}:"
+            f"{sync_record.entity_id}:{sync_record.id}"
+        )
         if _has_metric_been_emitted(redis_std, metric_key):
             task_logger.debug(
                 f"Skipping metric for sync record {sync_record.id} "
