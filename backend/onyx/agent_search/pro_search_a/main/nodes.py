@@ -946,13 +946,13 @@ def refined_sub_question_creation(state: MainState) -> FollowUpSubQuestionsUpdat
     for sub_question_nr, sub_question in enumerate(parsed_response):
         refined_sub_question = FollowUpSubQuestion(
             sub_question=sub_question,
-            sub_question_id=make_question_id(1, sub_question_nr),
+            sub_question_id=make_question_id(1, sub_question_nr+1),
             verified=False,
             answered=False,
             answer="",
         )
 
-        refined_sub_question_dict[sub_question_nr] = refined_sub_question
+        refined_sub_question_dict[sub_question_nr+1] = refined_sub_question
 
     now_end = datetime.now()
 
