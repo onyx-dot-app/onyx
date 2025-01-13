@@ -1,8 +1,6 @@
-from datetime import datetime
-from datetime import timezone
-
 from sqlalchemy import and_
 from sqlalchemy import desc
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import Session
@@ -29,7 +27,7 @@ def insert_sync_record(
         sync_type=sync_type,
         sync_status=SyncStatus.IN_PROGRESS,
         num_docs_synced=0,
-        sync_start_time=datetime.now(timezone.utc),
+        sync_start_time=func.now(),
     )
     db_session.add(sync_record)
     db_session.commit()
@@ -92,7 +90,7 @@ def update_sync_record_status(
         sync_record.num_docs_synced = num_docs_synced
 
     if sync_status.is_terminal():
-        sync_record.sync_end_time = datetime.now(timezone.utc)
+        sync_record.sync_end_time = func.now()  # type: ignore
 
     db_session.commit()
 
@@ -106,9 +104,7 @@ def cleanup_sync_records(
         .where(SyncRecord.entity_id == entity_id)
         .where(SyncRecord.sync_type == sync_type)
         .where(SyncRecord.sync_status == SyncStatus.IN_PROGRESS)
-        .values(
-            sync_status=SyncStatus.CANCELED, sync_end_time=datetime.now(timezone.utc)
-        )
+        .values(sync_status=SyncStatus.CANCELED, sync_end_time=func.now())
     )
     db_session.execute(stmt)
     db_session.commit()

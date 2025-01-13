@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "97dbb53fa8c8"
-down_revision = "369644546676"
+down_revision = "be2ab2aa50ee"
 branch_labels = None
 depends_on = None
 
@@ -51,6 +51,22 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
+    # Add index for fetch_latest_sync_record query
+    op.create_index(
+        "ix_sync_record_entity_id_sync_type_sync_start_time",
+        "sync_record",
+        ["entity_id", "sync_type", "sync_start_time"],
+    )
+
+    # Add index for cleanup_sync_records query
+    op.create_index(
+        "ix_sync_record_entity_id_sync_type_sync_status",
+        "sync_record",
+        ["entity_id", "sync_type", "sync_status"],
+    )
+
 
 def downgrade() -> None:
+    op.drop_index("ix_sync_record_entity_id_sync_type_sync_status")
+    op.drop_index("ix_sync_record_entity_id_sync_type_sync_start_time")
     op.drop_table("sync_record")

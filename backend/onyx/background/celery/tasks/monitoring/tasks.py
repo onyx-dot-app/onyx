@@ -1,8 +1,6 @@
 import json
 from collections.abc import Callable
-from datetime import datetime
 from datetime import timedelta
-from datetime import timezone
 from typing import Any
 
 from celery import shared_task
@@ -17,6 +15,7 @@ from onyx.background.celery.tasks.vespa.tasks import celery_get_queue_length
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.db.engine import get_db_current_time
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import SyncType
@@ -207,7 +206,8 @@ def _build_run_success_metric(
 
 def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Metric]:
     """Collect metrics about connector runs from the past hour"""
-    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    # NOTE: use get_db_current_time since the IndexAttempt times are set based on DB time
+    one_hour_ago = get_db_current_time(db_session) - timedelta(hours=1)
 
     # Get all connector credential pairs
     cc_pairs = db_session.scalars(select(ConnectorCredentialPair)).all()
@@ -253,7 +253,8 @@ def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Me
 
 def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]:
     """Collect metrics about document set and group syncing speed"""
-    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    # NOTE: use get_db_current_time since the SyncRecord times are set based on DB time
+    one_hour_ago = get_db_current_time(db_session) - timedelta(hours=1)
 
     # Get all sync records from the last hour
     recent_sync_records = db_session.scalars(
@@ -309,7 +310,10 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
         )
 
         # Add sync start latency metric
-        start_latency_key = f"sync_start_latency:{sync_record.sync_type}:{sync_record.entity_id}:{sync_record.id}"
+        start_latency_key = (
+            f"sync_start_latency:{sync_record.sync_type}"
+            f":{sync_record.entity_id}:{sync_record.id}"
+        )
         if _has_metric_been_emitted(redis_std, start_latency_key):
             task_logger.debug(
                 f"Skipping start latency metric for sync record {sync_record.id} "
@@ -329,6 +333,12 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
             )
         else:
             # Skip other sync types
+            task_logger.debug(
+                f"Skipping sync record {sync_record.id} "
+                f"with type {sync_record.sync_type} "
+                f"and id {sync_record.entity_id} "
+                "because it is not a document set or user group"
+            )
             continue
 
         if entity is None:
