@@ -19,15 +19,23 @@ from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import IndexingStatus
+from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import DocumentSet
 from onyx.db.models import IndexAttempt
+from onyx.db.models import SyncRecord
+from onyx.db.models import UserGroup
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 
 
-_CONNECTOR_INDEX_ATTEMPT_KEY_FMT = (
-    "monitoring_connector_index_attempt:{cc_pair_id}:{index_attempt_id}"
+_CONNECTOR_INDEX_ATTEMPT_START_LATENCY_KEY_FMT = (
+    "monitoring_connector_index_attempt_start_latency:{cc_pair_id}:{index_attempt_id}"
+)
+
+_CONNECTOR_INDEX_ATTEMPT_RUN_SUCCESS_KEY_FMT = (
+    "monitoring_connector_index_attempt_run_success:{cc_pair_id}:{index_attempt_id}"
 )
 
 
@@ -57,13 +65,36 @@ class Metric(BaseModel):
         task_logger.info(json.dumps(data))
 
     def emit(self) -> None:
+        # Convert value to appropriate type
+        float_value = (
+            float(self.value) if isinstance(self.value, (int, float)) else None
+        )
+        int_value = int(self.value) if isinstance(self.value, int) else None
+        string_value = str(self.value) if isinstance(self.value, str) else None
+        bool_value = bool(self.value) if isinstance(self.value, bool) else None
+
+        if (
+            float_value is None
+            and int_value is None
+            and string_value is None
+            and bool_value is None
+        ):
+            task_logger.error(
+                f"Invalid metric value type: {type(self.value)} "
+                f"({self.value}) for metric {self.name}."
+            )
+            return
+
         data = {
-            "metric": self.name,
-            "value": self.value,
+            "metric_name": self.name,
+            "float_value": float_value,
+            "int_value": int_value,
+            "string_value": string_value,
+            "bool_value": bool_value,
             "tags": self.tags,
         }
         optional_telemetry(
-            record_type=RecordType.USAGE,
+            record_type=RecordType.METRIC,
             data=data,
         )
 
@@ -72,14 +103,14 @@ def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
     """Collect metrics about queue lengths for different Celery queues"""
     metrics = []
     queue_mappings = {
-        "celery": "celery",
-        "indexing": OnyxCeleryQueues.CONNECTOR_INDEXING,
-        "sync": OnyxCeleryQueues.VESPA_METADATA_SYNC,
-        "deletion": OnyxCeleryQueues.CONNECTOR_DELETION,
-        "pruning": OnyxCeleryQueues.CONNECTOR_PRUNING,
-        "permissions_sync": OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC,
-        "external_group_sync": OnyxCeleryQueues.CONNECTOR_EXTERNAL_GROUP_SYNC,
-        "permissions_upsert": OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT,
+        "celery_queue_length": "celery",
+        "indexing_queue_length": "indexing",
+        "sync_queue_length": "sync",
+        "deletion_queue_length": "deletion",
+        "pruning_queue_length": "pruning",
+        "permissions_sync_queue_length": OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC,
+        "external_group_sync_queue_length": OnyxCeleryQueues.CONNECTOR_EXTERNAL_GROUP_SYNC,
+        "permissions_upsert_queue_length": OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT,
     }
 
     for name, queue in queue_mappings.items():
@@ -95,6 +126,85 @@ def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
     return metrics
 
 
+def _build_start_latency_metric(
+    cc_pair: ConnectorCredentialPair,
+    recent_attempt: IndexAttempt,
+    second_most_recent_attempt: IndexAttempt | None,
+    redis_std: Redis,
+) -> Metric | None:
+    if not recent_attempt.time_started:
+        return None
+
+    # check if we already emitted a metric for this index attempt
+    metric_key = _CONNECTOR_INDEX_ATTEMPT_START_LATENCY_KEY_FMT.format(
+        cc_pair_id=cc_pair.id,
+        index_attempt_id=recent_attempt.id,
+    )
+    if _has_metric_been_emitted(redis_std, metric_key):
+        task_logger.info(
+            f"Skipping metric for connector {cc_pair.connector.id} "
+            f"index attempt {recent_attempt.id} because it has already been "
+            "emitted"
+        )
+        return None
+
+    # Connector start latency
+    # first run case - we should start as soon as it's created
+    if not second_most_recent_attempt:
+        desired_start_time = cc_pair.connector.time_created
+    else:
+        if not cc_pair.connector.refresh_freq:
+            task_logger.error(
+                "Found non-initial index attempt for connector "
+                "without refresh_freq. This should never happen."
+            )
+            return None
+
+        desired_start_time = second_most_recent_attempt.time_updated + timedelta(
+            seconds=cc_pair.connector.refresh_freq
+        )
+
+    start_latency = (recent_attempt.time_started - desired_start_time).total_seconds()
+
+    return Metric(
+        key=metric_key,
+        name="connector_start_latency",
+        value=start_latency,
+        tags={},
+    )
+
+
+def _build_run_success_metric(
+    cc_pair: ConnectorCredentialPair, recent_attempt: IndexAttempt, redis_std: Redis
+) -> Metric | None:
+    metric_key = _CONNECTOR_INDEX_ATTEMPT_RUN_SUCCESS_KEY_FMT.format(
+        cc_pair_id=cc_pair.id,
+        index_attempt_id=recent_attempt.id,
+    )
+
+    if _has_metric_been_emitted(redis_std, metric_key):
+        task_logger.info(
+            f"Skipping metric for connector {cc_pair.connector.id} "
+            f"index attempt {recent_attempt.id} because it has already been "
+            "emitted"
+        )
+        return None
+
+    if recent_attempt.status in [
+        IndexingStatus.SUCCESS,
+        IndexingStatus.FAILED,
+        IndexingStatus.CANCELED,
+    ]:
+        return Metric(
+            key=metric_key,
+            name="connector_run_succeeded",
+            value=(1 if recent_attempt.status == IndexingStatus.SUCCESS else 0),
+            tags={"source": str(cc_pair.connector.source)},
+        )
+
+    return None
+
+
 def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Metric]:
     """Collect metrics about connector runs from the past hour"""
     one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
@@ -104,11 +214,6 @@ def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Me
 
     metrics = []
     for cc_pair in cc_pairs:
-        base_tags = {
-            "source": cc_pair.connector.source,
-            "connector_id": str(cc_pair.connector.id),
-        }
-
         # Get most recent attempt in the last hour
         recent_attempts = (
             db_session.query(IndexAttempt)
@@ -126,79 +231,130 @@ def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Me
         )
 
         # if no metric to emit, skip
-        if not recent_attempt or not recent_attempt.time_started:
-            continue
-
-        # check if we already emitted a metric for this index attempt
-        metric_key = _CONNECTOR_INDEX_ATTEMPT_KEY_FMT.format(
-            cc_pair_id=cc_pair.id,
-            index_attempt_id=recent_attempt.id,
-        )
-        if _has_metric_been_emitted(redis_std, metric_key):
-            task_logger.info(
-                f"Skipping metric for connector {cc_pair.connector.id} "
-                f"index attempt {recent_attempt.id} because it has already been "
-                "emitted"
-            )
+        if not recent_attempt:
             continue
 
         # Connector start latency
-        # first run case - we should start as soon as it's created
-        if not second_most_recent_attempt:
-            desired_start_time = cc_pair.connector.time_created
-        else:
-            if not cc_pair.connector.refresh_freq:
-                task_logger.error(
-                    "Found non-initial index attempt for connector "
-                    "without refresh_freq. This should never happen."
-                )
-                continue
-
-            desired_start_time = second_most_recent_attempt.time_updated + timedelta(
-                seconds=cc_pair.connector.refresh_freq
-            )
-
-        start_latency = (
-            recent_attempt.time_started - desired_start_time
-        ).total_seconds()
-
-        metrics.append(
-            Metric(
-                key=metric_key,
-                name="connector_start_latency",
-                value=start_latency,
-                tags={
-                    **base_tags,
-                    "index_attempt_id": str(recent_attempt.id),
-                },
-            )
+        start_latency_metric = _build_start_latency_metric(
+            cc_pair, recent_attempt, second_most_recent_attempt, redis_std
         )
+        if start_latency_metric:
+            metrics.append(start_latency_metric)
 
         # Connector run success/failure
-        if recent_attempt.status in [
-            IndexingStatus.SUCCESS,
-            IndexingStatus.FAILED,
-            IndexingStatus.CANCELED,
-        ]:
-            metrics.append(
-                Metric(
-                    key=metric_key,
-                    name="connector_run_succeeded",
-                    value=(1 if recent_attempt.status == IndexingStatus.SUCCESS else 0),
-                    tags={
-                        **base_tags,
-                        "index_attempt_id": str(recent_attempt.id),
-                    },
-                )
-            )
+        run_success_metric = _build_run_success_metric(
+            cc_pair, recent_attempt, redis_std
+        )
+        if run_success_metric:
+            metrics.append(run_success_metric)
 
     return metrics
 
 
-def _collect_sync_metrics(db_session: Session) -> list[Metric]:
+def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]:
     """Collect metrics about document set and group syncing speed"""
-    # TODO: Implement this
-    return []
+    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+
+    # Get all sync records from the last hour
+    recent_sync_records = db_session.scalars(
+        select(SyncRecord)
+        .where(SyncRecord.sync_start_time >= one_hour_ago)
+        .order_by(SyncRecord.sync_start_time.desc())
+    ).all()
+
+    metrics = []
+    for sync_record in recent_sync_records:
+        # Skip if no end time (sync still in progress)
+        if not sync_record.sync_end_time:
+            continue
+
+        # Check if we already emitted a metric for this sync record
+        metric_key = f"sync_speed:{sync_record.sync_type}:{sync_record.entity_id}:{sync_record.id}"
+        if _has_metric_been_emitted(redis_std, metric_key):
+            task_logger.debug(
+                f"Skipping metric for sync record {sync_record.id} "
+                "because it has already been emitted"
+            )
+            continue
+
+        # Calculate sync duration in minutes
+        sync_duration_mins = (
+            sync_record.sync_end_time - sync_record.sync_start_time
+        ).total_seconds() / 60.0
+
+        # Calculate sync speed (docs/min) - avoid division by zero
+        sync_speed = (
+            sync_record.num_docs_synced / sync_duration_mins
+            if sync_duration_mins > 0
+            else None
+        )
+
+        if sync_speed is None:
+            task_logger.error(
+                "Something went wrong with sync speed calculation. "
+                f"Sync record: {sync_record.id}"
+            )
+            continue
+
+        metrics.append(
+            Metric(
+                key=metric_key,
+                name="sync_speed_docs_per_min",
+                value=sync_speed,
+                tags={
+                    "sync_type": str(sync_record.sync_type),
+                    "status": str(sync_record.sync_status),
+                },
+            )
+        )
+
+        # Add sync start latency metric
+        start_latency_key = f"sync_start_latency:{sync_record.sync_type}:{sync_record.entity_id}:{sync_record.id}"
+        if _has_metric_been_emitted(redis_std, start_latency_key):
+            task_logger.debug(
+                f"Skipping start latency metric for sync record {sync_record.id} "
+                "because it has already been emitted"
+            )
+            continue
+
+        # Get the entity's last update time based on sync type
+        entity: DocumentSet | UserGroup | None = None
+        if sync_record.sync_type == SyncType.DOCUMENT_SET:
+            entity = db_session.scalar(
+                select(DocumentSet).where(DocumentSet.id == sync_record.entity_id)
+            )
+        elif sync_record.sync_type == SyncType.USER_GROUP:
+            entity = db_session.scalar(
+                select(UserGroup).where(UserGroup.id == sync_record.entity_id)
+            )
+        else:
+            # Skip other sync types
+            continue
+
+        if entity is None:
+            task_logger.error(
+                f"Could not find entity for sync record {sync_record.id} "
+                f"with type {sync_record.sync_type} and id {sync_record.entity_id}"
+            )
+            continue
+
+        # Calculate start latency in seconds
+        start_latency = (
+            sync_record.sync_start_time - entity.time_updated
+        ).total_seconds()
+
+        metrics.append(
+            Metric(
+                key=start_latency_key,
+                name="sync_start_latency_seconds",
+                value=start_latency,
+                tags={
+                    "sync_type": str(sync_record.sync_type),
+                },
+            )
+        )
+
+    return metrics
 
 
 @shared_task(
@@ -226,7 +382,7 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
         metric_functions: list[Callable[[], list[Metric]]] = [
             lambda: _collect_queue_metrics(redis_celery),
             lambda: _collect_connector_metrics(db_session, redis_std),
-            lambda: _collect_sync_metrics(db_session),
+            lambda: _collect_sync_metrics(db_session, redis_std),
         ]
         # Collect and log each metric
         with get_session_with_tenant(tenant_id) as db_session:

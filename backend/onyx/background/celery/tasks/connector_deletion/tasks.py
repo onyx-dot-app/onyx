@@ -17,7 +17,10 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import SyncType
 from onyx.db.search_settings import get_all_search_settings
+from onyx.db.sync_record import cleanup_sync_records
+from onyx.db.sync_record import insert_sync_record
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_delete import RedisConnectorDeletePayload
 from onyx.redis.redis_pool import get_redis_client
@@ -118,6 +121,13 @@ def try_generate_document_cc_pair_cleanup_tasks(
         return None
 
     if cc_pair.status != ConnectorCredentialPairStatus.DELETING:
+        # there should be no in-progress sync records if this is up to date
+        # clean it up just in case things got into a bad state
+        cleanup_sync_records(
+            db_session=db_session,
+            entity_id=cc_pair_id,
+            sync_type=SyncType.CONNECTOR_DELETION,
+        )
         return None
 
     # set a basic fence to start
@@ -127,6 +137,11 @@ def try_generate_document_cc_pair_cleanup_tasks(
     )
 
     redis_connector.delete.set_fence(fence_payload)
+    insert_sync_record(
+        db_session=db_session,
+        entity_id=cc_pair_id,
+        sync_type=SyncType.CONNECTOR_DELETION,
+    )
 
     try:
         # do not proceed if connector indexing or connector pruning are running

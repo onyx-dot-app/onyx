@@ -374,7 +374,7 @@ def _add_user_group__cc_pair_relationships__no_commit(
 
 
 def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserGroup:
-    db_user_group = UserGroup(name=user_group.name)
+    db_user_group = UserGroup(name=user_group.name, time_updated=func.now())
     db_session.add(db_user_group)
     db_session.flush()  # give the group an ID
 
@@ -630,6 +630,10 @@ def update_user_group(
         select(User).where(User.id.in_(removed_user_ids))  # type: ignore
     ).unique()
     _validate_curator_status__no_commit(db_session, list(removed_users))
+
+    # update "time_updated" to now
+    db_user_group.time_updated = func.now()
+
     db_session.commit()
     return db_user_group
 

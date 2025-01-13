@@ -218,6 +218,7 @@ def insert_document_set(
             description=document_set_creation_request.description,
             user_id=user_id,
             is_public=document_set_creation_request.is_public,
+            time_updated=func.now(),
         )
         db_session.add(new_document_set_row)
         db_session.flush()  # ensure the new document set gets assigned an ID
@@ -293,7 +294,7 @@ def update_document_set(
         document_set_row.description = document_set_update_request.description
         document_set_row.is_up_to_date = False
         document_set_row.is_public = document_set_update_request.is_public
-
+        document_set_row.time_updated = func.now()
         versioned_private_doc_set_fn = fetch_versioned_implementation(
             "onyx.db.document_set", "make_doc_set_private"
         )
