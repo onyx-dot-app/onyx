@@ -136,12 +136,14 @@ def try_generate_document_cc_pair_cleanup_tasks(
         submitted=datetime.now(timezone.utc),
     )
 
-    redis_connector.delete.set_fence(fence_payload)
+    # create before setting fence to avoid race condition where the monitoring
+    # task updates the sync record before it is created
     insert_sync_record(
         db_session=db_session,
         entity_id=cc_pair_id,
         sync_type=SyncType.CONNECTOR_DELETION,
     )
+    redis_connector.delete.set_fence(fence_payload)
 
     try:
         # do not proceed if connector indexing or connector pruning are running

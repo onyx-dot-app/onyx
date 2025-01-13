@@ -632,7 +632,7 @@ def update_user_group(
     _validate_curator_status__no_commit(db_session, list(removed_users))
 
     # update "time_updated" to now
-    db_user_group.time_updated = func.now()
+    db_user_group.time_last_modified_by_user = func.now()
 
     db_session.commit()
     return db_user_group

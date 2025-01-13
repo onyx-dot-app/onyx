@@ -84,13 +84,18 @@ class Metric(BaseModel):
             )
             return
 
+        # don't send None values over the wire
         data = {
-            "metric_name": self.name,
-            "float_value": float_value,
-            "int_value": int_value,
-            "string_value": string_value,
-            "bool_value": bool_value,
-            "tags": self.tags,
+            k: v
+            for k, v in {
+                "metric_name": self.name,
+                "float_value": float_value,
+                "int_value": int_value,
+                "string_value": string_value,
+                "bool_value": bool_value,
+                "tags": self.tags,
+            }.items()
+            if v is not None
         }
         optional_telemetry(
             record_type=RecordType.METRIC,
@@ -125,7 +130,7 @@ def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
     return metrics
 
 
-def _build_start_latency_metric(
+def _build_connector_start_latency_metric(
     cc_pair: ConnectorCredentialPair,
     recent_attempt: IndexAttempt,
     second_most_recent_attempt: IndexAttempt | None,
@@ -197,7 +202,7 @@ def _build_run_success_metric(
         return Metric(
             key=metric_key,
             name="connector_run_succeeded",
-            value=(1 if recent_attempt.status == IndexingStatus.SUCCESS else 0),
+            value=recent_attempt.status == IndexingStatus.SUCCESS,
             tags={"source": str(cc_pair.connector.source)},
         )
 
@@ -235,7 +240,7 @@ def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Me
             continue
 
         # Connector start latency
-        start_latency_metric = _build_start_latency_metric(
+        start_latency_metric = _build_connector_start_latency_metric(
             cc_pair, recent_attempt, second_most_recent_attempt, redis_std
         )
         if start_latency_metric:
@@ -353,8 +358,16 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
 
         # Calculate start latency in seconds
         start_latency = (
-            sync_record.sync_start_time - entity.time_updated
+            sync_record.sync_start_time - entity.time_last_modified_by_user
         ).total_seconds()
+        if start_latency < 0:
+            task_logger.error(
+                f"Start latency is negative for sync record {sync_record.id} "
+                f"with type {sync_record.sync_type} and id {sync_record.entity_id}."
+                "This is likely because the entity was updated between the time the "
+                "time the sync finished and this job ran. Skipping."
+            )
+            continue
 
         metrics.append(
             Metric(
@@ -373,7 +386,7 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
 @shared_task(
     name=OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
     soft_time_limit=JOB_TIMEOUT,
-    queue="monitoring",
+    queue=OnyxCeleryQueues.MONITORING,
     bind=True,
 )
 def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:

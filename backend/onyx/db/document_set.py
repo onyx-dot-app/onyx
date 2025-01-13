@@ -294,7 +294,7 @@ def update_document_set(
         document_set_row.description = document_set_update_request.description
         document_set_row.is_up_to_date = False
         document_set_row.is_public = document_set_update_request.is_public
-        document_set_row.time_updated = func.now()
+        document_set_row.time_last_modified_by_user = func.now()
         versioned_private_doc_set_fn = fetch_versioned_implementation(
             "onyx.db.document_set", "make_doc_set_private"
         )

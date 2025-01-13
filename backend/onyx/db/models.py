@@ -904,6 +904,21 @@ class SyncRecord(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    __table_args__ = (
+        Index(
+            "ix_sync_record_entity_id_sync_type_sync_start_time",
+            "entity_id",
+            "sync_type",
+            "sync_start_time",
+        ),
+        Index(
+            "ix_sync_record_entity_id_sync_type_sync_status",
+            "entity_id",
+            "sync_type",
+            "sync_status",
+        ),
+    )
+
 
 class DocumentByConnectorCredentialPair(Base):
     """Represents an indexing of a document by a specific connector / credential pair"""
@@ -1309,7 +1324,7 @@ class DocumentSet(Base):
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Last time a user updated this document set
-    time_updated: Mapped[datetime.datetime] = mapped_column(
+    time_last_modified_by_user: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 
@@ -1793,7 +1808,7 @@ class UserGroup(Base):
     )
 
     # Last time a user updated this user group
-    time_updated: Mapped[datetime.datetime] = mapped_column(
+    time_last_modified_by_user: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 

@@ -82,7 +82,7 @@ def update_sync_record_status(
     sync_record = fetch_latest_sync_record(db_session, entity_id, sync_type)
     if sync_record is None:
         raise ValueError(
-            f"No sync record found for entity_id={entity_id} " f"sync_type={sync_type}"
+            f"No sync record found for entity_id={entity_id} sync_type={sync_type}"
         )
 
     sync_record.sync_status = sync_status

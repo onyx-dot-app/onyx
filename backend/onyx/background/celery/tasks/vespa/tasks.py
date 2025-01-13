@@ -325,13 +325,15 @@ def try_generate_document_set_sync_tasks(
         f"document_set={document_set.id} tasks_generated={tasks_generated}"
     )
 
-    # set this only after all tasks have been added
-    rds.set_fence(tasks_generated)
+    # create before setting fence to avoid race condition where the monitoring
+    # task updates the sync record before it is created
     insert_sync_record(
         db_session=db_session,
         entity_id=document_set_id,
         sync_type=SyncType.DOCUMENT_SET,
     )
+    # set this only after all tasks have been added
+    rds.set_fence(tasks_generated)
     return tasks_generated
 
 
@@ -395,13 +397,16 @@ def try_generate_user_group_sync_tasks(
         f"usergroup={usergroup.id} tasks_generated={tasks_generated}"
     )
 
-    # set this only after all tasks have been added
-    rug.set_fence(tasks_generated)
+    # create before setting fence to avoid race condition where the monitoring
+    # task updates the sync record before it is created
     insert_sync_record(
         db_session=db_session,
         entity_id=usergroup_id,
         sync_type=SyncType.USER_GROUP,
     )
+    # set this only after all tasks have been added
+    rug.set_fence(tasks_generated)
+
     return tasks_generated
 
 

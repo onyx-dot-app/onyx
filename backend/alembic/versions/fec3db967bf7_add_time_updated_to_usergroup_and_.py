@@ -19,7 +19,7 @@ def upgrade() -> None:
     op.add_column(
         "document_set",
         sa.Column(
-            "time_updated",
+            "time_last_modified_by_user",
             sa.DateTime(timezone=True),
             nullable=False,
             server_default=sa.func.now(),
@@ -28,7 +28,7 @@ def upgrade() -> None:
     op.add_column(
         "user_group",
         sa.Column(
-            "time_updated",
+            "time_last_modified_by_user",
             sa.DateTime(timezone=True),
             nullable=False,
             server_default=sa.func.now(),
@@ -37,5 +37,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("user_group", "time_updated")
-    op.drop_column("document_set", "time_updated")
+    op.drop_column("user_group", "time_last_modified_by_user")
+    op.drop_column("document_set", "time_last_modified_by_user")
