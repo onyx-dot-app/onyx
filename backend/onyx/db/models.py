@@ -955,6 +955,14 @@ class DocumentByConnectorCredentialPair(Base):
             "credential_id",
             unique=False,
         ),
+        # Index to optimize get_document_counts_for_cc_pairs query pattern
+        Index(
+            "idx_document_cc_pair_counts",
+            "connector_id",
+            "credential_id",
+            "has_been_indexed",
+            unique=False,
+        ),
     )
 
 
