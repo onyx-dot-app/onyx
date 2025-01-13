@@ -21,6 +21,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import get_documents_by_ids
+from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
 from onyx.db.document import prepare_to_modify_documents
 from onyx.db.document import update_docs_chunk_count__no_commit
 from onyx.db.document import update_docs_last_modified__no_commit
@@ -55,12 +56,20 @@ class DocumentBatchPrepareContext(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
+class IndexingPipelineResult(BaseModel):
+    new_docs: int
+    # NOTE: need total_docs, since the pipeline can skip some docs
+    # (e.g. not even insert them into Postgres)
+    total_docs: int
+    total_chunks: int
+
+
 class IndexingPipelineProtocol(Protocol):
     def __call__(
         self,
         document_batch: list[Document],
         index_attempt_metadata: IndexAttemptMetadata,
-    ) -> tuple[int, int]:
+    ) -> IndexingPipelineResult:
         ...
 
 
@@ -147,10 +156,12 @@ def index_doc_batch_with_handler(
     db_session: Session,
     ignore_time_skip: bool = False,
     tenant_id: str | None = None,
-) -> tuple[int, int]:
-    r = (0, 0)
+) -> IndexingPipelineResult:
+    index_pipeline_result = IndexingPipelineResult(
+        new_docs=0, total_docs=len(document_batch), total_chunks=0
+    )
     try:
-        r = index_doc_batch(
+        index_pipeline_result = index_doc_batch(
             chunker=chunker,
             embedder=embedder,
             document_index=document_index,
@@ -203,7 +214,7 @@ def index_doc_batch_with_handler(
         else:
             pass
 
-    return r
+    return index_pipeline_result
 
 
 def index_doc_batch_prepare(
@@ -227,6 +238,15 @@ def index_doc_batch_prepare(
         if not ignore_time_skip
         else documents
     )
+    if len(updatable_docs) != len(documents):
+        updatable_doc_ids = [doc.id for doc in updatable_docs]
+        skipped_doc_ids = [
+            doc.id for doc in documents if doc.id not in updatable_doc_ids
+        ]
+        logger.info(
+            f"Skipping {len(skipped_doc_ids)} documents "
+            f"because they are up to date. Skipped doc IDs: {skipped_doc_ids}"
+        )
 
     # for all updatable docs, upsert into the DB
     # Does not include doc_updated_at which is also used to indicate a successful update
@@ -263,21 +283,6 @@ def index_doc_batch_prepare(
 def filter_documents(document_batch: list[Document]) -> list[Document]:
     documents: list[Document] = []
     for document in document_batch:
-        # Remove any NUL characters from title/semantic_id
-        # This is a known issue with the Zendesk connector
-        # Postgres cannot handle NUL characters in text fields
-        if document.title:
-            document.title = document.title.replace("\x00", "")
-        if document.semantic_identifier:
-            document.semantic_identifier = document.semantic_identifier.replace(
-                "\x00", ""
-            )
-
-        # Remove NUL characters from all sections
-        for section in document.sections:
-            if section.text is not None:
-                section.text = section.text.replace("\x00", "")
-
         empty_contents = not any(section.text.strip() for section in document.sections)
         if (
             (not document.title or not document.title.strip())
@@ -333,7 +338,7 @@ def index_doc_batch(
     ignore_time_skip: bool = False,
     tenant_id: str | None = None,
     filter_fnc: Callable[[list[Document]], list[Document]] = filter_documents,
-) -> tuple[int, int]:
+) -> IndexingPipelineResult:
     """Takes different pieces of the indexing pipeline and applies it to a batch of documents
     Note that the documents should already be batched at this point so that it does not inflate the
     memory requirements
@@ -359,7 +364,9 @@ def index_doc_batch(
         db_session=db_session,
     )
     if not ctx:
-        return 0, 0
+        return IndexingPipelineResult(
+            new_docs=0, total_docs=len(filtered_documents), total_chunks=0
+        )
 
     logger.debug("Starting chunking")
     chunks: list[DocAwareChunk] = chunker.chunk(ctx.updatable_docs)
@@ -425,7 +432,8 @@ def index_doc_batch(
         ]
 
         logger.debug(
-            f"Indexing the following chunks: {[chunk.to_short_descriptor() for chunk in access_aware_chunks]}"
+            "Indexing the following chunks: "
+            f"{[chunk.to_short_descriptor() for chunk in access_aware_chunks]}"
         )
         # A document will not be spread across different batches, so all the
         # documents with chunks in this set, are fully represented by the chunks
@@ -440,14 +448,17 @@ def index_doc_batch(
             ),
         )
 
-        successful_doc_ids = [record.document_id for record in insertion_records]
-        successful_docs = [
-            doc for doc in ctx.updatable_docs if doc.id in successful_doc_ids
-        ]
+        successful_doc_ids = {record.document_id for record in insertion_records}
+        if successful_doc_ids != set(updatable_ids):
+            raise RuntimeError(
+                f"Some documents were not successfully indexed. "
+                f"Updatable IDs: {updatable_ids}, "
+                f"Successful IDs: {successful_doc_ids}"
+            )
 
         last_modified_ids = []
         ids_to_new_updated_at = {}
-        for doc in successful_docs:
+        for doc in ctx.updatable_docs:
             last_modified_ids.append(doc.id)
             # doc_updated_at is the source's idea (on the other end of the connector)
             # of when the doc was last modified
@@ -469,11 +480,21 @@ def index_doc_batch(
             db_session=db_session,
         )
 
+        # these documents can now be counted as part of the CC Pairs
+        # document count, so we need to mark them as indexed
+        mark_document_as_indexed_for_cc_pair__no_commit(
+            connector_id=index_attempt_metadata.connector_id,
+            credential_id=index_attempt_metadata.credential_id,
+            document_ids=successful_doc_ids,
+            db_session=db_session,
+        )
+
         db_session.commit()
 
-    result = (
-        len([r for r in insertion_records if r.already_existed is False]),
-        len(access_aware_chunks),
+    result = IndexingPipelineResult(
+        new_docs=len([r for r in insertion_records if r.already_existed is False]),
+        total_docs=len(filtered_documents),
+        total_chunks=len(access_aware_chunks),
     )
 
     return result

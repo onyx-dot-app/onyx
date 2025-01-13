@@ -101,9 +101,16 @@ def strip_null_characters(doc_batch: list[Document]) -> list[Document]:
     for doc in doc_batch:
         cleaned_doc = doc.model_copy()
 
+        # Postgres cannot handle NUL characters in text fields
         if "\x00" in cleaned_doc.id:
             logger.warning(f"NUL characters found in document ID: {cleaned_doc.id}")
             cleaned_doc.id = cleaned_doc.id.replace("\x00", "")
+
+        if cleaned_doc.title and "\x00" in cleaned_doc.title:
+            logger.warning(
+                f"NUL characters found in document title: {cleaned_doc.title}"
+            )
+            cleaned_doc.title = cleaned_doc.title.replace("\x00", "")
 
         if "\x00" in cleaned_doc.semantic_identifier:
             logger.warning(
@@ -119,6 +126,12 @@ def strip_null_characters(doc_batch: list[Document]) -> list[Document]:
                     f"NUL characters found in document link for document: {cleaned_doc.id}"
                 )
                 section.link = section.link.replace("\x00", "")
+
+            if section.text and "\x00" in section.text:
+                logger.warning(
+                    f"NUL characters found in document text for document: {cleaned_doc.id}"
+                )
+                section.text = section.text.replace("\x00", "")
 
         cleaned_batch.append(cleaned_doc)
 
@@ -277,8 +290,6 @@ def _run_indexing(
                     tenant_id=tenant_id,
                 )
 
-            all_connector_doc_ids: set[str] = set()
-
             tracer_counter = 0
             if INDEXING_TRACER_INTERVAL > 0:
                 tracer.snap()
@@ -347,26 +358,22 @@ def _run_indexing(
                 index_attempt_md.batch_num = batch_num + 1  # use 1-index for this
 
                 # real work happens here!
-                new_docs, total_batch_chunks = indexing_pipeline(
+                index_pipeline_result = indexing_pipeline(
                     document_batch=doc_batch_cleaned,
                     index_attempt_metadata=index_attempt_md,
                 )
 
                 batch_num += 1
-                net_doc_change += new_docs
-                chunk_count += total_batch_chunks
-                document_count += len(doc_batch_cleaned)
-                all_connector_doc_ids.update(doc.id for doc in doc_batch_cleaned)
+                net_doc_change += index_pipeline_result.new_docs
+                chunk_count += index_pipeline_result.total_chunks
+                document_count += index_pipeline_result.total_docs
 
                 # commit transaction so that the `update` below begins
                 # with a brand new transaction. Postgres uses the start
                 # of the transactions when computing `NOW()`, so if we have
-                # a long running transaction, the `time_updated` field will
+                # a long running transaction, the `time_updated`  field will
                 # be inaccurate
                 db_session.commit()
-
-                if callback:
-                    callback.progress("_run_indexing", len(doc_batch_cleaned))
 
                 # This new value is updated every batch, so UI can refresh per batch update
                 with get_session_with_tenant(tenant_id) as db_session_temp:
@@ -377,6 +384,9 @@ def _run_indexing(
                         new_docs_indexed=net_doc_change,
                         docs_removed_from_index=0,
                     )
+
+                if callback:
+                    callback.progress("_run_indexing", len(doc_batch_cleaned))
 
                 tracer_counter += 1
                 if (
