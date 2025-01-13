@@ -20,9 +20,9 @@ import React, {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import {
-  DanswerDocument,
-  FilteredDanswerDocument,
-  LoadedDanswerDocument,
+  OnyxDocument,
+  FilteredOnyxDocument,
+  LoadedOnyxDocument,
 } from "@/lib/search/interfaces";
 import { SearchSummary } from "./SearchSummary";
 
@@ -98,7 +98,7 @@ function FileDisplay({
     <>
       {nonImgFiles && nonImgFiles.length > 0 && (
         <div
-          id="danswer-file"
+          id="onyx-file"
           className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}
         >
           <div className="flex flex-col gap-2">
@@ -119,7 +119,7 @@ function FileDisplay({
 
       {imageFiles && imageFiles.length > 0 && (
         <div
-          id="danswer-image"
+          id="onyx-image"
           className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}
         >
           <div className="flex flex-col gap-2">
@@ -200,9 +200,9 @@ export const AIMessage = ({
   continueGenerating?: () => void;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (messageId: number) => void;
-  selectedDocuments?: DanswerDocument[] | null;
+  selectedDocuments?: OnyxDocument[] | null;
   toggleDocumentSelection?: () => void;
-  docs?: DanswerDocument[] | null;
+  docs?: OnyxDocument[] | null;
   alternativeAssistant?: Persona | null;
   currentPersona: Persona;
   messageId: number | null;
@@ -210,7 +210,7 @@ export const AIMessage = ({
   documentSelectionToggled?: boolean;
   files?: FileDescriptor[];
   query?: string;
-  citedDocuments?: [string, DanswerDocument][] | null;
+  citedDocuments?: [string, OnyxDocument][] | null;
   toolCall?: ToolCallMetadata | null;
   isComplete?: boolean;
   hasDocs?: boolean;
@@ -221,7 +221,7 @@ export const AIMessage = ({
   retrievalDisabled?: boolean;
   overriddenModel?: string;
   regenerate?: (modelOverRide: LlmOverride) => Promise<void>;
-  setPresentingDocument?: (document: DanswerDocument) => void;
+  setPresentingDocument?: (document: OnyxDocument) => void;
 }) => {
   const toolCallGenerating = toolCall && !toolCall.tool_result;
   const processContent = (content: string | JSX.Element) => {
@@ -284,7 +284,7 @@ export const AIMessage = ({
     content = trimIncompleteCodeSection(content);
   }
 
-  let filteredDocs: FilteredDanswerDocument[] = [];
+  let filteredDocs: FilteredOnyxDocument[] = [];
 
   if (docs) {
     filteredDocs = docs
@@ -297,7 +297,7 @@ export const AIMessage = ({
       .filter((doc) => {
         return citedDocumentIds.includes(doc.document_id);
       })
-      .map((doc: DanswerDocument, ind: number) => {
+      .map((doc: OnyxDocument, ind: number) => {
         return {
           ...doc,
           included: selectedDocumentIds.includes(doc.document_id),
@@ -371,7 +371,7 @@ export const AIMessage = ({
     otherMessagesCanSwitchTo.length > 1;
   return (
     <div
-      id="danswer-ai-message"
+      id="onyx-ai-message"
       ref={trackedElementRef}
       className={`py-5 ml-4 px-5 relative flex `}
     >
@@ -762,7 +762,7 @@ export const HumanMessage = ({
 
   return (
     <div
-      id="danswer-human-message"
+      id="onyx-human-message"
       className="pt-5 pb-1 px-2 lg:px-5 flex -mr-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -812,6 +812,7 @@ export const HumanMessage = ({
                         outline-none 
                         placeholder-gray-400 
                         resize-none
+                        text-text-editing-message
                         pl-4
                         overflow-y-auto
                         pr-12 
@@ -870,7 +871,6 @@ export const HumanMessage = ({
                           py-2 
                           px-3 
                           w-fit 
-                          bg-hover
                           bg-background-strong 
                           text-sm
                           rounded-lg
@@ -896,15 +896,13 @@ export const HumanMessage = ({
                         <TooltipProvider delayDuration={1000}>
                           <Tooltip>
                             <TooltipTrigger>
-                              <button
-                                className="hover:bg-hover p-1.5 rounded"
+                              <HoverableIcon
+                                icon={<FiEdit2 className="text-gray-600" />}
                                 onClick={() => {
                                   setIsEditing(true);
                                   setIsHovered(false);
                                 }}
-                              >
-                                <FiEdit2 className="!h-4 !w-4" />
-                              </button>
+                              />
                             </TooltipTrigger>
                             <TooltipContent>Edit</TooltipContent>
                           </Tooltip>

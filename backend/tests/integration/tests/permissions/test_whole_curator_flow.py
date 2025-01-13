@@ -1,9 +1,9 @@
 """
 This test tests the happy path for curator permissions
 """
-from danswer.db.enums import AccessType
-from danswer.db.models import UserRole
-from danswer.server.documents.models import DocumentSource
+from onyx.db.enums import AccessType
+from onyx.db.models import UserRole
+from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager

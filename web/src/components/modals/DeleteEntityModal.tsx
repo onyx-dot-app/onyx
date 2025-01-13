@@ -22,8 +22,7 @@ export const DeleteEntityModal = ({
           <h2 className="my-auto text-2xl font-bold">Delete {entityType}?</h2>
         </div>
         <p className="mb-4">
-          Click below to confirm that you want to delete{" "}
-          <b>&quot;{entityName}&quot;</b>
+          Click below to confirm that you want to delete <b>{entityName}</b>
         </p>
         {additionalDetails && <p className="mb-4">{additionalDetails}</p>}
         <div className="flex">

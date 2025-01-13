@@ -7,7 +7,7 @@ import {
 import { redirect } from "next/navigation";
 import { ClientLayout } from "./ClientLayout";
 import {
-  SERVER_SIDE_ONLY__CLOUD_ENABLED,
+  NEXT_PUBLIC_CLOUD_ENABLED,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
 } from "@/lib/constants";
 import { AnnouncementBanner } from "../header/AnnouncementBanner";
@@ -49,7 +49,7 @@ export async function Layout({ children }: { children: React.ReactNode }) {
 
     <ClientLayout
       enableEnterprise={SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED}
-      enableCloud={SERVER_SIDE_ONLY__CLOUD_ENABLED}
+      enableCloud={NEXT_PUBLIC_CLOUD_ENABLED}
       user={user}
     >
       <AnnouncementBanner />

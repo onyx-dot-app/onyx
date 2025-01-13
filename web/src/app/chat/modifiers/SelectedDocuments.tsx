@@ -1,11 +1,11 @@
 import { BasicClickable } from "@/components/BasicClickable";
-import { DanswerDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import { FiBook } from "react-icons/fi";
 
 export function SelectedDocuments({
   selectedDocuments,
 }: {
-  selectedDocuments: DanswerDocument[];
+  selectedDocuments: OnyxDocument[];
 }) {
   if (selectedDocuments.length === 0) {
     return null;

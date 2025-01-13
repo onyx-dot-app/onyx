@@ -145,6 +145,7 @@ export function TextFormField({
   min,
   onChange,
   width,
+  vertical,
 }: {
   value?: string;
   name: string;
@@ -170,6 +171,7 @@ export function TextFormField({
   min?: number;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   width?: string;
+  vertical?: boolean;
 }) {
   let heightString = defaultHeight || "";
   if (isTextArea && !heightString) {
@@ -209,14 +211,16 @@ export function TextFormField({
 
   return (
     <div className={`w-full ${width}`}>
-      <div className="flex flex-col gap-x-2 items-start">
-        {!removeLabel && (
-          <Label className={sizeClass.label} small={small}>
-            {label}
-          </Label>
-        )}
-        {optional ? <span>(optional) </span> : ""}
-        {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
+      <div className={`flex ${vertical ? "flex-col" : "flex-row"} items-start`}>
+        <div className="flex gap-x-2 items-center">
+          {!removeLabel && (
+            <Label className={sizeClass.label} small={small}>
+              {label}
+            </Label>
+          )}
+          {optional ? <span>(optional) </span> : ""}
+          {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
+        </div>
         {error ? (
           <ManualErrorMessage>{error}</ManualErrorMessage>
         ) : (
@@ -237,6 +241,7 @@ export function TextFormField({
           as={isTextArea ? "textarea" : "input"}
           type={type}
           defaultValue={value}
+          data-testid={name}
           name={name}
           id={name}
           className={`

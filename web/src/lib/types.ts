@@ -45,7 +45,7 @@ export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
     "Global Curator users can perform admin actions for all groups they are a member of",
   [UserRole.CURATOR]: "Curator role must be assigned in the Groups tab",
   [UserRole.SLACK_USER]:
-    "This role is automatically assigned to users who only use Danswer via Slack",
+    "This role is automatically assigned to users who only use Onyx via Slack",
 };
 
 export interface User {
@@ -69,7 +69,11 @@ export interface MinimalUserSnapshot {
   email: string;
 }
 
-export type ValidInputTypes = "load_state" | "poll" | "event";
+export type ValidInputTypes =
+  | "load_state"
+  | "poll"
+  | "event"
+  | "slim_retrieval";
 export type ValidStatuses =
   | "success"
   | "completed_with_errors"
@@ -144,6 +148,12 @@ export interface OAuthSlackCallbackResponse {
   message: string;
   team_id: string;
   authed_user_id: string;
+  redirect_on_success: string;
+}
+
+export interface OAuthGoogleDriveCallbackResponse {
+  success: boolean;
+  message: string;
   redirect_on_success: string;
 }
 
@@ -329,6 +339,7 @@ export type ConfigurableSources = Exclude<
 
 export const oauthSupportedSources: ConfigurableSources[] = [
   ValidSources.Slack,
+  ValidSources.GoogleDrive,
 ];
 
 export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];

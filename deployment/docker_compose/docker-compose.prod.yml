@@ -1,14 +1,14 @@
 services:
   api_server:
-    image: danswer/danswer-backend:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
     command: >
       /bin/sh -c "
       alembic upgrade head &&
-      echo \"Starting Danswer Api Server\" &&
-      uvicorn danswer.main:app --host 0.0.0.0 --port 8080"
+      echo \"Starting Onyx Api Server\" &&
+      uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     depends_on:
       - relational_db
       - index
@@ -31,7 +31,7 @@ services:
         max-size: "50m"
         max-file: "6"
   background:
-    image: danswer/danswer-backend:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -74,7 +74,7 @@ services:
     #   - ${CA_CERT_PATH:-./custom-ca.crt}:/etc/ssl/certs/custom-ca.crt:ro
 
   web_server:
-    image: danswer/danswer-web-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}
     build:
       context: ../../web
       dockerfile: Dockerfile
@@ -114,7 +114,7 @@ services:
         max-file: "6"
 
   inference_model_server:
-    image: danswer/danswer-model-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
@@ -140,7 +140,7 @@ services:
         max-file: "6"
 
   indexing_model_server:
-    image: danswer/danswer-model-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server

@@ -45,7 +45,7 @@ export default function AssistantBanner({
                 <div
                   className={`${
                     mobile ? "w-full" : "w-36 mx-3"
-                  } flex py-1.5 scale-[1.] rounded-full border border-background-150 justify-center items-center gap-x-2 py-1 px-3 hover:bg-background-125 transition-colors cursor-pointer`}
+                  } flex py-1.5 scale-[1.] rounded-full border border-border-recent-assistants justify-center items-center gap-x-2 py-1 px-3 hover:bg-background-125 transition-colors cursor-pointer`}
                   onClick={() => onAssistantChange(assistant)}
                 >
                   <AssistantIcon
@@ -53,7 +53,7 @@ export default function AssistantBanner({
                     size="xs"
                     assistant={assistant}
                   />
-                  <span className="font-semibold text-text-800 text-xs truncate max-w-[120px]">
+                  <span className="font-semibold text-text-recent-assistants text-xs truncate max-w-[120px]">
                     {assistant.name}
                   </span>
                 </div>

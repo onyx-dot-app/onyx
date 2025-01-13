@@ -27,22 +27,25 @@ spec:
         app: redis
     spec:
       containers:
-      - name: redis
-        image: redis:7.4-alpine
-        ports:
-        - containerPort: 6379
-        env:
-        - name: REDIS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: danswer-secrets
-              key: redis_password
-        command: ["redis-server"]
-        args:
-          # save and appendonly are not strictly necessary because kubernetes doesn't mount
-          # /data silently like docker, but add the save and appendonly for consistency         
-          [
-            "--requirepass", "$(REDIS_PASSWORD)", 
-            "--save", "", 
-            "--appendonly", "no"
-          ]
+        - name: redis
+          image: redis:7.4-alpine
+          ports:
+            - containerPort: 6379
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: onyx-secrets
+                  key: redis_password
+          command: ["redis-server"]
+          args:
+            # save and appendonly are not strictly necessary because kubernetes doesn't mount
+            # /data silently like docker, but add the save and appendonly for consistency
+            [
+              "--requirepass",
+              "$(REDIS_PASSWORD)",
+              "--save",
+              "",
+              "--appendonly",
+              "no",
+            ]

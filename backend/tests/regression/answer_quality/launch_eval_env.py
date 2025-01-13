@@ -20,7 +20,7 @@ def main() -> None:
     config = load_config("search_test_config.yaml")
     if config.environment_name:
         env_name = config.environment_name
-        print("launching danswer with environment name:", env_name)
+        print("launching onyx with environment name:", env_name)
     else:
         print("No env name defined. Not launching docker.")
         print(

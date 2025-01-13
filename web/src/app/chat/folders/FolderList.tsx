@@ -24,6 +24,7 @@ import { CHAT_SESSION_ID_KEY } from "@/lib/drag/constants";
 import Cookies from "js-cookie";
 import { Popover } from "@/components/popover/Popover";
 import { ChatSession } from "../interfaces";
+import { useChatContext } from "@/components/context/ChatContext";
 const FolderItem = ({
   folder,
   currentChatId,
@@ -40,6 +41,7 @@ const FolderItem = ({
   showShareModal: ((chatSession: ChatSession) => void) | undefined;
   showDeleteModal: ((chatSession: ChatSession) => void) | undefined;
 }) => {
+  const { refreshChatSessions } = useChatContext();
   const [isExpanded, setIsExpanded] = useState<boolean>(isInitiallyExpanded);
   const [isEditing, setIsEditing] = useState<boolean>(initiallySelected);
   const [editedFolderName, setEditedFolderName] = useState<string>(
@@ -154,7 +156,8 @@ const FolderItem = ({
     const chatSessionId = event.dataTransfer.getData(CHAT_SESSION_ID_KEY);
     try {
       await addChatToFolder(folder.folder_id, chatSessionId);
-      router.refresh(); // Refresh to show the updated folder contents
+      await refreshChatSessions();
+      router.refresh();
     } catch (error) {
       setPopup({
         message: "Failed to add chat session to folder",

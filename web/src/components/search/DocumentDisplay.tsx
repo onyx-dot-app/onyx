@@ -1,10 +1,10 @@
 "use client";
 import React from "react";
 import {
-  DanswerDocument,
+  OnyxDocument,
   DocumentRelevance,
-  LoadedDanswerDocument,
-  SearchDanswerDocument,
+  LoadedOnyxDocument,
+  SearchOnyxDocument,
 } from "@/lib/search/interfaces";
 import { DocumentFeedbackBlock } from "./DocumentFeedbackBlock";
 import { useContext, useState } from "react";
@@ -127,7 +127,7 @@ export const buildDocumentSummaryDisplay = (
 export function DocumentMetadataBlock({
   document,
 }: {
-  document: DanswerDocument;
+  document: OnyxDocument;
 }) {
   // don't display super long tags, as they are ugly
   const MAXIMUM_TAG_LENGTH = 40;
@@ -163,7 +163,7 @@ export function DocumentMetadataBlock({
 }
 
 interface DocumentDisplayProps {
-  document: SearchDanswerDocument;
+  document: SearchOnyxDocument;
   messageId: number | null;
   documentRank: number;
   isSelected: boolean;
@@ -191,7 +191,7 @@ export const DocumentDisplay = ({
     document.relevance_explanation ?? additional_relevance?.content;
   const settings = useContext(SettingsContext);
   const [presentingDocument, setPresentingDocument] =
-    useState<DanswerDocument | null>(null);
+    useState<OnyxDocument | null>(null);
 
   const handleViewFile = async () => {
     setPresentingDocument(document);
@@ -316,7 +316,7 @@ export const AgenticDocumentDisplay = ({
 }: DocumentDisplayProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [presentingDocument, setPresentingDocument] =
-    useState<DanswerDocument | null>(null);
+    useState<OnyxDocument | null>(null);
 
   const [alternativeToggled, setAlternativeToggled] = useState(false);
 
@@ -428,10 +428,10 @@ export function CompactDocumentCard({
   url,
   updatePresentingDocument,
 }: {
-  document: LoadedDanswerDocument;
+  document: LoadedOnyxDocument;
   icon?: React.ReactNode;
   url?: string;
-  updatePresentingDocument: (documentIndex: LoadedDanswerDocument) => void;
+  updatePresentingDocument: (documentIndex: LoadedOnyxDocument) => void;
 }) {
   return (
     <div

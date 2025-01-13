@@ -9,6 +9,7 @@ mypy-extensions==1.0.0
 mypy==1.8.0
 pandas-stubs==2.2.3.241009
 pandas==2.2.3
+posthog==3.7.4
 pre-commit==3.2.2
 pytest-asyncio==0.22.0
 pytest==7.4.4

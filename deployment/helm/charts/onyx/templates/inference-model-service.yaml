@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "onyx-stack.fullname" . }}-inference-model-service
+spec:
+  type: {{ .Values.inferenceCapability.service.type }}
+  ports:
+    - port: {{ .Values.inferenceCapability.service.port }}
+      targetPort: {{ .Values.inferenceCapability.service.port }}
+      protocol: TCP
+      name: {{ .Values.inferenceCapability.service.name }}
+  selector:
+    {{- range .Values.inferenceCapability.deployment.labels }}
+    {{ .key }}: {{ .value }}
+    {{- end }}

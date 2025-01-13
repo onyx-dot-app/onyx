@@ -239,20 +239,20 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
           <TableRow>
             <TableHead>Time Started</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>New Doc Cnt</TableHead>
+            <TableHead>New Documents</TableHead>
             <TableHead>
               <div className="w-fit">
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="cursor-help flex items-center">
-                        Total Doc Cnt
+                        New + Modified Documents
                         <InfoIcon className="ml-1 w-4 h-4" />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>
-                      Total number of documents replaced in the index during
-                      this indexing attempt
+                      Total number of documents inserted or updated in the index
+                      during this indexing attempt
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>

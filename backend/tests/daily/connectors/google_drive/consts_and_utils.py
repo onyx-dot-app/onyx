@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from danswer.connectors.models import Document
+from onyx.connectors.models import Document
 
 ALL_FILES = list(range(0, 60))
 SHARED_DRIVE_FILES = list(range(20, 25))

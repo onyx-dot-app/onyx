@@ -14,13 +14,13 @@ import { Separator } from "@/components/ui/separator";
 import { useRouter } from "next/navigation";
 import { useContext, useEffect, useState } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { DanswerInitializingLoader } from "@/components/DanswerInitializingLoader";
+import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { Button } from "@/components/ui/button";
-import { DanswerDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat_search/TextView";
 
-function BackToDanswerButton() {
+function BackToOnyxButton() {
   const router = useRouter();
   const enterpriseSettings = useContext(SettingsContext)?.enterpriseSettings;
 
@@ -44,7 +44,7 @@ export function SharedChatDisplay({
 }) {
   const [isReady, setIsReady] = useState(false);
   const [presentingDocument, setPresentingDocument] =
-    useState<DanswerDocument | null>(null);
+    useState<OnyxDocument | null>(null);
 
   useEffect(() => {
     Prism.highlightAll();
@@ -58,7 +58,7 @@ export function SharedChatDisplay({
             Did not find a shared chat with the specified ID.
           </Callout>
         </div>
-        <BackToDanswerButton />
+        <BackToOnyxButton />
       </div>
     );
   }
@@ -122,7 +122,7 @@ export function SharedChatDisplay({
               ) : (
                 <div className="grow flex-0 h-screen w-full flex items-center justify-center">
                   <div className="mb-[33vh]">
-                    <DanswerInitializingLoader />
+                    <OnyxInitializingLoader />
                   </div>
                 </div>
               )}
@@ -130,7 +130,7 @@ export function SharedChatDisplay({
           </div>
         </div>
 
-        <BackToDanswerButton />
+        <BackToOnyxButton />
       </div>
     </>
   );

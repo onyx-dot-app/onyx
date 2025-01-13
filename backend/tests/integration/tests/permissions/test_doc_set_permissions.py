@@ -1,8 +1,8 @@
 import pytest
 from requests.exceptions import HTTPError
 
-from danswer.db.enums import AccessType
-from danswer.server.documents.models import DocumentSource
+from onyx.db.enums import AccessType
+from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.user import DATestUser

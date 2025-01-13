@@ -27,15 +27,23 @@ spec:
         app: indexing-model-server
     spec:
       containers:
-      - name: indexing-model-server
-        image: danswer/danswer-model-server:latest
-        imagePullPolicy: IfNotPresent
-        command: [ "uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "9000" ]
-        ports:
-        - containerPort: 9000
-        envFrom:
-        - configMapRef:
-            name: env-configmap
-        env:
-          - name: INDEXING_ONLY
-            value: "True"
+        - name: indexing-model-server
+          image: onyxdotapp/onyx-model-server:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            [
+              "uvicorn",
+              "model_server.main:app",
+              "--host",
+              "0.0.0.0",
+              "--port",
+              "9000",
+            ]
+          ports:
+            - containerPort: 9000
+          envFrom:
+            - configMapRef:
+                name: env-configmap
+          env:
+            - name: INDEXING_ONLY
+              value: "True"

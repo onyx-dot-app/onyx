@@ -11,12 +11,16 @@ import { errorHandlingFetcher } from "./fetcher";
 import { useContext, useEffect, useState } from "react";
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import { destructureValue } from "./llm/utils";
+import { destructureValue, structureValue } from "./llm/utils";
 import { ChatSession } from "@/app/chat/interfaces";
 import { UsersResponse } from "./users/interfaces";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { PersonaCategory } from "@/app/admin/assistants/interfaces";
+import {
+  LLMProvider,
+  LLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import { isAnthropic } from "@/app/admin/configuration/llm/interfaces";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
@@ -157,7 +161,7 @@ export interface LlmOverride {
 
 export interface LlmOverrideManager {
   llmOverride: LlmOverride;
-  setLlmOverride: React.Dispatch<React.SetStateAction<LlmOverride>>;
+  updateLLMOverride: (newOverride: LlmOverride) => void;
   globalDefault: LlmOverride;
   setGlobalDefault: React.Dispatch<React.SetStateAction<LlmOverride>>;
   temperature: number | null;
@@ -165,52 +169,64 @@ export interface LlmOverrideManager {
   updateModelOverrideForChatSession: (chatSession?: ChatSession) => void;
 }
 export function useLlmOverride(
+  llmProviders: LLMProviderDescriptor[],
   globalModel?: string | null,
   currentChatSession?: ChatSession,
   defaultTemperature?: number
 ): LlmOverrideManager {
+  const getValidLlmOverride = (
+    overrideModel: string | null | undefined
+  ): LlmOverride => {
+    if (overrideModel) {
+      const model = destructureValue(overrideModel);
+      const provider = llmProviders.find(
+        (p) =>
+          p.model_names.includes(model.modelName) &&
+          p.provider === model.provider
+      );
+      if (provider) {
+        return { ...model, name: provider.name };
+      }
+    }
+    return { name: "", provider: "", modelName: "" };
+  };
+
   const [globalDefault, setGlobalDefault] = useState<LlmOverride>(
-    globalModel != null
-      ? destructureValue(globalModel)
-      : {
-          name: "",
-          provider: "",
-          modelName: "",
-        }
+    getValidLlmOverride(globalModel)
   );
+  const updateLLMOverride = (newOverride: LlmOverride) => {
+    setLlmOverride(
+      getValidLlmOverride(
+        structureValue(
+          newOverride.name,
+          newOverride.provider,
+          newOverride.modelName
+        )
+      )
+    );
+  };
+
   const [llmOverride, setLlmOverride] = useState<LlmOverride>(
     currentChatSession && currentChatSession.current_alternate_model
-      ? destructureValue(currentChatSession.current_alternate_model)
-      : {
-          name: "",
-          provider: "",
-          modelName: "",
-        }
+      ? getValidLlmOverride(currentChatSession.current_alternate_model)
+      : { name: "", provider: "", modelName: "" }
   );
 
   const updateModelOverrideForChatSession = (chatSession?: ChatSession) => {
     setLlmOverride(
       chatSession && chatSession.current_alternate_model
-        ? destructureValue(chatSession.current_alternate_model)
+        ? getValidLlmOverride(chatSession.current_alternate_model)
         : globalDefault
     );
   };
 
   const [temperature, setTemperature] = useState<number | null>(
-    defaultTemperature != undefined ? defaultTemperature : 0
+    defaultTemperature !== undefined ? defaultTemperature : 0
   );
 
   useEffect(() => {
-    setGlobalDefault(
-      globalModel != null
-        ? destructureValue(globalModel)
-        : {
-            name: "",
-            provider: "",
-            modelName: "",
-          }
-    );
-  }, [globalModel]);
+    setGlobalDefault(getValidLlmOverride(globalModel));
+  }, [globalModel, llmProviders]);
 
   useEffect(() => {
     setTemperature(defaultTemperature !== undefined ? defaultTemperature : 0);
@@ -233,7 +249,7 @@ export function useLlmOverride(
   return {
     updateModelOverrideForChatSession,
     llmOverride,
-    setLlmOverride,
+    updateLLMOverride,
     globalDefault,
     setGlobalDefault,
     temperature,

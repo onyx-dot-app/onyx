@@ -1,7 +1,7 @@
 "use client";
 
+import { Option } from "@/components/Dropdown";
 import { generateRandomIconShape, createSVG } from "@/lib/assistantIconUtils";
-
 import { CCPairBasicInfo, DocumentSet, User } from "@/lib/types";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import {
   ArrayHelpers,
-  ErrorMessage,
-  Field,
   FieldArray,
   Form,
   Formik,
   FormikProps,
+  useFormikContext,
 } from "formik";
 
 import {
@@ -27,7 +26,6 @@ import {
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { getDisplayNameForModel, useCategories } from "@/lib/hooks";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
-import { Option } from "@/components/Dropdown";
 import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
 import { checkLLMSupportsImageInput, destructureValue } from "@/lib/llm/utils";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
@@ -41,10 +39,9 @@ import {
 } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { FiInfo, FiX } from "react-icons/fi";
+import { useEffect, useMemo, useState } from "react";
+import { FiInfo, FiRefreshCcw } from "react-icons/fi";
 import * as Yup from "yup";
-import { FullLLMProvider } from "../configuration/llm/interfaces";
 import CollapsibleSection from "./CollapsibleSection";
 import { SuccessfulPersonaUpdateRedirectType } from "./enums";
 import { Persona, PersonaCategory, StarterMessage } from "./interfaces";
@@ -66,6 +63,9 @@ import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { buildImgUrl } from "@/app/chat/files/images/utils";
 import { LlmList } from "@/components/llm/LLMList";
 import { useAssistants } from "@/components/context/AssistantsContext";
+import { debounce } from "lodash";
+import { FullLLMProvider } from "../configuration/llm/interfaces";
+import StarterMessagesList from "./StarterMessageList";
 import { Input } from "@/components/ui/input";
 import { CategoryCard } from "./CategoryCard";
 
@@ -129,12 +129,14 @@ export function AssistantEditor({
   ];
 
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [hasEditedStarterMessage, setHasEditedStarterMessage] = useState(false);
   const [showPersonaCategory, setShowPersonaCategory] = useState(!admin);
 
   // state to persist across formik reformatting
   const [defautIconColor, _setDeafultIconColor] = useState(
     colorOptions[Math.floor(Math.random() * colorOptions.length)]
   );
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [defaultIconShape, setDefaultIconShape] = useState<any>(null);
 
@@ -148,6 +150,10 @@ export function AssistantEditor({
 
   const [removePersonaImage, setRemovePersonaImage] = useState(false);
 
+  const autoStarterMessageEnabled = useMemo(
+    () => llmProviders.length > 0,
+    [llmProviders.length]
+  );
   const isUpdate = existingPersona !== undefined && existingPersona !== null;
   const existingPrompt = existingPersona?.prompts[0] ?? null;
   const defaultProvider = llmProviders.find(
@@ -217,7 +223,24 @@ export function AssistantEditor({
       existingPersona?.llm_model_provider_override ?? null,
     llm_model_version_override:
       existingPersona?.llm_model_version_override ?? null,
-    starter_messages: existingPersona?.starter_messages ?? [],
+    starter_messages: existingPersona?.starter_messages ?? [
+      {
+        name: "",
+        message: "",
+      },
+      {
+        name: "",
+        message: "",
+      },
+      {
+        name: "",
+        message: "",
+      },
+      {
+        name: "",
+        message: "",
+      },
+    ],
     enabled_tools_map: enabledToolsMap,
     icon_color: existingPersona?.icon_color ?? defautIconColor,
     icon_shape: existingPersona?.icon_shape ?? defaultIconShape,
@@ -227,6 +250,44 @@ export function AssistantEditor({
     // EE Only
     groups: existingPersona?.groups ?? [],
   };
+
+  interface AssistantPrompt {
+    message: string;
+    name: string;
+  }
+
+  const debouncedRefreshPrompts = debounce(
+    async (values: any, setFieldValue: any) => {
+      if (!autoStarterMessageEnabled) {
+        return;
+      }
+      setIsRefreshing(true);
+      try {
+        const response = await fetch("/api/persona/assistant-prompt-refresh", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: values.name,
+            description: values.description,
+            document_set_ids: values.document_set_ids,
+            instructions: values.system_prompt || values.task_prompt,
+          }),
+        });
+
+        const data: AssistantPrompt = await response.json();
+        if (response.ok) {
+          setFieldValue("starter_messages", data);
+        }
+      } catch (error) {
+        console.error("Failed to refresh prompts:", error);
+      } finally {
+        setIsRefreshing(false);
+      }
+    },
+    1000
+  );
 
   const [isRequestSuccessful, setIsRequestSuccessful] = useState(false);
 
@@ -421,6 +482,8 @@ export function AssistantEditor({
           isSubmitting,
           values,
           setFieldValue,
+          errors,
+
           ...formikProps
         }: FormikProps<any>) => {
           function toggleToolInValues(toolId: number) {
@@ -445,6 +508,7 @@ export function AssistantEditor({
 
           return (
             <Form className="w-full text-text-950">
+              {/* Refresh starter messages when name or description changes */}
               <div className="w-full flex gap-x-2 justify-center">
                 <Popover
                   open={isIconDropdownOpen}
@@ -595,6 +659,7 @@ export function AssistantEditor({
                 tooltip="Used to identify the Assistant in the UI."
                 label="Name"
                 placeholder="e.g. 'Email Assistant'"
+                aria-label="assistant-name-input"
               />
 
               <TextFormField
@@ -602,6 +667,7 @@ export function AssistantEditor({
                 name="description"
                 label="Description"
                 placeholder="e.g. 'Use this Assistant to help draft professional emails'"
+                data-testid="assistant-description-input"
               />
 
               <TextFormField
@@ -610,9 +676,7 @@ export function AssistantEditor({
                 label="Instructions"
                 isTextArea={true}
                 placeholder="e.g. 'You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns'"
-                onChange={(e) => {
-                  setFieldValue("system_prompt", e.target.value);
-                }}
+                data-testid="assistant-instructions-input"
               />
 
               <div>
@@ -885,8 +949,8 @@ export function AssistantEditor({
                                     {user?.role !== "admin" && (
                                       <>
                                         If this functionality would be useful,
-                                        reach out to the administrators of
-                                        Danswer for assistance.
+                                        reach out to the administrators of Onyx
+                                        for assistance.
                                       </>
                                     )}
                                   </p>
@@ -981,6 +1045,91 @@ export function AssistantEditor({
                       ))}
                     </>
                   )}
+                </div>
+              </div>
+
+              <div className="mb-6 w-full flex flex-col">
+                <div className="flex gap-x-2 items-center">
+                  <div className="block font-medium text-base">
+                    Starter Messages
+                  </div>
+                </div>
+
+                <SubLabel>
+                  Pre-configured messages that help users understand what this
+                  assistant can do and how to interact with it effectively.
+                </SubLabel>
+                <div className="relative w-fit">
+                  <TooltipProvider delayDuration={50}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() =>
+                              debouncedRefreshPrompts(values, setFieldValue)
+                            }
+                            disabled={
+                              !autoStarterMessageEnabled ||
+                              isRefreshing ||
+                              (Object.keys(errors).length > 0 &&
+                                Object.keys(errors).some(
+                                  (key) => !key.startsWith("starter_messages")
+                                ))
+                            }
+                            className={`
+                            px-3 py-2
+                            mr-auto
+                            my-2
+                            flex gap-x-2
+                            text-sm font-medium
+                            rounded-lg shadow-sm
+                            items-center gap-2
+                            transition-colors duration-200
+                            ${
+                              isRefreshing || !autoStarterMessageEnabled
+                                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                : "bg-blue-50 text-blue-600 hover:bg-blue-100 active:bg-blue-200"
+                            }
+                          `}
+                          >
+                            <div className="flex items-center gap-x-2">
+                              {isRefreshing ? (
+                                <FiRefreshCcw className="w-4 h-4 animate-spin text-gray-400" />
+                              ) : (
+                                <SwapIcon className="w-4 h-4 text-blue-600" />
+                              )}
+                              Generate
+                            </div>
+                          </Button>
+                        </div>
+                      </TooltipTrigger>
+                      {!autoStarterMessageEnabled && (
+                        <TooltipContent side="top" align="center">
+                          <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
+                            No LLM providers configured. Generation is not
+                            available.
+                          </p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <div className="w-full">
+                  <FieldArray
+                    name="starter_messages"
+                    render={(arrayHelpers: ArrayHelpers) => (
+                      <StarterMessagesList
+                        isRefreshing={isRefreshing}
+                        values={values.starter_messages}
+                        arrayHelpers={arrayHelpers}
+                        touchStarterMessages={() => {
+                          setHasEditedStarterMessage(true);
+                        }}
+                      />
+                    )}
+                  />
                 </div>
               </div>
 
@@ -1185,141 +1334,17 @@ export function AssistantEditor({
                           setFieldValue("task_prompt", e.target.value);
                         }}
                         explanationText="Learn about prompting in our docs!"
-                        explanationLink="https://docs.danswer.dev/guides/assistants"
+                        explanationLink="https://docs.onyx.app/guides/assistants"
                       />
                     </>
                   )}
-
-                  <div className="mb-6 flex flex-col">
-                    <div className="flex gap-x-2 items-center">
-                      <div className="block font-medium text-base">
-                        Starter Messages (Optional){" "}
-                      </div>
-                    </div>
-                    <SubLabel>
-                      Add pre-defined messages to help users get started. Only
-                      the first 4 will be displayed.
-                    </SubLabel>
-                    <FieldArray
-                      name="starter_messages"
-                      render={(
-                        arrayHelpers: ArrayHelpers<StarterMessage[]>
-                      ) => (
-                        <div>
-                          {values.starter_messages &&
-                            values.starter_messages.length > 0 &&
-                            values.starter_messages.map(
-                              (
-                                starterMessage: StarterMessage,
-                                index: number
-                              ) => {
-                                return (
-                                  <div
-                                    key={index}
-                                    className={index === 0 ? "mt-2" : "mt-6"}
-                                  >
-                                    <div className="flex">
-                                      <div className="w-full mr-6 border border-border p-3 rounded">
-                                        <div>
-                                          <Label small>Name</Label>
-                                          <SubLabel>
-                                            Shows up as the &quot;title&quot;
-                                            for this Starter Message. For
-                                            example, &quot;Write an email&quot;.
-                                          </SubLabel>
-                                          <Field
-                                            name={`starter_messages[${index}].name`}
-                                            className={`
-                                            border 
-                                            border-border 
-                                            bg-background 
-                                            rounded 
-                                            w-full 
-                                            py-2 
-                                            px-3 
-                                            mr-4
-                                          `}
-                                            autoComplete="off"
-                                          />
-                                          <ErrorMessage
-                                            name={`starter_messages[${index}].name`}
-                                            component="div"
-                                            className="text-error text-sm mt-1"
-                                          />
-                                        </div>
-
-                                        <div className="mt-3">
-                                          <Label small>Message</Label>
-                                          <SubLabel>
-                                            The actual message to be sent as the
-                                            initial user message if a user
-                                            selects this starter prompt. For
-                                            example, &quot;Write me an email to
-                                            a client about a new billing feature
-                                            we just released.&quot;
-                                          </SubLabel>
-                                          <Field
-                                            name={`starter_messages[${index}].message`}
-                                            className={`
-                                              border 
-                                              border-border 
-                                              bg-background 
-                                              rounded 
-                                              w-full 
-                                              py-2 
-                                              px-3 
-                                              min-h-12
-                                              mr-4
-                                              line-clamp-
-                                          `}
-                                            as="textarea"
-                                            autoComplete="off"
-                                          />
-                                          <ErrorMessage
-                                            name={`starter_messages[${index}].message`}
-                                            component="div"
-                                            className="text-error text-sm mt-1"
-                                          />
-                                        </div>
-                                      </div>
-                                      <div className="my-auto">
-                                        <FiX
-                                          className="my-auto w-10 h-10 cursor-pointer hover:bg-hover rounded p-2"
-                                          onClick={() =>
-                                            arrayHelpers.remove(index)
-                                          }
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              }
-                            )}
-
-                          <Button
-                            onClick={() => {
-                              arrayHelpers.push({
-                                name: "",
-                                description: "",
-                                message: "",
-                              });
-                            }}
-                            className="mt-3"
-                            size="sm"
-                            variant="next"
-                          >
-                            Add New
-                          </Button>
-                        </div>
-                      )}
-                    />
-                  </div>
 
                   <IsPublicGroupSelector
                     formikProps={{
                       values,
                       isSubmitting,
                       setFieldValue,
+                      errors,
                       ...formikProps,
                     }}
                     objectName="assistant"

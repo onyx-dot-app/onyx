@@ -1,18 +1,18 @@
 FROM python:3.11.7-slim-bookworm
 
-LABEL com.danswer.maintainer="founders@danswer.ai"
-LABEL com.danswer.description="This image is for the Danswer model server which runs all of the \
-AI models for Danswer. This container and all the code is MIT Licensed and free for all to use. \
-You can find it at https://hub.docker.com/r/danswer/danswer-model-server. For more details, \
-visit https://github.com/danswer-ai/danswer."
+LABEL com.danswer.maintainer="founders@onyx.app"
+LABEL com.danswer.description="This image is for the Onyx model server which runs all of the \
+AI models for Onyx. This container and all the code is MIT Licensed and free for all to use. \
+You can find it at https://hub.docker.com/r/onyx/onyx-model-server. For more details, \
+visit https://github.com/onyx-dot-app/onyx."
 
-# Default DANSWER_VERSION, typically overriden during builds by GitHub Actions.
-ARG DANSWER_VERSION=0.8-dev
-ENV DANSWER_VERSION=${DANSWER_VERSION} \
+# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
+ARG ONYX_VERSION=0.8-dev
+ENV ONYX_VERSION=${ONYX_VERSION} \
     DANSWER_RUNNING_IN_DOCKER="true"
 
 
-RUN echo "DANSWER_VERSION: ${DANSWER_VERSION}"
+RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
 COPY ./requirements/model_server.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade \
@@ -20,11 +20,11 @@ RUN pip install --no-cache-dir --upgrade \
         --timeout 30 \
         -r /tmp/requirements.txt
 
-RUN apt-get remove -y --allow-remove-essential perl-base && \
+RUN apt-get remove -y --allow-remove-essential perl-base && \ 
     apt-get autoremove -y
 
 # Pre-downloading models for setups with limited egress
-# Download tokenizers, distilbert for the Danswer model
+# Download tokenizers, distilbert for the Onyx model
 # Download model weights
 # Run Nomic to pull in the custom architecture and have it cached locally
 RUN python -c "from transformers import AutoTokenizer; \
@@ -38,18 +38,18 @@ from sentence_transformers import SentenceTransformer; \
 SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True);"
 
 # In case the user has volumes mounted to /root/.cache/huggingface that they've downloaded while
-# running Danswer, don't overwrite it with the built in cache folder
+# running Onyx, don't overwrite it with the built in cache folder
 RUN mv /root/.cache/huggingface /root/.cache/temp_huggingface
 
 WORKDIR /app
 
 # Utils used by model server
-COPY ./danswer/utils/logger.py /app/danswer/utils/logger.py
+COPY ./onyx/utils/logger.py /app/onyx/utils/logger.py
 
 # Place to fetch version information
-COPY ./danswer/__init__.py /app/danswer/__init__.py
+COPY ./onyx/__init__.py /app/onyx/__init__.py
 
-# Shared between Danswer Backend and Model Server
+# Shared between Onyx Backend and Model Server
 COPY ./shared_configs /app/shared_configs
 
 # Model Server main code

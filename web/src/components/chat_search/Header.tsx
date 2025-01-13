@@ -1,18 +1,16 @@
 "use client";
-import { User } from "@/lib/types";
 import { UserDropdown } from "../UserDropdown";
 import { FiShare2 } from "react-icons/fi";
 import { SetStateAction, useContext, useEffect } from "react";
-import { NewChatIcon } from "../icons/icons";
 import { NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA } from "@/lib/constants";
 import { ChatSession } from "@/app/chat/interfaces";
 import Link from "next/link";
 import { pageType } from "@/app/chat/sessionSidebar/types";
 import { useRouter } from "next/navigation";
 import { ChatBanner } from "@/app/chat/ChatBanner";
-import LogoType from "../header/LogoType";
-import { Persona } from "@/app/admin/assistants/interfaces";
-import { LlmOverrideManager } from "@/lib/hooks";
+import LogoWithText from "../header/LogoWithText";
+import { NewChatIcon } from "../icons/icons";
+import { SettingsContext } from "../settings/SettingsProvider";
 
 export default function FunctionalHeader({
   page,
@@ -21,9 +19,6 @@ export default function FunctionalHeader({
   toggleSidebar = () => null,
   reset = () => null,
   sidebarToggled,
-  liveAssistant,
-  onAssistantChange,
-  llmOverrideManager,
   documentSidebarToggled,
   toggleUserSettings,
 }: {
@@ -34,11 +29,9 @@ export default function FunctionalHeader({
   currentChatSession?: ChatSession | null | undefined;
   setSharingModalVisible?: (value: SetStateAction<boolean>) => void;
   toggleSidebar?: () => void;
-  liveAssistant?: Persona;
-  onAssistantChange?: (assistant: Persona) => void;
-  llmOverrideManager?: LlmOverrideManager;
   toggleUserSettings?: () => void;
 }) {
+  const settings = useContext(SettingsContext);
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey) {
@@ -76,10 +69,11 @@ export default function FunctionalHeader({
   return (
     <div className="left-0 sticky top-0 z-20 w-full relative flex">
       <div className="items-end flex mt-2 cursor-pointer text-text-700 relative flex w-full">
-        <LogoType
+        <LogoWithText
           assistantId={currentChatSession?.persona_id}
           page={page}
           toggleSidebar={toggleSidebar}
+          toggled={sidebarToggled && !settings?.isMobile}
           handleNewChat={handleNewChat}
         />
         <div className="mt-2 flex w-full h-8">
@@ -103,18 +97,19 @@ export default function FunctionalHeader({
           </div>
 
           <div className="invisible">
-            <LogoType
+            <LogoWithText
               page={page}
+              toggled={sidebarToggled}
               toggleSidebar={toggleSidebar}
               handleNewChat={handleNewChat}
             />
           </div>
 
-          <div className="absolute right-0 top-0 flex gap-x-2">
+          <div className="absolute  right-0 mobile:top-2 desktop:top-0 flex">
             {setSharingModalVisible && (
               <div
                 onClick={() => setSharingModalVisible(true)}
-                className="mobile:hidden my-auto rounded cursor-pointer hover:bg-hover-light"
+                className="mobile:hidden ml-2 my-auto rounded cursor-pointer hover:bg-hover-light"
               >
                 <FiShare2 size="18" />
               </div>
@@ -139,10 +134,9 @@ export default function FunctionalHeader({
                 <NewChatIcon size={20} />
               </div>
             </Link>
-          </div>
-          <div
-            style={{ transition: "width 0.30s ease-out" }}
-            className={`
+            <div
+              style={{ transition: "width 0.30s ease-out" }}
+              className={`
             hidden
             md:flex 
             mx-auto
@@ -153,7 +147,8 @@ export default function FunctionalHeader({
             h-full
             ${documentSidebarToggled ? "w-[400px]" : "w-[0px]"}
             `}
-          />
+            />
+          </div>
 
           {page != "assistants" && (
             <div

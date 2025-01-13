@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: background
-          image: danswer/danswer-backend:latest
+          image: onyxdotapp/onyx-backend:latest
           imagePullPolicy: IfNotPresent
           command:
             - "/bin/sh"
@@ -28,7 +28,7 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: danswer-secrets
+                  name: onyx-secrets
                   key: redis_password
           envFrom:
             - configMapRef:

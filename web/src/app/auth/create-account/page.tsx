@@ -14,12 +14,12 @@ const Page = () => {
           Account Not Found
         </h2>
         <p className="text-text-700 max-w-md text-center">
-          We couldn&apos;t find your account in our records. To access Danswer,
-          you need to either:
+          We couldn&apos;t find your account in our records. To access Onyx, you
+          need to either:
         </p>
         <ul className="list-disc text-left text-text-600 w-full pl-6 mx-auto">
-          <li>Be invited to an existing Danswer organization</li>
-          <li>Create a new Danswer organization</li>
+          <li>Be invited to an existing Onyx organization</li>
+          <li>Create a new Onyx organization</li>
         </ul>
         <div className="flex justify-center">
           <Link

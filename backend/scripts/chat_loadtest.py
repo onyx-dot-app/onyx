@@ -1,6 +1,6 @@
 """Basic Usage:
 
-python scripts/chat_loadtest.py --api-key <api-key> --url <danswer-url>/api
+python scripts/chat_loadtest.py --api-key <api-key> --url <onyx-url>/api
 
 to run from the container itself, copy this file in and run:
 
@@ -190,12 +190,12 @@ def main() -> None:
         "--url",
         type=str,
         default="http://localhost:3000/api",
-        help="Danswer URL",
+        help="Onyx URL",
     )
     parser.add_argument(
         "--api-key",
         type=str,
-        help="Danswer Basic/Admin Level API key",
+        help="Onyx Basic/Admin Level API key",
     )
     parser.add_argument(
         "--concurrent",

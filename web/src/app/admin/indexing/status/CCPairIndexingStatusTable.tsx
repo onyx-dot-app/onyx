@@ -326,8 +326,9 @@ export function CCPairIndexingStatusTable({
           (sum, status) => sum + status.docs_indexed,
           0
         ),
-        errors: statuses.filter((status) => status.last_status === "failed")
-          .length,
+        errors: statuses.filter(
+          (status) => status.last_finished_status === "failed"
+        ).length,
       };
     });
 

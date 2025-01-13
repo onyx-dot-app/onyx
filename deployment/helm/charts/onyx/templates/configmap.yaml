@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.config.envConfigMapName }}
+  labels:
+    {{- include "onyx-stack.labels" . | nindent 4 }}
+data:
+  INTERNAL_URL: "http://{{ include "onyx-stack.fullname" . }}-api-service:{{ .Values.api.service.port | default 8080 }}"
+  POSTGRES_HOST: {{ .Release.Name }}-postgresql
+  VESPA_HOST: da-vespa-0.vespa-service
+  REDIS_HOST: {{ .Release.Name }}-redis-master
+  MODEL_SERVER_HOST: "{{ include "onyx-stack.fullname" . }}-inference-model-service"
+  INDEXING_MODEL_SERVER_HOST: "{{ include "onyx-stack.fullname" . }}-indexing-model-service"
+{{- range $key, $value := .Values.configMap }}
+  {{ $key }}: "{{ $value }}"
+{{- end }}

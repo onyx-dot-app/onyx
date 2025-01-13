@@ -93,7 +93,7 @@ export const SlackTokensForm = ({
               Please refer to our{" "}
               <a
                 className="text-blue-500 hover:underline"
-                href="https://docs.danswer.dev/slack_bot_setup"
+                href="https://docs.onyx.app/slack_bot_setup"
                 target="_blank"
                 rel="noopener noreferrer"
               >

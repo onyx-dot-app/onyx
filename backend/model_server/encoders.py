@@ -20,7 +20,6 @@ from sentence_transformers import SentenceTransformer  # type: ignore
 from vertexai.language_models import TextEmbeddingInput  # type: ignore
 from vertexai.language_models import TextEmbeddingModel  # type: ignore
 
-from danswer.utils.logger import setup_logger
 from model_server.constants import DEFAULT_COHERE_MODEL
 from model_server.constants import DEFAULT_OPENAI_MODEL
 from model_server.constants import DEFAULT_VERTEX_MODEL
@@ -28,6 +27,7 @@ from model_server.constants import DEFAULT_VOYAGE_MODEL
 from model_server.constants import EmbeddingModelTextType
 from model_server.constants import EmbeddingProvider
 from model_server.utils import simple_log_function_time
+from onyx.utils.logger import setup_logger
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import OPENAI_EMBEDDING_TIMEOUT
@@ -114,7 +114,7 @@ class CloudEmbedding:
 
         final_embeddings: list[Embedding] = []
         for text_batch in batch_list(texts, _COHERE_MAX_INPUT_LEN):
-            # Does not use the same tokenizer as the Danswer API server but it's approximately the same
+            # Does not use the same tokenizer as the Onyx API server but it's approximately the same
             # empirically it's only off by a very few tokens so it's not a big deal
             response = await client.embed(
                 texts=text_batch,

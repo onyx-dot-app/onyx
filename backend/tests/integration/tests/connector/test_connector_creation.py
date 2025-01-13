@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 from datetime import timezone
 
-from danswer.server.documents.models import DocumentSource
+from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser

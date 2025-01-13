@@ -497,7 +497,6 @@ export function HorizontalSourceSelector({
               max-w-64
               border-border 
               rounded-lg 
-              bg-background
               max-h-96 
               overflow-y-scroll
               overscroll-contain
@@ -509,7 +508,6 @@ export function HorizontalSourceSelector({
               w-fit
               gap-x-1
               hover:bg-hover
-              bg-hover-light
               flex
               items-center
               bg-background-search-filter
@@ -523,7 +521,7 @@ export function HorizontalSourceSelector({
           </div>
         </PopoverTrigger>
         <PopoverContent
-          className="bg-background border-border border rounded-md z-[200] p-0"
+          className="bg-background-search-filter border-border border rounded-md z-[200] p-0"
           align="start"
         >
           <Calendar
@@ -542,7 +540,7 @@ export function HorizontalSourceSelector({
                 selectValue: timeRange?.selectValue || "",
               });
             }}
-            className="rounded-md "
+            className="rounded-md"
           />
         </PopoverContent>
       </Popover>

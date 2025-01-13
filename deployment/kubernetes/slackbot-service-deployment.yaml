@@ -16,9 +16,9 @@ spec:
     spec:
       containers:
         - name: slack-bot
-          image: danswer/danswer-backend:latest
+          image: onyxdotapp/onyx-backend:latest
           imagePullPolicy: IfNotPresent
-          command: ["python", "danswer/danswerbot/slack/listener.py"]
+          command: ["python", "onyxdotapp/onyxbot/slack/listener.py"]
           ports:
             - containerPort: 8000
           resources:

@@ -1,6 +1,10 @@
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { ValidSources } from "./types";
-import { Connector, ConnectorBase } from "./connectors/connectors";
+import {
+  Connector,
+  ConnectorBase,
+  ConnectorSnapshot,
+} from "./connectors/connectors";
 async function handleResponse(
   response: Response
 ): Promise<[string | null, any]> {
@@ -9,6 +13,18 @@ async function handleResponse(
     return [null, responseJson];
   }
   return [responseJson.detail, null];
+}
+
+export async function fetchConnectors(
+  credential_id: number
+): Promise<ConnectorSnapshot[]> {
+  const url = `/api/manage/admin/connector?credential=${credential_id}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch connectors: ${await response.text()}`);
+  }
+  const connectors: ConnectorSnapshot[] = await response.json();
+  return connectors;
 }
 
 export async function createConnector<T>(

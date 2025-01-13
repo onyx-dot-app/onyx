@@ -139,7 +139,7 @@ export function UserDropdown({
             <div
               className="
                 my-auto
-                bg-background-strong
+                bg-userdropdown-background
                 ring-2
                 ring-transparent
                 group-hover:ring-background-300/50

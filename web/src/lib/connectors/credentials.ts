@@ -60,6 +60,7 @@ export interface GmailCredentialJson {
 export interface GoogleDriveCredentialJson {
   google_tokens: string;
   google_primary_admin: string;
+  authentication_method?: string;
 }
 
 export interface GmailServiceAccountCredentialJson {
@@ -70,6 +71,7 @@ export interface GmailServiceAccountCredentialJson {
 export interface GoogleDriveServiceAccountCredentialJson {
   google_service_account_key: string;
   google_primary_admin: string;
+  authentication_method?: string;
 }
 
 export interface SlabCredentialJson {
