@@ -78,7 +78,4 @@ server {
         proxy_buffering off;
         proxy_pass http://localhost:80;
     }
-
-    ssl_certificate /etc/nginx/sslcerts/${SSL_CERT_FILE_NAME};
-    ssl_certificate_key /etc/nginx/sslcerts/${SSL_CERT_KEY_FILE_NAME};
 }
