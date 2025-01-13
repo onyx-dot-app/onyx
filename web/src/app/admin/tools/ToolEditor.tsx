@@ -154,7 +154,7 @@ function ToolForm({
       />
       <div className="mt-4 text-sm bg-blue-50 p-4 rounded-md border border-blue-200">
         <Link
-          href="https://docs.danswer.dev/tools/custom"
+          href="https://docs.onyx.app/tools/custom"
           className="text-link hover:underline flex items-center"
           target="_blank"
           rel="noopener noreferrer"

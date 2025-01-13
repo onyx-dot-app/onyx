@@ -3,22 +3,22 @@ from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-from danswer.connectors.google_drive.connector import GoogleDriveConnector
-from danswer.connectors.models import Document
+from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.models import Document
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FOLDER_URL
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_google_drive_sections(
     mock_get_api_key: MagicMock,
-    google_drive_oauth_connector_factory: Callable[..., GoogleDriveConnector],
+    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
-    oauth_connector = google_drive_oauth_connector_factory(
+    oauth_connector = google_drive_oauth_uploaded_connector_factory(
         primary_admin_email=ADMIN_EMAIL,
         include_shared_drives=False,
         include_my_drives=False,

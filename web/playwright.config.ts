@@ -16,7 +16,7 @@ export default defineConfig({
     {
       // dependency for admin workflows
       name: "admin_setup",
-      testMatch: /.*\admin_auth.setup\.ts/,
+      testMatch: /.*\admin_auth\.setup\.ts/,
     },
     {
       // tests admin workflows

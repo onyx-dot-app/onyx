@@ -3,9 +3,9 @@ from typing import Dict
 
 import requests
 
-API_SERVER_URL = "http://localhost:3000"  # Adjust this to your Danswer server URL
+API_SERVER_URL = "http://localhost:3000"  # Adjust this to your Onyx server URL
 HEADERS = {"Content-Type": "application/json"}
-API_KEY = "danswer-api-key"  # API key here, if auth is enabled
+API_KEY = "onyx-api-key"  # API key here, if auth is enabled
 
 
 def create_connector(

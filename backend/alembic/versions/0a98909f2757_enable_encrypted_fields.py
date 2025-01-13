@@ -11,7 +11,7 @@ from sqlalchemy.sql import table
 from sqlalchemy.dialects import postgresql
 import json
 
-from danswer.utils.encryption import encrypt_string_to_bytes
+from onyx.utils.encryption import encrypt_string_to_bytes
 
 # revision identifiers, used by Alembic.
 revision = "0a98909f2757"

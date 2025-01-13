@@ -14,8 +14,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from danswer.server.documents.models import DocumentSource
-from danswer.utils.logger import setup_logger
+from onyx.server.documents.models import DocumentSource
+from onyx.utils.logger import setup_logger
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.user import UserManager

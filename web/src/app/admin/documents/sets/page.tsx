@@ -314,7 +314,7 @@ const Main = () => {
       <Text className="mb-3">
         <b>Document Sets</b> allow you to group logically connected documents
         into a single bundle. These can then be used as a filter when performing
-        searches to control the scope of information Danswer searches over.
+        searches to control the scope of information Onyx searches over.
       </Text>
 
       <div className="mb-3"></div>

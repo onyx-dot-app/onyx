@@ -1,7 +1,7 @@
 "use client";
 
 import { DateRangeSelector } from "../DateRangeSelector";
-import { DanswerBotChart } from "./DanswerBotChart";
+import { OnyxBotChart } from "./OnyxBotChart";
 import { FeedbackChart } from "./FeedbackChart";
 import { QueryPerformanceChart } from "./QueryPerformanceChart";
 import { PersonaMessagesChart } from "./PersonaMessagesChart";
@@ -26,7 +26,7 @@ export default function AnalyticsPage() {
       />
       <QueryPerformanceChart timeRange={timeRange} />
       <FeedbackChart timeRange={timeRange} />
-      <DanswerBotChart timeRange={timeRange} />
+      <OnyxBotChart timeRange={timeRange} />
       <PersonaMessagesChart timeRange={timeRange} />
       <Separator />
       <UsageReports />

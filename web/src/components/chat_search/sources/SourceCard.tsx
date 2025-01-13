@@ -1,6 +1,6 @@
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SourceIcon } from "@/components/SourceIcon";
-import { DanswerDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import { truncateString } from "@/lib/utils";
 import { SetStateAction } from "react";
 import { Dispatch } from "react";
@@ -10,8 +10,8 @@ export default function SourceCard({
   doc,
   setPresentingDocument,
 }: {
-  doc: DanswerDocument;
-  setPresentingDocument?: (document: DanswerDocument) => void;
+  doc: OnyxDocument;
+  setPresentingDocument?: (document: OnyxDocument) => void;
 }) {
   return (
     <div
@@ -44,7 +44,7 @@ export default function SourceCard({
 interface SeeMoreBlockProps {
   documentSelectionToggled: boolean;
   toggleDocumentSelection?: () => void;
-  uniqueSources: DanswerDocument["source_type"][];
+  uniqueSources: OnyxDocument["source_type"][];
 }
 
 export function SeeMoreBlock({

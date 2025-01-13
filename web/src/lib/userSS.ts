@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { User } from "./types";
 import { buildUrl } from "./utilsSS";
 import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
-import { AuthType, SERVER_SIDE_ONLY__CLOUD_ENABLED } from "./constants";
+import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 
 export interface AuthTypeMetadata {
   authType: AuthType;
@@ -22,14 +22,14 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
   let authType: AuthType;
 
   // Override fasapi users auth so we can use both
-  if (SERVER_SIDE_ONLY__CLOUD_ENABLED) {
+  if (NEXT_PUBLIC_CLOUD_ENABLED) {
     authType = "cloud";
   } else {
     authType = data.auth_type as AuthType;
   }
 
   // for SAML / OIDC, we auto-redirect the user to the IdP when the user visits
-  // Danswer in an un-authenticated state
+  // Onyx in an un-authenticated state
   if (authType === "oidc" || authType === "saml") {
     return {
       authType,
@@ -51,7 +51,9 @@ export const getAuthDisabledSS = async (): Promise<boolean> => {
 const getOIDCAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
   const res = await fetch(
     buildUrl(
-      `/auth/oidc/authorize${nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ""}`
+      `/auth/oidc/authorize${
+        nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ""
+      }`
     )
   );
   if (!res.ok) {
@@ -65,7 +67,9 @@ const getOIDCAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
 const getGoogleOAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
   const res = await fetch(
     buildUrl(
-      `/auth/oauth/authorize${nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ""}`
+      `/auth/oauth/authorize${
+        nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ""
+      }`
     ),
     {
       headers: {
@@ -84,7 +88,9 @@ const getGoogleOAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
 const getSAMLAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
   const res = await fetch(
     buildUrl(
-      `/auth/saml/authorize${nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ""}`
+      `/auth/saml/authorize${
+        nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : ""
+      }`
     )
   );
   if (!res.ok) {

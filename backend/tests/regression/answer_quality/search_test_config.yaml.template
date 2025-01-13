@@ -2,7 +2,7 @@
 # Don't forget to also update the .env_eval file with the correct values
 
 # Directory where test results will be saved
-output_folder: "~/danswer_test_results"
+output_folder: "~/onyx_test_results"
 
 # Path to the zip file containing sample documents
 zipped_documents_file: "~/sampledocs.zip"

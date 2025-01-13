@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  # INTERNAL_URL env variable depends on this, don't change without changing INTERNAL_URL
+  name: {{ include "onyx-stack.fullname" . }}-api-service
+  labels:
+    {{- include "onyx-stack.labels" . | nindent 4 }}
+    {{- if .Values.api.deploymentLabels }}
+    {{- toYaml .Values.api.deploymentLabels | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.api.service.type }}
+  ports:
+    - port: {{ .Values.api.service.port }}
+      targetPort: api-server-port
+      protocol: TCP
+      name: api-server-port
+  selector:
+    {{- include "onyx-stack.selectorLabels" . | nindent 4 }}
+    {{- if .Values.api.deploymentLabels }}
+    {{- toYaml .Values.api.deploymentLabels | nindent 4 }}
+    {{- end }}

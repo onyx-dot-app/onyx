@@ -47,12 +47,8 @@ export function Modal({
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (
-      onOutsideClick &&
-      modalRef.current &&
-      !modalRef.current.contains(e.target as Node) &&
-      !isEventWithinRef(e.nativeEvent, modalRef)
-    ) {
+    // Only close if the user clicked exactly on the overlay (and not on a child element).
+    if (onOutsideClick && e.target === e.currentTarget) {
       onOutsideClick();
     }
   };

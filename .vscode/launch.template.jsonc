@@ -17,7 +17,7 @@
 			 }
 		},
         {
-            "name": "Run All Danswer Services",
+            "name": "Run All Onyx Services",
             "configurations": [
                 "Web Server",
                 "Model Server",
@@ -122,7 +122,7 @@
                 "PYTHONUNBUFFERED": "1"
             },
             "args": [
-                "danswer.main:app",
+                "onyx.main:app",
                 "--reload",
                 "--port",
                 "8080"
@@ -139,7 +139,7 @@
             "consoleName": "Slack Bot",
             "type": "debugpy",
             "request": "launch",
-            "program": "danswer/danswerbot/slack/listener.py",
+            "program": "onyx/onyxbot/slack/listener.py",
             "cwd": "${workspaceFolder}/backend",
             "envFile": "${workspaceFolder}/.vscode/.env",
             "env": {
@@ -166,7 +166,7 @@
             },
             "args": [
                 "-A",
-                "danswer.background.celery.versioned_apps.primary",
+                "onyx.background.celery.versioned_apps.primary",
                 "worker",
                 "--pool=threads",
                 "--concurrency=4",
@@ -195,7 +195,7 @@
             },
             "args": [
                 "-A",
-                "danswer.background.celery.versioned_apps.light",
+                "onyx.background.celery.versioned_apps.light",
                 "worker",
                 "--pool=threads",
                 "--concurrency=64",
@@ -224,7 +224,7 @@
             },
             "args": [
                 "-A",
-                "danswer.background.celery.versioned_apps.heavy",
+                "onyx.background.celery.versioned_apps.heavy",
                 "worker",
                 "--pool=threads",
                 "--concurrency=4",
@@ -254,7 +254,7 @@
             },
             "args": [
                 "-A",
-                "danswer.background.celery.versioned_apps.indexing",
+                "onyx.background.celery.versioned_apps.indexing",
                 "worker",
                 "--pool=threads",
                 "--concurrency=1",
@@ -283,7 +283,7 @@
             },
             "args": [
                 "-A",
-                "danswer.background.celery.versioned_apps.beat",
+                "onyx.background.celery.versioned_apps.beat",
                 "beat",
                 "--loglevel=INFO",
             ],
@@ -308,7 +308,7 @@
             "args": [
                 "-v"
                 // Specify a sepcific module/test to run or provide nothing to run all tests
-                //"tests/unit/danswer/llm/answering/test_prune_and_merge.py"
+                //"tests/unit/onyx/llm/answering/test_prune_and_merge.py"
             ],
             "presentation": {
 				 "group": "2",

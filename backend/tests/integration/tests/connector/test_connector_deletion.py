@@ -9,13 +9,13 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from danswer.db.engine import get_sqlalchemy_engine
-from danswer.db.enums import IndexingStatus
-from danswer.db.index_attempt import create_index_attempt
-from danswer.db.index_attempt import create_index_attempt_error
-from danswer.db.models import IndexAttempt
-from danswer.db.search_settings import get_current_search_settings
-from danswer.server.documents.models import DocumentSource
+from onyx.db.engine import get_sqlalchemy_engine
+from onyx.db.enums import IndexingStatus
+from onyx.db.index_attempt import create_index_attempt
+from onyx.db.index_attempt import create_index_attempt_error
+from onyx.db.models import IndexAttempt
+from onyx.db.search_settings import get_current_search_settings
+from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import NUM_DOCS
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager

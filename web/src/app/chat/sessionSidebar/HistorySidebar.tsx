@@ -11,13 +11,10 @@ import { createFolder } from "../folders/FolderManagement";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
-import {
-  AssistantsIconSkeleton,
-  ClosedBookIcon,
-} from "@/components/icons/icons";
+import { AssistantsIconSkeleton } from "@/components/icons/icons";
 import { PagesTab } from "./PagesTab";
 import { pageType } from "./types";
-import LogoType from "@/components/header/LogoType";
+import LogoWithText from "@/components/header/LogoWithText";
 
 interface HistorySidebarProps {
   page: pageType;
@@ -33,6 +30,7 @@ interface HistorySidebarProps {
   showDeleteModal?: (chatSession: ChatSession) => void;
   stopGenerating?: () => void;
   explicitlyUntoggle: () => void;
+  showDeleteAllModal?: () => void;
   backgroundToggled?: boolean;
 }
 
@@ -52,6 +50,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
       stopGenerating = () => null,
       showShareModal,
       showDeleteModal,
+      showDeleteAllModal,
       backgroundToggled,
     },
     ref: ForwardedRef<HTMLDivElement>
@@ -100,17 +99,19 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             flex 
             flex-col relative
             h-screen
+            pt-2
             transition-transform 
             `}
         >
-
-          <LogoType
-            showArrow={true}
-            toggled={toggled}
-            page={page}
-            toggleSidebar={toggleSidebar}
-            explicitlyUntoggle={explicitlyUntoggle}
-          />
+          <div className="pl-2">
+            <LogoWithText
+              showArrow={true}
+              toggled={toggled}
+              page={page}
+              toggleSidebar={toggleSidebar}
+              explicitlyUntoggle={explicitlyUntoggle}
+            />
+          </div>
           {page == "chat" && (
             <div className="mx-3 mt-4 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
               <Link
@@ -177,6 +178,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             currentChatId={currentChatId}
             folders={folders}
             openedFolders={openedFolders}
+            showDeleteAllModal={showDeleteAllModal}
           />
         </div>
       </>

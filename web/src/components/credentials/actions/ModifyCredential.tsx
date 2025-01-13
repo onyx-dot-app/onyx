@@ -35,6 +35,9 @@ const CredentialSelectionTable = ({
     number | null
   >(null);
 
+  // rkuo: this appears to merge editableCredentials into credentials so we get a single list
+  // of credentials to display
+  // Pretty sure this merging should be done outside of this UI component
   const allCredentials = React.useMemo(() => {
     const credMap = new Map(editableCredentials.map((cred) => [cred.id, cred]));
     credentials.forEach((cred) => {

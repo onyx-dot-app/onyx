@@ -285,7 +285,7 @@ export const DriveJsonUploadSection = ({
         <a
           className="text-link"
           target="_blank"
-          href="https://docs.danswer.dev/connectors/google_drive#authorization"
+          href="https://docs.onyx.app/connectors/google_drive#authorization"
           rel="noreferrer"
         >
           here
@@ -303,52 +303,72 @@ export const DriveJsonUploadSection = ({
 };
 
 interface DriveCredentialSectionProps {
-  googleDrivePublicCredential?: Credential<GoogleDriveCredentialJson>;
+  googleDrivePublicUploadedCredential?: Credential<GoogleDriveCredentialJson>;
   googleDriveServiceAccountCredential?: Credential<GoogleDriveServiceAccountCredentialJson>;
   serviceAccountKeyData?: { service_account_email: string };
   appCredentialData?: { client_id: string };
   setPopup: (popupSpec: PopupSpec | null) => void;
   refreshCredentials: () => void;
-  connectorExists: boolean;
+  connectorAssociated: boolean;
   user: User | null;
 }
 
+async function handleRevokeAccess(
+  connectorAssociated: boolean,
+  setPopup: (popupSpec: PopupSpec | null) => void,
+  existingCredential:
+    | Credential<GoogleDriveCredentialJson>
+    | Credential<GoogleDriveServiceAccountCredentialJson>,
+  refreshCredentials: () => void
+) {
+  if (connectorAssociated) {
+    const message =
+      "Cannot revoke the Google Drive credential while any connector is still associated with the credential. " +
+      "Please delete all associated connectors, then try again.";
+    setPopup({
+      message: message,
+      type: "error",
+    });
+    return;
+  }
+
+  await adminDeleteCredential(existingCredential.id);
+  setPopup({
+    message: "Successfully revoked the Google Drive credential!",
+    type: "success",
+  });
+
+  refreshCredentials();
+}
+
 export const DriveAuthSection = ({
-  googleDrivePublicCredential,
+  googleDrivePublicUploadedCredential,
   googleDriveServiceAccountCredential,
   serviceAccountKeyData,
   appCredentialData,
   setPopup,
   refreshCredentials,
-  connectorExists,
+  connectorAssociated, // don't allow revoke if a connector / credential pair is active with the uploaded credential
   user,
 }: DriveCredentialSectionProps) => {
   const router = useRouter();
 
   const existingCredential =
-    googleDrivePublicCredential || googleDriveServiceAccountCredential;
+    googleDrivePublicUploadedCredential || googleDriveServiceAccountCredential;
   if (existingCredential) {
     return (
       <>
         <p className="mb-2 text-sm">
-          <i>Existing credential already setup!</i>
+          <i>Uploaded and authenticated credential already exists!</i>
         </p>
         <Button
           onClick={async () => {
-            if (connectorExists) {
-              setPopup({
-                message:
-                  "Cannot revoke access to Google Drive while any connector is still setup. Please delete all connectors, then try again.",
-                type: "error",
-              });
-              return;
-            }
-            await adminDeleteCredential(existingCredential.id);
-            setPopup({
-              message: "Successfully revoked access to Google Drive!",
-              type: "success",
-            });
-            refreshCredentials();
+            handleRevokeAccess(
+              connectorAssociated,
+              setPopup,
+              existingCredential,
+              refreshCredentials
+            );
           }}
         >
           Revoke Access
@@ -429,6 +449,7 @@ export const DriveAuthSection = ({
           onClick={async () => {
             const [authUrl, errorMsg] = await setupGoogleDriveOAuth({
               isAdmin: true,
+              name: "OAuth (uploaded)",
             });
             if (authUrl) {
               // cookie used by callback to determine where to finally redirect to

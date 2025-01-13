@@ -193,6 +193,6 @@ def run_qa_test_and_save_results(env_name: str = "") -> None:
 if __name__ == "__main__":
     """
     To run a different set of questions, update the questions_file in search_test_config.yaml
-    If there is more than one instance of Danswer running, specify the env_name in search_test_config.yaml
+    If there is more than one instance of Onyx running, specify the env_name in search_test_config.yaml
     """
     run_qa_test_and_save_results()

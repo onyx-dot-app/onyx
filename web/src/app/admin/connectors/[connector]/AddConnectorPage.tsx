@@ -48,7 +48,11 @@ import NavigationRow from "./NavigationRow";
 import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
 import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
-import { EE_ENABLED, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import {
+  EE_ENABLED,
+  NEXT_PUBLIC_CLOUD_ENABLED,
+  TEST_ENV,
+} from "@/lib/constants";
 import TemporaryLoadingModal from "@/components/TemporaryLoadingModal";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
 export interface AdvancedConfig {
@@ -127,7 +131,7 @@ export default function AddConnector({
       setCurrentPageUrl(window.location.href);
     }
 
-    if (EE_ENABLED && NEXT_PUBLIC_CLOUD_ENABLED) {
+    if (EE_ENABLED && (NEXT_PUBLIC_CLOUD_ENABLED || TEST_ENV)) {
       const sourceMetadata = getSourceMetadata(connector);
       if (sourceMetadata?.oauthSupported == true) {
         setIsAuthorizeVisible(true);
@@ -433,9 +437,7 @@ export default function AddConnector({
               <CardSection>
                 <Title className="mb-2 text-lg">Select a credential</Title>
 
-                {connector == "google_drive" ? (
-                  <GDriveMain />
-                ) : connector == "gmail" ? (
+                {connector == "gmail" ? (
                   <GmailMain />
                 ) : (
                   <>
@@ -488,30 +490,27 @@ export default function AddConnector({
                       </div>
                     )}
 
-                    {/* NOTE: connector will never be google_drive, since the ternary above will 
-                    prevent that, but still keeping this here for safety in case the above changes. */}
-                    {(connector as ValidSources) !== "google_drive" &&
-                      createConnectorToggle && (
-                        <Modal
-                          className="max-w-3xl rounded-lg"
-                          onOutsideClick={() => setCreateConnectorToggle(false)}
-                        >
-                          <>
-                            <Title className="mb-2 text-lg">
-                              Create a {getSourceDisplayName(connector)}{" "}
-                              credential
-                            </Title>
-                            <CreateCredential
-                              close
-                              refresh={refresh}
-                              sourceType={connector}
-                              setPopup={setPopup}
-                              onSwitch={onSwap}
-                              onClose={() => setCreateConnectorToggle(false)}
-                            />
-                          </>
-                        </Modal>
-                      )}
+                    {createConnectorToggle && (
+                      <Modal
+                        className="max-w-3xl rounded-lg"
+                        onOutsideClick={() => setCreateConnectorToggle(false)}
+                      >
+                        <>
+                          <Title className="mb-2 text-lg">
+                            Create a {getSourceDisplayName(connector)}{" "}
+                            credential
+                          </Title>
+                          <CreateCredential
+                            close
+                            refresh={refresh}
+                            sourceType={connector}
+                            setPopup={setPopup}
+                            onSwitch={onSwap}
+                            onClose={() => setCreateConnectorToggle(false)}
+                          />
+                        </>
+                      </Modal>
+                    )}
                   </>
                 )}
               </CardSection>

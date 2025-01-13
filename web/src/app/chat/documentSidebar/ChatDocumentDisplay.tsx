@@ -1,5 +1,5 @@
 import { SourceIcon } from "@/components/SourceIcon";
-import { DanswerDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import { FiTag } from "react-icons/fi";
 import { DocumentSelector } from "./DocumentSelector";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
@@ -11,12 +11,12 @@ import { ValidSources } from "@/lib/types";
 
 interface DocumentDisplayProps {
   closeSidebar: () => void;
-  document: DanswerDocument;
+  document: OnyxDocument;
   modal?: boolean;
   isSelected: boolean;
   handleSelect: (documentId: string) => void;
   tokenLimitReached: boolean;
-  setPresentingDocument: Dispatch<SetStateAction<DanswerDocument | null>>;
+  setPresentingDocument: Dispatch<SetStateAction<OnyxDocument | null>>;
 }
 
 export function DocumentMetadataBlock({
@@ -24,7 +24,7 @@ export function DocumentMetadataBlock({
   document,
 }: {
   modal?: boolean;
-  document: DanswerDocument;
+  document: OnyxDocument;
 }) {
   const MAX_METADATA_ITEMS = 3;
   const metadataEntries = Object.entries(document.metadata);

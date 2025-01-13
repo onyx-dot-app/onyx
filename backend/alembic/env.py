@@ -11,10 +11,10 @@ from sqlalchemy.sql import text
 from sqlalchemy.sql.schema import SchemaItem
 
 from shared_configs.configs import MULTI_TENANT
-from danswer.db.engine import build_connection_string
-from danswer.db.models import Base
+from onyx.db.engine import build_connection_string
+from onyx.db.models import Base
 from celery.backends.database.session import ResultModelBase  # type: ignore
-from danswer.db.engine import get_all_tenant_ids
+from onyx.db.engine import get_all_tenant_ids
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 # Alembic Config object

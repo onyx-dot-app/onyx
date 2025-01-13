@@ -4,7 +4,7 @@ import {
 } from "@/app/chat/interfaces";
 import {
   AnswerPiecePacket,
-  DanswerDocument,
+  OnyxDocument,
   ErrorMessagePacket,
   DocumentInfoPacket,
   Quote,
@@ -37,7 +37,7 @@ export const searchRequestStreamed = async ({
 }: SearchRequestArgs) => {
   let answer = "";
   let quotes: Quote[] | null = null;
-  let relevantDocuments: DanswerDocument[] | null = null;
+  let relevantDocuments: OnyxDocument[] | null = null;
 
   try {
     const filters = buildFilters(sources, documentSets, timeRange, tags);
@@ -137,7 +137,7 @@ export const searchRequestStreamed = async ({
         // These all come together
         if (Object.hasOwn(chunk, "top_documents")) {
           chunk = chunk as DocumentInfoPacket;
-          const topDocuments = chunk.top_documents as DanswerDocument[] | null;
+          const topDocuments = chunk.top_documents as OnyxDocument[] | null;
           if (topDocuments) {
             relevantDocuments = topDocuments;
             updateDocs(relevantDocuments);

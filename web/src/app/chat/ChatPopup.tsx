@@ -33,7 +33,7 @@ export function ChatPopup() {
     enterpriseSettings?.custom_popup_header ||
     (isConsentScreen
       ? "Terms of Use"
-      : `Welcome to ${enterpriseSettings?.application_name || "Danswer"}!`);
+      : `Welcome to ${enterpriseSettings?.application_name || "Onyx"}!`);
 
   const popupContent =
     enterpriseSettings?.custom_popup_content ||

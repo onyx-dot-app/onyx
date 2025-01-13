@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { CompactDocumentCard } from "../DocumentDisplay";
-import { LoadedDanswerDocument } from "@/lib/search/interfaces";
+import { LoadedOnyxDocument } from "@/lib/search/interfaces";
 import {
   Tooltip,
   TooltipContent,
@@ -21,8 +21,8 @@ export function Citation({
   link?: string;
   children?: JSX.Element | string | null | ReactNode;
   index?: number;
-  updatePresentingDocument: (documentIndex: LoadedDanswerDocument) => void;
-  document: LoadedDanswerDocument;
+  updatePresentingDocument: (documentIndex: LoadedOnyxDocument) => void;
+  document: LoadedOnyxDocument;
   icon?: React.ReactNode;
   url?: string;
 }) {

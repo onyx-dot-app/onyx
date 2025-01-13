@@ -8,11 +8,11 @@ from sqlalchemy.orm import Session
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
-from danswer.db.engine import get_session_context_manager  # noqa: E402
-from danswer.db.document import delete_documents_complete__no_commit  # noqa: E402
-from danswer.db.search_settings import get_current_search_settings  # noqa: E402
-from danswer.document_index.vespa.index import VespaIndex  # noqa: E402
-from danswer.background.celery.tasks.shared.RetryDocumentIndex import (  # noqa: E402
+from onyx.db.engine import get_session_context_manager  # noqa: E402
+from onyx.db.document import delete_documents_complete__no_commit  # noqa: E402
+from onyx.db.search_settings import get_current_search_settings  # noqa: E402
+from onyx.document_index.vespa.index import VespaIndex  # noqa: E402
+from onyx.background.celery.tasks.shared.RetryDocumentIndex import (  # noqa: E402
     RetryDocumentIndex,
 )
 

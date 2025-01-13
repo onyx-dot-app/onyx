@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 # Import your models and constants
-from danswer.db.models import (
+from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,

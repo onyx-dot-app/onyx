@@ -10,6 +10,7 @@ import * as Yup from "yup";
 import { requestEmailVerification } from "../lib";
 import { useState } from "react";
 import { Spinner } from "@/components/Spinner";
+import { set } from "lodash";
 
 export function EmailPasswordForm({
   isSignup = false,
@@ -53,10 +54,12 @@ export function EmailPasswordForm({
             );
 
             if (!response.ok) {
+              setIsWorking(false);
               const errorDetail = (await response.json()).detail;
-
               let errorMsg = "Unknown error";
-              if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
+              if (typeof errorDetail === "object" && errorDetail.reason) {
+                errorMsg = errorDetail.reason;
+              } else if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
                 errorMsg =
                   "An account already exists with the specified email.";
               }

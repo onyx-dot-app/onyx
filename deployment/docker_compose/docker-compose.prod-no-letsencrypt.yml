@@ -1,13 +1,13 @@
 services:
   api_server:
-    image: danswer/danswer-backend:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
     command: >
       /bin/sh -c "alembic upgrade head &&
-      echo \"Starting Danswer Api Server\" &&
-      uvicorn danswer.main:app --host 0.0.0.0 --port 8080"
+      echo \"Starting Onyx Api Server\" &&
+      uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     depends_on:
       - relational_db
       - index
@@ -30,9 +30,8 @@ services:
         max-size: "50m"
         max-file: "6"
 
-
   background:
-    image: danswer/danswer-backend:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -61,9 +60,8 @@ services:
         max-size: "50m"
         max-file: "6"
 
-
   web_server:
-    image: danswer/danswer-web-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}
     build:
       context: ../../web
       dockerfile: Dockerfile
@@ -88,9 +86,8 @@ services:
         max-size: "50m"
         max-file: "6"
 
-
   inference_model_server:
-    image: danswer/danswer-model-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
@@ -115,9 +112,8 @@ services:
         max-size: "50m"
         max-file: "6"
 
-
   indexing_model_server:
-    image: danswer/danswer-model-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
@@ -144,7 +140,6 @@ services:
         max-size: "50m"
         max-file: "6"
 
-
   relational_db:
     image: postgres:15.2-alpine
     command: -c 'max_connections=250'
@@ -159,7 +154,6 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
@@ -176,12 +170,11 @@ services:
         max-size: "50m"
         max-file: "6"
 
-
   nginx:
     image: nginx:1.23.4-alpine
     restart: always
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
-    # if api_server / web_server are not up 
+    # if api_server / web_server are not up
     depends_on:
       - api_server
       - web_server
@@ -196,27 +189,25 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-    # The specified script waits for the api_server to start up. 
-    # Without this we've seen issues where nginx shows no error logs but 
+    # The specified script waits for the api_server to start up.
+    # Without this we've seen issues where nginx shows no error logs but
     # does not recieve any traffic
     # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
     # in order to make this work on both Unix-like systems and windows
-    command: > 
+    command: >
       /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
       && /etc/nginx/conf.d/run-nginx.sh app.conf.template.no-letsencrypt"
     env_file:
       - .env.nginx
 
-
   cache:
     image: redis:7.4-alpine
     restart: always
     ports:
-      - '6379:6379'
+      - "6379:6379"
     # docker silently mounts /data even without an explicit volume mount, which enables
     # persistence. explicitly setting save and appendonly forces ephemeral behavior.
     command: redis-server --save "" --appendonly no
-
 
 volumes:
   db_volume:

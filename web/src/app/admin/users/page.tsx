@@ -106,7 +106,7 @@ const UsersTables = ({
       <TabsList>
         <TabsTrigger value="invited">Invited Users</TabsTrigger>
         <TabsTrigger value="current">Current Users</TabsTrigger>
-        <TabsTrigger value="danswerbot">DanswerBot Users</TabsTrigger>
+        <TabsTrigger value="onyxbot">OnyxBot Users</TabsTrigger>
       </TabsList>
 
       <TabsContent value="invited">
@@ -153,10 +153,10 @@ const UsersTables = ({
         </Card>
       </TabsContent>
 
-      <TabsContent value="danswerbot">
+      <TabsContent value="onyxbot">
         <Card>
           <CardHeader>
-            <CardTitle>DanswerBot Users</CardTitle>
+            <CardTitle>OnyxBot Users</CardTitle>
           </CardHeader>
           <CardContent>
             {slack_users.length > 0 ? (

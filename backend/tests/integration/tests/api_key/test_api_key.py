@@ -1,6 +1,6 @@
 import requests
 
-from danswer.auth.schemas import UserRole
+from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.user import UserManager

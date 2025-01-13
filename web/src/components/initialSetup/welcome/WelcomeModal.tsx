@@ -62,18 +62,18 @@ export function _WelcomeModal({ user }: { user: User | null }) {
           setWelcomeFlowComplete();
           router.refresh();
         }}
-        title={"Welcome to Danswer!"}
+        title={"Welcome to Onyx!"}
         width="w-full max-h-[900px] overflow-y-scroll max-w-3xl"
       >
         <div>
           <Text className="mb-4">
-            Danswer brings all your company&apos;s knowledge to your fingertips,
+            Onyx brings all your company&apos;s knowledge to your fingertips,
             ready to be accessed instantly.
           </Text>
           <Text className="mb-4">
             To get started, we need to set up an API key for the Language Model
-            (LLM) provider. This key allows Danswer to interact with the AI
-            model, enabling intelligent responses to your queries.
+            (LLM) provider. This key allows Onyx to interact with the AI model,
+            enabling intelligent responses to your queries.
           </Text>
 
           <div className="max-h-[900px] overflow-y-scroll">

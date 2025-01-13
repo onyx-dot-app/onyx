@@ -11,16 +11,16 @@ Then run test_query_times.py to test query times.
 import random
 from datetime import datetime
 
-from danswer.access.models import DocumentAccess
-from danswer.configs.constants import DocumentSource
-from danswer.connectors.models import Document
-from danswer.db.engine import get_session_context_manager
-from danswer.db.search_settings import get_current_search_settings
-from danswer.document_index.vespa.index import VespaIndex
-from danswer.indexing.models import ChunkEmbedding
-from danswer.indexing.models import DocMetadataAwareIndexChunk
-from danswer.indexing.models import IndexChunk
-from danswer.utils.timing import log_function_time
+from onyx.access.models import DocumentAccess
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import Document
+from onyx.db.engine import get_session_context_manager
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.vespa.index import VespaIndex
+from onyx.indexing.models import ChunkEmbedding
+from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.indexing.models import IndexChunk
+from onyx.utils.timing import log_function_time
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.model_server_models import Embedding
 

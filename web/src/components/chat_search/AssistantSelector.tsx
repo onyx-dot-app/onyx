@@ -199,7 +199,7 @@ const AssistantSelector = ({
               onSelect={(value: string | null) => {
                 if (value == null) return;
                 const { modelName, name, provider } = destructureValue(value);
-                llmOverrideManager.setLlmOverride({
+                llmOverrideManager.updateLLMOverride({
                   name,
                   provider,
                   modelName,

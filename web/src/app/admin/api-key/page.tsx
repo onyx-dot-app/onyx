@@ -26,10 +26,10 @@ import { FiCopy, FiEdit2, FiRefreshCw, FiX } from "react-icons/fi";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { deleteApiKey, regenerateApiKey } from "./lib";
-import { DanswerApiKeyForm } from "./DanswerApiKeyForm";
+import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
 import { APIKey } from "./types";
 
-const API_KEY_TEXT = `API Keys allow you to access Danswer APIs programmatically. Click the button below to generate a new API Key.`;
+const API_KEY_TEXT = `API Keys allow you to access Onyx APIs programmatically. Click the button below to generate a new API Key.`;
 
 function NewApiKeyModal({
   apiKey,
@@ -129,7 +129,7 @@ function Main() {
         {newApiKeyButton}
 
         {showCreateUpdateForm && (
-          <DanswerApiKeyForm
+          <OnyxApiKeyForm
             onCreateApiKey={(apiKey) => {
               setFullApiKey(apiKey.api_key);
             }}
@@ -257,7 +257,7 @@ function Main() {
       </Table>
 
       {showCreateUpdateForm && (
-        <DanswerApiKeyForm
+        <OnyxApiKeyForm
           onCreateApiKey={(apiKey) => {
             setFullApiKey(apiKey.api_key);
           }}

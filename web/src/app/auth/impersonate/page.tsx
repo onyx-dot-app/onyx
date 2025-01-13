@@ -120,7 +120,7 @@ export default function ImpersonatePage() {
         </Formik>
 
         <div className="text-sm text-text-500 mt-4 text-center px-4 rounded-md">
-          Note: This feature is only available for @danswer.ai administrators
+          Note: This feature is only available for @onyx.app administrators
         </div>
       </div>
     </AuthFlowContainer>

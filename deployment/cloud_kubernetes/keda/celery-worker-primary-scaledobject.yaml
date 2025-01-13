@@ -2,7 +2,7 @@ apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
   name: celery-worker-primary-scaledobject
-  namespace: danswer
+  namespace: onyx
   labels:
     app: celery-worker-primary
 spec:
