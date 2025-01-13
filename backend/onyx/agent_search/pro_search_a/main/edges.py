@@ -58,9 +58,9 @@ def parallelize_initial_sub_question_answering(
 # Define the function that determines whether to continue or not
 def continue_to_refined_answer_or_end(
     state: RequireRefinedAnswerUpdate,
-) -> Literal["refined_decompose", "logging_node"]:
+) -> Literal["refined_sub_question_creation", "logging_node"]:
     if state["require_refined_answer"]:
-        return "refined_decompose"
+        return "refined_sub_question_creation"
     else:
         return "logging_node"
 
@@ -71,7 +71,7 @@ def parallelize_refined_sub_question_answering(
     if len(state["refined_sub_questions"]) > 0:
         return [
             Send(
-                "answer_refinement_sub_question",
+                "answer_refined_question",
                 AnswerQuestionInput(
                     **extract_core_fields_for_subgraph(state),
                     question=question_data.sub_question,

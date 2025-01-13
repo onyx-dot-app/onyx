@@ -686,7 +686,7 @@ def generate_refined_answer(state: MainState) -> RefinedAnswerUpdate:
     new_revised_good_sub_questions: list[str] = []
 
     for decomp_answer_result in decomp_answer_results:
-        question_level, _ = parse_question_id(decomp_answer_result.question_id)
+        question_level, question_nr = parse_question_id(decomp_answer_result.question_id)
 
         decomp_questions.append(decomp_answer_result.question)
         if (
@@ -698,6 +698,7 @@ def generate_refined_answer(state: MainState) -> RefinedAnswerUpdate:
                 SUB_QUESTION_ANSWER_TEMPLATE.format(
                     sub_question=decomp_answer_result.question,
                     sub_answer=decomp_answer_result.answer,
+                    sub_question_nr=question_nr,
                 )
             )
             if question_level == 0:
@@ -755,8 +756,28 @@ def generate_refined_answer(state: MainState) -> RefinedAnswerUpdate:
     # TODO: stream refined answer
     # Grader
     model = state["fast_llm"]
-    response = model.invoke(msg)
-    answer = response.pretty_repr()
+
+    streamed_tokens: list[str | list[str | dict[str, Any]]] = [""]
+    for message in model.stream(msg):
+        # TODO: in principle, the answer here COULD contain images, but we don't support that yet
+        content = message.content
+        if not isinstance(content, str):
+            raise ValueError(
+                f"Expected content to be a string, but got {type(content)}"
+            )
+        dispatch_custom_event(
+            "refined_agent_answer",
+            AgentAnswerPiece(
+                answer_piece=content,
+                level=1,
+                level_question_nr=0,
+                answer_type="agent_level_answer",
+            ),
+        )
+        streamed_tokens.append(content)
+
+    response = merge_content(*streamed_tokens)
+    answer = cast(str, response)
 
     # refined_agent_stats = _calculate_refined_agent_stats(
     #     state["decomp_answer_results"], state["original_question_retrieval_stats"]
