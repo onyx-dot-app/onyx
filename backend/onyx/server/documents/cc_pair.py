@@ -20,7 +20,9 @@ from onyx.background.celery.tasks.pruning.tasks import (
 )
 from onyx.background.celery.versioned_apps.primary import app as primary_app
 from onyx.db.connector_credential_pair import add_credential_to_connector
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair_from_id_for_user,
+)
 from onyx.db.connector_credential_pair import remove_credential_from_connector
 from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
@@ -65,7 +67,7 @@ def get_cc_pair_index_attempts(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptSnapshot]:
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id, db_session, user, get_editable=False
     )
     if not cc_pair:
@@ -98,14 +100,14 @@ def get_cc_pair_full_info(
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> CCPairFullInfo:
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id, db_session, user, get_editable=False
     )
     if not cc_pair:
         raise HTTPException(
             status_code=404, detail="CC Pair not found for current user permissions"
         )
-    editable_cc_pair = get_connector_credential_pair_from_id(
+    editable_cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id, db_session, user, get_editable=True
     )
     is_editable_for_current_user = editable_cc_pair is not None
@@ -170,7 +172,7 @@ def update_cc_pair_status(
 
     Returns HTTPStatus.OK if everything finished.
     """
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
@@ -235,7 +237,7 @@ def update_cc_pair_name(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
@@ -264,7 +266,7 @@ def update_cc_pair_property(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
@@ -303,7 +305,7 @@ def get_cc_pair_last_pruned(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
@@ -327,7 +329,7 @@ def prune_cc_pair(
 ) -> StatusResponse[list[int]]:
     """Triggers pruning on a particular cc_pair immediately"""
 
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
@@ -375,7 +377,7 @@ def get_cc_pair_latest_sync(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
@@ -399,7 +401,7 @@ def sync_cc_pair(
 ) -> StatusResponse[list[int]]:
     """Triggers permissions sync on a particular cc_pair immediately"""
 
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,

@@ -532,7 +532,10 @@ def monitor_connector_deletion_taskset(
         return
 
     with get_session_with_tenant(tenant_id) as db_session:
-        cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=cc_pair_id,
+        )
         if not cc_pair:
             task_logger.warning(
                 f"Connector deletion - cc_pair not found: cc_pair={cc_pair_id}"

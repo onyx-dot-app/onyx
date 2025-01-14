@@ -16,7 +16,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import KV_GEN_AI_KEY_CHECK_TIME
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.db.connector_credential_pair import get_connector_credential_pair
+from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
 from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
 )
@@ -152,7 +152,7 @@ def create_deletion_attempt_for_connector_id(
     connector_id = connector_credential_pair_identifier.connector_id
     credential_id = connector_credential_pair_identifier.credential_id
 
-    cc_pair = get_connector_credential_pair(
+    cc_pair = get_connector_credential_pair_for_user(
         db_session=db_session,
         connector_id=connector_id,
         credential_id=credential_id,

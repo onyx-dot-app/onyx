@@ -304,7 +304,8 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
                         )
 
                     cc_pair = get_connector_credential_pair_from_id(
-                        cc_pair_id, db_session
+                        db_session=db_session,
+                        cc_pair_id=cc_pair_id,
                     )
                     if not cc_pair:
                         continue
@@ -1189,8 +1190,8 @@ def connector_indexing_task(
             attempt_found = True
 
             cc_pair = get_connector_credential_pair_from_id(
-                cc_pair_id=cc_pair_id,
                 db_session=db_session,
+                cc_pair_id=cc_pair_id,
             )
 
             if not cc_pair:

@@ -75,7 +75,8 @@ def _get_connector_runner(
         # it will never succeed
 
         cc_pair = get_connector_credential_pair_from_id(
-            attempt.connector_credential_pair.id, db_session
+            db_session=db_session,
+            cc_pair_id=attempt.connector_credential_pair.id,
         )
         if cc_pair and cc_pair.status == ConnectorCredentialPairStatus.ACTIVE:
             update_connector_credential_pair(

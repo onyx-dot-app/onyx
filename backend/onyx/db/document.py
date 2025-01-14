@@ -107,7 +107,8 @@ def get_all_documents_needing_vespa_sync_for_cc_pair(
     db_session: Session, cc_pair_id: int
 ) -> list[DbDocument]:
     cc_pair = get_connector_credential_pair_from_id(
-        cc_pair_id=cc_pair_id, db_session=db_session
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
     )
     if not cc_pair:
         raise ValueError(f"No CC pair found with ID: {cc_pair_id}")
@@ -137,7 +138,8 @@ def get_documents_for_cc_pair(
     cc_pair_id: int,
 ) -> list[DbDocument]:
     cc_pair = get_connector_credential_pair_from_id(
-        cc_pair_id=cc_pair_id, db_session=db_session
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
     )
     if not cc_pair:
         raise ValueError(f"No CC pair found with ID: {cc_pair_id}")

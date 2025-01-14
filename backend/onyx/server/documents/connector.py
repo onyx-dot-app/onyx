@@ -67,7 +67,7 @@ from onyx.db.connector import update_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pair
-from onyx.db.connector_credential_pair import get_connector_credential_pairs
+from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
 from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import cleanup_google_drive_credentials
 from onyx.db.credentials import create_credential
@@ -467,7 +467,7 @@ def get_currently_failed_indexing_status(
     )
 
     # Get all connector credential pairs
-    cc_pairs = get_connector_credential_pairs(
+    cc_pairs = get_connector_credential_pairs_for_user(
         db_session=db_session,
         user=user,
         get_editable=get_editable,
@@ -536,7 +536,7 @@ def get_connector_status(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorStatus]:
-    cc_pairs = get_connector_credential_pairs(
+    cc_pairs = get_connector_credential_pairs_for_user(
         db_session=db_session,
         user=user,
     )
@@ -583,7 +583,7 @@ def get_connector_indexing_status(
     # Additional checks are done to make sure the connector and credential still exist.
     # TODO: make this one query ... possibly eager load or wrap in a read transaction
     # to avoid the complexity of trying to error check throughout the function
-    cc_pairs = get_connector_credential_pairs(
+    cc_pairs = get_connector_credential_pairs_for_user(
         db_session=db_session,
         user=user,
         get_editable=get_editable,
@@ -936,7 +936,11 @@ def connector_run_once(
     ]
 
     connector_credential_pairs = [
-        get_connector_credential_pair(connector_id, credential_id, db_session)
+        get_connector_credential_pair(
+            db_session=db_session,
+            connector_id=connector_id,
+            credential_id=credential_id,
+        )
         for credential_id in credential_ids
         if credential_id not in skipped_credentials
     ]
@@ -1118,10 +1122,15 @@ class BasicCCPairInfo(BaseModel):
 
 @router.get("/connector-status")
 def get_basic_connector_indexing_status(
-    _: User = Depends(current_chat_accesssible_user),
+    user: User = Depends(current_chat_accesssible_user),
     db_session: Session = Depends(get_session),
 ) -> list[BasicCCPairInfo]:
-    cc_pairs = get_connector_credential_pairs(db_session, eager_load_connector=True)
+    cc_pairs = get_connector_credential_pairs_for_user(
+        db_session=db_session,
+        eager_load_connector=True,
+        get_editable=False,
+        user=user,
+    )
     return [
         BasicCCPairInfo(
             has_successful_run=cc_pair.last_successful_index_time is not None,
