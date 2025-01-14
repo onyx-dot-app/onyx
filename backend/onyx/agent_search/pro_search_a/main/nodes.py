@@ -261,6 +261,11 @@ def generate_initial_answer(state: MainState) -> InitialAnswerUpdate:
         )
 
         answer = "I don't know"
+        initial_agent_stats = InitialAgentResultStats(
+            sub_questions={},
+            original_question={},
+            agent_effectiveness={},
+        )
 
     else:
         # Use the query info from the base document retrieval
