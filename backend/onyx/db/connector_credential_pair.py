@@ -93,7 +93,7 @@ def _add_user_filters(
 
 def get_connector_credential_pairs_for_user(
     db_session: Session,
-    user: User | None = None,
+    user: User | None,
     get_editable: bool = True,
     ids: list[int] | None = None,
     eager_load_connector: bool = False,
@@ -154,7 +154,7 @@ def get_connector_credential_pair_for_user(
     db_session: Session,
     connector_id: int,
     credential_id: int,
-    user: User | None = None,
+    user: User | None,
     get_editable: bool = True,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair)
@@ -180,7 +180,7 @@ def get_connector_credential_pair(
 def get_connector_credential_pair_from_id_for_user(
     cc_pair_id: int,
     db_session: Session,
-    user: User | None = None,
+    user: User | None,
     get_editable: bool = True,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair).distinct()

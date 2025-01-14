@@ -140,7 +140,7 @@ def _relate_credential_to_user_groups__no_commit(
 
 def fetch_credentials_for_user(
     db_session: Session,
-    user: User | None = None,
+    user: User | None,
     get_editable: bool = True,
 ) -> list[Credential]:
     stmt = select(Credential)

@@ -54,8 +54,6 @@ from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
-from onyx.document_index.document_index_utils import get_both_index_names
-from onyx.document_index.factory import get_default_document_index
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
@@ -450,19 +448,12 @@ def create_search_feedback(
     """This endpoint isn't protected - it does not check if the user has access to the document
     Users could try changing boosts of arbitrary docs but this does not leak any data.
     """
-
-    curr_ind_name, sec_ind_name = get_both_index_names(db_session)
-    document_index = get_default_document_index(
-        primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
-    )
-
     create_doc_retrieval_feedback(
         message_id=feedback.message_id,
         document_id=feedback.document_id,
         document_rank=feedback.document_rank,
         clicked=feedback.click,
         feedback=feedback.search_feedback,
-        document_index=document_index,
         db_session=db_session,
     )
 

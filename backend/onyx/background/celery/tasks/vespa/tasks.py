@@ -285,7 +285,10 @@ def try_generate_document_set_sync_tasks(
 
     # don't generate sync tasks if we're up to date
     # race condition with the monitor/cleanup function if we use a cached result!
-    document_set = get_document_set_by_id(db_session, document_set_id)
+    document_set = get_document_set_by_id(
+        db_session=db_session,
+        document_set_id=document_set_id,
+    )
     if not document_set:
         return None
 
