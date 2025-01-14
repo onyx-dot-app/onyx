@@ -56,7 +56,7 @@ BASE_RAG_PROMPT_v2 = """ \n
     Make sure that you keep all relevant information, specifically as it concerns to the ultimate goal.
     (But keep other details as well.)
 
-    Please remember to provide inline citations in the format [D1], [D2], [D3], etc.\n\n\n
+    Please remember to provide inline citations in the format [[D1]](), [[D2]](), [[D3]](), etc.\n\n\n
 
     For your general information, here is the ultimate motivation:
     \n--\n {original_question} \n--\n

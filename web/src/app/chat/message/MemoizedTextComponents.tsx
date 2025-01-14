@@ -14,13 +14,15 @@ export const MemoizedAnchor = memo(
     docs?: OnyxDocument[] | null;
     updatePresentingDocument: (doc: OnyxDocument) => void;
     children: React.ReactNode;
-  }) => {
+  }): JSX.Element => {
     const value = children?.toString();
     if (value?.startsWith("[") && value?.endsWith("]")) {
-      const match = value.match(/\[(\d+)\]/);
+      const match = value.match(/\[D?(\d+)\]/);
       if (match) {
         const index = parseInt(match[1], 10) - 1;
+
         const associatedDoc = docs?.[index];
+
         if (!associatedDoc) {
           return <>{children}</>;
         }
@@ -88,8 +90,16 @@ export const MemoizedLink = memo((props: any) => {
 });
 
 export const MemoizedParagraph = memo(
-  function MemoizedParagraph({ children }: any) {
-    return <p className="text-default">{children}</p>;
+  function MemoizedParagraph({ children, fontSize }: any) {
+    return (
+      <p
+        className={`text-default my-0 ${
+          fontSize === "sm" ? "leading-tight text-sm" : ""
+        }`}
+      >
+        {children}
+      </p>
+    );
   },
   (prevProps, nextProps) => {
     const areEqual = isEqual(prevProps.children, nextProps.children);

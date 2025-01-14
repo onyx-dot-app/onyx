@@ -15,6 +15,10 @@ import {
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
+  SubQuestionDetail,
+  constructSubQuestions,
+  SubQueryDetail,
+  DocumentsResponse,
 } from "./interfaces";
 
 import Prism from "prismjs";
@@ -73,6 +77,9 @@ import {
   DocumentInfoPacket,
   StreamStopInfo,
   StreamStopReason,
+  SubQueryPiece,
+  SubQuestionPiece,
+  AgentAnswerPiece,
 } from "@/lib/search/interfaces";
 import { buildFilters } from "@/lib/search/utils";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -114,6 +121,10 @@ import {
 import AssistantModal from "../assistants/mine/AssistantModal";
 import { getSourceMetadata } from "@/lib/sources";
 import { UserSettingsModal } from "./modal/UserSettingsModal";
+import { AgenticMessage } from "./message/AgenticMessage";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -191,7 +202,7 @@ export function ChatPage({
 
   const [documentSidebarToggled, setDocumentSidebarToggled] = useState(false);
   const [filtersToggled, setFiltersToggled] = useState(false);
-  const [langgraphEnabled, setLanggraphEnabled] = useState(false);
+  const [langgraphEnabled, setLanggraphEnabled] = useState(true);
 
   const [userSettingsToggled, setUserSettingsToggled] = useState(false);
 
@@ -472,11 +483,16 @@ export function ChatPage({
         `/api/chat/get-chat-session/${existingChatSessionId}`
       );
 
-      const chatSession = (await response.json()) as BackendChatSession;
+      const session = await response.json();
+      console.log(session);
+      const chatSession = session as BackendChatSession;
       setSelectedAssistantFromId(chatSession.persona_id);
 
       const newMessageMap = processRawChatHistory(chatSession.messages);
       const newMessageHistory = buildLatestMessageChain(newMessageMap);
+
+      console.log("message history");
+      console.log(newMessageHistory);
 
       // Update message history except for edge where where
       // last message is an error and we're on a new chat.
@@ -1247,6 +1263,8 @@ export function ChatPage({
     let error: string | null = null;
     let stackTrace: string | null = null;
 
+    let sub_questions: SubQuestionDetail[] = [];
+
     let finalMessage: BackendMessage | null = null;
     let toolCall: ToolCallMetadata | null = null;
 
@@ -1323,6 +1341,7 @@ export function ChatPage({
           if (!packet) {
             continue;
           }
+
           if (!initialFetchDetails) {
             if (!Object.hasOwn(packet, "user_message_id")) {
               console.error(
@@ -1394,8 +1413,52 @@ export function ChatPage({
               return prevState;
             });
 
-            if (Object.hasOwn(packet, "answer_piece")) {
+            // Continuously refine the sub_questions based on the packets that we receive
+            if (
+              Object.hasOwn(packet, "stop_reason") &&
+              Object.hasOwn(packet, "level_question_nr")
+            ) {
+              sub_questions = constructSubQuestions(
+                sub_questions,
+                packet as StreamStopInfo
+              );
+              console.log("PACKET INFO");
+              console.log(sub_questions);
+            } else if (Object.hasOwn(packet, "sub_question")) {
+              sub_questions = constructSubQuestions(
+                sub_questions,
+                packet as SubQuestionPiece
+              );
+            } else if (Object.hasOwn(packet, "sub_query")) {
+              sub_questions = constructSubQuestions(
+                sub_questions,
+                packet as SubQueryPiece
+              );
+            } else if (
+              Object.hasOwn(packet, "answer_piece") &&
+              Object.hasOwn(packet, "answer_type") &&
+              (packet as AgentAnswerPiece).answer_type === "agent_sub_answer"
+            ) {
+              sub_questions = constructSubQuestions(
+                sub_questions,
+                packet as AgentAnswerPiece
+              );
+            } else if (Object.hasOwn(packet, "answer_piece")) {
+              // Mark every sub_question's is_generating as false
+              sub_questions = sub_questions.map((subQ) => ({
+                ...subQ,
+                is_generating: false,
+              }));
               answer += (packet as AnswerPiecePacket).answer_piece;
+            } else if (
+              Object.hasOwn(packet, "top_documents") &&
+              Object.hasOwn(packet, "level_question_nr")
+            ) {
+              const documentsResponse = packet as DocumentsResponse;
+              sub_questions = constructSubQuestions(
+                sub_questions,
+                documentsResponse
+              );
             } else if (Object.hasOwn(packet, "top_documents")) {
               documents = (packet as DocumentInfoPacket).top_documents;
               retrievalType = RetrievalType.Search;
@@ -1486,6 +1549,7 @@ export function ChatPage({
                     []),
                   initialFetchDetails.assistant_message_id!,
                 ],
+                sub_questions: sub_questions,
                 latestChildMessageId: initialFetchDetails.assistant_message_id,
               },
               {
@@ -2001,6 +2065,32 @@ export function ChatPage({
     <>
       <HealthCheckBanner />
 
+      <div className="fixed right-4 top-20 z-50">
+        <Card className="w-72 shadow-lg bg-gray-100 dark:bg-gray-800">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              Langgraph Settings
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center space-x-3">
+              <Switch
+                id="langgraph-toggle"
+                checked={langgraphEnabled}
+                onCheckedChange={setLanggraphEnabled}
+                className="data-[state=checked]:bg-gray-600"
+              />
+              <Label
+                htmlFor="langgraph-toggle"
+                className="text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Enable Langgraph
+              </Label>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {showApiKeyModal && !shouldShowWelcomeModal && (
         <ApiKeyModal
           hide={() => setShowApiKeyModal(false)}
@@ -2267,17 +2357,6 @@ export function ChatPage({
                   hideUserDropdown={user?.is_anonymous_user}
                 />
               )}
-              <div className="flex items-center justify-end px-4 py-2">
-                <label className="flex items-center cursor-pointer">
-                  <span className="mr-2 text-sm">Langgraph</span>
-                  <input
-                    type="checkbox"
-                    checked={langgraphEnabled}
-                    onChange={(e) => setLanggraphEnabled(e.target.checked)}
-                    className="form-checkbox h-4 w-4"
-                  />
-                </label>
-              </div>
 
               {documentSidebarInitialWidth !== undefined && isReady ? (
                 <Dropzone
@@ -2472,6 +2551,7 @@ export function ChatPage({
                                 ) {
                                   return <></>;
                                 }
+
                                 return (
                                   <div
                                     id={`message-${message.messageId}`}
@@ -2482,7 +2562,19 @@ export function ChatPage({
                                         : null
                                     }
                                   >
-                                    <AIMessage
+                                    <AgenticMessage
+                                      subQuestions={
+                                        message.sub_questions &&
+                                        message.sub_questions.length > 0
+                                          ? message.sub_questions
+                                          : parentMessage?.sub_questions || []
+                                      }
+                                      docs={
+                                        message?.documents &&
+                                        message?.documents.length > 0
+                                          ? message?.documents
+                                          : parentMessage?.documents
+                                      }
                                       setPresentingDocument={
                                         setPresentingDocument
                                       }
@@ -2544,7 +2636,6 @@ export function ChatPage({
                                           message.messageId
                                         );
                                       }}
-                                      docs={message.documents}
                                       currentPersona={liveAssistant}
                                       alternativeAssistant={
                                         currentAlternativeAssistant
@@ -2657,7 +2748,8 @@ export function ChatPage({
                               } else {
                                 return (
                                   <div key={messageReactComponentKey}>
-                                    <AIMessage
+                                    <AgenticMessage
+                                      subQuestions={message.sub_questions || []}
                                       currentPersona={liveAssistant}
                                       messageId={message.messageId}
                                       content={
