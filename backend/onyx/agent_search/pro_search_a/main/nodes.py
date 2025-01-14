@@ -758,7 +758,6 @@ def generate_refined_answer(state: MainState) -> RefinedAnswerUpdate:
         )
     ]
 
-    # TODO: stream refined answer
     # Grader
     model = state["fast_llm"]
 

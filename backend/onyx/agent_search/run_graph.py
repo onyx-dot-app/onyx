@@ -76,6 +76,8 @@ def _parse_agent_event(
             return cast(StreamStopInfo, event["data"])
         elif event["name"] == "initial_agent_answer":
             return cast(AgentAnswerPiece, event["data"])
+        elif event["name"] == "refined_agent_answer":
+            return cast(AgentAnswerPiece, event["data"])
         elif event["name"] == "start_refined_answer_creation":
             return cast(ToolCallKickoff, event["data"])
         elif event["name"] == "tool_response":
