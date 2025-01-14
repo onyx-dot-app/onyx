@@ -71,10 +71,9 @@ from onyx.chat.models import ExtendedToolResponse
 from onyx.chat.models import SubQuestionPiece
 from onyx.db.chat import log_agent_metrics
 from onyx.db.chat import log_agent_sub_question_results
+from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.search.search_tool import yield_search_responses
 from onyx.utils.logger import setup_logger
-
-from onyx.tools.models import ToolCallKickoff
 
 logger = setup_logger()
 
@@ -129,11 +128,7 @@ def initial_sub_question_creation(state: MainState) -> BaseDecompUpdate:
     # list_of_subquestions = clean_and_parse_list_string(cast(str, response))
     list_of_subqs = cast(str, response).split("\n")
 
-    decomp_list: list[str] = [
-        sq.strip() for sq in list_of_subqs if sq.strip() != ""
-    ]
-
-
+    decomp_list: list[str] = [sq.strip() for sq in list_of_subqs if sq.strip() != ""]
 
     now_end = datetime.now()
 
@@ -655,10 +650,10 @@ def refined_answer_decision(state: MainState) -> RequireRefinedAnswerUpdate:
     )
 
     if not state["config"].allow_refinement or True:
-        return RequireRefinedAnswerUpdate(require_refined_answer=False)
+        return RequireRefinedAnswerUpdate(require_refined_answer=True)
 
     else:
-        return RequireRefinedAnswerUpdate(require_refined_answer=True)
+        return RequireRefinedAnswerUpdate(require_refined_answer=False)
 
 
 def generate_refined_answer(state: MainState) -> RefinedAnswerUpdate:
@@ -691,7 +686,9 @@ def generate_refined_answer(state: MainState) -> RefinedAnswerUpdate:
     new_revised_good_sub_questions: list[str] = []
 
     for decomp_answer_result in decomp_answer_results:
-        question_level, question_nr = parse_question_id(decomp_answer_result.question_id)
+        question_level, question_nr = parse_question_id(
+            decomp_answer_result.question_id
+        )
 
         decomp_questions.append(decomp_answer_result.question)
         if (
@@ -892,10 +889,16 @@ def generate_refined_answer(state: MainState) -> RefinedAnswerUpdate:
 
 def refined_sub_question_creation(state: MainState) -> FollowUpSubQuestionsUpdate:
     """ """
-    dispatch_custom_event("start_refined_answer_creation", ToolCallKickoff(
-        tool_name="agent_search_1",
-        tool_args={"query": state["config"].search_request.query, "answer": state["initial_answer"]},
-    ))
+    dispatch_custom_event(
+        "start_refined_answer_creation",
+        ToolCallKickoff(
+            tool_name="agent_search_1",
+            tool_args={
+                "query": state["config"].search_request.query,
+                "answer": state["initial_answer"],
+            },
+        ),
+    )
 
     now_start = datetime.now()
 
@@ -950,13 +953,13 @@ def refined_sub_question_creation(state: MainState) -> FollowUpSubQuestionsUpdat
     for sub_question_nr, sub_question in enumerate(parsed_response):
         refined_sub_question = FollowUpSubQuestion(
             sub_question=sub_question,
-            sub_question_id=make_question_id(1, sub_question_nr+1),
+            sub_question_id=make_question_id(1, sub_question_nr + 1),
             verified=False,
             answered=False,
             answer="",
         )
 
-        refined_sub_question_dict[sub_question_nr+1] = refined_sub_question
+        refined_sub_question_dict[sub_question_nr + 1] = refined_sub_question
 
     now_end = datetime.now()
 

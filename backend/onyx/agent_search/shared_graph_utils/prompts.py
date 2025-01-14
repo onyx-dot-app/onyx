@@ -319,8 +319,7 @@ DEEP_DECOMPOSE_PROMPT = """ \n
    sub-questions or those that already were suggested and failed.
    In other words - what can we try in addition to what has been tried so far?
 
-   Generate the list of questions separated by new lines like this:
-
+   Generate the list of questions separated by one new line like this:
 <sub-question 1>
 <sub-question 2>
 <sub-question 3>
