@@ -80,7 +80,7 @@ def drop_llm_indices(
     search_docs: Sequence[DBSearchDoc | SavedSearchDoc],
     dropped_indices: list[int],
 ) -> list[int]:
-    llm_bools = [True if i in llm_indices else False for i in range(len(search_docs))]
+    llm_bools = [i in llm_indices for i in range(len(search_docs))]
     if dropped_indices:
         llm_bools = [
             val for ind, val in enumerate(llm_bools) if ind not in dropped_indices

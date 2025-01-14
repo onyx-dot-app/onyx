@@ -3,7 +3,9 @@ from collections.abc import Iterator
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from typing import Literal
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -16,6 +18,8 @@ from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import RetrievalDocs
+from onyx.context.search.models import SearchRequest
+from onyx.llm.models import PreviousMessage
 from onyx.llm.override_models import PromptOverride
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
@@ -204,6 +208,28 @@ class PersonaOverrideConfig(BaseModel):
     custom_tools_openapi: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class ProSearchConfig(BaseModel):
+    """
+    Configuration for the Pro Search feature.
+    """
+
+    # For persisting agent search data
+    chat_session_id: UUID | None = None
+    # The message ID of the user message that triggered the Pro Search
+    message_id: int | None = None
+    # The search request that was used to generate the Pro Search
+    search_request: SearchRequest
+
+    # Whether to persistence data for the Pro Search (turned off for testing)
+    use_persistence: bool = True
+
+    # Whether to allow creation of refinement questions (and entity extraction, etc.)
+    allow_refinement: bool = False
+
+    # Message history for the current chat session
+    message_history: list[PreviousMessage] | None = None
+
+
 AnswerQuestionPossibleReturn = (
     OnyxAnswerPiece
     | CitationInfo
@@ -327,3 +353,39 @@ ResponsePart = (
     | ToolCallFinalResult
     | StreamStopInfo
 )
+
+
+class SubQueryPiece(BaseModel):
+    sub_query: str
+    level: int
+    level_question_nr: int
+    query_id: int
+
+
+class AgentAnswerPiece(BaseModel):
+    answer_piece: str
+    level: int
+    level_question_nr: int
+    answer_type: Literal["agent_sub_answer", "agent_level_answer"]
+
+
+class SubQuestionPiece(BaseModel):
+    sub_question: str
+    level: int
+    level_question_nr: int
+
+
+class ExtendedToolResponse(ToolResponse):
+    level: int
+    level_question_nr: int
+
+
+ProSearchPacket = (
+    SubQuestionPiece | AgentAnswerPiece | SubQueryPiece | ExtendedToolResponse
+)
+
+AnswerPacket = (
+    AnswerQuestionPossibleReturn | ProSearchPacket | ToolCallKickoff | ToolResponse
+)
+
+AnswerStream = Iterator[AnswerPacket]

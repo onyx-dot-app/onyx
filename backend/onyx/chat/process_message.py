@@ -24,6 +24,8 @@ from onyx.chat.models import MessageSpecificCitations
 from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
+from onyx.chat.models import ProSearchConfig
+from onyx.chat.models import ProSearchPacket
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import StreamingError
 from onyx.chat.models import StreamStopInfo
@@ -33,11 +35,13 @@ from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
+from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import SearchRequest
 from onyx.context.search.retrieval.search_runner import inference_sections_from_ids
 from onyx.context.search.utils import chunks_or_sections_to_search_docs
 from onyx.context.search.utils import dedupe_documents
@@ -281,6 +285,7 @@ ChatPacket = (
     | MessageSpecificCitations
     | MessageResponseIDInfo
     | StreamStopInfo
+    | ProSearchPacket
 )
 ChatPacketStream = Iterator[ChatPacket]
 
@@ -683,6 +688,51 @@ def stream_chat_message_objects(
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
 
+        message_history = [
+            PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
+        ]
+
+        search_request = None
+        pro_search_config = None
+        if new_msg_req.use_pro_search:
+            search_request = SearchRequest(
+                query=final_msg.message,
+                evaluation_type=(
+                    LLMEvaluationType.BASIC
+                    if persona.llm_relevance_filter
+                    else LLMEvaluationType.SKIP
+                ),
+                human_selected_filters=(
+                    retrieval_options.filters if retrieval_options else None
+                ),
+                persona=persona,
+                offset=(retrieval_options.offset if retrieval_options else None),
+                limit=retrieval_options.limit if retrieval_options else None,
+                rerank_settings=new_msg_req.rerank_settings,
+                chunks_above=new_msg_req.chunks_above,
+                chunks_below=new_msg_req.chunks_below,
+                full_doc=new_msg_req.full_doc,
+                enable_auto_detect_filters=(
+                    retrieval_options.enable_auto_detect_filters
+                    if retrieval_options
+                    else None
+                ),
+            )
+            # TODO: Since we're deleting the current main path in Answer,
+            # we should construct this unconditionally inside Answer instead
+            # Leaving it here for the time being to avoid breaking changes
+            pro_search_config = (
+                ProSearchConfig(
+                    search_request=search_request,
+                    chat_session_id=chat_session_id,
+                    message_id=user_message.id if user_message else None,
+                    message_history=message_history,
+                )
+                if new_msg_req.use_pro_search
+                else None
+            )
+            # TODO: add previous messages, answer style config, tools, etc.
+
         # LLM prompt building, response capturing, etc.
         answer = Answer(
             is_connected=is_connected,
@@ -702,11 +752,12 @@ def stream_chat_message_objects(
                     )
                 )
             ),
-            message_history=[
-                PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
-            ],
+            fast_llm=fast_llm,
+            message_history=message_history,
             tools=tools,
             force_use_tool=_get_force_search_settings(new_msg_req, tools),
+            pro_search_config=pro_search_config,
+            db_session=db_session,
         )
 
         reference_db_search_docs = None
@@ -718,6 +769,7 @@ def stream_chat_message_objects(
 
         for packet in answer.processed_streamed_output:
             if isinstance(packet, ToolResponse):
+                # TODO: don't need to dedupe here when we do it in agent flow
                 if packet.id == SEARCH_RESPONSE_SUMMARY_ID:
                     (
                         qa_docs_response,
@@ -738,25 +790,30 @@ def stream_chat_message_objects(
                 elif packet.id == SECTION_RELEVANCE_LIST_ID:
                     relevance_sections = packet.response
 
-                    if reference_db_search_docs is not None:
-                        llm_indices = relevant_sections_to_indices(
-                            relevance_sections=relevance_sections,
-                            items=[
-                                translate_db_search_doc_to_server_search_doc(doc)
-                                for doc in reference_db_search_docs
-                            ],
+                    if reference_db_search_docs is None:
+                        logger.warning(
+                            "No reference docs found for relevance filtering"
+                        )
+                        continue
+
+                    llm_indices = relevant_sections_to_indices(
+                        relevance_sections=relevance_sections,
+                        items=[
+                            translate_db_search_doc_to_server_search_doc(doc)
+                            for doc in reference_db_search_docs
+                        ],
+                    )
+
+                    if dropped_indices:
+                        llm_indices = drop_llm_indices(
+                            llm_indices=llm_indices,
+                            search_docs=reference_db_search_docs,
+                            dropped_indices=dropped_indices,
                         )
 
-                        if dropped_indices:
-                            llm_indices = drop_llm_indices(
-                                llm_indices=llm_indices,
-                                search_docs=reference_db_search_docs,
-                                dropped_indices=dropped_indices,
-                            )
-
-                        yield LLMRelevanceFilterResponse(
-                            llm_selected_doc_indices=llm_indices
-                        )
+                    yield LLMRelevanceFilterResponse(
+                        llm_selected_doc_indices=llm_indices
+                    )
                 elif packet.id == FINAL_CONTEXT_DOCUMENTS_ID:
                     yield FinalUsedContextDocsResponse(
                         final_context_docs=packet.response

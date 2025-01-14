@@ -1,17 +1,20 @@
 from collections.abc import Callable
-from collections.abc import Iterator
 from uuid import uuid4
 
 from langchain.schema.messages import BaseMessage
 from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import ToolCall
+from sqlalchemy.orm import Session
 
+from onyx.agent_search.run_graph import run_main_graph
 from onyx.chat.llm_response_handler import LLMResponseHandlerManager
-from onyx.chat.models import AnswerQuestionPossibleReturn
+from onyx.chat.models import AnswerPacket
+from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationInfo
 from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.models import PromptConfig
+from onyx.chat.models import ProSearchConfig
 from onyx.chat.prompt_builder.build import AnswerPromptBuilder
 from onyx.chat.prompt_builder.build import default_build_system_message
 from onyx.chat.prompt_builder.build import default_build_user_message
@@ -25,24 +28,19 @@ from onyx.chat.stream_processing.answer_response_handler import (
 from onyx.chat.stream_processing.utils import (
     map_document_id_order,
 )
+from onyx.chat.tool_handling.tool_response_handler import get_tool_by_name
 from onyx.chat.tool_handling.tool_response_handler import ToolResponseHandler
 from onyx.file_store.utils import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.tools.force import ForceUseTool
-from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_runner import ToolCallKickoff
 from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
-
-
-AnswerStream = Iterator[AnswerQuestionPossibleReturn | ToolCallKickoff | ToolResponse]
 
 
 class Answer:
@@ -59,7 +57,6 @@ class Answer:
         # newly passed in files to include as part of this question
         # TODO THIS NEEDS TO BE HANDLED
         latest_query_files: list[InMemoryChatFile] | None = None,
-        files: list[InMemoryChatFile] | None = None,
         tools: list[Tool] | None = None,
         # NOTE: for native tool-calling, this is only supported by OpenAI atm,
         #       but we only support them anyways
@@ -69,6 +66,9 @@ class Answer:
         return_contexts: bool = False,
         skip_gen_ai_answer_generation: bool = False,
         is_connected: Callable[[], bool] | None = None,
+        pro_search_config: ProSearchConfig | None = None,
+        fast_llm: LLM | None = None,
+        db_session: Session | None = None,
     ) -> None:
         if single_message_history and message_history:
             raise ValueError(
@@ -79,7 +79,6 @@ class Answer:
         self.is_connected: Callable[[], bool] | None = is_connected
 
         self.latest_query_files = latest_query_files or []
-        self.file_id_to_file = {file.file_id: file for file in (files or [])}
 
         self.tools = tools or []
         self.force_use_tool = force_use_tool
@@ -92,6 +91,7 @@ class Answer:
         self.prompt_config = prompt_config
 
         self.llm = llm
+        self.fast_llm = fast_llm
         self.llm_tokenizer = get_tokenizer(
             provider_type=llm.config.model_provider,
             model_name=llm.config.model_name,
@@ -100,9 +100,7 @@ class Answer:
         self._final_prompt: list[BaseMessage] | None = None
 
         self._streamed_output: list[str] | None = None
-        self._processed_stream: (
-            list[AnswerQuestionPossibleReturn | ToolResponse | ToolCallKickoff] | None
-        ) = None
+        self._processed_stream: (list[AnswerPacket] | None) = None
 
         self._return_contexts = return_contexts
         self.skip_gen_ai_answer_generation = skip_gen_ai_answer_generation
@@ -114,6 +112,9 @@ class Answer:
             )
             and not skip_explicit_tool_calling
         )
+
+        self.pro_search_config = pro_search_config
+        self.db_session = db_session
 
     def _get_tools_list(self) -> list[Tool]:
         if not self.force_use_tool.force_use:
@@ -173,11 +174,7 @@ class Answer:
                 current_llm_call.force_use_tool.tool_name,
                 current_llm_call.force_use_tool.args,
             )
-            tool = next(
-                (t for t in current_llm_call.tools if t.name == tool_name), None
-            )
-            if not tool:
-                raise RuntimeError(f"Tool '{tool_name}' not found")
+            tool = get_tool_by_name(current_llm_call.tools, tool_name)
 
             yield from self._handle_specified_tool_call(llm_calls, tool, tool_args)
             return
@@ -211,6 +208,11 @@ class Answer:
         final_search_results, displayed_search_results = SearchTool.get_search_result(
             current_llm_call
         ) or ([], [])
+
+        # NEXT: we still want to handle the LLM response stream, but it is now:
+        # 1. handle the tool call requests
+        # 2. feed back the processed results
+        # 3. handle the citations
 
         # Quotes are no longer supported
         # answer_handler: AnswerResponseHandler
@@ -258,6 +260,34 @@ class Answer:
     def processed_streamed_output(self) -> AnswerStream:
         if self._processed_stream is not None:
             yield from self._processed_stream
+            return
+
+        if self.pro_search_config:
+            if self.pro_search_config.search_request is None:
+                raise ValueError("Search request must be provided for pro search")
+            search_tools = [tool for tool in self.tools if isinstance(tool, SearchTool)]
+            if len(search_tools) == 0:
+                raise ValueError("No search tool found")
+            elif len(search_tools) > 1:
+                # TODO: handle multiple search tools
+                raise ValueError("Multiple search tools found")
+
+            search_tool = search_tools[0]
+            processed_stream = []
+            if self.db_session is None:
+                raise ValueError("db_session must be provided for pro search")
+            if self.fast_llm is None:
+                raise ValueError("fast_llm must be provided for pro search")
+            for packet in run_main_graph(
+                config=self.pro_search_config,
+                primary_llm=self.llm,
+                fast_llm=self.fast_llm,
+                search_tool=search_tool,
+                db_session=self.db_session,
+            ):
+                processed_stream.append(packet)
+                yield packet
+            self._processed_stream = processed_stream
             return
 
         prompt_builder = AnswerPromptBuilder(
