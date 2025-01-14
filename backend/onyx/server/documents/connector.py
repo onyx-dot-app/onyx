@@ -72,7 +72,7 @@ from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import cleanup_google_drive_credentials
 from onyx.db.credentials import create_credential
 from onyx.db.credentials import delete_service_account_credentials
-from onyx.db.credentials import fetch_credential_by_id
+from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.engine import get_current_tenant_id
@@ -361,7 +361,7 @@ def check_drive_tokens(
     user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> AuthStatus:
-    db_credentials = fetch_credential_by_id(credential_id, user, db_session)
+    db_credentials = fetch_credential_by_id_for_user(credential_id, user, db_session)
     if (
         not db_credentials
         or DB_CREDENTIALS_DICT_TOKEN_KEY not in db_credentials.credential_json

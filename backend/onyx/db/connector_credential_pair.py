@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.credentials import fetch_credential_by_id
+from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import ConnectorCredentialPair
@@ -390,7 +390,7 @@ def add_credential_to_connector(
     last_successful_index_time: datetime | None = None,
 ) -> StatusResponse:
     connector = fetch_connector_by_id(connector_id, db_session)
-    credential = fetch_credential_by_id(
+    credential = fetch_credential_by_id_for_user(
         credential_id,
         user,
         db_session,
@@ -472,7 +472,7 @@ def remove_credential_from_connector(
     db_session: Session,
 ) -> StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)
-    credential = fetch_credential_by_id(
+    credential = fetch_credential_by_id_for_user(
         credential_id,
         user,
         db_session,
