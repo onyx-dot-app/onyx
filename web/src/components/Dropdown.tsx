@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ChevronDownIcon } from "./icons/icons";
+import { ChevronDownIcon, PlusIcon } from "./icons/icons";
 import { FiCheck, FiChevronDown } from "react-icons/fi";
 import { Popover } from "./popover/Popover";
 import { createPortal } from "react-dom";
@@ -155,31 +155,36 @@ export function SearchMultiSelectDropdown({
               aria-orientation="vertical"
               aria-labelledby="options-menu"
             >
-              {filteredOptions.length ? (
-                filteredOptions.map((option, index) =>
-                  itemComponent ? (
-                    <div
-                      key={option.name}
-                      onClick={() => {
-                        handleSelect(option);
-                      }}
-                    >
-                      {itemComponent({ option })}
-                    </div>
-                  ) : (
-                    <StandardDropdownOption
-                      key={index}
-                      option={option}
-                      index={index}
-                      handleSelect={handleSelect}
-                    />
-                  )
+              {filteredOptions.map((option, index) =>
+                itemComponent ? (
+                  <div
+                    key={option.name}
+                    onClick={() => {
+                      handleSelect(option);
+                    }}
+                  >
+                    {itemComponent({ option })}
+                  </div>
+                ) : (
+                  <StandardDropdownOption
+                    key={index}
+                    option={option}
+                    index={index}
+                    handleSelect={handleSelect}
+                  />
                 )
-              ) : (
-                <>
-                  {onCreateLabel ? (
+              )}
+
+              {onCreateLabel &&
+                searchTerm.trim() !== "" &&
+                !filteredOptions.some(
+                  (option) =>
+                    option.name.toLowerCase() === searchTerm.toLowerCase()
+                ) && (
+                  <>
+                    <div className="border-t border-border"></div>
                     <button
-                      className={`w-full text-left block px-4 py-2.5 text-sm hover:bg-hover`}
+                      className="w-full  text-left flex items-center px-4 py-2  text-sm hover:bg-hover"
                       role="menuitem"
                       onClick={() => {
                         onCreateLabel(searchTerm);
@@ -187,19 +192,18 @@ export function SearchMultiSelectDropdown({
                         setSearchTerm("");
                       }}
                     >
+                      <PlusIcon className="w-4 h-4 mr-2" />
                       Create label "{searchTerm}"
                     </button>
-                  ) : (
-                    <button
-                      className={`w-full text-left block px-4 py-2.5 text-sm hover:bg-hover`}
-                      role="menuitem"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      No matches found...
-                    </button>
-                  )}
-                </>
-              )}
+                  </>
+                )}
+
+              {filteredOptions.length === 0 &&
+                (!onCreateLabel || searchTerm.trim() === "") && (
+                  <div className="px-4 py-2.5 text-sm text-text-muted">
+                    No matches found
+                  </div>
+                )}
             </div>
           </div>,
           document.body
