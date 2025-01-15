@@ -127,11 +127,8 @@ def strip_null_characters(doc_batch: list[Document]) -> list[Document]:
                 )
                 section.link = section.link.replace("\x00", "")
 
-            if section.text and "\x00" in section.text:
-                logger.warning(
-                    f"NUL characters found in document text for document: {cleaned_doc.id}"
-                )
-                section.text = section.text.replace("\x00", "")
+            # since text can be longer, just replace to avoid double scan
+            section.text = section.text.replace("\x00", "")
 
         cleaned_batch.append(cleaned_doc)
 
