@@ -23,6 +23,8 @@ from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
+from onyx.db.constants import SYSTEM_USER
+from onyx.db.constants import SystemUser
 from onyx.db.engine import get_sqlalchemy_engine
 from onyx.db.models import DocumentSet
 from onyx.db.models import Persona
@@ -44,8 +46,13 @@ logger = setup_logger()
 
 
 def _add_user_filters(
-    stmt: Select, user: User | None, get_editable: bool = True
+    stmt: Select, user: User | None | SystemUser, get_editable: bool = True
 ) -> Select:
+    if isinstance(user, SystemUser):
+        if user is SYSTEM_USER:
+            return stmt
+        raise ValueError("Bad SystemUser object")
+
     # If user is None and auth is disabled, assume the user is an admin
     if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
@@ -111,7 +118,10 @@ def _add_user_filters(
 
 
 def fetch_persona_by_id_for_user(
-    db_session: Session, persona_id: int, user: User | None, get_editable: bool = True
+    db_session: Session,
+    persona_id: int,
+    user: User | None | SystemUser,
+    get_editable: bool = True,
 ) -> Persona:
     stmt = select(Persona).where(Persona.id == persona_id).distinct()
     stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
@@ -122,6 +132,17 @@ def fetch_persona_by_id_for_user(
             detail=f"Persona with ID {persona_id} does not exist or user is not authorized to access it",
         )
     return persona
+
+
+def fetch_persona_by_id(
+    db_session: Session,
+    persona_id: int,
+) -> Persona:
+    return fetch_persona_by_id_for_user(
+        db_session=db_session,
+        persona_id=persona_id,
+        user=SYSTEM_USER,
+    )
 
 
 def get_best_persona_id_for_user(
@@ -285,7 +306,7 @@ def get_prompts(
 
 def get_personas_for_user(
     # if user is `None` assume the user is an admin or auth is disabled
-    user: User | None,
+    user: User | None | SystemUser,
     db_session: Session,
     get_editable: bool = True,
     include_default: bool = True,
@@ -315,10 +336,10 @@ def get_personas_for_user(
 
 
 def get_personas(db_session: Session) -> Sequence[Persona]:
-    stmt = select(Persona).distinct()
-    stmt = stmt.where(not_(Persona.name.startswith(SLACK_BOT_PERSONA_PREFIX)))
-    stmt = stmt.where(Persona.deleted.is_(False))
-    return db_session.execute(stmt).unique().scalars().all()
+    return get_personas_for_user(
+        user=SYSTEM_USER,
+        db_session=db_session,
+    )
 
 
 def mark_persona_as_deleted(
