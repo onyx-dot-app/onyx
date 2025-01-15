@@ -108,7 +108,7 @@ def upsert_ingestion_doc(
         tenant_id=tenant_id,
     )
 
-    new_doc, __chunk_count = indexing_pipeline(
+    indexing_pipeline_result = indexing_pipeline(
         document_batch=[document],
         index_attempt_metadata=IndexAttemptMetadata(
             connector_id=cc_pair.connector_id,
@@ -150,4 +150,7 @@ def upsert_ingestion_doc(
             ),
         )
 
-    return IngestionResult(document_id=document.id, already_existed=not bool(new_doc))
+    return IngestionResult(
+        document_id=document.id,
+        already_existed=indexing_pipeline_result.new_docs > 0,
+    )
