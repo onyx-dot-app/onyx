@@ -82,7 +82,7 @@ const AssistantCard: React.FC<{
   const closePopover = () => setActivePopover(undefined);
 
   return (
-    <div className="w-full p-2 overflow-visible bg-[#fefcf9] rounded shadow-[0px_0px_4px_0px_rgba(0,0,0,0.25)] flex flex-col">
+    <div className="w-full p-2 overflow-visible pb-4 pt-3 bg-[#fefcf9] rounded shadow-[0px_0px_4px_0px_rgba(0,0,0,0.25)] flex flex-col">
       <div className="w-full flex">
         <div className="ml-2 mr-4 mt-1 w-8 h-8">
           <AssistantIcon assistant={persona} size="large" />
@@ -93,6 +93,18 @@ const AssistantCard: React.FC<{
               <h3 className="text-black leading-none font-semibold text-base lg-normal">
                 {persona.name}
               </h3>
+              {persona.labels && persona.labels.length > 0 && (
+                <>
+                  {persona.labels.slice(0, 3).map((label, index) => (
+                    <AssistantBadge key={index} text={label.name} />
+                  ))}
+                  {persona.labels.length > 3 && (
+                    <AssistantBadge
+                      text={`+${persona.labels.length - 3} more`}
+                    />
+                  )}
+                </>
+              )}
             </div>
             {isOwnedByUser && (
               <div className="flex items-center gap-x-2">
@@ -112,7 +124,7 @@ const AssistantCard: React.FC<{
                   </PopoverTrigger>
                   <PopoverContent
                     className={`z-[10000] ${
-                      activePopover === null ? "w-40" : "w-80"
+                      activePopover === null ? "w-32" : "w-80"
                     } p-2`}
                   >
                     {activePopover === null && (
@@ -213,23 +225,12 @@ const AssistantCard: React.FC<{
             {persona.description || "\u00A0"}
           </p>
 
-          <div className="flex flex-col h-[55px]">
-            <div className="mb-1 mt-1">
+          <div className="flex flex-col ">
+            {/* <div className="mb-1 mt-1">
               <div className="flex items-center">
-                {persona.labels && persona.labels.length > 0 && (
-                  <>
-                    {persona.labels.slice(0, 2).map((label, index) => (
-                      <AssistantBadge key={index} text={label.name} />
-                    ))}
-                    {persona.labels.length > 2 && (
-                      <AssistantBadge
-                        text={`+${persona.labels.length - 2} more`}
-                      />
-                    )}
-                  </>
-                )}
+               
               </div>
-            </div>
+            </div> */}
 
             <div className="my-1">
               <span className="flex items-center text-black text-xs opacity-50">

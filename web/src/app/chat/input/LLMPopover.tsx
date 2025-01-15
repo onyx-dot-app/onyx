@@ -106,7 +106,7 @@ export default function LLMPopover({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-64 p-1 bg-white border border-gray-200 rounded-md shadow-lg"
+        className="w-64 p-1 bg-background border border-gray-200 rounded-md shadow-lg"
       >
         <div className="max-h-[300px] overflow-y-auto">
           {llmOptions.map(({ name, icon, value }, index) => {

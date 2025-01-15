@@ -1,15 +1,15 @@
 "use client";
 
-import SidebarWrapper from "@/app/assistants/SidebarWrapper";
 import InputPrompts from "./InputPrompts";
-import { BackButton } from "@/components/BackButton";
-import { useChatContext } from "@/components/context/ChatContext";
 
 export default function InputPromptsPage() {
-  const { toggledSidebar } = useChatContext();
   return (
-    <SidebarWrapper initiallyToggled={toggledSidebar}>
-      <InputPrompts />
-    </SidebarWrapper>
+    <div className="w-full py-16">
+      <div className="px-32">
+        <div className="mx-auto container">
+          <InputPrompts />
+        </div>
+      </div>
+    </div>
   );
 }

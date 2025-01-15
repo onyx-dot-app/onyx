@@ -59,7 +59,7 @@ export function StarterMessages({
                     `}
                     style={{ height: "5.2rem" }}
                   >
-                    {starterMessage.message}
+                    {starterMessage.name}
                   </button>
                 </div>
               ))}

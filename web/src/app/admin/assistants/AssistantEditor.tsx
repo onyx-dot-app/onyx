@@ -42,7 +42,12 @@ import { FiInfo, FiRefreshCcw, FiUsers } from "react-icons/fi";
 import * as Yup from "yup";
 import CollapsibleSection from "./CollapsibleSection";
 import { SuccessfulPersonaUpdateRedirectType } from "./enums";
-import { Persona, PersonaLabel, StarterMessage } from "./interfaces";
+import {
+  Persona,
+  PersonaLabel,
+  StarterMessage,
+  StarterMessageBase,
+} from "./interfaces";
 import {
   createPersonaLabel,
   createPersona,
@@ -85,7 +90,7 @@ import {
 } from "@/components/Dropdown";
 import { Badge } from "@/components/ui/badge";
 import { SourceChip } from "@/app/chat/input/ChatInputBar";
-import { GroupIcon, UserIcon } from "lucide-react";
+import { GroupIcon, TagIcon, UserIcon } from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -453,9 +458,14 @@ export function AssistantEditor({
           // if disable_retrieval is set, set num_chunks to 0
           // to tell the backend to not fetch any documents
           const numChunks = searchToolEnabled ? values.num_chunks || 10 : 0;
-          const starterMessages = values.starter_messages.filter(
-            (message: StarterMessage) => message.message.trim() !== ""
-          );
+          const starterMessages = values.starter_messages
+            .filter(
+              (message: { message: string }) => message.message.trim() !== ""
+            )
+            .map((message: { message: string; name?: string }) => ({
+              message: message.message,
+              name: message.name || message.message,
+            }));
 
           // don't set groups if marked as public
           const groups = values.is_public ? [] : values.groups;
@@ -768,29 +778,67 @@ export function AssistantEditor({
                   >
                     Select labels to categorize this assistant
                   </p>
-                  <div className="flex flex-col gap-2 mt-3">
-                    {labels.map((label) => (
-                      <div key={label.id} className="flex items-center">
-                        <Checkbox
-                          id={`label-${label.id}`}
-                          checked={values.label_ids.includes(label.id)}
-                          onCheckedChange={(checked) => {
-                            const newLabelIds = checked
-                              ? [...values.label_ids, label.id]
-                              : values.label_ids.filter(
-                                  (id: number) => id !== label.id
-                                );
+                  <div className="mt-3">
+                    <SearchMultiSelectDropdown
+                      options={labels.map((label) => ({
+                        name: label.name,
+                        value: label.id,
+                      }))}
+                      onSelect={(selected) => {
+                        const newLabelIds = [
+                          ...values.label_ids,
+                          selected.value as number,
+                        ];
+                        setFieldValue("label_ids", newLabelIds);
+                      }}
+                      itemComponent={({ option }) => (
+                        <div
+                          className="flex items-center px-4 py-2.5 text-sm hover:bg-hover cursor-pointer"
+                          onClick={() => {
+                            const isSelected = values.label_ids.includes(
+                              option.value as number
+                            );
+                            const newLabelIds = isSelected
+                              ? values.label_ids.filter(
+                                  (id: number) => id !== option.value
+                                )
+                              : [...values.label_ids, option.value as number];
                             setFieldValue("label_ids", newLabelIds);
                           }}
-                        />
-                        <label
-                          htmlFor={`label-${label.id}`}
-                          className="ml-2 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                         >
-                          {label.name}
-                        </label>
-                      </div>
-                    ))}
+                          <div
+                            className={`w-4 h-4 border border-border rounded-sm mr-2 ${
+                              values.label_ids.includes(option.value as number)
+                                ? "bg-primary"
+                                : "bg-transparent"
+                            }`}
+                          />
+                          <span className="text-sm font-medium leading-none">
+                            {option.name}
+                          </span>
+                        </div>
+                      )}
+                    />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {values.label_ids.map((labelId: number) => {
+                        const label = labels.find((l) => l.id === labelId);
+                        return label ? (
+                          <SourceChip
+                            key={label.id}
+                            onRemove={() => {
+                              setFieldValue(
+                                "label_ids",
+                                values.label_ids.filter(
+                                  (id: number) => id !== label.id
+                                )
+                              );
+                            }}
+                            title={label.name}
+                            icon={<TagIcon size={12} />}
+                          />
+                        ) : null;
+                      })}
+                    </div>
                   </div>
                 </div>
               )}

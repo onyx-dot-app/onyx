@@ -201,7 +201,10 @@ export function FilterPopup({
       <PopoverTrigger asChild>
         <button>{trigger}</button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0 shadow-lg" align="start">
+      <PopoverContent
+        className="bg-background w-[400px] p-0 shadow-lg"
+        align="start"
+      >
         <div className="flex h-[325px]">
           <div className="w-1/3 border-r border-gray-200 p-2">
             <ul className="space-y-1">

@@ -187,7 +187,9 @@ def generate_starter_messages(
     prompts = []
 
     for response in results.values():
-        starter_message = StarterMessage(message=response.content)
+        starter_message = StarterMessage(
+            message=response.content, name=response.content
+        )
         prompts.append(starter_message)
 
     return prompts

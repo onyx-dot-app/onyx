@@ -1,8 +1,11 @@
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { DocumentSet, MinimalUserSnapshot } from "@/lib/types";
 
-export interface StarterMessage {
+export interface StarterMessageBase {
   message: string;
+}
+export interface StarterMessage extends StarterMessageBase {
+  name: string;
 }
 
 export interface Prompt {

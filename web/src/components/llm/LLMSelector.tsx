@@ -58,7 +58,7 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
             : "User Default"}
         </SelectValue>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="z-[99999]">
         <SelectItem value="default">User Default</SelectItem>
         {llmOptions.map((option) => {
           if (

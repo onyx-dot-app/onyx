@@ -9,19 +9,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  TrashIcon,
-  PlusIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-} from "@/components/icons/icons";
+import { TrashIcon, PlusIcon } from "@/components/icons/icons";
 import { FiCheck, FiX } from "react-icons/fi";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import CardSection from "@/components/admin/CardSection";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { BackButton } from "@/components/BackButton";
 
 export default function InputPrompts() {
   const [inputPrompts, setInputPrompts] = useState<InputPrompt[]>([]);
@@ -137,7 +131,10 @@ export default function InputPrompts() {
   };
 
   return (
-    <CardSection className="bg-white mt-8">
+    <div className="mx-auto max-w-4xl">
+      <div className="absolute top-4 left-4">
+        <BackButton />
+      </div>
       {popup}
       <div className="flex justify-between items-start mb-6">
         <div className="flex flex-col gap-2">
@@ -250,6 +247,6 @@ export default function InputPrompts() {
           Create New Prompt
         </Button>
       )}
-    </CardSection>
+    </div>
   );
 }

@@ -8,6 +8,9 @@ import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrap
 import { cookies } from "next/headers";
 import { ChatProvider } from "@/components/context/ChatContext";
 import WrappedAssistantsStats from "./WrappedAssistantsStats";
+import CardSection from "@/components/admin/CardSection";
+import { AssistantStats } from "./AssistantStats";
+import { BackButton } from "@/components/BackButton";
 
 export default async function GalleryPage(props: {
   params: Promise<{ id: string }>;
@@ -60,12 +63,18 @@ export default async function GalleryPage(props: {
       {shouldShowWelcomeModal && (
         <WelcomeModal user={user} requestCookies={requestCookies} />
       )}
+      <div className="absolute top-4 left-4">
+        <BackButton />
+      </div>
 
-      <InstantSSRAutoRefresh />
-      <WrappedAssistantsStats
-        initiallyToggled={toggleSidebar}
-        assistantId={parseInt(params.id)}
-      />
+      <div className="w-full py-8">
+        <div className="px-32">
+          <InstantSSRAutoRefresh />
+          <div className="max-w-4xl  mx-auto !border-none !bg-transparent !ring-none">
+            <AssistantStats assistantId={parseInt(params.id)} />
+          </div>
+        </div>
+      </div>
     </ChatProvider>
   );
 }

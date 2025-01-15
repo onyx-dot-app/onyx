@@ -36,27 +36,21 @@ export const AssistantBadgeSelector = ({
 };
 
 export enum AssistantFilter {
-  AdminCreated = "Admin",
-  UserCreated = "User-created",
   Pinned = "Pinned",
-  Private = "Private",
   Public = "Public",
-  Builtin = "Builtin",
+  Private = "Private",
 }
 
 const useAssistantFilter = () => {
   const [assistantFilters, setAssistantFilters] = useState<
-    Record<AssistantFilter | string, boolean>
+    Record<AssistantFilter, boolean>
   >({
-    [AssistantFilter.Builtin]: false,
-    [AssistantFilter.AdminCreated]: false,
     [AssistantFilter.Pinned]: false,
-    [AssistantFilter.Private]: false,
     [AssistantFilter.Public]: false,
-    [AssistantFilter.UserCreated]: false,
+    [AssistantFilter.Private]: false,
   });
 
-  const toggleAssistantFilter = (filter: AssistantFilter | string) => {
+  const toggleAssistantFilter = (filter: AssistantFilter) => {
     setAssistantFilters((prevFilters) => ({
       ...prevFilters,
       [filter]: !prevFilters[filter],
@@ -81,21 +75,6 @@ export default function AssistantModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-  const { data: labels } = useLabels();
-
-  useEffect(() => {
-    if (labels) {
-      const labelFilters = labels.reduce(
-        (acc, label) => {
-          acc[`label_${label.id}`] = false;
-          return acc;
-        },
-        {} as Record<string, boolean>
-      );
-      setAssistantFilters((prev) => ({ ...prev, ...labelFilters }));
-    }
-  }, [labels, setAssistantFilters]);
-
   const memoizedCurrentlyVisibleAssistants = useMemo(() => {
     return assistants.filter((assistant) => {
       const nameMatches = assistant.name
@@ -108,39 +87,10 @@ export default function AssistantModal({
       const pinnedFilter =
         !assistantFilters[AssistantFilter.Pinned] ||
         pinnedAssistants.map((a: Persona) => a.id).includes(assistant.id);
-      const adminCreatedFilter =
-        !assistantFilters[AssistantFilter.AdminCreated] ||
-        assistant.is_default_persona;
 
-      const builtinFilter =
-        !assistantFilters[AssistantFilter.Builtin] || assistant.builtin_persona;
-      const isOwnedByUser = checkUserOwnsAssistant(user, assistant);
-
-      const userCreatedFilter =
-        !assistantFilters[AssistantFilter.UserCreated] || isOwnedByUser;
-
-      const labelFilters =
-        labels?.filter((label) => assistantFilters[`label_${label.id}`]) || [];
-      const labelFilter =
-        labelFilters.length === 0 ||
-        labelFilters.some((label) =>
-          assistant.labels?.some(
-            (assistantLabel) => assistantLabel.id === label.id
-          )
-        );
-
-      return (
-        nameMatches &&
-        publicFilter &&
-        privateFilter &&
-        pinnedFilter &&
-        adminCreatedFilter &&
-        builtinFilter &&
-        userCreatedFilter &&
-        labelFilter
-      );
+      return nameMatches && publicFilter && privateFilter && pinnedFilter;
     });
-  }, [assistants, searchQuery, assistantFilters, pinnedAssistants, labels]);
+  }, [assistants, searchQuery, assistantFilters, pinnedAssistants]);
 
   const featuredAssistants = [
     ...memoizedCurrentlyVisibleAssistants.filter(
@@ -208,44 +158,22 @@ export default function AssistantModal({
           </div>
           <div className="px-2 flex py-2 items-center gap-x-2 mb-2 flex-wrap">
             <AssistantBadgeSelector
+              text="Pinned"
+              selected={assistantFilters[AssistantFilter.Pinned]}
+              toggleFilter={() => toggleAssistantFilter(AssistantFilter.Pinned)}
+            />
+            <AssistantBadgeSelector
               text="Public"
-              selected={assistantFilters[AssistantFilter.Public] ?? false}
+              selected={assistantFilters[AssistantFilter.Public]}
               toggleFilter={() => toggleAssistantFilter(AssistantFilter.Public)}
             />
             <AssistantBadgeSelector
               text="Private"
-              selected={assistantFilters[AssistantFilter.Private] ?? false}
+              selected={assistantFilters[AssistantFilter.Private]}
               toggleFilter={() =>
                 toggleAssistantFilter(AssistantFilter.Private)
               }
             />
-            <AssistantBadgeSelector
-              text="Admin"
-              selected={assistantFilters[AssistantFilter.AdminCreated] ?? false}
-              toggleFilter={() =>
-                toggleAssistantFilter(AssistantFilter.AdminCreated)
-              }
-            />
-            <AssistantBadgeSelector
-              text="Pinned"
-              selected={assistantFilters[AssistantFilter.Pinned] ?? false}
-              toggleFilter={() => toggleAssistantFilter(AssistantFilter.Pinned)}
-            />
-            <AssistantBadgeSelector
-              text="Builtin"
-              selected={assistantFilters[AssistantFilter.Builtin] ?? false}
-              toggleFilter={() =>
-                toggleAssistantFilter(AssistantFilter.Builtin)
-              }
-            />
-            {labels?.map((label) => (
-              <AssistantBadgeSelector
-                key={label.id}
-                text={label.name}
-                selected={assistantFilters[`label_${label.id}`] ?? false}
-                toggleFilter={() => toggleAssistantFilter(`label_${label.id}`)}
-              />
-            ))}
           </div>
           <div className="w-full border-t border-neutral-200" />
         </div>

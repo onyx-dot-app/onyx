@@ -22,6 +22,7 @@ import { Label } from "@/components/admin/connectors/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useChatContext } from "@/components/context/ChatContext";
 import { InputPromptsSection } from "./InputPromptsSection";
+import { LLMSelector } from "@/components/llm/LLMSelector";
 
 export function UserSettingsModal({
   setPopup,
@@ -157,7 +158,7 @@ export function UserSettingsModal({
       : user?.preferences?.auto_scroll;
 
   return (
-    <Modal onOutsideClick={onClose} width="rounded-lg  bg-white max-w-xl">
+    <Modal onOutsideClick={onClose} width="rounded-lg w-full bg-white max-w-xl">
       <>
         <div className="flex mb-4">
           <h2 className="text-2xl text-emphasis font-bold flex my-auto">
@@ -191,15 +192,7 @@ export function UserSettingsModal({
 
         <Separator />
 
-        <h3 className="text-lg text-emphasis font-bold">
-          Default model for assistants
-        </h3>
-
-        <Text className="mb-4">
-          Choose a Large Language Model (LLM) to serve as the default for
-          assistants that don&apos;t have a default model assigned.
-          {defaultModel == null && "  No default model has been selected!"}
-        </Text>
+        <h3 className="text-lg text-emphasis font-bold mb-2 ">Default Model</h3>
         <div
           className="w-full max-h-96 overflow-y-auto flex text-sm flex-col border rounded-md"
           ref={containerRef}
@@ -211,59 +204,33 @@ export function UserSettingsModal({
           >
             Scroll to see all options
           </div>
-          <div>
-            <div
-              key={-1}
-              className="w-full border-b flex items-center gap-x-2 hover:bg-background-50"
-            >
-              <input
-                checked={defaultModelDestructured?.modelName == null}
-                type="radio"
-                name="credentialSelection"
-                onChange={(e) => {
-                  e.preventDefault();
-                  handleChangedefaultModel(null);
-                }}
-                className="form-radio ml-4 h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
-              />
-              {
-                <td className="p-2">
-                  System default{" "}
-                  {defaultProvider?.default_model_name &&
-                    `(${getDisplayNameForModel(
-                      defaultProvider?.default_model_name
-                    )})`}
-                </td>
+          <LLMSelector
+            llmProviders={llmProviders}
+            currentLlm={
+              defaultModelDestructured
+                ? structureValue(
+                    defaultModelDestructured.provider,
+                    "",
+                    defaultModelDestructured.modelName
+                  )
+                : null
+            }
+            userDefault={null}
+            requiresImageGeneration={false}
+            onSelect={(selected) => {
+              if (selected === null) {
+                handleChangedefaultModel(null);
+              } else {
+                const { modelName, provider, name } =
+                  destructureValue(selected);
+                if (modelName && name) {
+                  handleChangedefaultModel(
+                    structureValue(provider, "", modelName)
+                  );
+                }
               }
-            </div>
-
-            {llmOptions.map(({ name, value }, index) => {
-              return (
-                <div
-                  key={index}
-                  className="w-full flex items-center gap-x-2 border-b hover:bg-background-50"
-                >
-                  <input
-                    checked={defaultModelDestructured?.modelName == name}
-                    type="radio"
-                    name="credentialSelection"
-                    onChange={(e) => {
-                      e.preventDefault();
-                      handleChangedefaultModel(value);
-                    }}
-                    className="form-radio ml-4 h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
-                  />
-
-                  <td className="p-2">
-                    {getDisplayNameForModel(name)}{" "}
-                    {defaultModelDestructured &&
-                      defaultModelDestructured.name == name &&
-                      "(selected)"}
-                  </td>
-                </div>
-              );
-            })}
-          </div>
+            }}
+          />
         </div>
       </>
     </Modal>
