@@ -41,6 +41,7 @@ def upgrade() -> None:
         sa.Column(
             "user_id", fastapi_users_db_sqlalchemy.generics.GUID(), nullable=False
         ),
+        sa.Column("disabled", sa.Boolean(), nullable=False, default=False),
         sa.ForeignKeyConstraint(
             ["input_prompt_id"],
             ["inputprompt.id"],

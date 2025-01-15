@@ -1,28 +1,31 @@
 import React, { useState, useEffect } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { TrashIcon, PlusIcon } from "@/components/icons/icons";
-import { FiCheck, FiX } from "react-icons/fi";
+import { MoreVertical, CheckIcon, XIcon } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { BackButton } from "@/components/BackButton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function InputPrompts() {
   const [inputPrompts, setInputPrompts] = useState<InputPrompt[]>([]);
   const [editingPromptId, setEditingPromptId] = useState<number | null>(null);
   const [newPrompt, setNewPrompt] = useState<Partial<InputPrompt>>({});
   const [isCreatingNew, setIsCreatingNew] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const { popup, setPopup } = usePopup();
 
   useEffect(() => {
@@ -35,10 +38,7 @@ export default function InputPrompts() {
       if (response.ok) {
         const data = await response.json();
         setInputPrompts(data);
-        console.log("INPUT PROMPTS");
-        console.log(data);
       } else {
-        console.log("INPUT PROMPTS ERROR");
         throw new Error("Failed to fetch prompt shortcuts");
       }
     } catch (error) {
@@ -50,21 +50,16 @@ export default function InputPrompts() {
     return prompt.is_public;
   };
 
-  const handleEdit = (
-    promptId: number,
-    updatedFields: Partial<InputPrompt>
-  ) => {
-    setInputPrompts((prevPrompts) =>
-      prevPrompts.map((prompt) =>
-        prompt.id === promptId && !isPromptPublic(prompt)
-          ? { ...prompt, ...updatedFields }
-          : prompt
-      )
-    );
+  // UPDATED: Remove partial merging to avoid overwriting fresh data
+  const handleEdit = (promptId: number) => {
     setEditingPromptId(promptId);
   };
 
-  const handleSave = async (promptId: number) => {
+  const handleSave = async (
+    promptId: number,
+    updatedPrompt: string,
+    updatedContent: string
+  ) => {
     const promptToUpdate = inputPrompts.find((p) => p.id === promptId);
     if (!promptToUpdate || isPromptPublic(promptToUpdate)) return;
 
@@ -72,12 +67,25 @@ export default function InputPrompts() {
       const response = await fetch(`/api/input_prompt/${promptId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(promptToUpdate),
+        body: JSON.stringify({
+          prompt: updatedPrompt,
+          content: updatedContent,
+          active: true,
+        }),
       });
 
       if (!response.ok) {
         throw new Error("Failed to update prompt");
       }
+
+      // Update local state with new values
+      setInputPrompts((prevPrompts) =>
+        prevPrompts.map((prompt) =>
+          prompt.id === promptId
+            ? { ...prompt, prompt: updatedPrompt, content: updatedContent }
+            : prompt
+        )
+      );
 
       setEditingPromptId(null);
       setPopup({ message: "Prompt updated successfully", type: "success" });
@@ -88,23 +96,37 @@ export default function InputPrompts() {
 
   const handleDelete = async (id: number) => {
     const promptToDelete = inputPrompts.find((p) => p.id === id);
-    if (!promptToDelete || isPromptPublic(promptToDelete)) return;
+    if (!promptToDelete) return;
 
     try {
-      const response = await fetch(`/api/input_prompt/${id}`, {
-        method: "DELETE",
-      });
+      let response;
+      if (isPromptPublic(promptToDelete)) {
+        // For public prompts, use the hide endpoint
+        response = await fetch(`/api/input_prompt/${id}/hide`, {
+          method: "POST",
+        });
+      } else {
+        // For user-created prompts, use the delete endpoint
+        response = await fetch(`/api/input_prompt/${id}`, {
+          method: "DELETE",
+        });
+      }
 
       if (!response.ok) {
-        throw new Error("Failed to delete prompt");
+        throw new Error("Failed to delete/hide prompt");
       }
 
       setInputPrompts((prevPrompts) =>
         prevPrompts.filter((prompt) => prompt.id !== id)
       );
-      setPopup({ message: "Prompt deleted successfully", type: "success" });
+      setPopup({
+        message: isPromptPublic(promptToDelete)
+          ? "Prompt hidden successfully"
+          : "Prompt deleted successfully",
+        type: "success",
+      });
     } catch (error) {
-      setPopup({ message: "Failed to delete prompt", type: "error" });
+      setPopup({ message: "Failed to delete/hide prompt", type: "error" });
     }
   };
 
@@ -130,6 +152,107 @@ export default function InputPrompts() {
     }
   };
 
+  const PromptCard = ({ prompt }: { prompt: InputPrompt }) => {
+    const isEditing = editingPromptId === prompt.id;
+    const [localPrompt, setLocalPrompt] = useState(prompt.prompt);
+    const [localContent, setLocalContent] = useState(prompt.content);
+
+    // Sync local edits with any prompt changes from outside
+    useEffect(() => {
+      setLocalPrompt(prompt.prompt);
+      setLocalContent(prompt.content);
+    }, [prompt, isEditing]);
+
+    const handleLocalEdit = (field: "prompt" | "content", value: string) => {
+      if (field === "prompt") {
+        setLocalPrompt(value);
+      } else {
+        setLocalContent(value);
+      }
+    };
+
+    const handleSaveLocal = () => {
+      handleSave(prompt.id, localPrompt, localContent);
+    };
+
+    return (
+      <div className="border rounded-lg p-4 mb-4 relative">
+        {isEditing ? (
+          <>
+            <div className="absolute top-2 right-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditingPromptId(null);
+                  fetchInputPrompts(); // Revert changes from server
+                }}
+              >
+                <XIcon size={14} />
+              </Button>
+            </div>
+            <div className="flex">
+              <div className="flex-grow mr-4">
+                <Textarea
+                  value={localPrompt}
+                  onChange={(e) => handleLocalEdit("prompt", e.target.value)}
+                  className="mb-2 resize-none"
+                  placeholder="Prompt"
+                />
+                <Textarea
+                  value={localContent}
+                  onChange={(e) => handleLocalEdit("content", e.target.value)}
+                  className="resize-vertical min-h-[100px]"
+                  placeholder="Content"
+                />
+              </div>
+              <div className="flex items-end">
+                <Button onClick={handleSaveLocal}>
+                  {prompt.id ? "Save" : "Create"}
+                </Button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="mb-2 font-semibold">{prompt.prompt}</div>
+                </TooltipTrigger>
+                {isPromptPublic(prompt) && (
+                  <TooltipContent>
+                    <p>This is a built-in prompt and cannot be edited</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+            <div className="whitespace-pre-wrap">{prompt.content}</div>
+            <div className="absolute top-2 right-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    <MoreVertical size={14} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  {!isPromptPublic(prompt) && (
+                    <DropdownMenuItem onClick={() => handleEdit(prompt.id)}>
+                      Edit
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => handleDelete(prompt.id)}>
+                    {isPromptPublic(prompt) ? "Hide" : "Delete"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="mx-auto max-w-4xl">
       <div className="absolute top-4 left-4">
@@ -143,78 +266,9 @@ export default function InputPrompts() {
         </div>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-1/3">Prompt</TableHead>
-            <TableHead className="w-1/2">Content</TableHead>
-            <TableHead className="w-1/6">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {inputPrompts.map((prompt) => (
-            <TableRow className="fltart" key={prompt.id}>
-              <TableCell className="">
-                <Textarea
-                  value={prompt.prompt}
-                  onChange={(e) =>
-                    handleEdit(prompt.id, { prompt: e.target.value })
-                  }
-                  className="min-h-[80px] mb-auto resize-none"
-                  disabled={isPromptPublic(prompt)}
-                />
-              </TableCell>
-              <TableCell>
-                <Textarea
-                  value={prompt.content}
-                  onChange={(e) =>
-                    handleEdit(prompt.id, { content: e.target.value })
-                  }
-                  className="min-h-[80px]"
-                  disabled={isPromptPublic(prompt)}
-                />
-              </TableCell>
-              <TableCell>
-                <div className="flex space-x-2">
-                  {!isPromptPublic(prompt) && (
-                    <>
-                      {editingPromptId === prompt.id ? (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleSave(prompt.id)}
-                          >
-                            <FiCheck size={14} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setEditingPromptId(null);
-                              fetchInputPrompts(); // Revert changes
-                            }}
-                          >
-                            <FiX size={14} />
-                          </Button>
-                        </>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(prompt.id)}
-                        >
-                          <TrashIcon size={14} />
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      {inputPrompts.map((prompt) => (
+        <PromptCard key={prompt.id} prompt={prompt} />
+      ))}
 
       {isCreatingNew ? (
         <div className="space-y-2 border p-4 rounded-md mt-4">
@@ -224,7 +278,7 @@ export default function InputPrompts() {
             onChange={(e) =>
               setNewPrompt({ ...newPrompt, prompt: e.target.value })
             }
-            className="min-h-[40px] resize-none"
+            className="resize-none"
           />
           <Textarea
             placeholder="New content"
@@ -232,7 +286,7 @@ export default function InputPrompts() {
             onChange={(e) =>
               setNewPrompt({ ...newPrompt, content: e.target.value })
             }
-            className="min-h-[80px]"
+            className="resize-none"
           />
           <div className="flex space-x-2">
             <Button onClick={handleCreate}>Create</Button>

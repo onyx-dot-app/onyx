@@ -1964,6 +1964,7 @@ class InputPrompt__User(Base):
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("inputprompt.id"), primary_key=True
     )
+    disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 """

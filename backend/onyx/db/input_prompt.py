@@ -1,15 +1,19 @@
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import or_
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.constants import AuthType
 from onyx.db.models import InputPrompt
+from onyx.db.models import InputPrompt__User
 from onyx.db.models import User
 from onyx.server.features.input_prompt.models import InputPromptSnapshot
 from onyx.server.manage.models import UserInfo
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -129,7 +133,10 @@ def remove_public_input_prompt(input_prompt_id: int, db_session: Session) -> Non
 
 
 def remove_input_prompt(
-    user: User | None, input_prompt_id: int, db_session: Session
+    user: User | None,
+    input_prompt_id: int,
+    db_session: Session,
+    delete_public: bool = False,
 ) -> None:
     input_prompt = db_session.scalar(
         select(InputPrompt).where(InputPrompt.id == input_prompt_id)
@@ -137,7 +144,7 @@ def remove_input_prompt(
     if input_prompt is None:
         raise ValueError(f"No input prompt with id {input_prompt_id}")
 
-    if input_prompt.is_public:
+    if input_prompt.is_public and not delete_public:
         raise HTTPException(
             status_code=400, detail="Cannot delete public prompts with this method"
         )
@@ -183,16 +190,41 @@ def fetch_input_prompts_by_user(
     active: bool | None = None,
     include_public: bool = False,
 ) -> list[InputPrompt]:
+    """
+    Returns all prompts belonging to the user or public prompts,
+    excluding those the user has specifically disabled.
+    """
+
+    # Start with a basic query for InputPrompt
     query = select(InputPrompt)
 
+    # If we have a user, left join to InputPrompt__User so we can check "disabled"
     if user_id is not None:
+        IPU = aliased(InputPrompt__User)
+        query = query.join(
+            IPU,
+            (IPU.input_prompt_id == InputPrompt.id) & (IPU.user_id == user_id),
+            isouter=True,
+        )
+
+        # Exclude disabled prompts
+        # i.e. keep only those where (IPU.disabled is NULL or False)
+        query = query.where(or_(IPU.disabled.is_(None), IPU.disabled.is_(False)))
+
         if include_public:
+            # user-owned or public
             query = query.where(
-                (InputPrompt.user_id == user_id) | InputPrompt.is_public
+                (InputPrompt.user_id == user_id) | (InputPrompt.is_public)
             )
         else:
+            # only user-owned prompts
             query = query.where(InputPrompt.user_id == user_id)
 
+    # If no user is logged in, get all prompts (public and private)
+    if user_id is None and AUTH_TYPE == AuthType.DISABLED:
+        query = query.where(True)  # This will select all prompts
+
+    # If no user is logged in but we want to include public prompts
     elif include_public:
         query = query.where(InputPrompt.is_public)
 
@@ -200,3 +232,31 @@ def fetch_input_prompts_by_user(
         query = query.where(InputPrompt.active == active)
 
     return list(db_session.scalars(query).all())
+
+
+def disable_input_prompt_for_user(
+    input_prompt_id: int,
+    user_id: UUID,
+    db_session: Session,
+) -> None:
+    """
+    Sets (or creates) a record in InputPrompt__User with disabled=True
+    so that this prompt is hidden for the user.
+    """
+    ipu = (
+        db_session.query(InputPrompt__User)
+        .filter_by(input_prompt_id=input_prompt_id, user_id=user_id)
+        .first()
+    )
+
+    if ipu is None:
+        # Create a new association row
+        ipu = InputPrompt__User(
+            input_prompt_id=input_prompt_id, user_id=user_id, disabled=True
+        )
+        db_session.add(ipu)
+    else:
+        # Just update the existing record
+        ipu.disabled = True
+
+    db_session.commit()

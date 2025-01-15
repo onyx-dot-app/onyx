@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
 from onyx.db.engine import get_session
+from onyx.db.input_prompt import disable_input_prompt_for_user
 from onyx.db.input_prompt import fetch_input_prompt_by_id
 from onyx.db.input_prompt import fetch_input_prompts_by_user
-from onyx.db.input_prompt import fetch_public_input_prompts
 from onyx.db.input_prompt import insert_input_prompt
 from onyx.db.input_prompt import remove_input_prompt
 from onyx.db.input_prompt import remove_public_input_prompt
@@ -87,6 +87,7 @@ def patch_input_prompt(
     db_session: Session = Depends(get_session),
 ) -> InputPromptSnapshot:
     try:
+        print("update_input_prompt_request", update_input_prompt_request)
         updated_input_prompt = update_input_prompt(
             user=user,
             input_prompt_id=input_prompt_id,
@@ -95,6 +96,7 @@ def patch_input_prompt(
             active=update_input_prompt_request.active,
             db_session=db_session,
         )
+        print("updated_input_prompt", updated_input_prompt)
     except ValueError as e:
         error_msg = "Error occurred while updated input prompt"
         logger.warn(f"{error_msg}. Stack trace: {e}")
@@ -108,9 +110,12 @@ def delete_input_prompt(
     input_prompt_id: int,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
+    delete_public: bool = False,
 ) -> None:
     try:
-        remove_input_prompt(user, input_prompt_id, db_session)
+        remove_input_prompt(
+            user, input_prompt_id, db_session, delete_public=delete_public
+        )
 
     except ValueError as e:
         error_msg = "Error occurred while deleting input prompt"
@@ -133,12 +138,21 @@ def delete_public_input_prompt(
         raise HTTPException(status_code=404, detail=error_msg)
 
 
-@admin_router.get("")
-def list_public_input_prompts(
-    _: User | None = Depends(current_admin_user),
+@basic_router.post("/{input_prompt_id}/hide")
+def hide_input_prompt_for_user(
+    input_prompt_id: int,
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> list[InputPromptSnapshot]:
-    user_prompts = fetch_public_input_prompts(
-        db_session=db_session,
-    )
-    return [InputPromptSnapshot.from_model(prompt) for prompt in user_prompts]
+) -> None:
+    """
+    Endpoint that marks a seed (or any) prompt as disabled for the current user,
+    so it won't show up in their subsequent queries.
+    """
+    if user is None:
+        # if auth is disabled, just delete the prompt
+        delete_input_prompt(input_prompt_id, user, db_session, delete_public=True)
+
+    else:
+        disable_input_prompt_for_user(input_prompt_id, user.id, db_session)
+
+    return None
