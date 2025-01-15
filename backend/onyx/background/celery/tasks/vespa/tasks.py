@@ -285,7 +285,10 @@ def try_generate_document_set_sync_tasks(
 
     # don't generate sync tasks if we're up to date
     # race condition with the monitor/cleanup function if we use a cached result!
-    document_set = get_document_set_by_id(db_session, document_set_id)
+    document_set = get_document_set_by_id(
+        db_session=db_session,
+        document_set_id=document_set_id,
+    )
     if not document_set:
         return None
 
@@ -532,7 +535,10 @@ def monitor_connector_deletion_taskset(
         return
 
     with get_session_with_tenant(tenant_id) as db_session:
-        cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=cc_pair_id,
+        )
         if not cc_pair:
             task_logger.warning(
                 f"Connector deletion - cc_pair not found: cc_pair={cc_pair_id}"

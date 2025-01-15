@@ -28,7 +28,7 @@ from onyx.db.persona import create_update_persona
 from onyx.db.persona import delete_persona_category
 from onyx.db.persona import get_assistant_categories
 from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import get_personas
+from onyx.db.persona import get_personas_for_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
 from onyx.db.persona import update_all_personas_display_priority
@@ -125,7 +125,7 @@ def list_personas_admin(
 ) -> list[PersonaSnapshot]:
     return [
         PersonaSnapshot.from_model(persona)
-        for persona in get_personas(
+        for persona in get_personas_for_user(
             db_session=db_session,
             user=user,
             get_editable=get_editable,
@@ -329,7 +329,7 @@ def list_personas(
     include_deleted: bool = False,
     persona_ids: list[int] = Query(None),
 ) -> list[PersonaSnapshot]:
-    personas = get_personas(
+    personas = get_personas_for_user(
         user=user,
         include_deleted=include_deleted,
         db_session=db_session,

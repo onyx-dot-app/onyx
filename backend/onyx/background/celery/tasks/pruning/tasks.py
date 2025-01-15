@@ -103,7 +103,10 @@ def check_for_pruning(self: Task, *, tenant_id: str | None) -> bool | None:
         for cc_pair_id in cc_pair_ids:
             lock_beat.reacquire()
             with get_session_with_tenant(tenant_id) as db_session:
-                cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+                cc_pair = get_connector_credential_pair_from_id(
+                    db_session=db_session,
+                    cc_pair_id=cc_pair_id,
+                )
                 if not cc_pair:
                     continue
 

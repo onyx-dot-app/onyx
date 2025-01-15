@@ -80,7 +80,8 @@ def upsert_ingestion_doc(
         document.source = DocumentSource.FILE
 
     cc_pair = get_connector_credential_pair_from_id(
-        cc_pair_id=doc_info.cc_pair_id or DEFAULT_CC_PAIR_ID, db_session=db_session
+        db_session=db_session,
+        cc_pair_id=doc_info.cc_pair_id or DEFAULT_CC_PAIR_ID,
     )
     if cc_pair is None:
         raise HTTPException(

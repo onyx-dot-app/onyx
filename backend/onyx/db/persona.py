@@ -110,7 +110,7 @@ def _add_user_filters(
 # fetch_persona_by_id is used to fetch a persona by its ID. It is used to fetch a persona by its ID.
 
 
-def fetch_persona_by_id(
+def fetch_persona_by_id_for_user(
     db_session: Session, persona_id: int, user: User | None, get_editable: bool = True
 ) -> Persona:
     stmt = select(Persona).where(Persona.id == persona_id).distinct()
@@ -229,7 +229,7 @@ def update_persona_shared_users(
     """Simplified version of `create_update_persona` which only touches the
     accessibility rather than any of the logic (e.g. prompt, connected data sources,
     etc.)."""
-    persona = fetch_persona_by_id(
+    persona = fetch_persona_by_id_for_user(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
 
@@ -255,7 +255,7 @@ def update_persona_public_status(
     db_session: Session,
     user: User | None,
 ) -> None:
-    persona = fetch_persona_by_id(
+    persona = fetch_persona_by_id_for_user(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
     if user and user.role != UserRole.ADMIN and persona.user_id != user.id:
@@ -283,7 +283,7 @@ def get_prompts(
     return db_session.scalars(stmt).all()
 
 
-def get_personas(
+def get_personas_for_user(
     # if user is `None` assume the user is an admin or auth is disabled
     user: User | None,
     db_session: Session,
@@ -311,6 +311,13 @@ def get_personas(
             joinedload(Persona.users),
         )
 
+    return db_session.execute(stmt).unique().scalars().all()
+
+
+def get_personas(db_session: Session) -> Sequence[Persona]:
+    stmt = select(Persona).distinct()
+    stmt = stmt.where(not_(Persona.name.startswith(SLACK_BOT_PERSONA_PREFIX)))
+    stmt = stmt.where(Persona.deleted.is_(False))
     return db_session.execute(stmt).unique().scalars().all()
 
 
@@ -357,7 +364,7 @@ def update_all_personas_display_priority(
     db_session: Session,
 ) -> None:
     """Updates the display priority of all lives Personas"""
-    personas = get_personas(user=None, db_session=db_session)
+    personas = get_personas(db_session=db_session)
     available_persona_ids = {persona.id for persona in personas}
     if available_persona_ids != set(display_priority_map.keys()):
         raise ValueError("Invalid persona IDs provided")
@@ -511,7 +518,7 @@ def upsert_persona(
 
         # this checks if the user has permission to edit the persona
         # will raise an Exception if the user does not have permission
-        existing_persona = fetch_persona_by_id(
+        existing_persona = fetch_persona_by_id_for_user(
             db_session=db_session,
             persona_id=existing_persona.id,
             user=user,
@@ -637,7 +644,7 @@ def update_persona_visibility(
     db_session: Session,
     user: User | None = None,
 ) -> None:
-    persona = fetch_persona_by_id(
+    persona = fetch_persona_by_id_for_user(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
 

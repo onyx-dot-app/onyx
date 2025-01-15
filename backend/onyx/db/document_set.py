@@ -116,15 +116,24 @@ def delete_document_set_privacy__no_commit(
     """No private document sets in Onyx MIT"""
 
 
-def get_document_set_by_id(
+def get_document_set_by_id_for_user(
     db_session: Session,
     document_set_id: int,
-    user: User | None = None,
+    user: User | None,
     get_editable: bool = True,
 ) -> DocumentSetDBModel | None:
     stmt = select(DocumentSetDBModel).distinct()
     stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
     stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
+    return db_session.scalar(stmt)
+
+
+def get_document_set_by_id(
+    db_session: Session,
+    document_set_id: int,
+) -> DocumentSetDBModel | None:
+    stmt = select(DocumentSetDBModel).distinct()
+    stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
     return db_session.scalar(stmt)
 
 
@@ -275,7 +284,7 @@ def update_document_set(
 
     try:
         # update the description
-        document_set_row = get_document_set_by_id(
+        document_set_row = get_document_set_by_id_for_user(
             db_session=db_session,
             document_set_id=document_set_update_request.id,
             user=user,
@@ -366,7 +375,7 @@ def mark_document_set_as_to_be_deleted(
     job which syncs these changes to Vespa."""
 
     try:
-        document_set_row = get_document_set_by_id(
+        document_set_row = get_document_set_by_id_for_user(
             db_session=db_session,
             document_set_id=document_set_id,
             user=user,
@@ -478,7 +487,7 @@ def fetch_document_sets(
 
 def fetch_all_document_sets_for_user(
     db_session: Session,
-    user: User | None = None,
+    user: User | None,
     get_editable: bool = True,
 ) -> Sequence[DocumentSetDBModel]:
     stmt = select(DocumentSetDBModel).distinct()

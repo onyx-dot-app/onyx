@@ -116,7 +116,10 @@ def try_generate_document_cc_pair_cleanup_tasks(
     # we need to load the state of the object inside the fence
     # to avoid a race condition with db.commit/fence deletion
     # at the end of this taskset
-    cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+    )
     if not cc_pair:
         return None
 

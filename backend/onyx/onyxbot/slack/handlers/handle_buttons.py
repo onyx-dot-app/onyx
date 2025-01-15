@@ -14,8 +14,6 @@ from onyx.connectors.slack.utils import make_slack_api_rate_limited
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
-from onyx.document_index.document_index_utils import get_both_index_names
-from onyx.document_index.factory import get_default_document_index
 from onyx.onyxbot.slack.blocks import build_follow_up_resolved_blocks
 from onyx.onyxbot.slack.blocks import get_document_feedback_blocks
 from onyx.onyxbot.slack.config import get_slack_channel_config_for_bot_and_channel
@@ -186,16 +184,10 @@ def handle_slack_feedback(
             else:
                 feedback = SearchFeedbackType.HIDE
 
-            curr_ind_name, sec_ind_name = get_both_index_names(db_session)
-            document_index = get_default_document_index(
-                primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
-            )
-
             create_doc_retrieval_feedback(
                 message_id=message_id,
                 document_id=doc_id,
                 document_rank=doc_rank,
-                document_index=document_index,
                 db_session=db_session,
                 clicked=False,  # Not tracking this for Slack
                 feedback=feedback,

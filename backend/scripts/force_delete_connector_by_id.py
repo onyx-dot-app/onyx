@@ -141,7 +141,10 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
         return
 
     logger.notice("Getting connector credential pair")
-    cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+    )
 
     if not cc_pair:
         logger.error(f"Connector credential pair with ID {cc_pair_id} not found")

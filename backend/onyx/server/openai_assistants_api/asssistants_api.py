@@ -15,7 +15,7 @@ from onyx.db.engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import get_personas
+from onyx.db.persona import get_personas_for_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import upsert_persona
 from onyx.db.persona import upsert_prompt
@@ -243,7 +243,7 @@ def list_assistants(
     db_session: Session = Depends(get_session),
 ) -> ListAssistantsResponse:
     personas = list(
-        get_personas(
+        get_personas_for_user(
             user=user,
             db_session=db_session,
             get_editable=False,

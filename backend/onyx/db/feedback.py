@@ -27,7 +27,6 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
-from onyx.document_index.interfaces import DocumentIndex
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -108,9 +107,9 @@ def _add_user_filters(
     return stmt.where(where_clause)
 
 
-def fetch_docs_ranked_by_boost(
+def fetch_docs_ranked_by_boost_for_user(
     db_session: Session,
-    user: User | None = None,
+    user: User | None,
     ascending: bool = False,
     limit: int = 100,
 ) -> list[DbDocument]:
@@ -129,11 +128,11 @@ def fetch_docs_ranked_by_boost(
     return list(doc_list)
 
 
-def update_document_boost(
+def update_document_boost_for_user(
     db_session: Session,
     document_id: str,
     boost: int,
-    user: User | None = None,
+    user: User | None,
 ) -> None:
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     stmt = _add_user_filters(stmt, user, get_editable=True)
@@ -151,12 +150,11 @@ def update_document_boost(
     db_session.commit()
 
 
-def update_document_hidden(
+def update_document_hidden_for_user(
     db_session: Session,
     document_id: str,
     hidden: bool,
-    document_index: DocumentIndex,
-    user: User | None = None,
+    user: User | None,
 ) -> None:
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     stmt = _add_user_filters(stmt, user, get_editable=True)
@@ -178,7 +176,6 @@ def create_doc_retrieval_feedback(
     message_id: int,
     document_id: str,
     document_rank: int,
-    document_index: DocumentIndex,
     db_session: Session,
     clicked: bool = False,
     feedback: SearchFeedbackType | None = None,

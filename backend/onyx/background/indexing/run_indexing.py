@@ -79,7 +79,8 @@ def _get_connector_runner(
         # it will never succeed
 
         cc_pair = get_connector_credential_pair_from_id(
-            attempt.connector_credential_pair.id, db_session
+            db_session=db_session,
+            cc_pair_id=attempt.connector_credential_pair.id,
         )
         if cc_pair and cc_pair.status == ConnectorCredentialPairStatus.ACTIVE:
             update_connector_credential_pair(
@@ -292,7 +293,8 @@ def _run_indexing(
                 # TODO: should we move this into the above callback instead?
                 with get_session_with_tenant(tenant_id) as db_session_temp:
                     cc_pair_loop = get_connector_credential_pair_from_id(
-                        ctx.cc_pair_id, db_session=db_session_temp
+                        db_session_temp,
+                        ctx.cc_pair_id,
                     )
                     if not cc_pair_loop:
                         raise RuntimeError(f"CC pair {ctx.cc_pair_id} not found in DB.")

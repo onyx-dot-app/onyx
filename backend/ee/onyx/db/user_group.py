@@ -705,7 +705,10 @@ def delete_user_group_cc_pair_relationship__no_commit(
     connector_credential_pair_id matches the given cc_pair_id.
 
     Should be used very carefully (only for connectors that are being deleted)."""
-    cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+    )
     if not cc_pair:
         raise ValueError(f"Connector Credential Pair '{cc_pair_id}' does not exist")
 
