@@ -1,9 +1,5 @@
 "use client";
 
-import { HistorySidebar } from "@/app/chat/sessionSidebar/HistorySidebar";
-import { ChatSession } from "@/app/chat/interfaces";
-import { Folder } from "@/app/chat/folders/interfaces";
-import { User } from "@/lib/types";
 import Cookies from "js-cookie";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 import {
@@ -21,34 +17,25 @@ import { pageType } from "../chat/sessionSidebar/types";
 import FixedLogo from "../chat/shared_chat_search/FixedLogo";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useChatContext } from "@/components/context/ChatContext";
+import { HistorySidebar } from "../chat/sessionSidebar/HistorySidebar";
+import { useAssistants } from "@/components/context/AssistantsContext";
+import AssistantModal from "./mine/AssistantModal";
 
 interface SidebarWrapperProps<T extends object> {
   initiallyToggled: boolean;
-  page: pageType;
   size?: "sm" | "lg";
   children: ReactNode;
 }
 
 export default function SidebarWrapper<T extends object>({
   initiallyToggled,
-  page,
   size = "sm",
   children,
 }: SidebarWrapperProps<T>) {
-  const { chatSessions, folders, openedFolders } = useChatContext();
   const [toggledSidebar, setToggledSidebar] = useState(initiallyToggled);
   const [showDocSidebar, setShowDocSidebar] = useState(false); // State to track if sidebar is open
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
   const [untoggled, setUntoggled] = useState(false);
-
-  const explicitlyUntoggle = () => {
-    setShowDocSidebar(false);
-
-    setUntoggled(true);
-    setTimeout(() => {
-      setUntoggled(false);
-    }, 200);
-  };
 
   const toggleSidebar = useCallback(() => {
     Cookies.set(
@@ -62,6 +49,16 @@ export default function SidebarWrapper<T extends object>({
   }, [toggledSidebar]);
 
   const sidebarElementRef = useRef<HTMLDivElement>(null);
+  const { folders, openedFolders, chatSessions } = useChatContext();
+  const { assistants } = useAssistants();
+  const explicitlyUntoggle = () => {
+    setShowDocSidebar(false);
+
+    setUntoggled(true);
+    setTimeout(() => {
+      setUntoggled(false);
+    }, 200);
+  };
 
   const settings = useContext(SettingsContext);
   useSidebarVisibility({
@@ -72,7 +69,7 @@ export default function SidebarWrapper<T extends object>({
     mobile: settings?.isMobile,
   });
 
-  const innerSidebarElementRef = useRef<HTMLDivElement>(null);
+  const [showAssistantsModal, setShowAssistantsModal] = useState(false);
   const router = useRouter();
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -94,6 +91,9 @@ export default function SidebarWrapper<T extends object>({
 
   return (
     <div className="flex relative overflow-x-hidden overscroll-contain flex-col w-full h-screen">
+      {showAssistantsModal && (
+        <AssistantModal hideModal={() => setShowAssistantsModal(false)} />
+      )}
       <div
         ref={sidebarElementRef}
         className={`
@@ -114,10 +114,13 @@ export default function SidebarWrapper<T extends object>({
             }`}
       >
         <div className="w-full relative">
+          {" "}
           <HistorySidebar
-            page={page}
+            setShowAssistantsModal={setShowAssistantsModal}
+            assistants={assistants}
+            page={"chat"}
             explicitlyUntoggle={explicitlyUntoggle}
-            ref={innerSidebarElementRef}
+            ref={sidebarElementRef}
             toggleSidebar={toggleSidebar}
             toggled={toggledSidebar}
             existingChats={chatSessions}
@@ -128,11 +131,11 @@ export default function SidebarWrapper<T extends object>({
         </div>
       </div>
 
-      <div className="absolute h-svh px-2 left-0 w-full top-0">
+      <div className="absolute px-2 left-0 w-full top-0">
         <FunctionalHeader
           sidebarToggled={toggledSidebar}
           toggleSidebar={toggleSidebar}
-          page="assistants"
+          page="chat"
         />
         <div className="w-full flex">
           <div

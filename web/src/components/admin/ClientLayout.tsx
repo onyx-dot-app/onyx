@@ -29,8 +29,12 @@ import { UserDropdown } from "../UserDropdown";
 import { User } from "@/lib/types";
 import { usePathname } from "next/navigation";
 import { SettingsContext } from "../settings/SettingsProvider";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { MdOutlineCreditCard } from "react-icons/md";
+import { set } from "lodash";
+import { UserSettingsModal } from "@/app/chat/modal/UserSettingsModal";
+import { usePopup } from "./connectors/Popup";
+import { useChatContext } from "../context/ChatContext";
 
 export function ClientLayout({
   user,
@@ -47,7 +51,12 @@ export function ClientLayout({
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
   const pathname = usePathname();
   const settings = useContext(SettingsContext);
-
+  const [userSettingsOpen, setUserSettingsOpen] = useState(false);
+  const toggleUserSettings = () => {
+    setUserSettingsOpen(!userSettingsOpen);
+  };
+  const { llmProviders } = useChatContext();
+  const { popup, setPopup } = usePopup();
   if (
     pathname.startsWith("/admin/connectors") ||
     pathname.startsWith("/admin/embeddings")
@@ -55,9 +64,19 @@ export function ClientLayout({
     return <>{children}</>;
   }
 
+  // const { user} = useUser
   return (
     <div className="h-screen overflow-y-hidden">
       <div className="flex h-full">
+        {userSettingsOpen && (
+          <UserSettingsModal
+            llmProviders={llmProviders}
+            setPopup={setPopup}
+            onClose={() => setUserSettingsOpen(false)}
+            defaultModel={user?.preferences?.default_model!}
+          />
+        )}
+
         <div className="flex-none text-text-settings-sidebar bg-background-sidebar w-[250px] overflow-x-hidden z-20 pt-2 pb-8 h-full border-r border-border miniscroll overflow-auto">
           <AdminSidebar
             collections={[
@@ -405,8 +424,8 @@ export function ClientLayout({
           />
         </div>
         <div className="pb-8 relative h-full overflow-y-auto w-full">
-          <div className="fixed left-0 gap-x-4 px-2 top-2 h-8 px-0 mb-auto w-full items-start flex justify-end">
-            <UserDropdown />
+          <div className="fixed left-0 gap-x-4 px-4 top-4 h-8 px-0 mb-auto w-full items-start flex justify-end">
+            <UserDropdown toggleUserSettings={toggleUserSettings} />
           </div>
           <div className="pt-20 flex overflow-y-auto overflow-x-hidden h-full px-4 md:px-12">
             {children}

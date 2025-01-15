@@ -17,7 +17,7 @@ export default async function Page() {
     );
   } else {
     body = (
-      <CardSection>
+      <CardSection className="!border-none !bg-transparent !ring-none">
         <AssistantEditor
           {...values}
           admin
@@ -28,14 +28,5 @@ export default async function Page() {
     );
   }
 
-  return (
-    <div className="w-full">
-      <BackButton />
-      <AdminPageTitle
-        title="Create a New Assistant"
-        icon={<RobotIcon size={32} />}
-      />
-      {body}
-    </div>
-  );
+  return <div className="w-full">{body}</div>;
 }

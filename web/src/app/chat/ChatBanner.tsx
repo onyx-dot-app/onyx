@@ -2,17 +2,18 @@
 
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useContext, useState, useRef, useLayoutEffect } from "react";
-import { Popover } from "@/components/popover/Popover";
 import { ChevronDownIcon } from "@/components/icons/icons";
 import { MinimalMarkdown } from "@/components/chat_search/MinimalMarkdown";
 
 export function ChatBanner() {
   const settings = useContext(SettingsContext);
   const [isOverflowing, setIsOverflowing] = useState(false);
-  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+
   const contentRef = useRef<HTMLDivElement>(null);
   const fullContentRef = useRef<HTMLDivElement>(null);
 
+  // Check for text overflow
   useLayoutEffect(() => {
     const checkOverflow = () => {
       if (contentRef.current && fullContentRef.current) {
@@ -31,92 +32,91 @@ export function ChatBanner() {
     return () => window.removeEventListener("resize", checkOverflow);
   }, []);
 
+  // Bail out if no custom header content
   if (!settings?.enterpriseSettings?.custom_header_content) {
     return null;
   }
 
+  const handleMouseEnter = () => setIsExpanded(true);
+  const handleMouseLeave = () => setIsExpanded(false);
+
   return (
     <div
       className={`
-        px-2
-        z-[39] 
-        py-1.5
-        text-wrap
+        z-[39]
         w-full
         mx-auto
         relative
         cursor-default
         shadow-sm
         rounded
-        border-l-8 border-l-400
-        bg-background
-        border-r-4 border-r-200
-        border-border
         border
-        flex`}
+        border-border
+        border-l-8 border-l-400
+        border-r-4 border-r-200
+        bg-background-sidebar
+        transition-all duration-300 ease-in-out
+        ${isExpanded ? "shadow-md bg-background-100" : ""}
+      `}
+      onMouseLeave={handleMouseLeave}
+      aria-expanded={isExpanded}
+      role="region"
     >
       <div className="text-emphasis text-sm w-full">
-        <div className="relative">
-          <div className={`flex justify-center w-full overflow-hidden pr-8`}>
-            <div
-              ref={contentRef}
-              className={`overflow-hidden ${
-                settings.enterpriseSettings.two_lines_for_chat_header
-                  ? "line-clamp-2"
-                  : "line-clamp-1"
-              } text-center max-w-full`}
-            >
+        {/* Padding for consistent spacing */}
+        <div className="relative p-2">
+          {/* Collapsible container */}
+          <div
+            className={`
+              overflow-hidden
+              transition-all duration-300 ease-in-out
+              ${
+                isExpanded
+                  ? "max-h-[1000px]"
+                  : settings.enterpriseSettings.two_lines_for_chat_header
+                    ? "max-h-[3em]" // ~3 lines
+                    : "max-h-[1.5em]" // ~1.5 lines
+              }
+            `}
+          >
+            {/* Visible content container */}
+            <div ref={contentRef} className="text-center max-w-full">
               <MinimalMarkdown
-                className="prose text-sm max-w-full"
+                // Ensure text can wrap to multiple lines
+                className="prose text-left text-sm max-w-full whitespace-normal break-words"
                 content={settings.enterpriseSettings.custom_header_content}
               />
             </div>
           </div>
-          <div className="absolute top-0 left-0 invisible flex justify-center max-w-full">
+
+          {/* Invisible element to measure overflow */}
+          <div className="absolute top-0 left-0 invisible">
             <div
               ref={fullContentRef}
-              className={`overflow-hidden invisible ${
-                settings.enterpriseSettings.two_lines_for_chat_header
-                  ? "line-clamp-2"
-                  : "line-clamp-1"
-              } text-center max-w-full`}
+              className="overflow-hidden invisible text-center max-w-full"
             >
               <MinimalMarkdown
-                className="prose text-sm max-w-full"
+                // Same wrapping behavior as visible content
+                className="prose text-sm max-w-full whitespace-normal break-words"
                 content={settings.enterpriseSettings.custom_header_content}
               />
             </div>
           </div>
-          <div className="absolute bottom-0 right-0">
-            {isOverflowing && (
-              <Popover
-                open={isPopoverOpen}
-                onOpenChange={setIsPopoverOpen}
-                content={
-                  <button
-                    onClick={() => setIsPopoverOpen(true)}
-                    className="cursor-poiner bg-background-100 p-1 rounded-full"
-                  >
-                    <ChevronDownIcon className="h-4 w-4 text-emphasis" />
-                  </button>
-                }
-                popover={
-                  <div className="bg-background-100 p-4 rounded shadow-lg mobile:max-w-xs desktop:max-w-md">
-                    <p className="text-lg font-bold">Banner Content</p>
-                    <MinimalMarkdown
-                      className="max-h-96 overflow-y-auto"
-                      content={
-                        settings.enterpriseSettings.custom_header_content
-                      }
-                    />
-                  </div>
-                }
-                side="bottom"
-                align="end"
-              />
-            )}
-          </div>
+
+          {/* Chevron button if content is truncated */}
         </div>
+      </div>
+      <div className="absolute -top-1 right-0">
+        {isOverflowing && !isExpanded && (
+          <button
+            onMouseEnter={handleMouseEnter}
+            className="cursor-pointer bg-background-100 p-.5 rounded-full transition-opacity duration-300 ease-in-out"
+            aria-label="Expand banner content"
+            onClick={() => setIsExpanded(true)}
+          >
+            <ChevronDownIcon className="h-3 w-3 text-emphasis" />
+          </button>
+        )}
       </div>
     </div>
   );

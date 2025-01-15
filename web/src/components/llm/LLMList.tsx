@@ -73,7 +73,7 @@ export const LlmList: React.FC<LlmListProps> = ({
         scrollable
           ? "max-h-[200px] default-scrollbar overflow-x-hidden"
           : "max-h-[300px]"
-      } bg-background-175 flex flex-col gap-y-1 overflow-y-scroll`}
+      } bg-background-175 flex flex-col gap-y-2 mt-1 overflow-y-scroll`}
     >
       {llmOptions.map(({ name, icon, value }, index) => {
         if (!requiresImageGeneration || checkLLMSupportsImageInput(name)) {
@@ -81,15 +81,33 @@ export const LlmList: React.FC<LlmListProps> = ({
             <button
               type="button"
               key={index}
-              className={`w-full py-1.5 flex  gap-x-2 px-2 text-sm ${
-                currentLlm == name
-                  ? "bg-background-200"
-                  : "bg-background hover:bg-background-100"
-              } text-left rounded`}
+              className={`w-full items-center flex gap-x-2 text-sm  text-left rounded`}
               onClick={() => onSelect(value)}
             >
+              <div className="relative  flex-shrink-0">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  className={`overflow-hidden rounded-full ${
+                    currentLlm == name ? "bg-accent border-none " : ""
+                  }`}
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  {currentLlm != name && (
+                    <circle
+                      cx="10"
+                      cy="10"
+                      r="9"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    />
+                  )}
+                </svg>
+              </div>
               {icon({ size: 16 })}
-              {getDisplayNameForModel(name)}
+              <p className="text-sm">{getDisplayNameForModel(name)}</p>
               {(() => {
                 if (
                   currentAssistant?.llm_model_version_override === name &&

@@ -1,198 +1,150 @@
 "use client";
 
 import { ArrayHelpers, ErrorMessage, Field, useFormikContext } from "formik";
-
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@radix-ui/react-tooltip";
-
-import { useEffect } from "react";
-import { FiInfo, FiTrash2, FiPlus } from "react-icons/fi";
+} from "@/components/ui/tooltip";
+import { useEffect, useState } from "react";
+import { FiTrash2, FiRefreshCcw, FiRefreshCw } from "react-icons/fi";
 import { StarterMessage } from "./interfaces";
-import { Label } from "@/components/admin/connectors/Field";
+import { Button } from "@/components/ui/button";
+import { SwapIcon } from "@/components/icons/icons";
+import { TextFormField } from "@/components/admin/connectors/Field";
 
 export default function StarterMessagesList({
   values,
   arrayHelpers,
   isRefreshing,
   touchStarterMessages,
+  debouncedRefreshPrompts,
+  autoStarterMessageEnabled,
+  errors,
+  setFieldValue,
 }: {
   values: StarterMessage[];
   arrayHelpers: ArrayHelpers;
   isRefreshing: boolean;
   touchStarterMessages: () => void;
+  debouncedRefreshPrompts: () => void;
+  autoStarterMessageEnabled: boolean;
+  errors: any;
+  setFieldValue: any;
 }) {
-  const { handleChange } = useFormikContext();
+  const [tooltipOpen, setTooltipOpen] = useState(false);
 
-  // Group starter messages into rows of 2 for display purposes
-  const rows = values.reduce((acc: StarterMessage[][], curr, i) => {
-    if (i % 2 === 0) acc.push([curr]);
-    else acc[acc.length - 1].push(curr);
-    return acc;
-  }, []);
+  const handleInputChange = (index: number, value: string) => {
+    touchStarterMessages();
+    setFieldValue(`starter_messages.${index}.message`, value);
 
-  const canAddMore = values.length <= 6;
+    if (value && index === values.length - 1 && values.length < 4) {
+      arrayHelpers.push({ message: "" });
+    } else if (
+      !value &&
+      index === values.length - 2 &&
+      !values[values.length - 1].message
+    ) {
+      arrayHelpers.pop();
+    }
+  };
 
   return (
-    <div className="mt-4 flex flex-col gap-6">
-      {rows.map((row, rowIndex) => (
-        <div key={rowIndex} className="flex items-start gap-4">
-          <div className="grid grid-cols-2 gap-6 w-full xl:w-fit">
-            {row.map((starterMessage, colIndex) => (
-              <div
-                key={rowIndex * 2 + colIndex}
-                className="bg-white max-w-full w-full xl:w-[500px] border border-border rounded-lg shadow-md transition-shadow duration-200 p-6"
-              >
-                <div className="space-y-5">
-                  {isRefreshing ? (
-                    <div className="w-full">
-                      <div className="w-full">
-                        <div className="h-4 w-24 bg-gray-200 rounded animate-pulse mb-2" />
-                        <div className="h-10 w-full bg-gray-200 rounded animate-pulse" />
-                      </div>
-
-                      <div>
-                        <div className="h-4 w-24 bg-gray-200 rounded animate-pulse mb-2" />
-                        <div className="h-10 w-full bg-gray-200 rounded animate-pulse" />
-                      </div>
-
-                      <div>
-                        <div className="h-4 w-24 bg-gray-200 rounded animate-pulse mb-2" />
-                        <div className="h-24 w-full bg-gray-200 rounded animate-pulse" />
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div>
-                        <div className="flex w-full items-center gap-x-1">
-                          <Label
-                            small
-                            className="text-sm font-medium text-gray-700"
-                          >
-                            Name
-                          </Label>
-                          <TooltipProvider delayDuration={50}>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <FiInfo size={12} />
-                              </TooltipTrigger>
-                              <TooltipContent side="top" align="center">
-                                <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                                  Shows up as the &quot;title&quot; for this
-                                  Starter Message. For example, &quot;Write an
-                                  email.&quot;
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <Field
-                          name={`starter_messages.${
-                            rowIndex * 2 + colIndex
-                          }.name`}
-                          className="mt-1 w-full px-4 py-2.5 bg-background border border-border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                          autoComplete="off"
-                          placeholder="Enter a name..."
-                          onChange={(e: any) => {
-                            touchStarterMessages();
-                            handleChange(e);
-                          }}
-                        />
-                        <ErrorMessage
-                          name={`starter_messages.${
-                            rowIndex * 2 + colIndex
-                          }.name`}
-                          component="div"
-                          className="text-red-500 text-sm mt-1"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex w-full items-center gap-x-1">
-                          <Label
-                            small
-                            className="text-sm font-medium text-gray-700"
-                          >
-                            Message
-                          </Label>
-                          <TooltipProvider delayDuration={50}>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <FiInfo size={12} />
-                              </TooltipTrigger>
-                              <TooltipContent side="top" align="center">
-                                <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                                  The actual message to be sent as the initial
-                                  user message.
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <Field
-                          name={`starter_messages.${
-                            rowIndex * 2 + colIndex
-                          }.message`}
-                          className="mt-1  text-sm  w-full px-4 py-2.5 bg-background border border-border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition min-h-[100px] resize-y"
-                          as="textarea"
-                          autoComplete="off"
-                          placeholder="Enter the message..."
-                          onChange={(e: any) => {
-                            touchStarterMessages();
-                            handleChange(e);
-                          }}
-                        />
-                        <ErrorMessage
-                          name={`starter_messages.${
-                            rowIndex * 2 + colIndex
-                          }.message`}
-                          component="div"
-                          className="text-red-500 text-sm mt-1"
-                        />
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <button
+    <div className="flex flex-col gap-2">
+      {values.map((starterMessage, index) => (
+        <div key={index} className="flex items-center gap-2">
+          <TextFormField
+            name={`starter_messages.${index}.message`}
+            label=""
+            value={starterMessage.message}
+            onChange={(e) => handleInputChange(index, e.target.value)}
+            className="flex-grow"
+            removeLabel
+            small
+          />
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => {
-              arrayHelpers.remove(rowIndex * 2 + 1);
-              arrayHelpers.remove(rowIndex * 2);
+              arrayHelpers.remove(index);
+              if (
+                index === values.length - 2 &&
+                !values[values.length - 1].message
+              ) {
+                arrayHelpers.pop();
+              }
             }}
-            className="p-1.5 bg-white border border-gray-200 rounded-full text-gray-400 hover:text-red-500 hover:border-red-200 transition-colors mt-2"
-            aria-label="Delete row"
+            className={`text-gray-400 hover:text-red-500 ${
+              index === values.length - 1 && !starterMessage.message
+                ? "opacity-50 cursor-not-allowed"
+                : ""
+            }`}
+            disabled={index === values.length - 1 && !starterMessage.message}
           >
-            <FiTrash2 size={14} />
-          </button>
+            <FiTrash2 className="h-4 w-4" />
+          </Button>
         </div>
       ))}
 
-      {canAddMore && (
-        <button
-          type="button"
-          onClick={() => {
-            arrayHelpers.push({
-              name: "",
-              message: "",
-            });
-            arrayHelpers.push({
-              name: "",
-              message: "",
-            });
-          }}
-          className="self-start flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-        >
-          <FiPlus size={16} />
-          <span>Add Row</span>
-        </button>
-      )}
+      <div className="flex items-center gap-2 ">
+        <TooltipProvider delayDuration={50}>
+          <Tooltip onOpenChange={setTooltipOpen} open={tooltipOpen}>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                onMouseEnter={() => setTooltipOpen(true)}
+                onMouseLeave={() => setTooltipOpen(false)}
+                onClick={() => {
+                  const shouldSubmit =
+                    values.filter((msg) => msg.message.trim() !== "").length <
+                      4 &&
+                    !isRefreshing &&
+                    autoStarterMessageEnabled;
+                  if (shouldSubmit) {
+                    debouncedRefreshPrompts();
+                  }
+                }}
+                className={`
+                  ${
+                    values.filter((msg) => msg.message.trim() !== "").length >=
+                      4 ||
+                    isRefreshing ||
+                    !autoStarterMessageEnabled
+                      ? "bg-neutral-800 text-neutral-300 cursor-not-allowed"
+                      : ""
+                  }
+                `}
+              >
+                <div className="flex text-xs items-center gap-x-2">
+                  {isRefreshing ? (
+                    <FiRefreshCw className="w-4 h-4 animate-spin text-white" />
+                  ) : (
+                    <SwapIcon className="w-4 h-4 text-white" />
+                  )}
+                  Generate
+                </div>
+              </Button>
+            </TooltipTrigger>
+            {!autoStarterMessageEnabled && (
+              <TooltipContent side="top" align="center">
+                <p className="bg-background-950 max-w-[200px] text-sm p-1.5 text-white">
+                  No LLM providers configured. Generation is not available.
+                </p>
+              </TooltipContent>
+            )}
+            {values.filter((msg) => msg.message.trim() !== "").length >= 4 && (
+              <TooltipContent side="top" align="center">
+                <p className="bg-background-950 max-w-[200px] text-sm p-1.5 text-white">
+                  Max four starter messages
+                </p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+      </div>
     </div>
   );
 }

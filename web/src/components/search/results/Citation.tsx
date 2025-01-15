@@ -7,7 +7,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ValidSources } from "@/lib/types";
 import { openDocument } from "@/lib/search/utils";
 
 export function Citation({
@@ -37,7 +36,7 @@ export function Citation({
             onClick={() => openDocument(document, updatePresentingDocument)}
             className="inline-flex items-center cursor-pointer transition-all duration-200 ease-in-out"
           >
-            <span className="flex items-center justify-center w-6 h-6 text-[11px] font-medium text-gray-700 bg-gray-100 rounded-full border border-gray-300 hover:bg-gray-200 hover:text-gray-900 shadow-sm">
+            <span className="flex items-center justify-center w-5 h-5 text-[11px] font-medium text-gray-700 bg-neutral-100 rounded-full border border-gray-300 hover:bg-gray-200 hover:text-gray-900 shadow-sm">
               {innerText}
             </span>
           </div>

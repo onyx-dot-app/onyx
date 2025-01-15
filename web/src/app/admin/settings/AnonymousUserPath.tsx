@@ -26,11 +26,9 @@ export function AnonymousUserPath({
   } = useSWR("/api/tenants/anonymous-user-path", (url) =>
     fetch(url)
       .then((res) => {
-        console.log("Response:", res);
         return res.json();
       })
       .then((data) => {
-        console.log("Data:", data);
         return data.anonymous_user_path;
       })
   );

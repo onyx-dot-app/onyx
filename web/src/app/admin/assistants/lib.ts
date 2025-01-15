@@ -23,7 +23,7 @@ interface PersonaCreationRequest {
   uploaded_image: File | null;
   search_start_date: Date | null;
   is_default_persona: boolean;
-  category_id: number | null;
+  label_ids?: number[];
 }
 
 interface PersonaUpdateRequest {
@@ -49,7 +49,7 @@ interface PersonaUpdateRequest {
   remove_image: boolean;
   uploaded_image: File | null;
   search_start_date: Date | null;
-  category_id: number | null;
+  label_ids?: number[];
 }
 
 function promptNameFromPersonaName(personaName: string) {
@@ -110,8 +110,8 @@ function updatePrompt({
   });
 }
 
-export const createPersonaCategory = (name: string, description: string) => {
-  return fetch("/api/admin/persona/categories", {
+export const createPersonaLabel = (name: string, description: string) => {
+  return fetch("/api/persona/labels", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -120,8 +120,8 @@ export const createPersonaCategory = (name: string, description: string) => {
   });
 };
 
-export const deletePersonaCategory = (categoryId: number) => {
-  return fetch(`/api/admin/persona/category/${categoryId}`, {
+export const deletePersonaLabel = (labelId: number) => {
+  return fetch(`/api/admin/persona/label/${labelId}`, {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
@@ -129,19 +129,19 @@ export const deletePersonaCategory = (categoryId: number) => {
   });
 };
 
-export const updatePersonaCategory = (
+export const updatePersonaLabel = (
   id: number,
   name: string,
   description: string
 ) => {
-  return fetch(`/api/admin/persona/category/${id}`, {
+  return fetch(`/api/admin/persona/label/${id}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      category_name: name,
-      category_description: description,
+      label_name: name,
+      label_description: description,
     }),
   });
 };
@@ -165,7 +165,7 @@ function buildPersonaAPIBody(
     icon_shape,
     remove_image,
     search_start_date,
-    category_id,
+    label_ids,
   } = creationRequest;
 
   const is_default_persona =
@@ -195,7 +195,7 @@ function buildPersonaAPIBody(
     remove_image,
     search_start_date,
     is_default_persona,
-    category_id,
+    label_ids,
   };
 }
 

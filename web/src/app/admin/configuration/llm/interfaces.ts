@@ -10,6 +10,7 @@ import {
   OpenAIIcon,
   GeminiIcon,
   OpenSourceIcon,
+  AnthropicSVG,
 } from "@/components/icons/icons";
 import { FaRobot } from "react-icons/fa";
 
@@ -97,7 +98,7 @@ export const getProviderIcon = (providerName: string, modelName?: string) => {
 
       return OpenAIIcon; // Default for openai
     case "anthropic":
-      return AnthropicIcon;
+      return AnthropicSVG;
     case "bedrock":
       return AWSIcon;
     case "azure":

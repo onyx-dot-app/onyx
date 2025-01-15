@@ -41,7 +41,7 @@ class DATestUser(BaseModel):
     is_active: bool
 
 
-class DATestPersonaCategory(BaseModel):
+class DATestPersonaLabel(BaseModel):
     id: int | None = None
     name: str
     description: str | None

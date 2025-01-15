@@ -81,7 +81,7 @@ class ImageShape(str, Enum):
 class ImageGenerationTool(Tool):
     _NAME = "run_image_generation"
     _DESCRIPTION = "Generate an image from a prompt."
-    _DISPLAY_NAME = "Image Generation Tool"
+    _DISPLAY_NAME = "Image Generation"
 
     def __init__(
         self,

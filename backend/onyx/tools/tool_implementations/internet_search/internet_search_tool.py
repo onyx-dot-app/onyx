@@ -108,7 +108,7 @@ def internet_search_response_to_search_docs(
 
 class InternetSearchTool(Tool):
     _NAME = "run_internet_search"
-    _DISPLAY_NAME = "[Beta] Internet Search Tool"
+    _DISPLAY_NAME = "Internet Search"
     _DESCRIPTION = "Perform an internet search for up-to-date information."
 
     def __init__(

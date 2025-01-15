@@ -1,17 +1,18 @@
 "use client";
+import { useChatContext } from "@/components/context/ChatContext";
 import { ChatPage } from "./ChatPage";
 import FunctionalWrapper from "./shared_chat_search/FunctionalWrapper";
 
 export default function WrappedChat({
-  initiallyToggled,
   firstMessage,
 }: {
-  initiallyToggled: boolean;
   firstMessage?: string;
 }) {
+  const { toggledSidebar } = useChatContext();
+
   return (
     <FunctionalWrapper
-      initiallyToggled={initiallyToggled}
+      initiallyToggled={toggledSidebar}
       content={(toggledSidebar, toggle) => (
         <ChatPage
           toggle={toggle}

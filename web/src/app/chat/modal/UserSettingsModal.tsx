@@ -1,4 +1,11 @@
-import { Dispatch, SetStateAction, useContext, useEffect, useRef } from "react";
+import {
+  Dispatch,
+  SetStateAction,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Modal } from "@/components/Modal";
 import Text from "@/components/ui/text";
 import { getDisplayNameForModel, LlmOverride } from "@/lib/hooks";
@@ -13,8 +20,11 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/admin/connectors/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { useChatContext } from "@/components/context/ChatContext";
+import { InputPromptsSection } from "./InputPromptsSection";
+import { LLMSelector } from "@/components/llm/LLMSelector";
 
-export function SetDefaultModelModal({
+export function UserSettingsModal({
   setPopup,
   llmProviders,
   onClose,
@@ -23,11 +33,13 @@ export function SetDefaultModelModal({
 }: {
   setPopup: (popupSpec: PopupSpec | null) => void;
   llmProviders: LLMProviderDescriptor[];
-  setLlmOverride: Dispatch<SetStateAction<LlmOverride>>;
+  setLlmOverride?: Dispatch<SetStateAction<LlmOverride>>;
   onClose: () => void;
   defaultModel: string | null;
 }) {
-  const { refreshUser, user, updateUserAutoScroll } = useUser();
+  const { inputPrompts, refreshInputPrompts } = useChatContext();
+  const { refreshUser, user, updateUserAutoScroll, updateUserShortcuts } =
+    useUser();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
 
@@ -115,7 +127,7 @@ export function SetDefaultModelModal({
       const response = await setUserDefaultModel(defaultModel);
 
       if (response.ok) {
-        if (defaultModel) {
+        if (defaultModel && setLlmOverride) {
           setLlmOverride(destructureValue(defaultModel));
         }
         setPopup({
@@ -146,7 +158,7 @@ export function SetDefaultModelModal({
       : user?.preferences?.auto_scroll;
 
   return (
-    <Modal onOutsideClick={onClose} width="rounded-lg  bg-white max-w-xl">
+    <Modal onOutsideClick={onClose} width="rounded-lg w-full bg-white max-w-xl">
       <>
         <div className="flex mb-4">
           <h2 className="text-2xl text-emphasis font-bold flex my-auto">
@@ -157,6 +169,7 @@ export function SetDefaultModelModal({
         <div className="flex flex-col gap-y-2">
           <div className="flex items-center gap-x-2">
             <Switch
+              size="sm"
               checked={checked}
               onCheckedChange={(checked) => {
                 updateUserAutoScroll(checked);
@@ -164,19 +177,22 @@ export function SetDefaultModelModal({
             />
             <Label className="text-sm">Enable auto-scroll</Label>
           </div>
+          <div className="flex items-center gap-x-2">
+            <Switch
+              size="sm"
+              checked={user?.preferences?.shortcut_enabled}
+              onCheckedChange={(checked) => {
+                updateUserShortcuts(checked);
+                refreshUser();
+              }}
+            />
+            <Label className="text-sm">Enable Prompt Shortcuts</Label>
+          </div>
         </div>
 
         <Separator />
 
-        <h3 className="text-lg text-emphasis font-bold">
-          Default model for assistants
-        </h3>
-
-        <Text className="mb-4">
-          Choose a Large Language Model (LLM) to serve as the default for
-          assistants that don&apos;t have a default model assigned.
-          {defaultModel == null && "  No default model has been selected!"}
-        </Text>
+        <h3 className="text-lg text-emphasis font-bold mb-2 ">Default Model</h3>
         <div
           className="w-full max-h-96 overflow-y-auto flex text-sm flex-col border rounded-md"
           ref={containerRef}
@@ -188,59 +204,33 @@ export function SetDefaultModelModal({
           >
             Scroll to see all options
           </div>
-          <div>
-            <div
-              key={-1}
-              className="w-full border-b flex items-center gap-x-2 hover:bg-background-50"
-            >
-              <input
-                checked={defaultModelDestructured?.modelName == null}
-                type="radio"
-                name="credentialSelection"
-                onChange={(e) => {
-                  e.preventDefault();
-                  handleChangedefaultModel(null);
-                }}
-                className="form-radio ml-4 h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
-              />
-              {
-                <td className="p-2">
-                  System default{" "}
-                  {defaultProvider?.default_model_name &&
-                    `(${getDisplayNameForModel(
-                      defaultProvider?.default_model_name
-                    )})`}
-                </td>
+          <LLMSelector
+            llmProviders={llmProviders}
+            currentLlm={
+              defaultModelDestructured
+                ? structureValue(
+                    defaultModelDestructured.provider,
+                    "",
+                    defaultModelDestructured.modelName
+                  )
+                : null
+            }
+            userDefault={null}
+            requiresImageGeneration={false}
+            onSelect={(selected) => {
+              if (selected === null) {
+                handleChangedefaultModel(null);
+              } else {
+                const { modelName, provider, name } =
+                  destructureValue(selected);
+                if (modelName && name) {
+                  handleChangedefaultModel(
+                    structureValue(provider, "", modelName)
+                  );
+                }
               }
-            </div>
-
-            {llmOptions.map(({ name, value }, index) => {
-              return (
-                <div
-                  key={index}
-                  className="w-full flex items-center gap-x-2 border-b hover:bg-background-50"
-                >
-                  <input
-                    checked={defaultModelDestructured?.modelName == name}
-                    type="radio"
-                    name="credentialSelection"
-                    onChange={(e) => {
-                      e.preventDefault();
-                      handleChangedefaultModel(value);
-                    }}
-                    className="form-radio ml-4 h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
-                  />
-
-                  <td className="p-2">
-                    {getDisplayNameForModel(name)}{" "}
-                    {defaultModelDestructured &&
-                      defaultModelDestructured.name == name &&
-                      "(selected)"}
-                  </td>
-                </div>
-              );
-            })}
-          </div>
+            }}
+          />
         </div>
       </>
     </Modal>

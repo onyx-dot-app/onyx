@@ -9,6 +9,7 @@ export const DeleteEntityModal = ({
   entityName,
   additionalDetails,
   deleteButtonText,
+  includeCancelButton = true,
 }: {
   entityType: string;
   entityName: string;
@@ -16,9 +17,10 @@ export const DeleteEntityModal = ({
   onSubmit: () => void;
   additionalDetails?: string;
   deleteButtonText?: string;
+  includeCancelButton?: boolean;
 }) => {
   return (
-    <Modal onOutsideClick={onClose}>
+    <Modal width="max-w-4xl" onOutsideClick={onClose}>
       <>
         <div className="flex mb-4">
           <h2 className="my-auto text-2xl font-bold">
@@ -31,7 +33,15 @@ export const DeleteEntityModal = ({
         </p>
         {additionalDetails && <p className="mb-4">{additionalDetails}</p>}
         <div className="flex">
-          <div className="mx-auto">
+          <div className="mx-auto flex gap-x-2">
+            {includeCancelButton && (
+              <BasicClickable onClick={onClose}>
+                <div className="flex mx-2">
+                  <FiX className="my-auto mr-2" />
+                  Cancel
+                </div>
+              </BasicClickable>
+            )}
             <BasicClickable onClick={onSubmit}>
               <div className="flex mx-2">
                 <FiTrash className="my-auto mr-2" />

@@ -14,14 +14,16 @@ export function AssistantSharedStatusDisplay({
 }) {
   const isOwnedByUser = checkUserOwnsAssistant(user, assistant);
 
-  const assistantSharedUsersWithoutOwner = assistant.users?.filter(
+  const assistantSharedUsersWithoutOwner = (assistant.users || [])?.filter(
     (u) => u.id !== assistant.owner?.id
   );
 
   if (assistant.is_public) {
     return (
       <div
-        className={`text-subtle ${size === "sm" ? "text-sm" : size === "md" ? "text-base" : "text-lg"} flex items-center`}
+        className={`text-subtle ${
+          size === "sm" ? "text-sm" : size === "md" ? "text-base" : "text-lg"
+        } flex items-center`}
       >
         <FiUnlock className="mr-1" />
         Public
@@ -32,7 +34,9 @@ export function AssistantSharedStatusDisplay({
   if (assistantSharedUsersWithoutOwner.length > 0) {
     return (
       <div
-        className={`text-subtle ${size === "sm" ? "text-sm" : size === "md" ? "text-base" : "text-lg"} flex items-center`}
+        className={`text-subtle ${
+          size === "sm" ? "text-sm" : size === "md" ? "text-base" : "text-lg"
+        } flex items-center`}
       >
         <FiUnlock className="mr-1" />
         {isOwnedByUser ? (
@@ -61,7 +65,9 @@ export function AssistantSharedStatusDisplay({
 
   return (
     <div
-      className={`text-subtle ${size === "sm" ? "text-sm" : size === "md" ? "text-base" : "text-lg"} flex items-center`}
+      className={`text-subtle ${
+        size === "sm" ? "text-sm" : size === "md" ? "text-base" : "text-lg"
+      } flex items-center`}
     >
       <FiLock className="mr-1" />
       Private

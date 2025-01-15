@@ -34,7 +34,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
       <div
         className={`
           cursor-pointer
-          ${isCollapsed ? "h-6" : "pl-4 border-l-2  border-border"}
+          ${isCollapsed ? "h-6" : "pl-6 border-l-2  border-border"}
         `}
         onClick={toggleCollapse}
       >

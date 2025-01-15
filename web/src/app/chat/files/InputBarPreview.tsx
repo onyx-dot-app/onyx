@@ -44,7 +44,7 @@ export function InputBarPreviewImageProvider({
 
   return (
     <div
-      className="h-10 relative"
+      className="h-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -111,27 +111,28 @@ export function InputBarPreview({
             z-0
           "
         >
-          <FiLoader className="animate-spin text-white" />
+          <FiLoader size={12} className="animate-spin text-white" />
         </div>
       )}
       <div
         className={`
         flex
         items-center
-        p-2
+        px-2
         bg-hover
         border
+        gap-x-1.5
         border-border
         rounded-md
         box-border
-        h-10
+        h-8
       `}
       >
         <div className="flex-shrink-0">
           <div
             className="
-            w-6
-            h-6
+            w-5
+            h-5
             bg-document
             flex
             items-center
@@ -139,33 +140,31 @@ export function InputBarPreview({
             rounded-md
           "
           >
-            <FiFileText className="w-4 h-4 text-white" />
+            <FiFileText size={12} className="text-white" />
           </div>
         </div>
-        <div className="ml-2 relative">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div
-                  ref={fileNameRef}
-                  className={`font-medium text-sm line-clamp-1 break-all ellipses max-w-48`}
-                >
-                  {file.name}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="top" align="start">
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                ref={fileNameRef}
+                className={`font-medium text-sm line-clamp-1 break-all ellipses max-w-48`}
+              >
                 {file.name}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" align="start">
+              {file.name}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <button
           onClick={onDelete}
           className="
             cursor-pointer
             border-none
             bg-hover
-            p-1
             rounded-full
             z-10
           "

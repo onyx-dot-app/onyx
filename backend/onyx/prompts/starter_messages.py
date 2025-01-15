@@ -1,9 +1,10 @@
 PERSONA_CATEGORY_GENERATION_PROMPT = """
-Based on the assistant's name, description, and instructions, generate a list of {num_categories}
+Based on the assistant's name, description, and instructions, generate {num_categories}
  **unique and diverse** categories that represent different types of starter messages a user
  might send to initiate a conversation with this chatbot assistant.
 
-**Ensure that the categories are varied and cover a wide range of topics related to the assistant's capabilities.**
+**Ensure that the categories are relevant and cover
+topics related to the assistant's capabilities.**
 
 Provide the categories as a JSON array of strings **without any code fences or additional text**.
 
@@ -11,27 +12,20 @@ Provide the categories as a JSON array of strings **without any code fences or a
 - **Name**: {name}
 - **Description**: {description}
 - **Instructions**: {instructions}
-""".strip()
+"""
 
 PERSONA_STARTER_MESSAGE_CREATION_PROMPT = """
 Create a starter message that a **user** might send to initiate a conversation with a chatbot assistant.
 
-**Category**: {category}
+{category_prompt}
 
-Your response should include two parts:
-
-1. **Title**: A short, engaging title that reflects the user's intent
-   (e.g., 'Need Travel Advice', 'Question About Coding', 'Looking for Book Recommendations').
-
-2. **Message**: The actual message that the user would send to the assistant.
-   This should be natural, engaging, and encourage a helpful response from the assistant.
-   **Avoid overly specific details; keep the message general and broadly applicable.**
+Your response should only include the actual message that the user would send to the assistant.
+This should be natural, engaging, and encourage a helpful response from the assistant.
+**Avoid overly specific details; keep the message general and broadly applicable.**
 
 For example:
 - Instead of "I've just adopted a 6-month-old Labrador puppy who's pulling on the leash,"
 write "I'm having trouble training my new puppy to walk nicely on a leash."
-
-Ensure each part is clearly labeled and separated as shown above.
 Do not provide any additional text or explanation and be extremely concise
 
 **Context about the assistant:**
@@ -39,6 +33,18 @@ Do not provide any additional text or explanation and be extremely concise
 - **Description**: {description}
 - **Instructions**: {instructions}
 """.strip()
+
+
+def format_persona_starter_message_prompt(
+    name: str, description: str, instructions: str, category: str | None = None
+) -> str:
+    category_prompt = f"**Category**: {category}" if category else ""
+    return PERSONA_STARTER_MESSAGE_CREATION_PROMPT.format(
+        category_prompt=category_prompt,
+        name=name,
+        description=description,
+        instructions=instructions,
+    )
 
 
 if __name__ == "__main__":

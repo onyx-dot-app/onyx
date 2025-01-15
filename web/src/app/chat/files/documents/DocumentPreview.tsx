@@ -24,25 +24,26 @@ export function DocumentPreview({
   return (
     <div
       className={`
-        ${alignBubble && "w-64"}
+        ${alignBubble && "min-w-52 max-w-48"}
         flex
         items-center
-        p-3
-        bg-hover
+        bg-hover-light/50
         border
         border-border
         rounded-lg
         box-border
-        h-20
+        py-4
+        h-12
         hover:shadow-sm
         transition-all
+        px-2
       `}
     >
       <div className="flex-shrink-0">
         <div
           className="
-            w-14
-            h-14
+            w-8
+            h-8
             bg-document
             flex
             items-center
@@ -53,10 +54,10 @@ export function DocumentPreview({
             hover:bg-document-dark
           "
         >
-          <FiFileText className="w-7 h-7 text-white" />
+          <FiFileText className="w-5 h-5 text-white" />
         </div>
       </div>
-      <div className="ml-4 flex-grow">
+      <div className="ml-2 h-8 flex flex-col flex-grow">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -74,7 +75,7 @@ export function DocumentPreview({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        <div className="text-subtle text-xs mt-1">Document</div>
+        <div className="text-subtle text-xs">Document</div>
       </div>
       {open && (
         <button

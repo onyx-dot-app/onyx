@@ -76,6 +76,23 @@ export const buildDateString = (date: Date | null) => {
     : "Select a time range";
 };
 
+export const getFormattedDateRangeString = (
+  from: Date | null,
+  to: Date | null
+) => {
+  if (!from || !to) return null;
+
+  const options: Intl.DateTimeFormatOptions = {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  };
+  const fromString = from.toLocaleDateString("en-US", options);
+  const toString = to.toLocaleDateString("en-US", options);
+
+  return `${fromString} - ${toString}`;
+};
+
 export const getDateRangeString = (from: Date | null, to: Date | null) => {
   if (!from || !to) return null;
 

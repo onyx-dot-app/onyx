@@ -7,7 +7,7 @@ from onyx.server.features.persona.models import PersonaSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestPersona
-from tests.integration.common_utils.test_models import DATestPersonaCategory
+from tests.integration.common_utils.test_models import DATestPersonaLabel
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -216,12 +216,12 @@ class PersonaManager:
         return response.ok
 
 
-class PersonaCategoryManager:
+class PersonaLabelManager:
     @staticmethod
     def create(
-        category: DATestPersonaCategory,
+        category: DATestPersonaLabel,
         user_performing_action: DATestUser | None = None,
-    ) -> DATestPersonaCategory:
+    ) -> DATestPersonaLabel:
         response = requests.post(
             f"{API_SERVER_URL}/admin/persona/categories",
             json={
@@ -240,7 +240,7 @@ class PersonaCategoryManager:
     @staticmethod
     def get_all(
         user_performing_action: DATestUser | None = None,
-    ) -> list[DATestPersonaCategory]:
+    ) -> list[DATestPersonaLabel]:
         response = requests.get(
             f"{API_SERVER_URL}/persona/categories",
             headers=user_performing_action.headers
@@ -248,13 +248,13 @@ class PersonaCategoryManager:
             else GENERAL_HEADERS,
         )
         response.raise_for_status()
-        return [DATestPersonaCategory(**category) for category in response.json()]
+        return [DATestPersonaLabel(**category) for category in response.json()]
 
     @staticmethod
     def update(
-        category: DATestPersonaCategory,
+        category: DATestPersonaLabel,
         user_performing_action: DATestUser | None = None,
-    ) -> DATestPersonaCategory:
+    ) -> DATestPersonaLabel:
         response = requests.patch(
             f"{API_SERVER_URL}/admin/persona/category/{category.id}",
             json={
@@ -270,7 +270,7 @@ class PersonaCategoryManager:
 
     @staticmethod
     def delete(
-        category: DATestPersonaCategory,
+        category: DATestPersonaLabel,
         user_performing_action: DATestUser | None = None,
     ) -> bool:
         response = requests.delete(
@@ -283,10 +283,10 @@ class PersonaCategoryManager:
 
     @staticmethod
     def verify(
-        category: DATestPersonaCategory,
+        category: DATestPersonaLabel,
         user_performing_action: DATestUser | None = None,
     ) -> bool:
-        all_categories = PersonaCategoryManager.get_all(user_performing_action)
+        all_categories = PersonaLabelManager.get_all(user_performing_action)
         for fetched_category in all_categories:
             if fetched_category.id == category.id:
                 return (

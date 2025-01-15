@@ -1,11 +1,13 @@
 import yaml
 from sqlalchemy.orm import Session
 
+from onyx.configs.chat_configs import INPUT_PROMPT_YAML
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import PERSONAS_YAML
 from onyx.configs.chat_configs import PROMPTS_YAML
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.document_set import get_or_create_document_set_by_name
+from onyx.db.input_prompt import insert_input_prompt_if_not_exists
 from onyx.db.models import DocumentSet as DocumentSetDBModel
 from onyx.db.models import Persona
 from onyx.db.models import Prompt as PromptDBModel
@@ -34,6 +36,29 @@ def load_prompts_from_yaml(
             datetime_aware=prompt.get("datetime_aware", True),
             default_prompt=True,
             personas=None,
+            db_session=db_session,
+            commit=True,
+        )
+
+
+def load_input_prompts_from_yaml(
+    db_session: Session, input_prompts_yaml: str = INPUT_PROMPT_YAML
+) -> None:
+    with open(input_prompts_yaml, "r") as file:
+        data = yaml.safe_load(file)
+
+    all_input_prompts = data.get("input_prompts", [])
+    for input_prompt in all_input_prompts:
+        # If these prompts are deleted (which is a hard delete in the DB), on server startup
+        # they will be recreated, but the user can always just deactivate them, just a light inconvenience
+
+        insert_input_prompt_if_not_exists(
+            user=None,
+            input_prompt_id=input_prompt.get("id"),
+            prompt=input_prompt["prompt"],
+            content=input_prompt["content"],
+            is_public=input_prompt["is_public"],
+            active=input_prompt.get("active", True),
             db_session=db_session,
             commit=True,
         )
@@ -113,7 +138,7 @@ def load_personas_from_yaml(
             if persona.get("num_chunks") is not None
             else default_chunks,
             llm_relevance_filter=persona.get("llm_relevance_filter"),
-            starter_messages=persona.get("starter_messages"),
+            starter_messages=persona.get("starter_messages", []),
             llm_filter_extraction=persona.get("llm_filter_extraction"),
             icon_shape=persona.get("icon_shape"),
             icon_color=persona.get("icon_color"),
@@ -144,6 +169,8 @@ def load_chat_yamls(
     db_session: Session,
     prompt_yaml: str = PROMPTS_YAML,
     personas_yaml: str = PERSONAS_YAML,
+    input_prompts_yaml: str = INPUT_PROMPT_YAML,
 ) -> None:
     load_prompts_from_yaml(db_session, prompt_yaml)
     load_personas_from_yaml(db_session, personas_yaml)
+    load_input_prompts_from_yaml(db_session, input_prompts_yaml)
