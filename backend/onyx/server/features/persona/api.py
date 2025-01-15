@@ -230,11 +230,11 @@ def get_labels(
     ]
 
 
-@admin_router.post("/labels")
+@basic_router.post("/labels")
 def create_label(
     label: PersonaLabelCreate,
     db: Session = Depends(get_session),
-    _: User | None = Depends(current_admin_user),
+    _: User | None = Depends(current_user),
 ) -> PersonaLabelResponse:
     """Create a new assistant label"""
     label_model = create_assistant_label(

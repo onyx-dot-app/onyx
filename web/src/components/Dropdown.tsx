@@ -52,10 +52,12 @@ export function SearchMultiSelectDropdown({
   options,
   onSelect,
   itemComponent,
+  onCreateLabel,
 }: {
   options: StringOrNumberOption[];
   onSelect: (selected: StringOrNumberOption) => void;
   itemComponent?: FC<{ option: StringOrNumberOption }>;
+  onCreateLabel?: (name: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -174,14 +176,29 @@ export function SearchMultiSelectDropdown({
                   )
                 )
               ) : (
-                <button
-                  key={0}
-                  className={`w-full text-left block px-4 py-2.5 text-sm hover:bg-hover`}
-                  role="menuitem"
-                  onClick={() => setIsOpen(false)}
-                >
-                  No matches found...
-                </button>
+                <>
+                  {onCreateLabel ? (
+                    <button
+                      className={`w-full text-left block px-4 py-2.5 text-sm hover:bg-hover`}
+                      role="menuitem"
+                      onClick={() => {
+                        onCreateLabel(searchTerm);
+                        setIsOpen(false);
+                        setSearchTerm("");
+                      }}
+                    >
+                      Create label "{searchTerm}"
+                    </button>
+                  ) : (
+                    <button
+                      className={`w-full text-left block px-4 py-2.5 text-sm hover:bg-hover`}
+                      role="menuitem"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      No matches found...
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>,

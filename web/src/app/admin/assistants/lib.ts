@@ -111,7 +111,7 @@ function updatePrompt({
 }
 
 export const createPersonaLabel = (name: string, description: string) => {
-  return fetch("/api/admin/persona/labels", {
+  return fetch("/api/persona/labels", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

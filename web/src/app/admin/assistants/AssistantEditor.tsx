@@ -761,16 +761,6 @@ export function AssistantEditor({
                   <Separator />
                   <div className="flex gap-x-2 items-center mt-4 ">
                     <div className="block font-medium text-sm">Labels</div>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <FiInfo size={12} />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" align="center">
-                          Group similar assistants together by category
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
                   </div>
                   <p
                     className="text-sm text-subtle"
@@ -780,6 +770,10 @@ export function AssistantEditor({
                   </p>
                   <div className="mt-3">
                     <SearchMultiSelectDropdown
+                      onCreateLabel={async (name: string) => {
+                        await createPersonaLabel(name, "");
+                        await refreshLabels();
+                      }}
                       options={Array.from(
                         new Set(labels.map((label) => label.name))
                       ).map((name) => ({
