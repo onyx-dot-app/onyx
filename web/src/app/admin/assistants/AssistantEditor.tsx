@@ -1457,8 +1457,8 @@ export function AssistantEditor({
                         <TextFormField
                           small={true}
                           name="num_chunks"
-                          label="Number of Context Documents"
-                          placeholder="Defaults to 10"
+                          label="[Optional] Number of Context Documents"
+                          placeholder="Default 10"
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "" || /^[0-9]+$/.test(value)) {
@@ -1471,8 +1471,8 @@ export function AssistantEditor({
                           width="max-w-xl"
                           type="date"
                           small
-                          subtext="Documents prior to this date will not be ignored."
-                          label="Knowledge Cutoff Date"
+                          subtext="Documents prior to this date will be ignored."
+                          label="[Optional] Knowledge Cutoff Date"
                           value={values.search_start_date}
                           name="search_start_date"
                         />
