@@ -140,7 +140,7 @@ export function SearchMultiSelectDropdown({
         createPortal(
           <div
             ref={dropdownMenuRef}
-            className={`origin-top-right
+            className={`origin-bottom-right
                 rounded-md
                 shadow-lg
                 bg-background

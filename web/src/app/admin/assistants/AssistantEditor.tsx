@@ -94,6 +94,7 @@ import { GroupIcon, TagIcon, UserIcon } from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "SearchTool");
@@ -326,6 +327,7 @@ export function AssistantEditor({
     1000
   );
 
+  const [labelToDelete, setLabelToDelete] = useState<PersonaLabel | null>(null);
   const [isRequestSuccessful, setIsRequestSuccessful] = useState(false);
 
   const { data: userGroups } = useUserGroups();
@@ -361,6 +363,29 @@ export function AssistantEditor({
         <div className="absolute top-4 left-4">
           <BackButton />
         </div>
+      )}
+      {labelToDelete && (
+        <DeleteEntityModal
+          entityType="label"
+          entityName={labelToDelete.name}
+          onClose={() => setLabelToDelete(null)}
+          onSubmit={async () => {
+            const response = await deletePersonaLabel(labelToDelete.id);
+            if (response?.ok) {
+              setPopup({
+                message: `Label deleted successfully`,
+                type: "success",
+              });
+              await refreshLabels();
+            } else {
+              setPopup({
+                message: `Failed to delete label - ${await response.text()}`,
+                type: "error",
+              });
+            }
+            setLabelToDelete(null);
+          }}
+        />
       )}
       {popup}
       <Formik
@@ -1235,27 +1260,7 @@ export function AssistantEditor({
                               <Button
                                 variant="destructive"
                                 onClick={async () => {
-                                  if (
-                                    confirm(
-                                      `Are you sure you want to delete the label "${label.name}"?`
-                                    )
-                                  ) {
-                                    const response = await deletePersonaLabel(
-                                      label.id
-                                    );
-                                    if (response?.ok) {
-                                      setPopup({
-                                        message: `Label deleted successfully`,
-                                        type: "success",
-                                      });
-                                      await refreshLabels();
-                                    } else {
-                                      setPopup({
-                                        message: `Failed to delete label - ${await response.text()}`,
-                                        type: "error",
-                                      });
-                                    }
-                                  }
+                                  setLabelToDelete(label);
                                 }}
                               >
                                 Delete
