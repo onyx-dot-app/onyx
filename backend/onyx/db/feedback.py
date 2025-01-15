@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
+from onyx.auth.users import anonymous_user_enabled
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
@@ -87,8 +88,11 @@ def _add_user_filters(
 
     # If user is None, this is an anonymous user and we should only show public documents
     if user is None:
-        where_clause = CCPair.access_type == AccessType.PUBLIC
-        return stmt.where(where_clause)
+        if anonymous_user_enabled():
+            where_clause = CCPair.access_type == AccessType.PUBLIC
+            return stmt.where(where_clause)
+        else:
+            raise ValueError("User not authenticated")
 
     where_clause = User__UG.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:

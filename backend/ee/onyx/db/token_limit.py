@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
+from onyx.auth.users import anonymous_user_enabled
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.models import TokenRateLimit
@@ -51,8 +52,11 @@ def _add_user_filters(
 
     # If user is None, this is an anonymous user and we should only show public token_rate_limits
     if user is None:
-        where_clause = TokenRateLimit.scope == TokenRateLimitScope.GLOBAL
-        return stmt.where(where_clause)
+        if anonymous_user_enabled():
+            where_clause = TokenRateLimit.scope == TokenRateLimitScope.GLOBAL
+            return stmt.where(where_clause)
+        else:
+            raise ValueError("User not authenticated")
 
     where_clause = User__UG.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:

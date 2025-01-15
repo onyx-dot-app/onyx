@@ -474,6 +474,7 @@ export function ChatPage({
       const newMessageHistory = buildLatestMessageChain(newMessageMap);
 
       // Update message history except for edge where where
+
       // last message is an error and we're on a new chat.
       // This corresponds to a "renaming" of chat, which occurs after first message
       // stream

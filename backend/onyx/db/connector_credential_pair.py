@@ -10,6 +10,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
+from onyx.auth.users import anonymous_user_enabled
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id_for_user
@@ -65,8 +66,11 @@ def _add_user_filters(
 
     # If user is None, this is an anonymous user and we should only show public cc_pairs
     if user is None:
-        where_clause = ConnectorCredentialPair.access_type == AccessType.PUBLIC
-        return stmt.where(where_clause)
+        if anonymous_user_enabled():
+            where_clause = ConnectorCredentialPair.access_type == AccessType.PUBLIC
+            return stmt.where(where_clause)
+        else:
+            raise ValueError("User not authenticated")
 
     where_clause = User__UG.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:

@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
+from onyx.auth.users import anonymous_user_enabled
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
@@ -65,8 +66,11 @@ def _add_user_filters(
 
     # If user is None, this is an anonymous user and we should only show public DocumentSets
     if user is None:
-        where_clause = DocumentSetDBModel.is_public == True  # noqa: E712
-        return stmt.where(where_clause)
+        if anonymous_user_enabled():
+            where_clause = DocumentSetDBModel.is_public == True  # noqa: E712
+            return stmt.where(where_clause)
+        else:
+            raise ValueError("User not authenticated")
 
     where_clause = User__UserGroup.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:
