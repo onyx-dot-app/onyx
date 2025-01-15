@@ -285,6 +285,7 @@ class OnyxRedisLocks:
     CONNECTOR_EXTERNAL_GROUP_SYNC_LOCK_PREFIX = "da_lock:connector_external_group_sync"
     PRUNING_LOCK_PREFIX = "da_lock:pruning"
     INDEXING_METADATA_PREFIX = "da_metadata:indexing"
+    MONITOR_BACKGROUND_PROCESSES_LOCK_PREFIX = "da_lock:monitor_background_processes"
 
     SLACK_BOT_LOCK = "da_lock:slack_bot"
     SLACK_BOT_HEARTBEAT_PREFIX = "da_heartbeat:slack_bot"

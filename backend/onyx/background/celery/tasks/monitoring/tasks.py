@@ -406,7 +406,7 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
     r = get_redis_client(tenant_id=tenant_id)
 
     lock_monitoring: RedisLock = r.lock(
-        OnyxRedisLocks.CHECK_PRUNE_BEAT_LOCK,
+        OnyxRedisLocks.MONITOR_BACKGROUND_PROCESSES_LOCK_PREFIX + f"_{tenant_id}",
         timeout=_MONITORING_SOFT_TIME_LIMIT,
     )
 
