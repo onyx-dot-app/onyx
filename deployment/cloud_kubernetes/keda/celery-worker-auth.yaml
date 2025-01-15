@@ -2,7 +2,7 @@ apiVersion: keda.sh/v1alpha1
 kind: TriggerAuthentication
 metadata:
   name: celery-worker-auth
-  namespace: danswer
+  namespace: onyx
 spec:
   secretTargetRef:
     - parameter: host

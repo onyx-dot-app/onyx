@@ -4,12 +4,12 @@ RUN THIS AFTER SEED_DUMMY_DOCS.PY
 import random
 import time
 
-from danswer.configs.constants import DocumentSource
-from danswer.configs.model_configs import DOC_EMBEDDING_DIM
-from danswer.context.search.models import IndexFilters
-from danswer.db.engine import get_session_context_manager
-from danswer.db.search_settings import get_current_search_settings
-from danswer.document_index.vespa.index import VespaIndex
+from onyx.configs.constants import DocumentSource
+from onyx.configs.model_configs import DOC_EMBEDDING_DIM
+from onyx.context.search.models import IndexFilters
+from onyx.db.engine import get_session_context_manager
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.vespa.index import VespaIndex
 from scripts.query_time_check.seed_dummy_docs import TOTAL_ACL_ENTRIES_PER_CATEGORY
 from scripts.query_time_check.seed_dummy_docs import TOTAL_DOC_SETS
 from shared_configs.model_server_models import Embedding

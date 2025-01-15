@@ -1,6 +1,6 @@
-from danswer.configs.constants import DocumentSource
-from danswer.db.enums import AccessType
-from danswer.db.models import UserRole
+from onyx.configs.constants import DocumentSource
+from onyx.db.enums import AccessType
+from onyx.db.models import UserRole
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -14,7 +14,7 @@ def test_tenant_creation(reset_multitenant: None) -> None:
     TenantManager.create("tenant_dev", "test@test.com", "Data Plane Registration")
     test_user: DATestUser = UserManager.create(name="test", email="test@test.com")
 
-    assert UserManager.verify_role(test_user, UserRole.ADMIN)
+    assert UserManager.is_role(test_user, UserRole.ADMIN)
 
     test_credential = CredentialManager.create(
         name="admin_test_credential",

@@ -1,14 +1,15 @@
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import Field
 
-from danswer.auth.schemas import UserRole
-from danswer.context.search.enums import RecencyBiasSetting
-from danswer.db.enums import AccessType
-from danswer.server.documents.models import DocumentSource
-from danswer.server.documents.models import InputType
+from onyx.auth.schemas import UserRole
+from onyx.context.search.enums import RecencyBiasSetting
+from onyx.db.enums import AccessType
+from onyx.server.documents.models import DocumentSource
+from onyx.server.documents.models import InputType
 
 """
 These data models are used to represent the data on the testing side of things.
@@ -36,6 +37,8 @@ class DATestUser(BaseModel):
     email: str
     password: str
     headers: dict
+    role: UserRole
+    is_active: bool
 
 
 class DATestPersonaCategory(BaseModel):
@@ -150,3 +153,18 @@ class StreamedResponse(BaseModel):
     relevance_summaries: list[dict[str, Any]] | None = None
     tool_result: Any | None = None
     user: str | None = None
+
+
+class DATestGatingType(str, Enum):
+    FULL = "full"
+    PARTIAL = "partial"
+    NONE = "none"
+
+
+class DATestSettings(BaseModel):
+    """General settings"""
+
+    maximum_chat_retention_days: int | None = None
+    gpu_enabled: bool | None = None
+    product_gating: DATestGatingType = DATestGatingType.NONE
+    anonymous_user_enabled: bool | None = None

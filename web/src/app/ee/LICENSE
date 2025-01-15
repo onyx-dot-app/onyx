@@ -1,20 +1,20 @@
 The DanswerAI Enterprise license (the “Enterprise License”)
 Copyright (c) 2023-present DanswerAI, Inc.
 
-With regard to the Danswer Software:
+With regard to the Onyx Software:
 
 This software and associated documentation files (the "Software") may only be
 used in production, if you (and any entity that you represent) have agreed to,
 and are in compliance with, the DanswerAI Subscription Terms of Service, available
-at https://danswer.ai/terms (the “Enterprise Terms”), or other
+at https://onyx.app/terms (the “Enterprise Terms”), or other
 agreement governing the use of the Software, as agreed by you and DanswerAI,
-and otherwise have a valid Danswer Enterprise license for the
+and otherwise have a valid Onyx Enterprise license for the
 correct number of user seats. Subject to the foregoing sentence, you are free to
 modify this Software and publish patches to the Software. You agree that DanswerAI
 and/or its licensors (as applicable) retain all right, title and interest in and
 to all such modifications and/or patches, and all such modifications and/or
 patches may only be used, copied, modified, displayed, distributed, or otherwise
-exploited with a valid Danswer Enterprise license for the correct
+exploited with a valid Onyx Enterprise license for the correct
 number of user seats. Notwithstanding the foregoing, you may copy and modify
 the Software for development and testing purposes, without requiring a
 subscription. You agree that DanswerAI and/or its licensors (as applicable) retain
@@ -31,6 +31,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-For all third party components incorporated into the Danswer Software, those
+For all third party components incorporated into the Onyx Software, those
 components are licensed under the original license provided by the owner of the
 applicable component.

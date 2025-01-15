@@ -20,7 +20,7 @@ def run_jobs() -> None:
     cmd_worker_primary = [
         "celery",
         "-A",
-        "danswer.background.celery.versioned_apps.primary",
+        "onyx.background.celery.versioned_apps.primary",
         "worker",
         "--pool=threads",
         "--concurrency=6",
@@ -34,7 +34,7 @@ def run_jobs() -> None:
     cmd_worker_light = [
         "celery",
         "-A",
-        "danswer.background.celery.versioned_apps.light",
+        "onyx.background.celery.versioned_apps.light",
         "worker",
         "--pool=threads",
         "--concurrency=16",
@@ -48,7 +48,7 @@ def run_jobs() -> None:
     cmd_worker_heavy = [
         "celery",
         "-A",
-        "danswer.background.celery.versioned_apps.heavy",
+        "onyx.background.celery.versioned_apps.heavy",
         "worker",
         "--pool=threads",
         "--concurrency=6",
@@ -62,7 +62,7 @@ def run_jobs() -> None:
     cmd_worker_indexing = [
         "celery",
         "-A",
-        "danswer.background.celery.versioned_apps.indexing",
+        "onyx.background.celery.versioned_apps.indexing",
         "worker",
         "--pool=threads",
         "--concurrency=1",
@@ -75,7 +75,7 @@ def run_jobs() -> None:
     cmd_beat = [
         "celery",
         "-A",
-        "danswer.background.celery.versioned_apps.beat",
+        "onyx.background.celery.versioned_apps.beat",
         "beat",
         "--loglevel=INFO",
     ]

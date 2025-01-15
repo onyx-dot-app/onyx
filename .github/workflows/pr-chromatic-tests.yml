@@ -14,18 +14,24 @@ jobs:
     name: Playwright Tests
 
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=8cpu-linux-x64,ram=16,"run-id=${{ github.run_id }}"]
+    runs-on:
+      [
+        runs-on,
+        runner=32cpu-linux-x64,
+        disk=large,
+        "run-id=${{ github.run_id }}",
+      ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
           cache-dependency-path: |
             backend/requirements/default.txt
             backend/requirements/dev.txt
@@ -35,7 +41,7 @@ jobs:
           pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
           pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
           pip install --retries 5 --timeout 30 -r backend/requirements/model_server.txt
-        
+
       - name: Setup node
         uses: actions/setup-node@v4
         with:
@@ -48,7 +54,7 @@ jobs:
       - name: Install playwright browsers
         working-directory: ./web
         run: npx playwright install --with-deps
-        
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -60,13 +66,13 @@ jobs:
 
       # tag every docker image with "test" so that we can spin up the correct set
       # of images during testing
-      
+
       # we use the runs-on cache for docker builds
       # in conjunction with runs-on runners, it has better speed and unlimited caching
       # https://runs-on.com/caching/s3-cache-for-github-actions/
       # https://runs-on.com/caching/docker/
       # https://github.com/moby/buildkit#s3-cache-experimental
-      
+
       # images are built and run locally for testing purposes. Not pushed.
 
       - name: Build Web Docker image
@@ -75,7 +81,7 @@ jobs:
           context: ./web
           file: ./web/Dockerfile
           platforms: linux/amd64
-          tags: danswer/danswer-web-server:test
+          tags: onyxdotapp/onyx-web-server:test
           push: false
           load: true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/web-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
@@ -87,7 +93,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: linux/amd64
-          tags: danswer/danswer-backend:test
+          tags: onyxdotapp/onyx-backend:test
           push: false
           load: true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/backend/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
@@ -99,7 +105,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/amd64
-          tags: danswer/danswer-model-server:test
+          tags: onyxdotapp/onyx-model-server:test
           push: false
           load: true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/model-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
@@ -110,6 +116,7 @@ jobs:
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
           AUTH_TYPE=basic \
+          GEN_AI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
@@ -119,12 +126,12 @@ jobs:
       - name: Wait for service to be ready
         run: |
           echo "Starting wait-for-service script..."
-          
+
           docker logs -f danswer-stack-api_server-1 &
 
           start_time=$(date +%s)
           timeout=300  # 5 minutes in seconds
-          
+
           while true; do
             current_time=$(date +%s)
             elapsed_time=$((current_time - start_time))
@@ -152,7 +159,7 @@ jobs:
 
       - name: Run pytest playwright test init
         working-directory: ./backend
-        env: 
+        env:
           PYTEST_IGNORE_SKIP: true
         run: pytest -s tests/integration/tests/playwright/test_playwright.py
 
@@ -168,7 +175,7 @@ jobs:
           name: test-results
           path: ./web/test-results
           retention-days: 30
-                    
+
       # save before stopping the containers so the logs can be captured
       - name: Save Docker logs
         if: success() || failure()
@@ -176,7 +183,7 @@ jobs:
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p danswer-stack logs > docker-compose.log
           mv docker-compose.log ${{ github.workspace }}/docker-compose.log
-      
+
       - name: Upload logs
         if: success() || failure()
         uses: actions/upload-artifact@v4
@@ -191,35 +198,41 @@ jobs:
 
   chromatic-tests:
     name: Chromatic Tests
-    
+
     needs: playwright-tests
-    runs-on: [runs-on,runner=8cpu-linux-x64,ram=16,"run-id=${{ github.run_id }}"]
+    runs-on:
+      [
+        runs-on,
+        runner=32cpu-linux-x64,
+        disk=large,
+        "run-id=${{ github.run_id }}",
+      ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: Setup node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          
+
       - name: Install node dependencies
         working-directory: ./web
         run: npm ci
-        
+
       - name: Download Playwright test results
         uses: actions/download-artifact@v4
         with:
           name: test-results
           path: ./web/test-results
-          
+
       - name: Run Chromatic
         uses: chromaui/action@latest
         with:
           playwright: true
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
           workingDir: ./web
-        env: 
+        env:
           CHROMATIC_ARCHIVE_LOCATION: ./test-results

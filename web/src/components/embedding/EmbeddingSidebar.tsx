@@ -2,7 +2,7 @@ import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 
 import { SettingsIcon } from "@/components/icons/icons";
-import { Logo } from "@/components/Logo";
+import { Logo } from "@/components/logo/Logo";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import Link from "next/link";
 import { useContext } from "react";
@@ -41,7 +41,7 @@ export default function EmbeddingSidebar() {
               {enterpriseSettings && enterpriseSettings.application_name ? (
                 <HeaderTitle>{enterpriseSettings.application_name}</HeaderTitle>
               ) : (
-                <HeaderTitle>Danswer</HeaderTitle>
+                <HeaderTitle>Onyx</HeaderTitle>
               )}
             </div>
           </div>
@@ -79,7 +79,9 @@ export default function EmbeddingSidebar() {
                         </div>
                       </div>
                       <div
-                        className={`${index <= formStep ? "text-gray-800" : "text-gray-500"}`}
+                        className={`${
+                          index <= formStep ? "text-gray-800" : "text-gray-500"
+                        }`}
                       >
                         {step}
                       </div>

@@ -1,5 +1,5 @@
 # This file is used to demonstrate how to use the backend APIs directly
-# In this case, the equivalent of asking a question in Danswer Chat in a new chat session
+# In this case, the equivalent of asking a question in Onyx Chat in a new chat session
 import argparse
 import json
 import os
@@ -7,9 +7,9 @@ import os
 import requests
 
 
-def create_new_chat_session(danswer_url: str, api_key: str | None) -> int:
+def create_new_chat_session(onyx_url: str, api_key: str | None) -> int:
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
-    session_endpoint = danswer_url + "/api/chat/create-chat-session"
+    session_endpoint = onyx_url + "/api/chat/create-chat-session"
 
     response = requests.post(
         session_endpoint,
@@ -22,10 +22,10 @@ def create_new_chat_session(danswer_url: str, api_key: str | None) -> int:
     return new_session_id
 
 
-def process_question(danswer_url: str, question: str, api_key: str | None) -> None:
-    message_endpoint = danswer_url + "/api/chat/send-message"
+def process_question(onyx_url: str, question: str, api_key: str | None) -> None:
+    message_endpoint = onyx_url + "/api/chat/send-message"
 
-    chat_session_id = create_new_chat_session(danswer_url, api_key)
+    chat_session_id = create_new_chat_session(onyx_url, api_key)
 
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
 
@@ -65,23 +65,23 @@ def process_question(danswer_url: str, question: str, api_key: str | None) -> No
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Sample API Usage")
     parser.add_argument(
-        "--danswer-url",
+        "--onyx-url",
         type=str,
         default="http://localhost:80",
-        help="Danswer URL, should point to Danswer nginx.",
+        help="Onyx URL, should point to Onyx nginx.",
     )
     parser.add_argument(
         "--test-question",
         type=str,
-        default="What is Danswer?",
+        default="What is Onyx?",
         help="Test question for new Chat Session.",
     )
 
     # Not needed if Auth is disabled
-    # Or for Danswer MIT API key must be replaced with session cookie
+    # Or for Onyx MIT API key must be replaced with session cookie
     api_key = os.environ.get("DANSWER_API_KEY")
 
     args = parser.parse_args()
     process_question(
-        danswer_url=args.danswer_url, question=args.test_question, api_key=api_key
+        onyx_url=args.onyx_url, question=args.test_question, api_key=api_key
     )

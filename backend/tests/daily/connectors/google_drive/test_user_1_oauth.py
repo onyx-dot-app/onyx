@@ -3,8 +3,8 @@ from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-from danswer.connectors.google_drive.connector import GoogleDriveConnector
-from danswer.connectors.models import Document
+from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.models import Document
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_retrieved_docs_match_expected,
@@ -20,7 +20,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FIL
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_all(
@@ -60,7 +60,7 @@ def test_all(
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_shared_drives_only(
@@ -95,7 +95,7 @@ def test_shared_drives_only(
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_shared_with_me_only(
@@ -128,7 +128,7 @@ def test_shared_with_me_only(
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_my_drive_only(
@@ -158,7 +158,7 @@ def test_my_drive_only(
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_shared_my_drive_folder(
@@ -190,7 +190,7 @@ def test_shared_my_drive_folder(
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_shared_drive_folder(

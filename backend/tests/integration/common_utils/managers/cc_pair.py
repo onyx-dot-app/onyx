@@ -5,14 +5,14 @@ from uuid import uuid4
 
 import requests
 
-from danswer.connectors.models import InputType
-from danswer.db.enums import AccessType
-from danswer.db.enums import ConnectorCredentialPairStatus
-from danswer.server.documents.models import CCPairFullInfo
-from danswer.server.documents.models import ConnectorCredentialPairIdentifier
-from danswer.server.documents.models import ConnectorIndexingStatus
-from danswer.server.documents.models import DocumentSource
-from danswer.server.documents.models import DocumentSyncStatus
+from onyx.connectors.models import InputType
+from onyx.db.enums import AccessType
+from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.server.documents.models import CCPairFullInfo
+from onyx.server.documents.models import ConnectorCredentialPairIdentifier
+from onyx.server.documents.models import ConnectorIndexingStatus
+from onyx.server.documents.models import DocumentSource
+from onyx.server.documents.models import DocumentSyncStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import MAX_DELAY

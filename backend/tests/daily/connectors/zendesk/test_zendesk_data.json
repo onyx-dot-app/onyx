@@ -1,0 +1,34 @@
+{
+  "article": {
+      "id": "32502691728155",
+      "sections": [
+        {
+          "link": "https://d3v-onyx.zendesk.com/hc/en-us/articles/32502691728155-How-can-agents-leverage-knowledge-to-help-customers"
+        }
+      ],
+      "source": "zendesk",
+      "semantic_identifier": "How can agents leverage knowledge to help customers?",
+      "primary_owners": [
+        {
+          "display_name": "Dan Swer",
+          "email": "admin@onyx-test.com"
+        }
+      ]
+  },
+  "ticket": {
+    "id": "1",
+    "sections": [
+      {
+        "link": "https://d3v-onyx.zendesk.com/agent/tickets/1"
+      }
+    ],
+    "source": "zendesk",
+    "semantic_identifier": "Ticket #1: SAMPLE TICKET: Meet the ticket",
+    "metadata": {
+      "status": "open",
+      "priority": "normal",
+      "tags": ["sample", "support", "zendesk"],
+      "ticket_type": "incident"
+    }
+  }
+}

@@ -50,7 +50,7 @@ export function SlackChannelConfigsTable({
           <TableHeader>
             <TableRow>
               <TableHead>Channel</TableHead>
-              <TableHead>Persona</TableHead>
+              <TableHead>Assistant</TableHead>
               <TableHead>Document Sets</TableHead>
               <TableHead>Delete</TableHead>
             </TableRow>
@@ -84,7 +84,6 @@ export function SlackChannelConfigsTable({
                           href={`/admin/assistants/${slackChannelConfig.persona.id}`}
                           className="text-blue-500 flex hover:underline"
                         >
-                          <FiArrowUpRight className="my-auto mr-1" />
                           {slackChannelConfig.persona.name}
                         </Link>
                       ) : (
@@ -139,7 +138,7 @@ export function SlackChannelConfigsTable({
                   className="text-center text-muted-foreground"
                 >
                   Please add a New Slack Bot Configuration to begin chatting
-                  with Danswer!
+                  with Onyx!
                 </TableCell>
               </TableRow>
             )}

@@ -44,6 +44,7 @@ const EditPropertyModal = ({
             </h2>
 
             <TextFormField
+              vertical
               label={propertyDetails || ""}
               name="propertyValue"
               placeholder="Property value"

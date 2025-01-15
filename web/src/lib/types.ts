@@ -12,12 +12,6 @@ interface UserPreferences {
   auto_scroll: boolean | null;
 }
 
-export enum UserStatus {
-  live = "live",
-  invited = "invited",
-  deactivated = "deactivated",
-}
-
 export enum UserRole {
   LIMITED = "limited",
   BASIC = "basic",
@@ -45,23 +39,43 @@ export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
     "Global Curator users can perform admin actions for all groups they are a member of",
   [UserRole.CURATOR]: "Curator role must be assigned in the Groups tab",
   [UserRole.SLACK_USER]:
-    "This role is automatically assigned to users who only use Danswer via Slack",
+    "This role is automatically assigned to users who only use Onyx via Slack",
 };
 
 export interface User {
   id: string;
   email: string;
-  is_active: string;
-  is_superuser: string;
-  is_verified: string;
+  is_active: boolean;
+  is_superuser: boolean;
+  is_verified: boolean;
   role: UserRole;
   preferences: UserPreferences;
-  status: UserStatus;
   current_token_created_at?: Date;
   current_token_expiry_length?: number;
   oidc_expiry?: Date;
   is_cloud_superuser?: boolean;
   organization_name: string | null;
+  is_anonymous_user?: boolean;
+}
+
+export interface AllUsersResponse {
+  accepted: User[];
+  invited: User[];
+  slack_users: User[];
+  accepted_pages: number;
+  invited_pages: number;
+  slack_users_pages: number;
+}
+
+export interface AcceptedUserSnapshot {
+  id: string;
+  email: string;
+  role: UserRole;
+  is_active: boolean;
+}
+
+export interface InvitedUserSnapshot {
+  email: string;
 }
 
 export interface MinimalUserSnapshot {
@@ -116,27 +130,26 @@ export interface IndexAttemptSnapshot {
   time_updated: string;
 }
 
-export interface ConnectorIndexingStatus<
-  ConnectorConfigType,
-  ConnectorCredentialType,
-> {
+export interface ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
   cc_pair_id: number;
   name: string | null;
-  cc_pair_status: ConnectorCredentialPairStatus;
   connector: Connector<ConnectorConfigType>;
   credential: Credential<ConnectorCredentialType>;
   access_type: AccessType;
-  owner: string;
   groups: number[];
-  last_finished_status: ValidStatuses | null;
-  last_status: ValidStatuses | null;
+}
+
+export interface ConnectorIndexingStatus<
+  ConnectorConfigType,
+  ConnectorCredentialType,
+> extends ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
+  // Inlcude data only necessary for indexing statuses in admin page
   last_success: string | null;
-  docs_indexed: number;
-  error_msg: string;
+  last_status: ValidStatuses | null;
+  last_finished_status: ValidStatuses | null;
+  cc_pair_status: ConnectorCredentialPairStatus;
   latest_index_attempt: IndexAttemptSnapshot | null;
-  deletion_attempt: DeletionAttemptSnapshot | null;
-  is_deletable: boolean;
-  in_progress: boolean;
+  docs_indexed: number;
 }
 
 export interface OAuthPrepareAuthorizationResponse {
@@ -300,6 +313,7 @@ export enum ValidSources {
   GoogleSites = "google_sites",
   Loopio = "loopio",
   Dropbox = "dropbox",
+  Discord = "discord",
   Salesforce = "salesforce",
   Sharepoint = "sharepoint",
   Teams = "teams",
@@ -320,6 +334,7 @@ export enum ValidSources {
   Freshdesk = "freshdesk",
   Fireflies = "fireflies",
   Egnyte = "egnyte",
+  Airtable = "airtable",
 }
 
 export const validAutoSyncSources = [
@@ -327,6 +342,7 @@ export const validAutoSyncSources = [
   ValidSources.GoogleDrive,
   ValidSources.Gmail,
   ValidSources.Slack,
+  ValidSources.Salesforce,
 ] as const;
 
 // Create a type from the array elements

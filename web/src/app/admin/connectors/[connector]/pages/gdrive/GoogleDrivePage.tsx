@@ -6,11 +6,8 @@ import { FetchError, errorHandlingFetcher } from "@/lib/fetcher";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { ConnectorIndexingStatus, ValidSources } from "@/lib/types";
-import {
-  usePublicCredentials,
-  useConnectorCredentialIndexingStatus,
-} from "@/lib/hooks";
+import { ValidSources } from "@/lib/types";
+import { usePublicCredentials } from "@/lib/hooks";
 import Title from "@/components/ui/title";
 import { DriveJsonUploadSection, DriveAuthSection } from "./Credential";
 import {
@@ -18,13 +15,9 @@ import {
   GoogleDriveCredentialJson,
   GoogleDriveServiceAccountCredentialJson,
 } from "@/lib/connectors/credentials";
-import {
-  ConnectorSnapshot,
-  GoogleDriveConfig,
-} from "@/lib/connectors/connectors";
+import { ConnectorSnapshot } from "@/lib/connectors/connectors";
 import { useUser } from "@/components/user/UserProvider";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
-import { fetchConnectors } from "@/lib/connector";
 
 const useConnectorsByCredentialId = (credential_id: number | null) => {
   let url: string | null = null;
@@ -194,7 +187,7 @@ const GDriveMain = ({}: {}) => {
       {isAdmin && (
         <>
           <Title className="mb-2 mt-6 ml-auto mr-auto">
-            Step 2: Authenticate with Danswer
+            Step 2: Authenticate with Onyx
           </Title>
           <DriveAuthSection
             setPopup={setPopup}

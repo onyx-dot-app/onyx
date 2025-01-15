@@ -5,7 +5,7 @@ envsubst '$DOMAIN $SSL_CERT_FILE_NAME $SSL_CERT_KEY_FILE_NAME' < "/etc/nginx/con
 echo "Waiting for API server to boot up; this may take a minute or two..."
 echo "If this takes more than ~5 minutes, check the logs of the API server container for errors with the following command:"
 echo
-echo "docker logs danswer-stack_api_server-1"
+echo "docker logs onyx-stack_api_server-1"
 echo
 
 while true; do

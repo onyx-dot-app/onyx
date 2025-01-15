@@ -56,7 +56,9 @@ export default async function Page(props: {
           defaultAssistantId,
         }}
       >
-        <WrappedChat initiallyToggled={toggleSidebar} />
+        <WrappedChat
+          initiallyToggled={toggleSidebar && !user?.is_anonymous_user}
+        />
       </ChatProvider>
     </>
   );

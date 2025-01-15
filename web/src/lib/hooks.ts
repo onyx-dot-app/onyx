@@ -5,18 +5,24 @@ import {
   DocumentBoostStatus,
   Tag,
   UserGroup,
+  ConnectorStatus,
+  CCPairBasicInfo,
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import { useContext, useEffect, useState } from "react";
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import { destructureValue } from "./llm/utils";
+import { destructureValue, structureValue } from "./llm/utils";
 import { ChatSession } from "@/app/chat/interfaces";
-import { UsersResponse } from "./users/interfaces";
+import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { PersonaCategory } from "@/app/admin/assistants/interfaces";
+import {
+  LLMProvider,
+  LLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import { isAnthropic } from "@/app/admin/configuration/llm/interfaces";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
@@ -67,6 +73,7 @@ export const useObjectState = <T>(
 };
 
 const INDEXING_STATUS_URL = "/api/manage/admin/connector/indexing-status";
+const CONNECTOR_STATUS_URL = "/api/manage/admin/connector/status";
 
 export const useConnectorCredentialIndexingStatus = (
   refreshInterval = 30000, // 30 seconds
@@ -82,6 +89,30 @@ export const useConnectorCredentialIndexingStatus = (
     { refreshInterval: refreshInterval }
   );
 
+  return {
+    ...swrResponse,
+    refreshIndexingStatus: () => mutate(url),
+  };
+};
+
+export const useConnectorStatus = (refreshInterval = 30000) => {
+  const { mutate } = useSWRConfig();
+  const url = CONNECTOR_STATUS_URL;
+  const swrResponse = useSWR<ConnectorStatus<any, any>[]>(
+    url,
+    errorHandlingFetcher,
+    { refreshInterval: refreshInterval }
+  );
+
+  return {
+    ...swrResponse,
+    refreshIndexingStatus: () => mutate(url),
+  };
+};
+
+export const useBasicConnectorStatus = () => {
+  const url = "/api/manage/admin/connector-status";
+  const swrResponse = useSWR<CCPairBasicInfo[]>(url, errorHandlingFetcher);
   return {
     ...swrResponse,
     refreshIndexingStatus: () => mutate(url),
@@ -141,7 +172,7 @@ export function useFilters(): FilterManager {
 export const useUsers = () => {
   const url = "/api/manage/users";
 
-  const swrResponse = useSWR<UsersResponse>(url, errorHandlingFetcher);
+  const swrResponse = useSWR<AllUsersResponse>(url, errorHandlingFetcher);
 
   return {
     ...swrResponse,
@@ -157,7 +188,7 @@ export interface LlmOverride {
 
 export interface LlmOverrideManager {
   llmOverride: LlmOverride;
-  setLlmOverride: React.Dispatch<React.SetStateAction<LlmOverride>>;
+  updateLLMOverride: (newOverride: LlmOverride) => void;
   globalDefault: LlmOverride;
   setGlobalDefault: React.Dispatch<React.SetStateAction<LlmOverride>>;
   temperature: number | null;
@@ -165,52 +196,64 @@ export interface LlmOverrideManager {
   updateModelOverrideForChatSession: (chatSession?: ChatSession) => void;
 }
 export function useLlmOverride(
+  llmProviders: LLMProviderDescriptor[],
   globalModel?: string | null,
   currentChatSession?: ChatSession,
   defaultTemperature?: number
 ): LlmOverrideManager {
+  const getValidLlmOverride = (
+    overrideModel: string | null | undefined
+  ): LlmOverride => {
+    if (overrideModel) {
+      const model = destructureValue(overrideModel);
+      const provider = llmProviders.find(
+        (p) =>
+          p.model_names.includes(model.modelName) &&
+          p.provider === model.provider
+      );
+      if (provider) {
+        return { ...model, name: provider.name };
+      }
+    }
+    return { name: "", provider: "", modelName: "" };
+  };
+
   const [globalDefault, setGlobalDefault] = useState<LlmOverride>(
-    globalModel != null
-      ? destructureValue(globalModel)
-      : {
-          name: "",
-          provider: "",
-          modelName: "",
-        }
+    getValidLlmOverride(globalModel)
   );
+  const updateLLMOverride = (newOverride: LlmOverride) => {
+    setLlmOverride(
+      getValidLlmOverride(
+        structureValue(
+          newOverride.name,
+          newOverride.provider,
+          newOverride.modelName
+        )
+      )
+    );
+  };
+
   const [llmOverride, setLlmOverride] = useState<LlmOverride>(
     currentChatSession && currentChatSession.current_alternate_model
-      ? destructureValue(currentChatSession.current_alternate_model)
-      : {
-          name: "",
-          provider: "",
-          modelName: "",
-        }
+      ? getValidLlmOverride(currentChatSession.current_alternate_model)
+      : { name: "", provider: "", modelName: "" }
   );
 
   const updateModelOverrideForChatSession = (chatSession?: ChatSession) => {
     setLlmOverride(
       chatSession && chatSession.current_alternate_model
-        ? destructureValue(chatSession.current_alternate_model)
+        ? getValidLlmOverride(chatSession.current_alternate_model)
         : globalDefault
     );
   };
 
   const [temperature, setTemperature] = useState<number | null>(
-    defaultTemperature != undefined ? defaultTemperature : 0
+    defaultTemperature !== undefined ? defaultTemperature : 0
   );
 
   useEffect(() => {
-    setGlobalDefault(
-      globalModel != null
-        ? destructureValue(globalModel)
-        : {
-            name: "",
-            provider: "",
-            modelName: "",
-          }
-    );
-  }, [globalModel]);
+    setGlobalDefault(getValidLlmOverride(globalModel));
+  }, [globalModel, llmProviders]);
 
   useEffect(() => {
     setTemperature(defaultTemperature !== undefined ? defaultTemperature : 0);
@@ -233,7 +276,7 @@ export function useLlmOverride(
   return {
     updateModelOverrideForChatSession,
     llmOverride,
-    setLlmOverride,
+    updateLLMOverride,
     globalDefault,
     setGlobalDefault,
     temperature,
@@ -283,6 +326,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   // OpenAI models
   "o1-mini": "O1 Mini",
   "o1-preview": "O1 Preview",
+  "o1-2024-12-17": "O1",
   "gpt-4": "GPT 4",
   "gpt-4o": "GPT 4o",
   "gpt-4o-2024-08-06": "GPT 4o (Structured Outputs)",
@@ -302,6 +346,21 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "gpt-3.5-turbo-16k-0613": "GPT 3.5 Turbo 16k (June 2023)",
   "gpt-3.5-turbo-0301": "GPT 3.5 Turbo (March 2023)",
 
+  // Amazon models
+  "amazon.nova-micro@v1": "Amazon Nova Micro",
+  "amazon.nova-lite@v1": "Amazon Nova Lite",
+  "amazon.nova-pro@v1": "Amazon Nova Pro",
+
+  // Meta models
+  "llama-3.2-90b-vision-instruct": "Llama 3.2 90B",
+  "llama-3.2-11b-vision-instruct": "Llama 3.2 11B",
+  "llama-3.3-70b-instruct": "Llama 3.3 70B",
+
+  // Microsoft models
+  "phi-3.5-mini-instruct": "Phi 3.5 Mini",
+  "phi-3.5-moe-instruct": "Phi 3.5 MoE",
+  "phi-3.5-vision-instruct": "Phi 3.5 Vision",
+
   // Anthropic models
   "claude-3-opus-20240229": "Claude 3 Opus",
   "claude-3-sonnet-20240229": "Claude 3 Sonnet",
@@ -313,6 +372,9 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet (New)",
   "claude-3-5-sonnet-v2@20241022": "Claude 3.5 Sonnet (New)",
   "claude-3.5-sonnet-v2@20241022": "Claude 3.5 Sonnet (New)",
+  "claude-3-5-haiku-20241022": "Claude 3.5 Haiku",
+  "claude-3-5-haiku@20241022": "Claude 3.5 Haiku",
+  "claude-3.5-haiku@20241022": "Claude 3.5 Haiku",
 
   // Google Models
   "gemini-1.5-pro": "Gemini 1.5 Pro",
@@ -321,6 +383,11 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "gemini-1.5-flash-001": "Gemini 1.5 Flash",
   "gemini-1.5-pro-002": "Gemini 1.5 Pro (v2)",
   "gemini-1.5-flash-002": "Gemini 1.5 Flash (v2)",
+  "gemini-2.0-flash-exp": "Gemini 2.0 Flash (Experimental)",
+
+  // Mistral Models
+  "mistral-large-2411": "Mistral Large 24.11",
+  "mistral-large@2411": "Mistral Large 24.11",
 
   // Bedrock models
   "meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B",

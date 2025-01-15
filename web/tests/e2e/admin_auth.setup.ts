@@ -10,7 +10,7 @@ setup("authenticate", async ({ page }) => {
 
   await page.waitForURL("http://localhost:3000/auth/login?next=%2Fchat");
 
-  await expect(page).toHaveTitle("Danswer");
+  await expect(page).toHaveTitle("Onyx");
 
   await page.fill("#email", email);
   await page.fill("#password", password);

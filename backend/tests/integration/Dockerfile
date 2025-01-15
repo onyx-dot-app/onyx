@@ -1,6 +1,6 @@
 FROM python:3.11.7-slim-bookworm
 # Dockerfile for integration tests
-# Currently needs all dependencies, since the ITs use some of the Danswer
+# Currently needs all dependencies, since the ITs use some of the Onyx
 # backend code.
 
 # Install system dependencies
@@ -43,7 +43,7 @@ RUN pip install --no-cache-dir --upgrade \
 # Cleanup for CVEs and size reduction
 # https://github.com/tornadoweb/tornado/issues/3107
 # xserver-common and xvfb included by playwright installation but not needed after
-# perl-base is part of the base Python Debian image but not needed for Danswer functionality
+# perl-base is part of the base Python Debian image but not needed for Onyx functionality
 # perl-base could only be removed with --allow-remove-essential
 RUN apt-get update && \
     apt-get remove -y --allow-remove-essential \
@@ -68,7 +68,7 @@ COPY ./ee /app/ee
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Set up application files
-COPY ./danswer /app/danswer
+COPY ./onyx /app/onyx
 COPY ./shared_configs /app/shared_configs
 COPY ./alembic /app/alembic
 COPY ./alembic.ini /app/alembic.ini

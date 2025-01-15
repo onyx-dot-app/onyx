@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import WrappedAssistantsMine from "./WrappedAssistantsMine";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { cookies } from "next/headers";
+import { ChatProvider } from "@/components/context/ChatContext";
 
 export default async function GalleryPage(props: {
   searchParams: Promise<{ [key: string]: string }>;
@@ -27,21 +28,37 @@ export default async function GalleryPage(props: {
     openedFolders,
     toggleSidebar,
     shouldShowWelcomeModal,
+    availableSources,
+    ccPairs,
+    documentSets,
+    tags,
+    llmProviders,
+    defaultAssistantId,
   } = data;
 
   return (
-    <>
+    <ChatProvider
+      value={{
+        chatSessions,
+        availableSources,
+        ccPairs,
+        documentSets,
+        tags,
+        availableDocumentSets: documentSets,
+        availableTags: tags,
+        llmProviders,
+        folders,
+        openedFolders,
+        shouldShowWelcomeModal,
+        defaultAssistantId,
+      }}
+    >
       {shouldShowWelcomeModal && (
         <WelcomeModal user={user} requestCookies={requestCookies} />
       )}
 
       <InstantSSRAutoRefresh />
-      <WrappedAssistantsMine
-        initiallyToggled={toggleSidebar}
-        chatSessions={chatSessions}
-        folders={folders}
-        openedFolders={openedFolders}
-      />
-    </>
+      <WrappedAssistantsMine initiallyToggled={toggleSidebar} />
+    </ChatProvider>
   );
 }

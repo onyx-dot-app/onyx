@@ -108,6 +108,8 @@ module.exports = {
         "background-search-filter": "var(--background-100)",
         "background-search-filter-dropdown": "var(--background-100)",
 
+        "user-bubble": "var(--user-bubble)",
+
         // colors for sidebar in chat, search, and manage settings
         "background-sidebar": "var(--background-100)",
         "background-chatbar": "var(--background-100)",
@@ -140,6 +142,14 @@ module.exports = {
 
         // Background for chat messages (user bubbles)
         user: "var(--user-bubble)",
+
+        "userdropdown-background": "var(--background-150)",
+        "text-mobile-sidebar-toggled": "var(--text-800)",
+        "text-mobile-sidebar-untoggled": "var(--text-500)",
+        "text-editing-message": "var(--text-800)",
+        "background-sidebar": "var(--background-100)",
+        "background-search-filter": "var(--background-100)",
+        "background-search-filter-dropdown": "var(--background-hover)",
 
         "background-toggle": "var(--background-100)",
 
@@ -200,6 +210,8 @@ module.exports = {
         "calendar-today-bg-dark": "var(--background-800)",
         "calendar-today-text": "var(--text-800)",
         "calendar-today-text-dark": "var(--text-200)",
+        "calendar-background-selected": "var(--white)",
+        "calendar-ring-selected": "var(--background-900)",
 
         "user-text": "var(--text-800)",
 
@@ -349,6 +361,39 @@ module.exports = {
       },
       fontStyle: {
         "token-italic": "italic",
+      },
+      calendar: {
+        // Light mode
+        "bg-selected": "#4B5563",
+        "bg-outside-selected": "rgba(75, 85, 99, 0.2)",
+        "text-muted": "#6B7280",
+        "text-selected": "#FFFFFF",
+        "range-start": "#000000",
+        "range-middle": "#F3F4F6",
+        "range-end": "#000000",
+        "text-in-range": "#1F2937",
+
+        // Dark mode
+        "bg-selected-dark": "#6B7280",
+        "bg-outside-selected-dark": "rgba(107, 114, 128, 0.2)",
+        "text-muted-dark": "#9CA3AF",
+        "text-selected-dark": "#F3F4F6",
+        "range-start-dark": "#374151",
+        "range-middle-dark": "#4B5563",
+        "range-end-dark": "#374151",
+        "text-in-range-dark": "#E5E7EB",
+
+        // Hover effects
+        "hover-bg": "#9CA3AF",
+        "hover-bg-dark": "#6B7280",
+        "hover-text": "#374151",
+        "hover-text-dark": "#E5E7EB",
+
+        // Today's date
+        "today-bg": "#D1D5DB",
+        "today-bg-dark": "#4B5563",
+        "today-text": "#374151",
+        "today-text-dark": "#D1D5DB",
       },
     },
   },

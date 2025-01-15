@@ -1,0 +1,128 @@
+# Currently in the UI, each Persona only has one prompt, which is why there are 3 very similar personas defined below.
+
+personas:
+  # This id field can be left blank for other default personas, however an id 0 persona must exist
+  # this is for OnyxBot to use when tagged in a non-configured channel
+  # Careful setting specific IDs, this won't autoincrement the next ID value for postgres
+  - id: 0
+    name: "Search"
+    description: >
+      Assistant with access to documents and knowledge from Connected Sources.
+    # Default Prompt objects attached to the persona, see prompts.yaml
+    prompts:
+      - "Answer-Question"
+    # Default number of chunks to include as context, set to 0 to disable retrieval
+    # Remove the field to set to the system default number of chunks/tokens to pass to Gen AI
+    # Each chunk is 512 tokens long
+    num_chunks: 10
+    # Enable/Disable usage of the LLM chunk filter feature whereby each chunk is passed to the LLM to determine
+    # if the chunk is useful or not towards the latest user query
+    # This feature can be overriden for all personas via DISABLE_LLM_DOC_RELEVANCE env variable
+    llm_relevance_filter: true
+    # Enable/Disable usage of the LLM to extract query time filters including source type and time range filters
+    llm_filter_extraction: true
+    # Decay documents priority as they age, options are:
+    # - favor_recent (2x base by default, configurable)
+    # - base_decay
+    # - no_decay
+    # - auto (model chooses between favor_recent and base_decay based on user query)
+    recency_bias: "auto"
+    # Default Document Sets for this persona, specified as a list of names here.
+    # If the document set by the name exists, it will be attached to the persona
+    # If the document set by the name does not exist, it will be created as an empty document set with no connectors
+    # The admin can then use the UI to add new connectors to the document set
+    # Example:
+    # document_sets:
+    #   - "HR Resources"
+    #   - "Engineer Onboarding"
+    #   - "Benefits"
+    document_sets: []
+    icon_shape: 23013
+    icon_color: "#6FB1FF"
+    display_priority: 0
+    is_visible: true
+    starter_messages:
+      - name: "Give me an overview of what's here"
+        message: "Sample some documents and tell me what you find."
+      - name: "Use AI to solve a work related problem"
+        message: "Ask me what problem I would like to solve, then search the knowledge base to help me find a solution."
+      - name: "Find updates on a topic of interest"
+        message: "Once I provide a topic, retrieve related documents and tell me when there was last activity on the topic if available."
+      - name: "Surface contradictions"
+        message: "Have me choose a subject. Once I have provided it, check against the knowledge base and point out any inconsistencies. For all your following responses, focus on identifying contradictions."
+
+  - id: 1
+    name: "General"
+    description: >
+      Assistant with no search functionalities. Chat directly with the Large Language Model.
+    prompts:
+      - "OnlyLLM"
+    num_chunks: 0
+    llm_relevance_filter: true
+    llm_filter_extraction: true
+    recency_bias: "auto"
+    document_sets: []
+    icon_shape: 50910
+    icon_color: "#FF6F6F"
+    display_priority: 1
+    is_visible: true
+    starter_messages:
+      - name: "Summarize a document"
+        message: "If I have provided a document please summarize it for me. If not, please ask me to upload a document either by dragging it into the input bar or clicking the +file icon."
+      - name: "Help me with coding"
+        message: 'Write me a "Hello World" script in 5 random languages to show off the functionality.'
+      - name: "Draft a professional email"
+        message: "Help me craft a professional email. Let's establish the context and the anticipated outcomes of the email before proposing a draft."
+      - name: "Learn something new"
+        message: "What is the difference between a Gantt chart, a Burndown chart and a Kanban board?"
+
+  - id: 2
+    name: "Paraphrase"
+    description: >
+      Assistant that is heavily constrained and only provides exact quotes from Connected Sources.
+    prompts:
+      - "Paraphrase"
+    num_chunks: 10
+    llm_relevance_filter: true
+    llm_filter_extraction: true
+    recency_bias: "auto"
+    document_sets: []
+    icon_shape: 45519
+    icon_color: "#6FFF8D"
+    display_priority: 2
+    is_visible: false
+    starter_messages:
+      - name: "Document Search"
+        message: "Hi! Could you help me find information about our team structure and reporting lines from our internal documents?"
+      - name: "Process Verification"
+        message: "Hello! I need to understand our project approval process. Could you find the exact steps from our documentation?"
+      - name: "Technical Documentation"
+        message: "Hi there! I'm looking for information about our deployment procedures. Can you find the specific steps from our technical guides?"
+      - name: "Policy Reference"
+        message: "Hello! Could you help me find our official guidelines about client communication? I need the exact wording from our documentation."
+
+  - id: 3
+    name: "Art"
+    description: >
+      Assistant for generating images based on descriptions.
+    prompts:
+      - "ImageGeneration"
+    num_chunks: 0
+    llm_relevance_filter: false
+    llm_filter_extraction: false
+    recency_bias: "no_decay"
+    document_sets: []
+    icon_shape: 234124
+    icon_color: "#9B59B6"
+    image_generation: true
+    display_priority: 3
+    is_visible: true
+    starter_messages:
+      - name: "Create visuals for a presentation"
+        message: "Generate someone presenting a graph which clearly demonstrates an upwards trajectory."
+      - name: "Find inspiration for a marketing campaign"
+        message: "Generate an image of two happy individuals sipping on a soda drink in a glass bottle."
+      - name: "Visualize a product design"
+        message: "I want to add a search bar to my Iphone app. Generate me generic examples of how other apps implement this."
+      - name: "Generate a humorous image response"
+        message: "My teammate just made a silly mistake and I want to respond with a facepalm. Can you generate me one?"

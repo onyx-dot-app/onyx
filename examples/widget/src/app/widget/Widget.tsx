@@ -133,7 +133,7 @@ async function* sendMessage({
       prompt_id: null,
       search_doc_ids: null,
       file_descriptors: [],
-      // checkout https://github.com/danswer-ai/danswer/blob/main/backend/danswer/search/models.py#L105 for
+      // checkout https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/search/models.py#L105 for
       // all available options
       retrieval_options: {
         run_search: "always",

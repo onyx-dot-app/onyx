@@ -13,7 +13,7 @@ import Link from "next/link";
 import { SignInButton } from "../login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
-import { Separator } from "@/components/ui/separator";
+import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -22,6 +22,10 @@ const Page = async (props: {
   const nextUrl = Array.isArray(searchParams?.next)
     ? searchParams?.next[0]
     : searchParams?.next || null;
+
+  const defaultEmail = Array.isArray(searchParams?.email)
+    ? searchParams?.email[0]
+    : searchParams?.email || null;
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
@@ -39,13 +43,13 @@ const Page = async (props: {
 
   // simply take the user to the home page if Auth is disabled
   if (authTypeMetadata?.authType === "disabled") {
-    return redirect("/");
+    return redirect("/chat");
   }
 
   // if user is already logged in, take them to the main app page
-  if (currentUser && currentUser.is_active) {
+  if (currentUser && currentUser.is_active && !currentUser.is_anonymous_user) {
     if (!authTypeMetadata?.requiresVerification || currentUser.is_verified) {
-      return redirect("/");
+      return redirect("/chat");
     }
     return redirect("/auth/waiting-on-verification");
   }
@@ -53,7 +57,7 @@ const Page = async (props: {
 
   // only enable this page if basic login is enabled
   if (authTypeMetadata?.authType !== "basic" && !cloud) {
-    return redirect("/");
+    return redirect("/chat");
   }
 
   let authUrl: string | null = null;
@@ -62,14 +66,15 @@ const Page = async (props: {
   }
 
   return (
-    <AuthFlowContainer>
+    <AuthFlowContainer authState="signup">
       <HealthCheckBanner />
+      <AuthErrorDisplay searchParams={searchParams} />
 
       <>
         <div className="absolute top-10x w-full"></div>
         <div className="flex w-full flex-col justify-center">
           <h2 className="text-center text-xl text-strong font-bold">
-            {cloud ? "Complete your sign up" : "Sign Up for Danswer"}
+            {cloud ? "Complete your sign up" : "Sign Up for Onyx"}
           </h2>
           {cloud && (
             <>
@@ -94,22 +99,8 @@ const Page = async (props: {
             isSignup
             shouldVerify={authTypeMetadata?.requiresVerification}
             nextUrl={nextUrl}
+            defaultEmail={defaultEmail}
           />
-
-          <div className="flex">
-            <Text className="mt-4 mx-auto">
-              Already have an account?{" "}
-              <Link
-                href={{
-                  pathname: "/auth/login",
-                  query: { ...searchParams },
-                }}
-                className="text-link font-medium"
-              >
-                Log In
-              </Link>
-            </Text>
-          </div>
         </div>
       </>
     </AuthFlowContainer>

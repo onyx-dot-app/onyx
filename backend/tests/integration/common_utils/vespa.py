@@ -1,6 +1,6 @@
 import requests
 
-from danswer.document_index.vespa.index import DOCUMENT_ID_ENDPOINT
+from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 
 
 class vespa_fixture:

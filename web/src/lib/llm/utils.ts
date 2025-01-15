@@ -74,6 +74,8 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "claude-3-opus-20240229",
   "claude-3-sonnet-20240229",
   "claude-3-haiku-20240307",
+  // custom claude names
+  "claude-3.5-sonnet-v2@20241022",
   // claude names with AWS Bedrock Suffix
   "claude-3-opus-20240229-v1:0",
   "claude-3-sonnet-20240229-v1:0",
@@ -93,12 +95,20 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "gemini-1.5-flash-001",
   "gemini-1.5-pro-002",
   "gemini-1.5-flash-002",
+  "gemini-2.0-flash-exp",
+  // amazon models
+  "amazon.nova-lite@v1",
+  "amazon.nova-pro@v1",
+  // meta models
+  "llama-3.2-90b-vision-instruct",
+  "llama-3.2-11b-vision-instruct",
+  "Llama-3-2-11B-Vision-Instruct-yb",
 ];
 
 export function checkLLMSupportsImageInput(model: string) {
   // Original exact match check
   const exactMatch = MODEL_NAMES_SUPPORTING_IMAGE_INPUT.some(
-    (modelName) => modelName === model
+    (modelName) => modelName.toLowerCase() === model.toLowerCase()
   );
 
   if (exactMatch) {
@@ -107,12 +117,13 @@ export function checkLLMSupportsImageInput(model: string) {
 
   // Additional check for the last part of the model name
   const modelParts = model.split(/[/.]/);
-  const lastPart = modelParts[modelParts.length - 1];
+  const lastPart = modelParts[modelParts.length - 1]?.toLowerCase();
 
   return MODEL_NAMES_SUPPORTING_IMAGE_INPUT.some((modelName) => {
     const modelNameParts = modelName.split(/[/.]/);
     const modelNameLastPart = modelNameParts[modelNameParts.length - 1];
-    return modelNameLastPart === lastPart;
+    // lastPart is already lowercased above for tiny performance gain
+    return modelNameLastPart?.toLowerCase() === lastPart;
   });
 }
 

@@ -3,18 +3,19 @@ from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-from danswer.access.models import ExternalAccess
-from danswer.connectors.google_drive.connector import GoogleDriveConnector
-from danswer.connectors.google_utils.google_utils import execute_paginated_retrieval
-from danswer.connectors.google_utils.resources import get_admin_service
-from ee.danswer.external_permissions.google_drive.doc_sync import (
+from ee.onyx.external_permissions.google_drive.doc_sync import (
     _get_permissions_from_slim_doc,
 )
+from onyx.access.models import ExternalAccess
+from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
+from onyx.connectors.google_utils.resources import get_admin_service
 from tests.daily.connectors.google_drive.consts_and_utils import ACCESS_MAPPING
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import file_name_template
+from tests.daily.connectors.google_drive.consts_and_utils import filter_invalid_prefixes
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_FILE_IDS
@@ -81,9 +82,10 @@ def assert_correct_access_for_user(
     all_accessible_ids = expected_access_ids + PUBLIC_RANGE
     expected_file_names = {file_name_template.format(i) for i in all_accessible_ids}
 
-    print_discrepencies(expected_file_names, retrieved_file_names)
+    filtered_retrieved_file_names = filter_invalid_prefixes(retrieved_file_names)
+    print_discrepencies(expected_file_names, filtered_retrieved_file_names)
 
-    assert expected_file_names == retrieved_file_names
+    assert expected_file_names == filtered_retrieved_file_names
 
 
 # This function is supposed to map to the group_sync.py file for the google drive connector
@@ -118,7 +120,7 @@ def get_group_map(google_drive_connector: GoogleDriveConnector) -> dict[str, lis
 
 
 @patch(
-    "danswer.file_processing.extract_file_text.get_unstructured_api_key",
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
 def test_all_permissions(
@@ -172,8 +174,9 @@ def test_all_permissions(
     }
 
     # Should get everything
-    print_discrepencies(expected_file_names, found_file_names)
-    assert expected_file_names == found_file_names
+    filtered_retrieved_file_names = filter_invalid_prefixes(found_file_names)
+    print_discrepencies(expected_file_names, filtered_retrieved_file_names)
+    assert expected_file_names == filtered_retrieved_file_names
 
     group_map = get_group_map(google_drive_connector)
 

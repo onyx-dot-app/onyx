@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: onyx-nginx-conf
+data:
+  nginx.conf: |
+    upstream api_server {
+        server {{ include "onyx-stack.fullname" . }}-api-service:{{ .Values.api.service.port }} fail_timeout=0;
+    }
+
+    upstream web_server {
+        server {{ include "onyx-stack.fullname" . }}-webserver:{{ .Values.webserver.service.port }} fail_timeout=0;
+    }
+
+    server {
+        listen 1024;
+        server_name $$DOMAIN;
+
+        client_max_body_size 5G;    # Maximum upload size
+
+        location ~ ^/api(.*)$ {
+            rewrite ^/api(/.*)$ $1 break;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header Host $host;
+            proxy_http_version 1.1;
+            proxy_buffering off;
+            proxy_redirect off;
+            proxy_pass http://api_server;
+        }
+
+        location / {
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header Host $host;
+            proxy_http_version 1.1;
+            proxy_redirect off;
+            proxy_pass http://web_server;
+        }
+    }

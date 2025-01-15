@@ -326,8 +326,9 @@ export function CCPairIndexingStatusTable({
           (sum, status) => sum + status.docs_indexed,
           0
         ),
-        errors: statuses.filter((status) => status.last_status === "failed")
-          .length,
+        errors: statuses.filter(
+          (status) => status.last_finished_status === "failed"
+        ).length,
       };
     });
 
@@ -410,11 +411,6 @@ export function CCPairIndexingStatusTable({
             last_success: "2023-07-01T12:00:00Z",
             last_finished_status: "success",
             latest_index_attempt: null,
-            owner: "1",
-            error_msg: "",
-            deletion_attempt: null,
-            is_deletable: true,
-            in_progress: false,
             groups: [], // Add this line
           }}
           isEditable={false}

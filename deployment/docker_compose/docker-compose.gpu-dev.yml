@@ -1,13 +1,13 @@
 services:
   api_server:
-    image: danswer/danswer-backend:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
     command: >
       /bin/sh -c "alembic upgrade head &&
-      echo \"Starting Danswer Api Server\" &&
-      uvicorn danswer.main:app --host 0.0.0.0 --port 8080"
+      echo \"Starting Onyx Api Server\" &&
+      uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     depends_on:
       - relational_db
       - index
@@ -25,8 +25,8 @@ services:
       - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
       - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
       - REQUIRE_EMAIL_VERIFICATION=${REQUIRE_EMAIL_VERIFICATION:-}
-      - SMTP_SERVER=${SMTP_SERVER:-}  # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
-      - SMTP_PORT=${SMTP_PORT:-587}  # For sending verification emails, if unspecified then defaults to '587'
+      - SMTP_SERVER=${SMTP_SERVER:-} # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
+      - SMTP_PORT=${SMTP_PORT:-587} # For sending verification emails, if unspecified then defaults to '587'
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASS=${SMTP_PASS:-}
       - EMAIL_FROM=${EMAIL_FROM:-}
@@ -44,13 +44,10 @@ services:
       - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
       # if set, allows for the use of the token budget system
       - TOKEN_BUDGET_GLOBALLY_ENABLED=${TOKEN_BUDGET_GLOBALLY_ENABLED:-}
-      # Enables the use of bedrock models
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - AWS_REGION_NAME=${AWS_REGION_NAME:-}
+
       # Query Options
-      - DOC_TIME_DECAY=${DOC_TIME_DECAY:-}  # Recency Bias for search results, decay at 1 / (1 + DOC_TIME_DECAY * x years)
-      - HYBRID_ALPHA=${HYBRID_ALPHA:-}  # Hybrid Search Alpha (0 for entirely keyword, 1 for entirely vector)
+      - DOC_TIME_DECAY=${DOC_TIME_DECAY:-} # Recency Bias for search results, decay at 1 / (1 + DOC_TIME_DECAY * x years)
+      - HYBRID_ALPHA=${HYBRID_ALPHA:-} # Hybrid Search Alpha (0 for entirely keyword, 1 for entirely vector)
       - EDIT_KEYWORD_QUERY=${EDIT_KEYWORD_QUERY:-}
       - MULTILINGUAL_QUERY_EXPANSION=${MULTILINGUAL_QUERY_EXPANSION:-}
       - LANGUAGE_HINT=${LANGUAGE_HINT:-}
@@ -59,8 +56,8 @@ services:
       # Other services
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
-      - REDIS_HOST=cache      
-      - WEB_DOMAIN=${WEB_DOMAIN:-}  # For frontend redirect auth purpose
+      - REDIS_HOST=cache
+      - WEB_DOMAIN=${WEB_DOMAIN:-} # For frontend redirect auth purpose
       # Don't change the NLP model configs unless you know what you're doing
       - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE:-}
       - DOCUMENT_ENCODER_MODEL=${DOCUMENT_ENCODER_MODEL:-}
@@ -74,23 +71,33 @@ services:
       # We do not recommend changing this value
       - SYSTEM_RECURSION_LIMIT=${SYSTEM_RECURSION_LIMIT:-}
       # Leave this on pretty please? Nothing sensitive is collected!
-      # https://docs.danswer.dev/more/telemetry
+      # https://docs.onyx.app/more/telemetry
       - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-}
-      - LOG_LEVEL=${LOG_LEVEL:-info}  # Set to debug to get more fine-grained logs
-      - LOG_ALL_MODEL_INTERACTIONS=${LOG_ALL_MODEL_INTERACTIONS:-}  # LiteLLM Verbose Logging
-      # Log all of Danswer prompts and interactions with the LLM
+      - LOG_LEVEL=${LOG_LEVEL:-info} # Set to debug to get more fine-grained logs
+      - LOG_ALL_MODEL_INTERACTIONS=${LOG_ALL_MODEL_INTERACTIONS:-} # LiteLLM Verbose Logging
+      # Log all of Onyx prompts and interactions with the LLM
       - LOG_DANSWER_MODEL_INTERACTIONS=${LOG_DANSWER_MODEL_INTERACTIONS:-}
       # If set to `true` will enable additional logs about Vespa query performance
       # (time spent on finding the right docs + time spent fetching summaries from disk)
       - LOG_VESPA_TIMING_INFORMATION=${LOG_VESPA_TIMING_INFORMATION:-}
       - CELERY_BROKER_POOL_LIMIT=${CELERY_BROKER_POOL_LIMIT:-}
-      
+      - LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS=${LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS:-}
+
+      # Enables the use of bedrock models or IAM Auth
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION_NAME=${AWS_REGION_NAME:-}
+      - USE_IAM_AUTH=${USE_IAM_AUTH}
+
       # Chat Configs
       - HARD_DELETE_CHATS=${HARD_DELETE_CHATS:-}
 
       # Enterprise Edition only
       - API_KEY_HASH_ROUNDS=${API_KEY_HASH_ROUNDS:-}
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
+    # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
+    # volumes:
+    #   - ./bundle.pem:/app/bundle.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
@@ -99,9 +106,8 @@ services:
         max-size: "50m"
         max-file: "6"
 
-
   background:
-    image: danswer/danswer-backend:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -115,7 +121,7 @@ services:
     restart: always
     environment:
       - ENCRYPTION_KEY_SECRET=${ENCRYPTION_KEY_SECRET:-}
-      # Gen AI Settings (Needed by DanswerBot)
+      # Gen AI Settings (Needed by OnyxBot)
       - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
       - QA_TIMEOUT=${QA_TIMEOUT:-}
       - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
@@ -127,8 +133,8 @@ services:
       - DISABLE_LITELLM_STREAMING=${DISABLE_LITELLM_STREAMING:-}
       - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
       # Query Options
-      - DOC_TIME_DECAY=${DOC_TIME_DECAY:-}  # Recency Bias for search results, decay at 1 / (1 + DOC_TIME_DECAY * x years)
-      - HYBRID_ALPHA=${HYBRID_ALPHA:-}  # Hybrid Search Alpha (0 for entirely keyword, 1 for entirely vector)
+      - DOC_TIME_DECAY=${DOC_TIME_DECAY:-} # Recency Bias for search results, decay at 1 / (1 + DOC_TIME_DECAY * x years)
+      - HYBRID_ALPHA=${HYBRID_ALPHA:-} # Hybrid Search Alpha (0 for entirely keyword, 1 for entirely vector)
       - EDIT_KEYWORD_QUERY=${EDIT_KEYWORD_QUERY:-}
       - MULTILINGUAL_QUERY_EXPANSION=${MULTILINGUAL_QUERY_EXPANSION:-}
       - LANGUAGE_HINT=${LANGUAGE_HINT:-}
@@ -141,12 +147,12 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-}
       - VESPA_HOST=index
       - REDIS_HOST=cache
-      - WEB_DOMAIN=${WEB_DOMAIN:-}  # For frontend redirect auth purpose for OAuth2 connectors
+      - WEB_DOMAIN=${WEB_DOMAIN:-} # For frontend redirect auth purpose for OAuth2 connectors
       # Don't change the NLP model configs unless you know what you're doing
       - DOCUMENT_ENCODER_MODEL=${DOCUMENT_ENCODER_MODEL:-}
       - DOC_EMBEDDING_DIM=${DOC_EMBEDDING_DIM:-}
       - NORMALIZE_EMBEDDINGS=${NORMALIZE_EMBEDDINGS:-}
-      - ASYM_QUERY_PREFIX=${ASYM_QUERY_PREFIX:-}  # Needed by DanswerBot
+      - ASYM_QUERY_PREFIX=${ASYM_QUERY_PREFIX:-} # Needed by OnyxBot
       - ASYM_PASSAGE_PREFIX=${ASYM_PASSAGE_PREFIX:-}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
@@ -166,22 +172,22 @@ services:
       - GONG_CONNECTOR_START_TIME=${GONG_CONNECTOR_START_TIME:-}
       - NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP=${NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP:-}
       - GITHUB_CONNECTOR_BASE_URL=${GITHUB_CONNECTOR_BASE_URL:-}
-      # Danswer SlackBot Configs
+      # Onyx SlackBot Configs
       - DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER=${DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER:-}
       - DANSWER_BOT_FEEDBACK_VISIBILITY=${DANSWER_BOT_FEEDBACK_VISIBILITY:-}
       - DANSWER_BOT_DISPLAY_ERROR_MSGS=${DANSWER_BOT_DISPLAY_ERROR_MSGS:-}
       - DANSWER_BOT_RESPOND_EVERY_CHANNEL=${DANSWER_BOT_RESPOND_EVERY_CHANNEL:-}
-      - DANSWER_BOT_DISABLE_COT=${DANSWER_BOT_DISABLE_COT:-}  # Currently unused
+      - DANSWER_BOT_DISABLE_COT=${DANSWER_BOT_DISABLE_COT:-} # Currently unused
       - NOTIFY_SLACKBOT_NO_ANSWER=${NOTIFY_SLACKBOT_NO_ANSWER:-}
       - DANSWER_BOT_MAX_QPM=${DANSWER_BOT_MAX_QPM:-}
       - DANSWER_BOT_MAX_WAIT_TIME=${DANSWER_BOT_MAX_WAIT_TIME:-}
       # Logging
       # Leave this on pretty please? Nothing sensitive is collected!
-      # https://docs.danswer.dev/more/telemetry
+      # https://docs.onyx.app/more/telemetry
       - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-}
-      - LOG_LEVEL=${LOG_LEVEL:-info}  # Set to debug to get more fine-grained logs
-      - LOG_ALL_MODEL_INTERACTIONS=${LOG_ALL_MODEL_INTERACTIONS:-}  # LiteLLM Verbose Logging
-      # Log all of Danswer prompts and interactions with the LLM
+      - LOG_LEVEL=${LOG_LEVEL:-info} # Set to debug to get more fine-grained logs
+      - LOG_ALL_MODEL_INTERACTIONS=${LOG_ALL_MODEL_INTERACTIONS:-} # LiteLLM Verbose Logging
+      # Log all of Onyx prompts and interactions with the LLM
       - LOG_DANSWER_MODEL_INTERACTIONS=${LOG_DANSWER_MODEL_INTERACTIONS:-}
       - LOG_VESPA_TIMING_INFORMATION=${LOG_VESPA_TIMING_INFORMATION:-}
       # Celery Configs (defaults are set in the supervisord.conf file.
@@ -193,6 +199,13 @@ services:
       # Enterprise Edition only
       - API_KEY_HASH_ROUNDS=${API_KEY_HASH_ROUNDS:-}
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
+      - USE_IAM_AUTH=${USE_IAM_AUTH}
+      - AWS_REGION_NAME=${AWS_REGION_NAME-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
+    # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
+    # volumes:
+    #   - ./bundle.pem:/app/bundle.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
@@ -201,9 +214,8 @@ services:
         max-size: "50m"
         max-file: "6"
 
-
   web_server:
-    image: danswer/danswer-web-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}
     build:
       context: ../../web
       dockerfile: Dockerfile
@@ -226,9 +238,8 @@ services:
       # Enterprise Edition only
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
 
-
   inference_model_server:
-    image: danswer/danswer-model-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
     # for GPU support, please read installation guidelines in the README.md
     # bare minimum to get this working is to install nvidia-container-toolkit
     deploy:
@@ -264,9 +275,8 @@ services:
         max-size: "50m"
         max-file: "6"
 
-
   indexing_model_server:
-    image: danswer/danswer-model-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
@@ -302,7 +312,6 @@ services:
         max-size: "50m"
         max-file: "6"
 
-
   relational_db:
     image: postgres:15.2-alpine
     command: -c 'max_connections=250'
@@ -314,7 +323,6 @@ services:
       - "5432:5432"
     volumes:
       - db_volume:/var/lib/postgresql/data
-
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
@@ -331,12 +339,11 @@ services:
         max-size: "50m"
         max-file: "6"
 
-
   nginx:
     image: nginx:1.23.4-alpine
     restart: always
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
-    # if api_server / web_server are not up 
+    # if api_server / web_server are not up
     depends_on:
       - api_server
       - web_server
@@ -344,7 +351,7 @@ services:
       - DOMAIN=localhost
     ports:
       - "80:80"
-      - "3000:80"  # allow for localhost:3000 usage, since that is the norm
+      - "3000:80" # allow for localhost:3000 usage, since that is the norm
     volumes:
       - ../data/nginx:/etc/nginx/conf.d
     logging:
@@ -352,25 +359,23 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-    # The specified script waits for the api_server to start up. 
-    # Without this we've seen issues where nginx shows no error logs but 
+    # The specified script waits for the api_server to start up.
+    # Without this we've seen issues where nginx shows no error logs but
     # does not recieve any traffic
     # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
     # in order to make this work on both Unix-like systems and windows
-    command: > 
+    command: >
       /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
       && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev"
-
 
   cache:
     image: redis:7.4-alpine
     restart: always
     ports:
-      - '6379:6379'
+      - "6379:6379"
     # docker silently mounts /data even without an explicit volume mount, which enables
     # persistence. explicitly setting save and appendonly forces ephemeral behavior.
     command: redis-server --save "" --appendonly no
-
 
 volumes:
   db_volume:

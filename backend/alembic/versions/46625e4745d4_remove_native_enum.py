@@ -17,7 +17,7 @@ depends_on: None = None
 
 def upgrade() -> None:
     # At this point, we directly changed some previous migrations,
-    # https://github.com/danswer-ai/danswer/pull/637
+    # https://github.com/onyx-dot-app/onyx/pull/637
     # Due to using Postgres native Enums, it caused some complications for first time users.
     # To remove those complications, all Enums are only handled application side moving forward.
     # This migration exists to ensure that existing users don't run into upgrade issues.

@@ -16,6 +16,7 @@ function Main() {
     isLoading: indexAttemptIsLoading,
     error: indexAttemptError,
   } = useConnectorCredentialIndexingStatus();
+
   const {
     data: editableIndexAttemptData,
     isLoading: editableIndexAttemptIsLoading,

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from types import TracebackType
 from typing import cast
 from typing import Optional
@@ -20,7 +21,6 @@ from sentence_transformers import SentenceTransformer  # type: ignore
 from vertexai.language_models import TextEmbeddingInput  # type: ignore
 from vertexai.language_models import TextEmbeddingModel  # type: ignore
 
-from danswer.utils.logger import setup_logger
 from model_server.constants import DEFAULT_COHERE_MODEL
 from model_server.constants import DEFAULT_OPENAI_MODEL
 from model_server.constants import DEFAULT_VERTEX_MODEL
@@ -28,6 +28,7 @@ from model_server.constants import DEFAULT_VOYAGE_MODEL
 from model_server.constants import EmbeddingModelTextType
 from model_server.constants import EmbeddingProvider
 from model_server.utils import simple_log_function_time
+from onyx.utils.logger import setup_logger
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import OPENAI_EMBEDDING_TIMEOUT
@@ -114,7 +115,7 @@ class CloudEmbedding:
 
         final_embeddings: list[Embedding] = []
         for text_batch in batch_list(texts, _COHERE_MAX_INPUT_LEN):
-            # Does not use the same tokenizer as the Danswer API server but it's approximately the same
+            # Does not use the same tokenizer as the Onyx API server but it's approximately the same
             # empirically it's only off by a very few tokens so it's not a big deal
             response = await client.embed(
                 texts=text_batch,
@@ -320,8 +321,6 @@ async def embed_text(
     api_url: str | None,
     api_version: str | None,
 ) -> list[Embedding]:
-    logger.info(f"Embedding {len(texts)} texts with provider: {provider_type}")
-
     if not all(texts):
         logger.error("Empty strings provided for embedding")
         raise ValueError("Empty strings are not allowed for embedding.")
@@ -330,8 +329,17 @@ async def embed_text(
         logger.error("No texts provided for embedding")
         raise ValueError("No texts provided for embedding.")
 
+    start = time.monotonic()
+
+    total_chars = 0
+    for text in texts:
+        total_chars += len(text)
+
     if provider_type is not None:
-        logger.debug(f"Using cloud provider {provider_type} for embedding")
+        logger.info(
+            f"Embedding {len(texts)} texts with {total_chars} total characters with provider: {provider_type}"
+        )
+
         if api_key is None:
             logger.error("API key not provided for cloud model")
             raise RuntimeError("API key not provided for cloud model")
@@ -363,8 +371,16 @@ async def embed_text(
             logger.error(error_message)
             raise ValueError(error_message)
 
+        elapsed = time.monotonic() - start
+        logger.info(
+            f"Successfully embedded {len(texts)} texts with {total_chars} total characters "
+            f"with provider {provider_type} in {elapsed:.2f}"
+        )
     elif model_name is not None:
-        logger.debug(f"Using local model {model_name} for embedding")
+        logger.info(
+            f"Embedding {len(texts)} texts with {total_chars} total characters with local model: {model_name}"
+        )
+
         prefixed_texts = [f"{prefix}{text}" for text in texts] if prefix else texts
 
         local_model = get_embedding_model(
@@ -382,13 +398,17 @@ async def embed_text(
             for embedding in embeddings_vectors
         ]
 
+        elapsed = time.monotonic() - start
+        logger.info(
+            f"Successfully embedded {len(texts)} texts with {total_chars} total characters "
+            f"with local model {model_name} in {elapsed:.2f}"
+        )
     else:
         logger.error("Neither model name nor provider specified for embedding")
         raise ValueError(
             "Either model name or provider must be provided to run embeddings."
         )
 
-    logger.info(f"Successfully embedded {len(texts)} texts")
     return embeddings
 
 
@@ -440,7 +460,8 @@ async def process_embed_request(
 ) -> EmbedResponse:
     if not embed_request.texts:
         raise HTTPException(status_code=400, detail="No texts to be embedded")
-    elif not all(embed_request.texts):
+
+    if not all(embed_request.texts):
         raise ValueError("Empty strings are not allowed for embedding.")
 
     try:
@@ -471,9 +492,12 @@ async def process_embed_request(
             detail=str(e),
         )
     except Exception as e:
-        exception_detail = f"Error during embedding process:\n{str(e)}"
-        logger.exception(exception_detail)
-        raise HTTPException(status_code=500, detail=exception_detail)
+        logger.exception(
+            f"Error during embedding process: provider={embed_request.provider_type} model={embed_request.model_name}"
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Error during embedding process: {e}"
+        )
 
 
 @router.post("/cross-encoder-scores")

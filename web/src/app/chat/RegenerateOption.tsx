@@ -124,9 +124,9 @@ export default function RegenerateOption({
   onHoverChange: (isHovered: boolean) => void;
   onDropdownVisibleChange: (isVisible: boolean) => void;
 }) {
-  const llmOverrideManager = useLlmOverride();
-
   const { llmProviders } = useChatContext();
+  const llmOverrideManager = useLlmOverride(llmProviders);
+
   const [_, llmName] = getFinalLLM(llmProviders, selectedAssistant, null);
 
   const llmOptionsByProvider: {

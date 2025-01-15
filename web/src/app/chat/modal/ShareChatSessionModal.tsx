@@ -34,7 +34,7 @@ async function generateShareLink(chatSessionId: string) {
   return null;
 }
 
-async function generateCloneLink(
+async function generateSeedLink(
   message?: string,
   assistantId?: number,
   modelOverride?: LlmOverride
@@ -115,7 +115,7 @@ export function ShareChatSessionModal({
             {shareLink ? (
               <div>
                 <Text>
-                  This chat session is currently shared. Anyone at your
+                  This chat session is currently shared. Anyone in your
                   organization can view the message history using the following
                   link:
                 </Text>
@@ -157,10 +157,8 @@ export function ShareChatSessionModal({
             ) : (
               <div>
                 <Callout type="warning" title="Warning" className="mb-4">
-                  Ensure that all content in the chat is safe to share with the
-                  whole organization. The content of the retrieved documents
-                  will not be visible, but the names of cited documents as well
-                  as the AI and human messages will be visible.
+                  Please make sure that all content in this chat is safe to
+                  share with the whole organization.
                 </Callout>
                 <div className="flex w-full justify-between">
                   <Button
@@ -194,10 +192,9 @@ export function ShareChatSessionModal({
 
           <Separator className="my-4" />
           <div className="mb-4">
-            <Callout type="notice" title="Clone Chat">
-              Generate a link to clone this chat session with the current query.
-              This allows others to start a new chat with the same initial
-              message and settings.
+            <Callout type="notice" title="Seed New Chat">
+              Generate a link to a new chat session with the same settings as
+              this chat (including the assistant and model).
             </Callout>
           </div>
           <div className="flex w-full justify-between">
@@ -207,18 +204,18 @@ export function ShareChatSessionModal({
                 // NOTE: for "insecure" non-https setup, the `navigator.clipboard.writeText` may fail
                 // as the browser may not allow the clipboard to be accessed.
                 try {
-                  const cloneLink = await generateCloneLink(
+                  const seedLink = await generateSeedLink(
                     message,
                     assistantId,
                     modelOverride
                   );
-                  if (!cloneLink) {
+                  if (!seedLink) {
                     setPopup({
-                      message: "Failed to generate clone link",
+                      message: "Failed to generate seed link",
                       type: "error",
                     });
                   } else {
-                    navigator.clipboard.writeText(cloneLink);
+                    navigator.clipboard.writeText(seedLink);
                     setPopup({
                       message: "Link copied to clipboard!",
                       type: "success",
@@ -232,7 +229,7 @@ export function ShareChatSessionModal({
               size="sm"
               variant="secondary"
             >
-              Generate and Copy Clone Link
+              Generate and Copy Seed Link
             </Button>
           </div>
         </>

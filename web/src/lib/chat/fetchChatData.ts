@@ -86,6 +86,8 @@ export async function fetchChatData(searchParams: {
   const foldersResponse = results[7] as Response | null;
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
+
+  // TODO Validate need
   if (!authDisabled && !user) {
     const headersList = await headers();
     const fullUrl = headersList.get("x-url") || "/chat";
@@ -95,6 +97,7 @@ export async function fetchChatData(searchParams: {
     const redirectUrl = searchParamsString
       ? `${fullUrl}?${searchParamsString}`
       : fullUrl;
+
     return redirect(`/auth/login?next=${encodeURIComponent(redirectUrl)}`);
   }
 

@@ -149,7 +149,7 @@ def start_docker_compose(
     print("Starting Docker Compose...")
     os.chdir(os.path.dirname(__file__))
     os.chdir("../../../../deployment/docker_compose/")
-    command = f"docker compose -f docker-compose.search-testing.yml -p danswer-stack-{env_name} up -d"
+    command = f"docker compose -f docker-compose.search-testing.yml -p onyx-stack-{env_name} up -d"
     command += " --build"
     command += " --force-recreate"
 
@@ -185,7 +185,7 @@ def cleanup_docker(env_name: str) -> None:
     containers = [json.loads(line) for line in stdout.splitlines()]
     if not env_name:
         env_name = datetime.now().strftime("-%Y")
-    project_name = f"danswer-stack{env_name}"
+    project_name = f"onyx-stack{env_name}"
     containers_to_delete = [
         c for c in containers if c["Names"].startswith(project_name)
     ]
@@ -308,7 +308,7 @@ def restart_vespa_container(env_name: str) -> None:
 if __name__ == "__main__":
     """
     Running this just cleans up the docker environment for the container indicated by environment_name
-    If no environment_name is indicated, will just clean up all danswer docker containers/volumes/networks
+    If no environment_name is indicated, will just clean up all onyx docker containers/volumes/networks
     Note: vespa/postgres mounts are not deleted
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))

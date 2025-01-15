@@ -3,10 +3,7 @@
 import { AdminPageTitle } from "@/components/admin/Title";
 import { BookmarkIcon } from "@/components/icons/icons";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
-import {
-  useConnectorCredentialIndexingStatus,
-  useUserGroups,
-} from "@/lib/hooks";
+import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { BackButton } from "@/components/BackButton";
@@ -23,7 +20,7 @@ function Main() {
     data: ccPairs,
     isLoading: isCCPairsLoading,
     error: ccPairsError,
-  } = useConnectorCredentialIndexingStatus();
+  } = useConnectorStatus();
 
   // EE only
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();

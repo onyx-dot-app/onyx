@@ -8,7 +8,7 @@ import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { User } from "@/lib/types";
 import Text from "@/components/ui/text";
 import { RequestNewVerificationEmail } from "./RequestNewVerificationEmail";
-import { Logo } from "@/components/Logo";
+import { Logo } from "@/components/logo/Logo";
 
 export default async function Page({
   searchParams,
@@ -30,8 +30,8 @@ export default async function Page({
   }
 
   const nextUrl = Array.isArray(searchParams?.next)
-    ? searchParams?.next[0] || "/"
-    : searchParams?.next || "/";
+    ? searchParams?.next[0] || "/chat"
+    : searchParams?.next || "/chat";
 
   if (!currentUser) {
     if (authTypeMetadata?.authType === "disabled") {

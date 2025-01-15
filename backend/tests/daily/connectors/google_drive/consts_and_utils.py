@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from danswer.connectors.models import Document
+from onyx.connectors.models import Document
 
 ALL_FILES = list(range(0, 60))
 SHARED_DRIVE_FILES = list(range(20, 25))
@@ -123,8 +123,19 @@ SPECIAL_FILE_ID_TO_CONTENT_MAP: dict[int, str] = {
 file_name_template = "file_{}.txt"
 file_text_template = "This is file {}"
 
+# This is done to prevent different tests from interfering with each other
+# So each test type should have its own valid prefix
+_VALID_PREFIX = "file_"
 
-def print_discrepencies(expected: set[str], retrieved: set[str]) -> None:
+
+def filter_invalid_prefixes(names: set[str]) -> set[str]:
+    return {name for name in names if name.startswith(_VALID_PREFIX)}
+
+
+def print_discrepencies(
+    expected: set[str],
+    retrieved: set[str],
+) -> None:
     if expected != retrieved:
         print(expected)
         print(retrieved)
@@ -134,7 +145,7 @@ def print_discrepencies(expected: set[str], retrieved: set[str]) -> None:
         print(expected - retrieved)
 
 
-def get_file_content(file_id: int) -> str:
+def _get_expected_file_content(file_id: int) -> str:
     if file_id in SPECIAL_FILE_ID_TO_CONTENT_MAP:
         return SPECIAL_FILE_ID_TO_CONTENT_MAP[file_id]
 
@@ -142,25 +153,45 @@ def get_file_content(file_id: int) -> str:
 
 
 def assert_retrieved_docs_match_expected(
-    retrieved_docs: list[Document], expected_file_ids: Sequence[int]
+    retrieved_docs: list[Document],
+    expected_file_ids: Sequence[int],
 ) -> None:
     expected_file_names = {
         file_name_template.format(file_id) for file_id in expected_file_ids
     }
-    expected_file_texts = {get_file_content(file_id) for file_id in expected_file_ids}
+    expected_file_texts = {
+        _get_expected_file_content(file_id) for file_id in expected_file_ids
+    }
 
-    retrieved_file_names = set([doc.semantic_identifier for doc in retrieved_docs])
-    retrieved_texts = set(
+    for doc in retrieved_docs:
+        print(f"doc.semantic_identifier: {doc.semantic_identifier}")
+
+    # Filter out invalid prefixes to prevent different tests from interfering with each other
+    valid_retrieved_docs = [
+        doc
+        for doc in retrieved_docs
+        if doc.semantic_identifier.startswith(_VALID_PREFIX)
+    ]
+    valid_retrieved_file_names = set(
+        [doc.semantic_identifier for doc in valid_retrieved_docs]
+    )
+    valid_retrieved_texts = set(
         [
             " - ".join([section.text for section in doc.sections])
-            for doc in retrieved_docs
+            for doc in valid_retrieved_docs
         ]
     )
 
     # Check file names
-    print_discrepencies(expected_file_names, retrieved_file_names)
-    assert expected_file_names == retrieved_file_names
+    print_discrepencies(
+        expected=expected_file_names,
+        retrieved=valid_retrieved_file_names,
+    )
+    assert expected_file_names == valid_retrieved_file_names
 
     # Check file texts
-    print_discrepencies(expected_file_texts, retrieved_texts)
-    assert expected_file_texts == retrieved_texts
+    print_discrepencies(
+        expected=expected_file_texts,
+        retrieved=valid_retrieved_texts,
+    )
+    assert expected_file_texts == valid_retrieved_texts

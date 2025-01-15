@@ -8,12 +8,7 @@ import {
   updateDocumentSet,
   DocumentSetCreationRequest,
 } from "./lib";
-import {
-  ConnectorIndexingStatus,
-  DocumentSet,
-  UserGroup,
-  UserRole,
-} from "@/lib/types";
+import { ConnectorStatus, DocumentSet, UserGroup, UserRole } from "@/lib/types";
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { Separator } from "@/components/ui/separator";
@@ -24,7 +19,7 @@ import React, { useEffect, useState } from "react";
 import { useUser } from "@/components/user/UserProvider";
 
 interface SetCreationPopupProps {
-  ccPairs: ConnectorIndexingStatus<any, any>[];
+  ccPairs: ConnectorStatus<any, any>[];
   userGroups: UserGroup[] | undefined;
   onClose: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
@@ -65,9 +60,7 @@ export const DocumentSetCreationForm = ({
         }}
         validationSchema={Yup.object().shape({
           name: Yup.string().required("Please enter a name for the set"),
-          description: Yup.string().required(
-            "Please enter a description for the set"
-          ),
+          description: Yup.string().optional(),
           cc_pair_ids: Yup.array()
             .of(Yup.number().required())
             .required("Please select at least one connector"),
@@ -125,6 +118,7 @@ export const DocumentSetCreationForm = ({
                 label="Description:"
                 placeholder="Describe what the document set represents"
                 autoCompleteDisabled={true}
+                optional={true}
               />
 
               {isPaidEnterpriseFeaturesEnabled && (

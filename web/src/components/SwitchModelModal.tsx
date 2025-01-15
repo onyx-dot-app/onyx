@@ -25,7 +25,7 @@ export function SwitchModelModal({
           <br />
           Please click the button below to choose a new model. Don&apos;t worry,
           the re-indexing necessary for the switch will happen in the background
-          - your use of Danswer will not be interrupted.
+          - your use of Onyx will not be interrupted.
         </Text>
 
         <div className="flex mt-4">

@@ -20,9 +20,9 @@ import React, {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import {
-  DanswerDocument,
-  FilteredDanswerDocument,
-  LoadedDanswerDocument,
+  OnyxDocument,
+  FilteredOnyxDocument,
+  LoadedOnyxDocument,
 } from "@/lib/search/interfaces";
 import { SearchSummary } from "./SearchSummary";
 
@@ -66,12 +66,16 @@ import RegenerateOption from "../RegenerateOption";
 import { LlmOverride } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
 import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
-import { extractCodeText } from "./codeUtils";
+import { extractCodeText, preprocessLaTeX } from "./codeUtils";
 import ToolResult from "../../../components/tools/ToolResult";
 import CsvContent from "../../../components/tools/CSVContent";
 import SourceCard, {
   SeeMoreBlock,
 } from "@/components/chat_search/sources/SourceCard";
+
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -98,7 +102,7 @@ function FileDisplay({
     <>
       {nonImgFiles && nonImgFiles.length > 0 && (
         <div
-          id="danswer-file"
+          id="onyx-file"
           className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}
         >
           <div className="flex flex-col gap-2">
@@ -119,7 +123,7 @@ function FileDisplay({
 
       {imageFiles && imageFiles.length > 0 && (
         <div
-          id="danswer-image"
+          id="onyx-image"
           className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}
         >
           <div className="flex flex-col gap-2">
@@ -200,9 +204,9 @@ export const AIMessage = ({
   continueGenerating?: () => void;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (messageId: number) => void;
-  selectedDocuments?: DanswerDocument[] | null;
+  selectedDocuments?: OnyxDocument[] | null;
   toggleDocumentSelection?: () => void;
-  docs?: DanswerDocument[] | null;
+  docs?: OnyxDocument[] | null;
   alternativeAssistant?: Persona | null;
   currentPersona: Persona;
   messageId: number | null;
@@ -210,7 +214,7 @@ export const AIMessage = ({
   documentSelectionToggled?: boolean;
   files?: FileDescriptor[];
   query?: string;
-  citedDocuments?: [string, DanswerDocument][] | null;
+  citedDocuments?: [string, OnyxDocument][] | null;
   toolCall?: ToolCallMetadata | null;
   isComplete?: boolean;
   hasDocs?: boolean;
@@ -221,9 +225,10 @@ export const AIMessage = ({
   retrievalDisabled?: boolean;
   overriddenModel?: string;
   regenerate?: (modelOverRide: LlmOverride) => Promise<void>;
-  setPresentingDocument?: (document: DanswerDocument) => void;
+  setPresentingDocument?: (document: OnyxDocument) => void;
 }) => {
   const toolCallGenerating = toolCall && !toolCall.tool_result;
+
   const processContent = (content: string | JSX.Element) => {
     if (typeof content !== "string") {
       return content;
@@ -242,12 +247,16 @@ export const AIMessage = ({
 
       const lastMatch = matches[matches.length - 1];
       if (!lastMatch.endsWith("```")) {
-        return content;
+        return preprocessLaTeX(content);
       }
     }
 
-    return content + (!isComplete && !toolCallGenerating ? " [*]() " : "");
+    return (
+      preprocessLaTeX(content) +
+      (!isComplete && !toolCallGenerating ? " [*]() " : "")
+    );
   };
+
   const finalContent = processContent(content as string);
 
   const [isRegenerateHovered, setIsRegenerateHovered] = useState(false);
@@ -284,7 +293,7 @@ export const AIMessage = ({
     content = trimIncompleteCodeSection(content);
   }
 
-  let filteredDocs: FilteredDanswerDocument[] = [];
+  let filteredDocs: FilteredOnyxDocument[] = [];
 
   if (docs) {
     filteredDocs = docs
@@ -297,7 +306,7 @@ export const AIMessage = ({
       .filter((doc) => {
         return citedDocumentIds.includes(doc.document_id);
       })
-      .map((doc: DanswerDocument, ind: number) => {
+      .map((doc: OnyxDocument, ind: number) => {
         return {
           ...doc,
           included: selectedDocumentIds.includes(doc.document_id),
@@ -313,7 +322,7 @@ export const AIMessage = ({
   const anchorCallback = useCallback(
     (props: any) => (
       <MemoizedAnchor
-        updatePresentingDocument={setPresentingDocument}
+        updatePresentingDocument={setPresentingDocument!}
         docs={docs}
       >
         {props.children}
@@ -356,8 +365,8 @@ export const AIMessage = ({
       <ReactMarkdown
         className="prose max-w-full text-base"
         components={markdownComponents}
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[[rehypePrism, { ignoreMissing: true }]]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
       >
         {finalContent as string}
       </ReactMarkdown>
@@ -369,9 +378,10 @@ export const AIMessage = ({
     onMessageSelection &&
     otherMessagesCanSwitchTo &&
     otherMessagesCanSwitchTo.length > 1;
+
   return (
     <div
-      id="danswer-ai-message"
+      id="onyx-ai-message"
       ref={trackedElementRef}
       className={`py-5 ml-4 px-5 relative flex `}
     >
@@ -393,21 +403,16 @@ export const AIMessage = ({
                   <div className="max-w-message-max break-words">
                     {!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
                       <>
-                        {query !== undefined &&
-                          handleShowRetrieved !== undefined &&
-                          !retrievalDisabled && (
-                            <div className="mb-1">
-                              <SearchSummary
-                                index={index || 0}
-                                query={query}
-                                finished={toolCall?.tool_result != undefined}
-                                hasDocs={hasDocs || false}
-                                messageId={messageId}
-                                handleShowRetrieved={handleShowRetrieved}
-                                handleSearchQueryEdit={handleSearchQueryEdit}
-                              />
-                            </div>
-                          )}
+                        {query !== undefined && !retrievalDisabled && (
+                          <div className="mb-1">
+                            <SearchSummary
+                              index={index || 0}
+                              query={query}
+                              finished={toolCall?.tool_result != undefined}
+                              handleSearchQueryEdit={handleSearchQueryEdit}
+                            />
+                          </div>
+                        )}
                         {handleForceSearch &&
                           content &&
                           query === undefined &&
@@ -541,16 +546,16 @@ export const AIMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Copy!">
+                          <CustomTooltip showTick line content="Copy">
                             <CopyButton content={content.toString()} />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Good response!">
+                          <CustomTooltip showTick line content="Good response">
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Bad response!">
+                          <CustomTooltip showTick line content="Bad response">
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -561,7 +566,7 @@ export const AIMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Regenerate!"
+                              content="Regenerate"
                             >
                               <RegenerateOption
                                 onDropdownVisibleChange={
@@ -626,18 +631,18 @@ export const AIMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Copy!">
+                          <CustomTooltip showTick line content="Copy">
                             <CopyButton content={content.toString()} />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Good response!">
+                          <CustomTooltip showTick line content="Good response">
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Bad response!">
+                          <CustomTooltip showTick line content="Bad response">
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -648,7 +653,7 @@ export const AIMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Regenerate!"
+                              content="Regenerate"
                             >
                               <RegenerateOption
                                 selectedAssistant={currentPersona!}
@@ -762,7 +767,7 @@ export const HumanMessage = ({
 
   return (
     <div
-      id="danswer-human-message"
+      id="onyx-human-message"
       className="pt-5 pb-1 px-2 lg:px-5 flex -mr-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -812,6 +817,7 @@ export const HumanMessage = ({
                         outline-none 
                         placeholder-gray-400 
                         resize-none
+                        text-text-editing-message
                         pl-4
                         overflow-y-auto
                         pr-12 
@@ -870,7 +876,6 @@ export const HumanMessage = ({
                           py-2 
                           px-3 
                           w-fit 
-                          bg-hover
                           bg-background-strong 
                           text-sm
                           rounded-lg
@@ -896,15 +901,13 @@ export const HumanMessage = ({
                         <TooltipProvider delayDuration={1000}>
                           <Tooltip>
                             <TooltipTrigger>
-                              <button
-                                className="hover:bg-hover p-1.5 rounded"
+                              <HoverableIcon
+                                icon={<FiEdit2 className="text-gray-600" />}
                                 onClick={() => {
                                   setIsEditing(true);
                                   setIsHovered(false);
                                 }}
-                              >
-                                <FiEdit2 className="!h-4 !w-4" />
-                              </button>
+                              />
                             </TooltipTrigger>
                             <TooltipContent>Edit</TooltipContent>
                           </Tooltip>
