@@ -780,14 +780,17 @@ export function AssistantEditor({
                   </p>
                   <div className="mt-3">
                     <SearchMultiSelectDropdown
-                      options={labels.map((label) => ({
-                        name: label.name,
-                        value: label.id,
+                      options={Array.from(
+                        new Set(labels.map((label) => label.name))
+                      ).map((name) => ({
+                        name,
+                        value: name,
                       }))}
                       onSelect={(selected) => {
                         const newLabelIds = [
                           ...values.label_ids,
-                          selected.value as number,
+                          labels.find((l) => l.name === selected.value)
+                            ?.id as number,
                         ];
                         setFieldValue("label_ids", newLabelIds);
                       }}
@@ -795,24 +798,22 @@ export function AssistantEditor({
                         <div
                           className="flex items-center px-4 py-2.5 text-sm hover:bg-hover cursor-pointer"
                           onClick={() => {
-                            const isSelected = values.label_ids.includes(
-                              option.value as number
+                            const label = labels.find(
+                              (l) => l.name === option.value
                             );
-                            const newLabelIds = isSelected
-                              ? values.label_ids.filter(
-                                  (id: number) => id !== option.value
-                                )
-                              : [...values.label_ids, option.value as number];
-                            setFieldValue("label_ids", newLabelIds);
+                            if (label) {
+                              const isSelected = values.label_ids.includes(
+                                label.id
+                              );
+                              const newLabelIds = isSelected
+                                ? values.label_ids.filter(
+                                    (id: number) => id !== label.id
+                                  )
+                                : [...values.label_ids, label.id];
+                              setFieldValue("label_ids", newLabelIds);
+                            }
                           }}
                         >
-                          <div
-                            className={`w-4 h-4 border border-border rounded-sm mr-2 ${
-                              values.label_ids.includes(option.value as number)
-                                ? "bg-primary"
-                                : "bg-transparent"
-                            }`}
-                          />
                           <span className="text-sm font-medium leading-none">
                             {option.name}
                           </span>
