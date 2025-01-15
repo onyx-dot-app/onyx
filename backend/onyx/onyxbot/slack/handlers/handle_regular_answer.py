@@ -371,8 +371,8 @@ def handle_regular_answer(
         respond_in_thread(
             client=client,
             channel=channel,
-            receiver_ids=[message_info.sender]
-            if message_info.is_bot_msg and message_info.sender
+            receiver_ids=[message_info.sender_id]
+            if message_info.is_bot_msg and message_info.sender_id
             else receiver_ids,
             text="Hello! Onyx has some results for you!",
             blocks=all_blocks,

@@ -8,7 +8,7 @@ class SlackMessageInfo(BaseModel):
     channel_to_respond: str
     msg_to_respond: str | None
     thread_to_respond: str | None
-    sender: str | None
+    sender_id: str | None
     email: str | None
     bypass_filters: bool  # User has tagged @OnyxBot
     is_bot_msg: bool  # User is using /OnyxBot
