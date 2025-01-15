@@ -25,9 +25,7 @@ def discord_connector() -> DiscordConnector:
 
 
 def get_credentials() -> dict[str, str]:
-    token = os.environ.get("DISCORD_BOT_TOKEN")
-    if token is None:
-        raise ValueError("DISCORD_BOT_TOKEN is not set")
+    token = os.environ["DISCORD_BOT_TOKEN"]
     return {"discord_bot_token": token}
 
 
