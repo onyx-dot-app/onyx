@@ -138,6 +138,7 @@ class RunIndexingContext(BaseModel):
     earliest_index_time: float
     from_beginning: bool
     is_primary: bool
+    search_settings_status: IndexModelStatus
 
 
 def _run_indexing(
@@ -171,9 +172,8 @@ def _run_indexing(
         # search_settings = index_attempt_start.search_settings
         db_connector = index_attempt_start.connector_credential_pair.connector
         db_credential = index_attempt_start.connector_credential_pair.credential
-        search_settings = index_attempt_start.search_settings
         ctx = RunIndexingContext(
-            index_name=search_settings.index_name,
+            index_name=index_attempt_start.search_settings.index_name,
             cc_pair_id=index_attempt_start.connector_credential_pair.id,
             connector_id=db_connector.id,
             credential_id=db_credential.id,
@@ -189,6 +189,7 @@ def _run_indexing(
             is_primary=(
                 index_attempt_start.search_settings.status == IndexModelStatus.PRESENT
             ),
+            search_settings_status=index_attempt_start.search_settings.status,
         )
 
         last_successful_index_time = (
@@ -198,9 +199,14 @@ def _run_indexing(
                 connector_id=ctx.connector_id,
                 credential_id=ctx.credential_id,
                 earliest_index=ctx.earliest_index_time,
-                search_settings=search_settings,
+                search_settings=index_attempt_start.search_settings,
                 db_session=db_session_temp,
             )
+        )
+
+        embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
+            search_settings=index_attempt_start.search_settings,
+            callback=callback,
         )
 
     # Indexing is only done into one index at a time
@@ -208,17 +214,13 @@ def _run_indexing(
         primary_index_name=ctx.index_name, secondary_index_name=None
     )
 
-    embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
-        search_settings=search_settings,
-        callback=callback,
-    )
-
     indexing_pipeline = build_indexing_pipeline(
         attempt_id=index_attempt_id,
         embedder=embedding_model,
         document_index=document_index,
         ignore_time_skip=(
-            ctx.from_beginning or (search_settings.status == IndexModelStatus.FUTURE)
+            ctx.from_beginning
+            or (ctx.search_settings_status == IndexModelStatus.FUTURE)
         ),
         db_session=db_session,
         tenant_id=tenant_id,
@@ -301,7 +303,7 @@ def _run_indexing(
                     if (
                         (
                             cc_pair_loop.status == ConnectorCredentialPairStatus.PAUSED
-                            and search_settings.status != IndexModelStatus.FUTURE
+                            and ctx.search_settings_status != IndexModelStatus.FUTURE
                         )
                         # if it's deleting, we don't care if this is a secondary index
                         or cc_pair_loop.status == ConnectorCredentialPairStatus.DELETING
@@ -567,7 +569,8 @@ def run_indexing_entrypoint(
             f"credentials='{credential_id}'"
         )
 
-        _run_indexing(db_session, index_attempt_id, tenant_id, callback)
+        with get_session_with_tenant(tenant_id) as db_session:
+            _run_indexing(db_session, index_attempt_id, tenant_id, callback)
 
         logger.info(
             f"Indexing finished{tenant_str}: "
