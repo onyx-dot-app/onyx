@@ -189,6 +189,7 @@ def seed_initial_documents(
         groups=None,
         initial_status=ConnectorCredentialPairStatus.PAUSED,
         last_successful_index_time=last_index_time,
+        seeding_flow=True,
     )
     cc_pair_id = cast(int, result.data)
     processed_docs = fetch_versioned_implementation(

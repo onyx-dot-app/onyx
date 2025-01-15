@@ -354,6 +354,26 @@ async def get_current_tenant_id(request: Request) -> str:
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# Listen for events on the synchronous Session class
+@event.listens_for(Session, "after_begin")
+def _set_search_path(
+    session: Session, transaction: Any, connection: Any, *args: Any, **kwargs: Any
+) -> None:
+    """Every time a new transaction is started,
+    set the search_path from the session's info."""
+    tenant_id = session.info.get("tenant_id")
+    if tenant_id:
+        connection.exec_driver_sql(f'SET search_path = "{tenant_id}"')
+
+
+engine = get_sqlalchemy_async_engine()
+AsyncSessionLocal = sessionmaker(  # type: ignore
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+
 @asynccontextmanager
 async def get_async_session_with_tenant(
     tenant_id: str | None = None,
@@ -363,41 +383,22 @@ async def get_async_session_with_tenant(
 
     if not is_valid_schema_name(tenant_id):
         logger.error(f"Invalid tenant ID: {tenant_id}")
-        raise Exception("Invalid tenant ID")
+        raise ValueError("Invalid tenant ID")
 
-    engine = get_sqlalchemy_async_engine()
-    async_session_factory = sessionmaker(
-        bind=engine, expire_on_commit=False, class_=AsyncSession
-    )  # type: ignore
+    async with AsyncSessionLocal() as session:
+        session.sync_session.info["tenant_id"] = tenant_id
 
-    async def _set_search_path(session: AsyncSession, tenant_id: str) -> None:
-        await session.execute(text(f'SET search_path = "{tenant_id}"'))
-
-    async with async_session_factory() as session:
-        # Register an event listener that is called whenever a new transaction starts
-        @event.listens_for(session.sync_session, "after_begin")
-        def after_begin(session_: Any, transaction: Any, connection: Any) -> None:
-            # Because the event is sync, we can't directly await here.
-            # Instead we queue up an asyncio task to ensures
-            # the next statement sets the search_path
-            session_.do_orm_execute = lambda state: connection.exec_driver_sql(
-                f'SET search_path = "{tenant_id}"'
+        if POSTGRES_IDLE_SESSIONS_TIMEOUT:
+            await session.execute(
+                text(
+                    f"SET idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
+                )
             )
 
         try:
-            await _set_search_path(session, tenant_id)
-
-            if POSTGRES_IDLE_SESSIONS_TIMEOUT:
-                await session.execute(
-                    text(
-                        f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
-                    )
-                )
-        except Exception:
-            logger.exception("Error setting search_path.")
-            raise
-        else:
             yield session
+        finally:
+            pass
 
 
 @contextmanager

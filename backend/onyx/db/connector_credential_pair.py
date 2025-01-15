@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.connector import fetch_connector_by_id
+from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -388,14 +389,23 @@ def add_credential_to_connector(
     auto_sync_options: dict | None = None,
     initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
     last_successful_index_time: datetime | None = None,
+    seeding_flow: bool = False,
 ) -> StatusResponse:
     connector = fetch_connector_by_id(connector_id, db_session)
-    credential = fetch_credential_by_id_for_user(
-        credential_id,
-        user,
-        db_session,
-        get_editable=False,
-    )
+
+    # If we are in the seeding flow, we shouldn't need to check if the credential belongs to the user
+    if seeding_flow:
+        credential = fetch_credential_by_id(
+            db_session=db_session,
+            credential_id=credential_id,
+        )
+    else:
+        credential = fetch_credential_by_id_for_user(
+            credential_id,
+            user,
+            db_session,
+            get_editable=False,
+        )
 
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")
