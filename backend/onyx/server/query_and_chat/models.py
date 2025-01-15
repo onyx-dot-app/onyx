@@ -125,6 +125,10 @@ class CreateChatMessageRequest(ChunkContext):
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
 
+    # If true, ignores most of the search options and uses pro search instead.
+    # TODO: decide how many of the above options we want to pass through to pro search
+    use_pro_search: bool = False
+
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
         if self.search_doc_ids is None and self.retrieval_options is None:
@@ -190,6 +194,22 @@ class SearchFeedbackRequest(BaseModel):
         return self
 
 
+class SubQueryDetail(BaseModel):
+    query: str
+    query_id: int
+    # TODO: store these to enable per-query doc selection
+    doc_ids: list[int] | None = None
+
+
+class SubQuestionDetail(BaseModel):
+    level: int
+    level_question_nr: int
+    question: str
+    answer: str
+    sub_queries: list[SubQueryDetail] | None = None
+    context_docs: RetrievalDocs | None = None
+
+
 class ChatMessageDetail(BaseModel):
     message_id: int
     parent_message: int | None = None
@@ -201,9 +221,10 @@ class ChatMessageDetail(BaseModel):
     time_sent: datetime
     overridden_model: str | None
     alternate_assistant_id: int | None = None
-    # Dict mapping citation number to db_doc_id
     chat_session_id: UUID | None = None
+    # Dict mapping citation number to db_doc_id
     citations: dict[int, int] | None = None
+    sub_questions: list[SubQuestionDetail] | None = None
     files: list[FileDescriptor]
     tool_call: ToolCallFinalResult | None
 

@@ -25,6 +25,11 @@ class ToolCallSummary(BaseModel__v1):
     tool_call_request: AIMessage
     tool_call_result: ToolMessage
 
+    # This is a workaround to allow arbitrary types in the model
+    # TODO: Remove this once we have a better solution
+    class Config:
+        arbitrary_types_allowed = True
+
 
 def tool_call_tokens(
     tool_call_summary: ToolCallSummary, llm_tokenizer: BaseTokenizer

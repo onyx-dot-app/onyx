@@ -4,6 +4,9 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import model_validator
 
+from onyx.context.search.enums import SearchType
+from onyx.context.search.models import IndexFilters
+
 
 class ToolResponse(BaseModel):
     id: str | None = None
@@ -43,6 +46,12 @@ class ToolCallFinalResult(ToolCallKickoff):
 class DynamicSchemaInfo(BaseModel):
     chat_session_id: UUID | None
     message_id: int | None
+
+
+class SearchQueryInfo(BaseModel):
+    predicted_search: SearchType | None
+    final_filters: IndexFilters
+    recency_bias_multiplier: float
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

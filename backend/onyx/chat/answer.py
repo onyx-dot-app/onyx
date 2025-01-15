@@ -1,17 +1,21 @@
 from collections.abc import Callable
-from collections.abc import Iterator
 from uuid import uuid4
 
 from langchain.schema.messages import BaseMessage
 from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import ToolCall
+from sqlalchemy.orm import Session
 
+from onyx.agent_search.run_graph import run_basic_graph
+from onyx.agent_search.run_graph import run_main_graph
 from onyx.chat.llm_response_handler import LLMResponseHandlerManager
-from onyx.chat.models import AnswerQuestionPossibleReturn
+from onyx.chat.models import AnswerPacket
+from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationInfo
 from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.models import PromptConfig
+from onyx.chat.models import ProSearchConfig
 from onyx.chat.prompt_builder.build import AnswerPromptBuilder
 from onyx.chat.prompt_builder.build import default_build_system_message
 from onyx.chat.prompt_builder.build import default_build_user_message
@@ -19,30 +23,22 @@ from onyx.chat.prompt_builder.build import LLMCall
 from onyx.chat.stream_processing.answer_response_handler import (
     CitationResponseHandler,
 )
-from onyx.chat.stream_processing.answer_response_handler import (
-    DummyAnswerResponseHandler,
-)
 from onyx.chat.stream_processing.utils import (
     map_document_id_order,
 )
+from onyx.chat.tool_handling.tool_response_handler import get_tool_by_name
 from onyx.chat.tool_handling.tool_response_handler import ToolResponseHandler
 from onyx.file_store.utils import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.tools.force import ForceUseTool
-from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_runner import ToolCallKickoff
 from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
-
-
-AnswerStream = Iterator[AnswerQuestionPossibleReturn | ToolCallKickoff | ToolResponse]
 
 
 class Answer:
@@ -59,7 +55,6 @@ class Answer:
         # newly passed in files to include as part of this question
         # TODO THIS NEEDS TO BE HANDLED
         latest_query_files: list[InMemoryChatFile] | None = None,
-        files: list[InMemoryChatFile] | None = None,
         tools: list[Tool] | None = None,
         # NOTE: for native tool-calling, this is only supported by OpenAI atm,
         #       but we only support them anyways
@@ -69,6 +64,9 @@ class Answer:
         return_contexts: bool = False,
         skip_gen_ai_answer_generation: bool = False,
         is_connected: Callable[[], bool] | None = None,
+        pro_search_config: ProSearchConfig | None = None,
+        fast_llm: LLM | None = None,
+        db_session: Session | None = None,
     ) -> None:
         if single_message_history and message_history:
             raise ValueError(
@@ -79,7 +77,6 @@ class Answer:
         self.is_connected: Callable[[], bool] | None = is_connected
 
         self.latest_query_files = latest_query_files or []
-        self.file_id_to_file = {file.file_id: file for file in (files or [])}
 
         self.tools = tools or []
         self.force_use_tool = force_use_tool
@@ -92,6 +89,7 @@ class Answer:
         self.prompt_config = prompt_config
 
         self.llm = llm
+        self.fast_llm = fast_llm
         self.llm_tokenizer = get_tokenizer(
             provider_type=llm.config.model_provider,
             model_name=llm.config.model_name,
@@ -100,9 +98,7 @@ class Answer:
         self._final_prompt: list[BaseMessage] | None = None
 
         self._streamed_output: list[str] | None = None
-        self._processed_stream: (
-            list[AnswerQuestionPossibleReturn | ToolResponse | ToolCallKickoff] | None
-        ) = None
+        self._processed_stream: (list[AnswerPacket] | None) = None
 
         self._return_contexts = return_contexts
         self.skip_gen_ai_answer_generation = skip_gen_ai_answer_generation
@@ -115,55 +111,28 @@ class Answer:
             and not skip_explicit_tool_calling
         )
 
+        self.pro_search_config = pro_search_config
+        self.db_session = db_session
+
     def _get_tools_list(self) -> list[Tool]:
         if not self.force_use_tool.force_use:
             return self.tools
 
-        tool = next(
-            (t for t in self.tools if t.name == self.force_use_tool.tool_name), None
-        )
-        if tool is None:
-            raise RuntimeError(f"Tool '{self.force_use_tool.tool_name}' not found")
+        tool = get_tool_by_name(self.tools, self.force_use_tool.tool_name)
 
-        logger.info(
-            f"Forcefully using tool='{tool.name}'"
-            + (
-                f" with args='{self.force_use_tool.args}'"
-                if self.force_use_tool.args is not None
-                else ""
-            )
+        args_str = (
+            f" with args='{self.force_use_tool.args}'"
+            if self.force_use_tool.args
+            else ""
         )
+        logger.info(f"Forcefully using tool='{tool.name}'{args_str}")
         return [tool]
 
-    def _handle_specified_tool_call(
-        self, llm_calls: list[LLMCall], tool: Tool, tool_args: dict
-    ) -> AnswerStream:
-        current_llm_call = llm_calls[-1]
-
-        # make a dummy tool handler
-        tool_handler = ToolResponseHandler([tool])
-
-        dummy_tool_call_chunk = AIMessageChunk(content="")
-        dummy_tool_call_chunk.tool_calls = [
-            ToolCall(name=tool.name, args=tool_args, id=str(uuid4()))
-        ]
-
-        response_handler_manager = LLMResponseHandlerManager(
-            tool_handler, DummyAnswerResponseHandler(), self.is_cancelled
-        )
-        yield from response_handler_manager.handle_llm_response(
-            iter([dummy_tool_call_chunk])
-        )
-
-        new_llm_call = response_handler_manager.next_llm_call(current_llm_call)
-        if new_llm_call:
-            yield from self._get_response(llm_calls + [new_llm_call])
-        else:
-            raise RuntimeError("Tool call handler did not return a new LLM call")
-
+    # TODO: delete the function and move the full body to processed_streamed_output
     def _get_response(self, llm_calls: list[LLMCall]) -> AnswerStream:
         current_llm_call = llm_calls[-1]
 
+        tool, tool_args = None, None
         # handle the case where no decision has to be made; we simply run the tool
         if (
             current_llm_call.force_use_tool.force_use
@@ -173,17 +142,10 @@ class Answer:
                 current_llm_call.force_use_tool.tool_name,
                 current_llm_call.force_use_tool.args,
             )
-            tool = next(
-                (t for t in current_llm_call.tools if t.name == tool_name), None
-            )
-            if not tool:
-                raise RuntimeError(f"Tool '{tool_name}' not found")
-
-            yield from self._handle_specified_tool_call(llm_calls, tool, tool_args)
-            return
+            tool = get_tool_by_name(current_llm_call.tools, tool_name)
 
         # special pre-logic for non-tool calling LLM case
-        if not self.using_tool_calling_llm and current_llm_call.tools:
+        elif not self.using_tool_calling_llm and current_llm_call.tools:
             chosen_tool_and_args = (
                 ToolResponseHandler.get_tool_call_for_non_tool_calling_llm(
                     current_llm_call, self.llm
@@ -191,8 +153,24 @@ class Answer:
             )
             if chosen_tool_and_args:
                 tool, tool_args = chosen_tool_and_args
-                yield from self._handle_specified_tool_call(llm_calls, tool, tool_args)
-                return
+
+        if tool and tool_args:
+            dummy_tool_call_chunk = AIMessageChunk(content="")
+            dummy_tool_call_chunk.tool_calls = [
+                ToolCall(name=tool.name, args=tool_args, id=str(uuid4()))
+            ]
+
+            response_handler_manager = LLMResponseHandlerManager(
+                ToolResponseHandler([tool]), None, self.is_cancelled
+            )
+            yield from response_handler_manager.handle_llm_response(
+                iter([dummy_tool_call_chunk])
+            )
+
+            tmp_call = response_handler_manager.next_llm_call(current_llm_call)
+            if tmp_call is None:
+                return  # no more LLM calls to process
+            current_llm_call = tmp_call
 
         # if we're skipping gen ai answer generation, we should break
         # out unless we're forcing a tool call. If we don't, we might generate an
@@ -212,29 +190,63 @@ class Answer:
             current_llm_call
         ) or ([], [])
 
-        # Quotes are no longer supported
-        # answer_handler: AnswerResponseHandler
-        # if self.answer_style_config.citation_config:
-        #     answer_handler = CitationResponseHandler(
-        #         context_docs=search_result,
-        #         doc_id_to_rank_map=map_document_id_order(search_result),
-        #     )
-        # elif self.answer_style_config.quotes_config:
-        #     answer_handler = QuotesResponseHandler(
-        #         context_docs=search_result,
-        #     )
-        # else:
-        #     raise ValueError("No answer style config provided")
+        # NEXT: we still want to handle the LLM response stream, but it is now:
+        # 1. handle the tool call requests
+        # 2. feed back the processed results
+        # 3. handle the citations
+
         answer_handler = CitationResponseHandler(
             context_docs=final_search_results,
             final_doc_id_to_rank_map=map_document_id_order(final_search_results),
             display_doc_id_to_rank_map=map_document_id_order(displayed_search_results),
         )
 
+        # At the moment, this wrapper class passes streamed stuff through citation and tool handlers.
+        # In the future, we'll want to handle citations and tool calls in the langgraph graph.
         response_handler_manager = LLMResponseHandlerManager(
             tool_call_handler, answer_handler, self.is_cancelled
         )
 
+        # In langgraph, whether we do the basic thing (call llm stream) or pro search
+        # is based on a flag in the pro search config
+
+        if self.pro_search_config:
+            if self.pro_search_config.search_request is None:
+                raise ValueError("Search request must be provided for pro search")
+            search_tools = [tool for tool in self.tools if isinstance(tool, SearchTool)]
+            if len(search_tools) == 0:
+                raise ValueError("No search tool found")
+            elif len(search_tools) > 1:
+                # TODO: handle multiple search tools
+                raise ValueError("Multiple search tools found")
+
+            search_tool = search_tools[0]
+            if self.db_session is None:
+                raise ValueError("db_session must be provided for pro search")
+            if self.fast_llm is None:
+                raise ValueError("fast_llm must be provided for pro search")
+
+            stream = run_main_graph(
+                config=self.pro_search_config,
+                primary_llm=self.llm,
+                fast_llm=self.fast_llm,
+                search_tool=search_tool,
+                db_session=self.db_session,
+            )
+        else:
+            stream = run_basic_graph(
+                last_llm_call=current_llm_call,
+                primary_llm=self.llm,
+                answer_style_config=self.answer_style_config,
+                response_handler_manager=response_handler_manager,
+            )
+
+        processed_stream = []
+        for packet in stream:
+            processed_stream.append(packet)
+            yield packet
+        self._processed_stream = processed_stream
+        return
         # DEBUG: good breakpoint
         stream = self.llm.stream(
             # For tool calling LLMs, we want to insert the task prompt as part of this flow, this is because the LLM
