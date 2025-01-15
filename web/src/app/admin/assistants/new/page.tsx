@@ -17,7 +17,7 @@ export default async function Page() {
     );
   } else {
     body = (
-      <CardSection>
+      <CardSection className="!border-none !bg-transparent !ring-none">
         <AssistantEditor
           {...values}
           admin

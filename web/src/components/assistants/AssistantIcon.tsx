@@ -123,9 +123,7 @@ export function AssistantIcon({
       <Tooltip>
         <TooltipTrigger asChild>
           <div className={className}>
-            {assistant.id == 0 ? (
-              <OnyxIcon size={dimension} />
-            ) : assistant.uploaded_image_id ? (
+            {assistant.uploaded_image_id ? (
               <img
                 alt={assistant.name}
                 src={buildImgUrl(assistant.uploaded_image_id)}

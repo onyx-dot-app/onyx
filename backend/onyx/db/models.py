@@ -1398,7 +1398,7 @@ class Persona__PersonaLabel(Base):
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
     persona_label_id: Mapped[int] = mapped_column(
-        ForeignKey("persona_label.id"), primary_key=True
+        ForeignKey("persona_label.id", ondelete="CASCADE"), primary_key=True
     )
 
 
@@ -1522,6 +1522,8 @@ class PersonaLabel(Base):
         "Persona",
         secondary=Persona__PersonaLabel.__table__,
         back_populates="labels",
+        cascade="all, delete-orphan",
+        single_parent=True,
     )
 
 

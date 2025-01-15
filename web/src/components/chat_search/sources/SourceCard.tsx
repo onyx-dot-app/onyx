@@ -63,7 +63,7 @@ export function SeeMoreBlock({
           onClick={toggleDocumentSelection}
           className="flex-1 mr-1 font-semibold text-text-900 overflow-hidden text-ellipsis whitespace-nowrap"
         >
-          {toggled ? "Hide Results" : "Show Results"}
+          {toggled ? "Hide Results" : "Show Sources"}
         </p>
         <div className="flex-shrink-0 flex gap-x-1 items-center">
           {filteredUniqueSources.slice(0, 3).map((source, index) => (

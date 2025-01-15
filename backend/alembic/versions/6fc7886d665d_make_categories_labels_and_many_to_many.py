@@ -32,6 +32,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["persona_label_id"],
             ["persona_label.id"],
+            ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("persona_id", "persona_label_id"),
     )

@@ -11,6 +11,8 @@ import {
   FiTag,
   FiChevronLeft,
   FiChevronRight,
+  FiDatabase,
+  FiBook,
 } from "react-icons/fi";
 import { FilterManager } from "@/lib/hooks";
 import { DocumentSet, Tag } from "@/lib/types";
@@ -62,7 +64,7 @@ export function FilterPopup({
           ? "bg-gray-100 text-gray-900"
           : "text-gray-600 hover:bg-gray-50"
       }`}
-      onClick={() => {
+      onMouseDown={() => {
         setSelectedFilter(category);
       }}
     >
@@ -216,14 +218,14 @@ export function FilterPopup({
               {availableSources.length > 0 && (
                 <FilterOption
                   category={FilterCategories.sources}
-                  icon={<FiFilter className="w-4 h-4" />}
+                  icon={<FiDatabase className="w-4 h-4" />}
                   label="Sources"
                 />
               )}
               {availableDocumentSets.length > 0 && (
                 <FilterOption
                   category={FilterCategories.documentSets}
-                  icon={<FiFolder className="w-4 h-4" />}
+                  icon={<FiBook className="w-4 h-4" />}
                   label="Sets"
                 />
               )}

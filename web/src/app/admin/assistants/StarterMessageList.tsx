@@ -41,6 +41,12 @@ export default function StarterMessagesList({
 
     if (value && index === values.length - 1 && values.length < 6) {
       arrayHelpers.push({ message: "" });
+    } else if (
+      !value &&
+      index === values.length - 2 &&
+      !values[values.length - 1].message
+    ) {
+      arrayHelpers.pop();
     }
   };
 
@@ -62,7 +68,15 @@ export default function StarterMessagesList({
             type="button"
             variant="ghost"
             size="icon"
-            onClick={() => arrayHelpers.remove(index)}
+            onClick={() => {
+              arrayHelpers.remove(index);
+              if (
+                index === values.length - 2 &&
+                !values[values.length - 1].message
+              ) {
+                arrayHelpers.pop();
+              }
+            }}
             className={`text-gray-400 hover:text-red-500 ${
               index === values.length - 1 && !starterMessage.message
                 ? "opacity-50 cursor-not-allowed"
@@ -84,26 +98,30 @@ export default function StarterMessagesList({
                 size="sm"
                 onMouseEnter={() => setTooltipOpen(true)}
                 onMouseLeave={() => setTooltipOpen(false)}
-                onClick={() => debouncedRefreshPrompts()}
-                disabled={
-                  values.filter((msg) => msg.message.trim() !== "").length >=
-                    4 ||
-                  isRefreshing ||
-                  !autoStarterMessageEnabled
-                }
+                onClick={() => {
+                  const shouldSubmit =
+                    values.filter((msg) => msg.message.trim() !== "").length <
+                      4 &&
+                    !isRefreshing &&
+                    autoStarterMessageEnabled;
+                  if (shouldSubmit) {
+                    debouncedRefreshPrompts();
+                  }
+                }}
                 className={`
                   ${
                     values.filter((msg) => msg.message.trim() !== "").length >=
                       4 ||
                     isRefreshing ||
-                    (!autoStarterMessageEnabled &&
-                      "bg-neutral-200 border border-neutral-900 text-neutral-900 cursor-not-allowed")
+                    !autoStarterMessageEnabled
+                      ? "bg-neutral-800 text-neutral-300 cursor-not-allowed"
+                      : ""
                   }
                 `}
               >
                 <div className="flex text-xs items-center gap-x-2">
                   {isRefreshing ? (
-                    <FiRefreshCw className="w-4 h-4 animate-spin text-black" />
+                    <FiRefreshCw className="w-4 h-4 animate-spin text-white" />
                   ) : (
                     <SwapIcon className="w-4 h-4 text-white" />
                   )}

@@ -145,7 +145,8 @@ export function AssistantEditor({
   const router = useRouter();
 
   const { popup, setPopup } = usePopup();
-  const { data: labels, refreshLabels } = useLabels();
+  const { data, refreshLabels } = useLabels();
+  const labels = data || [];
 
   const colorOptions = [
     "#FF6FBF",
@@ -744,6 +745,87 @@ export function AssistantEditor({
                 data-testid="assistant-description-input"
                 className="[&_input]:placeholder:text-text-muted/50"
               />
+
+              <div className=" w-full max-w-4xl">
+                <Separator />
+                <div className="flex gap-x-2 items-center mt-4 ">
+                  <div className="block font-medium text-sm">Labels</div>
+                </div>
+                <p
+                  className="text-sm text-subtle"
+                  style={{ color: "rgb(113, 114, 121)" }}
+                >
+                  Select labels to categorize this assistant
+                </p>
+                <div className="mt-3">
+                  <SearchMultiSelectDropdown
+                    onCreateLabel={async (name: string) => {
+                      await createPersonaLabel(name, "");
+                      await refreshLabels();
+                    }}
+                    options={Array.from(
+                      new Set(labels.map((label) => label.name))
+                    ).map((name) => ({
+                      name,
+                      value: name,
+                    }))}
+                    onSelect={(selected) => {
+                      const newLabelIds = [
+                        ...values.label_ids,
+                        labels.find((l) => l.name === selected.value)
+                          ?.id as number,
+                      ];
+                      setFieldValue("label_ids", newLabelIds);
+                    }}
+                    itemComponent={({ option }) => (
+                      <div
+                        className="flex items-center px-4 py-2.5 text-sm hover:bg-hover cursor-pointer"
+                        onClick={() => {
+                          const label = labels.find(
+                            (l) => l.name === option.value
+                          );
+                          if (label) {
+                            const isSelected = values.label_ids.includes(
+                              label.id
+                            );
+                            const newLabelIds = isSelected
+                              ? values.label_ids.filter(
+                                  (id: number) => id !== label.id
+                                )
+                              : [...values.label_ids, label.id];
+                            setFieldValue("label_ids", newLabelIds);
+                          }
+                        }}
+                      >
+                        <span className="text-sm font-medium leading-none">
+                          {option.name}
+                        </span>
+                      </div>
+                    )}
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {values.label_ids.map((labelId: number) => {
+                      const label = labels.find((l) => l.id === labelId);
+                      return label ? (
+                        <SourceChip
+                          key={label.id}
+                          onRemove={() => {
+                            setFieldValue(
+                              "label_ids",
+                              values.label_ids.filter(
+                                (id: number) => id !== label.id
+                              )
+                            );
+                          }}
+                          title={label.name}
+                          icon={<TagIcon size={12} />}
+                        />
+                      ) : null;
+                    })}
+                  </div>
+                </div>
+              </div>
+
               <Separator />
 
               <TextFormField
@@ -755,88 +837,6 @@ export function AssistantEditor({
                 data-testid="assistant-instructions-input"
                 className="[&_textarea]:placeholder:text-text-muted/50"
               />
-
-              {labels && labels.length > 0 && (
-                <div className="my-4 w-full max-w-4xl">
-                  <Separator />
-                  <div className="flex gap-x-2 items-center mt-4 ">
-                    <div className="block font-medium text-sm">Labels</div>
-                  </div>
-                  <p
-                    className="text-sm text-subtle"
-                    style={{ color: "rgb(113, 114, 121)" }}
-                  >
-                    Select labels to categorize this assistant
-                  </p>
-                  <div className="mt-3">
-                    <SearchMultiSelectDropdown
-                      onCreateLabel={async (name: string) => {
-                        await createPersonaLabel(name, "");
-                        await refreshLabels();
-                      }}
-                      options={Array.from(
-                        new Set(labels.map((label) => label.name))
-                      ).map((name) => ({
-                        name,
-                        value: name,
-                      }))}
-                      onSelect={(selected) => {
-                        const newLabelIds = [
-                          ...values.label_ids,
-                          labels.find((l) => l.name === selected.value)
-                            ?.id as number,
-                        ];
-                        setFieldValue("label_ids", newLabelIds);
-                      }}
-                      itemComponent={({ option }) => (
-                        <div
-                          className="flex items-center px-4 py-2.5 text-sm hover:bg-hover cursor-pointer"
-                          onClick={() => {
-                            const label = labels.find(
-                              (l) => l.name === option.value
-                            );
-                            if (label) {
-                              const isSelected = values.label_ids.includes(
-                                label.id
-                              );
-                              const newLabelIds = isSelected
-                                ? values.label_ids.filter(
-                                    (id: number) => id !== label.id
-                                  )
-                                : [...values.label_ids, label.id];
-                              setFieldValue("label_ids", newLabelIds);
-                            }
-                          }}
-                        >
-                          <span className="text-sm font-medium leading-none">
-                            {option.name}
-                          </span>
-                        </div>
-                      )}
-                    />
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {values.label_ids.map((labelId: number) => {
-                        const label = labels.find((l) => l.id === labelId);
-                        return label ? (
-                          <SourceChip
-                            key={label.id}
-                            onRemove={() => {
-                              setFieldValue(
-                                "label_ids",
-                                values.label_ids.filter(
-                                  (id: number) => id !== label.id
-                                )
-                              );
-                            }}
-                            title={label.name}
-                            icon={<TagIcon size={12} />}
-                          />
-                        ) : null;
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <div className="w-full max-w-4xl">
                 <div className="flex flex-col">
@@ -1142,78 +1142,6 @@ export function AssistantEditor({
                 />
               </div>
 
-              {admin && (
-                <div className="max-w-4xl">
-                  <Separator />
-                  <div className="flex gap-x-2 items-center mt-4">
-                    <div className="block font-medium text-sm">
-                      Create New Label
-                    </div>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <FiInfo size={12} />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" align="center">
-                          Create a new category to group similar assistants
-                          together
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <SubLabel>Add a new label to categorize assistants</SubLabel>
-                  <div className="grid grid-cols-[1fr,2fr,auto] gap-4 mt-2">
-                    <TextFormField
-                      fontSize="sm"
-                      name="newLabelName"
-                      label="Label Name"
-                      placeholder="Development"
-                    />
-                    <TextFormField
-                      fontSize="sm"
-                      name="newLabelDescription"
-                      label="Label Description"
-                      placeholder="Assistants for software development"
-                    />
-                    <div className="flex items-end">
-                      <Button
-                        type="button"
-                        onClick={async () => {
-                          const name = values.newLabelName;
-                          const description = values.newLabelDescription;
-                          if (!name || !description) return;
-
-                          try {
-                            const response = await createPersonaLabel(
-                              name,
-                              description
-                            );
-                            if (response.ok) {
-                              setPopup({
-                                message: `Label "${name}" created successfully`,
-                                type: "success",
-                              });
-                              await refreshLabels();
-                              setFieldValue("newLabelName", "");
-                              setFieldValue("newLabelDescription", "");
-                            } else {
-                              throw new Error(await response.text());
-                            }
-                          } catch (error) {
-                            setPopup({
-                              message: `Failed to create category - ${error}`,
-                              type: "error",
-                            });
-                          }
-                        }}
-                      >
-                        Create
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {admin && labels && labels.length > 0 && (
                 <div className=" max-w-4xl">
                   <Separator />
@@ -1260,26 +1188,6 @@ export function AssistantEditor({
                             }
                           }}
                         />
-                        <TextFormField
-                          fontSize="sm"
-                          name={`editLabelDescription_${label.id}`}
-                          label="Label Description"
-                          value={
-                            values.editLabelId === label.id
-                              ? values.editLabelDescription
-                              : label.description
-                          }
-                          onChange={(e) => {
-                            setFieldValue("editLabelId", label.id);
-                            setFieldValue(
-                              "editLabelDescription",
-                              e.target.value
-                            );
-                            if (!values.editLabelName) {
-                              setFieldValue("editLabelName", label.name);
-                            }
-                          }}
-                        />
                         <div className="flex gap-2">
                           {values.editLabelId === label.id ? (
                             <>
@@ -1287,13 +1195,10 @@ export function AssistantEditor({
                                 onClick={async () => {
                                   const updatedName =
                                     values.editLabelName || label.name;
-                                  const updatedDescription =
-                                    values.editLabelDescription ||
-                                    label.description;
                                   const response = await updatePersonaLabel(
                                     label.id,
                                     updatedName,
-                                    updatedDescription
+                                    updatedName
                                   );
                                   if (response?.ok) {
                                     setPopup({
@@ -1327,19 +1232,6 @@ export function AssistantEditor({
                             </>
                           ) : (
                             <>
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  setFieldValue("editLabelId", label.id);
-                                  setFieldValue("editLabelName", label.name);
-                                  setFieldValue(
-                                    "editLabelDescription",
-                                    label.description
-                                  );
-                                }}
-                              >
-                                Edit
-                              </Button>
                               <Button
                                 variant="destructive"
                                 onClick={async () => {
@@ -1386,133 +1278,133 @@ export function AssistantEditor({
                 <>
                   <div className="max-w-4xl w-full">
                     <div className="flex gap-x-2 items-center ">
-                      <div className="block font-medium text-sm">
-                        Visibility and Sharing
-                      </div>
+                      <div className="block font-medium text-sm">Access</div>
                     </div>
                     <SubLabel>
                       Control who can access and use this assistant
                     </SubLabel>
 
-                    <div className="flex items-center">
-                      <Switch
-                        size="md"
-                        checked={values.is_public}
-                        onCheckedChange={(checked) => {
-                          setFieldValue("is_public", checked);
-                          if (checked) {
-                            setFieldValue("selectedUsers", []);
-                            setFieldValue("selectedGroups", []);
-                          }
-                        }}
-                      />
-                      <span className="ml-2">
-                        {values.is_public ? "Public" : "Private"}
-                      </span>
+                    <div className="min-h-[100px]">
+                      <div className="flex items-center mb-2">
+                        <Switch
+                          size="md"
+                          checked={values.is_public}
+                          onCheckedChange={(checked) => {
+                            setFieldValue("is_public", checked);
+                            if (checked) {
+                              setFieldValue("selectedUsers", []);
+                              setFieldValue("selectedGroups", []);
+                            }
+                          }}
+                        />
+                        <span className="text-sm ml-2">
+                          {values.is_public ? "Public" : "Private"}
+                        </span>
+                      </div>
+
+                      {values.is_public ? (
+                        <p className="text-sm text-text-dark">
+                          Anyone from your organization can view and use this
+                          assistant
+                        </p>
+                      ) : (
+                        <>
+                          <div className="mt-2">
+                            <Label className="mb-2" small>
+                              Share with Users and Groups
+                            </Label>
+
+                            <SearchMultiSelectDropdown
+                              options={[
+                                ...(Array.isArray(users) ? users : [])
+                                  .filter(
+                                    (u: MinimalUserSnapshot) =>
+                                      !values.selectedUsers.some(
+                                        (su: MinimalUserSnapshot) =>
+                                          su.id === u.id
+                                      ) && u.id !== user?.id
+                                  )
+                                  .map((u: MinimalUserSnapshot) => ({
+                                    name: u.email,
+                                    value: u.id,
+                                    type: "user",
+                                  })),
+                                ...(userGroups || [])
+                                  .filter(
+                                    (g: UserGroup) =>
+                                      !values.selectedGroups.includes(g.id)
+                                  )
+                                  .map((g: UserGroup) => ({
+                                    name: g.name,
+                                    value: g.id,
+                                    type: "group",
+                                  })),
+                              ]}
+                              onSelect={(
+                                selected: DropdownOption<string | number>
+                              ) => {
+                                const option = selected as {
+                                  name: string;
+                                  value: string | number;
+                                  type: "user" | "group";
+                                };
+                                if (option.type === "user") {
+                                  setFieldValue("selectedUsers", [
+                                    ...values.selectedUsers,
+                                    { id: option.value, email: option.name },
+                                  ]);
+                                } else {
+                                  setFieldValue("selectedGroups", [
+                                    ...values.selectedGroups,
+                                    option.value,
+                                  ]);
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {values.selectedUsers.map(
+                              (user: MinimalUserSnapshot) => (
+                                <SourceChip
+                                  key={user.id}
+                                  onRemove={() => {
+                                    setFieldValue(
+                                      "selectedUsers",
+                                      values.selectedUsers.filter(
+                                        (u: MinimalUserSnapshot) =>
+                                          u.id !== user.id
+                                      )
+                                    );
+                                  }}
+                                  title={user.email}
+                                  icon={<UserIcon size={12} />}
+                                />
+                              )
+                            )}
+                            {values.selectedGroups.map((groupId: number) => {
+                              const group = (userGroups || []).find(
+                                (g: UserGroup) => g.id === groupId
+                              );
+                              return group ? (
+                                <SourceChip
+                                  key={group.id}
+                                  title={group.name}
+                                  onRemove={() => {
+                                    setFieldValue(
+                                      "selectedGroups",
+                                      values.selectedGroups.filter(
+                                        (id: number) => id !== group.id
+                                      )
+                                    );
+                                  }}
+                                  icon={<GroupsIconSkeleton size={12} />}
+                                />
+                              ) : null;
+                            })}
+                          </div>
+                        </>
+                      )}
                     </div>
-
-                    <p className="text-sm text-text-dark">
-                      {values.is_public &&
-                        "Anyone from your organization can view and use this assistant"}
-                    </p>
-
-                    {!values.is_public && (
-                      <>
-                        <div className="mt-4">
-                          <Label small>Share with Users and Groups</Label>
-                          <SubLabel>
-                            Select users and groups to share this assistant with
-                          </SubLabel>
-                          <SearchMultiSelectDropdown
-                            options={[
-                              ...(Array.isArray(users) ? users : [])
-                                .filter(
-                                  (u: MinimalUserSnapshot) =>
-                                    !values.selectedUsers.some(
-                                      (su: MinimalUserSnapshot) =>
-                                        su.id === u.id
-                                    ) && u.id !== user?.id
-                                )
-                                .map((u: MinimalUserSnapshot) => ({
-                                  name: u.email,
-                                  value: u.id,
-                                  type: "user",
-                                })),
-                              ...(userGroups || [])
-                                .filter(
-                                  (g: UserGroup) =>
-                                    !values.selectedGroups.includes(g.id)
-                                )
-                                .map((g: UserGroup) => ({
-                                  name: g.name,
-                                  value: g.id,
-                                  type: "group",
-                                })),
-                            ]}
-                            onSelect={(
-                              selected: DropdownOption<string | number>
-                            ) => {
-                              const option = selected as {
-                                name: string;
-                                value: string | number;
-                                type: "user" | "group";
-                              };
-                              if (option.type === "user") {
-                                setFieldValue("selectedUsers", [
-                                  ...values.selectedUsers,
-                                  { id: option.value, email: option.name },
-                                ]);
-                              } else {
-                                setFieldValue("selectedGroups", [
-                                  ...values.selectedGroups,
-                                  option.value,
-                                ]);
-                              }
-                            }}
-                          />
-                        </div>
-                        <div className="flex flex-wrap gap-2 mt-4">
-                          {values.selectedUsers.map(
-                            (user: MinimalUserSnapshot) => (
-                              <SourceChip
-                                key={user.id}
-                                onRemove={() => {
-                                  setFieldValue(
-                                    "selectedUsers",
-                                    values.selectedUsers.filter(
-                                      (u: MinimalUserSnapshot) =>
-                                        u.id !== user.id
-                                    )
-                                  );
-                                }}
-                                title={user.email}
-                                icon={<UserIcon size={12} />}
-                              />
-                            )
-                          )}
-                          {values.selectedGroups.map((groupId: number) => {
-                            const group = (userGroups || []).find(
-                              (g: UserGroup) => g.id === groupId
-                            );
-                            return group ? (
-                              <SourceChip
-                                key={group.id}
-                                title={group.name}
-                                onRemove={() => {
-                                  setFieldValue(
-                                    "selectedGroups",
-                                    values.selectedGroups.filter(
-                                      (id: number) => id !== group.id
-                                    )
-                                  );
-                                }}
-                                icon={<GroupsIconSkeleton size={12} />}
-                              />
-                            ) : null;
-                          })}
-                        </div>
-                      </>
-                    )}
                   </div>
                   <Separator />
                   <div className="w-full flex flex-col">

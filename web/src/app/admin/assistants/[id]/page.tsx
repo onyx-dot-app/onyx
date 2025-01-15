@@ -22,7 +22,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
   } else {
     body = (
       <>
-        <CardSection>
+        <CardSection className="!border-none !bg-transparent !ring-none">
           <AssistantEditor
             {...values}
             admin
