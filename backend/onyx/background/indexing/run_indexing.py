@@ -191,6 +191,18 @@ def _run_indexing(
             ),
         )
 
+        last_successful_index_time = (
+            ctx.earliest_index_time
+            if ctx.from_beginning
+            else get_last_successful_attempt_time(
+                connector_id=ctx.connector_id,
+                credential_id=ctx.credential_id,
+                earliest_index=ctx.earliest_index_time,
+                search_settings=search_settings,
+                db_session=db_session_temp,
+            )
+        )
+
     # Indexing is only done into one index at a time
     document_index = get_default_document_index(
         primary_index_name=ctx.index_name, secondary_index_name=None
@@ -212,19 +224,6 @@ def _run_indexing(
         tenant_id=tenant_id,
         callback=callback,
     )
-
-    with get_session_with_tenant(tenant_id) as db_session_temp:
-        last_successful_index_time = (
-            ctx.earliest_index_time
-            if ctx.from_beginning
-            else get_last_successful_attempt_time(
-                connector_id=ctx.connector_id,
-                credential_id=ctx.credential_id,
-                earliest_index=ctx.earliest_index_time,
-                search_settings=search_settings,
-                db_session=db_session_temp,
-            )
-        )
 
     if INDEXING_TRACER_INTERVAL > 0:
         logger.debug(f"Memory tracer starting: interval={INDEXING_TRACER_INTERVAL}")
