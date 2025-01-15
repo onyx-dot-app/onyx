@@ -44,6 +44,8 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
     ? destructureValue(currentLlm)
     : null;
 
+  console.log(llmOptions);
+
   const currentLlmName = destructuredCurrentValue?.modelName;
 
   return (
@@ -59,7 +61,9 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
         </SelectValue>
       </SelectTrigger>
       <SelectContent className="z-[99999]">
-        <SelectItem value="default">User Default</SelectItem>
+        <SelectItem hideCheck value="default">
+          User Default
+        </SelectItem>
         {llmOptions.map((option) => {
           if (
             !requiresImageGeneration ||
