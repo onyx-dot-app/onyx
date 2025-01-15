@@ -368,7 +368,7 @@ def _run_indexing(
                 # commit transaction so that the `update` below begins
                 # with a brand new transaction. Postgres uses the start
                 # of the transactions when computing `NOW()`, so if we have
-                # a long running transaction, the `time_updated`  field will
+                # a long running transaction, the `time_updated` field will
                 # be inaccurate
                 db_session.commit()
 

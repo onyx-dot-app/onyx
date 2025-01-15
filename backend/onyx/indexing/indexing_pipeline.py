@@ -57,10 +57,13 @@ class DocumentBatchPrepareContext(BaseModel):
 
 
 class IndexingPipelineResult(BaseModel):
+    # number of documents that are completely new (e.g. did
+    # not exist as a part of this OR any other connector)
     new_docs: int
     # NOTE: need total_docs, since the pipeline can skip some docs
     # (e.g. not even insert them into Postgres)
     total_docs: int
+    # number of chunks that were inserted into Vespa
     total_chunks: int
 
 
