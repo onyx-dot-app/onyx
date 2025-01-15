@@ -273,7 +273,7 @@ export default function InputPrompts() {
       {isCreatingNew ? (
         <div className="space-y-2 border p-4 rounded-md mt-4">
           <Textarea
-            placeholder="New prompt"
+            placeholder="Prompt Shortcut (e.g. Summarize)"
             value={newPrompt.prompt || ""}
             onChange={(e) =>
               setNewPrompt({ ...newPrompt, prompt: e.target.value })
@@ -281,7 +281,7 @@ export default function InputPrompts() {
             className="resize-none"
           />
           <Textarea
-            placeholder="New content"
+            placeholder="Actual Prompt (e.g. Summarize the uploaded document and highlight key points.)"
             value={newPrompt.content || ""}
             onChange={(e) =>
               setNewPrompt({ ...newPrompt, content: e.target.value })

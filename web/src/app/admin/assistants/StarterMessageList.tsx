@@ -39,7 +39,7 @@ export default function StarterMessagesList({
     touchStarterMessages();
     setFieldValue(`starter_messages.${index}.message`, value);
 
-    if (value && index === values.length - 1 && values.length < 6) {
+    if (value && index === values.length - 1 && values.length < 4) {
       arrayHelpers.push({ message: "" });
     } else if (
       !value &&
@@ -59,7 +59,6 @@ export default function StarterMessagesList({
             label=""
             value={starterMessage.message}
             onChange={(e) => handleInputChange(index, e.target.value)}
-            placeholder={`Enter starter message ${index + 1}...`}
             className="flex-grow"
             removeLabel
             small
