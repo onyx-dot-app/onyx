@@ -80,6 +80,9 @@ export default function AssistantModal({
       const nameMatches = assistant.name
         .toLowerCase()
         .includes(searchQuery.toLowerCase());
+      const labelMatches = assistant.labels?.some((label) =>
+        label.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
       const publicFilter =
         !assistantFilters[AssistantFilter.Public] || assistant.is_public;
       const privateFilter =
@@ -88,7 +91,12 @@ export default function AssistantModal({
         !assistantFilters[AssistantFilter.Pinned] ||
         pinnedAssistants.map((a: Persona) => a.id).includes(assistant.id);
 
-      return nameMatches && publicFilter && privateFilter && pinnedFilter;
+      return (
+        (nameMatches || labelMatches) &&
+        publicFilter &&
+        privateFilter &&
+        pinnedFilter
+      );
     });
   }, [assistants, searchQuery, assistantFilters, pinnedAssistants]);
 
