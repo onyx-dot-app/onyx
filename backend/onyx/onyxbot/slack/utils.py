@@ -590,6 +590,7 @@ def slack_usage_report(
         record_type=RecordType.USAGE,
         data={"action": action},
         user_id=str(onyx_user.id) if onyx_user else "Non-Onyx-Or-No-Auth-User",
+        tenant_id=tenant_id,
     )
 
 

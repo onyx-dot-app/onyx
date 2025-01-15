@@ -215,7 +215,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         setup_multitenant_onyx()
 
-    optional_telemetry(record_type=RecordType.VERSION, data={"version": __version__})
+    if not MULTI_TENANT:
+        # don't emit a metric for every pod rollover/restart
+        optional_telemetry(
+            record_type=RecordType.VERSION, data={"version": __version__}
+        )
 
     if AUTH_RATE_LIMITING_ENABLED:
         await setup_auth_limiter()
