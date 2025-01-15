@@ -17,5 +17,5 @@ task_acks_late = shared_config.task_acks_late
 
 # Monitoring worker specific settings
 worker_concurrency = 1  # Single worker is sufficient for monitoring
-worker_pool = "solo"
+worker_pool = "threads"
 worker_prefetch_multiplier = 1

@@ -278,6 +278,7 @@ class OnyxRedisLocks:
         "da_lock:check_connector_external_group_sync_beat"
     )
     MONITOR_VESPA_SYNC_BEAT_LOCK = "da_lock:monitor_vespa_sync_beat"
+    MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
 
     CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = (
         "da_lock:connector_doc_permissions_sync"

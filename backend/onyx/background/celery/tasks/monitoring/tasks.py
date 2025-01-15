@@ -5,16 +5,18 @@ from typing import Any
 
 from celery import shared_task
 from celery import Task
+from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import BaseModel
 from redis import Redis
+from redis.lock import Lock as RedisLock
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.vespa.tasks import celery_get_queue_length
-from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine import get_db_current_time
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import IndexingStatus
@@ -28,6 +30,8 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 
+_MONITORING_SOFT_TIME_LIMIT = 60 * 5  # 5 minutes
+_MONITORING_TIME_LIMIT = _MONITORING_SOFT_TIME_LIMIT + 60  # 6 minutes
 
 _CONNECTOR_INDEX_ATTEMPT_START_LATENCY_KEY_FMT = (
     "monitoring_connector_index_attempt_start_latency:{cc_pair_id}:{index_attempt_id}"
@@ -385,7 +389,8 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
 
 @shared_task(
     name=OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
-    soft_time_limit=JOB_TIMEOUT,
+    soft_time_limit=_MONITORING_SOFT_TIME_LIMIT,
+    time_limit=_MONITORING_TIME_LIMIT,
     queue=OnyxCeleryQueues.MONITORING,
     bind=True,
 )
@@ -397,7 +402,18 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
     - Syncing speed metrics
     - Worker status and task counts
     """
-    task_logger.info("Starting background process monitoring")
+    task_logger.info("Starting background monitoring")
+    r = get_redis_client(tenant_id=tenant_id)
+
+    lock_monitoring: RedisLock = r.lock(
+        OnyxRedisLocks.MONITOR_BACKGROUND_PROCESSES_LOCK,
+        timeout=_MONITORING_SOFT_TIME_LIMIT,
+    )
+
+    # these tasks should never overlap
+    if not lock_monitoring.acquire(blocking=False):
+        task_logger.info("Skipping monitoring task because it is already running")
+        return None
 
     try:
         # Get Redis client for Celery broker
@@ -420,8 +436,16 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
                     if metric.key:
                         _mark_metric_as_emitted(redis_std, metric.key)
 
-        task_logger.info("Successfully collected background process metrics")
-
+        task_logger.info("Successfully collected background metrics")
+    except SoftTimeLimitExceeded:
+        task_logger.info(
+            "Soft time limit exceeded, task is being terminated gracefully."
+        )
     except Exception as e:
         task_logger.exception("Error collecting background process metrics")
         raise e
+    finally:
+        if lock_monitoring.owned():
+            lock_monitoring.release()
+
+        task_logger.info("Background monitoring task finished")
