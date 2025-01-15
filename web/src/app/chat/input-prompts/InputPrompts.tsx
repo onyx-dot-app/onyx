@@ -218,7 +218,12 @@ export default function InputPrompts() {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="mb-2 font-semibold">{prompt.prompt}</div>
+                  <div className="mb-2 font-semibold">
+                    {prompt.prompt}
+                    <span className="font-normal">
+                      {isPromptPublic(prompt) ? " (built-in)" : ""}
+                    </span>
+                  </div>
                 </TooltipTrigger>
                 {isPromptPublic(prompt) && (
                   <TooltipContent>
@@ -242,7 +247,7 @@ export default function InputPrompts() {
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={() => handleDelete(prompt.id)}>
-                    {isPromptPublic(prompt) ? "Hide" : "Delete"}
+                    Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
