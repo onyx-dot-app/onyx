@@ -147,6 +147,7 @@ class AnswerPromptBuilder:
         )
 
 
+# TODO: rename this? AnswerConfig maybe?
 class LLMCall(BaseModel__v1):
     prompt_builder: AnswerPromptBuilder
     tools: list[Tool]

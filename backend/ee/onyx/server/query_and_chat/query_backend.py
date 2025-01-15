@@ -196,6 +196,7 @@ def get_answer_stream(
         retrieval_details=query_request.retrieval_options,
         rerank_settings=query_request.rerank_settings,
         db_session=db_session,
+        use_pro_search=query_request.use_pro_search,
     )
 
     packets = stream_chat_message_objects(

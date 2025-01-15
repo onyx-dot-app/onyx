@@ -3,7 +3,9 @@ from collections.abc import Iterator
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from typing import Literal
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -16,6 +18,8 @@ from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import RetrievalDocs
+from onyx.context.search.models import SearchRequest
+from onyx.llm.models import PreviousMessage
 from onyx.llm.override_models import PromptOverride
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
@@ -49,6 +53,8 @@ class QADocsResponse(RetrievalDocs):
     applied_source_filters: list[DocumentSource] | None
     applied_time_cutoff: datetime | None
     recency_bias_multiplier: float
+    level: int | None = None
+    level_question_nr: int | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
@@ -62,10 +68,15 @@ class QADocsResponse(RetrievalDocs):
 class StreamStopReason(Enum):
     CONTEXT_LENGTH = "context_length"
     CANCELLED = "cancelled"
+    FINISHED = "finished"
 
 
 class StreamStopInfo(BaseModel):
     stop_reason: StreamStopReason
+
+    # used to identify the stream that was stopped for agent search
+    level: int | None = None
+    level_question_nr: int | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         data = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
@@ -109,6 +120,8 @@ class OnyxAnswerPiece(BaseModel):
 class CitationInfo(BaseModel):
     citation_num: int
     document_id: str
+    level: int | None = None
+    level_question_nr: int | None = None
 
 
 class AllCitations(BaseModel):
@@ -202,6 +215,30 @@ class PersonaOverrideConfig(BaseModel):
     tools: list[ToolConfig] = Field(default_factory=list)
     tool_ids: list[int] = Field(default_factory=list)
     custom_tools_openapi: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ProSearchConfig(BaseModel):
+    """
+    Configuration for the Pro Search feature.
+    """
+
+    use_agentic_search: bool = False
+
+    # For persisting agent search data
+    chat_session_id: UUID | None = None
+    # The message ID of the user message that triggered the Pro Search
+    message_id: int | None = None
+    # The search request that was used to generate the Pro Search
+    search_request: SearchRequest
+
+    # Whether to persistence data for the Pro Search (turned off for testing)
+    use_persistence: bool = True
+
+    # Whether to allow creation of refinement questions (and entity extraction, etc.)
+    allow_refinement: bool = False
+
+    # Message history for the current chat session
+    message_history: list[PreviousMessage] | None = None
 
 
 AnswerQuestionPossibleReturn = (
@@ -319,6 +356,40 @@ class PromptConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class SubQueryPiece(BaseModel):
+    sub_query: str
+    level: int
+    level_question_nr: int
+    query_id: int
+
+
+class AgentAnswerPiece(BaseModel):
+    answer_piece: str
+    level: int
+    level_question_nr: int
+    answer_type: Literal["agent_sub_answer", "agent_level_answer"]
+
+
+class SubQuestionPiece(BaseModel):
+    sub_question: str
+    level: int
+    level_question_nr: int
+
+
+class ExtendedToolResponse(ToolResponse):
+    level: int
+    level_question_nr: int
+
+
+ProSearchPacket = (
+    SubQuestionPiece | AgentAnswerPiece | SubQueryPiece | ExtendedToolResponse
+)
+
+AnswerPacket = (
+    AnswerQuestionPossibleReturn | ProSearchPacket | ToolCallKickoff | ToolResponse
+)
+
+
 ResponsePart = (
     OnyxAnswerPiece
     | CitationInfo
@@ -326,4 +397,7 @@ ResponsePart = (
     | ToolResponse
     | ToolCallFinalResult
     | StreamStopInfo
+    | ProSearchPacket
 )
+
+AnswerStream = Iterator[AnswerPacket]

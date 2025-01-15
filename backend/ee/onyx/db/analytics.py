@@ -345,7 +345,8 @@ def fetch_assistant_unique_users_total(
 def user_can_view_assistant_stats(
     db_session: Session, user: User | None, assistant_id: int
 ) -> bool:
-    # If user is None, assume the user is an admin or auth is disabled
+    # If user is None and auth is disabled, assume the user is an admin
+
     if user is None or user.role == UserRole.ADMIN:
         return True
 

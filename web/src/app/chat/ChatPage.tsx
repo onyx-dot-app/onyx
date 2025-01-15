@@ -188,6 +188,8 @@ export function ChatPage({
   const enterpriseSettings = settings?.enterpriseSettings;
 
   const [documentSidebarToggled, setDocumentSidebarToggled] = useState(false);
+  const [filtersToggled, setFiltersToggled] = useState(false);
+  const [langgraphEnabled, setLanggraphEnabled] = useState(false);
 
   const [userSettingsToggled, setUserSettingsToggled] = useState(false);
 
@@ -264,10 +266,10 @@ export function ChatPage({
           (assistant) => assistant.id === existingChatSessionAssistantId
         )
       : defaultAssistantId !== undefined
-        ? availableAssistants.find(
-            (assistant) => assistant.id === defaultAssistantId
-          )
-        : undefined
+      ? availableAssistants.find(
+          (assistant) => assistant.id === defaultAssistantId
+        )
+      : undefined
   );
   // Gather default temperature settings
   const search_param_temperature = searchParams.get(
@@ -277,12 +279,12 @@ export function ChatPage({
   const defaultTemperature = search_param_temperature
     ? parseFloat(search_param_temperature)
     : selectedAssistant?.tools.some(
-          (tool) =>
-            tool.in_code_tool_id === "SearchTool" ||
-            tool.in_code_tool_id === "InternetSearchTool"
-        )
-      ? 0
-      : 0.7;
+        (tool) =>
+          tool.in_code_tool_id === "SearchTool" ||
+          tool.in_code_tool_id === "InternetSearchTool"
+      )
+    ? 0
+    : 0.7;
 
   const setSelectedAssistantFromId = (assistantId: number) => {
     // NOTE: also intentionally look through available assistants here, so that
@@ -1224,8 +1226,8 @@ export function ChatPage({
     const currentAssistantId = alternativeAssistantOverride
       ? alternativeAssistantOverride.id
       : alternativeAssistant
-        ? alternativeAssistant.id
-        : liveAssistant.id;
+      ? alternativeAssistant.id
+      : liveAssistant.id;
 
     resetInputBar();
     let messageUpdates: Message[] | null = null;
@@ -1301,6 +1303,7 @@ export function ChatPage({
         systemPromptOverride:
           searchParams.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
         useExistingUserMessage: isSeededChat,
+        useLanggraph: langgraphEnabled,
       });
 
       const delay = (ms: number) => {
@@ -2260,6 +2263,17 @@ export function ChatPage({
                   hideUserDropdown={user?.is_anonymous_user}
                 />
               )}
+              <div className="flex items-center justify-end px-4 py-2">
+                <label className="flex items-center cursor-pointer">
+                  <span className="mr-2 text-sm">Langgraph</span>
+                  <input
+                    type="checkbox"
+                    checked={langgraphEnabled}
+                    onChange={(e) => setLanggraphEnabled(e.target.checked)}
+                    className="form-checkbox h-4 w-4"
+                  />
+                </label>
+              </div>
 
               {documentSidebarInitialWidth !== undefined && isReady ? (
                 <Dropzone

@@ -49,11 +49,7 @@ def build_next_prompt_for_search_like_tool(
                 message=prompt_builder.user_message_and_token_cnt[0],
                 prompt_config=prompt_config,
                 context_docs=final_context_documents,
-                all_doc_useful=(
-                    answer_style_config.citation_config.all_docs_useful
-                    if answer_style_config.citation_config
-                    else False
-                ),
+                all_doc_useful=(answer_style_config.citation_config.all_docs_useful),
                 history_message=prompt_builder.single_message_history or "",
             )
         )

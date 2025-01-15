@@ -406,8 +406,18 @@ class SearchPipeline:
 
     @property
     def section_relevance_list(self) -> list[bool]:
-        llm_indices = relevant_sections_to_indices(
-            relevance_sections=self.section_relevance,
-            items=self.final_context_sections,
+        return section_relevance_list_impl(
+            section_relevance=self.section_relevance,
+            final_context_sections=self.final_context_sections,
         )
-        return [ind in llm_indices for ind in range(len(self.final_context_sections))]
+
+
+def section_relevance_list_impl(
+    section_relevance: list[SectionRelevancePiece] | None,
+    final_context_sections: list[InferenceSection],
+) -> list[bool]:
+    llm_indices = relevant_sections_to_indices(
+        relevance_sections=section_relevance,
+        items=final_context_sections,
+    )
+    return [ind in llm_indices for ind in range(len(final_context_sections))]
