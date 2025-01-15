@@ -367,6 +367,15 @@ def index_doc_batch(
         db_session=db_session,
     )
     if not ctx:
+        # even though we didn't actually index anything, we should still
+        # mark them as "completed" for the CC Pair in order to make the
+        # counts match
+        mark_document_as_indexed_for_cc_pair__no_commit(
+            connector_id=index_attempt_metadata.connector_id,
+            credential_id=index_attempt_metadata.credential_id,
+            document_ids=[doc.id for doc in filtered_documents],
+            db_session=db_session,
+        )
         return IndexingPipelineResult(
             new_docs=0, total_docs=len(filtered_documents), total_chunks=0
         )
@@ -485,10 +494,13 @@ def index_doc_batch(
 
         # these documents can now be counted as part of the CC Pairs
         # document count, so we need to mark them as indexed
+        # NOTE: even documents we skipped since they were already up
+        # to date should be counted here in order to maintain parity
+        # between CC Pair and index attempt counts
         mark_document_as_indexed_for_cc_pair__no_commit(
             connector_id=index_attempt_metadata.connector_id,
             credential_id=index_attempt_metadata.credential_id,
-            document_ids=successful_doc_ids,
+            document_ids=[doc.id for doc in filtered_documents],
             db_session=db_session,
         )
 
