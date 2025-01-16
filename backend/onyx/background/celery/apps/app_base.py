@@ -100,6 +100,10 @@ def on_task_postrun(
     if not task_id:
         return
 
+    if task.name.startswith("cloud"):
+        # this is a cloud / all tenant task ... no postrun is needed
+        return
+
     # Get tenant_id directly from kwargs- each celery task has a tenant_id kwarg
     if not kwargs:
         logger.error(f"Task {task.name} (ID: {task_id}) is missing kwargs")

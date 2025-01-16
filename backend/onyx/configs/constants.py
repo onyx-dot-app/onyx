@@ -79,6 +79,8 @@ KV_DOCUMENTS_SEEDED_KEY = "documents_seeded"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation
+CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
+
 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
@@ -291,6 +293,8 @@ class OnyxRedisLocks:
     SLACK_BOT_HEARTBEAT_PREFIX = "da_heartbeat:slack_bot"
     ANONYMOUS_USER_ENABLED = "anonymous_user_enabled"
 
+    CLOUD_CHECK_INDEXING_BEAT_LOCK = "da_lock:cloud_check_indexing_beat"
+
 
 class OnyxRedisSignals:
     VALIDATE_INDEXING_FENCES = "signal:validate_indexing_fences"
@@ -330,6 +334,8 @@ class OnyxCeleryTask:
     VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     AUTOGENERATE_USAGE_REPORT_TASK = "autogenerate_usage_report_task"
+
+    CLOUD_CHECK_FOR_INDEXING = "cloud_check_for_indexing"
 
 
 REDIS_SOCKET_KEEPALIVE_OPTIONS = {}
