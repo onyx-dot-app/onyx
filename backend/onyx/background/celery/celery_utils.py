@@ -14,6 +14,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import Document
 from onyx.db.connector_credential_pair import get_connector_credential_pair
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import TaskStatus
 from onyx.db.models import TaskQueueState
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -41,14 +42,21 @@ def _get_deletion_status(
         return None
 
     redis_connector = RedisConnector(tenant_id, cc_pair.id)
-    if not redis_connector.delete.fenced:
-        return None
+    if redis_connector.delete.fenced:
+        return TaskQueueState(
+            task_id="",
+            task_name=redis_connector.delete.fence_key,
+            status=TaskStatus.STARTED,
+        )
 
-    return TaskQueueState(
-        task_id="",
-        task_name=redis_connector.delete.fence_key,
-        status=TaskStatus.STARTED,
-    )
+    if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+        return TaskQueueState(
+            task_id="",
+            task_name=redis_connector.delete.fence_key,
+            status=TaskStatus.PENDING,
+        )
+
+    return None
 
 
 def get_deletion_attempt_snapshot(

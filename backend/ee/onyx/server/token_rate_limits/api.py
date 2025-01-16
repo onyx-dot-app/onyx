@@ -5,7 +5,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.token_limit import fetch_all_user_group_token_rate_limits_by_group
-from ee.onyx.db.token_limit import fetch_user_group_token_rate_limits
+from ee.onyx.db.token_limit import fetch_user_group_token_rate_limits_for_user
 from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
@@ -51,8 +51,10 @@ def get_group_token_limit_settings(
 ) -> list[TokenRateLimitDisplay]:
     return [
         TokenRateLimitDisplay.from_db(token_rate_limit)
-        for token_rate_limit in fetch_user_group_token_rate_limits(
-            db_session, group_id, user
+        for token_rate_limit in fetch_user_group_token_rate_limits_for_user(
+            db_session=db_session,
+            group_id=group_id,
+            user=user,
         )
     ]
 

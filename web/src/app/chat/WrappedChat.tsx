@@ -4,14 +4,20 @@ import FunctionalWrapper from "./shared_chat_search/FunctionalWrapper";
 
 export default function WrappedChat({
   initiallyToggled,
+  firstMessage,
 }: {
   initiallyToggled: boolean;
+  firstMessage?: string;
 }) {
   return (
     <FunctionalWrapper
       initiallyToggled={initiallyToggled}
       content={(toggledSidebar, toggle) => (
-        <ChatPage toggle={toggle} toggledSidebar={toggledSidebar} />
+        <ChatPage
+          toggle={toggle}
+          toggledSidebar={toggledSidebar}
+          firstMessage={firstMessage}
+        />
       )}
     />
   );

@@ -12,6 +12,7 @@ from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocument
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.document import delete_document_by_connector_credential_pair__no_commit
 from onyx.db.document import delete_documents_complete__no_commit
+from onyx.db.document import fetch_chunk_count_for_document
 from onyx.db.document import get_document
 from onyx.db.document import get_document_connector_count
 from onyx.db.document import mark_document_as_modified
@@ -80,7 +81,13 @@ def document_by_cc_pair_cleanup_task(
                 # delete it from vespa and the db
                 action = "delete"
 
-                chunks_affected = retry_index.delete_single(document_id)
+                chunk_count = fetch_chunk_count_for_document(document_id, db_session)
+
+                chunks_affected = retry_index.delete_single(
+                    document_id,
+                    tenant_id=tenant_id,
+                    chunk_count=chunk_count,
+                )
                 delete_documents_complete__no_commit(
                     db_session=db_session,
                     document_ids=[document_id],
@@ -110,7 +117,12 @@ def document_by_cc_pair_cleanup_task(
                 )
 
                 # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
-                chunks_affected = retry_index.update_single(document_id, fields=fields)
+                chunks_affected = retry_index.update_single(
+                    document_id,
+                    tenant_id=tenant_id,
+                    chunk_count=doc.chunk_count,
+                    fields=fields,
+                )
 
                 # there are still other cc_pair references to the doc, so just resync to Vespa
                 delete_document_by_connector_credential_pair__no_commit(

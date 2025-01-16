@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
+from onyx.auth.users import current_chat_accesssible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
@@ -27,7 +28,7 @@ from onyx.db.persona import create_update_persona
 from onyx.db.persona import delete_persona_category
 from onyx.db.persona import get_assistant_categories
 from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import get_personas
+from onyx.db.persona import get_personas_for_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
 from onyx.db.persona import update_all_personas_display_priority
@@ -124,7 +125,7 @@ def list_personas_admin(
 ) -> list[PersonaSnapshot]:
     return [
         PersonaSnapshot.from_model(persona)
-        for persona in get_personas(
+        for persona in get_personas_for_user(
             db_session=db_session,
             user=user,
             get_editable=get_editable,
@@ -323,12 +324,12 @@ def get_image_generation_tool(
 
 @basic_router.get("")
 def list_personas(
-    user: User | None = Depends(current_user),
+    user: User | None = Depends(current_chat_accesssible_user),
     db_session: Session = Depends(get_session),
     include_deleted: bool = False,
     persona_ids: list[int] = Query(None),
 ) -> list[PersonaSnapshot]:
-    personas = get_personas(
+    personas = get_personas_for_user(
         user=user,
         include_deleted=include_deleted,
         db_session=db_session,

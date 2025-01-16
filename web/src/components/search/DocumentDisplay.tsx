@@ -29,7 +29,6 @@ export const buildDocumentSummaryDisplay = (
   blurb: string
 ) => {
   if (!matchHighlights || matchHighlights.length === 0) {
-    // console.log("no match highlights", matchHighlights);
     return blurb;
   }
 

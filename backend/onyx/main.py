@@ -30,6 +30,7 @@ from onyx.auth.users import fastapi_users
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
+from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
@@ -73,9 +74,9 @@ from onyx.server.manage.search_settings import router as search_settings_router
 from onyx.server.manage.slack_bot import router as slack_bot_management_router
 from onyx.server.manage.users import router as user_router
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
-from onyx.server.middleware.rate_limiting import close_limiter
+from onyx.server.middleware.rate_limiting import close_auth_limiter
 from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
-from onyx.server.middleware.rate_limiting import setup_limiter
+from onyx.server.middleware.rate_limiting import setup_auth_limiter
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.openai_assistants_api.full_openai_assistants_api import (
     get_full_openai_assistants_api_router,
@@ -156,7 +157,10 @@ def include_router_with_global_prefix_prepended(
 
 
 def include_auth_router_with_prefix(
-    application: FastAPI, router: APIRouter, prefix: str, tags: list[str] | None = None
+    application: FastAPI,
+    router: APIRouter,
+    prefix: str | None = None,
+    tags: list[str] | None = None,
 ) -> None:
     """Wrapper function to include an 'auth' router with prefix + rate-limiting dependencies."""
     final_tags = tags or ["auth"]
@@ -170,13 +174,14 @@ def include_auth_router_with_prefix(
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Set recursion limit
     if SYSTEM_RECURSION_LIMIT is not None:
         sys.setrecursionlimit(SYSTEM_RECURSION_LIMIT)
         logger.notice(f"System recursion limit set to {SYSTEM_RECURSION_LIMIT}")
 
     SqlEngine.set_app_name(POSTGRES_WEB_APP_NAME)
+
     SqlEngine.init_engine(
         pool_size=POSTGRES_API_SERVER_POOL_SIZE,
         max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
@@ -211,13 +216,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     optional_telemetry(record_type=RecordType.VERSION, data={"version": __version__})
 
-    # Set up rate limiter
-    await setup_limiter()
+    if AUTH_RATE_LIMITING_ENABLED:
+        await setup_auth_limiter()
 
     yield
 
-    # Close rate limiter
-    await close_limiter()
+    if AUTH_RATE_LIMITING_ENABLED:
+        await close_auth_limiter()
 
 
 def log_http_error(_: Request, exc: Exception) -> JSONResponse:

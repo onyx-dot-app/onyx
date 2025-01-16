@@ -118,6 +118,6 @@ jobs:
           TRIVY_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db:2"
           TRIVY_JAVA_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-java-db:1"
         with:
-          image-ref: docker.io/onyxdotapp/onyx-model-server:${{ github.ref_name }}
+          image-ref: docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
           severity: "CRITICAL,HIGH"
           timeout: "10m"

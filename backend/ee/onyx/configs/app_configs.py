@@ -15,6 +15,12 @@ SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/ee/onyx/configs/saml_co
 CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
     os.environ.get("CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
 )
+# This is a boolean that determines if anonymous access is public
+# Default behavior is to not make the page public and instead add a group
+# that contains all the users that we found in Confluence
+CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC = (
+    os.environ.get("CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC", "").lower() == "true"
+)
 # In seconds, default is 5 minutes
 CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
@@ -59,3 +65,5 @@ POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY") or "FooBar"
 POSTHOG_HOST = os.environ.get("POSTHOG_HOST") or "https://us.i.posthog.com"
 
 HUBSPOT_TRACKING_URL = os.environ.get("HUBSPOT_TRACKING_URL")
+
+ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"

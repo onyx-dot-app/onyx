@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.enums import AccessType
@@ -36,10 +37,11 @@ logger = setup_logger()
 def _add_user_filters(
     stmt: Select, user: User | None, get_editable: bool = True
 ) -> Select:
-    # If user is None, assume the user is an admin or auth is disabled
-    if user is None or user.role == UserRole.ADMIN:
+    # If user is None and auth is disabled, assume the user is an admin
+    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
 
+    stmt = stmt.distinct()
     DocumentSet__UG = aliased(DocumentSet__UserGroup)
     User__UG = aliased(User__UserGroup)
     """
@@ -60,6 +62,12 @@ def _add_user_filters(
     - if we are not editing, we show all DocumentSets in the groups the user is a curator
     for (as well as public DocumentSets)
     """
+
+    # If user is None, this is an anonymous user and we should only show public DocumentSets
+    if user is None:
+        where_clause = DocumentSetDBModel.is_public == True  # noqa: E712
+        return stmt.where(where_clause)
+
     where_clause = User__UserGroup.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:
         where_clause &= User__UserGroup.is_curator == True  # noqa: E712
@@ -108,15 +116,24 @@ def delete_document_set_privacy__no_commit(
     """No private document sets in Onyx MIT"""
 
 
-def get_document_set_by_id(
+def get_document_set_by_id_for_user(
     db_session: Session,
     document_set_id: int,
-    user: User | None = None,
+    user: User | None,
     get_editable: bool = True,
 ) -> DocumentSetDBModel | None:
     stmt = select(DocumentSetDBModel).distinct()
     stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
     stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
+    return db_session.scalar(stmt)
+
+
+def get_document_set_by_id(
+    db_session: Session,
+    document_set_id: int,
+) -> DocumentSetDBModel | None:
+    stmt = select(DocumentSetDBModel).distinct()
+    stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
     return db_session.scalar(stmt)
 
 
@@ -210,6 +227,7 @@ def insert_document_set(
             description=document_set_creation_request.description,
             user_id=user_id,
             is_public=document_set_creation_request.is_public,
+            time_last_modified_by_user=func.now(),
         )
         db_session.add(new_document_set_row)
         db_session.flush()  # ensure the new document set gets assigned an ID
@@ -266,7 +284,7 @@ def update_document_set(
 
     try:
         # update the description
-        document_set_row = get_document_set_by_id(
+        document_set_row = get_document_set_by_id_for_user(
             db_session=db_session,
             document_set_id=document_set_update_request.id,
             user=user,
@@ -285,7 +303,7 @@ def update_document_set(
         document_set_row.description = document_set_update_request.description
         document_set_row.is_up_to_date = False
         document_set_row.is_public = document_set_update_request.is_public
-
+        document_set_row.time_last_modified_by_user = func.now()
         versioned_private_doc_set_fn = fetch_versioned_implementation(
             "onyx.db.document_set", "make_doc_set_private"
         )
@@ -357,7 +375,7 @@ def mark_document_set_as_to_be_deleted(
     job which syncs these changes to Vespa."""
 
     try:
-        document_set_row = get_document_set_by_id(
+        document_set_row = get_document_set_by_id_for_user(
             db_session=db_session,
             document_set_id=document_set_id,
             user=user,
@@ -469,7 +487,7 @@ def fetch_document_sets(
 
 def fetch_all_document_sets_for_user(
     db_session: Session,
-    user: User | None = None,
+    user: User | None,
     get_editable: bool = True,
 ) -> Sequence[DocumentSetDBModel]:
     stmt = select(DocumentSetDBModel).distinct()

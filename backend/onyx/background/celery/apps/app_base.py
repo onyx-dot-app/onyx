@@ -161,9 +161,34 @@ def on_task_postrun(
         return
 
 
-def on_celeryd_init(sender: Any = None, conf: Any = None, **kwargs: Any) -> None:
+def on_celeryd_init(sender: str, conf: Any = None, **kwargs: Any) -> None:
     """The first signal sent on celery worker startup"""
-    multiprocessing.set_start_method("spawn")  # fork is unsafe, set to spawn
+
+    # NOTE(rkuo): start method "fork" is unsafe and we really need it to be "spawn"
+    # But something is blocking set_start_method from working in the cloud unless
+    # force=True. so we use force=True as a fallback.
+
+    all_start_methods: list[str] = multiprocessing.get_all_start_methods()
+    logger.info(f"Multiprocessing all start methods: {all_start_methods}")
+
+    try:
+        multiprocessing.set_start_method("spawn")  # fork is unsafe, set to spawn
+    except Exception:
+        logger.info(
+            "Multiprocessing set_start_method exceptioned. Trying force=True..."
+        )
+        try:
+            multiprocessing.set_start_method(
+                "spawn", force=True
+            )  # fork is unsafe, set to spawn
+        except Exception:
+            logger.info(
+                "Multiprocessing set_start_method force=True exceptioned even with force=True."
+            )
+
+    logger.info(
+        f"Multiprocessing selected start method: {multiprocessing.get_start_method()}"
+    )
 
 
 def wait_for_redis(sender: Any, **kwargs: Any) -> None:
@@ -335,6 +360,10 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
     if not celery_is_worker_primary(sender):
         return
 
+    if not hasattr(sender, "primary_worker_lock"):
+        # primary_worker_lock will not exist when MULTI_TENANT is True
+        return
+
     if not sender.primary_worker_lock:
         return
 
@@ -414,9 +443,19 @@ def on_setup_logging(
     task_logger.setLevel(loglevel)
     task_logger.propagate = False
 
-    # Hide celery task received and succeeded/failed messages
+    # hide celery task received spam
+    # e.g. "Task check_for_pruning[a1e96171-0ba8-4e00-887b-9fbf7442eab3] received"
     strategy.logger.setLevel(logging.WARNING)
+
+    # uncomment this to hide celery task succeeded/failed spam
+    # e.g. "Task check_for_pruning[a1e96171-0ba8-4e00-887b-9fbf7442eab3] succeeded in 0.03137450001668185s: None"
     trace.logger.setLevel(logging.WARNING)
+
+
+def set_task_finished_log_level(logLevel: int) -> None:
+    """call this to override the setLevel in on_setup_logging. We are interested
+    in the task timings in the cloud but it can be spammy for self hosted."""
+    trace.logger.setLevel(logLevel)
 
 
 class TenantContextFilter(logging.Filter):

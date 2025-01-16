@@ -13,7 +13,6 @@ import { Metadata } from "next";
 import { buildClientUrl } from "@/lib/utilsSS";
 import { Inter } from "next/font/google";
 import { EnterpriseSettings, GatingType } from "./admin/settings/interfaces";
-import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { fetchAssistantData } from "@/lib/chat/fetchAssistantdata";
 import { AppProvider } from "@/components/context/AppProvider";
 import { PHProvider } from "./providers";
@@ -156,6 +155,7 @@ export default async function RootLayout({
       </div>
     );
   }
+
   if (productGating === GatingType.FULL) {
     return getPageContent(
       <div className="flex flex-col items-center justify-center min-h-screen">

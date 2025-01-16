@@ -9,13 +9,12 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.db.credentials import alter_credential
 from onyx.db.credentials import cleanup_gmail_credentials
-from onyx.db.credentials import cleanup_google_drive_credentials
 from onyx.db.credentials import create_credential
 from onyx.db.credentials import CREDENTIAL_PERMISSIONS_TO_IGNORE
 from onyx.db.credentials import delete_credential
-from onyx.db.credentials import fetch_credential_by_id
-from onyx.db.credentials import fetch_credentials
-from onyx.db.credentials import fetch_credentials_by_source
+from onyx.db.credentials import fetch_credential_by_id_for_user
+from onyx.db.credentials import fetch_credentials_by_source_for_user
+from onyx.db.credentials import fetch_credentials_for_user
 from onyx.db.credentials import swap_credentials_connector
 from onyx.db.credentials import update_credential
 from onyx.db.engine import get_session
@@ -49,7 +48,7 @@ def list_credentials_admin(
     db_session: Session = Depends(get_session),
 ) -> list[CredentialSnapshot]:
     """Lists all public credentials"""
-    credentials = fetch_credentials(
+    credentials = fetch_credentials_for_user(
         db_session=db_session,
         user=user,
         get_editable=False,
@@ -69,7 +68,7 @@ def get_cc_source_full_info(
         False, description="If true, return editable credentials"
     ),
 ) -> list[CredentialSnapshot]:
-    credentials = fetch_credentials_by_source(
+    credentials = fetch_credentials_by_source_for_user(
         db_session=db_session,
         user=user,
         document_source=source_type,
@@ -133,8 +132,6 @@ def create_credential_from_model(
     # Temporary fix for empty Google App credentials
     if credential_info.source == DocumentSource.GMAIL:
         cleanup_gmail_credentials(db_session=db_session)
-    if credential_info.source == DocumentSource.GOOGLE_DRIVE:
-        cleanup_google_drive_credentials(db_session=db_session)
 
     credential = create_credential(credential_info, user, db_session)
     return ObjectCreationIdResponse(
@@ -151,7 +148,7 @@ def list_credentials(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[CredentialSnapshot]:
-    credentials = fetch_credentials(db_session=db_session, user=user)
+    credentials = fetch_credentials_for_user(db_session=db_session, user=user)
     return [
         CredentialSnapshot.from_credential_db_model(credential)
         for credential in credentials
@@ -164,7 +161,7 @@ def get_credential_by_id(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> CredentialSnapshot | StatusResponse[int]:
-    credential = fetch_credential_by_id(
+    credential = fetch_credential_by_id_for_user(
         credential_id,
         user,
         db_session,

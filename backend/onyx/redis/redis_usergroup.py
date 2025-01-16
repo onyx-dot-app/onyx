@@ -8,10 +8,12 @@ from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
 from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.db.models import Document
 from onyx.redis.redis_object_helper import RedisObjectHelper
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from onyx.utils.variable_functionality import global_version
@@ -50,12 +52,16 @@ class RedisUserGroup(RedisObjectHelper):
 
     def generate_tasks(
         self,
+        max_tasks: int,
         celery_app: Celery,
         db_session: Session,
         redis_client: Redis,
         lock: RedisLock,
         tenant_id: str | None,
     ) -> tuple[int, int] | None:
+        """Max tasks is ignored for now until we can build the logic to mark the
+        user group up to date over multiple batches.
+        """
         last_lock_time = time.monotonic()
 
         async_results = []
@@ -72,7 +78,8 @@ class RedisUserGroup(RedisObjectHelper):
             return 0, 0
 
         stmt = construct_document_select_by_usergroup(int(self._id))
-        for doc in db_session.scalars(stmt).yield_per(1):
+        for doc in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
+            doc = cast(Document, doc)
             current_time = time.monotonic()
             if current_time - last_lock_time >= (
                 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4

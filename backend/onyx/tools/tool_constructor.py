@@ -148,7 +148,9 @@ def construct_tools(
 
     for db_tool_model in persona.tools:
         if db_tool_model.in_code_tool_id:
-            tool_cls = get_built_in_tool_by_id(db_tool_model.id, db_session)
+            tool_cls = get_built_in_tool_by_id(
+                db_tool_model.in_code_tool_id, db_session
+            )
 
             # Handle Search Tool
             if tool_cls.__name__ == SearchTool.__name__:

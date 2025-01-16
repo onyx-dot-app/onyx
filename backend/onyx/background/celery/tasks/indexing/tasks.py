@@ -1,9 +1,11 @@
+import multiprocessing
+import os
+import sys
 import time
 from datetime import datetime
 from datetime import timezone
 from http import HTTPStatus
 from time import sleep
-from typing import cast
 
 import redis
 import sentry_sdk
@@ -23,6 +25,7 @@ from onyx.background.indexing.job_client import SimpleJobClient
 from onyx.background.indexing.run_indexing import run_indexing_entrypoint
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
 from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
 from onyx.configs.constants import DocumentSource
@@ -60,6 +63,8 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_connector_index import RedisConnectorIndexPayload
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_pool import redis_lock_dump
+from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
@@ -71,14 +76,18 @@ logger = setup_logger()
 
 
 class IndexingCallback(IndexingHeartbeatInterface):
+    PARENT_CHECK_INTERVAL = 60
+
     def __init__(
         self,
+        parent_pid: int,
         stop_key: str,
         generator_progress_key: str,
         redis_lock: RedisLock,
         redis_client: Redis,
     ):
         super().__init__()
+        self.parent_pid = parent_pid
         self.redis_lock: RedisLock = redis_lock
         self.stop_key: str = stop_key
         self.generator_progress_key: str = generator_progress_key
@@ -88,17 +97,43 @@ class IndexingCallback(IndexingHeartbeatInterface):
 
         self.last_tag: str = "IndexingCallback.__init__"
         self.last_lock_reacquire: datetime = datetime.now(timezone.utc)
+        self.last_lock_monotonic = time.monotonic()
+
+        self.last_parent_check = time.monotonic()
 
     def should_stop(self) -> bool:
         if self.redis_client.exists(self.stop_key):
             return True
+
         return False
 
     def progress(self, tag: str, amount: int) -> None:
+        # rkuo: this shouldn't be necessary yet because we spawn the process this runs inside
+        # with daemon = True. It seems likely some indexing tasks will need to spawn other processes eventually
+        # so leave this code in until we're ready to test it.
+
+        # if self.parent_pid:
+        #     # check if the parent pid is alive so we aren't running as a zombie
+        #     now = time.monotonic()
+        #     if now - self.last_parent_check > IndexingCallback.PARENT_CHECK_INTERVAL:
+        #         try:
+        #             # this is unintuitive, but it checks if the parent pid is still running
+        #             os.kill(self.parent_pid, 0)
+        #         except Exception:
+        #             logger.exception("IndexingCallback - parent pid check exceptioned")
+        #             raise
+        #         self.last_parent_check = now
+
         try:
-            self.redis_lock.reacquire()
+            current_time = time.monotonic()
+            if current_time - self.last_lock_monotonic >= (
+                CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4
+            ):
+                self.redis_lock.reacquire()
+                self.last_lock_reacquire = datetime.now(timezone.utc)
+                self.last_lock_monotonic = time.monotonic()
+
             self.last_tag = tag
-            self.last_lock_reacquire = datetime.now(timezone.utc)
         except LockError:
             logger.exception(
                 f"IndexingCallback - lock.reacquire exceptioned: "
@@ -109,29 +144,7 @@ class IndexingCallback(IndexingHeartbeatInterface):
                 f"now={datetime.now(timezone.utc)}"
             )
 
-            # diagnostic logging for lock errors
-            name = self.redis_lock.name
-            ttl = self.redis_client.ttl(name)
-            locked = self.redis_lock.locked()
-            owned = self.redis_lock.owned()
-            local_token: str | None = self.redis_lock.local.token  # type: ignore
-
-            remote_token_raw = self.redis_client.get(self.redis_lock.name)
-            if remote_token_raw:
-                remote_token_bytes = cast(bytes, remote_token_raw)
-                remote_token = remote_token_bytes.decode("utf-8")
-            else:
-                remote_token = None
-
-            logger.warning(
-                f"IndexingCallback - lock diagnostics: "
-                f"name={name} "
-                f"locked={locked} "
-                f"owned={owned} "
-                f"local_token={local_token} "
-                f"remote_token={remote_token} "
-                f"ttl={ttl}"
-            )
+            redis_lock_dump(self.redis_lock, self.redis_client)
             raise
 
         self.redis_client.incrby(self.generator_progress_key, amount)
@@ -193,6 +206,10 @@ def get_unfenced_index_attempt_ids(db_session: Session, r: redis.Redis) -> list[
 def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
     """a lightweight task used to kick off indexing tasks.
     Occcasionally does some validation of existing state to clear up error conditions"""
+    debug_tenants = {
+        "tenant_i-043470d740845ec56",
+        "tenant_82b497ce-88aa-4fbd-841a-92cae43529c8",
+    }
     time_start = time.monotonic()
 
     tasks_created = 0
@@ -208,11 +225,11 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
         timeout=CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
     )
 
-    try:
-        # these tasks should never overlap
-        if not lock_beat.acquire(blocking=False):
-            return None
+    # these tasks should never overlap
+    if not lock_beat.acquire(blocking=False):
+        return None
 
+    try:
         locked = True
 
         # check for search settings swap
@@ -235,15 +252,25 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
                     )
 
         # gather cc_pair_ids
+        lock_beat.reacquire()
         cc_pair_ids: list[int] = []
         with get_session_with_tenant(tenant_id) as db_session:
-            lock_beat.reacquire()
             cc_pairs = fetch_connector_credential_pairs(db_session)
             for cc_pair_entry in cc_pairs:
                 cc_pair_ids.append(cc_pair_entry.id)
 
         # kick off index attempts
         for cc_pair_id in cc_pair_ids:
+            # debugging logic - remove after we're done
+            if tenant_id in debug_tenants:
+                ttl = redis_client.ttl(OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK)
+                task_logger.info(
+                    f"check_for_indexing cc_pair lock: "
+                    f"tenant={tenant_id} "
+                    f"cc_pair={cc_pair_id} "
+                    f"ttl={ttl}"
+                )
+
             lock_beat.reacquire()
 
             redis_connector = RedisConnector(tenant_id, cc_pair_id)
@@ -252,21 +279,58 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
                     db_session
                 )
                 for search_settings_instance in search_settings_list:
+                    if tenant_id in debug_tenants:
+                        ttl = redis_client.ttl(OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK)
+                        task_logger.info(
+                            f"check_for_indexing cc_pair search settings lock: "
+                            f"tenant={tenant_id} "
+                            f"cc_pair={cc_pair_id} "
+                            f"ttl={ttl}"
+                        )
+
                     redis_connector_index = redis_connector.new_index(
                         search_settings_instance.id
                     )
                     if redis_connector_index.fenced:
                         continue
 
+                    if tenant_id in debug_tenants:
+                        ttl = redis_client.ttl(OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK)
+                        task_logger.info(
+                            f"check_for_indexing get_connector_credential_pair_from_id: "
+                            f"tenant={tenant_id} "
+                            f"cc_pair={cc_pair_id} "
+                            f"ttl={ttl}"
+                        )
+
                     cc_pair = get_connector_credential_pair_from_id(
-                        cc_pair_id, db_session
+                        db_session=db_session,
+                        cc_pair_id=cc_pair_id,
                     )
                     if not cc_pair:
                         continue
 
+                    if tenant_id in debug_tenants:
+                        ttl = redis_client.ttl(OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK)
+                        task_logger.info(
+                            f"check_for_indexing get_last_attempt_for_cc_pair: "
+                            f"tenant={tenant_id} "
+                            f"cc_pair={cc_pair_id} "
+                            f"ttl={ttl}"
+                        )
+
                     last_attempt = get_last_attempt_for_cc_pair(
                         cc_pair.id, search_settings_instance.id, db_session
                     )
+
+                    if tenant_id in debug_tenants:
+                        ttl = redis_client.ttl(OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK)
+                        task_logger.info(
+                            f"check_for_indexing cc_pair should index: "
+                            f"tenant={tenant_id} "
+                            f"cc_pair={cc_pair_id} "
+                            f"ttl={ttl}"
+                        )
 
                     search_settings_primary = False
                     if search_settings_instance.id == search_settings_list[0].id:
@@ -300,6 +364,15 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
                                 cc_pair.id, None, db_session
                             )
 
+                    if tenant_id in debug_tenants:
+                        ttl = redis_client.ttl(OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK)
+                        task_logger.info(
+                            f"check_for_indexing cc_pair try_creating_indexing_task: "
+                            f"tenant={tenant_id} "
+                            f"cc_pair={cc_pair_id} "
+                            f"ttl={ttl}"
+                        )
+
                     # using a task queue and only allowing one task per cc_pair/search_setting
                     # prevents us from starving out certain attempts
                     attempt_id = try_creating_indexing_task(
@@ -320,13 +393,51 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
                         )
                         tasks_created += 1
 
+                    if tenant_id in debug_tenants:
+                        ttl = redis_client.ttl(OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK)
+                        task_logger.info(
+                            f"check_for_indexing cc_pair try_creating_indexing_task finished: "
+                            f"tenant={tenant_id} "
+                            f"cc_pair={cc_pair_id} "
+                            f"ttl={ttl}"
+                        )
+
+        # debugging logic - remove after we're done
+        if tenant_id in debug_tenants:
+            ttl = redis_client.ttl(OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK)
+            task_logger.info(
+                f"check_for_indexing unfenced lock: "
+                f"tenant={tenant_id} "
+                f"ttl={ttl}"
+            )
+
+        lock_beat.reacquire()
+
         # Fail any index attempts in the DB that don't have fences
         # This shouldn't ever happen!
         with get_session_with_tenant(tenant_id) as db_session:
             unfenced_attempt_ids = get_unfenced_index_attempt_ids(
                 db_session, redis_client
             )
+
+            if tenant_id in debug_tenants:
+                ttl = redis_client.ttl(OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK)
+                task_logger.info(
+                    f"check_for_indexing after get unfenced lock: "
+                    f"tenant={tenant_id} "
+                    f"ttl={ttl}"
+                )
+
             for attempt_id in unfenced_attempt_ids:
+                # debugging logic - remove after we're done
+                if tenant_id in debug_tenants:
+                    ttl = redis_client.ttl(OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK)
+                    task_logger.info(
+                        f"check_for_indexing unfenced attempt id lock: "
+                        f"tenant={tenant_id} "
+                        f"ttl={ttl}"
+                    )
+
                 lock_beat.reacquire()
 
                 attempt = get_index_attempt(db_session, attempt_id)
@@ -344,6 +455,16 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
                     attempt.id, db_session, failure_reason=failure_reason
                 )
 
+        # debugging logic - remove after we're done
+        if tenant_id in debug_tenants:
+            ttl = redis_client.ttl(OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK)
+            task_logger.info(
+                f"check_for_indexing validate fences lock: "
+                f"tenant={tenant_id} "
+                f"ttl={ttl}"
+            )
+
+        lock_beat.reacquire()
         # we want to run this less frequently than the overall task
         if not redis_client.exists(OnyxRedisSignals.VALIDATE_INDEXING_FENCES):
             # clear any indexing fences that don't have associated celery tasks in progress
@@ -357,7 +478,6 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
                 task_logger.exception("Exception while validating indexing fences")
 
             redis_client.set(OnyxRedisSignals.VALIDATE_INDEXING_FENCES, 1, ex=60)
-
     except SoftTimeLimitExceeded:
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
@@ -373,6 +493,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
                     "check_for_indexing - Lock not owned on completion: "
                     f"tenant={tenant_id}"
                 )
+                redis_lock_dump(lock_beat, redis_client)
 
     time_elapsed = time.monotonic() - time_start
     task_logger.debug(f"check_for_indexing finished: elapsed={time_elapsed:.2f}")
@@ -391,7 +512,9 @@ def validate_indexing_fences(
     )
 
     # validate all existing indexing jobs
-    for key_bytes in r.scan_iter(RedisConnectorIndex.FENCE_PREFIX + "*"):
+    for key_bytes in r.scan_iter(
+        RedisConnectorIndex.FENCE_PREFIX + "*", count=SCAN_ITER_COUNT_DEFAULT
+    ):
         lock_beat.reacquire()
         with get_session_with_tenant(tenant_id) as db_session:
             validate_indexing_fence(
@@ -741,11 +864,14 @@ def connector_indexing_proxy_task(
     search_settings_id: int,
     tenant_id: str | None,
 ) -> None:
-    """celery tasks are forked, but forking is unstable.  This proxies work to a spawned task."""
+    """celery tasks are forked, but forking is unstable.
+    This is a thread that proxies work to a spawned task."""
+
     task_logger.info(
         f"Indexing watchdog - starting: attempt={index_attempt_id} "
         f"cc_pair={cc_pair_id} "
-        f"search_settings={search_settings_id}"
+        f"search_settings={search_settings_id} "
+        f"mp_start_method={multiprocessing.get_start_method()}"
     )
 
     if not self.request.id:
@@ -772,7 +898,6 @@ def connector_indexing_proxy_task(
         return
 
     task_logger.info(
-        f"Indexing proxy - spawn succeeded: attempt={index_attempt_id} "
         f"Indexing watchdog - spawn succeeded: attempt={index_attempt_id} "
         f"cc_pair={cc_pair_id} "
         f"search_settings={search_settings_id}"
@@ -789,23 +914,26 @@ def connector_indexing_proxy_task(
 
         # if the job is done, clean up and break
         if job.done():
-            if job.status == "error":
-                ignore_exitcode = False
+            try:
+                if job.status == "error":
+                    ignore_exitcode = False
 
-                exit_code: int | None = None
-                if job.process:
-                    exit_code = job.process.exitcode
+                    exit_code: int | None = None
+                    if job.process:
+                        exit_code = job.process.exitcode
 
-                # seeing odd behavior where spawned tasks usually return exit code 1 in the cloud,
-                # even though logging clearly indicates that they completed successfully
-                # to work around this, we ignore the job error state if the completion signal is OK
-                status_int = redis_connector_index.get_completion()
-                if status_int:
-                    status_enum = HTTPStatus(status_int)
-                    if status_enum == HTTPStatus.OK:
-                        ignore_exitcode = True
+                    # seeing odd behavior where spawned tasks usually return exit code 1 in the cloud,
+                    # even though logging clearly indicates successful completion
+                    # to work around this, we ignore the job error state if the completion signal is OK
+                    status_int = redis_connector_index.get_completion()
+                    if status_int:
+                        status_enum = HTTPStatus(status_int)
+                        if status_enum == HTTPStatus.OK:
+                            ignore_exitcode = True
 
-                if ignore_exitcode:
+                    if not ignore_exitcode:
+                        raise RuntimeError("Spawned task exceptioned.")
+
                     task_logger.warning(
                         "Indexing watchdog - spawned task has non-zero exit code "
                         "but completion signal is OK. Continuing...: "
@@ -815,18 +943,21 @@ def connector_indexing_proxy_task(
                         f"search_settings={search_settings_id} "
                         f"exit_code={exit_code}"
                     )
-                else:
-                    task_logger.error(
-                        "Indexing watchdog - spawned task exceptioned: "
-                        f"attempt={index_attempt_id} "
-                        f"tenant={tenant_id} "
-                        f"cc_pair={cc_pair_id} "
-                        f"search_settings={search_settings_id} "
-                        f"exit_code={exit_code} "
-                        f"error={job.exception()}"
-                    )
+            except Exception:
+                task_logger.error(
+                    "Indexing watchdog - spawned task exceptioned: "
+                    f"attempt={index_attempt_id} "
+                    f"tenant={tenant_id} "
+                    f"cc_pair={cc_pair_id} "
+                    f"search_settings={search_settings_id} "
+                    f"exit_code={exit_code} "
+                    f"error={job.exception()}"
+                )
 
-            job.release()
+                raise
+            finally:
+                job.release()
+
             break
 
         # if a termination signal is detected, clean up and break
@@ -911,7 +1042,7 @@ def connector_indexing_task_wrapper(
             tenant_id,
             is_ee,
         )
-    except:
+    except Exception:
         logger.exception(
             f"connector_indexing_task exceptioned: "
             f"tenant={tenant_id} "
@@ -919,7 +1050,14 @@ def connector_indexing_task_wrapper(
             f"cc_pair={cc_pair_id} "
             f"search_settings={search_settings_id}"
         )
-        raise
+
+        # There is a cloud related bug outside of our code
+        # where spawned tasks return with an exit code of 1.
+        # Unfortunately, exceptions also return with an exit code of 1,
+        # so just raising an exception isn't informative
+        # Exiting with 255 makes it possible to distinguish between normal exits
+        # and exceptions.
+        sys.exit(255)
 
     return result
 
@@ -991,7 +1129,17 @@ def connector_indexing_task(
             f"fence={redis_connector.stop.fence_key}"
         )
 
+    # this wait is needed to avoid a race condition where
+    # the primary worker sends the task and it is immediately executed
+    # before the primary worker can finalize the fence
+    start = time.monotonic()
     while True:
+        if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
+            raise ValueError(
+                f"connector_indexing_task - timed out waiting for fence to be ready: "
+                f"fence={redis_connector.permissions.fence_key}"
+            )
+
         if not redis_connector_index.fenced:  # The fence must exist
             raise ValueError(
                 f"connector_indexing_task - fence not found: fence={redis_connector_index.fence_key}"
@@ -1032,7 +1180,9 @@ def connector_indexing_task(
     if not acquired:
         logger.warning(
             f"Indexing task already running, exiting...: "
-            f"index_attempt={index_attempt_id} cc_pair={cc_pair_id} search_settings={search_settings_id}"
+            f"index_attempt={index_attempt_id} "
+            f"cc_pair={cc_pair_id} "
+            f"search_settings={search_settings_id}"
         )
         return None
 
@@ -1049,8 +1199,8 @@ def connector_indexing_task(
             attempt_found = True
 
             cc_pair = get_connector_credential_pair_from_id(
-                cc_pair_id=cc_pair_id,
                 db_session=db_session,
+                cc_pair_id=cc_pair_id,
             )
 
             if not cc_pair:
@@ -1068,6 +1218,7 @@ def connector_indexing_task(
 
         # define a callback class
         callback = IndexingCallback(
+            os.getppid(),
             redis_connector.stop.fence_key,
             redis_connector_index.generator_progress_key,
             lock,
@@ -1101,8 +1252,19 @@ def connector_indexing_task(
             f"search_settings={search_settings_id}"
         )
         if attempt_found:
-            with get_session_with_tenant(tenant_id) as db_session:
-                mark_attempt_failed(index_attempt_id, db_session, failure_reason=str(e))
+            try:
+                with get_session_with_tenant(tenant_id) as db_session:
+                    mark_attempt_failed(
+                        index_attempt_id, db_session, failure_reason=str(e)
+                    )
+            except Exception:
+                logger.exception(
+                    "Indexing watchdog - transient exception looking up index attempt: "
+                    f"attempt={index_attempt_id} "
+                    f"tenant={tenant_id} "
+                    f"cc_pair={cc_pair_id} "
+                    f"search_settings={search_settings_id}"
+                )
 
         raise e
     finally:

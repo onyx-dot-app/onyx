@@ -17,12 +17,12 @@ from sqlalchemy.orm import Session
 from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
 from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
 from ee.onyx.server.oauth.api_router import router
-from onyx.auth.users import current_user
+from onyx.auth.users import current_admin_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.utils import CONFLUENCE_OAUTH_TOKEN_URL
 from onyx.db.credentials import create_credential
-from onyx.db.credentials import fetch_credential_by_id
+from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.credentials import update_credential_json
 from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
@@ -143,7 +143,7 @@ class ConfluenceCloudOAuth:
 def confluence_oauth_callback(
     code: str,
     state: str,
-    user: User = Depends(current_user),
+    user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
@@ -247,7 +247,7 @@ def confluence_oauth_callback(
 @router.get("/connector/confluence/accessible-resources")
 def confluence_oauth_accessible_resources(
     credential_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
@@ -255,7 +255,7 @@ def confluence_oauth_accessible_resources(
     usable state after authorizing.  All API's require a cloud id. We have to list
     the accessible resources/sites and let the user choose which site to use."""
 
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
     if not credential:
         raise HTTPException(400, f"Credential {credential_id} not found.")
 
@@ -308,14 +308,14 @@ def confluence_oauth_accessible_resources(
 def confluence_oauth_finalize(
     credential_id: int,
     cloud_id: str,
-    user: User = Depends(current_user),
+    user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     """Saves the selected cloud id to the credential. After this, the credential is
     usable."""
 
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
     if not credential:
         raise HTTPException(
             status_code=400,

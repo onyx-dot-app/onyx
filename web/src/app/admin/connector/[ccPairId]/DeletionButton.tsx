@@ -8,7 +8,13 @@ import { deleteCCPair } from "@/lib/documentDeletion";
 import { mutate } from "swr";
 import { buildCCPairInfoUrl } from "./lib";
 
-export function DeletionButton({ ccPair }: { ccPair: CCPairFullInfo }) {
+export function DeletionButton({
+  ccPair,
+  refresh,
+}: {
+  ccPair: CCPairFullInfo;
+  refresh: () => void;
+}) {
   const { popup, setPopup } = usePopup();
 
   const isDeleting =
@@ -31,14 +37,22 @@ export function DeletionButton({ ccPair }: { ccPair: CCPairFullInfo }) {
       {popup}
       <Button
         variant="destructive"
-        onClick={() =>
-          deleteCCPair(
-            ccPair.connector.id,
-            ccPair.credential.id,
-            setPopup,
-            () => mutate(buildCCPairInfoUrl(ccPair.id))
-          )
-        }
+        onClick={async () => {
+          try {
+            // Await the delete operation to ensure it completes
+            await deleteCCPair(
+              ccPair.connector.id,
+              ccPair.credential.id,
+              setPopup,
+              () => mutate(buildCCPairInfoUrl(ccPair.id))
+            );
+
+            // Call refresh to update the state after deletion
+            refresh();
+          } catch (error) {
+            console.error("Error deleting connector:", error);
+          }
+        }}
         icon={FiTrash}
         disabled={
           ccPair.status === ConnectorCredentialPairStatus.ACTIVE || isDeleting

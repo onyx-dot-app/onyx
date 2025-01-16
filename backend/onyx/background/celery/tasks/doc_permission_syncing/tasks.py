@@ -1,6 +1,8 @@
+import time
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from time import sleep
 from uuid import uuid4
 
 from celery import Celery
@@ -14,10 +16,14 @@ from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.db.document import upsert_document_external_perms
 from ee.onyx.external_permissions.sync_params import DOC_PERMISSION_SYNC_PERIODS
 from ee.onyx.external_permissions.sync_params import DOC_PERMISSIONS_FUNC_MAP
+from ee.onyx.external_permissions.sync_params import (
+    DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION,
+)
 from onyx.access.models import DocExternalAccess
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
 from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
 from onyx.configs.constants import DocumentSource
@@ -88,19 +94,19 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )
-def check_for_doc_permissions_sync(self: Task, *, tenant_id: str | None) -> None:
+def check_for_doc_permissions_sync(self: Task, *, tenant_id: str | None) -> bool | None:
     r = get_redis_client(tenant_id=tenant_id)
 
-    lock_beat = r.lock(
+    lock_beat: RedisLock = r.lock(
         OnyxRedisLocks.CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK,
         timeout=CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
     )
 
-    try:
-        # these tasks should never overlap
-        if not lock_beat.acquire(blocking=False):
-            return
+    # these tasks should never overlap
+    if not lock_beat.acquire(blocking=False):
+        return None
 
+    try:
         # get all cc pairs that need to be synced
         cc_pair_ids_to_sync: list[int] = []
         with get_session_with_tenant(tenant_id) as db_session:
@@ -127,6 +133,8 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str | None) -> None
     finally:
         if lock_beat.owned():
             lock_beat.release()
+
+    return True
 
 
 def try_creating_permissions_sync_task(
@@ -219,6 +227,43 @@ def connector_permission_sync_generator_task(
 
     r = get_redis_client(tenant_id=tenant_id)
 
+    # this wait is needed to avoid a race condition where
+    # the primary worker sends the task and it is immediately executed
+    # before the primary worker can finalize the fence
+    start = time.monotonic()
+    while True:
+        if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
+            raise ValueError(
+                f"connector_permission_sync_generator_task - timed out waiting for fence to be ready: "
+                f"fence={redis_connector.permissions.fence_key}"
+            )
+
+        if not redis_connector.permissions.fenced:  # The fence must exist
+            raise ValueError(
+                f"connector_permission_sync_generator_task - fence not found: "
+                f"fence={redis_connector.permissions.fence_key}"
+            )
+
+        payload = redis_connector.permissions.payload  # The payload must exist
+        if not payload:
+            raise ValueError(
+                "connector_permission_sync_generator_task: payload invalid or not found"
+            )
+
+        if payload.celery_task_id is None:
+            logger.info(
+                f"connector_permission_sync_generator_task - Waiting for fence: "
+                f"fence={redis_connector.permissions.fence_key}"
+            )
+            sleep(1)
+            continue
+
+        logger.info(
+            f"connector_permission_sync_generator_task - Fence found, continuing...: "
+            f"fence={redis_connector.permissions.fence_key}"
+        )
+        break
+
     lock: RedisLock = r.lock(
         OnyxRedisLocks.CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX
         + f"_{redis_connector.id}",
@@ -234,7 +279,10 @@ def connector_permission_sync_generator_task(
 
     try:
         with get_session_with_tenant(tenant_id) as db_session:
-            cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+            cc_pair = get_connector_credential_pair_from_id(
+                db_session=db_session,
+                cc_pair_id=cc_pair_id,
+            )
             if cc_pair is None:
                 raise ValueError(
                     f"No connector credential pair found for id: {cc_pair_id}"
@@ -244,6 +292,8 @@ def connector_permission_sync_generator_task(
 
             doc_sync_func = DOC_PERMISSIONS_FUNC_MAP.get(source_type)
             if doc_sync_func is None:
+                if source_type in DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION:
+                    return None
                 raise ValueError(
                     f"No doc sync func found for {source_type} with cc_pair={cc_pair_id}"
                 )
@@ -254,8 +304,11 @@ def connector_permission_sync_generator_task(
             if not payload:
                 raise ValueError(f"No fence payload found: cc_pair={cc_pair_id}")
 
-            payload.started = datetime.now(timezone.utc)
-            redis_connector.permissions.set_fence(payload)
+            new_payload = RedisConnectorPermissionSyncPayload(
+                started=datetime.now(timezone.utc),
+                celery_task_id=payload.celery_task_id,
+            )
+            redis_connector.permissions.set_fence(new_payload)
 
             document_external_accesses: list[DocExternalAccess] = doc_sync_func(
                 tenant_id, cc_pair
@@ -343,5 +396,7 @@ def update_external_document_permissions_task(
             )
         return True
     except Exception:
-        logger.exception("Error Syncing Document Permissions")
+        logger.exception(
+            f"Error Syncing Document Permissions: connector_id={connector_id} doc_id={doc_id}"
+        )
         return False

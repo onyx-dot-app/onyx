@@ -4,7 +4,6 @@ import { ChatInputOption } from "./ChatInputOption";
 import { Persona } from "@/app/admin/assistants/interfaces";
 
 import { FilterManager, LlmOverrideManager } from "@/lib/hooks";
-import { SelectedFilterDisplay } from "./SelectedFilterDisplay";
 import { useChatContext } from "@/components/context/ChatContext";
 import { getFinalLLM } from "@/lib/llm/utils";
 import { ChatFileType, FileDescriptor } from "../interfaces";
@@ -32,56 +31,107 @@ import { ChatState } from "../types";
 import UnconfiguredProviderText from "@/components/chat_search/UnconfiguredProviderText";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { XIcon } from "lucide-react";
-import FiltersDisplay from "./FilterDisplay";
+import { fetchTitleFromUrl } from "@/lib/sources";
 
 const MAX_INPUT_HEIGHT = 200;
 
+const SelectedUrlChip = ({
+  url,
+  onRemove,
+}: {
+  url: string;
+  onRemove: (url: string) => void;
+}) => (
+  <div className="bg-white border border-gray-200 shadow-sm rounded-lg p-2 flex items-center space-x-2">
+    <img
+      src={`https://www.google.com/s2/favicons?domain=${new URL(url).hostname}`}
+      alt="Website favicon"
+      className="w-4 h-4"
+    />
+    <p className="text-sm font-medium text-gray-700 truncate">
+      {new URL(url).hostname}
+    </p>
+    <XIcon
+      onClick={() => onRemove(url)}
+      size={16}
+      className="text-text-400 hover:text-text-600 ml-auto cursor-pointer"
+    />
+  </div>
+);
+
+const SentUrlChip = ({
+  url,
+  onRemove,
+  onClick,
+  title,
+}: {
+  url: string;
+  onRemove: (url: string) => void;
+  onClick: () => void;
+  title: string;
+}) => {
+  return (
+    <button
+      className="bg-white/80 opacity-50 group-hover:opacity-100 border border-gray-200/50 shadow-sm rounded-lg p-2 flex items-center space-x-2  hover:bg-white hover:border-gray-200 transition-all duration-200"
+      onClick={onClick}
+    >
+      <img
+        src={`https://www.google.com/s2/favicons?domain=${
+          new URL(url).hostname
+        }`}
+        alt="Website favicon"
+        className="w-4 h-4 "
+      />
+      <p className="text-sm font-medium text-gray-600 truncate group-hover:text-gray-700">
+        {title}
+      </p>
+      <XIcon
+        onClick={(e) => {
+          onRemove(url);
+        }}
+        size={16}
+        className="text-text-300 hover:text-text-500 ml-auto transition-colors duration-200"
+      />
+    </button>
+  );
+};
+
 interface ChatInputBarProps {
-  removeFilters: () => void;
   removeDocs: () => void;
-  openModelSettings: () => void;
+  showDocs: () => void;
   showConfigureAPIKey: () => void;
   selectedDocuments: OnyxDocument[];
   message: string;
   setMessage: (message: string) => void;
   stopGenerating: () => void;
   onSubmit: () => void;
-  filterManager: FilterManager;
   llmOverrideManager: LlmOverrideManager;
   chatState: ChatState;
-  showDocs: () => void;
   alternativeAssistant: Persona | null;
   // assistants
   selectedAssistant: Persona;
-  setSelectedAssistant: (assistant: Persona) => void;
   setAlternativeAssistant: (alternativeAssistant: Persona | null) => void;
 
   files: FileDescriptor[];
   setFiles: (files: FileDescriptor[]) => void;
   handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
-  chatSessionId?: string;
   toggleFilters?: () => void;
 }
 
 export function ChatInputBar({
-  removeFilters,
   removeDocs,
-  openModelSettings,
-  showConfigureAPIKey,
   showDocs,
+  showConfigureAPIKey,
   selectedDocuments,
   message,
   setMessage,
   stopGenerating,
   onSubmit,
-  filterManager,
-  llmOverrideManager,
   chatState,
 
   // assistants
   selectedAssistant,
-  setSelectedAssistant,
   setAlternativeAssistant,
 
   files,
@@ -89,7 +139,6 @@ export function ChatInputBar({
   handleFileUpload,
   textAreaRef,
   alternativeAssistant,
-  chatSessionId,
   toggleFilters,
 }: ChatInputBarProps) {
   useEffect(() => {
@@ -417,7 +466,7 @@ export function ChatInputBar({
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
-              placeholder="Ask me anything.."
+              placeholder="Ask me anything..."
               value={message}
               onKeyDown={(event) => {
                 if (
@@ -462,16 +511,6 @@ export function ChatInputBar({
                   onClick={toggleFilters}
                 />
               )}
-              {(filterManager.selectedSources.length > 0 ||
-                filterManager.selectedDocumentSets.length > 0 ||
-                filterManager.selectedTags.length > 0 ||
-                filterManager.timeRange) &&
-                toggleFilters && (
-                  <FiltersDisplay
-                    filterManager={filterManager}
-                    toggleFilters={toggleFilters}
-                  />
-                )}
             </div>
 
             <div className="absolute bottom-2.5 mobile:right-4 desktop:right-10">

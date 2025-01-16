@@ -7,6 +7,8 @@ from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
+from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
+
 
 class RedisConnectorExternalGroupSyncPayload(BaseModel):
     started: datetime | None
@@ -63,7 +65,8 @@ class RedisConnectorExternalGroupSync:
         """Count of active external group syncing tasks"""
         count = 0
         for _ in self.redis.scan_iter(
-            RedisConnectorExternalGroupSync.FENCE_PREFIX + "*"
+            RedisConnectorExternalGroupSync.FENCE_PREFIX + "*",
+            count=SCAN_ITER_COUNT_DEFAULT,
         ):
             count += 1
         return count

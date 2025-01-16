@@ -9,6 +9,7 @@ from sqlalchemy.sql.expression import and_
 from sqlalchemy.sql.expression import or_
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
@@ -42,22 +43,21 @@ PUBLIC_CREDENTIAL_ID = 0
 def _add_user_filters(
     stmt: Select,
     user: User | None,
-    assume_admin: bool = False,  # Used with API key
     get_editable: bool = True,
 ) -> Select:
     """Attaches filters to the statement to ensure that the user can only
     access the appropriate credentials"""
-    if not user:
-        if assume_admin:
-            # apply admin filters minus the user_id check
-            stmt = stmt.where(
-                or_(
-                    Credential.user_id.is_(None),
-                    Credential.admin_public == True,  # noqa: E712
-                    Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE),
-                )
+    if user is None:
+        if not DISABLE_AUTH:
+            raise ValueError("Anonymous users are not allowed to access credentials")
+        # If user is None and auth is disabled, assume the user is an admin
+        return stmt.where(
+            or_(
+                Credential.user_id.is_(None),
+                Credential.admin_public == True,  # noqa: E712
+                Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE),
             )
-        return stmt
+        )
 
     if user.role == UserRole.ADMIN:
         # Admins can access all credentials that are public or owned by them
@@ -74,6 +74,7 @@ def _add_user_filters(
         # Basic users can only access credentials that are owned by them
         return stmt.where(Credential.user_id == user.id)
 
+    stmt = stmt.distinct()
     """
     THIS PART IS FOR CURATORS AND GLOBAL CURATORS
     Here we select cc_pairs by relation:
@@ -137,9 +138,9 @@ def _relate_credential_to_user_groups__no_commit(
     db_session.add_all(credential_user_groups)
 
 
-def fetch_credentials(
+def fetch_credentials_for_user(
     db_session: Session,
-    user: User | None = None,
+    user: User | None,
     get_editable: bool = True,
 ) -> list[Credential]:
     stmt = select(Credential)
@@ -148,11 +149,10 @@ def fetch_credentials(
     return list(results.all())
 
 
-def fetch_credential_by_id(
+def fetch_credential_by_id_for_user(
     credential_id: int,
     user: User | None,
     db_session: Session,
-    assume_admin: bool = False,
     get_editable: bool = True,
 ) -> Credential | None:
     stmt = select(Credential).distinct()
@@ -160,7 +160,6 @@ def fetch_credential_by_id(
     stmt = _add_user_filters(
         stmt=stmt,
         user=user,
-        assume_admin=assume_admin,
         get_editable=get_editable,
     )
     result = db_session.execute(stmt)
@@ -168,7 +167,18 @@ def fetch_credential_by_id(
     return credential
 
 
-def fetch_credentials_by_source(
+def fetch_credential_by_id(
+    db_session: Session,
+    credential_id: int,
+) -> Credential | None:
+    stmt = select(Credential).distinct()
+    stmt = stmt.where(Credential.id == credential_id)
+    result = db_session.execute(stmt)
+    credential = result.scalar_one_or_none()
+    return credential
+
+
+def fetch_credentials_by_source_for_user(
     db_session: Session,
     user: User | None,
     document_source: DocumentSource | None = None,
@@ -180,11 +190,22 @@ def fetch_credentials_by_source(
     return list(credentials)
 
 
+def fetch_credentials_by_source(
+    db_session: Session,
+    document_source: DocumentSource | None = None,
+) -> list[Credential]:
+    base_query = select(Credential).where(Credential.source == document_source)
+    credentials = db_session.execute(base_query).scalars().all()
+    return list(credentials)
+
+
 def swap_credentials_connector(
     new_credential_id: int, connector_id: int, user: User | None, db_session: Session
 ) -> ConnectorCredentialPair:
     # Check if the user has permission to use the new credential
-    new_credential = fetch_credential_by_id(new_credential_id, user, db_session)
+    new_credential = fetch_credential_by_id_for_user(
+        new_credential_id, user, db_session
+    )
     if not new_credential:
         raise ValueError(
             f"No Credential found with id {new_credential_id} or user doesn't have permission to use it"
@@ -274,7 +295,7 @@ def alter_credential(
     db_session: Session,
 ) -> Credential | None:
     # TODO: add user group relationship update
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
 
     if credential is None:
         return None
@@ -298,7 +319,7 @@ def update_credential(
     user: User,
     db_session: Session,
 ) -> Credential | None:
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
     if credential is None:
         return None
 
@@ -315,7 +336,7 @@ def update_credential_json(
     user: User,
     db_session: Session,
 ) -> Credential | None:
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
     if credential is None:
         return None
 
@@ -340,7 +361,7 @@ def delete_credential(
     db_session: Session,
     force: bool = False,
 ) -> None:
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
     if credential is None:
         raise ValueError(
             f"Credential by provided id {credential_id} does not exist or does not belong to user"
@@ -395,7 +416,10 @@ def create_initial_public_credential(db_session: Session) -> None:
         "DB is not in a valid initial state."
         "There must exist an empty public credential for data connectors that do not require additional Auth."
     )
-    first_credential = fetch_credential_by_id(PUBLIC_CREDENTIAL_ID, None, db_session)
+    first_credential = fetch_credential_by_id(
+        db_session=db_session,
+        credential_id=PUBLIC_CREDENTIAL_ID,
+    )
 
     if first_credential is not None:
         if first_credential.credential_json != {} or first_credential.user is not None:
@@ -413,7 +437,7 @@ def create_initial_public_credential(db_session: Session) -> None:
 
 def cleanup_gmail_credentials(db_session: Session) -> None:
     gmail_credentials = fetch_credentials_by_source(
-        db_session=db_session, user=None, document_source=DocumentSource.GMAIL
+        db_session=db_session, document_source=DocumentSource.GMAIL
     )
     for credential in gmail_credentials:
         db_session.delete(credential)
@@ -422,7 +446,7 @@ def cleanup_gmail_credentials(db_session: Session) -> None:
 
 def cleanup_google_drive_credentials(db_session: Session) -> None:
     google_drive_credentials = fetch_credentials_by_source(
-        db_session=db_session, user=None, document_source=DocumentSource.GOOGLE_DRIVE
+        db_session=db_session, document_source=DocumentSource.GOOGLE_DRIVE
     )
     for credential in google_drive_credentials:
         db_session.delete(credential)
@@ -432,7 +456,7 @@ def cleanup_google_drive_credentials(db_session: Session) -> None:
 def delete_service_account_credentials(
     user: User | None, db_session: Session, source: DocumentSource
 ) -> None:
-    credentials = fetch_credentials(db_session=db_session, user=user)
+    credentials = fetch_credentials_for_user(db_session=db_session, user=user)
     for credential in credentials:
         if (
             credential.credential_json.get(DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY)

@@ -10,7 +10,7 @@ export const ApiKeyModal = ({
   hide,
   setPopup,
 }: {
-  hide: () => void;
+  hide?: () => void;
   setPopup: (popup: PopupSpec) => void;
 }) => {
   const router = useRouter();
@@ -28,18 +28,25 @@ export const ApiKeyModal = ({
     <Modal
       title="Configure a Generative AI Model"
       width="max-w-3xl w-full"
-      onOutsideClick={() => hide()}
+      onOutsideClick={hide ? () => hide() : undefined}
     >
       <>
         <div className="mb-5 text-sm text-gray-700">
           Please provide an API Key – you can always change this or switch
           models later.
           <br />
-          If you would rather look around first, you can{" "}
-          <strong onClick={() => hide()} className="text-link cursor-pointer">
-            skip this step
-          </strong>
-          .
+          {hide && (
+            <>
+              If you would rather look around first, you can{" "}
+              <strong
+                onClick={() => hide()}
+                className="text-link cursor-pointer"
+              >
+                skip this step
+              </strong>
+              .
+            </>
+          )}
         </div>
 
         <ApiKeyForm
@@ -47,7 +54,7 @@ export const ApiKeyModal = ({
           onSuccess={() => {
             router.refresh();
             refreshProviderInfo();
-            hide();
+            hide?.();
           }}
           providerOptions={providerOptions}
         />

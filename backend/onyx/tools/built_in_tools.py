@@ -151,7 +151,7 @@ def auto_add_search_tool_to_personas(db_session: Session) -> None:
     logger.notice("Completed adding SearchTool to relevant Personas.")
 
 
-_built_in_tools_cache: dict[int, Type[Tool]] | None = None
+_built_in_tools_cache: dict[str, Type[Tool]] | None = None
 
 
 def refresh_built_in_tools_cache(db_session: Session) -> None:
@@ -173,15 +173,21 @@ def refresh_built_in_tools_cache(db_session: Session) -> None:
             ),
             None,
         )
-        if tool_info:
-            _built_in_tools_cache[tool.id] = tool_info["cls"]
+        if tool_info and tool.in_code_tool_id:
+            _built_in_tools_cache[tool.in_code_tool_id] = tool_info["cls"]
 
 
 def get_built_in_tool_by_id(
-    tool_id: int, db_session: Session, force_refresh: bool = False
+    in_code_tool_id: str, db_session: Session, force_refresh: bool = False
 ) -> Type[Tool]:
     global _built_in_tools_cache
-    if _built_in_tools_cache is None or force_refresh:
+
+    # If the tool is not in the cache, refresh it once
+    if (
+        _built_in_tools_cache is None
+        or force_refresh
+        or in_code_tool_id not in _built_in_tools_cache
+    ):
         refresh_built_in_tools_cache(db_session)
 
     if _built_in_tools_cache is None:
@@ -189,7 +195,9 @@ def get_built_in_tool_by_id(
             "Built-in tools cache is None despite being refreshed. Should never happen."
         )
 
-    if tool_id in _built_in_tools_cache:
-        return _built_in_tools_cache[tool_id]
-    else:
-        raise ValueError(f"No built-in tool found in the cache with ID {tool_id}")
+    if in_code_tool_id not in _built_in_tools_cache:
+        raise ValueError(
+            f"No built-in tool found in the cache with ID {in_code_tool_id}"
+        )
+
+    return _built_in_tools_cache[in_code_tool_id]

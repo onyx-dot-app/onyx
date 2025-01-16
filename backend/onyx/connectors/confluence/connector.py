@@ -55,6 +55,8 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
     "space",
     "restrictions.read.restrictions.user",
     "restrictions.read.restrictions.group",
+    "ancestors.restrictions.read.restrictions.user",
+    "ancestors.restrictions.read.restrictions.group",
 ]
 
 _SLIM_DOC_BATCH_SIZE = 5000
@@ -354,9 +356,11 @@ class ConfluenceConnector(
             # These will be used by doc_sync.py to sync permissions
             page_restrictions = page.get("restrictions")
             page_space_key = page.get("space", {}).get("key")
+            page_ancestors = page.get("ancestors", [])
             page_perm_sync_data = {
                 "restrictions": page_restrictions or {},
                 "space_key": page_space_key,
+                "ancestors": page_ancestors or [],
             }
 
             doc_metadata_list.append(

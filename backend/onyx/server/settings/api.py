@@ -10,6 +10,7 @@ from onyx.auth.users import current_user
 from onyx.auth.users import is_user_admin
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import NotificationType
+from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.db.notification import create_notification
@@ -25,9 +26,7 @@ from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
-
 
 admin_router = APIRouter(prefix="/admin/settings")
 basic_router = APIRouter(prefix="/settings")
@@ -44,6 +43,7 @@ def put_settings(
 def fetch_settings(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
+    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> UserSettings:
     """Settings and notifications are stuffed into this single endpoint to reduce number of
     Postgres calls"""

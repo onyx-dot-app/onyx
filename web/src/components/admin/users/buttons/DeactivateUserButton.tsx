@@ -1,10 +1,10 @@
 import { type User } from "@/lib/types";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
-import useSWRMutation from "swr/mutation";
 import { Button } from "@/components/ui/button";
+import useSWRMutation from "swr/mutation";
+import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 
-export const DeactivaterButton = ({
+const DeactivateUserButton = ({
   user,
   deactivate,
   setPopup,
@@ -43,3 +43,5 @@ export const DeactivaterButton = ({
     </Button>
   );
 };
+
+export default DeactivateUserButton;

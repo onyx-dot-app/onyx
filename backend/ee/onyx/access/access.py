@@ -3,6 +3,10 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.external_perm import fetch_external_groups_for_user
 from ee.onyx.db.user_group import fetch_user_groups_for_documents
 from ee.onyx.db.user_group import fetch_user_groups_for_user
+from ee.onyx.external_permissions.post_query_censoring import (
+    DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION,
+)
+from ee.onyx.external_permissions.sync_params import DOC_PERMISSIONS_FUNC_MAP
 from onyx.access.access import (
     _get_access_for_documents as get_access_for_documents_without_groups,
 )
@@ -10,6 +14,7 @@ from onyx.access.access import _get_acl_for_user as get_acl_for_user_without_gro
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_external_group
 from onyx.access.utils import prefix_user_group
+from onyx.db.document import get_document_sources
 from onyx.db.document import get_documents_by_ids
 from onyx.db.models import User
 
@@ -52,9 +57,20 @@ def _get_access_for_documents(
     )
     doc_id_map = {doc.id: doc for doc in documents}
 
+    # Get all sources in one batch
+    doc_id_to_source_map = get_document_sources(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+
     access_map = {}
     for document_id, non_ee_access in non_ee_access_dict.items():
         document = doc_id_map[document_id]
+        source = doc_id_to_source_map.get(document_id)
+        is_only_censored = (
+            source in DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION
+            and source not in DOC_PERMISSIONS_FUNC_MAP
+        )
 
         ext_u_emails = (
             set(document.external_user_emails)
@@ -70,7 +86,11 @@ def _get_access_for_documents(
 
         # If the document is determined to be "public" externally (through a SYNC connector)
         # then it's given the same access level as if it were marked public within Onyx
-        is_public_anywhere = document.is_public or non_ee_access.is_public
+        # If its censored, then it's public anywhere during the search and then permissions are
+        # applied after the search
+        is_public_anywhere = (
+            document.is_public or non_ee_access.is_public or is_only_censored
+        )
 
         # To avoid collisions of group namings between connectors, they need to be prefixed
         access_map[document_id] = DocumentAccess(

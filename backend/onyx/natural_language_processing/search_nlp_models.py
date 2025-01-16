@@ -12,6 +12,7 @@ from requests import Response
 from retry import retry
 
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
+from onyx.configs.app_configs import SKIP_WARM_UP
 from onyx.configs.model_configs import BATCH_SIZE_ENCODE_CHUNKS
 from onyx.configs.model_configs import (
     BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES,
@@ -131,10 +132,15 @@ class EmbeddingModel:
                 tries=10, delay=10, exceptions=ModelServerRateLimitError
             )(final_make_request_func)
 
+        response: Response | None = None
+
         try:
             response = final_make_request_func()
             return EmbedResponse(**response.json())
         except requests.HTTPError as e:
+            if not response:
+                raise HTTPError("HTTP error occurred - response is None.") from e
+
             try:
                 error_detail = response.json().get("detail", str(e))
             except Exception:
@@ -379,6 +385,9 @@ def warm_up_bi_encoder(
     embedding_model: EmbeddingModel,
     non_blocking: bool = False,
 ) -> None:
+    if SKIP_WARM_UP:
+        return
+
     warm_up_str = " ".join(WARM_UP_STRINGS)
 
     logger.debug(f"Warming up encoder model: {embedding_model.model_name}")

@@ -383,14 +383,14 @@ export const AIMessage = ({
     <div
       id="onyx-ai-message"
       ref={trackedElementRef}
-      className={`py-5 ml-4 px-5 relative flex `}
+      className={`py-5 ml-4 lg:px-5 relative flex `}
     >
       <div
         className={`mx-auto ${
           shared ? "w-full" : "w-[90%]"
         }  max-w-message-max`}
       >
-        <div className={`desktop:mr-12 ${!shared && "mobile:ml-0 md:ml-8"}`}>
+        <div className={`lg:mr-12 ${!shared && "mobile:ml-0 md:ml-8"}`}>
           <div className="flex">
             <AssistantIcon
               size="small"
@@ -399,7 +399,7 @@ export const AIMessage = ({
 
             <div className="w-full">
               <div className="max-w-message-max break-words">
-                <div className="w-full ml-4">
+                <div className="w-full lg:ml-4">
                   <div className="max-w-message-max break-words">
                     {!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
                       <>
@@ -410,6 +410,8 @@ export const AIMessage = ({
                               query={query}
                               finished={toolCall?.tool_result != undefined}
                               handleSearchQueryEdit={handleSearchQueryEdit}
+                              docs={docs || []}
+                              toggleDocumentSelection={toggleDocumentSelection!}
                             />
                           </div>
                         )}
@@ -465,7 +467,7 @@ export const AIMessage = ({
                       )}
 
                     {docs && docs.length > 0 && (
-                      <div className="mt-2 -mx-8 w-full mb-4 flex relative">
+                      <div className="mobile:hidden mt-2 -mx-8 w-full mb-4 flex relative">
                         <div className="w-full">
                           <div className="px-8 flex gap-x-2">
                             {!settings?.isMobile &&
@@ -546,16 +548,16 @@ export const AIMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Copy!">
+                          <CustomTooltip showTick line content="Copy">
                             <CopyButton content={content.toString()} />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Good response!">
+                          <CustomTooltip showTick line content="Good response">
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Bad response!">
+                          <CustomTooltip showTick line content="Bad response">
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -566,7 +568,7 @@ export const AIMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Regenerate!"
+                              content="Regenerate"
                             >
                               <RegenerateOption
                                 onDropdownVisibleChange={
@@ -631,18 +633,18 @@ export const AIMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Copy!">
+                          <CustomTooltip showTick line content="Copy">
                             <CopyButton content={content.toString()} />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Good response!">
+                          <CustomTooltip showTick line content="Good response">
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Bad response!">
+                          <CustomTooltip showTick line content="Bad response">
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -653,7 +655,7 @@ export const AIMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Regenerate!"
+                              content="Regenerate"
                             >
                               <RegenerateOption
                                 selectedAssistant={currentPersona!}
@@ -768,7 +770,7 @@ export const HumanMessage = ({
   return (
     <div
       id="onyx-human-message"
-      className="pt-5 pb-1 px-2 lg:px-5 flex -mr-6 relative"
+      className="pt-5 pb-1 w-full lg:px-5 flex -mr-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -778,7 +780,7 @@ export const HumanMessage = ({
         } max-w-[790px]`}
       >
         <div className="xl:ml-8">
-          <div className="flex flex-col mr-4">
+          <div className="flex flex-col desktop:mr-4">
             <FileDisplay alignBubble files={files || []} />
 
             <div className="flex justify-end">

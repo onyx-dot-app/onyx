@@ -18,6 +18,9 @@ from onyx.configs.constants import KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY
 from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.resources import get_gmail_service
 from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_AUTHENTICATION_METHOD,
+)
+from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
 )
 from onyx.connectors.google_utils.shared_constants import (
@@ -28,6 +31,9 @@ from onyx.connectors.google_utils.shared_constants import (
 )
 from onyx.connectors.google_utils.shared_constants import (
     GOOGLE_SCOPES,
+)
+from onyx.connectors.google_utils.shared_constants import (
+    GoogleOAuthAuthenticationMethod,
 )
 from onyx.connectors.google_utils.shared_constants import (
     MISSING_SCOPES_ERROR_STR,
@@ -96,6 +102,7 @@ def update_credential_access_tokens(
     user: User,
     db_session: Session,
     source: DocumentSource,
+    auth_method: GoogleOAuthAuthenticationMethod,
 ) -> OAuthCredentials | None:
     app_credentials = get_google_app_cred(source)
     flow = InstalledAppFlow.from_client_config(
@@ -119,6 +126,7 @@ def update_credential_access_tokens(
     new_creds_dict = {
         DB_CREDENTIALS_DICT_TOKEN_KEY: token_json_str,
         DB_CREDENTIALS_PRIMARY_ADMIN_KEY: email,
+        DB_CREDENTIALS_AUTHENTICATION_METHOD: auth_method.value,
     }
 
     if not update_credential_json(credential_id, new_creds_dict, user, db_session):
@@ -129,6 +137,7 @@ def update_credential_access_tokens(
 def build_service_account_creds(
     source: DocumentSource,
     primary_admin_email: str | None = None,
+    name: str | None = None,
 ) -> CredentialBase:
     service_account_key = get_service_account_key(source=source)
 
@@ -138,10 +147,15 @@ def build_service_account_creds(
     if primary_admin_email:
         credential_dict[DB_CREDENTIALS_PRIMARY_ADMIN_KEY] = primary_admin_email
 
+    credential_dict[
+        DB_CREDENTIALS_AUTHENTICATION_METHOD
+    ] = GoogleOAuthAuthenticationMethod.UPLOADED.value
+
     return CredentialBase(
         credential_json=credential_dict,
         admin_public=True,
         source=source,
+        name=name,
     )
 
 

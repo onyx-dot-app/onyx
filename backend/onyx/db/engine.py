@@ -1,4 +1,5 @@
 import contextlib
+import json
 import os
 import re
 import ssl
@@ -14,7 +15,6 @@ from typing import ContextManager
 
 import asyncpg  # type: ignore
 import boto3
-import jwt
 from fastapi import HTTPException
 from fastapi import Request
 from sqlalchemy import event
@@ -40,9 +40,9 @@ from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
 from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
 from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USER
-from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
 from onyx.configs.constants import SSL_CERT_FILE
+from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -322,34 +322,56 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
     return _ASYNC_ENGINE
 
 
-def get_current_tenant_id(request: Request) -> str:
+async def get_current_tenant_id(request: Request) -> str:
     if not MULTI_TENANT:
         tenant_id = POSTGRES_DEFAULT_SCHEMA
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         return tenant_id
 
-    token = request.cookies.get("fastapiusersauth")
-    if not token:
-        current_value = CURRENT_TENANT_ID_CONTEXTVAR.get()
-        return current_value
-
     try:
-        payload = jwt.decode(
-            token,
-            USER_AUTH_SECRET,
-            audience=["fastapi-users:auth"],
-            algorithms=["HS256"],
-        )
-        tenant_id = payload.get("tenant_id", POSTGRES_DEFAULT_SCHEMA)
+        # Look up token data in Redis
+        token_data = await retrieve_auth_token_data_from_redis(request)
+
+        if not token_data:
+            current_value = CURRENT_TENANT_ID_CONTEXTVAR.get()
+            logger.debug(
+                f"Token data not found or expired in Redis, defaulting to {current_value}"
+            )
+            return current_value
+
+        tenant_id = token_data.get("tenant_id", POSTGRES_DEFAULT_SCHEMA)
+
         if not is_valid_schema_name(tenant_id):
             raise HTTPException(status_code=400, detail="Invalid tenant ID format")
+
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         return tenant_id
-    except jwt.InvalidTokenError:
-        return CURRENT_TENANT_ID_CONTEXTVAR.get()
+    except json.JSONDecodeError:
+        logger.error("Error decoding token data from Redis")
+        return POSTGRES_DEFAULT_SCHEMA
     except Exception as e:
         logger.error(f"Unexpected error in get_current_tenant_id: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# Listen for events on the synchronous Session class
+@event.listens_for(Session, "after_begin")
+def _set_search_path(
+    session: Session, transaction: Any, connection: Any, *args: Any, **kwargs: Any
+) -> None:
+    """Every time a new transaction is started,
+    set the search_path from the session's info."""
+    tenant_id = session.info.get("tenant_id")
+    if tenant_id:
+        connection.exec_driver_sql(f'SET search_path = "{tenant_id}"')
+
+
+engine = get_sqlalchemy_async_engine()
+AsyncSessionLocal = sessionmaker(  # type: ignore
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
 
 
 @asynccontextmanager
@@ -361,27 +383,22 @@ async def get_async_session_with_tenant(
 
     if not is_valid_schema_name(tenant_id):
         logger.error(f"Invalid tenant ID: {tenant_id}")
-        raise Exception("Invalid tenant ID")
+        raise ValueError("Invalid tenant ID")
 
-    engine = get_sqlalchemy_async_engine()
-    async_session_factory = sessionmaker(
-        bind=engine, expire_on_commit=False, class_=AsyncSession
-    )  # type: ignore
+    async with AsyncSessionLocal() as session:
+        session.sync_session.info["tenant_id"] = tenant_id
 
-    async with async_session_factory() as session:
-        try:
-            await session.execute(text(f'SET search_path = "{tenant_id}"'))
-            if POSTGRES_IDLE_SESSIONS_TIMEOUT:
-                await session.execute(
-                    text(
-                        f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
-                    )
+        if POSTGRES_IDLE_SESSIONS_TIMEOUT:
+            await session.execute(
+                text(
+                    f"SET idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
                 )
-        except Exception:
-            logger.exception("Error setting search_path.")
-            raise
-        else:
+            )
+
+        try:
             yield session
+        finally:
+            pass
 
 
 @contextmanager

@@ -1,9 +1,9 @@
-import multiprocessing
 from typing import Any
 
 from celery import Celery
 from celery import signals
 from celery import Task
+from celery.apps.worker import Worker
 from celery.signals import celeryd_init
 from celery.signals import worker_init
 from celery.signals import worker_ready
@@ -14,7 +14,6 @@ from onyx.configs.constants import POSTGRES_CELERY_WORKER_LIGHT_APP_NAME
 from onyx.db.engine import SqlEngine
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
-
 
 logger = setup_logger()
 
@@ -49,17 +48,18 @@ def on_task_postrun(
 
 
 @celeryd_init.connect
-def on_celeryd_init(sender: Any = None, conf: Any = None, **kwargs: Any) -> None:
+def on_celeryd_init(sender: str, conf: Any = None, **kwargs: Any) -> None:
     app_base.on_celeryd_init(sender, conf, **kwargs)
 
 
 @worker_init.connect
-def on_worker_init(sender: Any, **kwargs: Any) -> None:
+def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     logger.info("worker_init signal received.")
-    logger.info(f"Multiprocessing start method: {multiprocessing.get_start_method()}")
+
+    logger.info(f"Concurrency: {sender.concurrency}")  # type: ignore
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_LIGHT_APP_NAME)
-    SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=8)
+    SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=8)  # type: ignore
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)

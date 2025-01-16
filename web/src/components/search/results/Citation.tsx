@@ -12,14 +12,12 @@ import { openDocument } from "@/lib/search/utils";
 
 export function Citation({
   children,
-  link,
   document,
   index,
   updatePresentingDocument,
   icon,
   url,
 }: {
-  link?: string;
   children?: JSX.Element | string | null | ReactNode;
   index?: number;
   updatePresentingDocument: (document: OnyxDocument) => void;

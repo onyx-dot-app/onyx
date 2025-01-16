@@ -17,7 +17,10 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import SyncType
 from onyx.db.search_settings import get_all_search_settings
+from onyx.db.sync_record import cleanup_sync_records
+from onyx.db.sync_record import insert_sync_record
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_delete import RedisConnectorDeletePayload
 from onyx.redis.redis_pool import get_redis_client
@@ -34,7 +37,9 @@ class TaskDependencyError(RuntimeError):
     trail=False,
     bind=True,
 )
-def check_for_connector_deletion_task(self: Task, *, tenant_id: str | None) -> None:
+def check_for_connector_deletion_task(
+    self: Task, *, tenant_id: str | None
+) -> bool | None:
     r = get_redis_client(tenant_id=tenant_id)
 
     lock_beat: RedisLock = r.lock(
@@ -42,11 +47,11 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str | None) -> N
         timeout=CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
     )
 
-    try:
-        # these tasks should never overlap
-        if not lock_beat.acquire(blocking=False):
-            return
+    # these tasks should never overlap
+    if not lock_beat.acquire(blocking=False):
+        return None
 
+    try:
         # collect cc_pair_ids
         cc_pair_ids: list[int] = []
         with get_session_with_tenant(tenant_id) as db_session:
@@ -81,6 +86,8 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str | None) -> N
         if lock_beat.owned():
             lock_beat.release()
 
+    return True
+
 
 def try_generate_document_cc_pair_cleanup_tasks(
     app: Celery,
@@ -109,11 +116,21 @@ def try_generate_document_cc_pair_cleanup_tasks(
     # we need to load the state of the object inside the fence
     # to avoid a race condition with db.commit/fence deletion
     # at the end of this taskset
-    cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+    )
     if not cc_pair:
         return None
 
     if cc_pair.status != ConnectorCredentialPairStatus.DELETING:
+        # there should be no in-progress sync records if this is up to date
+        # clean it up just in case things got into a bad state
+        cleanup_sync_records(
+            db_session=db_session,
+            entity_id=cc_pair_id,
+            sync_type=SyncType.CONNECTOR_DELETION,
+        )
         return None
 
     # set a basic fence to start
@@ -122,6 +139,13 @@ def try_generate_document_cc_pair_cleanup_tasks(
         submitted=datetime.now(timezone.utc),
     )
 
+    # create before setting fence to avoid race condition where the monitoring
+    # task updates the sync record before it is created
+    insert_sync_record(
+        db_session=db_session,
+        entity_id=cc_pair_id,
+        sync_type=SyncType.CONNECTOR_DELETION,
+    )
     redis_connector.delete.set_fence(fence_payload)
 
     try:

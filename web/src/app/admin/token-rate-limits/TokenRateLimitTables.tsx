@@ -176,7 +176,10 @@ export const GenericTokenRateLimitTable = ({
   responseMapper?: (data: any) => TokenRateLimitDisplay[];
   isAdmin?: boolean;
 }) => {
-  const { data, isLoading, error } = useSWR(fetchUrl, errorHandlingFetcher);
+  const { data, isLoading, error } = useSWR<TokenRateLimitDisplay[]>(
+    fetchUrl,
+    errorHandlingFetcher
+  );
 
   if (isLoading) {
     return <ThreeDotsLoader />;
@@ -193,7 +196,7 @@ export const GenericTokenRateLimitTable = ({
 
   return (
     <TokenRateLimitTable
-      tokenRateLimits={processedData}
+      tokenRateLimits={processedData ?? []}
       fetchUrl={fetchUrl}
       title={title}
       description={description}

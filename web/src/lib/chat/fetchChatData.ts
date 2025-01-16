@@ -24,7 +24,10 @@ import {
   DOCUMENT_SIDEBAR_WIDTH_COOKIE_NAME,
 } from "@/components/resizable/constants";
 import { hasCompletedWelcomeFlowSS } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
-import { NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN } from "../constants";
+import {
+  NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN,
+  NEXT_PUBLIC_ENABLE_CHROME_EXTENSION,
+} from "../constants";
 import { redirect } from "next/navigation";
 
 interface FetchChatDataResult {
@@ -86,6 +89,8 @@ export async function fetchChatData(searchParams: {
   const foldersResponse = results[7] as Response | null;
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
+
+  // TODO Validate need
   if (!authDisabled && !user) {
     const headersList = await headers();
     const fullUrl = headersList.get("x-url") || "/chat";
@@ -95,7 +100,10 @@ export async function fetchChatData(searchParams: {
     const redirectUrl = searchParamsString
       ? `${fullUrl}?${searchParamsString}`
       : fullUrl;
-    return redirect(`/auth/login?next=${encodeURIComponent(redirectUrl)}`);
+
+    if (!NEXT_PUBLIC_ENABLE_CHROME_EXTENSION) {
+      return redirect(`/auth/login?next=${encodeURIComponent(redirectUrl)}`);
+    }
   }
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {

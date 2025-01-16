@@ -5,6 +5,8 @@ from typing import Any
 from typing import Generic
 from typing import TypeVar
 
+from pydantic import BaseModel
+
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
@@ -69,6 +71,10 @@ class SlimConnector(BaseConnector):
 
 
 class OAuthConnector(BaseConnector):
+    class AdditionalOauthKwargs(BaseModel):
+        # if overridden, all fields should be str type
+        pass
+
     @classmethod
     @abc.abstractmethod
     def oauth_id(cls) -> DocumentSource:
@@ -76,12 +82,22 @@ class OAuthConnector(BaseConnector):
 
     @classmethod
     @abc.abstractmethod
-    def oauth_authorization_url(cls, base_domain: str, state: str) -> str:
+    def oauth_authorization_url(
+        cls,
+        base_domain: str,
+        state: str,
+        additional_kwargs: dict[str, str],
+    ) -> str:
         raise NotImplementedError
 
     @classmethod
     @abc.abstractmethod
-    def oauth_code_to_token(cls, base_domain: str, code: str) -> dict[str, Any]:
+    def oauth_code_to_token(
+        cls,
+        base_domain: str,
+        code: str,
+        additional_kwargs: dict[str, str],
+    ) -> dict[str, Any]:
         raise NotImplementedError
 
 

@@ -1,4 +1,4 @@
-import multiprocessing
+import logging
 from typing import Any
 from typing import cast
 
@@ -6,6 +6,7 @@ from celery import bootsteps  # type: ignore
 from celery import Celery
 from celery import signals
 from celery import Task
+from celery.apps.worker import Worker
 from celery.exceptions import WorkerShutdown
 from celery.signals import celeryd_init
 from celery.signals import worker_init
@@ -72,14 +73,13 @@ def on_task_postrun(
 
 
 @celeryd_init.connect
-def on_celeryd_init(sender: Any = None, conf: Any = None, **kwargs: Any) -> None:
+def on_celeryd_init(sender: str, conf: Any = None, **kwargs: Any) -> None:
     app_base.on_celeryd_init(sender, conf, **kwargs)
 
 
 @worker_init.connect
-def on_worker_init(sender: Any, **kwargs: Any) -> None:
+def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     logger.info("worker_init signal received.")
-    logger.info(f"Multiprocessing start method: {multiprocessing.get_start_method()}")
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME)
     SqlEngine.init_engine(pool_size=8, max_overflow=0)
@@ -88,11 +88,11 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
     app_base.wait_for_db(sender, **kwargs)
     app_base.wait_for_vespa(sender, **kwargs)
 
+    logger.info("Running as the primary celery worker.")
+
     # Less startup checks in multi-tenant case
     if MULTI_TENANT:
         return
-
-    logger.info("Running as the primary celery worker.")
 
     # This is singleton work that should be done on startup exactly once
     # by the primary worker. This is unnecessary in the multi tenant scenario
@@ -134,7 +134,7 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
         raise WorkerShutdown("Primary worker lock could not be acquired!")
 
     # tacking on our own user data to the sender
-    sender.primary_worker_lock = lock
+    sender.primary_worker_lock = lock  # type: ignore
 
     # As currently designed, when this worker starts as "primary", we reinitialize redis
     # to a clean state (for our purposes, anyway)
@@ -193,6 +193,10 @@ def on_setup_logging(
     loglevel: Any, logfile: Any, format: Any, colorize: Any, **kwargs: Any
 ) -> None:
     app_base.on_setup_logging(loglevel, logfile, format, colorize, **kwargs)
+
+    # this can be spammy, so just enable it in the cloud for now
+    if MULTI_TENANT:
+        app_base.set_task_finished_log_level(logging.INFO)
 
 
 class HubPeriodicTask(bootsteps.StartStopStep):
@@ -281,5 +285,6 @@ celery_app.autodiscover_tasks(
         "onyx.background.celery.tasks.pruning",
         "onyx.background.celery.tasks.shared",
         "onyx.background.celery.tasks.vespa",
+        "onyx.background.celery.tasks.llm_model_update",
     ]
 )

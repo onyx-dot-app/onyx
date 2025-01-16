@@ -374,7 +374,9 @@ def _add_user_group__cc_pair_relationships__no_commit(
 
 
 def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserGroup:
-    db_user_group = UserGroup(name=user_group.name)
+    db_user_group = UserGroup(
+        name=user_group.name, time_last_modified_by_user=func.now()
+    )
     db_session.add(db_user_group)
     db_session.flush()  # give the group an ID
 
@@ -630,6 +632,10 @@ def update_user_group(
         select(User).where(User.id.in_(removed_user_ids))  # type: ignore
     ).unique()
     _validate_curator_status__no_commit(db_session, list(removed_users))
+
+    # update "time_updated" to now
+    db_user_group.time_last_modified_by_user = func.now()
+
     db_session.commit()
     return db_user_group
 
@@ -699,7 +705,10 @@ def delete_user_group_cc_pair_relationship__no_commit(
     connector_credential_pair_id matches the given cc_pair_id.
 
     Should be used very carefully (only for connectors that are being deleted)."""
-    cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+    )
     if not cc_pair:
         raise ValueError(f"Connector Credential Pair '{cc_pair_id}' does not exist")
 

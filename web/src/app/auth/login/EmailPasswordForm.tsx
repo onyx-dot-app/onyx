@@ -12,18 +12,22 @@ import { Spinner } from "@/components/Spinner";
 import { set } from "lodash";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import Link from "next/link";
+import { useUser } from "@/components/user/UserProvider";
 
 export function EmailPasswordForm({
   isSignup = false,
   shouldVerify,
   referralSource,
   nextUrl,
+  defaultEmail,
 }: {
   isSignup?: boolean;
   shouldVerify?: boolean;
   referralSource?: string;
   nextUrl?: string | null;
+  defaultEmail?: string | null;
 }) {
+  const { user } = useUser();
   const { popup, setPopup } = usePopup();
   const [isWorking, setIsWorking] = useState(false);
   return (
@@ -32,7 +36,7 @@ export function EmailPasswordForm({
       {popup}
       <Formik
         initialValues={{
-          email: "",
+          email: defaultEmail || "",
           password: "",
         }}
         validationSchema={Yup.object().shape({
@@ -116,24 +120,29 @@ export function EmailPasswordForm({
               name="password"
               label="Password"
               type="password"
+              includeForgotPassword={
+                NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && !isSignup
+              }
               placeholder="**************"
             />
 
-            {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && !isSignup && (
-              <Link
-                href="/auth/forgot-password"
-                className="text-sm text-link font-medium whitespace-nowrap"
-              >
-                Forgot Password?
-              </Link>
-            )}
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="mx-auto w-full"
+              className="mx-auto  !py-4 w-full"
             >
               {isSignup ? "Sign Up" : "Log In"}
             </Button>
+            {user?.is_anonymous_user && (
+              <Link
+                href="/chat"
+                className="text-xs text-blue-500  cursor-pointer text-center w-full text-link font-medium mx-auto"
+              >
+                <span className="hover:border-b hover:border-dotted hover:border-blue-500">
+                  or continue as guest
+                </span>
+              </Link>
+            )}
           </Form>
         )}
       </Formik>

@@ -94,19 +94,19 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )
-def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> None:
+def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> bool | None:
     r = get_redis_client(tenant_id=tenant_id)
 
-    lock_beat = r.lock(
+    lock_beat: RedisLock = r.lock(
         OnyxRedisLocks.CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK,
         timeout=CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
     )
 
-    try:
-        # these tasks should never overlap
-        if not lock_beat.acquire(blocking=False):
-            return
+    # these tasks should never overlap
+    if not lock_beat.acquire(blocking=False):
+        return None
 
+    try:
         cc_pair_ids_to_sync: list[int] = []
         with get_session_with_tenant(tenant_id) as db_session:
             cc_pairs = get_all_auto_sync_cc_pairs(db_session)
@@ -149,6 +149,8 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> None:
         if lock_beat.owned():
             lock_beat.release()
 
+    return True
+
 
 def try_creating_external_group_sync_task(
     app: Celery,
@@ -162,7 +164,7 @@ def try_creating_external_group_sync_task(
 
     LOCK_TIMEOUT = 30
 
-    lock = r.lock(
+    lock: RedisLock = r.lock(
         DANSWER_REDIS_FUNCTION_LOCK_PREFIX + "try_generate_external_group_sync_tasks",
         timeout=LOCK_TIMEOUT,
     )
@@ -248,7 +250,10 @@ def connector_external_group_sync_generator_task(
             return None
 
         with get_session_with_tenant(tenant_id) as db_session:
-            cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+            cc_pair = get_connector_credential_pair_from_id(
+                cc_pair_id=cc_pair_id,
+                db_session=db_session,
+            )
             if cc_pair is None:
                 raise ValueError(
                     f"No connector credential pair found for id: {cc_pair_id}"

@@ -14,7 +14,7 @@ export function ChatIntro({ selectedPersona }: { selectedPersona: Persona }) {
             <div
               onMouseEnter={() => setHoveredAssistant(true)}
               onMouseLeave={() => setHoveredAssistant(false)}
-              className="p-4 scale-[.7] cursor-pointer border-dashed rounded-full flex border border-gray-300 border-2 border-dashed"
+              className="mobile:hidden p-4 scale-[.7] cursor-pointer border-dashed rounded-full flex border border-gray-300 border-2 border-dashed"
             >
               <AssistantIcon
                 disableToolip
@@ -22,7 +22,7 @@ export function ChatIntro({ selectedPersona }: { selectedPersona: Persona }) {
                 assistant={selectedPersona}
               />
             </div>
-            <div className="absolute right-full mr-1 w-[300px] top-0">
+            <div className="absolute right-full mr-1 mobile:mr-0 w-[300px] top-0">
               {hoveredAssistant && (
                 <DisplayAssistantCard selectedPersona={selectedPersona} />
               )}

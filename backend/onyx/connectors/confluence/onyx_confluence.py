@@ -44,6 +44,7 @@ _REPLACEMENT_EXPANSIONS = "body.view.value"
 
 _USER_NOT_FOUND = "Unknown Confluence User"
 _USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
+_USER_EMAIL_CACHE: dict[str, str | None] = {}
 
 
 # class OAuthRefreshInterface(ABC):
@@ -168,6 +169,7 @@ def _handle_http_error(e: HTTPError, attempt: int) -> int:
 
 
 _DEFAULT_PAGINATION_LIMIT = 1000
+_MINIMUM_PAGINATION_LIMIT = 50
 
 
 # class OAuthCredentialsManager(OAuthRefreshInterface):
@@ -462,32 +464,6 @@ class OnyxConfluence:
 
         return confluence
 
-    def get_current_user(self, expand: str | None = None) -> Any:
-        """
-        Implements a method that isn't in the third party client.
-
-        Get information about the current user
-        :param expand: OPTIONAL expand for get status of user.
-                Possible param is "status". Results are "Active, Deactivated"
-        :return: Returns the user details
-        """
-
-        from atlassian.errors import ApiPermissionError  # type:ignore
-
-        url = "rest/api/user/current"
-        params = {}
-        if expand:
-            params["expand"] = expand
-        try:
-            response = self.get(url, params=params)
-        except HTTPError as e:
-            if e.response.status_code == 403:
-                raise ApiPermissionError(
-                    "The calling user does not have permission", reason=e
-                )
-            raise
-        return response
-
     # https://developer.atlassian.com/cloud/confluence/rate-limiting/
     # this uses the native rate limiting option provided by the
     # confluence client and otherwise applies a simpler set of error handling
@@ -615,27 +591,67 @@ class OnyxConfluence:
         url_suffix += f"{connection_char}limit={limit}"
 
         while url_suffix:
+            logger.debug(f"Making confluence call to {url_suffix}")
             try:
-                logger.debug(f"Making confluence call to {url_suffix}")
-                next_response = self.get(url_suffix)
+                raw_response = self.get(
+                    path=url_suffix,
+                    advanced_mode=True,
+                )
+            except Exception as e:
+                logger.exception(f"Error in confluence call to {url_suffix}")
+                raise e
+
+            try:
+                raw_response.raise_for_status()
             except Exception as e:
                 logger.warning(f"Error in confluence call to {url_suffix}")
 
                 # If the problematic expansion is in the url, replace it
                 # with the replacement expansion and try again
                 # If that fails, raise the error
-                if _PROBLEMATIC_EXPANSIONS not in url_suffix:
-                    logger.exception(f"Error in confluence call to {url_suffix}")
-                    raise e
-                logger.warning(
-                    f"Replacing {_PROBLEMATIC_EXPANSIONS} with {_REPLACEMENT_EXPANSIONS}"
-                    " and trying again."
+                if _PROBLEMATIC_EXPANSIONS in url_suffix:
+                    logger.warning(
+                        f"Replacing {_PROBLEMATIC_EXPANSIONS} with {_REPLACEMENT_EXPANSIONS}"
+                        " and trying again."
+                    )
+                    url_suffix = url_suffix.replace(
+                        _PROBLEMATIC_EXPANSIONS,
+                        _REPLACEMENT_EXPANSIONS,
+                    )
+                    continue
+                if (
+                    raw_response.status_code == 500
+                    and limit > _MINIMUM_PAGINATION_LIMIT
+                ):
+                    new_limit = limit // 2
+                    logger.warning(
+                        f"Error in confluence call to {url_suffix} \n"
+                        f"Raw Response Text: {raw_response.text} \n"
+                        f"Full Response: {raw_response.__dict__} \n"
+                        f"Error: {e} \n"
+                        f"Reducing limit from {limit} to {new_limit} and trying again."
+                    )
+                    url_suffix = url_suffix.replace(
+                        f"limit={limit}", f"limit={new_limit}"
+                    )
+                    limit = new_limit
+                    continue
+
+                logger.exception(
+                    f"Error in confluence call to {url_suffix} \n"
+                    f"Raw Response Text: {raw_response.text} \n"
+                    f"Full Response: {raw_response.__dict__} \n"
+                    f"Error: {e} \n"
                 )
-                url_suffix = url_suffix.replace(
-                    _PROBLEMATIC_EXPANSIONS,
-                    _REPLACEMENT_EXPANSIONS,
+                raise e
+
+            try:
+                next_response = raw_response.json()
+            except Exception as e:
+                logger.exception(
+                    f"Failed to parse response as JSON. Response: {raw_response.__dict__}"
                 )
-                continue
+                raise e
 
             # yield the results individually
             yield from next_response.get("results", [])
@@ -741,6 +757,62 @@ class OnyxConfluence:
         """
         group_name = quote(group_name)
         yield from self._paginate_url(f"rest/api/group/{group_name}/member", limit)
+
+    def get_all_space_permissions_server(
+        self,
+        space_key: str,
+    ) -> list[dict[str, Any]]:
+        """
+        This is a confluence server specific method that can be used to
+        fetch the permissions of a space.
+        This is better logging than calling the get_space_permissions method
+        because it returns a jsonrpc response.
+        TODO: Make this call these endpoints for newer confluence versions:
+        - /rest/api/space/{spaceKey}/permissions
+        - /rest/api/space/{spaceKey}/permissions/anonymous
+        """
+        url = "rpc/json-rpc/confluenceservice-v2"
+        data = {
+            "jsonrpc": "2.0",
+            "method": "getSpacePermissionSets",
+            "id": 7,
+            "params": [space_key],
+        }
+        response = self.post(url, data=data)
+        logger.debug(f"jsonrpc response: {response}")
+        if not response.get("result"):
+            logger.warning(
+                f"No jsonrpc response for space permissions for space {space_key}"
+                f"\nResponse: {response}"
+            )
+
+        return response.get("result", [])
+
+    def get_current_user(self, expand: str | None = None) -> Any:
+        """
+        Implements a method that isn't in the third party client.
+
+        Get information about the current user
+        :param expand: OPTIONAL expand for get status of user.
+                Possible param is "status". Results are "Active, Deactivated"
+        :return: Returns the user details
+        """
+
+        from atlassian.errors import ApiPermissionError  # type:ignore
+
+        url = "rest/api/user/current"
+        params = {}
+        if expand:
+            params["expand"] = expand
+        try:
+            response = self.get(url, params=params)
+        except HTTPError as e:
+            if e.response.status_code == 403:
+                raise ApiPermissionError(
+                    "The calling user does not have permission", reason=e
+                )
+            raise
+        return response
 
 
 # def build_confluence_client(
@@ -900,9 +972,6 @@ class OnyxConfluence:
 #     )
 
 
-_USER_EMAIL_CACHE: dict[str, str | None] = {}
-
-
 def get_user_email_from_username__server(
     confluence_client: OnyxConfluence, user_name: str
 ) -> str | None:
@@ -912,11 +981,13 @@ def get_user_email_from_username__server(
             response = confluence_client.get_mobile_parameters(user_name)
             email = response.get("email")
         except Exception:
-            # For now, we'll just return a string that indicates failure
-            # We may want to revert to returning None in the future
-            # email = None
-            email = f"FAILED TO GET CONFLUENCE EMAIL FOR {user_name}"
             logger.warning(f"failed to get confluence email for {user_name}")
+            # For now, we'll just return None and log a warning. This means
+            # we will keep retrying to get the email every group sync.
+            email = None
+            # We may want to just return a string that indicates failure so we dont
+            # keep retrying
+            # email = f"FAILED TO GET CONFLUENCE EMAIL FOR {user_name}"
         _USER_EMAIL_CACHE[user_name] = email
     return _USER_EMAIL_CACHE[user_name]
 

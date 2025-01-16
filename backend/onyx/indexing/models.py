@@ -23,11 +23,13 @@ class ChunkEmbedding(BaseModel):
 
 class BaseChunk(BaseModel):
     chunk_id: int
-    blurb: str  # The first sentence(s) of the first Section of the chunk
+    # The first sentence(s) of the first Section of the chunk
+    blurb: str
     content: str
     # Holds the link and the offsets into the raw Chunk text
     source_links: dict[int, str] | None
-    section_continuation: bool  # True if this Chunk's start is not at the start of a Section
+    # True if this Chunk's start is not at the start of a Section
+    section_continuation: bool
 
 
 class DocAwareChunk(BaseChunk):
@@ -46,6 +48,8 @@ class DocAwareChunk(BaseChunk):
     metadata_suffix_keyword: str
 
     mini_chunk_texts: list[str] | None
+
+    large_chunk_id: int | None
 
     large_chunk_reference_ids: list[int] = Field(default_factory=list)
 
@@ -150,3 +154,8 @@ class IndexingSetting(EmbeddingModelDetail):
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
         )
+
+
+class MultipassConfig(BaseModel):
+    multipass_indexing: bool
+    enable_large_chunks: bool

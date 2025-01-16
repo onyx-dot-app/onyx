@@ -6,7 +6,7 @@ import { Credential } from "@/lib/connectors/credentials"; // Import Credential 
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
-  const loadStateConnectors = ["web", "xenforo", "file"];
+  const loadStateConnectors = ["web", "xenforo", "file", "airtable"];
   if (loadStateConnectors.includes(connector_name)) {
     return true;
   }
@@ -1031,6 +1031,36 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  discord: {
+    description: "Configure Discord connector",
+    values: [],
+    advanced_values: [
+      {
+        type: "list",
+        query: "Enter Server IDs to include:",
+        label: "Server IDs",
+        name: "server_ids",
+        description: `Specify 0 or more server ids to include. Only channels inside them will be used for indexing`,
+        optional: true,
+      },
+      {
+        type: "list",
+        query: "Enter channel names to include:",
+        label: "Channels",
+        name: "channel_names",
+        description: `Specify 0 or more channels to index. For example, specifying the channel "support" will cause us to only index all content within the "#support" channel. If no channels are specified, all channels the bot has access to will be indexed.`,
+        optional: true,
+      },
+      {
+        type: "text",
+        query: "Enter the Start Date:",
+        label: "Start Date",
+        name: "start_date",
+        description: `Only messages after this date will be indexed. Format: YYYY-MM-DD`,
+        optional: true,
+      },
+    ],
+  },
   freshdesk: {
     description: "Configure Freshdesk connector",
     values: [],
@@ -1055,6 +1085,28 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
       },
     ],
     advanced_values: [],
+  },
+  airtable: {
+    description: "Configure Airtable connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the base ID:",
+        label: "Base ID",
+        name: "base_id",
+        optional: false,
+        description: "The ID of the Airtable base to index.",
+      },
+      {
+        type: "text",
+        query: "Enter the table name or ID:",
+        label: "Table Name or Table ID",
+        name: "table_name_or_id",
+        optional: false,
+      },
+    ],
+    advanced_values: [],
+    overrideDefaultFreq: 60 * 60 * 24,
   },
 };
 export function createConnectorInitialValues(

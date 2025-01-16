@@ -33,6 +33,7 @@ class RecordType(str, Enum):
     USAGE = "usage"
     LATENCY = "latency"
     FAILURE = "failure"
+    METRIC = "metric"
 
 
 def get_or_generate_uuid() -> str:

@@ -1,4 +1,3 @@
-import math
 from datetime import datetime
 from http import HTTPStatus
 
@@ -21,7 +20,9 @@ from onyx.background.celery.tasks.pruning.tasks import (
 )
 from onyx.background.celery.versioned_apps.primary import app as primary_app
 from onyx.db.connector_credential_pair import add_credential_to_connector
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair_from_id_for_user,
+)
 from onyx.db.connector_credential_pair import remove_credential_from_connector
 from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
@@ -48,7 +49,8 @@ from onyx.server.documents.models import CCStatusUpdateRequest
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.server.documents.models import ConnectorCredentialPairMetadata
 from onyx.server.documents.models import DocumentSyncStatus
-from onyx.server.documents.models import PaginatedIndexAttempts
+from onyx.server.documents.models import IndexAttemptSnapshot
+from onyx.server.documents.models import PaginatedReturn
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -64,8 +66,8 @@ def get_cc_pair_index_attempts(
     page_size: int = Query(10, ge=1, le=1000),
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-) -> PaginatedIndexAttempts:
-    cc_pair = get_connector_credential_pair_from_id(
+) -> PaginatedReturn[IndexAttemptSnapshot]:
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id, db_session, user, get_editable=False
     )
     if not cc_pair:
@@ -82,10 +84,12 @@ def get_cc_pair_index_attempts(
         page=page,
         page_size=page_size,
     )
-    return PaginatedIndexAttempts.from_models(
-        index_attempt_models=index_attempts,
-        page=page,
-        total_pages=math.ceil(total_count / page_size),
+    return PaginatedReturn(
+        items=[
+            IndexAttemptSnapshot.from_index_attempt_db_model(index_attempt)
+            for index_attempt in index_attempts
+        ],
+        total_items=total_count,
     )
 
 
@@ -96,14 +100,14 @@ def get_cc_pair_full_info(
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> CCPairFullInfo:
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id, db_session, user, get_editable=False
     )
     if not cc_pair:
         raise HTTPException(
             status_code=404, detail="CC Pair not found for current user permissions"
         )
-    editable_cc_pair = get_connector_credential_pair_from_id(
+    editable_cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id, db_session, user, get_editable=True
     )
     is_editable_for_current_user = editable_cc_pair is not None
@@ -162,18 +166,13 @@ def update_cc_pair_status(
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
-    """This method may wait up to 30 seconds if pausing the connector due to the need to
-    terminate tasks in progress. Tasks are not guaranteed to terminate within the
-    timeout.
+    """This method returns nearly immediately. It simply sets some signals and
+    optimistically assumes any running background processes will clean themselves up.
+    This is done to improve the perceived end user experience.
 
     Returns HTTPStatus.OK if everything finished.
-    Returns HTTPStatus.ACCEPTED if the connector is being paused, but background tasks
-    did not finish within the timeout.
     """
-    WAIT_TIMEOUT = 15.0
-    still_terminating = False
-
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
@@ -186,73 +185,37 @@ def update_cc_pair_status(
             detail="Connection not found for current user's permissions",
         )
 
+    redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if status_update_request.status == ConnectorCredentialPairStatus.PAUSED:
+        redis_connector.stop.set_fence(True)
+
         search_settings_list: list[SearchSettings] = get_active_search_settings(
             db_session
         )
 
-        redis_connector = RedisConnector(tenant_id, cc_pair_id)
+        while True:
+            for search_settings in search_settings_list:
+                redis_connector_index = redis_connector.new_index(search_settings.id)
+                if not redis_connector_index.fenced:
+                    continue
 
-        try:
-            redis_connector.stop.set_fence(True)
-            while True:
-                logger.debug(
-                    f"Wait for indexing soft termination starting: cc_pair={cc_pair_id}"
-                )
-                wait_succeeded = redis_connector.wait_for_indexing_termination(
-                    search_settings_list, WAIT_TIMEOUT
-                )
-                if wait_succeeded:
-                    logger.debug(
-                        f"Wait for indexing soft termination succeeded: cc_pair={cc_pair_id}"
-                    )
-                    break
+                index_payload = redis_connector_index.payload
+                if not index_payload:
+                    continue
 
-                logger.debug(
-                    "Wait for indexing soft termination timed out. "
-                    f"Moving to hard termination: cc_pair={cc_pair_id} timeout={WAIT_TIMEOUT:.2f}"
-                )
+                if not index_payload.celery_task_id:
+                    continue
 
-                for search_settings in search_settings_list:
-                    redis_connector_index = redis_connector.new_index(
-                        search_settings.id
-                    )
-                    if not redis_connector_index.fenced:
-                        continue
+                # Revoke the task to prevent it from running
+                primary_app.control.revoke(index_payload.celery_task_id)
 
-                    index_payload = redis_connector_index.payload
-                    if not index_payload:
-                        continue
+                # If it is running, then signaling for termination will get the
+                # watchdog thread to kill the spawned task
+                redis_connector_index.set_terminate(index_payload.celery_task_id)
 
-                    if not index_payload.celery_task_id:
-                        continue
-
-                    # Revoke the task to prevent it from running
-                    primary_app.control.revoke(index_payload.celery_task_id)
-
-                    # If it is running, then signaling for termination will get the
-                    # watchdog thread to kill the spawned task
-                    redis_connector_index.set_terminate(index_payload.celery_task_id)
-
-                logger.debug(
-                    f"Wait for indexing hard termination starting: cc_pair={cc_pair_id}"
-                )
-                wait_succeeded = redis_connector.wait_for_indexing_termination(
-                    search_settings_list, WAIT_TIMEOUT
-                )
-                if wait_succeeded:
-                    logger.debug(
-                        f"Wait for indexing hard termination succeeded: cc_pair={cc_pair_id}"
-                    )
-                    break
-
-                logger.debug(
-                    f"Wait for indexing hard termination timed out: cc_pair={cc_pair_id}"
-                )
-                still_terminating = True
-                break
-        finally:
-            redis_connector.stop.set_fence(False)
+            break
+    else:
+        redis_connector.stop.set_fence(False)
 
     update_connector_credential_pair_from_id(
         db_session=db_session,
@@ -261,14 +224,6 @@ def update_cc_pair_status(
     )
 
     db_session.commit()
-
-    if still_terminating:
-        return JSONResponse(
-            status_code=HTTPStatus.ACCEPTED,
-            content={
-                "message": "Request accepted, background task termination still in progress"
-            },
-        )
 
     return JSONResponse(
         status_code=HTTPStatus.OK, content={"message": str(HTTPStatus.OK)}
@@ -282,7 +237,7 @@ def update_cc_pair_name(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
@@ -311,7 +266,7 @@ def update_cc_pair_property(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
@@ -350,7 +305,7 @@ def get_cc_pair_last_pruned(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
@@ -374,7 +329,7 @@ def prune_cc_pair(
 ) -> StatusResponse[list[int]]:
     """Triggers pruning on a particular cc_pair immediately"""
 
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
@@ -422,7 +377,7 @@ def get_cc_pair_latest_sync(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
@@ -446,7 +401,7 @@ def sync_cc_pair(
 ) -> StatusResponse[list[int]]:
     """Triggers permissions sync on a particular cc_pair immediately"""
 
-    cc_pair = get_connector_credential_pair_from_id(
+    cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,

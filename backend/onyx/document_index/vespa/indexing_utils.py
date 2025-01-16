@@ -1,16 +1,24 @@
 import concurrent.futures
 import json
+import uuid
 from datetime import datetime
 from datetime import timezone
 from http import HTTPStatus
 
 import httpx
 from retry import retry
+from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import ENABLE_MULTIPASS_INDEXING
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
+from onyx.db.models import SearchSettings
+from onyx.db.search_settings import get_current_search_settings
+from onyx.db.search_settings import get_secondary_search_settings
 from onyx.document_index.document_index_utils import get_uuid_from_chunk
+from onyx.document_index.document_index_utils import get_uuid_from_chunk_info_old
+from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
 from onyx.document_index.vespa.shared_utils.utils import remove_invalid_unicode_chars
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
@@ -42,20 +50,17 @@ from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import TITLE_EMBEDDING
 from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.indexing.models import EmbeddingProvider
+from onyx.indexing.models import MultipassConfig
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
 @retry(tries=3, delay=1, backoff=2)
-def _does_document_exist(
-    doc_chunk_id: str,
-    index_name: str,
-    http_client: httpx.Client,
+def _does_doc_chunk_exist(
+    doc_chunk_id: uuid.UUID, index_name: str, http_client: httpx.Client
 ) -> bool:
-    """Returns whether the document already exists and the users/group whitelists
-    Specifically in this case, document refers to a vespa document which is equivalent to a Onyx
-    chunk. This checks for whether the chunk exists already in the index"""
     doc_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}"
     doc_fetch_response = http_client.get(doc_url)
     if doc_fetch_response.status_code == 404:
@@ -64,10 +69,10 @@ def _does_document_exist(
     if doc_fetch_response.status_code != 200:
         logger.debug(f"Failed to check for document with URL {doc_url}")
         raise RuntimeError(
-            f"Unexpected fetch document by ID value from Vespa "
-            f"with error {doc_fetch_response.status_code}"
-            f"Index name: {index_name}"
-            f"Doc chunk id: {doc_chunk_id}"
+            f"Unexpected fetch document by ID value from Vespa: "
+            f"error={doc_fetch_response.status_code} "
+            f"index={index_name} "
+            f"doc_chunk_id={doc_chunk_id}"
         )
     return True
 
@@ -98,8 +103,8 @@ def get_existing_documents_from_chunks(
     try:
         chunk_existence_future = {
             executor.submit(
-                _does_document_exist,
-                str(get_uuid_from_chunk(chunk)),
+                _does_doc_chunk_exist,
+                get_uuid_from_chunk(chunk),
                 index_name,
                 http_client,
             ): chunk
@@ -131,7 +136,9 @@ def _index_vespa_chunk(
     document = chunk.source_document
 
     # No minichunk documents in vespa, minichunk vectors are stored in the chunk itself
+
     vespa_chunk_id = str(get_uuid_from_chunk(chunk))
+
     embeddings = chunk.embeddings
 
     embeddings_name_vector_map = {"full_chunk": embeddings.full_embedding}
@@ -248,3 +255,66 @@ def clean_chunk_id_copy(
         }
     )
     return clean_chunk
+
+
+def check_for_final_chunk_existence(
+    minimal_doc_info: MinimalDocumentIndexingInfo,
+    start_index: int,
+    index_name: str,
+    http_client: httpx.Client,
+) -> int:
+    index = start_index
+    while True:
+        doc_chunk_id = get_uuid_from_chunk_info_old(
+            document_id=minimal_doc_info.doc_id,
+            chunk_id=index,
+            large_chunk_reference_ids=[],
+        )
+        if not _does_doc_chunk_exist(doc_chunk_id, index_name, http_client):
+            return index
+        index += 1
+
+
+def should_use_multipass(search_settings: SearchSettings | None) -> bool:
+    """
+    Determines whether multipass should be used based on the search settings
+    or the default config if settings are unavailable.
+    """
+    if search_settings is not None:
+        return search_settings.multipass_indexing
+    return ENABLE_MULTIPASS_INDEXING
+
+
+def can_use_large_chunks(multipass: bool, search_settings: SearchSettings) -> bool:
+    """
+    Given multipass usage and an embedder, decides whether large chunks are allowed
+    based on model/provider constraints.
+    """
+    # Only local models that support a larger context are from Nomic
+    # Cohere does not support larger contexts (they recommend not going above ~512 tokens)
+    return (
+        multipass
+        and search_settings.model_name.startswith("nomic-ai")
+        and search_settings.provider_type != EmbeddingProvider.COHERE
+    )
+
+
+def get_multipass_config(
+    db_session: Session, primary_index: bool = True
+) -> MultipassConfig:
+    """
+    Determines whether to enable multipass and large chunks by examining
+    the current search settings and the embedder configuration.
+    """
+    search_settings = (
+        get_current_search_settings(db_session)
+        if primary_index
+        else get_secondary_search_settings(db_session)
+    )
+    multipass = should_use_multipass(search_settings)
+    if not search_settings:
+        return MultipassConfig(multipass_indexing=False, enable_large_chunks=False)
+    enable_large_chunks = can_use_large_chunks(multipass, search_settings)
+    return MultipassConfig(
+        multipass_indexing=multipass, enable_large_chunks=enable_large_chunks
+    )

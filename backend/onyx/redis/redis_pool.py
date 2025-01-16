@@ -1,14 +1,20 @@
 import asyncio
 import functools
+import json
+import ssl
 import threading
 from collections.abc import Callable
 from typing import Any
+from typing import cast
 from typing import Optional
 
 import redis
+from fastapi import Request
 from redis import asyncio as aioredis
 from redis.client import Redis
+from redis.lock import Lock as RedisLock
 
+from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REDIS_DB_NUMBER
 from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
 from onyx.configs.app_configs import REDIS_HOST
@@ -22,6 +28,8 @@ from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+SCAN_ITER_COUNT_DEFAULT = 4096
 
 
 class TenantRedis(redis.Redis):
@@ -107,6 +115,10 @@ class TenantRedis(redis.Redis):
             "sadd",
             "srem",
             "scard",
+            "hexists",
+            "hset",
+            "hdel",
+            "ttl",
         ]  # Regular methods that need simple prefixing
 
         if item == "scan_iter":
@@ -186,10 +198,6 @@ class RedisPool:
 redis_pool = RedisPool()
 
 
-def get_redis_client(*, tenant_id: str | None) -> Redis:
-    return redis_pool.get_client(tenant_id)
-
-
 # # Usage example
 # redis_pool = RedisPool()
 # redis_client = redis_pool.get_client()
@@ -199,7 +207,19 @@ def get_redis_client(*, tenant_id: str | None) -> Redis:
 # value = redis_client.get('key')
 # print(value.decode())  # Output: 'value'
 
-_async_redis_connection = None
+
+def get_redis_client(*, tenant_id: str | None) -> Redis:
+    return redis_pool.get_client(tenant_id)
+
+
+SSL_CERT_REQS_MAP = {
+    "none": ssl.CERT_NONE,
+    "optional": ssl.CERT_OPTIONAL,
+    "required": ssl.CERT_REQUIRED,
+}
+
+
+_async_redis_connection: aioredis.Redis | None = None
 _async_lock = asyncio.Lock()
 
 
@@ -216,15 +236,89 @@ async def get_async_redis_connection() -> aioredis.Redis:
         async with _async_lock:
             # Double-check inside the lock to avoid race conditions
             if _async_redis_connection is None:
-                scheme = "rediss" if REDIS_SSL else "redis"
-                url = f"{scheme}://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER}"
+                # Load env vars or your config variables
 
-                # Create a new Redis connection (or connection pool) from the URL
-                _async_redis_connection = aioredis.from_url(
-                    url,
-                    password=REDIS_PASSWORD,
-                    max_connections=REDIS_POOL_MAX_CONNECTIONS,
-                )
+                connection_kwargs: dict[str, Any] = {
+                    "host": REDIS_HOST,
+                    "port": REDIS_PORT,
+                    "db": REDIS_DB_NUMBER,
+                    "password": REDIS_PASSWORD,
+                    "max_connections": REDIS_POOL_MAX_CONNECTIONS,
+                    "health_check_interval": REDIS_HEALTH_CHECK_INTERVAL,
+                    "socket_keepalive": True,
+                    "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
+                }
+
+                if REDIS_SSL:
+                    ssl_context = ssl.create_default_context()
+
+                    if REDIS_SSL_CA_CERTS:
+                        ssl_context.load_verify_locations(REDIS_SSL_CA_CERTS)
+                    ssl_context.check_hostname = False
+
+                    # Map your string to the proper ssl.CERT_* constant
+                    ssl_context.verify_mode = SSL_CERT_REQS_MAP.get(
+                        REDIS_SSL_CERT_REQS, ssl.CERT_NONE
+                    )
+
+                    connection_kwargs["ssl"] = ssl_context
+
+                # Create a new Redis connection (or connection pool) with SSL configuration
+                _async_redis_connection = aioredis.Redis(**connection_kwargs)
 
     # Return the established connection (or pool) for all future operations
     return _async_redis_connection
+
+
+async def retrieve_auth_token_data_from_redis(request: Request) -> dict | None:
+    token = request.cookies.get("fastapiusersauth")
+    if not token:
+        logger.debug("No auth token cookie found")
+        return None
+
+    try:
+        redis = await get_async_redis_connection()
+        redis_key = REDIS_AUTH_KEY_PREFIX + token
+        token_data_str = await redis.get(redis_key)
+
+        if not token_data_str:
+            logger.debug(f"Token key {redis_key} not found or expired in Redis")
+            return None
+
+        return json.loads(token_data_str)
+    except json.JSONDecodeError:
+        logger.error("Error decoding token data from Redis")
+        return None
+    except Exception as e:
+        logger.error(
+            f"Unexpected error in retrieve_auth_token_data_from_redis: {str(e)}"
+        )
+        raise ValueError(
+            f"Unexpected error in retrieve_auth_token_data_from_redis: {str(e)}"
+        )
+
+
+def redis_lock_dump(lock: RedisLock, r: Redis) -> None:
+    # diagnostic logging for lock errors
+    name = lock.name
+    ttl = r.ttl(name)
+    locked = lock.locked()
+    owned = lock.owned()
+    local_token: str | None = lock.local.token  # type: ignore
+
+    remote_token_raw = r.get(lock.name)
+    if remote_token_raw:
+        remote_token_bytes = cast(bytes, remote_token_raw)
+        remote_token = remote_token_bytes.decode("utf-8")
+    else:
+        remote_token = None
+
+    logger.warning(
+        f"RedisLock diagnostic: "
+        f"name={name} "
+        f"locked={locked} "
+        f"owned={owned} "
+        f"local_token={local_token} "
+        f"remote_token={remote_token} "
+        f"ttl={ttl}"
+    )

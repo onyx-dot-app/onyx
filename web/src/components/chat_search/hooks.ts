@@ -7,6 +7,7 @@ interface UseSidebarVisibilityProps {
   setShowDocSidebar: Dispatch<SetStateAction<boolean>>;
   mobile?: boolean;
   setToggled?: () => void;
+  isAnonymousUser?: boolean;
 }
 
 export const useSidebarVisibility = ({
@@ -16,11 +17,15 @@ export const useSidebarVisibility = ({
   setToggled,
   showDocSidebar,
   mobile,
+  isAnonymousUser,
 }: UseSidebarVisibilityProps) => {
   const xPosition = useRef(0);
 
   useEffect(() => {
     const handleEvent = (event: MouseEvent) => {
+      if (isAnonymousUser) {
+        return;
+      }
       const currentXPosition = event.clientX;
       xPosition.current = currentXPosition;
 
@@ -67,15 +72,20 @@ export const useSidebarVisibility = ({
     };
 
     const handleMouseLeave = () => {
-      setShowDocSidebar(false);
+      if (!mobile) {
+        setShowDocSidebar(false);
+      }
     };
-
-    document.addEventListener("mousemove", handleEvent);
-    document.addEventListener("mouseleave", handleMouseLeave);
+    if (!mobile) {
+      document.addEventListener("mousemove", handleEvent);
+      document.addEventListener("mouseleave", handleMouseLeave);
+    }
 
     return () => {
-      document.removeEventListener("mousemove", handleEvent);
-      document.removeEventListener("mouseleave", handleMouseLeave);
+      if (!mobile) {
+        document.removeEventListener("mousemove", handleEvent);
+        document.removeEventListener("mouseleave", handleMouseLeave);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showDocSidebar, toggledSidebar, sidebarElementRef, mobile]);

@@ -44,8 +44,10 @@ class Settings(BaseModel):
     maximum_chat_retention_days: int | None = None
     gpu_enabled: bool | None = None
     product_gating: GatingType = GatingType.NONE
+    anonymous_user_enabled: bool | None = None
 
 
 class UserSettings(Settings):
     notifications: list[Notification]
     needs_reindexing: bool
+    tenant_id: str | None = None

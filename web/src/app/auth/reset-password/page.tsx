@@ -28,87 +28,84 @@ const ResetPasswordPage: React.FC = () => {
   return (
     <AuthFlowContainer>
       <div className="flex flex-col w-full justify-center">
-        <CardSection className="mt-4 w-full">
-          <div className="flex">
-            <Title className="mb-2 mx-auto font-bold">Reset Password</Title>
-          </div>
-          {isWorking && <Spinner />}
-          {popup}
-          <Formik
-            initialValues={{
-              password: "",
-              confirmPassword: "",
-            }}
-            validationSchema={Yup.object().shape({
-              password: Yup.string().required("Password is required"),
-              confirmPassword: Yup.string()
-                .oneOf([Yup.ref("password"), undefined], "Passwords must match")
-                .required("Confirm Password is required"),
-            })}
-            onSubmit={async (values) => {
-              if (!token) {
-                setPopup({
-                  type: "error",
-                  message: "Invalid or missing reset token.",
-                });
-                return;
-              }
-              setIsWorking(true);
-              try {
-                await resetPassword(token, values.password);
-                setPopup({
-                  type: "success",
-                  message:
-                    "Password reset successfully. Redirecting to login...",
-                });
-                setTimeout(() => {
-                  redirect("/auth/login");
-                }, 1000);
-              } catch (error) {
-                setPopup({
-                  type: "error",
-                  message: "An error occurred. Please try again.",
-                });
-              } finally {
-                setIsWorking(false);
-              }
-            }}
-          >
-            {({ isSubmitting }) => (
-              <Form className="w-full flex flex-col items-stretch mt-2">
-                <TextFormField
-                  name="password"
-                  label="New Password"
-                  type="password"
-                  placeholder="Enter your new password"
-                />
-                <TextFormField
-                  name="confirmPassword"
-                  label="Confirm New Password"
-                  type="password"
-                  placeholder="Confirm your new password"
-                />
+        <div className="flex">
+          <Title className="mb-2 mx-auto font-bold">Reset Password</Title>
+        </div>
+        {isWorking && <Spinner />}
+        {popup}
+        <Formik
+          initialValues={{
+            password: "",
+            confirmPassword: "",
+          }}
+          validationSchema={Yup.object().shape({
+            password: Yup.string().required("Password is required"),
+            confirmPassword: Yup.string()
+              .oneOf([Yup.ref("password"), undefined], "Passwords must match")
+              .required("Confirm Password is required"),
+          })}
+          onSubmit={async (values) => {
+            if (!token) {
+              setPopup({
+                type: "error",
+                message: "Invalid or missing reset token.",
+              });
+              return;
+            }
+            setIsWorking(true);
+            try {
+              await resetPassword(token, values.password);
+              setPopup({
+                type: "success",
+                message: "Password reset successfully. Redirecting to login...",
+              });
+              setTimeout(() => {
+                redirect("/auth/login");
+              }, 1000);
+            } catch (error) {
+              setPopup({
+                type: "error",
+                message: "An error occurred. Please try again.",
+              });
+            } finally {
+              setIsWorking(false);
+            }
+          }}
+        >
+          {({ isSubmitting }) => (
+            <Form className="w-full flex flex-col items-stretch mt-2">
+              <TextFormField
+                name="password"
+                label="New Password"
+                type="password"
+                placeholder="Enter your new password"
+              />
+              <TextFormField
+                name="confirmPassword"
+                label="Confirm New Password"
+                type="password"
+                placeholder="Confirm your new password"
+              />
 
-                <div className="flex">
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="mx-auto w-full"
-                  >
-                    Reset Password
-                  </Button>
-                </div>
-              </Form>
-            )}
-          </Formik>
-          <div className="flex">
-            <Text className="mt-4 mx-auto">
-              <Link href="/auth/login" className="text-link font-medium">
-                Back to Login
-              </Link>
-            </Text>
-          </div>
-        </CardSection>
+              <div className="flex">
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="mx-auto w-full"
+                >
+                  Reset Password
+                </Button>
+              </div>
+            </Form>
+          )}
+        </Formik>
+        <div className="flex">
+          <Text className="mt-4 mx-auto">
+            <Link href="/auth/login" className="text-link font-medium">
+              Back to Login
+            </Link>
+          </Text>
+        </div>
       </div>
     </AuthFlowContainer>
   );

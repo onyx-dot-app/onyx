@@ -2,7 +2,6 @@
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
-import { HealthCheckBanner } from "@/components/health/healthcheck";
 
 import Title from "@/components/ui/title";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -19,12 +18,12 @@ import AdvancedFormPage from "./pages/Advanced";
 import DynamicConnectionForm from "./pages/DynamicConnectorCreationForm";
 import CreateCredential from "@/components/credentials/actions/CreateCredential";
 import ModifyCredential from "@/components/credentials/actions/ModifyCredential";
+import { ConfigurableSources, oauthSupportedSources } from "@/lib/types";
 import {
-  ConfigurableSources,
-  oauthSupportedSources,
-  ValidSources,
-} from "@/lib/types";
-import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
+  Credential,
+  credentialTemplates,
+  OAuthDetails,
+} from "@/lib/connectors/credentials";
 import {
   ConnectionConfiguration,
   connectorConfigs,
@@ -37,7 +36,6 @@ import {
   ConnectorBase,
 } from "@/lib/connectors/connectors";
 import { Modal } from "@/components/Modal";
-import GDriveMain from "./pages/gdrive/GoogleDrivePage";
 import { GmailMain } from "./pages/gmail/GmailPage";
 import {
   useGmailCredentials,
@@ -54,7 +52,12 @@ import {
   NEXT_PUBLIC_TEST_ENV,
 } from "@/lib/constants";
 import TemporaryLoadingModal from "@/components/TemporaryLoadingModal";
-import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
+import {
+  getConnectorOauthRedirectUrl,
+  useOAuthDetails,
+} from "@/lib/connectors/oauth";
+import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
+import { Spinner } from "@/components/Spinner";
 export interface AdvancedConfig {
   refreshFreq: number;
   pruneFreq: number;
@@ -144,7 +147,8 @@ export default function AddConnector({
   // State for managing credentials and files
   const [currentCredential, setCurrentCredential] =
     useState<Credential<any> | null>(null);
-  const [createConnectorToggle, setCreateConnectorToggle] = useState(false);
+  const [createCredentialFormToggle, setCreateCredentialFormToggle] =
+    useState(false);
 
   // Fetch credentials data
   const { data: credentials } = useSWR<Credential<any>[]>(
@@ -158,6 +162,9 @@ export default function AddConnector({
     errorHandlingFetcher,
     { refreshInterval: 5000 }
   );
+
+  const { data: oauthDetails, isLoading: oauthDetailsLoading } =
+    useOAuthDetails(connector);
 
   // Get credential template and configuration
   const credentialTemplate = credentialTemplates[connector];
@@ -450,19 +457,33 @@ export default function AddConnector({
                       onDeleteCredential={onDeleteCredential}
                       onSwitch={onSwap}
                     />
-                    {!createConnectorToggle && (
+                    {!createCredentialFormToggle && (
                       <div className="mt-6 flex space-x-4">
                         {/* Button to pop up a form to manually enter credentials */}
                         <button
                           className="mt-6 text-sm bg-background-900 px-2 py-1.5 flex text-text-200 flex-none rounded mr-4"
                           onClick={async () => {
-                            const redirectUrl =
-                              await getConnectorOauthRedirectUrl(connector);
-                            // if redirect is supported, just use it
-                            if (redirectUrl) {
-                              window.location.href = redirectUrl;
+                            if (oauthDetails && oauthDetails.oauth_enabled) {
+                              if (oauthDetails.additional_kwargs.length > 0) {
+                                setCreateCredentialFormToggle(true);
+                              } else {
+                                const redirectUrl =
+                                  await getConnectorOauthRedirectUrl(
+                                    connector,
+                                    {}
+                                  );
+                                // if redirect is supported, just use it
+                                if (redirectUrl) {
+                                  window.location.href = redirectUrl;
+                                } else {
+                                  setCreateCredentialFormToggle(
+                                    (createConnectorToggle) =>
+                                      !createConnectorToggle
+                                  );
+                                }
+                              }
                             } else {
-                              setCreateConnectorToggle(
+                              setCreateCredentialFormToggle(
                                 (createConnectorToggle) =>
                                   !createConnectorToggle
                               );
@@ -491,25 +512,42 @@ export default function AddConnector({
                       </div>
                     )}
 
-                    {createConnectorToggle && (
+                    {createCredentialFormToggle && (
                       <Modal
                         className="max-w-3xl rounded-lg"
-                        onOutsideClick={() => setCreateConnectorToggle(false)}
+                        onOutsideClick={() =>
+                          setCreateCredentialFormToggle(false)
+                        }
                       >
-                        <>
-                          <Title className="mb-2 text-lg">
-                            Create a {getSourceDisplayName(connector)}{" "}
-                            credential
-                          </Title>
-                          <CreateCredential
-                            close
-                            refresh={refresh}
-                            sourceType={connector}
-                            setPopup={setPopup}
-                            onSwitch={onSwap}
-                            onClose={() => setCreateConnectorToggle(false)}
-                          />
-                        </>
+                        {oauthDetailsLoading ? (
+                          <Spinner />
+                        ) : (
+                          <>
+                            <Title className="mb-2 text-lg">
+                              Create a {getSourceDisplayName(connector)}{" "}
+                              credential
+                            </Title>
+                            {oauthDetails && oauthDetails.oauth_enabled ? (
+                              <CreateStdOAuthCredential
+                                sourceType={connector}
+                                additionalFields={
+                                  oauthDetails.additional_kwargs
+                                }
+                              />
+                            ) : (
+                              <CreateCredential
+                                close
+                                refresh={refresh}
+                                sourceType={connector}
+                                setPopup={setPopup}
+                                onSwitch={onSwap}
+                                onClose={() =>
+                                  setCreateCredentialFormToggle(false)
+                                }
+                              />
+                            )}
+                          </>
+                        )}
                       </Modal>
                     )}
                   </>

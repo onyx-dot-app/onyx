@@ -9,7 +9,6 @@ from sqlalchemy import desc
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy import update
-from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.connectors.models import Document
@@ -118,21 +117,14 @@ def get_in_progress_index_attempts(
 def get_all_index_attempts_by_status(
     status: IndexingStatus, db_session: Session
 ) -> list[IndexAttempt]:
-    """This eagerly loads the connector and credential so that the db_session can be expired
-    before running long-living indexing jobs, which causes increasing memory usage.
+    """Returns index attempts with the given status.
+    Only recommend calling this with non-terminal states as the full list of
+    terminal statuses may be quite large.
 
     Results are ordered by time_created (oldest to newest)."""
     stmt = select(IndexAttempt)
     stmt = stmt.where(IndexAttempt.status == status)
     stmt = stmt.order_by(IndexAttempt.time_created)
-    stmt = stmt.options(
-        joinedload(IndexAttempt.connector_credential_pair).joinedload(
-            ConnectorCredentialPair.connector
-        ),
-        joinedload(IndexAttempt.connector_credential_pair).joinedload(
-            ConnectorCredentialPair.credential
-        ),
-    )
     new_attempts = db_session.scalars(stmt)
     return list(new_attempts.all())
 

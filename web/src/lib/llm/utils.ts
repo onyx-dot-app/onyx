@@ -102,12 +102,13 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   // meta models
   "llama-3.2-90b-vision-instruct",
   "llama-3.2-11b-vision-instruct",
+  "Llama-3-2-11B-Vision-Instruct-yb",
 ];
 
 export function checkLLMSupportsImageInput(model: string) {
   // Original exact match check
   const exactMatch = MODEL_NAMES_SUPPORTING_IMAGE_INPUT.some(
-    (modelName) => modelName === model
+    (modelName) => modelName.toLowerCase() === model.toLowerCase()
   );
 
   if (exactMatch) {
@@ -116,12 +117,13 @@ export function checkLLMSupportsImageInput(model: string) {
 
   // Additional check for the last part of the model name
   const modelParts = model.split(/[/.]/);
-  const lastPart = modelParts[modelParts.length - 1];
+  const lastPart = modelParts[modelParts.length - 1]?.toLowerCase();
 
   return MODEL_NAMES_SUPPORTING_IMAGE_INPUT.some((modelName) => {
     const modelNameParts = modelName.split(/[/.]/);
     const modelNameLastPart = modelNameParts[modelNameParts.length - 1];
-    return modelNameLastPart === lastPart;
+    // lastPart is already lowercased above for tiny performance gain
+    return modelNameLastPart?.toLowerCase() === lastPart;
   });
 }
 

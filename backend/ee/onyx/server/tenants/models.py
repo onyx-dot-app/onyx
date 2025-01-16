@@ -44,3 +44,7 @@ class TenantCreationPayload(BaseModel):
 class TenantDeletionPayload(BaseModel):
     tenant_id: str
     email: str
+
+
+class AnonymousUserPath(BaseModel):
+    anonymous_user_path: str | None

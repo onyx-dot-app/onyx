@@ -73,7 +73,10 @@ export function WhitelabelingForm() {
         }}
         validationSchema={Yup.object().shape({
           auto_scroll: Yup.boolean().nullable(),
-          application_name: Yup.string().nullable(),
+          application_name: Yup.string()
+            .required("Application name is required")
+            .trim()
+            .min(1, "Application name cannot be empty"),
           use_custom_logo: Yup.boolean().required(),
           use_custom_logotype: Yup.boolean().required(),
           custom_header_content: Yup.string().nullable(),
