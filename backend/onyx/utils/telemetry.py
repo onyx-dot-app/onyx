@@ -42,6 +42,11 @@ def _get_or_generate_customer_id_mt(tenant_id: str) -> str:
 
 
 def get_or_generate_uuid(tenant_id: str | None = None) -> str:
+    # TODO: split out the whole "instance UUID" generation logic into a separate
+    # utility function. Telemetry should not be aware at all of how the UUID is
+    # generated/stored.
+    # TODO: handle potential race condition for UUID generation. Doesn't matter for
+    # the telemetry case, but if this is used generally it should be handled.
     global _CACHED_UUID
 
     if _CACHED_UUID is not None:
@@ -58,7 +63,7 @@ def get_or_generate_uuid(tenant_id: str | None = None) -> str:
     return _CACHED_UUID
 
 
-def _get_or_generate_instance_domain() -> str | None:
+def _get_or_generate_instance_domain() -> str | None:  #
     global _CACHED_INSTANCE_DOMAIN
 
     if _CACHED_INSTANCE_DOMAIN is not None:
