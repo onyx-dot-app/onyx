@@ -1,9 +1,11 @@
+from uuid import UUID
 from uuid import uuid4
 
 import requests
 
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.server.features.persona.models import PersonaSnapshot
+from onyx.server.features.persona.models import PersonaUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestPersona
@@ -16,6 +18,9 @@ class PersonaManager:
     def create(
         name: str | None = None,
         description: str | None = None,
+        system_prompt: str | None = None,
+        task_prompt: str | None = None,
+        include_citations: bool = False,
         num_chunks: float = 5,
         llm_relevance_filter: bool = True,
         is_public: bool = True,
@@ -28,32 +33,38 @@ class PersonaManager:
         llm_model_version_override: str | None = None,
         users: list[str] | None = None,
         groups: list[int] | None = None,
-        category_id: int | None = None,
+        label_ids: list[int] | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> DATestPersona:
         name = name or f"test-persona-{uuid4()}"
         description = description or f"Description for {name}"
+        system_prompt = system_prompt or f"System prompt for {name}"
+        task_prompt = task_prompt or f"Task prompt for {name}"
 
-        persona_creation_request = {
-            "name": name,
-            "description": description,
-            "num_chunks": num_chunks,
-            "llm_relevance_filter": llm_relevance_filter,
-            "is_public": is_public,
-            "llm_filter_extraction": llm_filter_extraction,
-            "recency_bias": recency_bias,
-            "prompt_ids": prompt_ids or [0],
-            "document_set_ids": document_set_ids or [],
-            "tool_ids": tool_ids or [],
-            "llm_model_provider_override": llm_model_provider_override,
-            "llm_model_version_override": llm_model_version_override,
-            "users": users or [],
-            "groups": groups or [],
-        }
+        persona_creation_request = PersonaUpsertRequest(
+            name=name,
+            description=description,
+            system_prompt=system_prompt,
+            task_prompt=task_prompt,
+            include_citations=include_citations,
+            num_chunks=num_chunks,
+            llm_relevance_filter=llm_relevance_filter,
+            is_public=is_public,
+            llm_filter_extraction=llm_filter_extraction,
+            recency_bias=recency_bias,
+            prompt_ids=prompt_ids or [0],
+            document_set_ids=document_set_ids or [],
+            tool_ids=tool_ids or [],
+            llm_model_provider_override=llm_model_provider_override,
+            llm_model_version_override=llm_model_version_override,
+            users=[UUID(user) for user in (users or [])],
+            groups=groups or [],
+            label_ids=label_ids or [],
+        )
 
         response = requests.post(
             f"{API_SERVER_URL}/persona",
-            json=persona_creation_request,
+            json=persona_creation_request.model_dump(),
             headers=user_performing_action.headers
             if user_performing_action
             else GENERAL_HEADERS,
@@ -77,6 +88,7 @@ class PersonaManager:
             llm_model_version_override=llm_model_version_override,
             users=users or [],
             groups=groups or [],
+            label_ids=label_ids or [],
         )
 
     @staticmethod
@@ -84,6 +96,9 @@ class PersonaManager:
         persona: DATestPersona,
         name: str | None = None,
         description: str | None = None,
+        system_prompt: str | None = None,
+        task_prompt: str | None = None,
+        include_citations: bool = False,
         num_chunks: float | None = None,
         llm_relevance_filter: bool | None = None,
         is_public: bool | None = None,
@@ -96,32 +111,38 @@ class PersonaManager:
         llm_model_version_override: str | None = None,
         users: list[str] | None = None,
         groups: list[int] | None = None,
+        label_ids: list[int] | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> DATestPersona:
-        persona_update_request = {
-            "name": name or persona.name,
-            "description": description or persona.description,
-            "num_chunks": num_chunks or persona.num_chunks,
-            "llm_relevance_filter": llm_relevance_filter
-            or persona.llm_relevance_filter,
-            "is_public": is_public or persona.is_public,
-            "llm_filter_extraction": llm_filter_extraction
+        system_prompt = system_prompt or f"System prompt for {persona.name}"
+        task_prompt = task_prompt or f"Task prompt for {persona.name}"
+        persona_update_request = PersonaUpsertRequest(
+            name=name or persona.name,
+            description=description or persona.description,
+            system_prompt=system_prompt,
+            task_prompt=task_prompt,
+            include_citations=include_citations,
+            num_chunks=num_chunks or persona.num_chunks,
+            llm_relevance_filter=llm_relevance_filter or persona.llm_relevance_filter,
+            is_public=is_public or persona.is_public,
+            llm_filter_extraction=llm_filter_extraction
             or persona.llm_filter_extraction,
-            "recency_bias": recency_bias or persona.recency_bias,
-            "prompt_ids": prompt_ids or persona.prompt_ids,
-            "document_set_ids": document_set_ids or persona.document_set_ids,
-            "tool_ids": tool_ids or persona.tool_ids,
-            "llm_model_provider_override": llm_model_provider_override
+            recency_bias=recency_bias or persona.recency_bias,
+            prompt_ids=prompt_ids or persona.prompt_ids,
+            document_set_ids=document_set_ids or persona.document_set_ids,
+            tool_ids=tool_ids or persona.tool_ids,
+            llm_model_provider_override=llm_model_provider_override
             or persona.llm_model_provider_override,
-            "llm_model_version_override": llm_model_version_override
+            llm_model_version_override=llm_model_version_override
             or persona.llm_model_version_override,
-            "users": users or persona.users,
-            "groups": groups or persona.groups,
-        }
+            users=[UUID(user) for user in (users or persona.users)],
+            groups=groups or persona.groups,
+            label_ids=label_ids or persona.label_ids,
+        )
 
         response = requests.patch(
             f"{API_SERVER_URL}/persona/{persona.id}",
-            json=persona_update_request,
+            json=persona_update_request.model_dump(),
             headers=user_performing_action.headers
             if user_performing_action
             else GENERAL_HEADERS,
@@ -137,8 +158,8 @@ class PersonaManager:
             llm_relevance_filter=updated_persona_data["llm_relevance_filter"],
             is_public=updated_persona_data["is_public"],
             llm_filter_extraction=updated_persona_data["llm_filter_extraction"],
-            recency_bias=updated_persona_data["recency_bias"],
-            prompt_ids=updated_persona_data["prompts"],
+            recency_bias=recency_bias or persona.recency_bias,
+            prompt_ids=[prompt["id"] for prompt in updated_persona_data["prompts"]],
             document_set_ids=updated_persona_data["document_sets"],
             tool_ids=updated_persona_data["tools"],
             llm_model_provider_override=updated_persona_data[
@@ -149,6 +170,7 @@ class PersonaManager:
             ],
             users=[user["email"] for user in updated_persona_data["users"]],
             groups=updated_persona_data["groups"],
+            label_ids=updated_persona_data["labels"],
         )
 
     @staticmethod
@@ -165,11 +187,28 @@ class PersonaManager:
         return [PersonaSnapshot(**persona) for persona in response.json()]
 
     @staticmethod
+    def get_one(
+        persona_id: int,
+        user_performing_action: DATestUser | None = None,
+    ) -> list[PersonaSnapshot]:
+        response = requests.get(
+            f"{API_SERVER_URL}/persona/{persona_id}",
+            headers=user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+        return [PersonaSnapshot(**response.json())]
+
+    @staticmethod
     def verify(
         persona: DATestPersona,
         user_performing_action: DATestUser | None = None,
     ) -> bool:
-        all_personas = PersonaManager.get_all(user_performing_action)
+        all_personas = PersonaManager.get_one(
+            persona_id=persona.id,
+            user_performing_action=user_performing_action,
+        )
         for fetched_persona in all_personas:
             if fetched_persona.id == persona.id:
                 return (
@@ -199,6 +238,7 @@ class PersonaManager:
                     and set(user.email for user in fetched_persona.users)
                     == set(persona.users)
                     and set(fetched_persona.groups) == set(persona.groups)
+                    and set(fetched_persona.labels) == set(persona.label_ids)
                 )
         return False
 

@@ -127,7 +127,7 @@ class DATestPersona(BaseModel):
     llm_model_version_override: str | None
     users: list[str]
     groups: list[int]
-    category_id: int | None = None
+    label_ids: list[int]
 
 
 #
