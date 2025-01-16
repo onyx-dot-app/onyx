@@ -27,6 +27,8 @@ from onyx.server.manage.models import SlackBot
 from onyx.server.manage.models import SlackBotCreationRequest
 from onyx.server.manage.models import SlackChannelConfig
 from onyx.server.manage.models import SlackChannelConfigCreationRequest
+from onyx.server.manage.validate_tokens import validate_app_token
+from onyx.server.manage.validate_tokens import validate_bot_token
 from onyx.utils.telemetry import create_milestone_and_report
 
 
@@ -222,6 +224,9 @@ def create_bot(
     _: User | None = Depends(current_admin_user),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> SlackBot:
+    validate_app_token(slack_bot_creation_request.app_token)
+    validate_bot_token(slack_bot_creation_request.bot_token)
+
     slack_bot_model = insert_slack_bot(
         db_session=db_session,
         name=slack_bot_creation_request.name,
