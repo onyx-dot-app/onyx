@@ -61,8 +61,8 @@ def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, str]:
             continue
 
         raise ValueError(
-            f"Unable to mask credentials of type other than string, cannot process request."
-            f"Recieved type: {type(val)}"
+            f"Unable to mask credentials of type other than string or int, cannot process request."
+            f"Received type: {type(val)}"
         )
 
     return masked_creds

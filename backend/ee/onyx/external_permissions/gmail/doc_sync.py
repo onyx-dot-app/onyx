@@ -28,6 +28,7 @@ def _get_slim_doc_generator(
 
 
 def gmail_doc_sync(
+    tenant_id: str | None,
     cc_pair: ConnectorCredentialPair,
 ) -> list[DocExternalAccess]:
     """

@@ -128,6 +128,7 @@ def _get_permissions_from_slim_doc(
 
 
 def gdrive_doc_sync(
+    tenant_id: str | None,
     cc_pair: ConnectorCredentialPair,
 ) -> list[DocExternalAccess]:
     """
