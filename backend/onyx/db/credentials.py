@@ -14,6 +14,8 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
 )
+from onyx.db.constants import SYSTEM_USER
+from onyx.db.constants import SystemUser
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Credential__UserGroup
@@ -42,11 +44,17 @@ PUBLIC_CREDENTIAL_ID = 0
 
 def _add_user_filters(
     stmt: Select,
-    user: User | None,
+    user: User | None | SystemUser,
     get_editable: bool = True,
 ) -> Select:
     """Attaches filters to the statement to ensure that the user can only
     access the appropriate credentials"""
+
+    if isinstance(user, SystemUser):
+        if user is SYSTEM_USER:
+            return stmt
+        raise ValueError("Bad SystemUser object")
+
     if user is None:
         if not DISABLE_AUTH:
             raise ValueError("Anonymous users are not allowed to access credentials")
@@ -151,7 +159,7 @@ def fetch_credentials_for_user(
 
 def fetch_credential_by_id_for_user(
     credential_id: int,
-    user: User | None,
+    user: User | None | SystemUser,
     db_session: Session,
     get_editable: bool = True,
 ) -> Credential | None:
@@ -171,16 +179,16 @@ def fetch_credential_by_id(
     db_session: Session,
     credential_id: int,
 ) -> Credential | None:
-    stmt = select(Credential).distinct()
-    stmt = stmt.where(Credential.id == credential_id)
-    result = db_session.execute(stmt)
-    credential = result.scalar_one_or_none()
-    return credential
+    return fetch_credential_by_id_for_user(
+        credential_id=credential_id,
+        user=SYSTEM_USER,
+        db_session=db_session,
+    )
 
 
 def fetch_credentials_by_source_for_user(
     db_session: Session,
-    user: User | None,
+    user: User | None | SystemUser,
     document_source: DocumentSource | None = None,
     get_editable: bool = True,
 ) -> list[Credential]:
@@ -194,9 +202,11 @@ def fetch_credentials_by_source(
     db_session: Session,
     document_source: DocumentSource | None = None,
 ) -> list[Credential]:
-    base_query = select(Credential).where(Credential.source == document_source)
-    credentials = db_session.execute(base_query).scalars().all()
-    return list(credentials)
+    return fetch_credentials_by_source_for_user(
+        db_session=db_session,
+        user=SYSTEM_USER,
+        document_source=document_source,
+    )
 
 
 def swap_credentials_connector(

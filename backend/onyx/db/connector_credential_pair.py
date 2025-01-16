@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.connector import fetch_connector_by_id
+from onyx.db.constants import SYSTEM_USER
+from onyx.db.constants import SystemUser
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.enums import AccessType
@@ -33,8 +35,13 @@ logger = setup_logger()
 
 
 def _add_user_filters(
-    stmt: Select, user: User | None, get_editable: bool = True
+    stmt: Select, user: User | None | SystemUser, get_editable: bool = True
 ) -> Select:
+    if isinstance(user, SystemUser):
+        if user is SYSTEM_USER:
+            return stmt
+        raise ValueError("Bad SystemUser object")
+
     # If user is None and auth is disabled, assume the user is an admin
     if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
@@ -94,7 +101,7 @@ def _add_user_filters(
 
 def get_connector_credential_pairs_for_user(
     db_session: Session,
-    user: User | None,
+    user: User | None | SystemUser,
     get_editable: bool = True,
     ids: list[int] | None = None,
     eager_load_connector: bool = False,
@@ -105,6 +112,7 @@ def get_connector_credential_pairs_for_user(
         stmt = stmt.options(joinedload(ConnectorCredentialPair.connector))
 
     stmt = _add_user_filters(stmt, user, get_editable)
+
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
 
@@ -115,12 +123,11 @@ def get_connector_credential_pairs(
     db_session: Session,
     ids: list[int] | None = None,
 ) -> list[ConnectorCredentialPair]:
-    stmt = select(ConnectorCredentialPair).distinct()
-
-    if ids:
-        stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
-
-    return list(db_session.scalars(stmt).all())
+    return get_connector_credential_pairs_for_user(
+        db_session=db_session,
+        user=SYSTEM_USER,
+        ids=ids,
+    )
 
 
 def add_deletion_failure_message(
@@ -155,7 +162,7 @@ def get_connector_credential_pair_for_user(
     db_session: Session,
     connector_id: int,
     credential_id: int,
-    user: User | None,
+    user: User | None | SystemUser,
     get_editable: bool = True,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair)
@@ -171,17 +178,18 @@ def get_connector_credential_pair(
     connector_id: int,
     credential_id: int,
 ) -> ConnectorCredentialPair | None:
-    stmt = select(ConnectorCredentialPair)
-    stmt = stmt.where(ConnectorCredentialPair.connector_id == connector_id)
-    stmt = stmt.where(ConnectorCredentialPair.credential_id == credential_id)
-    result = db_session.execute(stmt)
-    return result.scalar_one_or_none()
+    return get_connector_credential_pair_for_user(
+        db_session=db_session,
+        connector_id=connector_id,
+        credential_id=credential_id,
+        user=SYSTEM_USER,
+    )
 
 
 def get_connector_credential_pair_from_id_for_user(
     cc_pair_id: int,
     db_session: Session,
-    user: User | None,
+    user: User | None | SystemUser,
     get_editable: bool = True,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair).distinct()
@@ -195,10 +203,11 @@ def get_connector_credential_pair_from_id(
     db_session: Session,
     cc_pair_id: int,
 ) -> ConnectorCredentialPair | None:
-    stmt = select(ConnectorCredentialPair).distinct()
-    stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
-    result = db_session.execute(stmt)
-    return result.scalar_one_or_none()
+    return get_connector_credential_pair_from_id_for_user(
+        cc_pair_id=cc_pair_id,
+        db_session=db_session,
+        user=SYSTEM_USER,
+    )
 
 
 def get_last_successful_attempt_time(

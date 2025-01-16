@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
+from onyx.db.constants import SYSTEM_USER
+from onyx.db.constants import SystemUser
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import ConnectorCredentialPair
@@ -35,8 +37,13 @@ logger = setup_logger()
 
 
 def _add_user_filters(
-    stmt: Select, user: User | None, get_editable: bool = True
+    stmt: Select, user: User | None | SystemUser, get_editable: bool = True
 ) -> Select:
+    if isinstance(user, SystemUser):
+        if user is SYSTEM_USER:
+            return stmt
+        raise ValueError("Bad SystemUser object")
+
     # If user is None and auth is disabled, assume the user is an admin
     if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
@@ -487,12 +494,21 @@ def fetch_document_sets(
 
 def fetch_all_document_sets_for_user(
     db_session: Session,
-    user: User | None,
+    user: User | None | SystemUser,
     get_editable: bool = True,
 ) -> Sequence[DocumentSetDBModel]:
     stmt = select(DocumentSetDBModel).distinct()
     stmt = _add_user_filters(stmt, user, get_editable=get_editable)
     return db_session.scalars(stmt).all()
+
+
+def fetch_all_document_sets(
+    db_session: Session,
+) -> Sequence[DocumentSetDBModel]:
+    return fetch_all_document_sets_for_user(
+        db_session=db_session,
+        user=SYSTEM_USER,
+    )
 
 
 def fetch_documents_for_document_set_paginated(
