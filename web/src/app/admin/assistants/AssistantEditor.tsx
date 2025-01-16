@@ -39,11 +39,7 @@ import { FiInfo, FiRefreshCcw, FiUsers } from "react-icons/fi";
 import * as Yup from "yup";
 import CollapsibleSection from "./CollapsibleSection";
 import { SuccessfulPersonaUpdateRedirectType } from "./enums";
-import {
-  Persona,
-  PersonaLabel,
-  StarterMessage,
-} from "./interfaces";
+import { Persona, PersonaLabel, StarterMessage } from "./interfaces";
 import {
   createPersonaLabel,
   PersonaUpsertParameters,
@@ -501,7 +497,10 @@ export function AssistantEditor({
 
           let personaResponse;
           if (isUpdate) {
-            personaResponse = await updatePersona(existingPersona.id, submissionData);
+            personaResponse = await updatePersona(
+              existingPersona.id,
+              submissionData
+            );
           } else {
             personaResponse = await createPersona(submissionData);
           }
