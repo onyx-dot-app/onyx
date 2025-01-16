@@ -87,7 +87,7 @@ class OnyxDBCredentialsProvider(
                 db_session.rollback()
                 raise
 
-    def is_dynamic(self):
+    def is_dynamic(self) -> bool:
         return True
 
 
@@ -131,5 +131,5 @@ class OnyxStaticCredentialsProvider(
     def set_credentials(self, credential_json: dict[str, Any]) -> None:
         self._credential_json = credential_json
 
-    def is_dynamic(self):
+    def is_dynamic(self) -> bool:
         return False
