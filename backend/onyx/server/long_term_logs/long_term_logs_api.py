@@ -65,7 +65,7 @@ def download_long_term_logs_zip(
         # Create JSON file
         json_path = temp_dir_path / f"{category}-logs.json"
         with open(json_path, "w") as f:
-            json.dump(logs, f, indent=2, default=str)
+            json.dump(logs, f, indent=2, default=str, ensure_ascii=False)
 
         # Create ZIP file
         zip_path = temp_dir_path / f"{category}-logs.zip"

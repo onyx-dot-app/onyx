@@ -75,7 +75,7 @@ def save_vespa(filename: str) -> None:
 
     with open(filename, "w") as jsonl_file:
         for doc in doc_jsons:
-            json_str = json.dumps(doc)
+            json_str = json.dumps(doc, ensure_ascii=False)
             jsonl_file.write(json_str + "\n")
 
 

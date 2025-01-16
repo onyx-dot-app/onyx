@@ -68,7 +68,7 @@ class LongTermLogger:
             )
             with open(file_path, "w+") as f:
                 # default allows us to "ignore" unserializable objects
-                json.dump(final_record, f, default=lambda x: str(x))
+                json.dump(final_record, f, default=lambda x: str(x), ensure_ascii=False)
         except Exception as e:
             logger.error(f"Error recording log: {e}")
 

@@ -188,7 +188,8 @@ class ImageGenerationTool(Tool):
                         "url": image_generation.url,
                     }
                     for image_generation in image_generations
-                ]
+                ],
+                ensure_ascii=False
             ),
         )
 

@@ -160,7 +160,7 @@ def _apply_pruning(
             # If using tool message, it will be a bit of an overestimate as the extra json text around the section
             # will be counted towards the token count. However, once the Sections are merged, the extra json parts
             # that overlap will not be counted multiple times like it is in the pruning step.
-            json.dumps(section_to_dict(section, ind))
+            json.dumps(section_to_dict(section, ind), ensure_ascii=False)
             if using_tool_message
             else build_doc_context_str(
                 semantic_identifier=section.center_chunk.semantic_identifier,
