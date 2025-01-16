@@ -22,7 +22,6 @@ def confluence_connector() -> ConfluenceConnector:
     credentials_provider = OnyxStaticCredentialsProvider(
         None,
         DocumentSource.CONFLUENCE,
-        0,
         {
             "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
             "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN"],

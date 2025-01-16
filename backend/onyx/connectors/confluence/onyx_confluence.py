@@ -14,6 +14,7 @@ from urllib.parse import quote
 
 import bs4
 from atlassian import Confluence  # type:ignore
+from redis import Redis
 from requests import HTTPError
 
 from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
@@ -270,13 +271,19 @@ class OnyxConfluence:
         self._url = url.rstrip("/")
         self._credentials_provider = credentials_provider
 
+        self.redis_client: Redis | None = None
+        self.static_credentials: dict[str, Any] | None = None
+        if self._credentials_provider.is_dynamic():
+            self.redis_client = get_redis_client(
+                tenant_id=credentials_provider.get_tenant_id()
+            )
+        else:
+            self.static_credentials = self._credentials_provider.get_credentials()
+
         self._confluence = Confluence(url)
-        self.redis_client = get_redis_client(
-            tenant_id=credentials_provider.get_tenant_id()
-        )
         self.credential_key: str = (
             self.CREDENTIAL_PREFIX
-            + f":credential_{self._credentials_provider.get_credential_id()}"
+            + f":credential_{self._credentials_provider.get_provider_key()}"
         )
 
         self._kwargs: Any = None
@@ -287,8 +294,6 @@ class OnyxConfluence:
             "cloud": is_cloud,
         }
 
-        self.static_credentials: dict[str, Any] | None = None
-
     def _renew_credentials(self) -> tuple[dict[str, Any], bool]:
         """credential_json - the current json credentials
         Returns a tuple
@@ -298,10 +303,14 @@ class OnyxConfluence:
         This method is intended to be used within a distributed lock.
         Lock, call this, update credentials if the tokens were refreshed, then release
         """
-
+        # static credentials are preloaded, so no locking/redis required
         if self.static_credentials:
             return self.static_credentials, False
 
+        if not self.redis_client:
+            raise RuntimeError("self.redis_client is None")
+
+        # dynamic credentials need locking
         # check redis first, then fallback to the DB
         credential_raw = self.redis_client.get(self.credential_key)
         if credential_raw is not None:

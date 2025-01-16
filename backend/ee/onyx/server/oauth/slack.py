@@ -13,6 +13,7 @@ from ee.onyx.configs.app_configs import OAUTH_SLACK_CLIENT_ID
 from ee.onyx.configs.app_configs import OAUTH_SLACK_CLIENT_SECRET
 from ee.onyx.server.oauth.api_router import router
 from onyx.auth.users import current_admin_user
+from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.db.credentials import create_credential
@@ -134,6 +135,11 @@ def handle_slack_oauth_callback(
     try:
         session = SlackOAuth.parse_session(session_json)
 
+        if not DEV_MODE:
+            redirect_uri = SlackOAuth.REDIRECT_URI
+        else:
+            redirect_uri = SlackOAuth.DEV_REDIRECT_URI
+
         # Exchange the authorization code for an access token
         response = requests.post(
             SlackOAuth.TOKEN_URL,
@@ -142,7 +148,7 @@ def handle_slack_oauth_callback(
                 "client_id": SlackOAuth.CLIENT_ID,
                 "client_secret": SlackOAuth.CLIENT_SECRET,
                 "code": code,
-                "redirect_uri": SlackOAuth.REDIRECT_URI,
+                "redirect_uri": redirect_uri,
             },
         )
 

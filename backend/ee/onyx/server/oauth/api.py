@@ -10,6 +10,7 @@ from ee.onyx.server.oauth.confluence_cloud import ConfluenceCloudOAuth
 from ee.onyx.server.oauth.google_drive import GoogleDriveOAuth
 from ee.onyx.server.oauth.slack import SlackOAuth
 from onyx.auth.users import current_admin_user
+from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine import get_current_tenant_id
 from onyx.db.models import User
@@ -41,19 +42,29 @@ def prepare_authorization_request(
     )
 
     if connector == DocumentSource.SLACK:
-        oauth_url = SlackOAuth.generate_oauth_url(oauth_state)
+        if not DEV_MODE:
+            oauth_url = SlackOAuth.generate_oauth_url(oauth_state)
+        else:
+            oauth_url = SlackOAuth.generate_dev_oauth_url(oauth_state)
+
         session = SlackOAuth.session_dump_json(
             email=user.email, redirect_on_success=redirect_on_success
         )
     elif connector == DocumentSource.CONFLUENCE:
-        oauth_url = ConfluenceCloudOAuth.generate_dev_oauth_url(oauth_state)
+        if not DEV_MODE:
+            oauth_url = ConfluenceCloudOAuth.generate_oauth_url(oauth_state)
+        else:
+            oauth_url = ConfluenceCloudOAuth.generate_dev_oauth_url(oauth_state)
         session = ConfluenceCloudOAuth.session_dump_json(
             email=user.email, redirect_on_success=redirect_on_success
         )
     # elif connector == DocumentSource.JIRA:
     #     oauth_url = JiraCloudOAuth.generate_dev_oauth_url(oauth_state)
     elif connector == DocumentSource.GOOGLE_DRIVE:
-        oauth_url = GoogleDriveOAuth.generate_oauth_url(oauth_state)
+        if not DEV_MODE:
+            oauth_url = GoogleDriveOAuth.generate_oauth_url(oauth_state)
+        else:
+            oauth_url = GoogleDriveOAuth.generate_dev_oauth_url(oauth_state)
         session = GoogleDriveOAuth.session_dump_json(
             email=user.email, redirect_on_success=redirect_on_success
         )

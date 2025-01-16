@@ -18,6 +18,7 @@ from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
 from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
 from ee.onyx.server.oauth.api_router import router
 from onyx.auth.users import current_admin_user
+from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.utils import CONFLUENCE_OAUTH_TOKEN_URL
@@ -183,6 +184,11 @@ def confluence_oauth_callback(
     try:
         session = ConfluenceCloudOAuth.parse_session(session_json)
 
+        if not DEV_MODE:
+            redirect_uri = ConfluenceCloudOAuth.REDIRECT_URI
+        else:
+            redirect_uri = ConfluenceCloudOAuth.DEV_REDIRECT_URI
+
         # Exchange the authorization code for an access token
         response = requests.post(
             ConfluenceCloudOAuth.TOKEN_URL,
@@ -191,7 +197,7 @@ def confluence_oauth_callback(
                 "client_id": ConfluenceCloudOAuth.CLIENT_ID,
                 "client_secret": ConfluenceCloudOAuth.CLIENT_SECRET,
                 "code": code,
-                "redirect_uri": ConfluenceCloudOAuth.DEV_REDIRECT_URI,
+                "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             },
         )

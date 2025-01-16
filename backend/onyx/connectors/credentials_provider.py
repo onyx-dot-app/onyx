@@ -1,3 +1,4 @@
+import uuid
 from types import TracebackType
 from typing import Any
 
@@ -50,8 +51,8 @@ class OnyxDBCredentialsProvider(
     def get_tenant_id(self) -> str | None:
         return self._tenant_id
 
-    def get_credential_id(self) -> int:
-        return self._credential_id
+    def get_provider_key(self) -> str:
+        return str(self._credential_id)
 
     def get_credentials(self) -> dict[str, Any]:
         with get_session_with_tenant(self._tenant_id) as db_session:
@@ -86,6 +87,9 @@ class OnyxDBCredentialsProvider(
                 db_session.rollback()
                 raise
 
+    def is_dynamic(self):
+        return True
+
 
 class OnyxStaticCredentialsProvider(
     CredentialsProviderInterface["OnyxStaticCredentialsProvider"]
@@ -96,15 +100,15 @@ class OnyxStaticCredentialsProvider(
         self,
         tenant_id: str | None,
         connector_name: str,
-        credential_id: int,
         credential_json: dict[str, Any],
     ):
         self._tenant_id = tenant_id
         self._connector_name = connector_name
-        self._credential_id = credential_id
         self._credential_json = credential_json
 
-    def __enter__(self) -> "OnyxDBCredentialsProvider":
+        self._provider_key = str(uuid.uuid4())
+
+    def __enter__(self) -> "OnyxStaticCredentialsProvider":
         return self
 
     def __exit__(
@@ -118,11 +122,14 @@ class OnyxStaticCredentialsProvider(
     def get_tenant_id(self) -> str | None:
         return self._tenant_id
 
-    def get_credential_id(self) -> int:
-        return self._credential_id
+    def get_provider_key(self) -> str:
+        return self._provider_key
 
     def get_credentials(self) -> dict[str, Any]:
         return self._credential_json
 
     def set_credentials(self, credential_json: dict[str, Any]) -> None:
         self._credential_json = credential_json
+
+    def is_dynamic(self):
+        return False
