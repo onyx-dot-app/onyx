@@ -261,8 +261,30 @@ export function getMarkdownForSelection(
       if (segment.type === "text") {
         result += segment.text.slice(overlapStart, overlapEnd);
       } else {
-        // For markdown elements, if we include any of it, include all of it
-        result += segment.raw;
+        // For markdown elements, wrap just the selected portion with the appropriate markdown
+        const selectedPortion = segment.text.slice(overlapStart, overlapEnd);
+        switch (segment.type) {
+          case "bold":
+            result += `**${selectedPortion}**`;
+            break;
+          case "italic":
+            result += `*${selectedPortion}*`;
+            break;
+          case "code":
+            result += `\`${selectedPortion}\``;
+            break;
+          case "link":
+            // For links, we need to preserve the URL if it exists in the raw markdown
+            const urlMatch = segment.raw.match(/\]\((.*?)\)/);
+            const url = urlMatch ? urlMatch[1] : "";
+            result += `[${selectedPortion}](${url})`;
+            break;
+          case "codeblock":
+            result += `\`\`\`\n${selectedPortion}\n\`\`\``;
+            break;
+          default:
+            result += selectedPortion;
+        }
       }
     }
 
