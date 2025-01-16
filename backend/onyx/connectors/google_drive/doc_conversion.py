@@ -252,6 +252,7 @@ def build_slim_document(file: GoogleDriveFileType) -> SlimDocument | None:
         id=file["webViewLink"],
         perm_sync_data={
             "doc_id": file.get("id"),
+            "drive_id": file.get("driveId"),
             "permissions": file.get("permissions", []),
             "permission_ids": file.get("permissionIds", []),
             "name": file.get("name"),
