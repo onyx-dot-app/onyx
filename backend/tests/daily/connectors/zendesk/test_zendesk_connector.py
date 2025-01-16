@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 import pytest
+from requests.exceptions import HTTPError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
@@ -38,6 +39,7 @@ def get_credentials() -> dict[str, str]:
     }
 
 
+@pytest.mark.xfail(raises=HTTPError, reason="Zendesk credentials may have expired")
 @pytest.mark.parametrize(
     "connector_fixture", ["zendesk_article_connector", "zendesk_ticket_connector"]
 )
@@ -96,6 +98,7 @@ def test_zendesk_connector_basic(
         )
 
 
+@pytest.mark.xfail(raises=HTTPError, reason="Zendesk credentials may have expired")
 def test_zendesk_connector_slim(zendesk_article_connector: ZendeskConnector) -> None:
     # Get full doc IDs
     all_full_doc_ids = set()
