@@ -144,9 +144,7 @@ def build_citations_user_message(
     )
 
     history_block = (
-        HISTORY_BLOCK.format(history_str=history_message) + "\n"
-        if history_message
-        else ""
+        HISTORY_BLOCK.format(history_str=history_message) if history_message else ""
     )
     query, img_urls = message_to_prompt_and_imgs(message)
 
