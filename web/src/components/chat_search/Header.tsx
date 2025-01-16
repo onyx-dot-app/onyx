@@ -192,14 +192,14 @@ export default function FunctionalHeader({
             <div
               style={{ transition: "width 0.30s ease-out" }}
               className={`
-            hidden
-            md:flex 
-            mx-auto
-            overflow-y-hidden 
-            transition-all 
-            duration-300 
-            ease-in-out
-            h-full
+                hidden
+                md:flex 
+                mx-auto
+                overflow-y-hidden 
+                transition-all 
+                duration-300 
+                ease-in-out
+                h-full
             `}
             />
             <div

@@ -670,7 +670,7 @@ def refined_answer_decision(state: MainState) -> RequireRefinedAnswerUpdate:
         f"--------{now_end}--{now_end - now_start}--------REFINED ANSWER DECISION END---"
     )
 
-    if not state["config"].allow_refinement or True:
+    if not state["config"].allow_refinement:
         return RequireRefinedAnswerUpdate(require_refined_answer=True)
 
     else:

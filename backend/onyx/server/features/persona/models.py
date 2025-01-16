@@ -53,7 +53,7 @@ class CreatePersonaRequest(BaseModel):
     is_default_persona: bool = False
     display_priority: int | None = None
     search_start_date: datetime | None = None
-    label_ids: list[int]
+    label_ids: list[int] | None = None
 
 
 class PersonaSnapshot(BaseModel):
@@ -81,7 +81,7 @@ class PersonaSnapshot(BaseModel):
     uploaded_image_id: str | None = None
     is_default_persona: bool
     search_start_date: datetime | None = None
-    labels: list["PersonaLabelSnapshot"]
+    labels: list["PersonaLabelSnapshot"] = []
 
     @classmethod
     def from_model(

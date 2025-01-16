@@ -115,7 +115,7 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
         size={16}
         className="w-3 ml-[2px] mr-[2px] group-hover:visible invisible flex-none cursor-grab"
       />
-      <button
+      <div
         onClick={(e) => {
           e.preventDefault();
           if (!isDragging) {
@@ -139,7 +139,7 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
         >
           <CircleX size={16} className="text-text-history-sidebar-button" />
         </button>
-      </button>
+      </div>
     </div>
   );
 };

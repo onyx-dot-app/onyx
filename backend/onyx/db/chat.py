@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
 from typing import Any
+from typing import cast
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -51,7 +52,6 @@ from onyx.server.query_and_chat.models import SubQueryDetail
 from onyx.server.query_and_chat.models import SubQuestionDetail
 from onyx.tools.tool_runner import ToolCallFinalResult
 from onyx.utils.logger import setup_logger
-from typing import cast
 from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
@@ -863,7 +863,9 @@ def translate_db_sub_questions_to_server_objects(
     for sub_question in db_sub_questions:
         sub_queries = []
         docs: dict[str, SearchDoc] = {}
-        doc_results = cast(list[dict[str, JSON_ro]], sub_question.sub_question_doc_results)
+        doc_results = cast(
+            list[dict[str, JSON_ro]], sub_question.sub_question_doc_results
+        )
         verified_doc_ids = [x["document_id"] for x in doc_results]
         for sub_query in sub_question.sub_queries:
             doc_ids = [doc.id for doc in sub_query.search_docs]
@@ -877,7 +879,9 @@ def translate_db_sub_questions_to_server_objects(
             for doc in sub_query.search_docs:
                 docs[doc.document_id] = doc
 
-        verified_docs = [docs[cast(str, doc_id)] for doc_id in verified_doc_ids if doc_id in docs]
+        verified_docs = [
+            docs[cast(str, doc_id)] for doc_id in verified_doc_ids if doc_id in docs
+        ]
 
         sub_questions.append(
             SubQuestionDetail(
@@ -936,6 +940,8 @@ def translate_db_message_to_chat_message_detail(
             chat_message.sub_questions
         ),
     )
+    print("DOCS")
+    print(chat_msg_detail.context_docs)
 
     return chat_msg_detail
 

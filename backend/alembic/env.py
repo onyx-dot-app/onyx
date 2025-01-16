@@ -152,6 +152,8 @@ async def run_async_migrations() -> None:
     if upgrade_all_tenants:
         tenant_schemas = get_all_tenant_ids()
         for schema in tenant_schemas:
+            print("MIGRRATING SCHEMA")
+            print(schema)
             try:
                 logger.info(f"Migrating schema: {schema}")
                 async with engine.connect() as connection:
@@ -198,6 +200,8 @@ def run_migrations_offline() -> None:
         engine.sync_engine.dispose()
 
         for schema in tenant_schemas:
+            print("MIGRRATING SCHEMA")
+            print(schema)
             logger.info(f"Migrating schema: {schema}")
             context.configure(
                 url=url,

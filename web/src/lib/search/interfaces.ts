@@ -15,6 +15,50 @@ export const SearchType = {
 };
 export type SearchType = (typeof SearchType)[keyof typeof SearchType];
 
+export interface ProSearchPacket {
+  sub_question?: string;
+  answer_piece?: string;
+  sub_query?: string;
+  tool_response?: ToolResponse;
+  level: number;
+  level_question_nr: number;
+}
+
+export interface AgentAnswerPiece {
+  answer_piece: string;
+  level: number;
+  level_question_nr: number;
+  answer_type: "agent_sub_answer" | "agent_level_answer";
+}
+
+export interface SubQuestionPiece {
+  sub_question: string;
+  level: number;
+  level_question_nr: number;
+}
+
+export interface SubQueryPiece {
+  sub_query: string;
+  level: number;
+  level_question_nr: number;
+  query_id: number;
+}
+
+export interface SubQuestionSearchDoc {
+  context_docs: OnyxDocument[];
+  level_question_nr: number;
+  level: number;
+}
+
+export interface ToolResponse {
+  id?: string | null;
+  response?: any;
+}
+export interface ExtendedToolResponse extends ToolResponse {
+  level: number;
+  level_question_nr: number;
+}
+
 export interface AnswerPiecePacket {
   answer_piece: string;
 }
@@ -26,6 +70,8 @@ export enum StreamStopReason {
 
 export interface StreamStopInfo {
   stop_reason: StreamStopReason;
+  level?: number;
+  level_question_nr?: number;
 }
 
 export interface ErrorMessagePacket {
@@ -62,6 +108,7 @@ export interface OnyxDocument {
   is_internet: boolean;
   validationState?: null | "good" | "bad";
 }
+
 export interface LoadedOnyxDocument extends OnyxDocument {
   icon: React.FC<{ size?: number; className?: string }>;
 }
