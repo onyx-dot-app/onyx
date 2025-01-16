@@ -2158,20 +2158,16 @@ export function ChatPage({
               <div className="w-full relative">
                 <HistorySidebar
                   setShowAssistantsModal={setShowAssistantsModal}
-                  assistants={assistants}
                   explicitlyUntoggle={explicitlyUntoggle}
-                  stopGenerating={stopGenerating}
                   reset={() => setMessage("")}
                   page="chat"
                   ref={innerSidebarElementRef}
                   toggleSidebar={toggleSidebar}
                   toggled={toggledSidebar}
-                  backgroundToggled={toggledSidebar || showHistorySidebar}
                   currentAssistantId={liveAssistant?.id}
                   existingChats={chatSessions}
                   currentChatSession={selectedChatSession}
                   folders={folders}
-                  openedFolders={openedFolders}
                   removeToggle={removeToggle}
                   showShareModal={showShareModal}
                   showDeleteAllModal={() => setShowDeleteAllModal(true)}

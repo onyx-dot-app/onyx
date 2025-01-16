@@ -40,7 +40,7 @@ export function RegenerateDropdown({
   };
 
   const Dropdown = (
-    <div className="max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto py-2 min-w-fit bg-white dark:bg-gray-800 rounded-md shadow-lg">
+    <div className="overflow-y-auto py-2 min-w-fit bg-white dark:bg-gray-800 rounded-md shadow-lg">
       <div className="mb-1 flex items-center justify-between px-5 pt-2">
         <span className="text-sm text-text-500 dark:text-text-400">
           Regenerate with
@@ -58,12 +58,7 @@ export function RegenerateDropdown({
           <div className="flex grow items-center justify-between gap-2">
             <div>
               <div className="flex items-center gap-3">
-                <div>
-                  {getDisplayNameForModel(option.name)}
-                  <div className="text-text-500 dark:text-text-400 text-xs">
-                    {option.description || "Model description"}
-                  </div>
-                </div>
+                <div>{getDisplayNameForModel(option.name)}</div>
               </div>
             </div>
           </div>

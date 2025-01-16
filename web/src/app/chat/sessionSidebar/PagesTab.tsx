@@ -9,14 +9,12 @@ import {
 import { Folder } from "../folders/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
-import { pageType } from "./types";
-import { FiPlus, FiTrash2, FiEdit, FiCheck, FiX } from "react-icons/fi";
+import { FiPlus, FiTrash2, FiCheck, FiX } from "react-icons/fi";
 import { NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED } from "@/lib/constants";
 import { FolderDropdown } from "../folders/FolderDropdown";
 import { ChatSessionDisplay } from "./ChatSessionDisplay";
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Caret } from "@/components/icons/icons";
-import { CaretCircleDown } from "@phosphor-icons/react";
 import { groupSessionsByDateRange } from "../lib";
 import React from "react";
 import {
@@ -36,7 +34,6 @@ import {
 } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { DragHandle } from "@/components/table/DragHandle";
 import { useChatContext } from "@/components/context/ChatContext";
 
 interface SortableFolderProps {
@@ -52,50 +49,20 @@ interface SortableFolderProps {
 }
 
 const SortableFolder: React.FC<SortableFolderProps> = (props) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: props.folder.folder_id?.toString() ?? "",
-    data: {
-      activationConstraint: {
-        distance: 8,
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({
+      id: props.folder.folder_id?.toString() ?? "",
+      data: {
+        activationConstraint: {
+          distance: 8,
+        },
       },
-    },
-  });
+    });
   const ref = useRef<HTMLDivElement>(null);
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
-  const [isHovering, setIsHovering] = useState(false);
-
-  useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
-      if (ref.current) {
-        const rect = ref.current.getBoundingClientRect();
-        const isInside =
-          event.clientX >= rect.left &&
-          event.clientX <= rect.right &&
-          event.clientY >= rect.top &&
-          event.clientY <= rect.bottom;
-        if (isInside) {
-          setIsHovering(true);
-        } else {
-          setIsHovering(false);
-        }
-      }
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-    };
-  }, []);
 
   return (
     <div
@@ -113,7 +80,6 @@ export function PagesTab({
   currentChatId,
   folders,
   closeSidebar,
-  newFolderId,
   showShareModal,
   showDeleteModal,
   showDeleteAllModal,
@@ -123,7 +89,6 @@ export function PagesTab({
   currentChatId?: string;
   folders?: Folder[];
   closeSidebar?: () => void;
-  newFolderId: number | null;
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
   showDeleteAllModal?: () => void;

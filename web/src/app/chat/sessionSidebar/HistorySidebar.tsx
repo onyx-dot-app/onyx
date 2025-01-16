@@ -1,6 +1,5 @@
 "use client";
 
-import { FiEdit, FiFolderPlus, FiMoreHorizontal, FiPlus } from "react-icons/fi";
 import React, {
   ForwardedRef,
   forwardRef,
@@ -54,18 +53,14 @@ interface HistorySidebarProps {
   existingChats?: ChatSession[];
   currentChatSession?: ChatSession | null | undefined;
   folders?: Folder[];
-  openedFolders?: { [key: number]: boolean };
   toggleSidebar?: () => void;
   toggled?: boolean;
   removeToggle?: () => void;
   reset?: () => void;
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
-  stopGenerating?: () => void;
   explicitlyUntoggle: () => void;
   showDeleteAllModal?: () => void;
-  backgroundToggled?: boolean;
-  assistants: Persona[];
   currentAssistantId?: number | null;
   setShowAssistantsModal: (show: boolean) => void;
 }
@@ -148,17 +143,13 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
       page,
       existingChats,
       currentChatSession,
-      assistants,
       folders,
-      openedFolders,
       explicitlyUntoggle,
       toggleSidebar,
       removeToggle,
-      stopGenerating = () => null,
       showShareModal,
       showDeleteModal,
       showDeleteAllModal,
-      backgroundToggled,
       currentAssistantId,
     },
     ref: ForwardedRef<HTMLDivElement>
@@ -364,7 +355,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
 
           <PagesTab
             setNewFolderId={setNewFolderId}
-            newFolderId={newFolderId}
             showDeleteModal={showDeleteModal}
             showShareModal={showShareModal}
             closeSidebar={removeToggle}
