@@ -25,7 +25,6 @@ import { HealthCheckBanner } from "@/components/health/healthcheck";
 import {
   buildChatUrl,
   buildLatestMessageChain,
-  checkAnyAssistantHasSearch,
   createChatSession,
   deleteAllChatSessions,
   getCitedDocumentsFromMessage,
@@ -308,7 +307,6 @@ export function ChatPage({
   const {
     visibleAssistants: assistants,
     recentAssistants,
-    assistants: allAssistants,
     refreshRecentAssistants,
   } = useAssistants();
 
@@ -2473,12 +2471,6 @@ export function ChatPage({
                                         setPresentingDocument
                                       }
                                       index={i}
-                                      selectedMessageForDocDisplay={
-                                        selectedMessageForDocDisplay
-                                      }
-                                      documentSelectionToggled={
-                                        documentSidebarToggled
-                                      }
                                       continueGenerating={
                                         i == messageHistory.length - 1 &&
                                         currentCanContinue()
@@ -2598,19 +2590,6 @@ export function ChatPage({
                                             }
                                           : undefined
                                       }
-                                      handleShowRetrieved={(messageNumber) => {
-                                        if (isShowingRetrieved) {
-                                          setSelectedMessageForDocDisplay(null);
-                                        } else {
-                                          if (messageNumber !== null) {
-                                            setSelectedMessageForDocDisplay(
-                                              messageNumber
-                                            );
-                                          } else {
-                                            setSelectedMessageForDocDisplay(-1);
-                                          }
-                                        }
-                                      }}
                                       handleForceSearch={() => {
                                         if (
                                           previousMessage &&

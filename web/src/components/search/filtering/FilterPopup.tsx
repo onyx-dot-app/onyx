@@ -6,8 +6,6 @@ import {
 } from "@/components/ui/popover";
 import {
   FiCalendar,
-  FiFilter,
-  FiFolder,
   FiTag,
   FiChevronLeft,
   FiChevronRight,
@@ -21,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { SourceIcon } from "@/components/SourceIcon";
+import { TagFilter } from "./TagFilter";
 
 interface FilterPopupProps {
   filterManager: FilterManager;
@@ -340,39 +339,11 @@ export function FilterPopup({
               </div>
             )}
             {selectedFilter === FilterCategories.tags && (
-              <div>
-                <h3 className="text-sm font-semibold mb-2">Tags</h3>
-                <ul className="space-y-2">
-                  {availableTags.map((tag) => (
-                    <li
-                      key={tag.tag_value}
-                      className="flex items-center space-x-2"
-                    >
-                      <Checkbox
-                        id={tag.tag_value}
-                        checked={filterManager.selectedTags.some(
-                          (t) => t.tag_value === tag.tag_value
-                        )}
-                        onCheckedChange={() => {
-                          filterManager.setSelectedTags((prev) =>
-                            prev.some((t) => t.tag_value === tag.tag_value)
-                              ? prev.filter(
-                                  (t) => t.tag_value !== tag.tag_value
-                                )
-                              : [...prev, tag]
-                          );
-                        }}
-                      />
-                      <label
-                        htmlFor={tag.tag_value}
-                        className="text-sm cursor-pointer"
-                      >
-                        {tag.tag_value}
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <TagFilter
+                tags={availableTags}
+                selectedTags={filterManager.selectedTags}
+                setSelectedTags={filterManager.setSelectedTags}
+              />
             )}
           </div>
         </div>

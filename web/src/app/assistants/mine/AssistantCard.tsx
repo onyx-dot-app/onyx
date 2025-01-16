@@ -26,20 +26,19 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { useUser } from "@/components/user/UserProvider";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
-import { toggleAssistantPinnedStatus } from "@/lib/assistants/pinnedAssistants";
+import { toggleAssistantPinnedStatus } from "@/lib/assistants/updateAssistantPreferences";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
 import { PinnedIcon } from "@/components/icons/icons";
 import {
   deletePersona,
   togglePersonaPublicStatus,
 } from "@/app/admin/assistants/lib";
-import { HammerIcon } from "lucide-react";
+import { PencilIcon } from "lucide-react";
 
 export const AssistantBadge = ({
   text,
@@ -284,7 +283,7 @@ const AssistantCard: React.FC<{
                     }}
                     className="hover:bg-neutral-100 hover:text-text px-2 py-1 gap-x-1 rounded border border-black flex items-center"
                   >
-                    <FaHashtag size={12} className="flex-none" />
+                    <PencilIcon size={12} className="flex-none" />
                     <span className="text-xs">Start Chat</span>
                   </button>
                 </TooltipTrigger>
@@ -296,7 +295,7 @@ const AssistantCard: React.FC<{
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
+                  <div
                     onClick={async () => {
                       await toggleAssistantPinnedStatus(
                         user?.preferences.pinned_assistants || [],
@@ -305,11 +304,17 @@ const AssistantCard: React.FC<{
                       );
                       await refreshUser();
                     }}
-                    className="hover:bg-neutral-100 px-2 py-1 gap-x-1 rounded border border-black flex items-center w-[65px]"
+                    className="hover:bg-neutral-100 px-2 group cursor-pointer py-1 gap-x-1 relative rounded border border-black flex items-center w-[65px]"
                   >
                     <PinnedIcon size={12} />
-                    <p className="text-xs">{pinned ? "Unpin" : "Pin"}</p>
-                  </button>
+                    {!pinned ? (
+                      <p className="absolute w-full left-0 group-hover:text-black w-full text-center transform text-xs">
+                        Pin
+                      </p>
+                    ) : (
+                      <p className="text-xs group-hover:text-black">Unpin</p>
+                    )}
+                  </div>
                 </TooltipTrigger>
                 <TooltipContent>
                   {pinned ? "Remove from" : "Add to"} your pinned list

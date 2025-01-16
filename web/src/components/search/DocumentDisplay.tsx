@@ -3,7 +3,6 @@ import React from "react";
 import {
   OnyxDocument,
   DocumentRelevance,
-  LoadedOnyxDocument,
   SearchOnyxDocument,
 } from "@/lib/search/interfaces";
 import { DocumentFeedbackBlock } from "./DocumentFeedbackBlock";
@@ -12,7 +11,7 @@ import { PopupSpec } from "../admin/connectors/Popup";
 import { DocumentUpdatedAtBadge } from "./DocumentUpdatedAtBadge";
 import { SourceIcon } from "../SourceIcon";
 import { MetadataBadge } from "../MetadataBadge";
-import { BookIcon, GlobeIcon, LightBulbIcon, SearchIcon } from "../icons/icons";
+import { BookIcon, LightBulbIcon } from "../icons/icons";
 
 import { FaStar } from "react-icons/fa";
 import { FiTag } from "react-icons/fi";
@@ -20,8 +19,6 @@ import { SettingsContext } from "../settings/SettingsProvider";
 import { CustomTooltip, TooltipGroup } from "../tooltip/CustomTooltip";
 import { WarningCircle } from "@phosphor-icons/react";
 import TextView from "../chat_search/TextView";
-import { SearchResultIcon } from "../SearchResultIcon";
-import { ValidSources } from "@/lib/types";
 import { openDocument } from "@/lib/search/utils";
 
 export const buildDocumentSummaryDisplay = (

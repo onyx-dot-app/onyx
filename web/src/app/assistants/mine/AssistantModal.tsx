@@ -38,7 +38,7 @@ export const AssistantBadgeSelector = ({
 export enum AssistantFilter {
   Pinned = "Pinned",
   Public = "Public",
-  Private = "Private",
+  Mine = "Mine",
 }
 
 const useAssistantFilter = () => {
@@ -47,7 +47,7 @@ const useAssistantFilter = () => {
   >({
     [AssistantFilter.Pinned]: false,
     [AssistantFilter.Public]: false,
-    [AssistantFilter.Private]: false,
+    [AssistantFilter.Mine]: false,
   });
 
   const toggleAssistantFilter = (filter: AssistantFilter) => {
@@ -86,7 +86,7 @@ export default function AssistantModal({
       const publicFilter =
         !assistantFilters[AssistantFilter.Public] || assistant.is_public;
       const privateFilter =
-        !assistantFilters[AssistantFilter.Private] || !assistant.is_public;
+        !assistantFilters[AssistantFilter.Mine] || !assistant.is_public;
       const pinnedFilter =
         !assistantFilters[AssistantFilter.Pinned] ||
         pinnedAssistants.map((a: Persona) => a.id).includes(assistant.id);
@@ -176,11 +176,9 @@ export default function AssistantModal({
               toggleFilter={() => toggleAssistantFilter(AssistantFilter.Public)}
             />
             <AssistantBadgeSelector
-              text="Private"
-              selected={assistantFilters[AssistantFilter.Private]}
-              toggleFilter={() =>
-                toggleAssistantFilter(AssistantFilter.Private)
-              }
+              text="Mine"
+              selected={assistantFilters[AssistantFilter.Mine]}
+              toggleFilter={() => toggleAssistantFilter(AssistantFilter.Mine)}
             />
           </div>
           <div className="w-full border-t border-neutral-200" />

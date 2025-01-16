@@ -18,18 +18,18 @@ import {
 } from "@/components/ui/select";
 
 interface LLMSelectorProps {
+  userSettings?: boolean;
   llmProviders: LLMProviderDescriptor[];
   currentLlm: string | null;
   onSelect: (value: string | null) => void;
-  userDefault?: string | null;
   requiresImageGeneration?: boolean;
 }
 
 export const LLMSelector: React.FC<LLMSelectorProps> = ({
+  userSettings,
   llmProviders,
   currentLlm,
   onSelect,
-  userDefault,
   requiresImageGeneration,
 }) => {
   const llmOptions = llmProviders.flatMap((provider) =>
@@ -39,6 +39,15 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
       icon: getProviderIcon(provider.provider, modelName),
     }))
   );
+
+  const defaultProvider = llmProviders.find(
+    (llmProvider) => llmProvider.is_default_provider
+  );
+
+  const defaultModelName = defaultProvider?.default_model_name;
+  const defaultModelDisplayName = defaultModelName
+    ? getDisplayNameForModel(defaultModelName)
+    : null;
 
   const destructuredCurrentValue = currentLlm
     ? destructureValue(currentLlm)
@@ -55,12 +64,19 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
         <SelectValue>
           {currentLlmName
             ? getDisplayNameForModel(currentLlmName)
-            : "User Default"}
+            : userSettings
+              ? "System Default"
+              : "User Default"}
         </SelectValue>
       </SelectTrigger>
       <SelectContent className="z-[99999]">
-        <SelectItem hideCheck value="default">
-          User Default
+        <SelectItem className="flex" hideCheck value="default">
+          <span>{userSettings ? "System Default" : "User Default"}</span>
+          {userSettings && (
+            <span className=" my-auto font-normal ml-1">
+              ({defaultModelDisplayName})
+            </span>
+          )}
         </SelectItem>
         {llmOptions.map((option) => {
           if (
@@ -69,16 +85,9 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
           ) {
             return (
               <SelectItem key={option.value} value={option.value}>
-                <div className="mt-2 flex items-center">
+                <div className="my-1 flex items-center">
                   {option.icon && option.icon({ size: 16 })}
                   <span className="ml-2">{option.name}</span>
-                  {userDefault &&
-                    option.value ===
-                      structureValue(userDefault, "", userDefault) && (
-                      <span className="ml-2 text-sm text-gray-500">
-                        (user default)
-                      </span>
-                    )}
                 </div>
               </SelectItem>
             );

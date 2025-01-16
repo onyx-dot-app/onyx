@@ -16,14 +16,7 @@ import { Folder } from "../folders/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
-import {
-  AssistantsIconSkeleton,
-  DocumentIcon2,
-  NewChatIcon,
-  OnyxIcon,
-  PinnedIcon,
-  PlusIcon,
-} from "@/components/icons/icons";
+import { DocumentIcon2, NewChatIcon } from "@/components/icons/icons";
 import { PagesTab } from "./PagesTab";
 import { pageType } from "./types";
 import LogoWithText from "@/components/header/LogoWithText";
@@ -32,7 +25,10 @@ import { DragEndEvent } from "@dnd-kit/core";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { buildChatUrl } from "../lib";
-import { toggleAssistantPinnedStatus } from "@/lib/assistants/pinnedAssistants";
+import {
+  toggleAssistantPinnedStatus,
+  reorderPinnedAssistants,
+} from "@/lib/assistants/updateAssistantPreferences";
 import { useUser } from "@/components/user/UserProvider";
 import { DragHandle } from "@/components/table/DragHandle";
 import {
@@ -51,7 +47,6 @@ import {
 } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { reorderPinnedAssistants } from "@/lib/assistants/pinnedAssistants";
 import { CircleX } from "lucide-react";
 
 interface HistorySidebarProps {
