@@ -1,16 +1,12 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { useRouter } from "next/navigation";
-
 import { Modal } from "@/components/Modal";
 import AssistantCard from "./AssistantCard";
 import { useAssistants } from "@/components/context/AssistantsContext";
-import { checkUserOwnsAssistant } from "@/lib/assistants/checkOwnership";
 import { useUser } from "@/components/user/UserProvider";
-import { Button } from "@/components/ui/button";
-import { useLabels } from "@/lib/hooks";
 
 export const AssistantBadgeSelector = ({
   text,

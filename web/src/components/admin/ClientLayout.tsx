@@ -19,7 +19,6 @@ import {
   SlackIconSkeleton,
   DocumentSetIconSkeleton,
   AssistantsIconSkeleton,
-  ClosedBookIcon,
   SearchIcon,
   DocumentIcon2,
 } from "@/components/icons/icons";
@@ -31,7 +30,6 @@ import { usePathname } from "next/navigation";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { useContext, useState } from "react";
 import { MdOutlineCreditCard } from "react-icons/md";
-import { set } from "lodash";
 import { UserSettingsModal } from "@/app/chat/modal/UserSettingsModal";
 import { usePopup } from "./connectors/Popup";
 import { useChatContext } from "../context/ChatContext";
@@ -64,9 +62,9 @@ export function ClientLayout({
     return <>{children}</>;
   }
 
-  // const { user} = useUser
   return (
     <div className="h-screen overflow-y-hidden">
+      {popup}
       <div className="flex h-full">
         {userSettingsOpen && (
           <UserSettingsModal
@@ -423,15 +421,16 @@ export function ClientLayout({
             ]}
           />
         </div>
-        <div className="pb-8 relative h-full overflow-y-auto w-full">
+        <div className="pb-8 relative h-full overflow-y-hidden w-full">
           <div className="fixed left-0 gap-x-4 px-4 top-4 h-8 px-0 mb-auto w-full items-start flex justify-end">
             <UserDropdown toggleUserSettings={toggleUserSettings} />
           </div>
-          <div className="pt-20 flex overflow-y-auto overflow-x-hidden h-full px-4 md:px-12">
+          <div className="pt-20 flex w-full overflow-y-auto overflow-x-hidden h-full px-4 md:px-12">
             {children}
           </div>
         </div>
       </div>
     </div>
   );
+  // Is there a clean way to add this to some piece of text where we need to enbale for copy-paste in a react app?
 }

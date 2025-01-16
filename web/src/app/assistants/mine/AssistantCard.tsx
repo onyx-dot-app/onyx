@@ -2,16 +2,11 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   FiMoreHorizontal,
-  FiShare2,
-  FiEye,
-  FiEyeOff,
   FiTrash,
   FiEdit,
-  FiHash,
   FiBarChart,
   FiLock,
   FiUnlock,
-  FiSearch,
 } from "react-icons/fi";
 import { FaHashtag } from "react-icons/fa";
 import {
@@ -140,20 +135,6 @@ const AssistantCard: React.FC<{
                           <FiEdit size={12} className="inline mr-2" />
                           Edit
                         </button>
-                        {/* 
-                        <button
-                          onClick={isOwnedByUser ? handleShare : undefined}
-                          className={`w-full text-left flex items-center px-2 py-1 rounded ${
-                            isOwnedByUser
-                              ? "hover:bg-neutral-100"
-                              : "opacity-50 cursor-not-allowed"
-                          }`}
-                          disabled={!isOwnedByUser}
-                        >
-                          <FiShare2 size={12} className="inline mr-2" />
-                          Share
-                        </button> */}
-
                         <button
                           onClick={
                             isOwnedByUser
@@ -225,19 +206,14 @@ const AssistantCard: React.FC<{
           </p>
 
           <div className="flex flex-col ">
-            {/* <div className="mb-1 mt-1">
-              <div className="flex items-center">
-               
-              </div>
-            </div> */}
-
             <div className="my-1">
               <span className="flex items-center text-black text-xs opacity-50">
-                {(persona.owner?.email || persona.builtin_persona) && "By "}
-                {persona.owner?.email || (persona.builtin_persona && "Onyx")}
-                {(persona.owner?.email || persona.builtin_persona) && (
-                  <span className="mx-2">•</span>
-                )}
+                {persona.owner?.email || persona.builtin_persona ? (
+                  <>
+                    By {persona.owner?.email || "Onyx"}
+                    <span className="mx-2">•</span>
+                  </>
+                ) : null}
                 {persona.tools.length > 0 ? (
                   <>
                     {persona.tools.length}
@@ -260,16 +236,6 @@ const AssistantCard: React.FC<{
                   </>
                 )}
               </span>
-            </div>
-
-            <div className="mb-1 flex flex-wrap">
-              {persona.document_sets.slice(0, 5).map((set, index) => (
-                <AssistantBadge
-                  className="!text-base"
-                  key={index}
-                  text={set.name}
-                />
-              ))}
             </div>
           </div>
           <div className="flex gap-2">
