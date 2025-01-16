@@ -152,7 +152,11 @@ def _convert_delta_to_message_chunk(
     stop_reason: str | None = None,
 ) -> BaseMessageChunk:
     """Adapted from langchain_community.chat_models.litellm._convert_delta_to_message_chunk"""
-    role = _dict.get("role") or (_base_msg_to_role(curr_msg) if curr_msg else None)
+    role = (
+        _dict.get("role")
+        or (_base_msg_to_role(curr_msg) if curr_msg else None)
+        or "assistant"
+    )
     content = _dict.get("content") or ""
     additional_kwargs = {}
     if _dict.get("function_call"):

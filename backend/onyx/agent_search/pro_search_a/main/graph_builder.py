@@ -148,7 +148,7 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
     graph.add_conditional_edges(
         source="initial_sub_question_creation",
         path=parallelize_initial_sub_question_answering,
-        path_map=["answer_query_subgraph"],
+        path_map=["answer_query_subgraph", "ingest_initial_sub_question_answers"],
     )
     graph.add_edge(
         start_key="answer_query_subgraph",
@@ -182,12 +182,12 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
     )
 
     graph.add_conditional_edges(
-        source="refined_sub_question_creation",    #DONE
+        source="refined_sub_question_creation",  # DONE
         path=parallelize_refined_sub_question_answering,
         path_map=["answer_refined_question"],
     )
     graph.add_edge(
-        start_key="answer_refined_question", # HERE
+        start_key="answer_refined_question",  # HERE
         end_key="ingest_refined_answers",
     )
 

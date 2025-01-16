@@ -47,7 +47,7 @@ def parallelize_initial_sub_question_answering(
     else:
         return [
             Send(
-                "ingest_answers",
+                "ingest_initial_sub_question_answers",
                 AnswerQuestionOutput(
                     answer_results=[],
                 ),
