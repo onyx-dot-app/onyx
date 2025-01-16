@@ -144,3 +144,6 @@ export interface StreamingError {
   error: string;
   stack_trace: string;
 }
+
+export const isAnthropic = (provider: string, modelName: string) =>
+  provider === "anthropic" || modelName.toLowerCase().includes("claude");

@@ -243,9 +243,9 @@ export function ChatPage({
   };
 
   const llmOverrideManager = useLlmOverride(
-    modelVersionFromSearchParams || (user?.preferences.default_model ?? null),
-    selectedChatSession,
-    defaultTemperature
+    llmProviders,
+    user?.preferences.default_model,
+    selectedChatSession
   );
 
   const [alternativeAssistant, setAlternativeAssistant] =
@@ -269,20 +269,21 @@ export function ChatPage({
 
   // always set the model override for the chat session, when an assistant, llm provider, or user preference exists
   useEffect(() => {
+    if (noAssistants) return;
     const personaDefault = getLLMProviderOverrideForPersona(
       liveAssistant,
       llmProviders
     );
 
     if (personaDefault) {
-      llmOverrideManager.setLlmOverride(personaDefault);
+      llmOverrideManager.updateLLMOverride(personaDefault);
     } else if (user?.preferences.default_model) {
-      llmOverrideManager.setLlmOverride(
+      llmOverrideManager.updateLLMOverride(
         destructureValue(user?.preferences.default_model)
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveAssistant, llmProviders, user?.preferences.default_model]);
+  }, [liveAssistant, user?.preferences.default_model]);
 
   const stopGenerating = () => {
     const currentSession = currentSessionId();
@@ -370,7 +371,7 @@ export function ChatPage({
 
       // reset LLM overrides (based on chat session!)
       llmOverrideManager.updateModelOverrideForChatSession(selectedChatSession);
-      llmOverrideManager.setTemperature(null);
+      llmOverrideManager.updateTemperature(null);
 
       // remove uploaded files
       setCurrentMessageFiles([]);
