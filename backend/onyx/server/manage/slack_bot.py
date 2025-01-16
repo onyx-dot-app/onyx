@@ -253,6 +253,8 @@ def patch_bot(
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_admin_user),
 ) -> SlackBot:
+    validate_bot_token(slack_bot_creation_request.bot_token)
+    validate_app_token(slack_bot_creation_request.app_token)
     slack_bot_model = update_slack_bot(
         db_session=db_session,
         slack_bot_id=slack_bot_id,
