@@ -4,7 +4,7 @@ from onyx.connectors.confluence.onyx_confluence import (
     get_user_email_from_username__server,
 )
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.credentials_provider import OnyxCredentialsProvider
+from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 
@@ -51,7 +51,7 @@ def confluence_group_sync(
     #     **cc_pair.connector.connector_specific_config
     # )
 
-    provider = OnyxCredentialsProvider(tenant_id, "confluence", cc_pair.credential_id)
+    provider = OnyxDBCredentialsProvider(tenant_id, "confluence", cc_pair.credential_id)
     is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)
     wiki_base: str = cc_pair.connector.connector_specific_config["wiki_base"]
     url = wiki_base.rstrip("/")

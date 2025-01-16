@@ -10,7 +10,9 @@ from onyx.db.models import Credential
 from onyx.redis.redis_pool import get_redis_client
 
 
-class OnyxCredentialsProvider(CredentialsProviderInterface["OnyxCredentialsProvider"]):
+class OnyxDBCredentialsProvider(
+    CredentialsProviderInterface["OnyxDBCredentialsProvider"]
+):
     """Implementation to allow the connector to callback and update credentials in the db.
     Required in cases where credentials can rotate while the connector is running.
     """
@@ -28,7 +30,7 @@ class OnyxCredentialsProvider(CredentialsProviderInterface["OnyxCredentialsProvi
         self.lock_key = f"da_lock:connector:{connector_name}:credential_{credential_id}"
         self._lock: RedisLock = self.redis_client.lock(self.lock_key, self.LOCK_TTL)
 
-    def __enter__(self) -> "OnyxCredentialsProvider":
+    def __enter__(self) -> "OnyxDBCredentialsProvider":
         acquired = self._lock.acquire(blocking_timeout=self.LOCK_TTL)
         if not acquired:
             raise RuntimeError(f"Could not acquire lock for key: {self.lock_key}")
@@ -83,3 +85,44 @@ class OnyxCredentialsProvider(CredentialsProviderInterface["OnyxCredentialsProvi
             except Exception:
                 db_session.rollback()
                 raise
+
+
+class OnyxStaticCredentialsProvider(
+    CredentialsProviderInterface["OnyxStaticCredentialsProvider"]
+):
+    """Implementation (a very simple one!) to handle static credentials."""
+
+    def __init__(
+        self,
+        tenant_id: str | None,
+        connector_name: str,
+        credential_id: int,
+        credential_json: dict[str, Any],
+    ):
+        self._tenant_id = tenant_id
+        self._connector_name = connector_name
+        self._credential_id = credential_id
+        self._credential_json = credential_json
+
+    def __enter__(self) -> "OnyxDBCredentialsProvider":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        pass
+
+    def get_tenant_id(self) -> str | None:
+        return self._tenant_id
+
+    def get_credential_id(self) -> int:
+        return self._credential_id
+
+    def get_credentials(self) -> dict[str, Any]:
+        return self._credential_json
+
+    def set_credentials(self, credential_json: dict[str, Any]) -> None:
+        self._credential_json = credential_json

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_ID
 from ee.onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_SECRET
 from ee.onyx.server.oauth.api_router import router
-from onyx.auth.users import current_user
+from onyx.auth.users import current_admin_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
@@ -113,7 +113,7 @@ class GoogleDriveOAuth:
 def handle_google_drive_oauth_callback(
     code: str,
     state: str,
-    user: User = Depends(current_user),
+    user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:

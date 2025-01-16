@@ -12,7 +12,7 @@ from onyx.connectors.blob.connector import BlobStorageConnector
 from onyx.connectors.bookstack.connector import BookstackConnector
 from onyx.connectors.clickup.connector import ClickupConnector
 from onyx.connectors.confluence.connector import ConfluenceConnector
-from onyx.connectors.credentials_provider import OnyxCredentialsProvider
+from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.discord.connector import DiscordConnector
 from onyx.connectors.discourse.connector import DiscourseConnector
 from onyx.connectors.document360.connector import Document360Connector
@@ -153,7 +153,7 @@ def instantiate_connector(
     connector = connector_class(**connector_specific_config)
 
     if isinstance(connector, CredentialsConnector):
-        provider = OnyxCredentialsProvider(tenant_id, str(source), credential.id)
+        provider = OnyxDBCredentialsProvider(tenant_id, str(source), credential.id)
         connector.set_credentials_provider(provider)
     else:
         new_credentials = connector.load_credentials(credential.credential_json)
