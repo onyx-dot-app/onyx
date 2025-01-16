@@ -10,7 +10,7 @@ from onyx.chat.chat_utils import combine_message_chain
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
-from onyx.chat.prompt_builder.build import AnswerPromptBuilder
+from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.constants import DocumentSource
 from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.context.search.models import SearchDoc

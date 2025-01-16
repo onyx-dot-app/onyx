@@ -17,6 +17,7 @@ from onyx.llm.utils import check_message_tokens
 from onyx.llm.utils import message_to_prompt_and_imgs
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
+from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
 from onyx.prompts.prompt_utils import add_date_time_to_prompt
 from onyx.prompts.prompt_utils import drop_messages_history_overflow
 from onyx.tools.force import ForceUseTool
@@ -42,11 +43,22 @@ def default_build_system_message(
 
 
 def default_build_user_message(
-    user_query: str, prompt_config: PromptConfig, files: list[InMemoryChatFile] = []
+    user_query: str,
+    prompt_config: PromptConfig,
+    files: list[InMemoryChatFile] = [],
+    single_message_history: str | None = None,
 ) -> HumanMessage:
+    history_block = (
+        HISTORY_BLOCK.format(history_str=single_message_history)
+        if single_message_history
+        else ""
+    )
+
     user_prompt = (
         CHAT_USER_CONTEXT_FREE_PROMPT.format(
-            task_prompt=prompt_config.task_prompt, user_query=user_query
+            history_block=history_block,
+            task_prompt=prompt_config.task_prompt,
+            user_query=user_query,
         )
         if prompt_config.task_prompt
         else user_query
@@ -64,7 +76,8 @@ class AnswerPromptBuilder:
         user_message: HumanMessage,
         message_history: list[PreviousMessage],
         llm_config: LLMConfig,
-        raw_user_text: str,
+        raw_user_query: str,
+        raw_user_uploaded_files: list[InMemoryChatFile],
         single_message_history: str | None = None,
     ) -> None:
         self.max_tokens = compute_max_llm_input_tokens(llm_config)
@@ -83,10 +96,6 @@ class AnswerPromptBuilder:
             self.history_token_cnts,
         ) = translate_history_to_basemessages(message_history)
 
-        # for cases where like the QA flow where we want to condense the chat history
-        # into a single message rather than a sequence of User / Assistant messages
-        self.single_message_history = single_message_history
-
         self.system_message_and_token_cnt: tuple[SystemMessage, int] | None = None
         self.user_message_and_token_cnt = (
             user_message,
@@ -95,7 +104,10 @@ class AnswerPromptBuilder:
 
         self.new_messages_and_token_cnts: list[tuple[BaseMessage, int]] = []
 
-        self.raw_user_message = raw_user_text
+        # used for building a new prompt after a tool-call
+        self.raw_user_query = raw_user_query
+        self.raw_user_uploaded_files = raw_user_uploaded_files
+        self.single_message_history = single_message_history
 
     def update_system_prompt(self, system_message: SystemMessage | None) -> None:
         if not system_message:
