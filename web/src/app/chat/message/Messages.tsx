@@ -21,7 +21,10 @@ import React, {
 import ReactMarkdown from "react-markdown";
 import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
 import { SearchSummary } from "./SearchSummary";
-
+import {
+  markdownToHtml,
+  getMarkdownForSelection,
+} from "@/app/chat/message/codeUtils";
 import { SkippedSearch } from "./SkippedSearch";
 import remarkGfm from "remark-gfm";
 import { CopyButton } from "@/components/CopyButton";
@@ -373,15 +376,28 @@ export const AIMessage = ({
   );
 
   const renderedMarkdown = useMemo(() => {
+    if (typeof finalContent !== "string") {
+      return finalContent;
+    }
+
+    // Create a hidden div with the HTML content for copying
+    const htmlContent = markdownToHtml(finalContent);
+
     return (
-      <ReactMarkdown
-        className="prose max-w-full text-base"
-        components={markdownComponents}
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
-      >
-        {finalContent as string}
-      </ReactMarkdown>
+      <>
+        <div
+          style={{ position: "absolute", left: "-9999px" }}
+          dangerouslySetInnerHTML={{ __html: htmlContent }}
+        />
+        <ReactMarkdown
+          className="prose max-w-full text-base"
+          components={markdownComponents}
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
+        >
+          {finalContent}
+        </ReactMarkdown>
+      </>
     );
   }, [finalContent, markdownComponents]);
 
@@ -513,7 +529,54 @@ export const AIMessage = ({
 
                         {typeof content === "string" ? (
                           <div className="overflow-x-visible max-w-content-max">
-                            {renderedMarkdown}
+                            <div
+                              contentEditable="true"
+                              suppressContentEditableWarning
+                              className="focus:outline-none cursor-text select-text"
+                              style={{
+                                MozUserModify: "read-only",
+                                WebkitUserModify: "read-only",
+                              }}
+                              onCopy={(e) => {
+                                e.preventDefault();
+                                const selection = window.getSelection();
+                                const selectedPlainText =
+                                  selection?.toString() || "";
+
+                                if (!selectedPlainText) {
+                                  // If no text is selected, copy the full content
+                                  const clipboardItem = new ClipboardItem({
+                                    "text/html": new Blob(
+                                      [markdownToHtml(content)],
+                                      { type: "text/html" }
+                                    ),
+                                    "text/plain": new Blob([content], {
+                                      type: "text/plain",
+                                    }),
+                                  });
+                                  navigator.clipboard.write([clipboardItem]);
+                                  return;
+                                }
+
+                                const markdownText = getMarkdownForSelection(
+                                  content,
+                                  selectedPlainText
+                                );
+
+                                const clipboardItem = new ClipboardItem({
+                                  "text/html": new Blob(
+                                    [markdownToHtml(markdownText)],
+                                    { type: "text/html" }
+                                  ),
+                                  "text/plain": new Blob([markdownText], {
+                                    type: "text/plain",
+                                  }),
+                                });
+                                navigator.clipboard.write([clipboardItem]);
+                              }}
+                            >
+                              {renderedMarkdown}
+                            </div>
                           </div>
                         ) : (
                           content
@@ -559,7 +622,16 @@ export const AIMessage = ({
                             )}
                           </div>
                           <CustomTooltip showTick line content="Copy">
-                            <CopyButton content={content.toString()} />
+                            <CopyButton
+                              content={
+                                typeof content === "string"
+                                  ? {
+                                      html: markdownToHtml(content),
+                                      plainText: content,
+                                    }
+                                  : content.toString()
+                              }
+                            />
                           </CustomTooltip>
                           <CustomTooltip showTick line content="Good response">
                             <HoverableIcon
@@ -644,7 +716,16 @@ export const AIMessage = ({
                             )}
                           </div>
                           <CustomTooltip showTick line content="Copy">
-                            <CopyButton content={content.toString()} />
+                            <CopyButton
+                              content={
+                                typeof content === "string"
+                                  ? {
+                                      html: markdownToHtml(content),
+                                      plainText: content,
+                                    }
+                                  : content.toString()
+                              }
+                            />
                           </CustomTooltip>
 
                           <CustomTooltip showTick line content="Good response">
