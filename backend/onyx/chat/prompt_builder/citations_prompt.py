@@ -6,7 +6,7 @@ from onyx.chat.models import PromptConfig
 from onyx.configs.model_configs import GEN_AI_SINGLE_USER_MESSAGE_EXPECTED_MAX_TOKENS
 from onyx.context.search.models import InferenceChunk
 from onyx.db.models import Persona
-from onyx.db.persona import get_default_prompt__read_only
+from onyx.db.prompts import get_default_prompt__read_only
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple

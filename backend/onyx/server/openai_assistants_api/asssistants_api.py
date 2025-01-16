@@ -18,7 +18,7 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import get_personas_for_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import upsert_persona
-from onyx.db.persona import upsert_prompt
+from onyx.db.prompts import upsert_prompt
 from onyx.db.tools import get_tool_by_name
 from onyx.utils.logger import setup_logger
 

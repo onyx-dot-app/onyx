@@ -3,16 +3,6 @@ from pydantic import BaseModel
 from onyx.db.models import Prompt
 
 
-class CreatePromptRequest(BaseModel):
-    name: str
-    description: str
-    system_prompt: str
-    task_prompt: str
-    include_citations: bool = False
-    datetime_aware: bool = False
-    persona_ids: list[int] | None = None
-
-
 class PromptSnapshot(BaseModel):
     id: int
     name: str

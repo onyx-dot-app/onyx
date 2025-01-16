@@ -27,32 +27,36 @@ class GenerateStarterMessageRequest(BaseModel):
     generation_count: int
 
 
-class CreatePersonaRequest(BaseModel):
+class PersonaUpsertRequest(BaseModel):
     name: str
     description: str
+    existing_prompt_id: int | None = None
+    system_prompt: str
+    task_prompt: str
+    document_set_ids: list[int]
     num_chunks: float
-    llm_relevance_filter: bool
+    include_citations: bool
     is_public: bool
-    llm_filter_extraction: bool
     recency_bias: RecencyBiasSetting
     prompt_ids: list[int]
-    document_set_ids: list[int]
-    # e.g. ID of SearchTool or ImageGenerationTool or <USER_DEFINED_TOOL>
-    tool_ids: list[int]
+    llm_filter_extraction: bool
+    llm_relevance_filter: bool
     llm_model_provider_override: str | None = None
     llm_model_version_override: str | None = None
     starter_messages: list[StarterMessage] | None = None
     # For Private Personas, who should be able to access these
     users: list[UUID] = Field(default_factory=list)
     groups: list[int] = Field(default_factory=list)
+    # e.g. ID of SearchTool or ImageGenerationTool or <USER_DEFINED_TOOL>
+    tool_ids: list[int]
     icon_color: str | None = None
     icon_shape: int | None = None
-    uploaded_image_id: str | None = None  # New field for uploaded image
     remove_image: bool | None = None
-    is_default_persona: bool = False
-    display_priority: int | None = None
+    uploaded_image_id: str | None = None  # New field for uploaded image
     search_start_date: datetime | None = None
     label_ids: list[int] | None = None
+    is_default_persona: bool = False
+    display_priority: int | None = None
 
 
 class PersonaSnapshot(BaseModel):

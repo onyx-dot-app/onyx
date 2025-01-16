@@ -6,14 +6,11 @@ import { generateRandomIconShape } from "@/lib/assistantIconUtils";
 import { CCPairBasicInfo, DocumentSet, User, UserGroup } from "@/lib/types";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { ArrayHelpers, FieldArray, Form, Formik, FormikProps } from "formik";
 
 import {
   BooleanFormField,
   Label,
-  SelectorFormField,
   TextFormField,
 } from "@/components/admin/connectors/Field";
 
@@ -46,10 +43,10 @@ import {
   Persona,
   PersonaLabel,
   StarterMessage,
-  StarterMessageBase,
 } from "./interfaces";
 import {
   createPersonaLabel,
+  PersonaUpsertParameters,
   createPersona,
   deletePersonaLabel,
   updatePersonaLabel,
@@ -67,30 +64,19 @@ import { useAssistants } from "@/components/context/AssistantsContext";
 import { debounce } from "lodash";
 import { FullLLMProvider } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
-import { LabelCard } from "./LabelCard";
 import { Switch } from "@/components/ui/switch";
 import { generateIdenticon } from "@/components/assistants/AssistantIcon";
 import { BackButton } from "@/components/BackButton";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import { AssistantVisibilityPopover } from "@/app/assistants/mine/AssistantVisibilityPopover";
 import { MinimalUserSnapshot } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
-import { useUsers } from "@/lib/hooks";
-import { AllUsersResponse } from "@/lib/types";
-// import { Badge } from "@/components/ui/Badge";
-// import {
-//   addUsersToAssistantSharedList,
-//   shareAssistantWithGroups,
-// } from "@/lib/assistants/shareAssistant";
 import {
   SearchMultiSelectDropdown,
   Option as DropdownOption,
 } from "@/components/Dropdown";
-import { Badge } from "@/components/ui/badge";
 import { SourceChip } from "@/app/chat/input/ChatInputBar";
-import { GroupIcon, TagIcon, UserIcon } from "lucide-react";
+import { TagIcon, UserIcon } from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -268,7 +254,6 @@ export function AssistantEditor({
     labels: existingPersona?.labels ?? null,
 
     // EE Only
-    groups: existingPersona?.groups ?? [],
     label_ids: existingPersona?.labels?.map((label) => label.id) ?? [],
     selectedUsers:
       existingPersona?.users?.filter(
@@ -418,7 +403,6 @@ export function AssistantEditor({
             icon_shape: Yup.number(),
             uploaded_image: Yup.mixed().nullable(),
             // EE Only
-            groups: Yup.array().of(Yup.number()),
             label_ids: Yup.array().of(Yup.number()),
             selectedUsers: Yup.array().of(Yup.object()),
             selectedGroups: Yup.array().of(Yup.number()),
@@ -494,12 +478,13 @@ export function AssistantEditor({
             }));
 
           // don't set groups if marked as public
-          const groups = values.is_public ? [] : values.groups;
-
-          const submissionData = {
+          const groups = values.is_public ? [] : values.selectedGroups;
+          const submissionData: PersonaUpsertParameters = {
             ...values,
+            existing_prompt_id: existingPrompt?.id ?? null,
+            is_default_persona: admin!,
             starter_messages: starterMessages,
-            groups: values.is_public ? [] : values.selectedGroups,
+            groups: groups,
             users: values.is_public
               ? undefined
               : [
@@ -514,25 +499,14 @@ export function AssistantEditor({
             num_chunks: numChunks,
           };
 
-          let promptResponse;
           let personaResponse;
           if (isUpdate) {
-            [promptResponse, personaResponse] = await updatePersona({
-              id: existingPersona.id,
-              existingPromptId: existingPrompt?.id,
-              ...submissionData,
-            });
+            personaResponse = await updatePersona(existingPersona.id, submissionData);
           } else {
-            [promptResponse, personaResponse] = await createPersona({
-              ...submissionData,
-              is_default_persona: admin!,
-            });
+            personaResponse = await createPersona(submissionData);
           }
 
           let error = null;
-          if (!promptResponse.ok) {
-            error = await promptResponse.text();
-          }
 
           if (!personaResponse) {
             error = "Failed to create Assistant - no response received";

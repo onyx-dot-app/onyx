@@ -12,9 +12,9 @@ from onyx.db.models import DocumentSet as DocumentSetDBModel
 from onyx.db.models import Persona
 from onyx.db.models import Prompt as PromptDBModel
 from onyx.db.models import Tool as ToolDBModel
-from onyx.db.persona import get_prompt_by_name
 from onyx.db.persona import upsert_persona
-from onyx.db.persona import upsert_prompt
+from onyx.db.prompts import get_prompt_by_name
+from onyx.db.prompts import upsert_prompt
 
 
 def load_prompts_from_yaml(
@@ -26,6 +26,7 @@ def load_prompts_from_yaml(
     all_prompts = data.get("prompts", [])
     for prompt in all_prompts:
         upsert_prompt(
+            db_session=db_session,
             user=None,
             prompt_id=prompt.get("id"),
             name=prompt["name"],
@@ -36,9 +37,8 @@ def load_prompts_from_yaml(
             datetime_aware=prompt.get("datetime_aware", True),
             default_prompt=True,
             personas=None,
-            db_session=db_session,
-            commit=True,
         )
+        db_session.commit()
 
 
 def load_input_prompts_from_yaml(
