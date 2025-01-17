@@ -6,13 +6,14 @@ from pydantic import Field
 
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.models import Persona
-from onyx.db.models import PersonaCategory
+from onyx.db.models import PersonaLabel
 from onyx.db.models import StarterMessage
 from onyx.server.features.document_set.models import DocumentSet
 from onyx.server.features.prompt.models import PromptSnapshot
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
+
 
 logger = setup_logger()
 
@@ -23,6 +24,7 @@ class GenerateStarterMessageRequest(BaseModel):
     description: str
     instructions: str
     document_set_ids: list[int]
+    generation_count: int
 
 
 class CreatePersonaRequest(BaseModel):
@@ -50,7 +52,7 @@ class CreatePersonaRequest(BaseModel):
     is_default_persona: bool = False
     display_priority: int | None = None
     search_start_date: datetime | None = None
-    category_id: int | None = None
+    label_ids: list[int] | None = None
 
 
 class PersonaSnapshot(BaseModel):
@@ -78,7 +80,7 @@ class PersonaSnapshot(BaseModel):
     uploaded_image_id: str | None = None
     is_default_persona: bool
     search_start_date: datetime | None = None
-    category_id: int | None = None
+    labels: list["PersonaLabelSnapshot"]
 
     @classmethod
     def from_model(
@@ -126,7 +128,7 @@ class PersonaSnapshot(BaseModel):
             icon_shape=persona.icon_shape,
             uploaded_image_id=persona.uploaded_image_id,
             search_start_date=persona.search_start_date,
-            category_id=persona.category_id,
+            labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
         )
 
 
@@ -142,20 +144,29 @@ class ImageGenerationToolStatus(BaseModel):
     is_available: bool
 
 
-class PersonaCategoryCreate(BaseModel):
+class PersonaLabelCreate(BaseModel):
     name: str
-    description: str
 
 
-class PersonaCategoryResponse(BaseModel):
+class PersonaLabelResponse(BaseModel):
     id: int
     name: str
-    description: str | None
 
     @classmethod
-    def from_model(cls, category: PersonaCategory) -> "PersonaCategoryResponse":
-        return PersonaCategoryResponse(
+    def from_model(cls, category: PersonaLabel) -> "PersonaLabelResponse":
+        return PersonaLabelResponse(
             id=category.id,
             name=category.name,
-            description=category.description,
+        )
+
+
+class PersonaLabelSnapshot(BaseModel):
+    id: int
+    name: str
+
+    @classmethod
+    def from_model(cls, label: PersonaLabel) -> "PersonaLabelSnapshot":
+        return PersonaLabelSnapshot(
+            id=label.id,
+            name=label.name,
         )

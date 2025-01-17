@@ -438,18 +438,18 @@ export function CompactDocumentCard({
       onClick={() => {
         openDocument(document, updatePresentingDocument);
       }}
-      className="max-w-[250px] cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0  flex-col  content-start items-start gap-0 "
+      className="max-w-[250px]  gap-y-0 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0  flex-col  content-start items-start gap-0 "
     >
-      <div className="text-sm font-semibold flex  items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
+      <div className="text-sm  !pb-0 !mb-0 font-semibold flex  items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
         {icon}
         {(document.semantic_identifier || document.document_id).slice(0, 40)}
         {(document.semantic_identifier || document.document_id).length > 40 &&
           "..."}
       </div>
       {document.blurb && (
-        <p className="text-xs mb-0 text-gray-600 line-clamp-2">
+        <div className="text-xs mb-0 text-gray-600 line-clamp-2">
           {document.blurb}
-        </p>
+        </div>
       )}
       {document.updated_at && (
         <div className=" flex mt-0 pt-0 items-center justify-between w-full ">

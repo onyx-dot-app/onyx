@@ -151,6 +151,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     # if specified, controls the assistants that are shown to the user + their order
     # if not specified, all assistants are shown
     auto_scroll: Mapped[bool] = mapped_column(Boolean, default=True)
+    shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
     )
@@ -162,6 +163,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
     recent_assistants: Mapped[list[dict]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=list, server_default="[]"
+    )
+    pinned_assistants: Mapped[list[int] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True, default=None
     )
 
     oidc_expiry: Mapped[datetime.datetime] = mapped_column(
@@ -184,7 +188,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
 
     prompts: Mapped[list["Prompt"]] = relationship("Prompt", back_populates="user")
-
+    input_prompts: Mapped[list["InputPrompt"]] = relationship(
+        "InputPrompt", back_populates="user"
+    )
     # Personas owned by this user
     personas: Mapped[list["Persona"]] = relationship("Persona", back_populates="user")
     # Custom tools created by this user
@@ -1429,8 +1435,17 @@ class StarterMessage(TypedDict):
 
 
 class StarterMessageModel(BaseModel):
-    name: str
     message: str
+    name: str
+
+
+class Persona__PersonaLabel(Base):
+    __tablename__ = "persona__persona_label"
+
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
+    persona_label_id: Mapped[int] = mapped_column(
+        ForeignKey("persona_label.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class Persona(Base):
@@ -1455,9 +1470,7 @@ class Persona(Base):
     recency_bias: Mapped[RecencyBiasSetting] = mapped_column(
         Enum(RecencyBiasSetting, native_enum=False)
     )
-    category_id: Mapped[int | None] = mapped_column(
-        ForeignKey("persona_category.id"), nullable=True
-    )
+
     # Allows the Persona to specify a different LLM version than is controlled
     # globablly via env variables. For flexibility, validity is not currently enforced
     # NOTE: only is applied on the actual response generation - is not used for things like
@@ -1529,10 +1542,11 @@ class Persona(Base):
         secondary="persona__user_group",
         viewonly=True,
     )
-    category: Mapped["PersonaCategory"] = relationship(
-        "PersonaCategory", back_populates="personas"
+    labels: Mapped[list["PersonaLabel"]] = relationship(
+        "PersonaLabel",
+        secondary=Persona__PersonaLabel.__table__,
+        back_populates="personas",
     )
-
     # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
         Index(
@@ -1544,14 +1558,17 @@ class Persona(Base):
     )
 
 
-class PersonaCategory(Base):
-    __tablename__ = "persona_category"
+class PersonaLabel(Base):
+    __tablename__ = "persona_label"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
-    description: Mapped[str | None] = mapped_column(String, nullable=True)
     personas: Mapped[list["Persona"]] = relationship(
-        "Persona", back_populates="category"
+        "Persona",
+        secondary=Persona__PersonaLabel.__table__,
+        back_populates="labels",
+        cascade="all, delete-orphan",
+        single_parent=True,
     )
 
 
@@ -1972,6 +1989,32 @@ class UsageReport(Base):
 
     requestor = relationship("User")
     file = relationship("PGFileStore")
+
+
+class InputPrompt(Base):
+    __tablename__ = "inputprompt"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    prompt: Mapped[str] = mapped_column(String)
+    content: Mapped[str] = mapped_column(String)
+    active: Mapped[bool] = mapped_column(Boolean)
+    user: Mapped[User | None] = relationship("User", back_populates="input_prompts")
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
+
+
+class InputPrompt__User(Base):
+    __tablename__ = "inputprompt__user"
+
+    input_prompt_id: Mapped[int] = mapped_column(
+        ForeignKey("inputprompt.id"), primary_key=True
+    )
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("inputprompt.id"), primary_key=True
+    )
+    disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 """

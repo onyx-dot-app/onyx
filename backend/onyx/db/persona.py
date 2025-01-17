@@ -28,7 +28,7 @@ from onyx.db.models import DocumentSet
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
-from onyx.db.models import PersonaCategory
+from onyx.db.models import PersonaLabel
 from onyx.db.models import Prompt
 from onyx.db.models import StarterMessage
 from onyx.db.models import Tool
@@ -460,7 +460,7 @@ def upsert_persona(
     search_start_date: datetime | None = None,
     builtin_persona: bool = False,
     is_default_persona: bool = False,
-    category_id: int | None = None,
+    label_ids: list[int] | None = None,
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
 ) -> Persona:
@@ -506,6 +506,12 @@ def upsert_persona(
             f"specified. Specified IDs were: '{prompt_ids}'"
         )
 
+    labels = None
+    if label_ids is not None:
+        labels = (
+            db_session.query(PersonaLabel).filter(PersonaLabel.id.in_(label_ids)).all()
+        )
+
     # ensure all specified tools are valid
     if tools:
         validate_persona_tools(tools)
@@ -547,7 +553,7 @@ def upsert_persona(
             existing_persona.uploaded_image_id = uploaded_image_id
         existing_persona.is_visible = is_visible
         existing_persona.search_start_date = search_start_date
-        existing_persona.category_id = category_id
+        existing_persona.labels = labels or []
         # Do not delete any associations manually added unless
         # a new updated list is provided
         if document_sets is not None:
@@ -600,7 +606,7 @@ def upsert_persona(
             is_visible=is_visible,
             search_start_date=search_start_date,
             is_default_persona=is_default_persona,
-            category_id=category_id,
+            labels=labels or [],
         )
         db_session.add(new_persona)
         persona = new_persona
@@ -821,37 +827,31 @@ def delete_persona_by_name(
     db_session.commit()
 
 
-def get_assistant_categories(db_session: Session) -> list[PersonaCategory]:
-    return db_session.query(PersonaCategory).all()
+def get_assistant_labels(db_session: Session) -> list[PersonaLabel]:
+    return db_session.query(PersonaLabel).all()
 
 
-def create_assistant_category(
-    db_session: Session, name: str, description: str
-) -> PersonaCategory:
-    category = PersonaCategory(name=name, description=description)
-    db_session.add(category)
+def create_assistant_label(db_session: Session, name: str) -> PersonaLabel:
+    label = PersonaLabel(name=name)
+    db_session.add(label)
     db_session.commit()
-    return category
+    return label
 
 
-def update_persona_category(
-    category_id: int,
-    category_description: str,
-    category_name: str,
+def update_persona_label(
+    label_id: int,
+    label_name: str,
     db_session: Session,
 ) -> None:
-    persona_category = (
-        db_session.query(PersonaCategory)
-        .filter(PersonaCategory.id == category_id)
-        .one_or_none()
+    persona_label = (
+        db_session.query(PersonaLabel).filter(PersonaLabel.id == label_id).one_or_none()
     )
-    if persona_category is None:
-        raise ValueError(f"Persona category with ID {category_id} does not exist")
-    persona_category.description = category_description
-    persona_category.name = category_name
+    if persona_label is None:
+        raise ValueError(f"Persona label with ID {label_id} does not exist")
+    persona_label.name = label_name
     db_session.commit()
 
 
-def delete_persona_category(category_id: int, db_session: Session) -> None:
-    db_session.query(PersonaCategory).filter(PersonaCategory.id == category_id).delete()
+def delete_persona_label(label_id: int, db_session: Session) -> None:
+    db_session.query(PersonaLabel).filter(PersonaLabel.id == label_id).delete()
     db_session.commit()

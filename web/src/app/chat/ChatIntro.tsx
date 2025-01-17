@@ -1,42 +1,22 @@
-import { Persona } from "../admin/assistants/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { useState } from "react";
-import { DisplayAssistantCard } from "@/components/assistants/AssistantDescriptionCard";
+import { Persona } from "../admin/assistants/interfaces";
+import { OnyxIcon } from "@/components/icons/icons";
 
 export function ChatIntro({ selectedPersona }: { selectedPersona: Persona }) {
-  const [hoveredAssistant, setHoveredAssistant] = useState(false);
-
   return (
     <div className="flex flex-col items-center gap-6">
-      <div className="relative flex w-fit mx-auto justify-center">
-        <div className="absolute z-10 -left-20 top-1/2 -translate-y-1/2">
-          <div className="relative">
-            <div
-              onMouseEnter={() => setHoveredAssistant(true)}
-              onMouseLeave={() => setHoveredAssistant(false)}
-              className="mobile:hidden p-4 scale-[.7] cursor-pointer border-dashed rounded-full flex border border-gray-300 border-2 border-dashed"
-            >
-              <AssistantIcon
-                disableToolip
-                size="large"
-                assistant={selectedPersona}
-              />
-            </div>
-            <div className="absolute right-full mr-1 mobile:mr-0 w-[300px] top-0">
-              {hoveredAssistant && (
-                <DisplayAssistantCard selectedPersona={selectedPersona} />
-              )}
-            </div>
-          </div>
+      <div className="relative flex flex-col gap-y-4 w-fit mx-auto justify-center">
+        <div className="absolute z-10 items-center flex -left-12 top-1/2 -translate-y-1/2">
+          <AssistantIcon size={36} assistant={selectedPersona} />
         </div>
 
-        <div className="text-2xl text-black font-semibold text-center">
+        <div className="text-4xl text-text font-normal text-center">
           {selectedPersona.name}
         </div>
       </div>
-      <p className="text-base text-black font-normal text-center">
+      <div className="self-stretch text-center text-text-darker text-xl font-[350] leading-normal">
         {selectedPersona.description}
-      </p>
+      </div>
     </div>
   );
 }

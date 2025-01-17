@@ -11,6 +11,8 @@ import {
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
 } from "@/lib/constants";
 import { AnnouncementBanner } from "../header/AnnouncementBanner";
+import { fetchChatData } from "@/lib/chat/fetchChatData";
+import { ChatProvider } from "../context/ChatContext";
 
 export async function Layout({ children }: { children: React.ReactNode }) {
   const tasks = [getAuthTypeMetadataSS(), getCurrentUserSS()];
@@ -42,14 +44,53 @@ export async function Layout({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const data = await fetchChatData({});
+  if ("redirect" in data) {
+    redirect(data.redirect);
+  }
+
+  const {
+    chatSessions,
+    availableSources,
+    documentSets,
+    tags,
+    llmProviders,
+    folders,
+    openedFolders,
+    toggleSidebar,
+    defaultAssistantId,
+    shouldShowWelcomeModal,
+    ccPairs,
+    inputPrompts,
+  } = data;
+
   return (
-    <ClientLayout
-      enableEnterprise={SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED}
-      enableCloud={NEXT_PUBLIC_CLOUD_ENABLED}
-      user={user}
+    <ChatProvider
+      value={{
+        inputPrompts,
+        chatSessions,
+        toggledSidebar: toggleSidebar,
+        availableSources,
+        ccPairs,
+        documentSets,
+        tags,
+        availableDocumentSets: documentSets,
+        availableTags: tags,
+        llmProviders,
+        folders,
+        openedFolders,
+        shouldShowWelcomeModal,
+        defaultAssistantId,
+      }}
     >
-      <AnnouncementBanner />
-      {children}
-    </ClientLayout>
+      <ClientLayout
+        enableEnterprise={SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED}
+        enableCloud={NEXT_PUBLIC_CLOUD_ENABLED}
+        user={user}
+      >
+        <AnnouncementBanner />
+        {children}
+      </ClientLayout>
+    </ChatProvider>
   );
 }

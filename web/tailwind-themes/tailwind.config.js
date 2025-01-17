@@ -49,7 +49,8 @@ module.exports = {
         desktop: "768px",
       },
       fontFamily: {
-        sans: ["var(--font-inter)"],
+        sans: ["Hanken Grotesk", "var(--font-inter)", "sans-serif"],
+        hanken: ["Hanken Grotesk", "sans-serif"],
       },
       width: {
         "message-xs": "450px",
@@ -82,8 +83,11 @@ module.exports = {
         "token-attr-name": "var(--token-attr-name)",
         "non-selectable": "var(--non-selectable)",
 
+        "gray-background": "#F4F2ED",
+
         // background
-        background: "var(--background)",
+        background: "#FEFCFA",
+        "background-dark": "#F1EEE8",
         "background-100": "var(--background-100)",
         "background-125": "var(--background-125)",
         "background-150": "var(--background-150)",
@@ -111,8 +115,8 @@ module.exports = {
         "user-bubble": "var(--user-bubble)",
 
         // colors for sidebar in chat, search, and manage settings
-        "background-sidebar": "var(--background-100)",
-        "background-chatbar": "var(--background-100)",
+
+        "background-chatbar": "#F5F3EE",
         "text-sidebar": "var(--text-500)",
 
         "toggled-background": "var(--background-400)",
@@ -137,17 +141,17 @@ module.exports = {
         "text-application-untoggled": "var(--text-500)",
         "text-application-untoggled-hover": "var(--text-700)",
 
-        "background-chat-hover": "var(--background-200)",
-        "background-chat-selected": "var(--background-200)",
+        "background-chat-hover": "#E6E3DD",
+        "background-chat-selected": "#E6E3DD",
 
         // Background for chat messages (user bubbles)
         user: "var(--user-bubble)",
 
-        "userdropdown-background": "var(--background-150)",
+        "userdropdown-background": "var(--background-800)",
         "text-mobile-sidebar-toggled": "var(--text-800)",
         "text-mobile-sidebar-untoggled": "var(--text-500)",
         "text-editing-message": "var(--text-800)",
-        "background-sidebar": "var(--background-100)",
+        "background-sidebar": "#F5F3EE",
         "background-search-filter": "var(--background-100)",
         "background-search-filter-dropdown": "var(--background-hover)",
 
@@ -158,7 +162,7 @@ module.exports = {
         "background-agentic-untoggled": "var(--undo)",
         "text-agentic-toggled": "var(--text-800)",
         "text-agentic-untoggled": "var(--white)",
-        "text-chatbar-subtle": "var(--text-500)",
+        "text-chatbar-subtle": "#9c9c96",
         "text-chatbar": "var(--text-800)",
 
         // Color for the star indicator on high quality search results.
@@ -169,6 +173,16 @@ module.exports = {
         "disabled-submit-background": "var(--background-400)",
 
         input: "var(--white)",
+
+        text: "#000000",
+        "text-darker": "#282828",
+        "text-dark": "#4A4A4A",
+        "text-muted": "#6C6C6B",
+        "text-gray": "#6c6c6c",
+
+        // background: "#F1EEE8",
+
+        "text-light": "#9c9c96",
 
         "text-50": "var(--text-50)",
         "text-100": "var(--text-100)",
@@ -240,10 +254,10 @@ module.exports = {
         accent: "var(--accent)",
 
         // hover
-        "hover-light": "var(--background-100)",
+        "hover-light": "#F1EEE8",
         "hover-lightish": "var(--background-125)",
 
-        hover: "var(--background-200)",
+        hover: "#E6E3DD",
         "hover-emphasis": "var(--background-300)",
         "accent-hover": "var(--accent-hover)",
 

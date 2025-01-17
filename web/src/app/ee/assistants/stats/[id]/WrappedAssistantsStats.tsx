@@ -10,7 +10,7 @@ export default function WrappedAssistantsStats({
   assistantId: number;
 }) {
   return (
-    <SidebarWrapper page="chat" initiallyToggled={initiallyToggled}>
+    <SidebarWrapper initiallyToggled={initiallyToggled}>
       <AssistantStats assistantId={assistantId} />
     </SidebarWrapper>
   );

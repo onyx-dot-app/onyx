@@ -19,11 +19,26 @@ export const useDropdownPosition = ({
       const rect = dropdownRef.current.getBoundingClientRect();
       const menuRect = dropdownMenuRef.current.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
 
       let top = rect.bottom + window.scrollY;
+      let left = rect.left + window.scrollX;
 
-      if (top + menuRect.height > viewportHeight) {
+      // Check if there's enough space below
+      if (rect.bottom + menuRect.height <= viewportHeight) {
+        // Position below the trigger
+        top = rect.bottom + window.scrollY;
+      } else if (rect.top - menuRect.height >= 0) {
+        // Position above the trigger if there's not enough space below
         top = rect.top + window.scrollY - menuRect.height;
+      } else {
+        // If there's not enough space above or below, position at the bottom of the viewport
+        top = viewportHeight + window.scrollY - menuRect.height;
+      }
+
+      // Ensure the dropdown doesn't go off the right edge of the screen
+      if (left + menuRect.width > viewportWidth) {
+        left = viewportWidth - menuRect.width + window.scrollX;
       }
 
       dropdownMenuRef.current.style.position = "absolute";

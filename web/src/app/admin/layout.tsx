@@ -1,4 +1,5 @@
 import { Layout } from "@/components/admin/Layout";
+import { fetchChatData } from "@/lib/chat/fetchChatData";
 
 export default async function AdminLayout({
   children,

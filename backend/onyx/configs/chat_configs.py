@@ -1,6 +1,6 @@
 import os
 
-
+INPUT_PROMPT_YAML = "./onyx/seeding/input_prompts.yaml"
 PROMPTS_YAML = "./onyx/seeding/prompts.yaml"
 PERSONAS_YAML = "./onyx/seeding/personas.yaml"
 
