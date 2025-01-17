@@ -83,7 +83,6 @@ export function PagesTab({
   showShareModal,
   showDeleteModal,
   showDeleteAllModal,
-  setNewFolderId,
 }: {
   existingChats?: ChatSession[];
   currentChatId?: string;
@@ -92,7 +91,6 @@ export function PagesTab({
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
   showDeleteAllModal?: () => void;
-  setNewFolderId: (folderId: number) => void;
 }) {
   const { setPopup, popup } = usePopup();
   const router = useRouter();
@@ -161,9 +159,8 @@ export function PagesTab({
       const newFolderName = newFolderInputRef.current?.value;
       if (newFolderName) {
         try {
-          const folderId = await createFolder(newFolderName);
+          await createFolder(newFolderName);
           await refreshFolders();
-          setNewFolderId(folderId);
           router.refresh();
           setPopup({
             message: "Folder created successfully",
@@ -181,7 +178,7 @@ export function PagesTab({
       }
       setIsCreatingFolder(false);
     },
-    [router, setNewFolderId, setPopup, refreshFolders]
+    [router, setPopup, refreshFolders]
   );
 
   const existingChatsNotinFolders = existingChats?.filter(

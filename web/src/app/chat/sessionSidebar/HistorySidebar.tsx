@@ -116,7 +116,9 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
         } relative flex items-center gap-x-2 py-1 px-2 rounded-md`}
       >
         <AssistantIcon assistant={assistant} size={16} className="flex-none" />
-        <p className="text-base text-black">{assistant.name}</p>
+        <p className="text-base text-left w-fit line-clamp-1 text-ellipsis text-black">
+          {assistant.name}
+        </p>
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -156,11 +158,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
     const { refreshUser, user, toggleAssistantPinnedStatus } = useUser();
     const { refreshAssistants, pinnedAssistants, setPinnedAssistants } =
       useAssistants();
-
-    const { popup, setPopup } = usePopup();
-
-    // For determining intial focus state
-    const [newFolderId, setNewFolderId] = useState<number | null>(null);
 
     const currentChatId = currentChatSession?.id;
 
@@ -218,7 +215,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
 
     return (
       <>
-        {popup}
         <div
           ref={ref}
           className={`
@@ -332,7 +328,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                           assistant.id,
                           false
                         );
-                        await refreshUser();
                         await refreshAssistants();
                       }}
                     />
@@ -351,7 +346,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
           </div>
 
           <PagesTab
-            setNewFolderId={setNewFolderId}
             showDeleteModal={showDeleteModal}
             showShareModal={showShareModal}
             closeSidebar={removeToggle}
