@@ -537,11 +537,6 @@ export const AIMessage = ({
                                 const selection = window.getSelection();
                                 const selectedPlainText =
                                   selection?.toString() || "";
-                                console.log("selection", selection);
-                                console.log(
-                                  "selectedPlainText",
-                                  selectedPlainText
-                                );
                                 if (!selectedPlainText) {
                                   // If no text is selected, copy the full content
                                   const contentStr =
@@ -550,7 +545,6 @@ export const AIMessage = ({
                                       : (
                                           content as JSX.Element
                                         ).props?.children?.toString() || "";
-                                  console.log("contentStr", contentStr);
                                   const clipboardItem = new ClipboardItem({
                                     "text/html": new Blob(
                                       [
@@ -576,15 +570,6 @@ export const AIMessage = ({
                                       ).props?.children?.toString() || "";
                                 const markdownText = getMarkdownForSelection(
                                   contentStr,
-                                  selectedPlainText
-                                );
-                                console.log("markdownText", markdownText);
-                                console.log(
-                                  "markdownToHtml(markdownText)",
-                                  markdownToHtml(markdownText)
-                                );
-                                console.log(
-                                  "selectedPlainText",
                                   selectedPlainText
                                 );
                                 const clipboardItem = new ClipboardItem({
