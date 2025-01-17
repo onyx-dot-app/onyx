@@ -1,0 +1,263 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "The template used to create an ECS Service from the ECS Console."
+
+Parameters:
+  SubnetIDs:
+      Type: CommaDelimitedList
+      Default: subnet-0af372d676f65b287,subnet-06721b79e2e51d22c
+  VpcID:
+      Type: String
+      Default: vpc-098cfa79d637dabff
+  AcmId:
+      Type: String
+      Default: 1eedaab4-16eb-4261-be6f-0a470746c3f9
+  HostedZoneId:
+      Type: String
+      Default: Z0514693S8C8QL9LABTK
+  DomainName:
+      Type: String
+      Default: demo.danswer.ai
+  TargetGroupPort:
+      Type: Number
+      Default: 80
+  HealthCheckPort:
+      Type: Number
+      Default: 80
+  ContainerName:
+     Type: String
+     Default: nginx
+  ContainerPort:
+     Type: Number
+     Default: 80
+  Environment:
+    Type: String
+  ServiceName:
+    Type: String
+    Default: onyx-nginx
+
+Resources:
+  ECSService:
+    Type: "AWS::ECS::Service"
+    DependsOn: LoadBalancer
+    Properties:
+      Cluster:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-ECSClusterName"
+      CapacityProviderStrategy:
+        - CapacityProvider: "FARGATE"
+          Base: 0
+          Weight: 1
+      TaskDefinition: !Ref TaskDefinition
+      ServiceName: !Sub ${Environment}-${ServiceName}
+      SchedulingStrategy: "REPLICA"
+      DesiredCount: 1
+      AvailabilityZoneRebalancing: "ENABLED"
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: "ENABLED"
+          SecurityGroups: 
+            - !Ref SecurityGroup
+          Subnets: !Ref SubnetIDs
+      PlatformVersion: "LATEST"
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      DeploymentController:
+        Type: "ECS"
+      ServiceConnectConfiguration:
+        Enabled: false
+      ServiceRegistries:
+        - RegistryArn: !GetAtt
+            - "ServiceDiscoveryService"
+            - "Arn"
+      Tags:
+        - Key: app
+          Value: onyx
+        - Key: service
+          Value: !Ref ServiceName
+        - Key: env
+          Value: !Ref Environment
+      EnableECSManagedTags: true
+      LoadBalancers:
+        - ContainerName: !Ref ContainerName
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref TargetGroup
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${Environment}-${ServiceName}-TaskDefinition
+      ContainerDefinitions:
+        - Name: nginx
+          Image: nginx:1.23.4-alpine
+          Cpu: 0
+          PortMappings:
+            - Name: nginx-80-tcp
+              ContainerPort: 80
+              HostPort: 80
+              Protocol: tcp
+          Essential: true
+          Command:
+            - /bin/sh
+            - -c
+            - dos2unix /etc/nginx/conf.d/run-nginx.sh && /etc/nginx/conf.d/run-nginx.sh app.conf.template
+          Environment:
+            - Name: EMAIL
+              Value: ""
+            - Name: DOMAIN
+              Value: !Ref DomainName
+          MountPoints:
+            - SourceVolume: efs-volume
+              ContainerPath: /etc/nginx/conf.d
+          VolumesFrom: []
+          DependsOn:
+            - ContainerName: s3-sync-container
+              Condition: SUCCESS
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/OnyxNginxTaskDefinition
+              mode: non-blocking
+              awslogs-create-group: "true"
+              max-buffer-size: 25m
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          SystemControls: []
+        - Name: s3-sync-container
+          Image: amazon/aws-cli:latest
+          Cpu: 128
+          MemoryReservation: 256
+          PortMappings: []
+          Essential: false
+          EntryPoint:
+            - ""
+          Command:
+            - sh
+            - -c
+            - !Sub aws s3 cp s3://${Environment}-onyx-ecs-fargate-configs/nginx/conf.d/ /etc/nginx/conf.d/ --recursive && exit 0 || exit 1
+          Environment:
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+          MountPoints:
+            - SourceVolume: efs-volume
+              ContainerPath: /etc/nginx/conf.d
+          VolumesFrom: []
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub /ecs/${Environment}-s3-sync-configs-TaskDefinition
+              mode: non-blocking
+              awslogs-create-group: "true"
+              max-buffer-size: 25m
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          SystemControls: []
+      TaskRoleArn:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-ECSTaskRole"
+      ExecutionRoleArn:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-ECSTaskExecutionRole" 
+      NetworkMode: awsvpc
+      Volumes:
+        - Name: efs-volume
+          EFSVolumeConfiguration:
+            FilesystemId:
+              Fn::ImportValue:
+                Fn::Sub: "${Environment}-onyx-efs-OnyxEfsId"
+            RootDirectory: /
+      PlacementConstraints: []
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: "512"
+      Memory: "1024"
+      EnableFaultInjection: false 
+
+  SecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub "Security group for ${ServiceName}"
+      GroupName: !Sub ${Environment}-ecs-${ServiceName}
+      VpcId: !Ref VpcID
+      SecurityGroupIngress:
+        - FromPort: 80
+          ToPort: 80
+          IpProtocol: "tcp"
+          CidrIp: "0.0.0.0/0"
+        - FromPort: 80
+          ToPort: 80
+          IpProtocol: "tcp"
+          CidrIpv6: "::/0"
+
+  ServiceDiscoveryService:
+    Type: "AWS::ServiceDiscovery::Service"
+    Properties:
+      Name: !Ref ServiceName
+      DnsConfig:
+        DnsRecords:
+          - Type: "A"
+            TTL: 15
+      NamespaceId:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespace"
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: SecurityGroup
+    Properties:
+      Type: application
+      Scheme: internet-facing
+      Subnets: !Ref SubnetIDs
+      SecurityGroups: 
+        - !Ref SecurityGroup
+
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Sub arn:aws:acm:${AWS::Region}:${AWS::AccountId}:certificate/${AcmId}
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: True
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPort: !Ref HealthCheckPort
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 20
+      HealthyThresholdCount: 3
+      Port: !Ref TargetGroupPort
+      Protocol: HTTP
+      ProtocolVersion: HTTP1
+      VpcId: !Ref VpcID
+      TargetType: ip
+
+  Route53Record:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.DNSName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        EvaluateTargetHealth: false
+
+Outputs:
+  ECSService:
+    Description: "The created service."
+    Value: !Ref "ECSService"
+  ServiceDiscoveryService:
+    Value: !Ref "ServiceDiscoveryService"
