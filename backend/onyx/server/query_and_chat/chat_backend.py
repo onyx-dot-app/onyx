@@ -479,7 +479,10 @@ def get_max_document_tokens(
         raise HTTPException(status_code=404, detail="Persona not found")
 
     return MaxSelectedDocumentTokens(
-        max_tokens=compute_max_document_tokens_for_persona(persona),
+        max_tokens=compute_max_document_tokens_for_persona(
+            db_session=db_session,
+            persona=persona,
+        ),
     )
 
 

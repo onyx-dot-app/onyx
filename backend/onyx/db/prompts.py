@@ -1,10 +1,7 @@
-from functools import lru_cache
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
-from onyx.db.engine import get_sqlalchemy_engine
 from onyx.db.models import Persona
 from onyx.db.models import Prompt
 from onyx.db.models import User
@@ -30,16 +27,6 @@ def _get_default_prompt(db_session: Session) -> Prompt:
 
 def get_default_prompt(db_session: Session) -> Prompt:
     return _get_default_prompt(db_session)
-
-
-@lru_cache()
-def get_default_prompt__read_only() -> Prompt:
-    """Due to the way lru_cache / SQLAlchemy works, this can cause issues
-    when trying to attach the returned `Prompt` object to a `Persona`. If you are
-    doing anything other than reading, you should use the `get_default_prompt`
-    method instead."""
-    with Session(get_sqlalchemy_engine()) as db_session:
-        return _get_default_prompt(db_session)
 
 
 def get_prompts_by_ids(prompt_ids: list[int], db_session: Session) -> list[Prompt]:
