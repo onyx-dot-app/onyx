@@ -981,7 +981,6 @@ export function AssistantEditor({
                                     subtext="Documents prior to this date will not be referenced by the search tool"
                                     optional
                                     label="Search Start Date"
-                                    value={values.search_start_date}
                                     name="search_start_date"
                                   />
 

@@ -15,8 +15,47 @@ import {
   handleOAuthPrepareFinalization,
 } from "@/lib/oauth_utils";
 import { SelectorFormField } from "@/components/admin/connectors/Field";
-import { Form, Formik } from "formik";
+import { ErrorMessage, Field, Form, Formik, useFormikContext } from "formik";
 import * as Yup from "yup";
+
+// Helper component to keep the effect logic clean:
+function UpdateCloudURLOnCloudIdChange({
+  accessibleResources,
+}: {
+  accessibleResources: ConfluenceAccessibleResource[];
+}) {
+  const { values, setValues, setFieldValue } = useFormikContext<{
+    cloud_id: string;
+    cloud_name: string;
+    cloud_url: string;
+  }>();
+
+  useEffect(() => {
+    // Whenever cloud_id changes, find the matching resource and update cloud_url
+    if (values.cloud_id) {
+      const selectedResource = accessibleResources.find(
+        (resource) => resource.id === values.cloud_id
+      );
+      if (selectedResource) {
+        // Update multiple fields together ... somehow setting them in sequence
+        // doesn't work with the validator
+        // it may also be possible to await each setFieldValue call.
+        // https://github.com/jaredpalmer/formik/issues/2266
+        setValues((prevValues) => ({
+          ...prevValues,
+          cloud_name: selectedResource.name,
+          cloud_url: selectedResource.url,
+        }));
+
+        // setFieldValue("cloud_url", selectedResource.url);
+        // setFieldValue("cloud_name", selectedResource.name);
+      }
+    }
+  }, [values.cloud_id, accessibleResources, setFieldValue]);
+
+  // This component doesn't render anything visible:
+  return null;
+}
 
 export default function OAuthFinalizePage() {
   const router = useRouter();
@@ -118,14 +157,22 @@ export default function OAuthFinalizePage() {
           <Formik
             initialValues={{
               credential_id: credential,
-              cloud_id: null,
+              cloud_id: "",
+              cloud_name: "",
+              cloud_url: "",
             }}
             validationSchema={Yup.object().shape({
               credential_id: Yup.number().required(
                 "Credential ID is required."
               ),
               cloud_id: Yup.string().required(
-                "You must select a Confluence site."
+                "You must select a Confluence site (id not found)."
+              ),
+              cloud_name: Yup.string().required(
+                "You must select a Confluence site (name not found)."
+              ),
+              cloud_url: Yup.string().required(
+                "You must select a Confluence site (url not found)."
               ),
             })}
             validateOnMount
@@ -136,9 +183,19 @@ export default function OAuthFinalizePage() {
                   throw new Error("Cloud ID is required.");
                 }
 
+                if (!values.cloud_name) {
+                  throw new Error("Cloud URL is required.");
+                }
+
+                if (!values.cloud_url) {
+                  throw new Error("Cloud URL is required.");
+                }
+
                 const response = await handleOAuthConfluenceFinalize(
                   values.credential_id,
-                  values.cloud_id
+                  values.cloud_id,
+                  values.cloud_name,
+                  values.cloud_url
                 );
                 formikHelpers.setSubmitting(false);
 
@@ -159,8 +216,36 @@ export default function OAuthFinalizePage() {
               }
             }}
           >
-            {({ isSubmitting, isValid, setFieldValue }) => (
+            {({ isSubmitting, isValid, setFieldValue, errors, values }) => (
               <Form>
+                {/* Debug info */}
+                <div className="mb-4 p-2 bg-gray-100 rounded text-xs">
+                  <pre>
+                    isValid: {String(isValid)}
+                    errors: {JSON.stringify(errors, null, 2)}
+                    values: {JSON.stringify(values, null, 2)}
+                  </pre>
+                </div>
+
+                {/* Our helper component that reacts to changes in cloud_id */}
+                <UpdateCloudURLOnCloudIdChange
+                  accessibleResources={accessibleResources}
+                />
+
+                <Field type="hidden" name="cloud_name" />
+                <ErrorMessage
+                  name="cloud_name"
+                  component="div"
+                  className="error"
+                />
+
+                <Field type="hidden" name="cloud_url" />
+                <ErrorMessage
+                  name="cloud_url"
+                  component="div"
+                  className="error"
+                />
+
                 {!redirectUrl && accessibleResources.length > 0 && (
                   <SelectorFormField
                     name="cloud_id"
@@ -168,8 +253,13 @@ export default function OAuthFinalizePage() {
                       name: `${resource.name} - ${resource.url}`,
                       value: resource.id,
                     }))}
-                    onSelect={(selected) => {
-                      setFieldValue("cloud_id", selected);
+                    onSelect={(selectedValue) => {
+                      const selectedResource = accessibleResources.find(
+                        (resource) => resource.id === selectedValue
+                      );
+                      if (selectedResource) {
+                        setFieldValue("cloud_id", selectedResource.id);
+                      }
                     }}
                   />
                 )}

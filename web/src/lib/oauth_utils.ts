@@ -232,11 +232,15 @@ export async function handleOAuthConfluencePrepareFinalization(
 
 export async function handleOAuthConfluenceFinalize(
   credential_id: number,
-  cloud_id: string
+  cloud_id: string,
+  cloud_name: string,
+  cloud_url: string
 ): Promise<OAuthConfluenceFinalizeResponse> {
   const url = `/api/oauth/connector/confluence/finalize?credential_id=${encodeURIComponent(
     credential_id
-  )}&cloud_id=${encodeURIComponent(cloud_id)}`;
+  )}&cloud_id=${encodeURIComponent(cloud_id)}&cloud_name=${encodeURIComponent(
+    cloud_name
+  )}&cloud_url=${encodeURIComponent(cloud_url)}`;
 
   const response = await fetch(url, {
     method: "POST",

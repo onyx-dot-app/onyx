@@ -314,12 +314,16 @@ def confluence_oauth_accessible_resources(
 def confluence_oauth_finalize(
     credential_id: int,
     cloud_id: str,
+    cloud_name: str,
+    cloud_url: str,
     user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
-    """Saves the selected cloud id to the credential. After this, the credential is
-    usable."""
+    """Saves the info for the selected cloud site to the credential.
+    This is the final step in the confluence oauth flow where after the traditional
+    OAuth process, the user has to select a site to associate with the credentials.
+    After this, the credential is usable."""
 
     credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
     if not credential:
@@ -330,6 +334,8 @@ def confluence_oauth_finalize(
 
     new_credential_json: dict[str, Any] = dict(credential.credential_json)
     new_credential_json["cloud_id"] = cloud_id
+    new_credential_json["cloud_name"] = cloud_name
+    new_credential_json["wiki_base"] = cloud_url
 
     try:
         update_credential_json(credential_id, new_credential_json, user, db_session)
