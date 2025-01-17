@@ -94,7 +94,7 @@ export function SimplifiedChatInputBar({
               rounded-lg
               relative
               text-text-chatbar
-              bg-background-chatbar
+              bg-white
               [&:has(textarea:focus)]::ring-1
               [&:has(textarea:focus)]::ring-black
             "
@@ -146,7 +146,7 @@ export function SimplifiedChatInputBar({
                 resize-none
                 rounded-lg
                 border-0
-                bg-background-chatbar
+                bg-white
                 placeholder:text-text-chatbar-subtle
                 ${
                   textAreaRef.current &&

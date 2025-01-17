@@ -206,12 +206,12 @@ const AssistantCard: React.FC<{
             )}
           </div>
 
-          <p className="text-black font-[350] mt-0 text-sm mb-1 line-clamp-2 h-[2.7em]">
+          <p className="text-black font-[350] mt-0 text-sm line-clamp-2 h-[2.7em]">
             {persona.description || "\u00A0"}
           </p>
 
           <div className="flex flex-col ">
-            <div className="my-1">
+            <div className="my-1.5">
               <span className="flex items-center text-black text-xs opacity-50">
                 {persona.owner?.email || persona.builtin_persona ? (
                   <>
