@@ -216,16 +216,16 @@ export default function OAuthFinalizePage() {
               }
             }}
           >
-            {({ isSubmitting, isValid, setFieldValue, errors, values }) => (
+            {({ isSubmitting, isValid, setFieldValue }) => (
               <Form>
-                {/* Debug info */}
+                {/* Debug info
                 <div className="mb-4 p-2 bg-gray-100 rounded text-xs">
                   <pre>
                     isValid: {String(isValid)}
                     errors: {JSON.stringify(errors, null, 2)}
                     values: {JSON.stringify(values, null, 2)}
                   </pre>
-                </div>
+                </div> */}
 
                 {/* Our helper component that reacts to changes in cloud_id */}
                 <UpdateCloudURLOnCloudIdChange
