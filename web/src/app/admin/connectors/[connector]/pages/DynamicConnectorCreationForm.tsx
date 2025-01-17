@@ -37,7 +37,8 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
 
   let initialConnectorName = "";
   if (config.initialConnectorName) {
-    initialConnectorName = currentCredential?.credential_json?.cloud_name ?? "";
+    initialConnectorName =
+      currentCredential?.credential_json?.[config.initialConnectorName] ?? "";
   }
 
   useEffect(() => {

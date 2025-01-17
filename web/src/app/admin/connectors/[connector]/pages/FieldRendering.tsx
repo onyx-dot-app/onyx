@@ -143,9 +143,10 @@ export const RenderField: FC<RenderFieldProps> = ({
       ? field.initial(currentCredential)
       : (field.initial ?? "");
 
+  // if initialValue exists, prepopulate the field with it
   useEffect(() => {
     const field_value = values[field.name];
-    if (field_value === undefined) {
+    if (initialValue && field_value === undefined) {
       setFieldValue(field.name, initialValue);
     }
   }, [field.name, initialValue, setFieldValue, values]);
