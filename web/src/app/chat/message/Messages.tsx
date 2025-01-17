@@ -42,7 +42,6 @@ import "prismjs/themes/prism-tomorrow.css";
 import "./custom-code-styles.css";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-
 import { LikeFeedback, DislikeFeedback } from "@/components/icons/icons";
 import {
   CustomTooltip,
