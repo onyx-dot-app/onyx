@@ -578,6 +578,15 @@ export const AIMessage = ({
                                   contentStr,
                                   selectedPlainText
                                 );
+                                console.log("markdownText", markdownText);
+                                console.log(
+                                  "markdownToHtml(markdownText)",
+                                  markdownToHtml(markdownText)
+                                );
+                                console.log(
+                                  "selectedPlainText",
+                                  selectedPlainText
+                                );
                                 const clipboardItem = new ClipboardItem({
                                   "text/html": new Blob(
                                     [markdownToHtml(markdownText)],
