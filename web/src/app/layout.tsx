@@ -22,10 +22,19 @@ import { Suspense } from "react";
 import PostHogPageView from "./PostHogPageView";
 import Script from "next/script";
 import { LogoType } from "@/components/logo/Logo";
+import { Hanken_Grotesk } from "next/font/google";
+import { fetchChatData } from "@/lib/chat/fetchChatData";
+import { redirect } from "next/navigation";
 
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+  display: "swap",
+});
+
+const hankenGrotesk = Hanken_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-hanken-grotesk",
   display: "swap",
 });
 
@@ -65,8 +74,8 @@ export default async function RootLayout({
   const productGating =
     combinedSettings?.settings.product_gating ?? GatingType.NONE;
 
-  const getPageContent = (content: React.ReactNode) => (
-    <html lang="en" className={`${inter.variable} font-sans`}>
+  const getPageContent = async (content: React.ReactNode) => (
+    <html lang="en" className={`${inter.variable} ${hankenGrotesk.variable}`}>
       <head>
         <meta
           name="viewport"
@@ -98,7 +107,7 @@ export default async function RootLayout({
           />
         )}
       </head>
-      <body className={`relative ${inter.variable} font-sans`}>
+      <body className={`relative ${inter.variable} font-hanken`}>
         <div
           className={`text-default min-h-screen bg-background ${
             process.env.THEME_IS_DARK?.toLowerCase() === "true" ? "dark" : ""

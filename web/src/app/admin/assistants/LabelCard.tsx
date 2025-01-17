@@ -9,31 +9,30 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { PersonaCategory } from "./interfaces";
+import { PersonaLabel } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 
-interface CategoryCardProps {
-  category: PersonaCategory;
-  onUpdate: (id: number, name: string, description: string) => void;
+interface LabelCardProps {
+  label: PersonaLabel;
+  onUpdate: (id: number, name: string) => void;
   onDelete: (id: number) => void;
-  refreshCategories: () => Promise<void>;
+  refreshLabels: () => Promise<void>;
   setPopup: (popup: PopupSpec) => void;
 }
 
-export function CategoryCard({
-  category,
+export function LabelCard({
+  label,
   onUpdate,
   onDelete,
-  refreshCategories,
-}: CategoryCardProps) {
+  refreshLabels,
+}: LabelCardProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(category.name);
-  const [description, setDescription] = useState(category.description);
+  const [name, setName] = useState(label.name);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onUpdate(category.id, name, description);
-    await refreshCategories();
+    await onUpdate(label.id, name);
+    await refreshLabels();
     setIsEditing(false);
   };
   const handleEdit = (e: React.MouseEvent) => {
@@ -42,7 +41,7 @@ export function CategoryCard({
   };
 
   return (
-    <Card key={category.id} className="w-full max-w-sm">
+    <Card key={label.id} className="w-full max-w-sm">
       <CardHeader className="w-full">
         <CardTitle className="text-2xl font-bold">
           {isEditing ? (
@@ -52,21 +51,10 @@ export function CategoryCard({
               className="text-lg font-semibold"
             />
           ) : (
-            <span>{category.name}</span>
+            <span>{label.name}</span>
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent className="w-full">
-        {isEditing ? (
-          <Textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="resize-none w-full"
-          />
-        ) : (
-          <p className="text-sm text-gray-600">{category.description}</p>
-        )}
-      </CardContent>
       <CardFooter className="flex justify-end space-x-2">
         {isEditing ? (
           <>
@@ -91,8 +79,8 @@ export function CategoryCard({
               variant="destructive"
               onClick={async (e) => {
                 e.preventDefault();
-                await onDelete(category.id);
-                await refreshCategories();
+                await onDelete(label.id);
+                await refreshLabels();
               }}
             >
               Delete

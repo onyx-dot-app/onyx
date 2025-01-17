@@ -26,7 +26,7 @@ export default function AuthFlowContainer({
         </div>
       )}
       {authState === "signup" && (
-        <div className="text-sm mt-4 text-center w-full text-neutral-900 font-medium mx-auto">
+        <div className="text-sm mt-4 text-center w-full text-neutral-800 font-medium mx-auto">
           Already have an account?{" "}
           <Link
             href="/auth/login"

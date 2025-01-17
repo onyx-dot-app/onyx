@@ -127,7 +127,7 @@ def handle_generate_answer_button(
                 channel_to_respond=channel_id,
                 msg_to_respond=cast(str, message_ts or thread_ts),
                 thread_to_respond=cast(str, thread_ts or message_ts),
-                sender=user_id or None,
+                sender_id=user_id or None,
                 email=email or None,
                 bypass_filters=True,
                 is_bot_msg=False,

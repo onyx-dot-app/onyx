@@ -11,7 +11,7 @@ import {
   User,
   ValidSources,
 } from "@/lib/types";
-import { ChatSession } from "@/app/chat/interfaces";
+import { ChatSession, InputPrompt } from "@/app/chat/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { FullEmbeddingModelResponse } from "@/components/embedding/interfaces";
 import { Settings } from "@/app/admin/settings/interfaces";
@@ -44,6 +44,7 @@ interface FetchChatDataResult {
   toggleSidebar: boolean;
   finalDocumentSidebarInitialWidth?: number;
   shouldShowWelcomeModal: boolean;
+  inputPrompts: InputPrompt[];
 }
 
 export async function fetchChatData(searchParams: {
@@ -59,6 +60,7 @@ export async function fetchChatData(searchParams: {
     fetchSS("/query/valid-tags"),
     fetchLLMProvidersSS(),
     fetchSS("/folder"),
+    fetchSS("/input_prompt?include_public=true"),
   ];
 
   let results: (
@@ -70,6 +72,7 @@ export async function fetchChatData(searchParams: {
     | LLMProviderDescriptor[]
     | [Persona[], string | null]
     | null
+    | InputPrompt[]
   )[] = [null, null, null, null, null, null, null, null, null];
   try {
     results = await Promise.all(tasks);
@@ -88,6 +91,13 @@ export async function fetchChatData(searchParams: {
   const llmProviders = (results[6] || []) as LLMProviderDescriptor[];
   const foldersResponse = results[7] as Response | null;
 
+  let inputPrompts: InputPrompt[] = [];
+  if (results[8] instanceof Response && results[8].ok) {
+    inputPrompts = await results[8].json();
+  } else {
+    console.log("Failed to fetch input prompts");
+  }
+
   const authDisabled = authTypeMetadata?.authType === "disabled";
 
   // TODO Validate need
@@ -102,7 +112,9 @@ export async function fetchChatData(searchParams: {
       : fullUrl;
 
     if (!NEXT_PUBLIC_ENABLE_CHROME_EXTENSION) {
-      return redirect(`/auth/login?next=${encodeURIComponent(redirectUrl)}`);
+      return {
+        redirect: `/auth/login?next=${encodeURIComponent(redirectUrl)}`,
+      };
     }
   }
 
@@ -207,5 +219,6 @@ export async function fetchChatData(searchParams: {
     finalDocumentSidebarInitialWidth,
     toggleSidebar,
     shouldShowWelcomeModal,
+    inputPrompts,
   };
 }

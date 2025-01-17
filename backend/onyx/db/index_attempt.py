@@ -182,13 +182,13 @@ def mark_attempt_in_progress(
 
 
 def mark_attempt_succeeded(
-    index_attempt: IndexAttempt,
+    index_attempt_id: int,
     db_session: Session,
 ) -> None:
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
-            .where(IndexAttempt.id == index_attempt.id)
+            .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
         ).scalar_one()
 
@@ -200,13 +200,13 @@ def mark_attempt_succeeded(
 
 
 def mark_attempt_partially_succeeded(
-    index_attempt: IndexAttempt,
+    index_attempt_id: int,
     db_session: Session,
 ) -> None:
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
-            .where(IndexAttempt.id == index_attempt.id)
+            .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
         ).scalar_one()
 
@@ -265,17 +265,26 @@ def mark_attempt_failed(
 
 def update_docs_indexed(
     db_session: Session,
-    index_attempt: IndexAttempt,
+    index_attempt_id: int,
     total_docs_indexed: int,
     new_docs_indexed: int,
     docs_removed_from_index: int,
 ) -> None:
-    index_attempt.total_docs_indexed = total_docs_indexed
-    index_attempt.new_docs_indexed = new_docs_indexed
-    index_attempt.docs_removed_from_index = docs_removed_from_index
+    try:
+        attempt = db_session.execute(
+            select(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+        ).scalar_one()
 
-    db_session.add(index_attempt)
-    db_session.commit()
+        attempt.total_docs_indexed = total_docs_indexed
+        attempt.new_docs_indexed = new_docs_indexed
+        attempt.docs_removed_from_index = docs_removed_from_index
+        db_session.commit()
+    except Exception:
+        db_session.rollback()
+        logger.exception("update_docs_indexed exceptioned.")
+        raise
 
 
 def get_last_attempt(

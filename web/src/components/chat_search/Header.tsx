@@ -17,21 +17,21 @@ export default function FunctionalHeader({
   currentChatSession,
   setSharingModalVisible,
   toggleSidebar = () => null,
+  documentSidebarToggled,
   reset = () => null,
   sidebarToggled,
-  documentSidebarToggled,
   toggleUserSettings,
   hideUserDropdown,
 }: {
   reset?: () => void;
   page: pageType;
   sidebarToggled?: boolean;
-  documentSidebarToggled?: boolean;
   currentChatSession?: ChatSession | null | undefined;
   setSharingModalVisible?: (value: SetStateAction<boolean>) => void;
   toggleSidebar?: () => void;
   toggleUserSettings?: () => void;
   hideUserDropdown?: boolean;
+  documentSidebarToggled?: boolean;
 }) {
   const settings = useContext(SettingsContext);
   useEffect(() => {
@@ -70,15 +70,15 @@ export default function FunctionalHeader({
   };
   return (
     <div className="left-0 sticky top-0 z-20 w-full relative flex">
-      <div className="items-end flex mt-2 cursor-pointer text-text-700 relative flex w-full">
+      <div className="items-end flex mt-2 text-text-700 relative flex w-full">
         <LogoWithText
           assistantId={currentChatSession?.persona_id}
           page={page}
           toggleSidebar={toggleSidebar}
-          toggled={sidebarToggled && !settings?.isMobile}
+          toggled={false}
           handleNewChat={handleNewChat}
         />
-        <div className="mt-2 flex w-full h-8">
+        <div className="mt-1 items-center flex w-full h-8">
           <div
             style={{ transition: "width 0.30s ease-out" }}
             className={`
@@ -93,10 +93,59 @@ export default function FunctionalHeader({
             ${sidebarToggled ? "w-[250px]" : "w-[0px]"}
             `}
           />
+          {page == "chat" && (
+            <div
+              className={`
+            absolute
+            ${
+              documentSidebarToggled &&
+              sidebarToggled &&
+              "left-[calc(50%-75px)]"
+            }
+            ${
+              documentSidebarToggled && !sidebarToggled
+                ? "left-[calc(50%-175px)]"
+                : !documentSidebarToggled && sidebarToggled
+                  ? "left-[calc(50%+100px)]"
+                  : "left-1/2"
+            }
+            ${
+              documentSidebarToggled || sidebarToggled
+                ? "mobile:w-[40vw] max-w-[40vw]"
+                : "mobile:w-[50vw] max-w-[60vw]"
+            }
+            ${
+              settings?.enterpriseSettings?.two_lines_for_chat_header
+                ? "top-0"
+                : "top-1"
+            }
+            h-8
+            -translate-x-1/2
+            transition-all duration-300
+          `}
+            >
+              <ChatBanner />
+            </div>
+          )}
 
-          <div className="w-full mobile:-mx-20 desktop:px-4">
+          {/* <div
+            className={`absolute 
+              ${
+                documentSidebarToggled && !sidebarToggled
+                  ? "left-[calc(50%-125px)]"
+                  : !documentSidebarToggled && sidebarToggled
+                    ? "left-[calc(50%+125px)]"
+                    : "left-1/2"
+              }
+              ${
+                documentSidebarToggled || sidebarToggled
+                  ? "mobile:w-[40vw] max-w-[50vw]"
+                  : "mobile:w-[50vw] max-w-[60vw]"
+              }
+              top-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300`}
+          >
             <ChatBanner />
-          </div>
+          </div> */}
 
           <div className="invisible">
             <LogoWithText
@@ -107,11 +156,13 @@ export default function FunctionalHeader({
             />
           </div>
 
-          <div className="absolute right-0 mobile:top-2 desktop:top-0 flex">
+          {/* className="fixed cursor-pointer flex z-40 left-4 bg-black top-3 h-8" */}
+
+          <div className="absolute right-2 mobile:top-1 desktop:top-1 h-8  flex">
             {setSharingModalVisible && !hideUserDropdown && (
               <div
                 onClick={() => setSharingModalVisible(true)}
-                className="mobile:hidden mr-2 my-auto rounded cursor-pointer hover:bg-hover-light"
+                className="mobile:hidden mr-2 my-auto rounded-full p-1 cursor-pointer hover:bg-hover-light"
               >
                 <FiShare2 size="18" />
               </div>
@@ -134,8 +185,8 @@ export default function FunctionalHeader({
                   : "")
               }
             >
-              <div className="cursor-pointer ml-2 mr-4 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
-                <NewChatIcon size={20} />
+              <div className=" cursor-pointer ml-2 mr-4 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
+                <NewChatIcon size={24} />
               </div>
             </Link>
             <div
@@ -143,6 +194,19 @@ export default function FunctionalHeader({
               className={`
             hidden
             md:flex 
+            mx-auto
+            overflow-y-hidden 
+            transition-all 
+            duration-300 
+            ease-in-out
+            h-full
+            `}
+            />
+            <div
+              style={{ transition: "width 0.30s ease-out" }}
+              className={`
+            mobile:hidden
+            flex-none 
             mx-auto
             overflow-y-hidden 
             transition-all 
@@ -160,11 +224,7 @@ export default function FunctionalHeader({
               h-20 absolute top-0 z-10 w-full sm:w-[90%] lg:w-[70%]
               bg-gradient-to-b via-50% z-[-1] from-background via-background to-background/10 flex
               transition-all duration-300 ease-in-out
-              ${
-                documentSidebarToggled
-                  ? "left-[200px] transform -translate-x-[calc(50%+100px)]"
-                  : "left-1/2 transform -translate-x-1/2"
-              }
+              left-1/2 transform -translate-x-1/2
             `}
             />
           )}

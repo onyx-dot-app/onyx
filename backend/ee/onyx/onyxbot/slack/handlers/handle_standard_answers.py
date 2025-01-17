@@ -150,9 +150,9 @@ def _handle_standard_answers(
             db_session=db_session,
             description="",
             user_id=None,
-            persona_id=slack_channel_config.persona.id
-            if slack_channel_config.persona
-            else 0,
+            persona_id=(
+                slack_channel_config.persona.id if slack_channel_config.persona else 0
+            ),
             onyxbot_flow=True,
             slack_thread_id=slack_thread_id,
         )
@@ -182,7 +182,7 @@ def _handle_standard_answers(
             formatted_answers.append(formatted_answer)
         answer_message = "\n\n".join(formatted_answers)
 
-        _ = create_new_chat_message(
+        chat_message = create_new_chat_message(
             chat_session_id=chat_session.id,
             parent_message=new_user_message,
             prompt_id=prompt.id if prompt else None,
@@ -191,8 +191,13 @@ def _handle_standard_answers(
             message_type=MessageType.ASSISTANT,
             error=None,
             db_session=db_session,
-            commit=True,
+            commit=False,
         )
+        # attach the standard answers to the chat message
+        chat_message.standard_answers = [
+            standard_answer for standard_answer, _ in matching_standard_answers
+        ]
+        db_session.commit()
 
         update_emote_react(
             emoji=DANSWER_REACT_EMOJI,

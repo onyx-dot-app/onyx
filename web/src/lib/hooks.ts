@@ -19,7 +19,7 @@ import { ChatSession } from "@/app/chat/interfaces";
 import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { PersonaCategory } from "@/app/admin/assistants/interfaces";
+import { PersonaLabel } from "@/app/admin/assistants/interfaces";
 import {
   LLMProvider,
   LLMProviderDescriptor,
@@ -122,16 +122,21 @@ export const useBasicConnectorStatus = () => {
   };
 };
 
-export const useCategories = () => {
+export const useLabels = () => {
   const { mutate } = useSWRConfig();
-  const swrResponse = useSWR<PersonaCategory[]>(
-    "/api/persona/categories",
+  const swrResponse = useSWR<PersonaLabel[]>(
+    "/api/persona/labels",
     errorHandlingFetcher
   );
 
+  const refreshLabels = async () => {
+    const updatedLabels = await mutate("/api/persona/labels");
+    return updatedLabels;
+  };
+
   return {
     ...swrResponse,
-    refreshCategories: () => mutate("/api/persona/categories"),
+    refreshLabels,
   };
 };
 
@@ -157,6 +162,7 @@ export interface FilterManager {
     availableDocumentSets: string[],
     availableTags: Tag[]
   ) => void;
+  clearFilters: () => void;
 }
 
 export function useFilters(): FilterManager {
@@ -198,6 +204,13 @@ export function useFilters(): FilterManager {
 
     const queryString = params.toString();
     return queryString ? `&${queryString}` : "";
+  };
+
+  const clearFilters = () => {
+    setTimeRange(null);
+    setSelectedSources([]);
+    setSelectedDocumentSets([]);
+    setSelectedTags([]);
   };
 
   function buildFiltersFromQueryString(
@@ -259,6 +272,7 @@ export function useFilters(): FilterManager {
   }
 
   return {
+    clearFilters,
     timeRange,
     setTimeRange,
     selectedSources,

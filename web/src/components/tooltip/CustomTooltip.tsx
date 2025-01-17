@@ -98,9 +98,12 @@ export const CustomTooltip = ({
   const updateTooltipPosition = () => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
+      const scrollX = window.scrollX || window.pageXOffset;
+      const scrollY = window.scrollY || window.pageYOffset;
+
       setTooltipPosition({
-        top: position === "top" ? rect.top - 10 : rect.bottom + 10,
-        left: rect.left + rect.width / 2,
+        top: (position === "top" ? rect.top - 10 : rect.bottom + 10) + scrollY,
+        left: rect.left + rect.width / 2 + scrollX,
       });
     }
   };

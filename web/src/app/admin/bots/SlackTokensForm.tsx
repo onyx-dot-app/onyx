@@ -64,7 +64,13 @@ export const SlackTokensForm = ({
           router.push(`/admin/bots/${encodeURIComponent(botId)}`);
         } else {
           const responseJson = await response.json();
-          const errorMsg = responseJson.detail || responseJson.message;
+          let errorMsg = responseJson.detail || responseJson.message;
+
+          if (errorMsg.includes("Invalid bot token:")) {
+            errorMsg = "Slack Bot Token is invalid";
+          } else if (errorMsg.includes("Invalid app token:")) {
+            errorMsg = "Slack App Token is invalid";
+          }
           setPopup({
             message: isUpdate
               ? `Error updating Slack Bot - ${errorMsg}`

@@ -151,7 +151,7 @@ export function SearchSummary({
 
   const editInput = handleSearchQueryEdit ? (
     <div className="mobile:hidden flex w-full mr-3">
-      <div className="my-2 w-full">
+      <div className="w-full">
         <input
           ref={editQueryRef}
           value={finalQuery}
@@ -171,10 +171,10 @@ export function SearchSummary({
               event.preventDefault();
             }
           }}
-          className="px-1 py-0.5 h-[28px] text-sm mr-2 w-full rounded-sm border border-border-strong"
+          className="px-1 py-0.5 h-[22px] text-sm mr-2 w-full rounded-sm border border-border-strong"
         />
       </div>
-      <div className="ml-2 my-auto flex">
+      <div className="ml-2 -my-1 my-auto flex">
         <Hoverable
           icon={FiCheck}
           onClick={() => {
@@ -225,7 +225,7 @@ export function SearchSummary({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="ml-2 mobile:hidden hover:bg-hover p-1 rounded flex-shrink-0"
+                    className="ml-2 -my-2 mobile:hidden hover:bg-hover p-1 rounded flex-shrink-0"
                     onClick={() => {
                       setIsEditing(true);
                     }}

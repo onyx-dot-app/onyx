@@ -41,6 +41,8 @@ import {
   FirefliesIcon,
   EgnyteIcon,
   AirtableIcon,
+  GlobeIcon2,
+  FileIcon2,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import {
@@ -63,13 +65,13 @@ type SourceMap = {
 
 export const SOURCE_METADATA_MAP: SourceMap = {
   web: {
-    icon: GlobeIcon,
+    icon: GlobeIcon2,
     displayName: "Web",
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/connectors/web",
   },
   file: {
-    icon: FileIcon,
+    icon: FileIcon2,
     displayName: "File",
     category: SourceCategory.Storage,
     docs: "https://docs.onyx.app/connectors/file",

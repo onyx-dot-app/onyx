@@ -540,9 +540,9 @@ def build_request_details(
         tagged = event.get("type") == "app_mention"
         message_ts = event.get("ts")
         thread_ts = event.get("thread_ts")
-        sender = event.get("user") or None
+        sender_id = event.get("user") or None
         expert_info = expert_info_from_slack_id(
-            sender, client.web_client, user_cache={}
+            sender_id, client.web_client, user_cache={}
         )
         email = expert_info.email if expert_info else None
 
@@ -566,8 +566,21 @@ def build_request_details(
                 channel=channel, thread=thread_ts, client=client.web_client
             )
         else:
+            sender_display_name = None
+            if expert_info:
+                sender_display_name = expert_info.display_name
+                if sender_display_name is None:
+                    sender_display_name = (
+                        f"{expert_info.first_name} {expert_info.last_name}"
+                        if expert_info.last_name
+                        else expert_info.first_name
+                    )
+                if sender_display_name is None:
+                    sender_display_name = expert_info.email
             thread_messages = [
-                ThreadMessage(message=msg, sender=None, role=MessageType.USER)
+                ThreadMessage(
+                    message=msg, sender=sender_display_name, role=MessageType.USER
+                )
             ]
 
         return SlackMessageInfo(
@@ -575,7 +588,7 @@ def build_request_details(
             channel_to_respond=channel,
             msg_to_respond=cast(str, message_ts or thread_ts),
             thread_to_respond=cast(str, thread_ts or message_ts),
-            sender=sender,
+            sender_id=sender_id,
             email=email,
             bypass_filters=tagged,
             is_bot_msg=False,
@@ -598,7 +611,7 @@ def build_request_details(
             channel_to_respond=channel,
             msg_to_respond=None,
             thread_to_respond=None,
-            sender=sender,
+            sender_id=sender,
             email=email,
             bypass_filters=True,
             is_bot_msg=True,
@@ -687,7 +700,7 @@ def process_message(
                 if feedback_reminder_id:
                     remove_scheduled_feedback_reminder(
                         client=client.web_client,
-                        channel=details.sender,
+                        channel=details.sender_id,
                         msg_id=feedback_reminder_id,
                     )
                 # Skipping answering due to pre-filtering is not considered a failure

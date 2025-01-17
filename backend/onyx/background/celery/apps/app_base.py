@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatter
 from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
 from onyx.background.celery.celery_utils import celery_is_worker_primary
+from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine import get_sqlalchemy_engine
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
@@ -98,6 +99,10 @@ def on_task_postrun(
         return
 
     if not task_id:
+        return
+
+    if task.name.startswith(ONYX_CLOUD_CELERY_TASK_PREFIX):
+        # this is a cloud / all tenant task ... no postrun is needed
         return
 
     # Get tenant_id directly from kwargs- each celery task has a tenant_id kwarg

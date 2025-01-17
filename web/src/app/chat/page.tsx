@@ -6,5 +6,5 @@ export default async function Page(props: {
   const searchParams = await props.searchParams;
   const firstMessage = searchParams.firstMessage;
 
-  return <WrappedChat firstMessage={firstMessage} initiallyToggled={false} />;
+  return <WrappedChat firstMessage={firstMessage} />;
 }

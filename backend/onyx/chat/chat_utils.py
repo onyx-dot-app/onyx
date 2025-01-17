@@ -25,7 +25,7 @@ from onyx.db.models import Persona
 from onyx.db.models import Prompt
 from onyx.db.models import Tool
 from onyx.db.models import User
-from onyx.db.persona import get_prompts_by_ids
+from onyx.db.prompts import get_prompts_by_ids
 from onyx.llm.models import PreviousMessage
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.server.query_and_chat.models import CreateChatMessageRequest

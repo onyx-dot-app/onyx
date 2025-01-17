@@ -8,12 +8,13 @@ import {
   User,
   ValidSources,
 } from "@/lib/types";
-import { ChatSession } from "@/app/chat/interfaces";
+import { ChatSession, InputPrompt } from "@/app/chat/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Folder } from "@/app/chat/folders/interfaces";
 
 interface ChatContextProps {
   chatSessions: ChatSession[];
+  toggledSidebar: boolean;
   availableSources: ValidSources[];
   ccPairs: CCPairBasicInfo[];
   tags: Tag[];
@@ -27,6 +28,10 @@ interface ChatContextProps {
   shouldDisplaySourcesIncompleteModal?: boolean;
   defaultAssistantId?: number;
   refreshChatSessions: () => Promise<void>;
+  reorderFolders: (displayPriorityMap: Record<number, number>) => void;
+  refreshFolders: () => Promise<void>;
+  refreshInputPrompts: () => Promise<void>;
+  inputPrompts: InputPrompt[];
 }
 
 const ChatContext = createContext<ChatContextProps | undefined>(undefined);
@@ -36,11 +41,28 @@ const ChatContext = createContext<ChatContextProps | undefined>(undefined);
 export const ChatProvider: React.FC<{
   value: Omit<
     ChatContextProps,
-    "refreshChatSessions" | "refreshAvailableAssistants"
+    | "refreshChatSessions"
+    | "refreshAvailableAssistants"
+    | "reorderFolders"
+    | "refreshFolders"
+    | "refreshInputPrompts"
   >;
   children: React.ReactNode;
 }> = ({ value, children }) => {
+  const [inputPrompts, setInputPrompts] = useState(value?.inputPrompts || []);
   const [chatSessions, setChatSessions] = useState(value?.chatSessions || []);
+  const [folders, setFolders] = useState(value?.folders || []);
+
+  const reorderFolders = (displayPriorityMap: Record<number, number>) => {
+    setFolders(
+      folders.map((folder) => {
+        if (folder.folder_id) {
+          folder.display_priority = displayPriorityMap[folder.folder_id];
+        }
+        return folder;
+      })
+    );
+  };
 
   const refreshChatSessions = async () => {
     try {
@@ -52,13 +74,30 @@ export const ChatProvider: React.FC<{
       console.error("Error refreshing chat sessions:", error);
     }
   };
+  const refreshFolders = async () => {
+    const response = await fetch("/api/folder");
+    if (!response.ok) throw new Error("Failed to fetch folders");
+    const { folders } = await response.json();
+    setFolders(folders);
+  };
+  const refreshInputPrompts = async () => {
+    const response = await fetch("/api/input_prompt");
+    if (!response.ok) throw new Error("Failed to fetch input prompts");
+    const inputPrompts = await response.json();
+    setInputPrompts(inputPrompts);
+  };
 
   return (
     <ChatContext.Provider
       value={{
         ...value,
+        inputPrompts,
+        refreshInputPrompts,
         chatSessions,
+        folders,
+        reorderFolders,
         refreshChatSessions,
+        refreshFolders,
       }}
     >
       {children}

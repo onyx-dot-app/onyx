@@ -90,6 +90,7 @@ def get_chunk_info(
         min_chunk_ind=chunk_id,
         max_chunk_ind=chunk_id,
     )
+
     inference_chunks = document_index.id_based_retrieval(
         chunk_requests=[chunk_request],
         filters=IndexFilters(access_control_list=user_acl_filters),

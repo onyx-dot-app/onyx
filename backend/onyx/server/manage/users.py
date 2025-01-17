@@ -625,6 +625,30 @@ def update_user_recent_assistants(
     db_session.commit()
 
 
+@router.patch("/shortcut-enabled")
+def update_user_shortcut_enabled(
+    shortcut_enabled: bool,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            no_auth_user.preferences.shortcut_enabled = shortcut_enabled
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    db_session.execute(
+        update(User)
+        .where(User.id == user.id)  # type: ignore
+        .values(shortcut_enabled=shortcut_enabled)
+    )
+    db_session.commit()
+
+
 @router.patch("/auto-scroll")
 def update_user_auto_scroll(
     request: AutoScrollRequest,
@@ -669,6 +693,37 @@ def update_user_default_model(
         update(User)
         .where(User.id == user.id)  # type: ignore
         .values(default_model=request.default_model)
+    )
+    db_session.commit()
+
+
+class ReorderPinnedAssistantsRequest(BaseModel):
+    ordered_assistant_ids: list[int]
+
+
+@router.patch("/user/pinned-assistants")
+def update_user_pinned_assistants(
+    request: ReorderPinnedAssistantsRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    ordered_assistant_ids = request.ordered_assistant_ids
+
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            no_auth_user.preferences.pinned_assistants = ordered_assistant_ids
+            print("ordered_assistant_ids", ordered_assistant_ids)
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    db_session.execute(
+        update(User)
+        .where(User.id == user.id)  # type: ignore
+        .values(pinned_assistants=ordered_assistant_ids)
     )
     db_session.commit()
 

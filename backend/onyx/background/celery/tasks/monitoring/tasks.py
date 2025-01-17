@@ -67,7 +67,7 @@ class Metric(BaseModel):
         }
         task_logger.info(json.dumps(data))
 
-    def emit(self) -> None:
+    def emit(self, tenant_id: str | None) -> None:
         # Convert value to appropriate type
         float_value = (
             float(self.value) if isinstance(self.value, (int, float)) else None
@@ -104,6 +104,7 @@ class Metric(BaseModel):
         optional_telemetry(
             record_type=RecordType.METRIC,
             data=data,
+            tenant_id=tenant_id,
         )
 
 
@@ -432,7 +433,7 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
                 metrics = metric_fn()
                 for metric in metrics:
                     metric.log()
-                    metric.emit()
+                    metric.emit(tenant_id)
                     if metric.key:
                         _mark_metric_as_emitted(redis_std, metric.key)
 

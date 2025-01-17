@@ -20,6 +20,8 @@ interface ModalProps {
   noPadding?: boolean;
   height?: string;
   noScroll?: boolean;
+  heightOverride?: string;
+  removeBottomPadding?: boolean;
 }
 
 export function Modal({
@@ -35,6 +37,8 @@ export function Modal({
   icon,
   hideCloseButton,
   noScroll,
+  heightOverride,
+  removeBottomPadding,
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -80,7 +84,8 @@ export function Modal({
           relative
           overflow-visible
           ${width ?? "w-11/12 max-w-4xl"}
-          ${noPadding ? "" : "p-10"}
+          ${noPadding ? "" : removeBottomPadding ? "pt-10 px-10" : "p-10"}
+
           ${className || ""}
         `}
       >
@@ -112,9 +117,10 @@ export function Modal({
             </>
           )}
           <div
+            style={{ height: heightOverride }}
             className={cn(
               noScroll ? "overflow-auto" : "overflow-x-visible",
-              height || "max-h-[60vh]"
+              !heightOverride && (height || "max-h-[60vh]")
             )}
           >
             {children}

@@ -14,7 +14,6 @@ from onyx.auth.users import current_chat_accesssible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
-from onyx.chat.prompt_builder.utils import build_dummy_prompt
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NotificationType
@@ -23,32 +22,34 @@ from onyx.db.engine import get_session
 from onyx.db.models import StarterMessageModel as StarterMessage
 from onyx.db.models import User
 from onyx.db.notification import create_notification
-from onyx.db.persona import create_assistant_category
+from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
-from onyx.db.persona import delete_persona_category
-from onyx.db.persona import get_assistant_categories
+from onyx.db.persona import delete_persona_label
+from onyx.db.persona import get_assistant_labels
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import get_personas_for_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
 from onyx.db.persona import update_all_personas_display_priority
-from onyx.db.persona import update_persona_category
+from onyx.db.persona import update_persona_label
 from onyx.db.persona import update_persona_public_status
 from onyx.db.persona import update_persona_shared_users
 from onyx.db.persona import update_persona_visibility
+from onyx.db.prompts import build_prompt_name_from_persona_name
+from onyx.db.prompts import upsert_prompt
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.secondary_llm_flows.starter_message_creation import (
     generate_starter_messages,
 )
-from onyx.server.features.persona.models import CreatePersonaRequest
 from onyx.server.features.persona.models import GenerateStarterMessageRequest
 from onyx.server.features.persona.models import ImageGenerationToolStatus
-from onyx.server.features.persona.models import PersonaCategoryCreate
-from onyx.server.features.persona.models import PersonaCategoryResponse
+from onyx.server.features.persona.models import PersonaLabelCreate
+from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.features.persona.models import PromptTemplateResponse
+from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.features.persona.models import PromptSnapshot
 from onyx.server.models import DisplayPriorityRequest
 from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
@@ -173,18 +174,37 @@ def upload_file(
 
 @basic_router.post("")
 def create_persona(
-    create_persona_request: CreatePersonaRequest,
+    persona_upsert_request: PersonaUpsertRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> PersonaSnapshot:
+    prompt_id = (
+        persona_upsert_request.prompt_ids[0]
+        if persona_upsert_request.prompt_ids
+        and len(persona_upsert_request.prompt_ids) > 0
+        else None
+    )
+    prompt = upsert_prompt(
+        db_session=db_session,
+        user=user,
+        name=build_prompt_name_from_persona_name(persona_upsert_request.name),
+        system_prompt=persona_upsert_request.system_prompt,
+        task_prompt=persona_upsert_request.task_prompt,
+        # TODO: The PersonaUpsertRequest should provide the value for datetime_aware
+        datetime_aware=False,
+        include_citations=persona_upsert_request.include_citations,
+        prompt_id=prompt_id,
+    )
+    prompt_snapshot = PromptSnapshot.from_model(prompt)
+    persona_upsert_request.prompt_ids = [prompt.id]
     persona_snapshot = create_update_persona(
         persona_id=None,
-        create_persona_request=create_persona_request,
+        create_persona_request=persona_upsert_request,
         user=user,
         db_session=db_session,
     )
-
+    persona_snapshot.prompts = [prompt_snapshot]
     create_milestone_and_report(
         user=user,
         distinct_id=tenant_id or "N/A",
@@ -202,69 +222,86 @@ def create_persona(
 @basic_router.patch("/{persona_id}")
 def update_persona(
     persona_id: int,
-    update_persona_request: CreatePersonaRequest,
+    persona_upsert_request: PersonaUpsertRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
-    return create_update_persona(
+    prompt_id = (
+        persona_upsert_request.prompt_ids[0]
+        if persona_upsert_request.prompt_ids
+        and len(persona_upsert_request.prompt_ids) > 0
+        else None
+    )
+    prompt = upsert_prompt(
+        db_session=db_session,
+        user=user,
+        name=build_prompt_name_from_persona_name(persona_upsert_request.name),
+        # TODO: The PersonaUpsertRequest should provide the value for datetime_aware
+        datetime_aware=False,
+        system_prompt=persona_upsert_request.system_prompt,
+        task_prompt=persona_upsert_request.task_prompt,
+        include_citations=persona_upsert_request.include_citations,
+        prompt_id=prompt_id,
+    )
+    prompt_snapshot = PromptSnapshot.from_model(prompt)
+    persona_upsert_request.prompt_ids = [prompt.id]
+    persona_snapshot = create_update_persona(
         persona_id=persona_id,
-        create_persona_request=update_persona_request,
+        create_persona_request=persona_upsert_request,
         user=user,
         db_session=db_session,
     )
+    persona_snapshot.prompts = [prompt_snapshot]
+    return persona_snapshot
 
 
-class PersonaCategoryPatchRequest(BaseModel):
-    category_description: str
-    category_name: str
+class PersonaLabelPatchRequest(BaseModel):
+    label_name: str
 
 
-@basic_router.get("/categories")
-def get_categories(
+@basic_router.get("/labels")
+def get_labels(
     db: Session = Depends(get_session),
     _: User | None = Depends(current_user),
-) -> list[PersonaCategoryResponse]:
+) -> list[PersonaLabelResponse]:
     return [
-        PersonaCategoryResponse.from_model(category)
-        for category in get_assistant_categories(db_session=db)
+        PersonaLabelResponse.from_model(label)
+        for label in get_assistant_labels(db_session=db)
     ]
 
 
-@admin_router.post("/categories")
-def create_category(
-    category: PersonaCategoryCreate,
+@basic_router.post("/labels")
+def create_label(
+    label: PersonaLabelCreate,
     db: Session = Depends(get_session),
-    _: User | None = Depends(current_admin_user),
-) -> PersonaCategoryResponse:
-    """Create a new assistant category"""
-    category_model = create_assistant_category(
-        name=category.name, description=category.description, db_session=db
-    )
-    return PersonaCategoryResponse.from_model(category_model)
+    _: User | None = Depends(current_user),
+) -> PersonaLabelResponse:
+    """Create a new assistant label"""
+    label_model = create_assistant_label(name=label.name, db_session=db)
+    return PersonaLabelResponse.from_model(label_model)
 
 
-@admin_router.patch("/category/{category_id}")
-def patch_persona_category(
-    category_id: int,
-    persona_category_patch_request: PersonaCategoryPatchRequest,
+@admin_router.patch("/label/{label_id}")
+def patch_persona_label(
+    label_id: int,
+    persona_label_patch_request: PersonaLabelPatchRequest,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_persona_category(
-        category_id=category_id,
-        category_description=persona_category_patch_request.category_description,
-        category_name=persona_category_patch_request.category_name,
+    update_persona_label(
+        label_id=label_id,
+        label_name=persona_label_patch_request.label_name,
         db_session=db_session,
     )
 
 
-@admin_router.delete("/category/{category_id}")
-def delete_category(
-    category_id: int,
+@admin_router.delete("/label/{label_id}")
+def delete_label(
+    label_id: int,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    delete_persona_category(category_id=category_id, db_session=db_session)
+    delete_persona_label(label_id=label_id, db_session=db_session)
 
 
 class PersonaShareRequest(BaseModel):
@@ -369,22 +406,6 @@ def get_persona(
     )
 
 
-@basic_router.get("/utils/prompt-explorer")
-def build_final_template_prompt(
-    system_prompt: str,
-    task_prompt: str,
-    retrieval_disabled: bool = False,
-    _: User | None = Depends(current_user),
-) -> PromptTemplateResponse:
-    return PromptTemplateResponse(
-        final_prompt_template=build_dummy_prompt(
-            system_prompt=system_prompt,
-            task_prompt=task_prompt,
-            retrieval_disabled=retrieval_disabled,
-        )
-    )
-
-
 @basic_router.post("/assistant-prompt-refresh")
 def build_assistant_prompts(
     generate_persona_prompt_request: GenerateStarterMessageRequest,
@@ -393,16 +414,19 @@ def build_assistant_prompts(
 ) -> list[StarterMessage]:
     try:
         logger.info(
-            "Generating starter messages for user: %s", user.id if user else "Anonymous"
+            f"Generating {generate_persona_prompt_request.generation_count} starter messages"
+            f" for user: {user.id if user else 'Anonymous'}",
         )
-        return generate_starter_messages(
+        starter_messages = generate_starter_messages(
             name=generate_persona_prompt_request.name,
             description=generate_persona_prompt_request.description,
             instructions=generate_persona_prompt_request.instructions,
             document_set_ids=generate_persona_prompt_request.document_set_ids,
+            generation_count=generate_persona_prompt_request.generation_count,
             db_session=db_session,
             user=user,
         )
+        return starter_messages
     except Exception as e:
         logger.exception("Failed to generate starter messages")
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import datetime
-from functools import lru_cache
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -8,7 +7,6 @@ from sqlalchemy import delete
 from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import not_
-from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
@@ -23,20 +21,19 @@ from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
-from onyx.db.engine import get_sqlalchemy_engine
 from onyx.db.models import DocumentSet
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
-from onyx.db.models import PersonaCategory
+from onyx.db.models import PersonaLabel
 from onyx.db.models import Prompt
 from onyx.db.models import StarterMessage
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
-from onyx.server.features.persona.models import CreatePersonaRequest
 from onyx.server.features.persona.models import PersonaSnapshot
+from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -105,9 +102,6 @@ def _add_user_filters(
     where_clause |= Persona.user_id == user.id
 
     return stmt.where(where_clause)
-
-
-# fetch_persona_by_id is used to fetch a persona by its ID. It is used to fetch a persona by its ID.
 
 
 def fetch_persona_by_id_for_user(
@@ -184,7 +178,7 @@ def make_persona_private(
 
 def create_update_persona(
     persona_id: int | None,
-    create_persona_request: CreatePersonaRequest,
+    create_persona_request: PersonaUpsertRequest,
     user: User | None,
     db_session: Session,
 ) -> PersonaSnapshot:
@@ -192,14 +186,36 @@ def create_update_persona(
     # Permission to actually use these is checked later
 
     try:
-        persona_data = {
-            "persona_id": persona_id,
-            "user": user,
-            "db_session": db_session,
-            **create_persona_request.model_dump(exclude={"users", "groups"}),
-        }
+        all_prompt_ids = create_persona_request.prompt_ids
 
-        persona = upsert_persona(**persona_data)
+        if not all_prompt_ids:
+            raise ValueError("No prompt IDs provided")
+
+        persona = upsert_persona(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            description=create_persona_request.description,
+            name=create_persona_request.name,
+            prompt_ids=all_prompt_ids,
+            document_set_ids=create_persona_request.document_set_ids,
+            tool_ids=create_persona_request.tool_ids,
+            is_public=create_persona_request.is_public,
+            recency_bias=create_persona_request.recency_bias,
+            llm_model_provider_override=create_persona_request.llm_model_provider_override,
+            llm_model_version_override=create_persona_request.llm_model_version_override,
+            starter_messages=create_persona_request.starter_messages,
+            icon_color=create_persona_request.icon_color,
+            icon_shape=create_persona_request.icon_shape,
+            uploaded_image_id=create_persona_request.uploaded_image_id,
+            display_priority=create_persona_request.display_priority,
+            remove_image=create_persona_request.remove_image,
+            search_start_date=create_persona_request.search_start_date,
+            label_ids=create_persona_request.label_ids,
+            num_chunks=create_persona_request.num_chunks,
+            llm_relevance_filter=create_persona_request.llm_relevance_filter,
+            llm_filter_extraction=create_persona_request.llm_filter_extraction,
+        )
 
         versioned_make_persona_private = fetch_versioned_implementation(
             "onyx.db.persona", "make_persona_private"
@@ -263,24 +279,6 @@ def update_persona_public_status(
 
     persona.is_public = is_public
     db_session.commit()
-
-
-def get_prompts(
-    user_id: UUID | None,
-    db_session: Session,
-    include_default: bool = True,
-    include_deleted: bool = False,
-) -> Sequence[Prompt]:
-    stmt = select(Prompt).where(
-        or_(Prompt.user_id == user_id, Prompt.user_id.is_(None))
-    )
-
-    if not include_default:
-        stmt = stmt.where(Prompt.default_prompt.is_(False))
-    if not include_deleted:
-        stmt = stmt.where(Prompt.deleted.is_(False))
-
-    return db_session.scalars(stmt).all()
 
 
 def get_personas_for_user(
@@ -374,65 +372,6 @@ def update_all_personas_display_priority(
     db_session.commit()
 
 
-def upsert_prompt(
-    user: User | None,
-    name: str,
-    description: str,
-    system_prompt: str,
-    task_prompt: str,
-    include_citations: bool,
-    datetime_aware: bool,
-    personas: list[Persona] | None,
-    db_session: Session,
-    prompt_id: int | None = None,
-    default_prompt: bool = True,
-    commit: bool = True,
-) -> Prompt:
-    if prompt_id is not None:
-        prompt = db_session.query(Prompt).filter_by(id=prompt_id).first()
-    else:
-        prompt = get_prompt_by_name(prompt_name=name, user=user, db_session=db_session)
-
-    if prompt:
-        if not default_prompt and prompt.default_prompt:
-            raise ValueError("Cannot update default prompt with non-default.")
-
-        prompt.name = name
-        prompt.description = description
-        prompt.system_prompt = system_prompt
-        prompt.task_prompt = task_prompt
-        prompt.include_citations = include_citations
-        prompt.datetime_aware = datetime_aware
-        prompt.default_prompt = default_prompt
-
-        if personas is not None:
-            prompt.personas.clear()
-            prompt.personas = personas
-
-    else:
-        prompt = Prompt(
-            id=prompt_id,
-            user_id=user.id if user else None,
-            name=name,
-            description=description,
-            system_prompt=system_prompt,
-            task_prompt=task_prompt,
-            include_citations=include_citations,
-            datetime_aware=datetime_aware,
-            default_prompt=default_prompt,
-            personas=personas or [],
-        )
-        db_session.add(prompt)
-
-    if commit:
-        db_session.commit()
-    else:
-        # Flush the session so that the Prompt has an ID
-        db_session.flush()
-
-    return prompt
-
-
 def upsert_persona(
     user: User | None,
     name: str,
@@ -460,7 +399,7 @@ def upsert_persona(
     search_start_date: datetime | None = None,
     builtin_persona: bool = False,
     is_default_persona: bool = False,
-    category_id: int | None = None,
+    label_ids: list[int] | None = None,
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
 ) -> Persona:
@@ -477,6 +416,15 @@ def upsert_persona(
             persona_name=name, user=user, db_session=db_session
         )
 
+    if existing_persona:
+        # this checks if the user has permission to edit the persona
+        # will raise an Exception if the user does not have permission
+        existing_persona = fetch_persona_by_id_for_user(
+            db_session=db_session,
+            persona_id=existing_persona.id,
+            user=user,
+            get_editable=True,
+        )
     # Fetch and attach tools by IDs
     tools = None
     if tool_ids is not None:
@@ -506,6 +454,12 @@ def upsert_persona(
             f"specified. Specified IDs were: '{prompt_ids}'"
         )
 
+    labels = None
+    if label_ids is not None:
+        labels = (
+            db_session.query(PersonaLabel).filter(PersonaLabel.id.in_(label_ids)).all()
+        )
+
     # ensure all specified tools are valid
     if tools:
         validate_persona_tools(tools)
@@ -515,15 +469,6 @@ def upsert_persona(
         # This ensures that core system personas are not modified unintentionally.
         if existing_persona.builtin_persona and not builtin_persona:
             raise ValueError("Cannot update builtin persona with non-builtin.")
-
-        # this checks if the user has permission to edit the persona
-        # will raise an Exception if the user does not have permission
-        existing_persona = fetch_persona_by_id_for_user(
-            db_session=db_session,
-            persona_id=existing_persona.id,
-            user=user,
-            get_editable=True,
-        )
 
         # The following update excludes `default`, `built-in`, and display priority.
         # Display priority is handled separately in the `display-priority` endpoint.
@@ -547,7 +492,7 @@ def upsert_persona(
             existing_persona.uploaded_image_id = uploaded_image_id
         existing_persona.is_visible = is_visible
         existing_persona.search_start_date = search_start_date
-        existing_persona.category_id = category_id
+        existing_persona.labels = labels or []
         # Do not delete any associations manually added unless
         # a new updated list is provided
         if document_sets is not None:
@@ -600,7 +545,7 @@ def upsert_persona(
             is_visible=is_visible,
             search_start_date=search_start_date,
             is_default_persona=is_default_persona,
-            category_id=category_id,
+            labels=labels or [],
         )
         db_session.add(new_persona)
         persona = new_persona
@@ -611,16 +556,6 @@ def upsert_persona(
         db_session.flush()
 
     return persona
-
-
-def mark_prompt_as_deleted(
-    prompt_id: int,
-    user: User | None,
-    db_session: Session,
-) -> None:
-    prompt = get_prompt_by_id(prompt_id=prompt_id, user=user, db_session=db_session)
-    prompt.deleted = True
-    db_session.commit()
 
 
 def delete_old_default_personas(
@@ -658,69 +593,6 @@ def validate_persona_tools(tools: list[Tool]) -> None:
             raise ValueError(
                 "Bing API key not found, please contact your Onyx admin to get it added!"
             )
-
-
-def get_prompts_by_ids(prompt_ids: list[int], db_session: Session) -> list[Prompt]:
-    """Unsafe, can fetch prompts from all users"""
-    if not prompt_ids:
-        return []
-    prompts = db_session.scalars(
-        select(Prompt).where(Prompt.id.in_(prompt_ids)).where(Prompt.deleted.is_(False))
-    ).all()
-
-    return list(prompts)
-
-
-def get_prompt_by_id(
-    prompt_id: int,
-    user: User | None,
-    db_session: Session,
-    include_deleted: bool = False,
-) -> Prompt:
-    stmt = select(Prompt).where(Prompt.id == prompt_id)
-
-    # if user is not specified OR they are an admin, they should
-    # have access to all prompts, so this where clause is not needed
-    if user and user.role != UserRole.ADMIN:
-        stmt = stmt.where(or_(Prompt.user_id == user.id, Prompt.user_id.is_(None)))
-
-    if not include_deleted:
-        stmt = stmt.where(Prompt.deleted.is_(False))
-
-    result = db_session.execute(stmt)
-    prompt = result.scalar_one_or_none()
-
-    if prompt is None:
-        raise ValueError(
-            f"Prompt with ID {prompt_id} does not exist or does not belong to user"
-        )
-
-    return prompt
-
-
-def _get_default_prompt(db_session: Session) -> Prompt:
-    stmt = select(Prompt).where(Prompt.id == 0)
-    result = db_session.execute(stmt)
-    prompt = result.scalar_one_or_none()
-
-    if prompt is None:
-        raise RuntimeError("Default Prompt not found")
-
-    return prompt
-
-
-def get_default_prompt(db_session: Session) -> Prompt:
-    return _get_default_prompt(db_session)
-
-
-@lru_cache()
-def get_default_prompt__read_only() -> Prompt:
-    """Due to the way lru_cache / SQLAlchemy works, this can cause issues
-    when trying to attach the returned `Prompt` object to a `Persona`. If you are
-    doing anything other than reading, you should use the `get_default_prompt`
-    method instead."""
-    with Session(get_sqlalchemy_engine()) as db_session:
-        return _get_default_prompt(db_session)
 
 
 # TODO: since this gets called with every chat message, could it be more efficient to pregenerate
@@ -794,22 +666,6 @@ def get_personas_by_ids(
     return personas
 
 
-def get_prompt_by_name(
-    prompt_name: str, user: User | None, db_session: Session
-) -> Prompt | None:
-    stmt = select(Prompt).where(Prompt.name == prompt_name)
-
-    # if user is not specified OR they are an admin, they should
-    # have access to all prompts, so this where clause is not needed
-    if user and user.role != UserRole.ADMIN:
-        stmt = stmt.where(Prompt.user_id == user.id)
-
-    # Order by ID to ensure consistent result when multiple prompts exist
-    stmt = stmt.order_by(Prompt.id).limit(1)
-    result = db_session.execute(stmt).scalar_one_or_none()
-    return result
-
-
 def delete_persona_by_name(
     persona_name: str, db_session: Session, is_default: bool = True
 ) -> None:
@@ -821,37 +677,31 @@ def delete_persona_by_name(
     db_session.commit()
 
 
-def get_assistant_categories(db_session: Session) -> list[PersonaCategory]:
-    return db_session.query(PersonaCategory).all()
+def get_assistant_labels(db_session: Session) -> list[PersonaLabel]:
+    return db_session.query(PersonaLabel).all()
 
 
-def create_assistant_category(
-    db_session: Session, name: str, description: str
-) -> PersonaCategory:
-    category = PersonaCategory(name=name, description=description)
-    db_session.add(category)
+def create_assistant_label(db_session: Session, name: str) -> PersonaLabel:
+    label = PersonaLabel(name=name)
+    db_session.add(label)
     db_session.commit()
-    return category
+    return label
 
 
-def update_persona_category(
-    category_id: int,
-    category_description: str,
-    category_name: str,
+def update_persona_label(
+    label_id: int,
+    label_name: str,
     db_session: Session,
 ) -> None:
-    persona_category = (
-        db_session.query(PersonaCategory)
-        .filter(PersonaCategory.id == category_id)
-        .one_or_none()
+    persona_label = (
+        db_session.query(PersonaLabel).filter(PersonaLabel.id == label_id).one_or_none()
     )
-    if persona_category is None:
-        raise ValueError(f"Persona category with ID {category_id} does not exist")
-    persona_category.description = category_description
-    persona_category.name = category_name
+    if persona_label is None:
+        raise ValueError(f"Persona label with ID {label_id} does not exist")
+    persona_label.name = label_name
     db_session.commit()
 
 
-def delete_persona_category(category_id: int, db_session: Session) -> None:
-    db_session.query(PersonaCategory).filter(PersonaCategory.id == category_id).delete()
+def delete_persona_label(label_id: int, db_session: Session) -> None:
+    db_session.query(PersonaLabel).filter(PersonaLabel.id == label_id).delete()
     db_session.commit()

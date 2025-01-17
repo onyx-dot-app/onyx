@@ -5,6 +5,9 @@ import { SettingsProvider } from "../settings/SettingsProvider";
 import { AssistantsProvider } from "./AssistantsContext";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { User } from "@/lib/types";
+import { fetchChatData } from "@/lib/chat/fetchChatData";
+import { ChatProvider } from "./ChatContext";
+import { redirect } from "next/navigation";
 
 interface AppProviderProps {
   children: React.ReactNode;

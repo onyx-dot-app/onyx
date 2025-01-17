@@ -9,7 +9,7 @@ from litellm import image_generation  # type: ignore
 from pydantic import BaseModel
 
 from onyx.chat.chat_utils import combine_message_chain
-from onyx.chat.prompt_builder.build import AnswerPromptBuilder
+from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.configs.tool_configs import IMAGE_GENERATION_OUTPUT_FORMAT
 from onyx.llm.interfaces import LLM
@@ -81,7 +81,7 @@ class ImageShape(str, Enum):
 class ImageGenerationTool(Tool):
     _NAME = "run_image_generation"
     _DESCRIPTION = "Generate an image from a prompt."
-    _DISPLAY_NAME = "Image Generation Tool"
+    _DISPLAY_NAME = "Image Generation"
 
     def __init__(
         self,

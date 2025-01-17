@@ -104,8 +104,8 @@ export default function LogoWithText({
                 }}
               >
                 <NewChatIcon
-                  className="ml-2 flex-none text-text-700 hover:text-text-600 transition-colors duration-300"
-                  size={20}
+                  className="ml-2 flex-none text-text-700 hover:text-text-600 "
+                  size={24}
                 />
               </Link>
             </TooltipTrigger>
@@ -119,7 +119,7 @@ export default function LogoWithText({
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                className="mr-3  my-auto ml-auto"
+                className="mr-2  my-auto ml-auto"
                 onClick={() => {
                   toggleSidebar();
                   if (toggled) {
