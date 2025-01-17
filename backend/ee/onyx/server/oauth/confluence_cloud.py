@@ -218,6 +218,7 @@ def confluence_oauth_callback(
             credential_json={
                 "confluence_access_token": token_response.access_token,
                 "confluence_refresh_token": token_response.refresh_token,
+                "created_at": now.isoformat(),
                 "expires_at": expires_at.isoformat(),
                 "expires_in": token_response.expires_in,
                 "scope": token_response.scope,
