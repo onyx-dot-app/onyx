@@ -308,6 +308,13 @@ class OnyxCeleryPriority(int, Enum):
     LOWEST = auto()
 
 
+# a prefix used to distinguish system wide tasks in the cloud
+ONYX_CLOUD_CELERY_TASK_PREFIX = "cloud"
+
+# the tenant id we use for system level redis operations
+ONYX_CLOUD_TENANT_ID = "cloud"
+
+
 class OnyxCeleryTask:
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
@@ -335,7 +342,7 @@ class OnyxCeleryTask:
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     AUTOGENERATE_USAGE_REPORT_TASK = "autogenerate_usage_report_task"
 
-    CLOUD_CHECK_FOR_INDEXING = "cloud_check_for_indexing"
+    CLOUD_CHECK_FOR_INDEXING = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_for_indexing"
 
 
 REDIS_SOCKET_KEEPALIVE_OPTIONS = {}

@@ -8,6 +8,7 @@ from celery.beat import PersistentScheduler  # type: ignore
 from celery.signals import beat_init
 
 import onyx.background.celery.apps.app_base as app_base
+from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import POSTGRES_CELERY_BEAT_APP_NAME
 from onyx.db.engine import get_all_tenant_ids
 from onyx.db.engine import SqlEngine
@@ -134,7 +135,7 @@ class DynamicTenantScheduler(PersistentScheduler):
         current_tenants = set()
         for task_name, _ in current_schedule:
             task_name = cast(str, task_name)
-            if task_name.startswith("cloud"):
+            if task_name.startswith(ONYX_CLOUD_CELERY_TASK_PREFIX):
                 continue
 
             if "_" in task_name:

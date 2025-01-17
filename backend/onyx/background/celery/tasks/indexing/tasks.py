@@ -26,6 +26,7 @@ from onyx.background.indexing.run_indexing import run_indexing_entrypoint
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
+from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
@@ -796,7 +797,7 @@ def cloud_check_for_indexing(self: Task) -> bool | None:
     """a lightweight task used to kick off individual check tasks for each tenant."""
     time_start = time.monotonic()
 
-    redis_client = get_redis_client(tenant_id="cloud")
+    redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
 
     lock_beat: RedisLock = redis_client.lock(
         OnyxRedisLocks.CLOUD_CHECK_INDEXING_BEAT_LOCK,
@@ -807,9 +808,16 @@ def cloud_check_for_indexing(self: Task) -> bool | None:
     if not lock_beat.acquire(blocking=False):
         return None
 
+    last_lock_time = time.monotonic()
+
     try:
         tenant_ids = get_all_tenant_ids()
         for tenant_id in tenant_ids:
+            current_time = time.monotonic()
+            if current_time - last_lock_time >= (CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4):
+                lock_beat.reacquire()
+                last_lock_time = current_time
+
             self.app.send_task(
                 OnyxCeleryTask.CHECK_FOR_INDEXING,
                 kwargs=dict(

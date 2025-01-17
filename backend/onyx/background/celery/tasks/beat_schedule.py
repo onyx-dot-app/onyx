@@ -2,6 +2,7 @@ from datetime import timedelta
 from typing import Any
 
 from onyx.configs.app_configs import LLM_MODEL_UPDATE_API_URL
+from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -16,11 +17,11 @@ from shared_configs.configs import MULTI_TENANT
 BEAT_EXPIRES_DEFAULT = 15 * 60  # 15 minutes (in seconds)
 
 # tasks that only run in the cloud
-# the name attribute must start with "cloud" to be filtered properly
+# the name attribute must start with ONYX_CELERY_CLOUD_PREFIX = "cloud" to be filtered
 # by the DynamicTenantScheduler
 cloud_tasks_to_schedule = [
     {
-        "name": "cloud_check-for-indexing",
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check-for-indexing",
         "task": OnyxCeleryTask.CLOUD_CHECK_FOR_INDEXING,
         "schedule": timedelta(seconds=15),
         "options": {
