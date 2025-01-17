@@ -191,6 +191,8 @@ def create_persona(
         name=build_prompt_name_from_persona_name(persona_upsert_request.name),
         system_prompt=persona_upsert_request.system_prompt,
         task_prompt=persona_upsert_request.task_prompt,
+        # TODO: The PersonaUpsertRequest should provide the value for datetime_aware
+        datetime_aware=False,
         include_citations=persona_upsert_request.include_citations,
         prompt_id=prompt_id,
     )
@@ -234,6 +236,8 @@ def update_persona(
         db_session=db_session,
         user=user,
         name=build_prompt_name_from_persona_name(persona_upsert_request.name),
+        # TODO: The PersonaUpsertRequest should provide the value for datetime_aware
+        datetime_aware=False,
         system_prompt=persona_upsert_request.system_prompt,
         task_prompt=persona_upsert_request.task_prompt,
         include_citations=persona_upsert_request.include_citations,
