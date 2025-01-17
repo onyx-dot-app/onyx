@@ -339,11 +339,14 @@ export function FilterPopup({
               </div>
             )}
             {selectedFilter === FilterCategories.tags && (
-              <TagFilter
-                tags={availableTags}
-                selectedTags={filterManager.selectedTags}
-                setSelectedTags={filterManager.setSelectedTags}
-              />
+              <>
+                <p className="text-sm font-semibold mb-2">Tags</p>
+                <TagFilter
+                  tags={availableTags}
+                  selectedTags={filterManager.selectedTags}
+                  setSelectedTags={filterManager.setSelectedTags}
+                />
+              </>
             )}
           </div>
         </div>

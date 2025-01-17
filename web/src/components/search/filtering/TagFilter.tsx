@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Tag } from "@/lib/types";
-import { FiTag, FiX } from "react-icons/fi";
+import { FiTag } from "react-icons/fi";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 
 export function TagFilter({
@@ -48,48 +47,37 @@ export function TagFilter({
         className="border border-border w-full"
       />
       <div className="space-y-2 max-h-48 overflow-y-auto">
-        {filteredTags.map((tag) => (
-          <div
-            key={`${tag.tag_key}-${tag.tag_value}`}
-            className="flex items-center space-x-2"
-          >
-            <Checkbox
-              id={`${tag.tag_key}-${tag.tag_value}`}
-              checked={selectedTags.some(
-                (t) =>
-                  t.tag_key === tag.tag_key && t.tag_value === tag.tag_value
-              )}
-              onCheckedChange={() => toggleTag(tag)}
-            />
-            <label
-              htmlFor={`${tag.tag_key}-${tag.tag_value}`}
-              className="text-sm cursor-pointer flex items-center"
+        {filteredTags
+          .sort((a, b) =>
+            selectedTags.some(
+              (t) => t.tag_key === a.tag_key && t.tag_value === a.tag_value
+            )
+              ? -1
+              : 1
+          )
+          .map((tag) => (
+            <div
+              key={`${tag.tag_key}-${tag.tag_value}`}
+              className="flex items-center space-x-2"
             >
-              <FiTag className="mr-1" />
-              {tag.tag_key}={tag.tag_value}
-            </label>
-          </div>
-        ))}
-      </div>
-      {selectedTags.length > 0 && (
-        <div>
-          <div className="text-sm font-medium mb-1">Selected Tags:</div>
-          <div className="flex flex-wrap gap-1">
-            {selectedTags.map((tag) => (
-              <Button
-                key={`${tag.tag_key}-${tag.tag_value}`}
-                variant="outline"
-                size="sm"
-                onClick={() => toggleTag(tag)}
-                className="text-xs py-0 h-6"
+              <Checkbox
+                id={`${tag.tag_key}-${tag.tag_value}`}
+                checked={selectedTags.some(
+                  (t) =>
+                    t.tag_key === tag.tag_key && t.tag_value === tag.tag_value
+                )}
+                onCheckedChange={() => toggleTag(tag)}
+              />
+              <label
+                htmlFor={`${tag.tag_key}-${tag.tag_value}`}
+                className="text-sm cursor-pointer flex items-center"
               >
+                <FiTag className="mr-1" />
                 {tag.tag_key}={tag.tag_value}
-                <FiX className="ml-1" />
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
+              </label>
+            </div>
+          ))}
+      </div>
     </div>
   );
 }

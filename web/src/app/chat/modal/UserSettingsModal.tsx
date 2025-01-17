@@ -183,7 +183,6 @@ export function UserSettingsModal({
               checked={user?.preferences?.shortcut_enabled}
               onCheckedChange={(checked) => {
                 updateUserShortcuts(checked);
-                refreshUser();
               }}
             />
             <Label className="text-sm">Enable Prompt Shortcuts</Label>

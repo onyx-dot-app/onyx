@@ -24,10 +24,7 @@ import { DragEndEvent } from "@dnd-kit/core";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { buildChatUrl } from "../lib";
-import {
-  toggleAssistantPinnedStatus,
-  reorderPinnedAssistants,
-} from "@/lib/assistants/updateAssistantPreferences";
+import { reorderPinnedAssistants } from "@/lib/assistants/updateAssistantPreferences";
 import { useUser } from "@/components/user/UserProvider";
 import { DragHandle } from "@/components/table/DragHandle";
 import {
@@ -156,7 +153,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
   ) => {
     const searchParams = useSearchParams();
     const router = useRouter();
-    const { refreshUser, user } = useUser();
+    const { refreshUser, user, toggleAssistantPinnedStatus } = useUser();
     const { refreshAssistants, pinnedAssistants, setPinnedAssistants } =
       useAssistants();
 

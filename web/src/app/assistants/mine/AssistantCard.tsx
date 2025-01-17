@@ -21,7 +21,6 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { useUser } from "@/components/user/UserProvider";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
-import { toggleAssistantPinnedStatus } from "@/lib/assistants/updateAssistantPreferences";
 import {
   Tooltip,
   TooltipContent,
@@ -56,7 +55,7 @@ const AssistantCard: React.FC<{
   pinned: boolean;
   closeModal: () => void;
 }> = ({ persona, pinned, closeModal }) => {
-  const { user, refreshUser } = useUser();
+  const { user, toggleAssistantPinnedStatus } = useUser();
   const router = useRouter();
   const { refreshAssistants } = useAssistants();
 
@@ -268,7 +267,6 @@ const AssistantCard: React.FC<{
                         persona.id,
                         !pinned
                       );
-                      await refreshUser();
                     }}
                     className="hover:bg-neutral-100 px-2 group cursor-pointer py-1 gap-x-1 relative rounded border border-black flex items-center w-[65px]"
                   >
