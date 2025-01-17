@@ -186,11 +186,11 @@ def create_update_persona(
     # Permission to actually use these is checked later
 
     try:
-        all_prompt_ids = create_persona_request.prompt_ids or []
-        if create_persona_request.existing_prompt_id:
-            all_prompt_ids.append(create_persona_request.existing_prompt_id)
+        all_prompt_ids = create_persona_request.prompt_ids
+
         if not all_prompt_ids:
             raise ValueError("No prompt IDs provided")
+
         persona = upsert_persona(
             persona_id=persona_id,
             user=user,

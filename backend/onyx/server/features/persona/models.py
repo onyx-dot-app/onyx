@@ -7,15 +7,43 @@ from pydantic import Field
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
+from onyx.db.models import Prompt
 from onyx.db.models import StarterMessage
 from onyx.server.features.document_set.models import DocumentSet
-from onyx.server.features.prompt.models import PromptSnapshot
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
+
+
+class PromptSnapshot(BaseModel):
+    id: int
+    name: str
+    description: str
+    system_prompt: str
+    task_prompt: str
+    include_citations: bool
+    datetime_aware: bool
+    default_prompt: bool
+    # Not including persona info, not needed
+
+    @classmethod
+    def from_model(cls, prompt: Prompt) -> "PromptSnapshot":
+        if prompt.deleted:
+            raise ValueError("Prompt has been deleted")
+
+        return PromptSnapshot(
+            id=prompt.id,
+            name=prompt.name,
+            description=prompt.description,
+            system_prompt=prompt.system_prompt,
+            task_prompt=prompt.task_prompt,
+            include_citations=prompt.include_citations,
+            datetime_aware=prompt.datetime_aware,
+            default_prompt=prompt.default_prompt,
+        )
 
 
 # More minimal request for generating a persona prompt
@@ -30,7 +58,6 @@ class GenerateStarterMessageRequest(BaseModel):
 class PersonaUpsertRequest(BaseModel):
     name: str
     description: str
-    existing_prompt_id: int | None = None
     system_prompt: str
     task_prompt: str
     document_set_ids: list[int]

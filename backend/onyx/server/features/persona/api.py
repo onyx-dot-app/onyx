@@ -49,7 +49,7 @@ from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.server.features.prompt.models import PromptSnapshot
+from onyx.server.features.persona.models import PromptSnapshot
 from onyx.server.models import DisplayPriorityRequest
 from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
@@ -179,6 +179,12 @@ def create_persona(
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> PersonaSnapshot:
+    prompt_id = (
+        persona_upsert_request.prompt_ids[0]
+        if persona_upsert_request.prompt_ids
+        and len(persona_upsert_request.prompt_ids) > 0
+        else None
+    )
     prompt = upsert_prompt(
         db_session=db_session,
         user=user,
@@ -186,10 +192,10 @@ def create_persona(
         system_prompt=persona_upsert_request.system_prompt,
         task_prompt=persona_upsert_request.task_prompt,
         include_citations=persona_upsert_request.include_citations,
-        prompt_id=persona_upsert_request.existing_prompt_id,
+        prompt_id=prompt_id,
     )
     prompt_snapshot = PromptSnapshot.from_model(prompt)
-    persona_upsert_request.existing_prompt_id = prompt.id
+    persona_upsert_request.prompt_ids = [prompt.id]
     persona_snapshot = create_update_persona(
         persona_id=None,
         create_persona_request=persona_upsert_request,
@@ -218,6 +224,12 @@ def update_persona(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
+    prompt_id = (
+        persona_upsert_request.prompt_ids[0]
+        if persona_upsert_request.prompt_ids
+        and len(persona_upsert_request.prompt_ids) > 0
+        else None
+    )
     prompt = upsert_prompt(
         db_session=db_session,
         user=user,
@@ -225,10 +237,10 @@ def update_persona(
         system_prompt=persona_upsert_request.system_prompt,
         task_prompt=persona_upsert_request.task_prompt,
         include_citations=persona_upsert_request.include_citations,
-        prompt_id=persona_upsert_request.existing_prompt_id,
+        prompt_id=prompt_id,
     )
     prompt_snapshot = PromptSnapshot.from_model(prompt)
-    persona_upsert_request.existing_prompt_id = prompt.id
+    persona_upsert_request.prompt_ids = [prompt.id]
     persona_snapshot = create_update_persona(
         persona_id=persona_id,
         create_persona_request=persona_upsert_request,

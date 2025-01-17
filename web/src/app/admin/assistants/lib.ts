@@ -4,7 +4,6 @@ import { Persona, StarterMessage } from "./interfaces";
 interface PersonaUpsertRequest {
   name: string;
   description: string;
-  existing_prompt_id: number | null;
   system_prompt: string;
   task_prompt: string;
   document_set_ids: number[];
@@ -105,6 +104,7 @@ function buildPersonaUpsertRequest(
     include_citations,
     is_public,
     groups,
+    existing_prompt_id,
     users,
     tool_ids,
     icon_color,
@@ -130,9 +130,8 @@ function buildPersonaUpsertRequest(
     remove_image,
     search_start_date,
     is_default_persona: creationRequest.is_default_persona ?? false,
-    existing_prompt_id: null,
     recency_bias: "base_decay",
-    prompt_ids: [],
+    prompt_ids: existing_prompt_id ? [existing_prompt_id] : [],
     llm_filter_extraction: false,
     llm_relevance_filter: creationRequest.llm_relevance_filter ?? null,
     llm_model_provider_override:
