@@ -568,7 +568,7 @@ export const AIMessage = ({
                                     [markdownToHtml(markdownText)],
                                     { type: "text/html" }
                                   ),
-                                  "text/plain": new Blob([markdownText], {
+                                  "text/plain": new Blob([selectedPlainText], {
                                     type: "text/plain",
                                   }),
                                 });
