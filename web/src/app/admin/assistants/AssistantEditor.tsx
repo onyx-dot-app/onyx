@@ -1339,7 +1339,6 @@ export function AssistantEditor({
                           small
                           subtext="Documents prior to this date will be ignored."
                           label="[Optional] Knowledge Cutoff Date"
-                          value={values.search_start_date}
                           name="search_start_date"
                         />
 
