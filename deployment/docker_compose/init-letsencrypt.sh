@@ -122,4 +122,4 @@ $COMPOSE_CMD -f docker-compose.prod.yml run --name onyx-stack --rm --entrypoint 
   done'" certbot
 
 echo "### Reloading nginx ..."
-$COMPOSE_CMD -f docker-compose.prod.yml -p onyx-stack up --force-recreate -d
+$COMPOSE_CMD -f docker-compose.prod.yml -p onyx-stack up --force-recreate -d --build
