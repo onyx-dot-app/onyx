@@ -151,8 +151,7 @@ export function TextFormField({
   vertical,
   className,
 }: {
-  // Escape hatch for setting the value of the field - conflicts with Formik
-  value?: string;
+  value?: string; // Escape hatch for setting the value of the field - conflicts with Formik
   name: string;
   removeLabel?: boolean;
   label: string;
