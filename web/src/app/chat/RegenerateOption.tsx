@@ -50,7 +50,7 @@ export function RegenerateDropdown({
         <div
           key={option.value}
           role="menuitem"
-          className={`flex items-center m-1.5 p-2.5 text-sm cursor-pointer focus-visible:outline-0 group relative hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md my-0 px-3 mx-2 gap-2.5 py-3 !pr-3 ${
+          className={`flex items-center m-1.5 p-1.5 text-sm cursor-pointer focus-visible:outline-0 group relative hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md my-0 px-3 mx-2 gap-2.5 py-3 !pr-3 ${
             option.value === selected ? "bg-gray-100 dark:bg-gray-700" : ""
           }`}
           onClick={() => onSelect(option.value)}
