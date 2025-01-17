@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   FiMoreHorizontal,
@@ -33,6 +33,8 @@ import {
   togglePersonaPublicStatus,
 } from "@/app/admin/assistants/lib";
 import { PencilIcon } from "lucide-react";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 export const AssistantBadge = ({
   text,
@@ -64,6 +66,8 @@ const AssistantCard: React.FC<{
   const [activePopover, setActivePopover] = useState<string | null | undefined>(
     undefined
   );
+
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
   const handleShare = () => setActivePopover("visibility");
   const handleDelete = () => setActivePopover("delete");
@@ -134,27 +138,29 @@ const AssistantCard: React.FC<{
                           <FiEdit size={12} className="inline mr-2" />
                           Edit
                         </button>
-                        <button
-                          onClick={
-                            isOwnedByUser
-                              ? () => {
-                                  router.push(
-                                    `/assistants/stats/${persona.id}`
-                                  );
-                                  closePopover();
-                                }
-                              : undefined
-                          }
-                          className={`w-full text-left items-center px-2 py-1 rounded ${
-                            isOwnedByUser
-                              ? "hover:bg-neutral-100"
-                              : "opacity-50 cursor-not-allowed"
-                          }`}
-                          disabled={!isOwnedByUser}
-                        >
-                          <FiBarChart size={12} className="inline mr-2" />
-                          Stats
-                        </button>
+                        {isPaidEnterpriseFeaturesEnabled && (
+                          <button
+                            onClick={
+                              isOwnedByUser
+                                ? () => {
+                                    router.push(
+                                      `/assistants/stats/${persona.id}`
+                                    );
+                                    closePopover();
+                                  }
+                                : undefined
+                            }
+                            className={`w-full text-left items-center px-2 py-1 rounded ${
+                              isOwnedByUser
+                                ? "hover:bg-neutral-100"
+                                : "opacity-50 cursor-not-allowed"
+                            }`}
+                            disabled={!isOwnedByUser}
+                          >
+                            <FiBarChart size={12} className="inline mr-2" />
+                            Stats
+                          </button>
+                        )}
                         <button
                           onClick={isOwnedByUser ? handleDelete : undefined}
                           className={`w-full text-left items-center px-2 py-1 rounded ${

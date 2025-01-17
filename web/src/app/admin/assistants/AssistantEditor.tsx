@@ -78,6 +78,8 @@ import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
+import { DeletePersonaButton } from "./[id]/DeletePersonaButton";
+import Title from "@/components/ui/title";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "SearchTool");
@@ -129,8 +131,8 @@ export function AssistantEditor({
   const router = useRouter();
 
   const { popup, setPopup } = usePopup();
-  const { data, refreshLabels } = useLabels();
-  const labels = data || [];
+  const { labels, refreshLabels, createLabel, updateLabel, deleteLabel } =
+    useLabels();
 
   const colorOptions = [
     "#FF6FBF",
@@ -145,8 +147,6 @@ export function AssistantEditor({
   const [showSearchTool, setShowSearchTool] = useState(false);
 
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  const [hasEditedStarterMessage, setHasEditedStarterMessage] = useState(false);
-  const [showPersonaLabel, setShowPersonaLabel] = useState(!admin);
 
   // state to persist across formik reformatting
   const [defautIconColor, _setDeafultIconColor] = useState(
@@ -331,6 +331,10 @@ export function AssistantEditor({
     }));
   };
 
+  if (!labels) {
+    return <></>;
+  }
+
   return (
     <div className="mx-auto max-w-4xl">
       <style>
@@ -352,7 +356,7 @@ export function AssistantEditor({
           entityName={labelToDelete.name}
           onClose={() => setLabelToDelete(null)}
           onSubmit={async () => {
-            const response = await deletePersonaLabel(labelToDelete.id);
+            const response = await deleteLabel(labelToDelete.id);
             if (response?.ok) {
               setPopup({
                 message: `Label deleted successfully`,
@@ -576,7 +580,7 @@ export function AssistantEditor({
           return (
             <Form className="w-full text-text-950 assistant-editor">
               {/* Refresh starter messages when name or description changes */}
-              <p className="text-base font-normal !text-2xl">
+              <p className="text-base font-normal text-2xl">
                 {existingPersona ? (
                   <>
                     Edit assistant <b>{existingPersona.name}</b>
@@ -759,7 +763,7 @@ export function AssistantEditor({
                 <div className="mt-3">
                   <SearchMultiSelectDropdown
                     onCreateLabel={async (name: string) => {
-                      await createPersonaLabel(name);
+                      await createLabel(name);
                       const currentLabels = await refreshLabels();
 
                       setTimeout(() => {
@@ -1140,106 +1144,6 @@ export function AssistantEditor({
                 />
               </div>
 
-              {admin && labels && labels.length > 0 && (
-                <div className=" max-w-4xl">
-                  <Separator />
-                  <div className="flex gap-x-2 items-center ">
-                    <div className="block font-medium text-sm">
-                      Manage Labels
-                    </div>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <FiInfo size={12} />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" align="center">
-                          Manage existing labels or create new ones to group
-                          similar assistants
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <SubLabel>Edit or delete existing labels</SubLabel>
-                  <div className="grid grid-cols-1 gap-4">
-                    {labels.map((label: PersonaLabel) => (
-                      <div
-                        key={label.id}
-                        className="grid grid-cols-[1fr,2fr,auto] gap-4 items-end"
-                      >
-                        <TextFormField
-                          fontSize="sm"
-                          name={`editLabelName_${label.id}`}
-                          label="Label Name"
-                          value={
-                            values.editLabelId === label.id
-                              ? values.editLabelName
-                              : label.name
-                          }
-                          onChange={(e) => {
-                            setFieldValue("editLabelId", label.id);
-                            setFieldValue("editLabelName", e.target.value);
-                          }}
-                        />
-                        <div className="flex gap-2">
-                          {values.editLabelId === label.id ? (
-                            <>
-                              <Button
-                                onClick={async () => {
-                                  const updatedName =
-                                    values.editLabelName || label.name;
-                                  const response = await updatePersonaLabel(
-                                    label.id,
-                                    updatedName
-                                  );
-                                  if (response?.ok) {
-                                    setPopup({
-                                      message: `Label "${updatedName}" updated successfully`,
-                                      type: "success",
-                                    });
-                                    await refreshLabels();
-                                    setFieldValue("editLabelId", null);
-                                    setFieldValue("editLabelName", "");
-                                    setFieldValue("editLabelDescription", "");
-                                  } else {
-                                    setPopup({
-                                      message: `Failed to update label - ${await response.text()}`,
-                                      type: "error",
-                                    });
-                                  }
-                                }}
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  setFieldValue("editLabelId", null);
-                                  setFieldValue("editLabelName", "");
-                                  setFieldValue("editLabelDescription", "");
-                                }}
-                              >
-                                Cancel
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button
-                                variant="destructive"
-                                onClick={async () => {
-                                  setLabelToDelete(label);
-                                }}
-                              >
-                                Delete
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <Separator />
               <AdvancedOptionsToggle
                 showAdvancedOptions={showAdvancedOptions}
@@ -1401,13 +1305,9 @@ export function AssistantEditor({
                             autoStarterMessageEnabled={
                               autoStarterMessageEnabled
                             }
-                            errors={errors}
                             isRefreshing={isRefreshing}
                             values={values.starter_messages}
                             arrayHelpers={arrayHelpers}
-                            touchStarterMessages={() => {
-                              setHasEditedStarterMessage(true);
-                            }}
                             setFieldValue={setFieldValue}
                           />
                         )}
@@ -1478,6 +1378,14 @@ export function AssistantEditor({
                     explanationLink="https://docs.onyx.app/guides/assistants"
                     className="[&_textarea]:placeholder:text-text-muted/50"
                   />
+                  <div className="flex justify-end">
+                    {existingPersona && (
+                      <DeletePersonaButton
+                        personaId={existingPersona!.id}
+                        redirectType={SuccessfulPersonaUpdateRedirectType.ADMIN}
+                      />
+                    )}
+                  </div>
                 </>
               )}
 

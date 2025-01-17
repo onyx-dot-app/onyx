@@ -29,12 +29,6 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
             defaultPublic={true}
             redirectType={SuccessfulPersonaUpdateRedirectType.ADMIN}
           />
-          <Title>Delete Assistant</Title>
-
-          <DeletePersonaButton
-            personaId={values.existingPersona!.id}
-            redirectType={SuccessfulPersonaUpdateRedirectType.ADMIN}
-          />
         </CardSection>
       </>
     );

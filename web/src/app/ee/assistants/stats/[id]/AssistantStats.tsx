@@ -1,10 +1,6 @@
 "use client";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
-import Text from "@/components/ui/text";
-import Title from "@/components/ui/title";
-import CardSection from "@/components/admin/CardSection";
-import { AreaChartDisplay } from "@/components/ui/areaChart";
 import { useEffect, useState, useMemo } from "react";
 import {
   DateRangeSelector,
@@ -12,7 +8,8 @@ import {
 } from "@/app/ee/admin/performance/DateRangeSelector";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { BackButton } from "@/components/BackButton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AreaChartDisplay } from "@/components/ui/areaChart";
 
 type AssistantDailyUsageEntry = {
   date: string;
@@ -120,7 +117,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
     );
   } else if (error) {
     content = (
-      <div className="h-80 text-red-600 text-bold flex flex-col">
+      <div className="h-80 text-red-600 font-bold flex flex-col">
         <p className="m-auto">{error}</p>
       </div>
     );
@@ -139,52 +136,60 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
         data={chartData}
         categories={["Messages", "Unique Users"]}
         index="Day"
-        colors={["indigo", "fuchsia"]}
+        colors={["#4A4A4A", "#A0A0A0"]}
         yAxisWidth={60}
       />
     );
   }
 
   return (
-    <>
-      <div className="flex justify-between items-start mb-6">
-        <div className="flex flex-col gap-2">
-          <Title>Assistant Analytics</Title>
-          <Text>
-            Messages and unique users per day for the assistant{" "}
-            <b>{assistant?.name}</b>
-          </Text>
-          <DateRangeSelector value={dateRange} onValueChange={setDateRange} />
+    <Card className="w-full">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <p className="text-base font-normal text-2xl">Assistant Analytics</p>
+        <DateRangeSelector value={dateRange} onValueChange={setDateRange} />
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center space-x-4">
+                {assistant && (
+                  <AssistantIcon
+                    disableToolip
+                    size="large"
+                    assistant={assistant}
+                  />
+                )}
+                <div>
+                  <h3 className="text-lg font-normal">{assistant?.name}</h3>
+                  <p className="text-sm text-gray-500">
+                    {assistant?.description}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-500">
+                    Total Messages
+                  </p>
+                  <p className="text-2xl font-normal">{totalMessages}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">
+                    Total Unique Users
+                  </p>
+                  <p className="text-2xl font-normal">{totalUniqueUsers}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        {assistant && (
-          <div className="bg-gray-100 p-4 w-full max-w-64 rounded-lg shadow-sm">
-            <div className="flex items-center mb-2">
-              <AssistantIcon
-                disableToolip
-                size="medium"
-                assistant={assistant}
-              />
-              <Title className="text-lg ml-3">{assistant?.name}</Title>
-            </div>
-            <Text className="text-gray-600 text-sm">
-              {assistant?.description}
-            </Text>
-          </div>
-        )}
-      </div>
-      <div className="flex flex-col gap-4">
-        <div className="flex justify-between">
-          <div>
-            <Text className="font-semibold">Total Messages</Text>
-            <Text>{totalMessages}</Text>
-          </div>
-          <div>
-            <Text className="font-semibold">Total Unique Users</Text>
-            <Text>{totalUniqueUsers}</Text>
-          </div>
-        </div>
-      </div>
-      {content}
-    </>
+        {content}
+      </CardContent>
+    </Card>
   );
 }

@@ -204,7 +204,6 @@ export function UserSettingsModal({
             Scroll to see all options
           </div>
           <LLMSelector
-            userDefault={user?.preferences?.default_model}
             userSettings
             llmProviders={llmProviders}
             currentLlm={
