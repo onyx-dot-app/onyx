@@ -9,8 +9,6 @@ import {
 } from "react-icons/fi";
 import { FeedbackType } from "../types";
 import React, {
-  memo,
-  ReactNode,
   useCallback,
   useContext,
   useEffect,
@@ -40,7 +38,6 @@ import { DocumentPreview } from "../files/documents/DocumentPreview";
 import { InMessageImage } from "../files/images/InMessageImage";
 import { CodeBlock } from "./CodeBlock";
 import rehypePrism from "rehype-prism-plus";
-
 import "prismjs/themes/prism-tomorrow.css";
 import "./custom-code-styles.css";
 import { Persona } from "@/app/admin/assistants/interfaces";
@@ -71,7 +68,6 @@ import CsvContent from "../../../components/tools/CSVContent";
 import SourceCard, {
   SeeMoreBlock,
 } from "@/components/chat_search/sources/SourceCard";
-
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
@@ -545,12 +541,22 @@ export const AIMessage = ({
 
                                 if (!selectedPlainText) {
                                   // If no text is selected, copy the full content
+                                  const contentStr =
+                                    typeof content === "string"
+                                      ? content
+                                      : (
+                                          content as JSX.Element
+                                        ).props?.children?.toString() || "";
                                   const clipboardItem = new ClipboardItem({
                                     "text/html": new Blob(
-                                      [markdownToHtml(content)],
+                                      [
+                                        typeof content === "string"
+                                          ? markdownToHtml(content)
+                                          : contentStr,
+                                      ],
                                       { type: "text/html" }
                                     ),
-                                    "text/plain": new Blob([content], {
+                                    "text/plain": new Blob([contentStr], {
                                       type: "text/plain",
                                     }),
                                   });
@@ -558,11 +564,16 @@ export const AIMessage = ({
                                   return;
                                 }
 
+                                const contentStr =
+                                  typeof content === "string"
+                                    ? content
+                                    : (
+                                        content as JSX.Element
+                                      ).props?.children?.toString() || "";
                                 const markdownText = getMarkdownForSelection(
-                                  content,
+                                  contentStr,
                                   selectedPlainText
                                 );
-
                                 const clipboardItem = new ClipboardItem({
                                   "text/html": new Blob(
                                     [markdownToHtml(markdownText)],
