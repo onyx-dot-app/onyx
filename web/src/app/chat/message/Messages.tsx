@@ -537,7 +537,11 @@ export const AIMessage = ({
                                 const selection = window.getSelection();
                                 const selectedPlainText =
                                   selection?.toString() || "";
-
+                                console.log("selection", selection);
+                                console.log(
+                                  "selectedPlainText",
+                                  selectedPlainText
+                                );
                                 if (!selectedPlainText) {
                                   // If no text is selected, copy the full content
                                   const contentStr =
@@ -546,6 +550,7 @@ export const AIMessage = ({
                                       : (
                                           content as JSX.Element
                                         ).props?.children?.toString() || "";
+                                  console.log("contentStr", contentStr);
                                   const clipboardItem = new ClipboardItem({
                                     "text/html": new Blob(
                                       [

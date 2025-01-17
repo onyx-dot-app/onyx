@@ -108,6 +108,9 @@ interface MarkdownSegment {
 }
 
 export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
+  console.log("[parseMarkdownToSegments] Starting parse of markdown:", {
+    markdownLength: markdown.length,
+  });
   const segments: MarkdownSegment[] = [];
   let currentIndex = 0;
 
@@ -118,6 +121,9 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
       .match(/^```(\w*)\n([\s\S]*?)```/);
     if (codeBlockMatch) {
       const [fullMatch, , code] = codeBlockMatch;
+      console.log("[parseMarkdownToSegments] Found code block:", {
+        length: code.length,
+      });
       segments.push({
         type: "codeblock",
         text: code,
@@ -132,6 +138,9 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
     const inlineCodeMatch = markdown.slice(currentIndex).match(/^`([^`]+)`/);
     if (inlineCodeMatch) {
       const [fullMatch, code] = inlineCodeMatch;
+      console.log("[parseMarkdownToSegments] Found inline code:", {
+        length: code.length,
+      });
       segments.push({
         type: "code",
         text: code,
@@ -148,6 +157,7 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
       .match(/^\[([^\]]+)\]\(([^)]+)\)/);
     if (linkMatch) {
       const [fullMatch, text] = linkMatch;
+      console.log("[parseMarkdownToSegments] Found link:", { text });
       segments.push({
         type: "link",
         text: text,
@@ -162,6 +172,7 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
     const boldMatch = markdown.slice(currentIndex).match(/^\*\*([^*]+)\*\*/);
     if (boldMatch) {
       const [fullMatch, text] = boldMatch;
+      console.log("[parseMarkdownToSegments] Found bold text:", { text });
       segments.push({
         type: "bold",
         text: text,
@@ -176,6 +187,7 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
     const italicMatch = markdown.slice(currentIndex).match(/^\*([^*]+)\*/);
     if (italicMatch) {
       const [fullMatch, text] = italicMatch;
+      console.log("[parseMarkdownToSegments] Found italic text:", { text });
       segments.push({
         type: "italic",
         text: text,
@@ -192,6 +204,10 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
       // No more special characters, add the rest as text
       const text = markdown.slice(currentIndex);
       if (text) {
+        console.log("[parseMarkdownToSegments] Found plain text (end):", {
+          length: text.length,
+          text,
+        });
         segments.push({
           type: "text",
           text: text,
@@ -204,6 +220,10 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
       // Add the text up to the next special character
       const text = markdown.slice(currentIndex, currentIndex + nextSpecialChar);
       if (text) {
+        console.log("[parseMarkdownToSegments] Found plain text:", {
+          length: text.length,
+          text,
+        });
         segments.push({
           type: "text",
           text: text,
@@ -216,6 +236,9 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
     }
   }
 
+  console.log("[parseMarkdownToSegments] Finished parsing", {
+    segmentCount: segments.length,
+  });
   return segments;
 }
 
@@ -223,6 +246,11 @@ export function getMarkdownForSelection(
   content: string,
   selectedText: string
 ): string {
+  console.log("[getMarkdownForSelection] Starting selection processing:", {
+    contentLength: content.length,
+    selectedTextLength: selectedText.length,
+  });
+
   const segments = parseMarkdownToSegments(content);
 
   // Build plain text and create mapping to markdown segments
@@ -238,7 +266,15 @@ export function getMarkdownForSelection(
 
   // Find the selection in the plain text
   const startIndex = plainText.indexOf(selectedText);
-  if (startIndex === -1) return selectedText;
+  if (startIndex === -1) {
+    console.log("[getMarkdownForSelection] Selected text not found in content");
+    return selectedText;
+  }
+
+  console.log("[getMarkdownForSelection] Found selection:", {
+    startIndex,
+    endIndex: startIndex + selectedText.length,
+  });
 
   const endIndex = startIndex + selectedText.length;
 
@@ -248,21 +284,37 @@ export function getMarkdownForSelection(
   let selectionStart = startIndex;
   let selectionEnd = endIndex;
 
-  segments.forEach((segment) => {
+  segments.forEach((segment, idx) => {
     const segmentStart = currentIndex;
     const segmentEnd = segmentStart + segment.length;
 
     // Check if this segment overlaps with the selection
     if (segmentEnd > selectionStart && segmentStart < selectionEnd) {
+      console.log("[getMarkdownForSelection] Processing overlapping segment:", {
+        segmentIndex: idx,
+        type: segment.type,
+        segmentStart,
+        segmentEnd,
+      });
+
       // Calculate how much of this segment to include
       const overlapStart = Math.max(0, selectionStart - segmentStart);
       const overlapEnd = Math.min(segment.length, selectionEnd - segmentStart);
 
       if (segment.type === "text") {
-        result += segment.text.slice(overlapStart, overlapEnd);
+        const textPortion = segment.text.slice(overlapStart, overlapEnd);
+        result += textPortion;
+        console.log("[getMarkdownForSelection] Added text portion:", {
+          length: textPortion.length,
+        });
       } else {
         // For markdown elements, wrap just the selected portion with the appropriate markdown
         const selectedPortion = segment.text.slice(overlapStart, overlapEnd);
+        console.log("[getMarkdownForSelection] Processing markdown element:", {
+          type: segment.type,
+          selectedPortionLength: selectedPortion.length,
+        });
+
         switch (segment.type) {
           case "bold":
             result += `**${selectedPortion}**`;
@@ -291,5 +343,9 @@ export function getMarkdownForSelection(
     currentIndex += segment.length;
   });
 
+  console.log("[getMarkdownForSelection] Finished processing selection:", {
+    resultLength: result.length,
+    result,
+  });
   return result;
 }
