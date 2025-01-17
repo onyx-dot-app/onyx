@@ -17,18 +17,6 @@ Parameters:
   DomainName:
       Type: String
       Default: demo.danswer.ai
-  TargetGroupPort:
-      Type: Number
-      Default: 80
-  HealthCheckPort:
-      Type: Number
-      Default: 80
-  ContainerName:
-     Type: String
-     Default: nginx
-  ContainerPort:
-     Type: Number
-     Default: 80
   Environment:
     Type: String
   ServiceName:
@@ -82,8 +70,8 @@ Resources:
           Value: !Ref Environment
       EnableECSManagedTags: true
       LoadBalancers:
-        - ContainerName: !Ref ContainerName
-          ContainerPort: !Ref ContainerPort
+        - ContainerName: nginx
+          ContainerPort: 80
           TargetGroupArn: !Ref TargetGroup
 
   TaskDefinition:
@@ -109,6 +97,12 @@ Resources:
               Value: ""
             - Name: DOMAIN
               Value: !Ref DomainName
+            - Name: ONYX_BACKEND_API_HOST
+              Value: !Sub ${Environment}-${ServiceName}
+            - Name: AWS_ONYX_NAMESPACE
+              Value:
+                Fn::ImportValue:
+                  Fn::Sub: ${Environment}-onyx-cluster-OnyxNamespaceName
           MountPoints:
             - SourceVolume: efs-volume
               ContainerPath: /etc/nginx/conf.d
@@ -233,12 +227,12 @@ Resources:
     Properties:
       HealthCheckEnabled: True
       HealthCheckIntervalSeconds: 30
-      HealthCheckPort: !Ref HealthCheckPort
+      HealthCheckPort: 80
       HealthCheckPath: /
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 20
       HealthyThresholdCount: 3
-      Port: !Ref TargetGroupPort
+      Port: 80
       Protocol: HTTP
       ProtocolVersion: HTTP1
       VpcId: !Ref VpcID

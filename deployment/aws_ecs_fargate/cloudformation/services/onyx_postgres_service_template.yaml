@@ -2,15 +2,15 @@ AWSTemplateFormatVersion: '2010-09-09'
 Parameters:
   Environment:
     Type: String
-  SecurityGroupName:
-    Type: String
-    Default: ecs-onyx-postgres
   SubnetIDs:
     Type: CommaDelimitedList
     Default: subnet-0af372d676f65b287,subnet-06721b79e2e51d22c
   VpcID:
     Type: String
     Default: vpc-098cfa79d637dabff
+  ServiceName:
+    Type: String
+    Default: onyx-postgres
 
 Resources:
 
@@ -24,8 +24,8 @@ Resources:
         - CapacityProvider: FARGATE
           Base: 0
           Weight: 1
-      TaskDefinition: !Ref OnyxPostgresTaskDefinition
-      ServiceName: !Sub ${Environment}-onyx-postgres-service
+      TaskDefinition: !Ref TaskDefinition
+      ServiceName: !Sub ${Environment}-${ServiceName}-service
       SchedulingStrategy: REPLICA
       DesiredCount: 1
       AvailabilityZoneRebalancing: ENABLED
@@ -53,7 +53,7 @@ Resources:
         - Key: app
           Value: onyx
         - Key: service
-          Value: onyx-postgres
+          Value: !Ref ServiceName
         - Key: env
           Value: !Ref Environment
       EnableECSManagedTags: true
@@ -61,7 +61,7 @@ Resources:
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Onyx SecurityGroup access to EFS mount and postgres.
+      GroupDescription: !Sub Onyx SecurityGroup access to EFS mount and ${ServiceName}.
       GroupName: !Sub ${Environment}-${SecurityGroupName}
       VpcId: !Ref VpcID
       SecurityGroupIngress:
@@ -83,7 +83,7 @@ Resources:
   ServiceDiscoveryService:
     Type: "AWS::ServiceDiscovery::Service"
     Properties:
-      Name: !Sub ${Environment}-onyx-postgres-service
+      Name: !Sub ${Environment}-${ServiceName}-service
       DnsConfig:
         DnsRecords:
           - Type: "A"
@@ -94,10 +94,10 @@ Resources:
       HealthCheckCustomConfig:
         FailureThreshold: 1
 
-  OnyxPostgresTaskDefinition:
+  TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: !Sub ${Environment}-OnyxPostgresTaskDefinition
+      Family: !Sub ${Environment}-${ServiceName}-TaskDefinition
       TaskRoleArn:
         Fn::ImportValue:
           Fn::Sub: "${Environment}-onyx-cluster-ECSTaskRole"
@@ -125,7 +125,7 @@ Resources:
                 Fn::ImportValue:
                   Fn::Sub: "${Environment}-onyx-efs-PostgresDataEfsAccessPoint"
       ContainerDefinitions:
-        - Name: onyx-postgres
+        - Name: !Ref ServiceName
           Image: postgres:15.2-alpine
           Cpu: 0
           Essential: true

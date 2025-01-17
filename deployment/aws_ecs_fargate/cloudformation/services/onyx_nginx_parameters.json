@@ -1,0 +1,8 @@
+{
+	“AcmId”: “1eedaab4-16eb-4261-be6f-0a470746c3f9”,
+	“DomainName”: “demo.danswer.ai”,
+	“Environment”: “production”,
+	“HostedZoneId”: “Z0514693S8C8QL9LABTK”,
+	“SubnetIDs”: “subnet-0af372d676f65b287,subnet-06721b79e2e51d22c”,
+	“VpcID”: “vpc-098cfa79d637dabff”
+}
