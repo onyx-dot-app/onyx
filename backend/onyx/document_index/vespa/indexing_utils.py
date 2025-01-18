@@ -138,7 +138,6 @@ def _index_vespa_chunk(
     # No minichunk documents in vespa, minichunk vectors are stored in the chunk itself
 
     vespa_chunk_id = str(get_uuid_from_chunk(chunk))
-    print("VESPA CHUNK ID")
 
     embeddings = chunk.embeddings
 
@@ -228,8 +227,6 @@ def batch_index_vespa_chunks(
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS)
 
     try:
-        for chunk in chunks:
-            print(chunk)
         chunk_index_future = {
             executor.submit(
                 _index_vespa_chunk, chunk, index_name, http_client, multitenant

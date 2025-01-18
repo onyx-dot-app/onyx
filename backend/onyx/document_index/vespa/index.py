@@ -337,7 +337,6 @@ class VespaIndex(DocumentIndex):
             # know precisely which chunks to delete. This information exists for
             # documents that have `chunk_count` in the database, but not for
             # `old_version` documents.
-            print("ENRICHED DOc")
 
             enriched_doc_infos: list[EnrichedDocumentIndexingInfo] = [
                 VespaIndex.enrich_basic_chunk_info(
@@ -371,8 +370,6 @@ class VespaIndex(DocumentIndex):
                     http_client=http_client,
                     executor=executor,
                 )
-            print("CLEANED CHUNKS")
-            print(len(cleaned_chunks))
 
             for chunk_batch in batch_generator(cleaned_chunks, BATCH_SIZE):
                 batch_index_vespa_chunks(

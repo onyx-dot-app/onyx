@@ -10,8 +10,6 @@ import {
 import { ChevronDownIcon, PlusIcon } from "./icons/icons";
 import { FiCheck, FiChevronDown } from "react-icons/fi";
 import { Popover } from "./popover/Popover";
-import { createPortal } from "react-dom";
-import { useDropdownPosition } from "@/lib/dropdown";
 
 export interface Option<T> {
   name: string;
