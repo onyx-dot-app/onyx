@@ -213,17 +213,16 @@ class UserManager:
         is_active_filter: bool | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> PaginatedReturn[FullUserSnapshot]:
-        query_params = {
+        query_params: dict[str, str | list[str] | int] = {
             "page_num": page_num,
             "page_size": page_size,
-            "q": search_query if search_query else None,
-            "roles": [role.value for role in role_filter] if role_filter else None,
-            "is_active": is_active_filter if is_active_filter is not None else None,
         }
-        # Remove None values
-        query_params = {
-            key: value for key, value in query_params.items() if value is not None
-        }
+        if search_query:
+            query_params["q"] = search_query
+        if role_filter:
+            query_params["roles"] = [role.value for role in role_filter]
+        if is_active_filter is not None:
+            query_params["is_active"] = is_active_filter
 
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/users/accepted?{urlencode(query_params, doseq=True)}",

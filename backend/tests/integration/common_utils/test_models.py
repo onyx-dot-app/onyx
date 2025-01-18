@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
@@ -131,10 +132,6 @@ class DATestPersona(BaseModel):
 
 
 #
-class DATestChatSession(BaseModel):
-    id: UUID
-    persona_id: int
-    description: str
 
 
 class DATestChatMessage(BaseModel):
@@ -142,6 +139,13 @@ class DATestChatMessage(BaseModel):
     chat_session_id: UUID
     parent_message_id: int | None
     message: str
+
+
+class DATestChatSession(BaseModel):
+    id: UUID
+    persona_id: int
+    description: str
+    feedback_type: QAFeedbackType | None = None
 
 
 class StreamedResponse(BaseModel):

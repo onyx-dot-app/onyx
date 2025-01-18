@@ -4,7 +4,7 @@ prompts:
   # Careful setting specific IDs, this won't autoincrement the next ID value for postgres
   - id: 0
     name: "Answer-Question"
-    description: "Answers user questions using retrieved context!asdfasdf"
+    description: "Answers user questions using retrieved context!"
     # System Prompt (as shown in UI)
     system: >
       You are a question answering system that is constantly learning and improving.
