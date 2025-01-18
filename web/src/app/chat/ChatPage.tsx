@@ -1888,6 +1888,7 @@ export function ChatPage({
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
 
   const currentPersona = alternativeAssistant || liveAssistant;
+
   useEffect(() => {
     const handleSlackChatRedirect = async () => {
       if (!slackChatId) return;
@@ -2063,7 +2064,7 @@ export function ChatPage({
         <div className="md:hidden">
           <Modal
             onOutsideClick={() => setDocumentSidebarToggled(false)}
-            title={"Sources"}
+            title="Sources"
           >
             <DocumentResults
               setPresentingDocument={setPresentingDocument}
