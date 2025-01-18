@@ -30,14 +30,17 @@ class RedisConnectorIndex:
     GENERATOR_LOCK_PREFIX = "da_lock:indexing"
 
     TERMINATE_PREFIX = PREFIX + "_terminate"  # connectorindexing_terminate
+    TERMINATE_TTL = 600
 
     # used to signal the overall workflow is still active
     # there are gaps in time between states where we need some slack
     # to correctly transition
     ACTIVE_PREFIX = PREFIX + "_active"
+    ACTIVE_TTL = 3600
 
     # used to signal that the watchdog is running
     WATCHDOG_PREFIX = PREFIX + "_watchdog"
+    WATCHDOG_TTL = 300
 
     def __init__(
         self,
@@ -115,7 +118,9 @@ class RedisConnectorIndex:
         """This sets a signal. It does not block!"""
         # We shouldn't need very long to terminate the spawned task.
         # 10 minute TTL is good.
-        self.redis.set(f"{self.terminate_key}_{celery_task_id}", 0, ex=600)
+        self.redis.set(
+            f"{self.terminate_key}_{celery_task_id}", 0, ex=self.TERMINATE_TTL
+        )
 
     def set_watchdog(self, value: bool) -> None:
         """Signal the state of the watchdog."""
@@ -123,7 +128,7 @@ class RedisConnectorIndex:
             self.redis.delete(self.watchdog_key)
             return
 
-        self.redis.set(self.watchdog_key, 0, ex=300)
+        self.redis.set(self.watchdog_key, 0, ex=self.WATCHDOG_TTL)
 
     def watchdog_signaled(self) -> bool:
         """Check the state of the watchdog."""
@@ -138,7 +143,7 @@ class RedisConnectorIndex:
 
         The slack in timing is needed to avoid race conditions where simply checking
         the celery queue and task status could result in race conditions."""
-        self.redis.set(self.active_key, 0, ex=3600)
+        self.redis.set(self.active_key, 0, ex=self.ACTIVE_TTL)
 
     def active(self) -> bool:
         if self.redis.exists(self.active_key):
