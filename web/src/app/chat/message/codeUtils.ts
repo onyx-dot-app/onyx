@@ -85,19 +85,27 @@ export const preprocessLaTeX = (content: string) => {
 
 export const markdownToHtml = (content: string): string => {
   // Basic markdown to HTML conversion for common patterns
-  return content
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") // Bold
-    .replace(/\*(.*?)\*/g, "<em>$1</em>") // Italic
+  const processedContent = content
+    .replace(/(\*\*|__)(.*?)\1/g, "<strong>$2</strong>") // Bold with ** or __
+    .replace(/(\*|_)([^*_\n]+?)\1(?!\*|_)/g, "<em>$2</em>"); // Italic with * or _
+
+  // Handle code blocks and links
+  const withCodeAndLinks = processedContent
     .replace(/`([^`]+)`/g, "<code>$1</code>") // Inline code
     .replace(
       /```(\w*)\n([\s\S]*?)```/g,
       (_, lang, code) =>
         `<pre><code class="language-${lang}">${code.trim()}</code></pre>`
     ) // Code blocks
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>') // Links
-    .split("\n")
-    .map((line) => (line.trim() ? `<p>${line}</p>` : ""))
-    .join("\n"); // Paragraphs
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>'); // Links
+
+  // Handle paragraphs
+  return withCodeAndLinks
+    .split(/\n\n+/)
+    .map((para) => para.trim())
+    .filter((para) => para.length > 0)
+    .map((para) => `<p>${para}</p>`)
+    .join("\n");
 };
 
 interface MarkdownSegment {
@@ -159,9 +167,11 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
     }
 
     // Check for bold
-    const boldMatch = markdown.slice(currentIndex).match(/^\*\*([^*]+)\*\*/);
+    const boldMatch = markdown
+      .slice(currentIndex)
+      .match(/^(\*\*|__)([^*_\n]*?)\1/);
     if (boldMatch) {
-      const [fullMatch, text] = boldMatch;
+      const [fullMatch, delimiter, text] = boldMatch;
       segments.push({
         type: "bold",
         text: text,
@@ -173,9 +183,11 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
     }
 
     // Check for italic
-    const italicMatch = markdown.slice(currentIndex).match(/^\*([^*]+)\*/);
+    const italicMatch = markdown
+      .slice(currentIndex)
+      .match(/^(\*|_)([^*_\n]+?)\1(?!\*|_)/);
     if (italicMatch) {
-      const [fullMatch, text] = italicMatch;
+      const [fullMatch, delimiter, text] = italicMatch;
       segments.push({
         type: "italic",
         text: text,
@@ -187,7 +199,7 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
     }
 
     // Regular text
-    let nextSpecialChar = markdown.slice(currentIndex).search(/[`\[*]/);
+    let nextSpecialChar = markdown.slice(currentIndex).search(/[`\[*_]/);
     if (nextSpecialChar === -1) {
       // No more special characters, add the rest as text
       const text = markdown.slice(currentIndex);
