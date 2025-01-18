@@ -181,7 +181,13 @@ export const SlackChannelConfigCreationForm = ({
           {({ isSubmitting, values, setFieldValue }) => (
             <Form>
               <div className="px-6 pb-6 pt-4 w-full">
-                <Label htmlFor="channel_name">Slack Channel Name:</Label>
+                <label
+                  htmlFor="channel_name"
+                  className="block font-medium text-base"
+                >
+                  Slack Channel Name:
+                </label>
+
                 <SearchMultiSelectDropdown
                   options={[
                     { name: "general", value: "general" },
@@ -190,9 +196,6 @@ export const SlackChannelConfigCreationForm = ({
                   ]}
                   onSelect={(selected) =>
                     setFieldValue("channel_name", selected.value)
-                  }
-                  onCreateLabel={(newLabel) =>
-                    setFieldValue("channel_name", newLabel)
                   }
                 />
 
