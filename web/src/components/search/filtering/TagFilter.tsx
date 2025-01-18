@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { Tag } from "@/lib/types";
-import { FiTag } from "react-icons/fi";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
+
+interface TagFilterProps {
+  tags: Tag[];
+  selectedTags: Tag[];
+  setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>;
+}
 
 export function TagFilter({
   tags,
   selectedTags,
   setSelectedTags,
-}: {
-  tags: Tag[];
-  selectedTags: Tag[];
-  setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>;
-}) {
+}: TagFilterProps) {
   const [filterValue, setFilterValue] = useState("");
   const [filteredTags, setFilteredTags] = useState<Tag[]>(tags);
 
@@ -44,9 +44,9 @@ export function TagFilter({
         placeholder="Search tags..."
         value={filterValue}
         onChange={(e) => setFilterValue(e.target.value)}
-        className="border border-border w-full"
+        className="w-full"
       />
-      <div className="space-y-2 max-h-48 overflow-y-auto">
+      <div className="space-y-1 max-h-48 overflow-y-auto">
         {filteredTags
           .sort((a, b) =>
             selectedTags.some(
@@ -58,23 +58,17 @@ export function TagFilter({
           .map((tag) => (
             <div
               key={`${tag.tag_key}-${tag.tag_value}`}
-              className="flex items-center space-x-2"
-            >
-              <Checkbox
-                id={`${tag.tag_key}-${tag.tag_value}`}
-                checked={selectedTags.some(
+              className={`px-3 py-2 text-sm cursor-pointer transition-colors duration-200 ${
+                selectedTags.some(
                   (t) =>
                     t.tag_key === tag.tag_key && t.tag_value === tag.tag_value
-                )}
-                onCheckedChange={() => toggleTag(tag)}
-              />
-              <label
-                htmlFor={`${tag.tag_key}-${tag.tag_value}`}
-                className="text-sm cursor-pointer flex items-center"
-              >
-                <FiTag className="mr-1" />
-                {tag.tag_key}={tag.tag_value}
-              </label>
+                )
+                  ? "bg-accent text-accent-foreground"
+                  : "hover:bg-accent hover:text-accent-foreground"
+              }`}
+              onClick={() => toggleTag(tag)}
+            >
+              {tag.tag_key}={tag.tag_value}
             </div>
           ))}
       </div>
