@@ -74,7 +74,7 @@ export default function TextView({
       let contentType =
         response.headers.get("Content-Type") || "application/octet-stream";
 
-      // If it's octet-stream but file name suggests a markdown extension, override
+      // If it's octet-stream but file name suggests a markdown extension, override and attempt to read as markdown
       if (
         contentType === "application/octet-stream" &&
         (originalFileName.toLowerCase().endsWith(".md") ||
