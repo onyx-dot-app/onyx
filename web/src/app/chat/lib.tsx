@@ -378,9 +378,9 @@ export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
     } else if (diffDays <= 7) {
       groups["Previous 7 Days"].push(chatSession);
     } else if (diffDays <= 30) {
-      groups["Previous 30 Days"].push(chatSession);
+      groups["Previous 30 days"].push(chatSession);
     } else {
-      groups["Over 30 days ago"].push(chatSession);
+      groups["Over 30 days"].push(chatSession);
     }
   });
 
