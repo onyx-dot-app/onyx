@@ -83,7 +83,10 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
         last_lock_time = time.monotonic()
 
         async_results = []
-        cc_pair = get_connector_credential_pair_from_id(int(self._id), db_session)
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=int(self._id),
+        )
         if not cc_pair:
             return None
 

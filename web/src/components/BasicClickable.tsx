@@ -83,12 +83,18 @@ export function BasicSelectable({
   hasBorder,
   fullWidth = false,
   padding = "normal",
+  removeColors = false,
+  isDragging = false,
+  isHovered,
 }: {
   children: string | JSX.Element;
   selected: boolean;
   hasBorder?: boolean;
   fullWidth?: boolean;
+  removeColors?: boolean;
   padding?: "none" | "normal" | "extra";
+  isDragging?: boolean;
+  isHovered?: boolean;
 }) {
   return (
     <div
@@ -96,14 +102,22 @@ export function BasicSelectable({
         rounded
         font-medium 
         text-sm
+        truncate
+        px-2
         ${padding == "normal" && "p-1"}
         ${padding == "extra" && "p-1.5"}
         select-none
         ${hasBorder ? "border border-border" : ""}
         ${
-          selected
-            ? "bg-background-chat-selected"
-            : "hover:bg-background-chat-hover"
+          !removeColors
+            ? isDragging
+              ? "bg-background-chat-hover"
+              : selected
+                ? "bg-background-chat-selected"
+                : isHovered
+                  ? "bg-background-chat-hover"
+                  : "hover:bg-background-chat-hover"
+            : ""
         }
         ${fullWidth ? "w-full" : ""}`}
     >

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 
 from onyx.access.models import DocExternalAccess
-from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -147,7 +147,7 @@ class RedisConnectorPermissionSync:
         for doc_perm in new_permissions:
             current_time = time.monotonic()
             if lock and current_time - last_lock_time >= (
-                CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4
+                CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4
             ):
                 lock.reacquire()
                 last_lock_time = current_time

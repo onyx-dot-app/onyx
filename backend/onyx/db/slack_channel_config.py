@@ -12,9 +12,9 @@ from onyx.db.models import Persona
 from onyx.db.models import Persona__DocumentSet
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
-from onyx.db.persona import get_default_prompt
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import upsert_persona
+from onyx.db.prompts import get_default_prompt
 from onyx.utils.errors import EERequiredError
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,

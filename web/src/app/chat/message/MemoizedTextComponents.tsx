@@ -1,12 +1,9 @@
 import { Citation } from "@/components/search/results/Citation";
-import { WebResultIcon } from "@/components/WebResultIcon";
 import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
-import { getSourceMetadata, SOURCE_METADATA_MAP } from "@/lib/sources";
-import { ValidSources } from "@/lib/types";
 import React, { memo } from "react";
 import isEqual from "lodash/isEqual";
-import { SlackIcon } from "@/components/icons/icons";
 import { SourceIcon } from "@/components/SourceIcon";
+import { WebResultIcon } from "@/components/WebResultIcon";
 
 export const MemoizedAnchor = memo(
   ({
@@ -23,22 +20,28 @@ export const MemoizedAnchor = memo(
       const match = value.match(/\[(\d+)\]/);
       if (match) {
         const index = parseInt(match[1], 10) - 1;
-        const associatedDoc = docs && docs[index];
+        const associatedDoc = docs?.[index];
+        if (!associatedDoc) {
+          return <>{children}</>;
+        }
 
-        const url = associatedDoc?.link
-          ? new URL(associatedDoc.link).origin + "/favicon.ico"
-          : "";
-
-        const icon =
-          (associatedDoc && (
-            <SourceIcon sourceType={associatedDoc?.source_type} iconSize={18} />
-          )) ||
-          null;
+        let icon: React.ReactNode = null;
+        if (associatedDoc.source_type === "web") {
+          icon = <WebResultIcon url={associatedDoc.link} />;
+        } else {
+          icon = (
+            <SourceIcon sourceType={associatedDoc.source_type} iconSize={18} />
+          );
+        }
 
         return (
           <MemoizedLink
             updatePresentingDocument={updatePresentingDocument}
-            document={{ ...associatedDoc, icon, url }}
+            document={{
+              ...associatedDoc,
+              icon,
+              url: associatedDoc.link,
+            }}
           >
             {children}
           </MemoizedLink>
@@ -66,7 +69,6 @@ export const MemoizedLink = memo((props: any) => {
       <Citation
         url={document?.url}
         icon={document?.icon as React.ReactNode}
-        link={rest?.href}
         document={document as LoadedOnyxDocument}
         updatePresentingDocument={updatePresentingDocument}
       >

@@ -8,6 +8,9 @@ from ee.onyx.db.user_group import fetch_user_group
 from ee.onyx.db.user_group import mark_user_group_as_synced
 from ee.onyx.db.user_group import prepare_user_group_for_deletion
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.db.enums import SyncStatus
+from onyx.db.enums import SyncType
+from onyx.db.sync_record import update_sync_record_status
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import setup_logger
 
@@ -43,24 +46,59 @@ def monitor_usergroup_taskset(
         f"User group sync progress: usergroup_id={usergroup_id} remaining={count} initial={initial_count}"
     )
     if count > 0:
+        update_sync_record_status(
+            db_session=db_session,
+            entity_id=usergroup_id,
+            sync_type=SyncType.USER_GROUP,
+            sync_status=SyncStatus.IN_PROGRESS,
+            num_docs_synced=count,
+        )
         return
 
     user_group = fetch_user_group(db_session=db_session, user_group_id=usergroup_id)
     if user_group:
         usergroup_name = user_group.name
-        if user_group.is_up_for_deletion:
-            # this prepare should have been run when the deletion was scheduled,
-            # but run it again to be sure we're ready to go
-            mark_user_group_as_synced(db_session, user_group)
-            prepare_user_group_for_deletion(db_session, usergroup_id)
-            delete_user_group(db_session=db_session, user_group=user_group)
-            task_logger.info(
-                f"Deleted usergroup: name={usergroup_name} id={usergroup_id}"
+        try:
+            if user_group.is_up_for_deletion:
+                # this prepare should have been run when the deletion was scheduled,
+                # but run it again to be sure we're ready to go
+                mark_user_group_as_synced(db_session, user_group)
+                prepare_user_group_for_deletion(db_session, usergroup_id)
+                delete_user_group(db_session=db_session, user_group=user_group)
+
+                update_sync_record_status(
+                    db_session=db_session,
+                    entity_id=usergroup_id,
+                    sync_type=SyncType.USER_GROUP,
+                    sync_status=SyncStatus.SUCCESS,
+                    num_docs_synced=initial_count,
+                )
+
+                task_logger.info(
+                    f"Deleted usergroup: name={usergroup_name} id={usergroup_id}"
+                )
+            else:
+                mark_user_group_as_synced(db_session=db_session, user_group=user_group)
+
+                update_sync_record_status(
+                    db_session=db_session,
+                    entity_id=usergroup_id,
+                    sync_type=SyncType.USER_GROUP,
+                    sync_status=SyncStatus.SUCCESS,
+                    num_docs_synced=initial_count,
+                )
+
+                task_logger.info(
+                    f"Synced usergroup. name={usergroup_name} id={usergroup_id}"
+                )
+        except Exception as e:
+            update_sync_record_status(
+                db_session=db_session,
+                entity_id=usergroup_id,
+                sync_type=SyncType.USER_GROUP,
+                sync_status=SyncStatus.FAILED,
+                num_docs_synced=initial_count,
             )
-        else:
-            mark_user_group_as_synced(db_session=db_session, user_group=user_group)
-            task_logger.info(
-                f"Synced usergroup. name={usergroup_name} id={usergroup_id}"
-            )
+            raise e
 
     rug.reset()

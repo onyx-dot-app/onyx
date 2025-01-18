@@ -4,9 +4,10 @@ not follow the expected behavior, etc.
 
 NOTE: cannot use Celery directly due to
 https://github.com/celery/celery/issues/7007#issuecomment-1740139367"""
+import multiprocessing as mp
 from collections.abc import Callable
 from dataclasses import dataclass
-from multiprocessing import Process
+from multiprocessing.context import SpawnProcess
 from typing import Any
 from typing import Literal
 from typing import Optional
@@ -46,7 +47,9 @@ def _initializer(
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME)
 
     # Initialize a new engine with desired parameters
-    SqlEngine.init_engine(pool_size=4, max_overflow=12, pool_recycle=60)
+    SqlEngine.init_engine(
+        pool_size=4, max_overflow=12, pool_recycle=60, pool_pre_ping=True
+    )
 
     # Proceed with executing the target function
     return func(*args, **kwargs)
@@ -63,7 +66,7 @@ class SimpleJob:
     """Drop in replacement for `dask.distributed.Future`"""
 
     id: int
-    process: Optional["Process"] = None
+    process: Optional["SpawnProcess"] = None
 
     def cancel(self) -> bool:
         return self.release()
@@ -131,7 +134,10 @@ class SimpleJobClient:
         job_id = self.job_id_counter
         self.job_id_counter += 1
 
-        process = Process(target=_run_in_process, args=(func, args), daemon=True)
+        # this approach allows us to always "spawn" a new process regardless of
+        # get_start_method's current setting
+        ctx = mp.get_context("spawn")
+        process = ctx.Process(target=_run_in_process, args=(func, args), daemon=True)
         job = SimpleJob(id=job_id, process=process)
         process.start()
 

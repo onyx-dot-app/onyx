@@ -15,7 +15,7 @@ from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 from requests import JSONDecodeError
 
-from onyx.chat.prompt_builder.build import AnswerPromptBuilder
+from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine import get_session_with_default_tenant
 from onyx.file_store.file_store import get_default_file_store

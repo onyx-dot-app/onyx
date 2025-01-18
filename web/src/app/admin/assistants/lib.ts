@@ -1,10 +1,40 @@
 import { FullLLMProvider } from "../configuration/llm/interfaces";
 import { Persona, StarterMessage } from "./interfaces";
 
-interface PersonaCreationRequest {
+interface PersonaUpsertRequest {
   name: string;
   description: string;
   system_prompt: string;
+  task_prompt: string;
+  document_set_ids: number[];
+  num_chunks: number | null;
+  include_citations: boolean;
+  is_public: boolean;
+  recency_bias: string;
+  prompt_ids: number[];
+  llm_filter_extraction: boolean;
+  llm_relevance_filter: boolean | null;
+  llm_model_provider_override: string | null;
+  llm_model_version_override: string | null;
+  starter_messages: StarterMessage[] | null;
+  users?: string[];
+  groups: number[];
+  tool_ids: number[];
+  icon_color: string | null;
+  icon_shape: number | null;
+  remove_image?: boolean;
+  uploaded_image_id: string | null;
+  search_start_date: Date | null;
+  is_default_persona: boolean;
+  display_priority: number | null;
+  label_ids: number[] | null;
+}
+
+export interface PersonaUpsertParameters {
+  name: string;
+  description: string;
+  system_prompt: string;
+  existing_prompt_id: number | null;
   task_prompt: string;
   document_set_ids: number[];
   num_chunks: number | null;
@@ -20,108 +50,24 @@ interface PersonaCreationRequest {
   icon_color: string | null;
   icon_shape: number | null;
   remove_image?: boolean;
-  uploaded_image: File | null;
   search_start_date: Date | null;
+  uploaded_image: File | null;
   is_default_persona: boolean;
-  category_id: number | null;
+  label_ids: number[] | null;
 }
 
-interface PersonaUpdateRequest {
-  id: number;
-  existingPromptId: number | undefined;
-  name: string;
-  description: string;
-  system_prompt: string;
-  task_prompt: string;
-  document_set_ids: number[];
-  num_chunks: number | null;
-  include_citations: boolean;
-  is_public: boolean;
-  llm_relevance_filter: boolean | null;
-  llm_model_provider_override: string | null;
-  llm_model_version_override: string | null;
-  starter_messages: StarterMessage[] | null;
-  users?: string[];
-  groups: number[];
-  tool_ids: number[];
-  icon_color: string | null;
-  icon_shape: number | null;
-  remove_image: boolean;
-  uploaded_image: File | null;
-  search_start_date: Date | null;
-  category_id: number | null;
-}
-
-function promptNameFromPersonaName(personaName: string) {
-  return `default-prompt__${personaName}`;
-}
-
-function createPrompt({
-  personaName,
-  systemPrompt,
-  taskPrompt,
-  includeCitations,
-}: {
-  personaName: string;
-  systemPrompt: string;
-  taskPrompt: string;
-  includeCitations: boolean;
-}) {
-  return fetch("/api/prompt", {
+export const createPersonaLabel = (name: string) => {
+  return fetch("/api/persona/labels", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      name: promptNameFromPersonaName(personaName),
-      description: `Default prompt for persona ${personaName}`,
-      system_prompt: systemPrompt,
-      task_prompt: taskPrompt,
-      include_citations: includeCitations,
-    }),
-  });
-}
-
-function updatePrompt({
-  promptId,
-  personaName,
-  systemPrompt,
-  taskPrompt,
-  includeCitations,
-}: {
-  promptId: number;
-  personaName: string;
-  systemPrompt: string;
-  taskPrompt: string;
-  includeCitations: boolean;
-}) {
-  return fetch(`/api/prompt/${promptId}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      name: promptNameFromPersonaName(personaName),
-      description: `Default prompt for persona ${personaName}`,
-      system_prompt: systemPrompt,
-      task_prompt: taskPrompt,
-      include_citations: includeCitations,
-    }),
-  });
-}
-
-export const createPersonaCategory = (name: string, description: string) => {
-  return fetch("/api/admin/persona/categories", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify({ name }),
   });
 };
 
-export const deletePersonaCategory = (categoryId: number) => {
-  return fetch(`/api/admin/persona/category/${categoryId}`, {
+export const deletePersonaLabel = (labelId: number) => {
+  return fetch(`/api/admin/persona/label/${labelId}`, {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
@@ -129,73 +75,72 @@ export const deletePersonaCategory = (categoryId: number) => {
   });
 };
 
-export const updatePersonaCategory = (
+export const updatePersonaLabel = (
   id: number,
-  name: string,
-  description: string
-) => {
-  return fetch(`/api/admin/persona/category/${id}`, {
+  name: string
+): Promise<Response> => {
+  return fetch(`/api/admin/persona/label/${id}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      category_name: name,
-      category_description: description,
+      label_name: name,
     }),
   });
 };
 
-function buildPersonaAPIBody(
-  creationRequest: PersonaCreationRequest | PersonaUpdateRequest,
-  promptId: number,
+function buildPersonaUpsertRequest(
+  creationRequest: PersonaUpsertParameters,
   uploaded_image_id: string | null
-) {
+): PersonaUpsertRequest {
   const {
     name,
     description,
+    system_prompt,
+    task_prompt,
     document_set_ids,
     num_chunks,
-    llm_relevance_filter,
+    include_citations,
     is_public,
     groups,
+    existing_prompt_id,
     users,
     tool_ids,
     icon_color,
     icon_shape,
     remove_image,
     search_start_date,
-    category_id,
   } = creationRequest;
-
-  const is_default_persona =
-    "is_default_persona" in creationRequest
-      ? creationRequest.is_default_persona
-      : false;
-
   return {
     name,
     description,
-    num_chunks,
-    llm_relevance_filter,
-    llm_filter_extraction: false,
-    is_public,
-    recency_bias: "base_decay",
-    prompt_ids: [promptId],
+    system_prompt,
+    task_prompt,
     document_set_ids,
-    llm_model_provider_override: creationRequest.llm_model_provider_override,
-    llm_model_version_override: creationRequest.llm_model_version_override,
-    starter_messages: creationRequest.starter_messages,
-    users,
+    num_chunks,
+    include_citations,
+    is_public,
+    uploaded_image_id,
     groups,
+    users,
     tool_ids,
     icon_color,
     icon_shape,
-    uploaded_image_id,
     remove_image,
     search_start_date,
-    is_default_persona,
-    category_id,
+    is_default_persona: creationRequest.is_default_persona ?? false,
+    recency_bias: "base_decay",
+    prompt_ids: existing_prompt_id ? [existing_prompt_id] : [],
+    llm_filter_extraction: false,
+    llm_relevance_filter: creationRequest.llm_relevance_filter ?? null,
+    llm_model_provider_override:
+      creationRequest.llm_model_provider_override ?? null,
+    llm_model_version_override:
+      creationRequest.llm_model_version_override ?? null,
+    starter_messages: creationRequest.starter_messages ?? null,
+    display_priority: null,
+    label_ids: creationRequest.label_ids ?? null,
   };
 }
 
@@ -217,117 +162,58 @@ export async function uploadFile(file: File): Promise<string | null> {
 }
 
 export async function createPersona(
-  personaCreationRequest: PersonaCreationRequest
-): Promise<[Response, Response | null]> {
-  // first create prompt
-  const createPromptResponse = await createPrompt({
-    personaName: personaCreationRequest.name,
-    systemPrompt: personaCreationRequest.system_prompt,
-    taskPrompt: personaCreationRequest.task_prompt,
-    includeCitations: personaCreationRequest.include_citations,
-  });
-  const promptId = createPromptResponse.ok
-    ? (await createPromptResponse.json()).id
-    : null;
-
+  personaUpsertParams: PersonaUpsertParameters
+): Promise<Response | null> {
   let fileId = null;
-  if (personaCreationRequest.uploaded_image) {
-    fileId = await uploadFile(personaCreationRequest.uploaded_image);
+  if (personaUpsertParams.uploaded_image) {
+    fileId = await uploadFile(personaUpsertParams.uploaded_image);
     if (!fileId) {
-      return [createPromptResponse, null];
+      return null;
     }
   }
 
-  const createPersonaResponse =
-    promptId !== null
-      ? await fetch("/api/persona", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(
-            buildPersonaAPIBody(personaCreationRequest, promptId, fileId)
-          ),
-        })
-      : null;
+  const createPersonaResponse = await fetch("/api/persona", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(
+      buildPersonaUpsertRequest(personaUpsertParams, fileId)
+    ),
+  });
 
-  return [createPromptResponse, createPersonaResponse];
+  return createPersonaResponse;
 }
 
 export async function updatePersona(
-  personaUpdateRequest: PersonaUpdateRequest
-): Promise<[Response, Response | null]> {
-  const { id, existingPromptId } = personaUpdateRequest;
-
-  let promptResponse;
-  let promptId: number | null = null;
-  if (existingPromptId !== undefined) {
-    promptResponse = await updatePrompt({
-      promptId: existingPromptId,
-      personaName: personaUpdateRequest.name,
-      systemPrompt: personaUpdateRequest.system_prompt,
-      taskPrompt: personaUpdateRequest.task_prompt,
-      includeCitations: personaUpdateRequest.include_citations,
-    });
-    promptId = existingPromptId;
-  } else {
-    promptResponse = await createPrompt({
-      personaName: personaUpdateRequest.name,
-      systemPrompt: personaUpdateRequest.system_prompt,
-      taskPrompt: personaUpdateRequest.task_prompt,
-      includeCitations: personaUpdateRequest.include_citations,
-    });
-    promptId = promptResponse.ok
-      ? ((await promptResponse.json()).id as number)
-      : null;
-  }
+  id: number,
+  personaUpsertParams: PersonaUpsertParameters
+): Promise<Response | null> {
   let fileId = null;
-  if (personaUpdateRequest.uploaded_image) {
-    fileId = await uploadFile(personaUpdateRequest.uploaded_image);
+  if (personaUpsertParams.uploaded_image) {
+    fileId = await uploadFile(personaUpsertParams.uploaded_image);
     if (!fileId) {
-      return [promptResponse, null];
+      return null;
     }
   }
 
-  const updatePersonaResponse =
-    promptResponse.ok && promptId !== null
-      ? await fetch(`/api/persona/${id}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(
-            buildPersonaAPIBody(personaUpdateRequest, promptId, fileId)
-          ),
-        })
-      : null;
+  const updatePersonaResponse = await fetch(`/api/persona/${id}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(
+      buildPersonaUpsertRequest(personaUpsertParams, fileId)
+    ),
+  });
 
-  return [promptResponse, updatePersonaResponse];
+  return updatePersonaResponse;
 }
 
 export function deletePersona(personaId: number) {
   return fetch(`/api/persona/${personaId}`, {
     method: "DELETE",
   });
-}
-
-export function buildFinalPrompt(
-  systemPrompt: string,
-  taskPrompt: string,
-  retrievalDisabled: boolean
-) {
-  const queryString = Object.entries({
-    system_prompt: systemPrompt,
-    task_prompt: taskPrompt,
-    retrieval_disabled: retrievalDisabled,
-  })
-    .map(
-      ([key, value]) =>
-        `${encodeURIComponent(key)}=${encodeURIComponent(value)}`
-    )
-    .join("&");
-
-  return fetch(`/api/persona/utils/prompt-explorer?${queryString}`);
 }
 
 function smallerNumberFirstComparator(a: number, b: number) {

@@ -41,10 +41,9 @@ class DATestUser(BaseModel):
     is_active: bool
 
 
-class DATestPersonaCategory(BaseModel):
+class DATestPersonaLabel(BaseModel):
     id: int | None = None
     name: str
-    description: str | None
 
 
 class DATestCredential(BaseModel):
@@ -128,7 +127,7 @@ class DATestPersona(BaseModel):
     llm_model_version_override: str | None
     users: list[str]
     groups: list[int]
-    category_id: int | None = None
+    label_ids: list[int]
 
 
 #

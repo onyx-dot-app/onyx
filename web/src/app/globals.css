@@ -53,7 +53,9 @@
     --text-950: #0a0a0a;
     /* solidDark - Nearly pure black */
 
-    --background: #fafafa;
+    --background: #fefcfa;
+    /* --background: #fafafa; */
+
     /* 50 - Almost white */
     --background-100: #f5f5f5;
     /* neutral-100 - Very light gray */
@@ -99,7 +101,7 @@
     /* blue-500 - Bright blue */
     --link-hover: #1d4ed8;
     /* blue-700 - Dark blue */
-    --error: #ef4444;
+    --error: #f87171;
     /* red-500 - Bright red */
     --undo: #ef4444;
     /* red-500 - Bright red */
@@ -142,7 +144,7 @@
     /* Light pink for non-selectable elements */
     --highlight-text: #fef9c3;
     /* Very light yellow for highlighted text */
-    --user-bubble: #f1f2f4;
+    --user-bubble: #f1eee8;
     /* near gray-100 - Very light grayish */
     --ai-bubble: #272a2d;
     /* Dark grayish for AI bubbles */

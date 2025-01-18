@@ -9,7 +9,7 @@ from onyx.utils.special_types import JSON_ro
 
 
 if TYPE_CHECKING:
-    from onyx.chat.prompt_builder.build import AnswerPromptBuilder
+    from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
     from onyx.tools.message import ToolCallSummary
     from onyx.tools.models import ToolResponse
 

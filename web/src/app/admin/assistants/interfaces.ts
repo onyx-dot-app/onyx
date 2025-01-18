@@ -1,9 +1,11 @@
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { DocumentSet, MinimalUserSnapshot } from "@/lib/types";
 
-export interface StarterMessage {
-  name: string;
+export interface StarterMessageBase {
   message: string;
+}
+export interface StarterMessage extends StarterMessageBase {
+  name: string;
 }
 
 export interface Prompt {
@@ -42,11 +44,10 @@ export interface Persona {
   icon_shape?: number;
   icon_color?: string;
   uploaded_image_id?: string;
-  category_id?: number | null;
+  labels?: PersonaLabel[];
 }
 
-export interface PersonaCategory {
+export interface PersonaLabel {
   id: number;
   name: string;
-  description: string;
 }

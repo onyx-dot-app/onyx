@@ -9,12 +9,7 @@ export default function CardSection({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "p-6 shadow-sm rounded-lg bg-white border border-border-strong/80",
-        className
-      )}
-    >
+    <div className={cn("p-6 border border-border-strong/80", className)}>
       {children}
     </div>
   );

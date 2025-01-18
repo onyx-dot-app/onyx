@@ -24,12 +24,27 @@ class IndexingMode(str, PyEnum):
     REINDEX = "reindex"
 
 
-# these may differ in the future, which is why we're okay with this duplication
-class DeletionStatus(str, PyEnum):
-    NOT_STARTED = "not_started"
+class SyncType(str, PyEnum):
+    DOCUMENT_SET = "document_set"
+    USER_GROUP = "user_group"
+    CONNECTOR_DELETION = "connector_deletion"
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class SyncStatus(str, PyEnum):
     IN_PROGRESS = "in_progress"
     SUCCESS = "success"
     FAILED = "failed"
+    CANCELED = "canceled"
+
+    def is_terminal(self) -> bool:
+        terminal_states = {
+            SyncStatus.SUCCESS,
+            SyncStatus.FAILED,
+        }
+        return self in terminal_states
 
 
 # Consistent with Celery task statuses

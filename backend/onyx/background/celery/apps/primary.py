@@ -1,5 +1,4 @@
 import logging
-import multiprocessing
 from typing import Any
 from typing import cast
 
@@ -7,6 +6,7 @@ from celery import bootsteps  # type: ignore
 from celery import Celery
 from celery import signals
 from celery import Task
+from celery.apps.worker import Worker
 from celery.exceptions import WorkerShutdown
 from celery.signals import celeryd_init
 from celery.signals import worker_init
@@ -17,7 +17,7 @@ from redis.lock import Lock as RedisLock
 import onyx.background.celery.apps.app_base as app_base
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import celery_is_worker_primary
-from onyx.background.celery.tasks.indexing.tasks import (
+from onyx.background.celery.tasks.indexing.utils import (
     get_unfenced_index_attempt_ids,
 )
 from onyx.configs.constants import CELERY_PRIMARY_WORKER_LOCK_TIMEOUT
@@ -73,14 +73,13 @@ def on_task_postrun(
 
 
 @celeryd_init.connect
-def on_celeryd_init(sender: Any = None, conf: Any = None, **kwargs: Any) -> None:
+def on_celeryd_init(sender: str, conf: Any = None, **kwargs: Any) -> None:
     app_base.on_celeryd_init(sender, conf, **kwargs)
 
 
 @worker_init.connect
-def on_worker_init(sender: Any, **kwargs: Any) -> None:
+def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     logger.info("worker_init signal received.")
-    logger.info(f"Multiprocessing start method: {multiprocessing.get_start_method()}")
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME)
     SqlEngine.init_engine(pool_size=8, max_overflow=0)
@@ -135,7 +134,7 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
         raise WorkerShutdown("Primary worker lock could not be acquired!")
 
     # tacking on our own user data to the sender
-    sender.primary_worker_lock = lock
+    sender.primary_worker_lock = lock  # type: ignore
 
     # As currently designed, when this worker starts as "primary", we reinitialize redis
     # to a clean state (for our purposes, anyway)

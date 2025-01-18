@@ -161,7 +161,10 @@ def _get_salesforce_client_for_doc_id(db_session: Session, doc_id: str) -> Sales
 
     cc_pair_id = _DOC_ID_TO_CC_PAIR_ID_MAP[doc_id]
     if cc_pair_id not in _CC_PAIR_ID_SALESFORCE_CLIENT_MAP:
-        cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=cc_pair_id,
+        )
         if cc_pair is None:
             raise ValueError(f"CC pair {cc_pair_id} not found")
         credential_json = cc_pair.credential.credential_json

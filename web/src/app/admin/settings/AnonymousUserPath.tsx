@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { Button } from "@/components/ui/button";
-import { NEXT_PUBLIC_CLOUD_DOMAIN } from "@/lib/constants";
+import { NEXT_PUBLIC_WEB_DOMAIN } from "@/lib/constants";
 import { ClipboardIcon } from "@/components/icons/icons";
 import { Input } from "@/components/ui/input";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -26,11 +26,9 @@ export function AnonymousUserPath({
   } = useSWR("/api/tenants/anonymous-user-path", (url) =>
     fetch(url)
       .then((res) => {
-        console.log("Response:", res);
         return res.json();
       })
       .then((data) => {
-        console.log("Data:", data);
         return data.anonymous_user_path;
       })
   );
@@ -118,7 +116,7 @@ export function AnonymousUserPath({
         <div className="flex flex-col gap-2 justify-center items-start">
           <div className="w-full flex-grow  flex items-center rounded-md shadow-sm">
             <span className="inline-flex items-center rounded-l-md border border-r-0 border-gray-300 bg-gray-50 px-3 text-gray-500 sm:text-sm h-10">
-              {NEXT_PUBLIC_CLOUD_DOMAIN}/anonymous/
+              {NEXT_PUBLIC_WEB_DOMAIN}/anonymous/
             </span>
             <Input
               type="text"
@@ -143,7 +141,7 @@ export function AnonymousUserPath({
               className="h-10 px-4"
               onClick={() => {
                 navigator.clipboard.writeText(
-                  `${NEXT_PUBLIC_CLOUD_DOMAIN}/anonymous/${anonymousUserPath}`
+                  `${NEXT_PUBLIC_WEB_DOMAIN}/anonymous/${anonymousUserPath}`
                 );
                 setPopup({
                   message: "Invite link copied!",

@@ -25,6 +25,7 @@ export interface AbridgedSearchDoc {
 }
 
 export interface MessageSnapshot {
+  id: number;
   message: string;
   message_type: "user" | "assistant";
   documents: AbridgedSearchDoc[];

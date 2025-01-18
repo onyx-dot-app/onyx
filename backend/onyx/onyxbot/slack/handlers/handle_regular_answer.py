@@ -126,7 +126,12 @@ def handle_regular_answer(
     #     messages, max_tokens=max_history_tokens, llm_tokenizer=llm_tokenizer
     # )
 
-    combined_message = slackify_message_thread(messages)
+    # NOTE: only the message history will contain the person asking. This is likely
+    # fine since the most common use case for this info is when referring to a user
+    # who previously posted in the thread.
+    user_message = messages[-1]
+    history_messages = messages[:-1]
+    single_message_history = slackify_message_thread(history_messages) or None
 
     bypass_acl = False
     if (
@@ -159,6 +164,7 @@ def handle_regular_answer(
                 user=onyx_user,
                 db_session=db_session,
                 bypass_acl=bypass_acl,
+                single_message_history=single_message_history,
             )
 
             answer = gather_stream_for_slack(packets)
@@ -198,7 +204,7 @@ def handle_regular_answer(
 
         with get_session_with_tenant(tenant_id) as db_session:
             answer_request = prepare_chat_message_request(
-                message_text=combined_message,
+                message_text=user_message.message,
                 user=user,
                 persona_id=persona.id,
                 # This is not used in the Slack flow, only in the answer API
@@ -312,7 +318,7 @@ def handle_regular_answer(
     top_docs = retrieval_info.top_documents
     if not top_docs and not should_respond_even_with_no_docs:
         logger.error(
-            f"Unable to answer question: '{combined_message}' - no documents found"
+            f"Unable to answer question: '{user_message}' - no documents found"
         )
         # Optionally, respond in thread with the error message
         # Used primarily for debugging purposes
@@ -371,8 +377,8 @@ def handle_regular_answer(
         respond_in_thread(
             client=client,
             channel=channel,
-            receiver_ids=[message_info.sender]
-            if message_info.is_bot_msg and message_info.sender
+            receiver_ids=[message_info.sender_id]
+            if message_info.is_bot_msg and message_info.sender_id
             else receiver_ids,
             text="Hello! Onyx has some results for you!",
             blocks=all_blocks,

@@ -24,7 +24,7 @@ from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import Tool
 from onyx.db.persona import upsert_persona
-from onyx.server.features.persona.models import CreatePersonaRequest
+from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.settings.models import Settings
 from onyx.server.settings.store import store_settings as store_base_settings
@@ -57,7 +57,7 @@ class SeedConfiguration(BaseModel):
     llms: list[LLMProviderUpsertRequest] | None = None
     admin_user_emails: list[str] | None = None
     seeded_logo_path: str | None = None
-    personas: list[CreatePersonaRequest] | None = None
+    personas: list[PersonaUpsertRequest] | None = None
     settings: Settings | None = None
     enterprise_settings: EnterpriseSettings | None = None
 
@@ -128,7 +128,7 @@ def _seed_llms(
         )
 
 
-def _seed_personas(db_session: Session, personas: list[CreatePersonaRequest]) -> None:
+def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) -> None:
     if personas:
         logger.notice("Seeding Personas")
         for persona in personas:

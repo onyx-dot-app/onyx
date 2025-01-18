@@ -23,6 +23,7 @@ def load_no_auth_user_preferences(store: KeyValueStore) -> UserPreferences:
         preferences_data = cast(
             Mapping[str, Any], store.load(KV_NO_AUTH_USER_PREFERENCES_KEY)
         )
+        print("preferences_data", preferences_data)
         return UserPreferences(**preferences_data)
     except KvKeyNotFoundError:
         return UserPreferences(

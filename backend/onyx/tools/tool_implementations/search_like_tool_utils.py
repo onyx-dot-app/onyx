@@ -5,12 +5,12 @@ from langchain_core.messages import HumanMessage
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
-from onyx.chat.prompt_builder.build import AnswerPromptBuilder
+from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.citations_prompt import (
     build_citations_system_message,
 )
 from onyx.chat.prompt_builder.citations_prompt import build_citations_user_message
-from onyx.chat.prompt_builder.quotes_prompt import build_quotes_user_message
+from onyx.llm.utils import build_content_with_imgs
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
 
@@ -40,37 +40,27 @@ def build_next_prompt_for_search_like_tool(
         # if using tool calling llm, then the final context documents are the tool responses
         final_context_documents = []
 
-    if answer_style_config.citation_config:
-        prompt_builder.update_system_prompt(
-            build_citations_system_message(prompt_config)
+    prompt_builder.update_system_prompt(build_citations_system_message(prompt_config))
+    prompt_builder.update_user_prompt(
+        build_citations_user_message(
+            # make sure to use the original user query here in order to avoid duplication
+            # of the task prompt
+            message=HumanMessage(
+                content=build_content_with_imgs(
+                    prompt_builder.raw_user_query,
+                    prompt_builder.raw_user_uploaded_files,
+                )
+            ),
+            prompt_config=prompt_config,
+            context_docs=final_context_documents,
+            all_doc_useful=(
+                answer_style_config.citation_config.all_docs_useful
+                if answer_style_config.citation_config
+                else False
+            ),
+            history_message=prompt_builder.single_message_history or "",
         )
-        prompt_builder.update_user_prompt(
-            build_citations_user_message(
-                message=prompt_builder.user_message_and_token_cnt[0],
-                prompt_config=prompt_config,
-                context_docs=final_context_documents,
-                all_doc_useful=(
-                    answer_style_config.citation_config.all_docs_useful
-                    if answer_style_config.citation_config
-                    else False
-                ),
-                history_message=prompt_builder.single_message_history or "",
-            )
-        )
-    elif answer_style_config.quotes_config:
-        # For Quotes, the system prompt is included in the user prompt
-        prompt_builder.update_system_prompt(None)
-
-        human_message = HumanMessage(content=prompt_builder.raw_user_message)
-
-        prompt_builder.update_user_prompt(
-            build_quotes_user_message(
-                message=human_message,
-                context_docs=final_context_documents,
-                history_str=prompt_builder.single_message_history or "",
-                prompt=prompt_config,
-            )
-        )
+    )
 
     if using_tool_calling_llm:
         prompt_builder.append_message(tool_call_summary.tool_call_request)

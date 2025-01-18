@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatter
 from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
 from onyx.background.celery.celery_utils import celery_is_worker_primary
+from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine import get_sqlalchemy_engine
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
@@ -100,6 +101,10 @@ def on_task_postrun(
     if not task_id:
         return
 
+    if task.name.startswith(ONYX_CLOUD_CELERY_TASK_PREFIX):
+        # this is a cloud / all tenant task ... no postrun is needed
+        return
+
     # Get tenant_id directly from kwargs- each celery task has a tenant_id kwarg
     if not kwargs:
         logger.error(f"Task {task.name} (ID: {task_id}) is missing kwargs")
@@ -161,9 +166,34 @@ def on_task_postrun(
         return
 
 
-def on_celeryd_init(sender: Any = None, conf: Any = None, **kwargs: Any) -> None:
+def on_celeryd_init(sender: str, conf: Any = None, **kwargs: Any) -> None:
     """The first signal sent on celery worker startup"""
-    multiprocessing.set_start_method("spawn")  # fork is unsafe, set to spawn
+
+    # NOTE(rkuo): start method "fork" is unsafe and we really need it to be "spawn"
+    # But something is blocking set_start_method from working in the cloud unless
+    # force=True. so we use force=True as a fallback.
+
+    all_start_methods: list[str] = multiprocessing.get_all_start_methods()
+    logger.info(f"Multiprocessing all start methods: {all_start_methods}")
+
+    try:
+        multiprocessing.set_start_method("spawn")  # fork is unsafe, set to spawn
+    except Exception:
+        logger.info(
+            "Multiprocessing set_start_method exceptioned. Trying force=True..."
+        )
+        try:
+            multiprocessing.set_start_method(
+                "spawn", force=True
+            )  # fork is unsafe, set to spawn
+        except Exception:
+            logger.info(
+                "Multiprocessing set_start_method force=True exceptioned even with force=True."
+            )
+
+    logger.info(
+        f"Multiprocessing selected start method: {multiprocessing.get_start_method()}"
+    )
 
 
 def wait_for_redis(sender: Any, **kwargs: Any) -> None:

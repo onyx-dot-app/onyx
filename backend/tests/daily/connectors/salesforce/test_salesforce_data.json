@@ -1,0 +1,20 @@
+{
+  "id": "SALESFORCE_001fI000005drUcQAI",
+  "expected_links": [
+    "https://customization-ruby-2195.my.salesforce.com/001fI000005drUcQAI",
+    "https://customization-ruby-2195.my.salesforce.com/003fI000001jiCPQAY",
+    "https://customization-ruby-2195.my.salesforce.com/017fI00000T7hvsQAB",
+    "https://customization-ruby-2195.my.salesforce.com/006fI000000rDvBQAU"
+  ],
+  "expected_text": [
+    "BillingPostalCode: 60601\nType: Prospect\nWebsite: www.globalistindustries.com\nBillingCity: Chicago\nDescription: Globalist company\nIsDeleted: false\nIsPartner: false\nPhone: (312) 555-0456\nShippingCountry: USA\nShippingState: IL\nIsBuyer: false\nBillingCountry: USA\nBillingState: IL\nShippingPostalCode: 60601\nBillingStreet: 456 Market St\nIsCustomerPortal: false\nPersonActiveTrackerCount: 0\nShippingCity: Chicago\nShippingStreet: 456 Market St",
+    "FirstName: Michael\nMailingCountry: USA\nActiveTrackerCount: 0\nEmail: m.brown@globalindustries.com\nMailingState: IL\nMailingStreet: 456 Market St\nMailingCity: Chicago\nLastName: Brown\nTitle: CTO\nIsDeleted: false\nPhone: (312) 555-0456\nHasOptedOutOfEmail: false\nIsEmailBounced: false\nMailingPostalCode: 60601",
+    "ForecastCategory: Closed\nName: Global Industries Equipment Sale\nIsDeleted: false\nForecastCategoryName: Closed\nFiscalYear: 2024\nFiscalQuarter: 4\nIsClosed: true\nIsWon: true\nAmount: 5000000.0\nProbability: 100.0\nPushCount: 0\nHasOverdueTask: false\nStageName: Closed Won\nHasOpenActivity: false\nHasOpportunityLineItem: false",
+    "Field: created\nDataType: Text\nIsDeleted: false"
+  ],
+  "semantic_identifier": "Unknown Object",
+  "metadata": {},
+  "primary_owners": null,
+  "secondary_owners": null,
+  "title": null
+}

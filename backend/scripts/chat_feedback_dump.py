@@ -108,6 +108,7 @@ logger = getLogger(__name__)
 
 
 # class MessageSnapshot(BaseModel):
+#     id: int
 #     message: str
 #     message_type: MessageType
 #     documents: list[AbridgedSearchDoc]

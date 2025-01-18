@@ -1,12 +1,13 @@
 from langchain.schema.messages import HumanMessage
 from langchain.schema.messages import SystemMessage
+from sqlalchemy.orm import Session
 
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
 from onyx.configs.model_configs import GEN_AI_SINGLE_USER_MESSAGE_EXPECTED_MAX_TOKENS
 from onyx.context.search.models import InferenceChunk
 from onyx.db.models import Persona
-from onyx.db.persona import get_default_prompt__read_only
+from onyx.db.prompts import get_default_prompt
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
@@ -97,11 +98,12 @@ def compute_max_document_tokens(
 
 
 def compute_max_document_tokens_for_persona(
+    db_session: Session,
     persona: Persona,
     actual_user_input: str | None = None,
     max_llm_token_override: int | None = None,
 ) -> int:
-    prompt = persona.prompts[0] if persona.prompts else get_default_prompt__read_only()
+    prompt = persona.prompts[0] if persona.prompts else get_default_prompt(db_session)
     return compute_max_document_tokens(
         prompt_config=PromptConfig.from_model(prompt),
         llm_config=get_main_llm_from_tuple(get_llms_for_persona(persona)).config,
@@ -144,9 +146,7 @@ def build_citations_user_message(
     )
 
     history_block = (
-        HISTORY_BLOCK.format(history_str=history_message) + "\n"
-        if history_message
-        else ""
+        HISTORY_BLOCK.format(history_str=history_message) if history_message else ""
     )
     query, img_urls = message_to_prompt_and_imgs(message)
 

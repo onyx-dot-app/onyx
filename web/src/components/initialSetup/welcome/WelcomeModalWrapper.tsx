@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import {
   _CompletedWelcomeFlowDummyComponent,
   _WelcomeModal,

@@ -47,6 +47,7 @@ POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME = "celery_worker_primary"
 POSTGRES_CELERY_WORKER_LIGHT_APP_NAME = "celery_worker_light"
 POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
 POSTGRES_CELERY_WORKER_INDEXING_APP_NAME = "celery_worker_indexing"
+POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
 POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME = "celery_worker_indexing_child"
 POSTGRES_PERMISSIONS_APP_NAME = "permissions"
 POSTGRES_UNKNOWN_APP_NAME = "unknown"
@@ -78,6 +79,8 @@ KV_DOCUMENTS_SEEDED_KEY = "documents_seeded"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation
+CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
+
 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
@@ -197,6 +200,7 @@ class SessionType(str, Enum):
 class QAFeedbackType(str, Enum):
     LIKE = "like"  # User likes the answer, used for metrics
     DISLIKE = "dislike"  # User dislikes the answer, used for metrics
+    MIXED = "mixed"  # User likes some answers and dislikes other, used for chat session metrics
 
 
 class SearchFeedbackType(str, Enum):
@@ -260,6 +264,9 @@ class OnyxCeleryQueues:
     # Indexing queue
     CONNECTOR_INDEXING = "connector_indexing"
 
+    # Monitoring queue
+    MONITORING = "monitoring"
+
 
 class OnyxRedisLocks:
     PRIMARY_WORKER = "da_lock:primary_worker"
@@ -274,6 +281,7 @@ class OnyxRedisLocks:
         "da_lock:check_connector_external_group_sync_beat"
     )
     MONITOR_VESPA_SYNC_BEAT_LOCK = "da_lock:monitor_vespa_sync_beat"
+    MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
 
     CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = (
         "da_lock:connector_doc_permissions_sync"
@@ -285,6 +293,8 @@ class OnyxRedisLocks:
     SLACK_BOT_LOCK = "da_lock:slack_bot"
     SLACK_BOT_HEARTBEAT_PREFIX = "da_heartbeat:slack_bot"
     ANONYMOUS_USER_ENABLED = "anonymous_user_enabled"
+
+    CLOUD_CHECK_INDEXING_BEAT_LOCK = "da_lock:cloud_check_indexing_beat"
 
 
 class OnyxRedisSignals:
@@ -299,6 +309,13 @@ class OnyxCeleryPriority(int, Enum):
     LOWEST = auto()
 
 
+# a prefix used to distinguish system wide tasks in the cloud
+ONYX_CLOUD_CELERY_TASK_PREFIX = "cloud"
+
+# the tenant id we use for system level redis operations
+ONYX_CLOUD_TENANT_ID = "cloud"
+
+
 class OnyxCeleryTask:
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
@@ -308,6 +325,7 @@ class OnyxCeleryTask:
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
     MONITOR_VESPA_SYNC = "monitor_vespa_sync"
+    MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"
@@ -324,6 +342,8 @@ class OnyxCeleryTask:
     VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     AUTOGENERATE_USAGE_REPORT_TASK = "autogenerate_usage_report_task"
+
+    CLOUD_CHECK_FOR_INDEXING = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_for_indexing"
 
 
 REDIS_SOCKET_KEEPALIVE_OPTIONS = {}

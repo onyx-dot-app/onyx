@@ -118,32 +118,6 @@ You should always get right to the point, and never use extraneous language.
 """
 
 
-# This is only for visualization for the users to specify their own prompts
-# The actual flow does not work like this
-PARAMATERIZED_PROMPT = f"""
-{{system_prompt}}
-
-CONTEXT:
-{GENERAL_SEP_PAT}
-{{context_docs_str}}
-{GENERAL_SEP_PAT}
-
-{{task_prompt}}
-
-{QUESTION_PAT.upper()} {{user_query}}
-RESPONSE:
-""".strip()
-
-PARAMATERIZED_PROMPT_WITHOUT_CONTEXT = f"""
-{{system_prompt}}
-
-{{task_prompt}}
-
-{QUESTION_PAT.upper()} {{user_query}}
-RESPONSE:
-""".strip()
-
-
 # CURRENTLY DISABLED, CANNOT USE THIS ONE
 # Default chain-of-thought style json prompt which uses multiple docs
 # This one has a section for the LLM to output some non-answer "thoughts"

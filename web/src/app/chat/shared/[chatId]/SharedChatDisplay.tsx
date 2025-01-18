@@ -20,7 +20,7 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { Button } from "@/components/ui/button";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat_search/TextView";
-import { ChatFilters } from "../../documentSidebar/ChatFilters";
+import { DocumentResults } from "../../documentSidebar/DocumentResults";
 import { Modal } from "@/components/Modal";
 import FunctionalHeader from "@/components/chat_search/Header";
 import FixedLogo from "../../shared_chat_search/FixedLogo";
@@ -107,7 +107,7 @@ export function SharedChatDisplay({
       {documentSidebarToggled && settings?.isMobile && (
         <div className="md:hidden">
           <Modal noPadding noScroll>
-            <ChatFilters
+            <DocumentResults
               isSharedChat={true}
               selectedMessage={
                 selectedMessageForDocDisplay
@@ -128,10 +128,6 @@ export function SharedChatDisplay({
               isOpen={true}
               setPresentingDocument={setPresentingDocument}
               modal={true}
-              ccPairs={[]}
-              tags={[]}
-              documentSets={[]}
-              showFilters={false}
               closeSidebar={() => {
                 setDocumentSidebarToggled(false);
               }}
@@ -166,7 +162,7 @@ export function SharedChatDisplay({
                   ${documentSidebarToggled ? "w-[400px]" : "w-[0px]"}
             `}
               >
-                <ChatFilters
+                <DocumentResults
                   modal={false}
                   isSharedChat={true}
                   selectedMessage={
@@ -186,10 +182,6 @@ export function SharedChatDisplay({
                   initialWidth={400}
                   isOpen={true}
                   setPresentingDocument={setPresentingDocument}
-                  ccPairs={[]}
-                  tags={[]}
-                  documentSets={[]}
-                  showFilters={false}
                   closeSidebar={() => {
                     setDocumentSidebarToggled(false);
                   }}
@@ -199,7 +191,6 @@ export function SharedChatDisplay({
             )}
             <div className="flex mobile:hidden max-h-full overflow-hidden ">
               <FunctionalHeader
-                documentSidebarToggled={documentSidebarToggled}
                 sidebarToggled={false}
                 toggleSidebar={() => {}}
                 page="chat"
@@ -212,8 +203,7 @@ export function SharedChatDisplay({
                 <div className="fixed z-10 w-full ">
                   <div className="bg-background relative px-5 pt-4 w-full">
                     <h1 className="text-3xl text-strong font-bold">
-                      {chatSession.description ||
-                        `Chat ${chatSession.chat_session_id}`}
+                      {chatSession.description || `Unnamed Chat`}
                     </h1>
                     <p className=" text-emphasis">
                       {humanReadableFormat(chatSession.time_created)}

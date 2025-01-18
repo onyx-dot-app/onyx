@@ -1,3 +1,4 @@
+"use client";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
 import Text from "@/components/ui/text";
@@ -11,6 +12,7 @@ import {
 } from "@/app/ee/admin/performance/DateRangeSelector";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import { BackButton } from "@/components/BackButton";
 
 type AssistantDailyUsageEntry = {
   date: string;
@@ -144,7 +146,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
   }
 
   return (
-    <CardSection className="mt-8">
+    <>
       <div className="flex justify-between items-start mb-6">
         <div className="flex flex-col gap-2">
           <Title>Assistant Analytics</Title>
@@ -155,7 +157,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
           <DateRangeSelector value={dateRange} onValueChange={setDateRange} />
         </div>
         {assistant && (
-          <div className="bg-gray-100 p-4 rounded-lg shadow-sm">
+          <div className="bg-gray-100 p-4 w-full max-w-64 rounded-lg shadow-sm">
             <div className="flex items-center mb-2">
               <AssistantIcon
                 disableToolip
@@ -183,6 +185,6 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
         </div>
       </div>
       {content}
-    </CardSection>
+    </>
   );
 }

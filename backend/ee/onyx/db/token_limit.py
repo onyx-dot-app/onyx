@@ -111,10 +111,10 @@ def insert_user_group_token_rate_limit(
     return token_limit
 
 
-def fetch_user_group_token_rate_limits(
+def fetch_user_group_token_rate_limits_for_user(
     db_session: Session,
     group_id: int,
-    user: User | None = None,
+    user: User | None,
     enabled_only: bool = False,
     ordered: bool = True,
     get_editable: bool = True,

@@ -4,12 +4,15 @@ import {
 } from "@/components/BasicClickable";
 import { HoverPopup } from "@/components/HoverPopup";
 import { Hoverable } from "@/components/Hoverable";
+import { SourceIcon } from "@/components/SourceIcon";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { OnyxDocument } from "@/lib/search/interfaces";
+import { ValidSources } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 import { FiCheck, FiEdit2, FiSearch, FiX } from "react-icons/fi";
 
@@ -45,11 +48,15 @@ export function SearchSummary({
   query,
   finished,
   handleSearchQueryEdit,
+  docs,
+  toggleDocumentSelection,
 }: {
   index: number;
   finished: boolean;
   query: string;
   handleSearchQueryEdit?: (query: string) => void;
+  docs: OnyxDocument[];
+  toggleDocumentSelection: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [finalQuery, setFinalQuery] = useState(query);
@@ -87,28 +94,64 @@ export function SearchSummary({
   }, [query, isEditing]);
 
   const searchingForDisplay = (
-    <div className={`flex p-1 rounded ${isOverflowed && "cursor-default"}`}>
-      <FiSearch className="flex-none mr-2 my-auto" size={14} />
+    <div className="flex flex-col gap-y-1">
       <div
-        className={`${!finished && "loading-text"} 
-        !text-sm !line-clamp-1 !break-all px-0.5`}
-        ref={searchingForRef}
+        className={`flex items-center w-full rounded ${
+          isOverflowed && "cursor-default"
+        }`}
       >
-        {finished ? "Searched" : "Searching"} for:{" "}
-        <i>
-          {index === 1
-            ? finalQuery.length > 50
-              ? `${finalQuery.slice(0, 50)}...`
-              : finalQuery
-            : finalQuery}
-        </i>
+        <FiSearch className="mobile:hidden flex-none mr-2" size={14} />
+        <div
+          className={`${
+            !finished && "loading-text"
+          } text-xs desktop:text-sm mobile:ml-auto !line-clamp-1 !break-all px-0.5 flex-grow`}
+          ref={searchingForRef}
+        >
+          {finished ? "Searched" : "Searching"} for:{" "}
+          <i>
+            {index === 1
+              ? finalQuery.length > 50
+                ? `${finalQuery.slice(0, 50)}...`
+                : finalQuery
+              : finalQuery}
+          </i>
+        </div>
+      </div>
+
+      <div className="desktop:hidden">
+        {" "}
+        {docs && (
+          <button
+            className="cursor-pointer mr-2 flex items-center gap-0.5"
+            onClick={() => toggleDocumentSelection()}
+          >
+            {Array.from(new Set(docs.map((doc) => doc.source_type)))
+              .slice(0, 3)
+              .map((sourceType, idx) => (
+                <div key={idx} className="rounded-full">
+                  <SourceIcon sourceType={sourceType} iconSize={14} />
+                </div>
+              ))}
+            {Array.from(new Set(docs.map((doc) => doc.source_type))).length >
+              3 && (
+              <div className="rounded-full bg-gray-200 w-3.5 h-3.5 flex items-center justify-center">
+                <span className="text-[8px]">
+                  +
+                  {Array.from(new Set(docs.map((doc) => doc.source_type)))
+                    .length - 3}
+                </span>
+              </div>
+            )}
+            <span className="text-xs underline">View sources</span>
+          </button>
+        )}
       </div>
     </div>
   );
 
   const editInput = handleSearchQueryEdit ? (
-    <div className="flex w-full mr-3">
-      <div className="my-2 w-full">
+    <div className="mobile:hidden flex w-full mr-3">
+      <div className="w-full">
         <input
           ref={editQueryRef}
           value={finalQuery}
@@ -128,10 +171,10 @@ export function SearchSummary({
               event.preventDefault();
             }
           }}
-          className="px-1 py-0.5 h-[28px] text-sm mr-2 w-full rounded-sm border border-border-strong"
+          className="px-1 py-0.5 h-[22px] text-sm mr-2 w-full rounded-sm border border-border-strong"
         />
       </div>
-      <div className="ml-2 my-auto flex">
+      <div className="ml-2 -my-1 my-auto flex">
         <Hoverable
           icon={FiCheck}
           onClick={() => {
@@ -155,12 +198,12 @@ export function SearchSummary({
   ) : null;
 
   return (
-    <div className="flex">
+    <div className="flex items-center">
       {isEditing ? (
         editInput
       ) : (
         <>
-          <div className="text-sm">
+          <div className="mobile:w-full mobile:mr-2 text-sm mobile:flex-grow">
             {isOverflowed ? (
               <HoverPopup
                 mainContent={searchingForDisplay}
@@ -176,12 +219,13 @@ export function SearchSummary({
               searchingForDisplay
             )}
           </div>
+
           {handleSearchQueryEdit && (
             <TooltipProvider delayDuration={1000}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="my-auto hover:bg-hover p-1.5 rounded"
+                    className="ml-2 -my-2 mobile:hidden hover:bg-hover p-1 rounded flex-shrink-0"
                     onClick={() => {
                       setIsEditing(true);
                     }}

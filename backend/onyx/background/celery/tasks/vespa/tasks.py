@@ -1,6 +1,7 @@
 import random
 import time
 import traceback
+from collections.abc import Callable
 from datetime import datetime
 from datetime import timezone
 from http import HTTPStatus
@@ -53,10 +54,16 @@ from onyx.db.document_set import get_document_set_by_id
 from onyx.db.document_set import mark_document_set_as_synced
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import IndexingStatus
+from onyx.db.enums import SyncStatus
+from onyx.db.enums import SyncType
 from onyx.db.index_attempt import delete_index_attempts
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.models import DocumentSet
+from onyx.db.models import UserGroup
+from onyx.db.sync_record import cleanup_sync_records
+from onyx.db.sync_record import insert_sync_record
+from onyx.db.sync_record import update_sync_record_status
 from onyx.document_index.document_index_utils import get_both_index_names
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaDocumentFields
@@ -278,11 +285,21 @@ def try_generate_document_set_sync_tasks(
 
     # don't generate sync tasks if we're up to date
     # race condition with the monitor/cleanup function if we use a cached result!
-    document_set = get_document_set_by_id(db_session, document_set_id)
+    document_set = get_document_set_by_id(
+        db_session=db_session,
+        document_set_id=document_set_id,
+    )
     if not document_set:
         return None
 
     if document_set.is_up_to_date:
+        # there should be no in-progress sync records if this is up to date
+        # clean it up just in case things got into a bad state
+        cleanup_sync_records(
+            db_session=db_session,
+            entity_id=document_set_id,
+            sync_type=SyncType.DOCUMENT_SET,
+        )
         return None
 
     # add tasks to celery and build up the task set to monitor in redis
@@ -311,6 +328,13 @@ def try_generate_document_set_sync_tasks(
         f"document_set={document_set.id} tasks_generated={tasks_generated}"
     )
 
+    # create before setting fence to avoid race condition where the monitoring
+    # task updates the sync record before it is created
+    insert_sync_record(
+        db_session=db_session,
+        entity_id=document_set_id,
+        sync_type=SyncType.DOCUMENT_SET,
+    )
     # set this only after all tasks have been added
     rds.set_fence(tasks_generated)
     return tasks_generated
@@ -332,8 +356,9 @@ def try_generate_user_group_sync_tasks(
         return None
 
     # race condition with the monitor/cleanup function if we use a cached result!
-    fetch_user_group = fetch_versioned_implementation(
-        "onyx.db.user_group", "fetch_user_group"
+    fetch_user_group = cast(
+        Callable[[Session, int], UserGroup | None],
+        fetch_versioned_implementation("onyx.db.user_group", "fetch_user_group"),
     )
 
     usergroup = fetch_user_group(db_session, usergroup_id)
@@ -341,6 +366,13 @@ def try_generate_user_group_sync_tasks(
         return None
 
     if usergroup.is_up_to_date:
+        # there should be no in-progress sync records if this is up to date
+        # clean it up just in case things got into a bad state
+        cleanup_sync_records(
+            db_session=db_session,
+            entity_id=usergroup_id,
+            sync_type=SyncType.USER_GROUP,
+        )
         return None
 
     # add tasks to celery and build up the task set to monitor in redis
@@ -368,8 +400,16 @@ def try_generate_user_group_sync_tasks(
         f"usergroup={usergroup.id} tasks_generated={tasks_generated}"
     )
 
+    # create before setting fence to avoid race condition where the monitoring
+    # task updates the sync record before it is created
+    insert_sync_record(
+        db_session=db_session,
+        entity_id=usergroup_id,
+        sync_type=SyncType.USER_GROUP,
+    )
     # set this only after all tasks have been added
     rug.set_fence(tasks_generated)
+
     return tasks_generated
 
 
@@ -419,6 +459,13 @@ def monitor_document_set_taskset(
         f"remaining={count} initial={initial_count}"
     )
     if count > 0:
+        update_sync_record_status(
+            db_session=db_session,
+            entity_id=document_set_id,
+            sync_type=SyncType.DOCUMENT_SET,
+            sync_status=SyncStatus.IN_PROGRESS,
+            num_docs_synced=count,
+        )
         return
 
     document_set = cast(
@@ -437,6 +484,13 @@ def monitor_document_set_taskset(
             task_logger.info(
                 f"Successfully synced document set: document_set={document_set_id}"
             )
+        update_sync_record_status(
+            db_session=db_session,
+            entity_id=document_set_id,
+            sync_type=SyncType.DOCUMENT_SET,
+            sync_status=SyncStatus.SUCCESS,
+            num_docs_synced=initial_count,
+        )
 
     rds.reset()
 
@@ -470,10 +524,21 @@ def monitor_connector_deletion_taskset(
         f"Connector deletion progress: cc_pair={cc_pair_id} remaining={remaining} initial={fence_data.num_tasks}"
     )
     if remaining > 0:
+        with get_session_with_tenant(tenant_id) as db_session:
+            update_sync_record_status(
+                db_session=db_session,
+                entity_id=cc_pair_id,
+                sync_type=SyncType.CONNECTOR_DELETION,
+                sync_status=SyncStatus.IN_PROGRESS,
+                num_docs_synced=remaining,
+            )
         return
 
     with get_session_with_tenant(tenant_id) as db_session:
-        cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=cc_pair_id,
+        )
         if not cc_pair:
             task_logger.warning(
                 f"Connector deletion - cc_pair not found: cc_pair={cc_pair_id}"
@@ -545,11 +610,29 @@ def monitor_connector_deletion_taskset(
                 )
                 db_session.delete(connector)
             db_session.commit()
+
+            update_sync_record_status(
+                db_session=db_session,
+                entity_id=cc_pair_id,
+                sync_type=SyncType.CONNECTOR_DELETION,
+                sync_status=SyncStatus.SUCCESS,
+                num_docs_synced=fence_data.num_tasks,
+            )
+
         except Exception as e:
             db_session.rollback()
             stack_trace = traceback.format_exc()
             error_message = f"Error: {str(e)}\n\nStack Trace:\n{stack_trace}"
             add_deletion_failure_message(db_session, cc_pair_id, error_message)
+
+            update_sync_record_status(
+                db_session=db_session,
+                entity_id=cc_pair_id,
+                sync_type=SyncType.CONNECTOR_DELETION,
+                sync_status=SyncStatus.FAILED,
+                num_docs_synced=fence_data.num_tasks,
+            )
+
             task_logger.exception(
                 f"Connector deletion exceptioned: "
                 f"cc_pair={cc_pair_id} connector={cc_pair.connector_id} credential={cc_pair.credential_id}"

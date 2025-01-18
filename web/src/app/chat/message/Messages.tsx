@@ -19,11 +19,7 @@ import React, {
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
-import {
-  OnyxDocument,
-  FilteredOnyxDocument,
-  LoadedOnyxDocument,
-} from "@/lib/search/interfaces";
+import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
 import { SearchSummary } from "./SearchSummary";
 
 import { SkippedSearch } from "./SkippedSearch";
@@ -111,7 +107,6 @@ function FileDisplay({
                 <div key={file.id} className="w-fit">
                   <DocumentPreview
                     fileName={file.name || file.id}
-                    maxWidth="max-w-64"
                     alignBubble={alignBubble}
                   />
                 </div>
@@ -196,6 +191,7 @@ export const AIMessage = ({
   onMessageSelection,
   setPresentingDocument,
   index,
+  toggledDocumentSidebar,
 }: {
   index?: number;
   selectedMessageForDocDisplay?: number | null;
@@ -217,6 +213,7 @@ export const AIMessage = ({
   citedDocuments?: [string, OnyxDocument][] | null;
   toolCall?: ToolCallMetadata | null;
   isComplete?: boolean;
+  toggledDocumentSidebar?: boolean;
   hasDocs?: boolean;
   handleFeedback?: (feedbackType: FeedbackType) => void;
   handleShowRetrieved?: (messageNumber: number | null) => void;
@@ -339,6 +336,21 @@ export const AIMessage = ({
     new Set((docs || []).map((doc) => doc.source_type))
   ).slice(0, 3);
 
+  const webSourceDomains: string[] = Array.from(
+    new Set(
+      docs
+        ?.filter((doc) => doc.source_type === "web")
+        .map((doc) => {
+          try {
+            const url = new URL(doc.link);
+            return `https://${url.hostname}`;
+          } catch {
+            return doc.link; // fallback to full link if parsing fails
+          }
+        }) || []
+    )
+  );
+
   const markdownComponents = useMemo(
     () => ({
       a: anchorCallback,
@@ -383,23 +395,24 @@ export const AIMessage = ({
     <div
       id="onyx-ai-message"
       ref={trackedElementRef}
-      className={`py-5 ml-4 px-5 relative flex `}
+      className={`py-5 ml-4 lg:px-5 relative flex `}
     >
       <div
         className={`mx-auto ${
           shared ? "w-full" : "w-[90%]"
         }  max-w-message-max`}
       >
-        <div className={`desktop:mr-12 ${!shared && "mobile:ml-0 md:ml-8"}`}>
+        <div className={`lg:mr-12 ${!shared && "mobile:ml-0 md:ml-8"}`}>
           <div className="flex">
             <AssistantIcon
-              size="small"
+              className="mobile:hidden"
+              size={24}
               assistant={alternativeAssistant || currentPersona}
             />
 
             <div className="w-full">
               <div className="max-w-message-max break-words">
-                <div className="w-full ml-4">
+                <div className="w-full desktop:ml-4">
                   <div className="max-w-message-max break-words">
                     {!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
                       <>
@@ -410,6 +423,8 @@ export const AIMessage = ({
                               query={query}
                               finished={toolCall?.tool_result != undefined}
                               handleSearchQueryEdit={handleSearchQueryEdit}
+                              docs={docs || []}
+                              toggleDocumentSelection={toggleDocumentSelection!}
                             />
                           </div>
                         )}
@@ -465,14 +480,14 @@ export const AIMessage = ({
                       )}
 
                     {docs && docs.length > 0 && (
-                      <div className="mt-2 -mx-8 w-full mb-4 flex relative">
+                      <div className="mobile:hidden mt-2 -mx-8 w-full mb-4 flex relative">
                         <div className="w-full">
                           <div className="px-8 flex gap-x-2">
                             {!settings?.isMobile &&
                               docs.length > 0 &&
                               docs
                                 .slice(0, 2)
-                                .map((doc, ind) => (
+                                .map((doc: OnyxDocument, ind: number) => (
                                   <SourceCard
                                     doc={doc}
                                     key={ind}
@@ -482,13 +497,10 @@ export const AIMessage = ({
                                   />
                                 ))}
                             <SeeMoreBlock
-                              documentSelectionToggled={
-                                (documentSelectionToggled &&
-                                  selectedMessageForDocDisplay === messageId) ||
-                                false
-                              }
-                              toggleDocumentSelection={toggleDocumentSelection}
+                              toggled={toggledDocumentSidebar!}
+                              toggleDocumentSelection={toggleDocumentSelection!}
                               uniqueSources={uniqueSources}
+                              webSourceDomains={webSourceDomains}
                             />
                           </div>
                         </div>
@@ -768,7 +780,7 @@ export const HumanMessage = ({
   return (
     <div
       id="onyx-human-message"
-      className="pt-5 pb-1 px-2 lg:px-5 flex -mr-6 relative"
+      className="pt-5 pb-1 w-full lg:px-5 flex -mr-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -778,7 +790,7 @@ export const HumanMessage = ({
         } max-w-[790px]`}
       >
         <div className="xl:ml-8">
-          <div className="flex flex-col mr-4">
+          <div className="flex flex-col desktop:mr-4">
             <FileDisplay alignBubble files={files || []} />
 
             <div className="flex justify-end">
@@ -794,7 +806,6 @@ export const HumanMessage = ({
                       border 
                       border-border 
                       rounded-lg 
-                      bg-background-emphasis
                       pb-2
                       [&:has(textarea:focus)]::ring-1
                       [&:has(textarea:focus)]::ring-black
@@ -810,7 +821,6 @@ export const HumanMessage = ({
                         border-0
                         rounded-lg 
                         overflow-y-hidden
-                        bg-background-emphasis 
                         whitespace-normal 
                         break-word
                         overscroll-contain
@@ -820,6 +830,7 @@ export const HumanMessage = ({
                         text-text-editing-message
                         pl-4
                         overflow-y-auto
+                        bg-background
                         pr-12 
                         py-4`}
                         aria-multiline
@@ -893,7 +904,7 @@ export const HumanMessage = ({
                   </div>
                 ) : typeof content === "string" ? (
                   <>
-                    <div className="ml-auto mr-1 my-auto">
+                    <div className="ml-auto flex items-center mr-1 h-fit my-auto">
                       {onEdit &&
                       isHovered &&
                       !isEditing &&

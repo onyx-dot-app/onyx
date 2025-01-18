@@ -13,7 +13,6 @@ const cspHeader = `
     object-src 'none';
     base-uri 'self';
     form-action 'self';
-    frame-ancestors 'none';
     ${
       process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true"
         ? "upgrade-insecure-requests;"
@@ -26,6 +25,17 @@ const nextConfig = {
   output: "standalone",
   publicRuntimeConfig: {
     version,
+  },
+  images: {
+    // Used to fetch favicons
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "www.google.com",
+        port: "",
+        pathname: "/s2/favicons/**",
+      },
+    ],
   },
   async headers() {
     return [
@@ -45,16 +55,11 @@ const nextConfig = {
             value: "strict-origin-when-cross-origin",
           },
           {
-            key: "X-Frame-Options",
-            value: "DENY",
-          },
-          {
             key: "X-Content-Type-Options",
             value: "nosniff",
           },
           {
             key: "Permissions-Policy",
-            // Deny all permissions by default
             value:
               "accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), cross-origin-isolated=(), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=(), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(), midi=(), navigation-override=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(), xr-spatial-tracking=()",
           },

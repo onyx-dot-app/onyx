@@ -40,6 +40,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint("fk_persona_category", "persona", type_="foreignkey")
+    op.drop_constraint("persona_category_id_fkey", "persona", type_="foreignkey")
     op.drop_column("persona", "category_id")
     op.drop_table("persona_category")
