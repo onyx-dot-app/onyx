@@ -1,6 +1,5 @@
-{
-	“DomainName”: “danswer.ia”,
-	“SubjectAlternativeNames”: “”,
-	“Environment”: “production”
-}
-
+[
+    {"ParameterKey": "DomainName", "ParameterValue": "danswer.ai."},
+    {"ParameterKey": "SubjectAlternativeNames", "ParameterValue": ""},
+    {"ParameterKey": "Environment", "ParameterValue": "production"}
+]

@@ -2,10 +2,6 @@
 envsubst '$DOMAIN $SSL_CERT_FILE_NAME $SSL_CERT_KEY_FILE_NAME' < "/etc/nginx/conf.d/$1" > /etc/nginx/conf.d/app.conf
 
 ONYX_BACKEND_API_HOST="${ONYX_BACKEND_API_HOST:-api_server}"
-AWS_ONYX_NAMESPACE="${AWS_ONYX_NAMESPACE:-}"
-if [[ -n "${AWS_ONYX_NAMESPACE}" ]]; then
-    AWS_ONYX_NAMESPACE=".${AWS_ONYX_NAMESPACE}"
-fi
 
 # wait for the api_server to be ready
 echo "Waiting for API server to boot up; this may take a minute or two..."
@@ -16,7 +12,7 @@ echo
 
 while true; do
   # Use curl to send a request and capture the HTTP status code
-  status_code=$(curl -o /dev/null -s -w "%{http_code}\n" "http://${ONYX_BACKEND_API_URL}${AWS_ONYX_NAMESPACE}:8080/health")
+  status_code=$(curl -o /dev/null -s -w "%{http_code}\n" "http://${ONYX_BACKEND_API_HOST}:8080/health")
   
   # Check if the status code is 200
   if [ "$status_code" -eq 200 ]; then

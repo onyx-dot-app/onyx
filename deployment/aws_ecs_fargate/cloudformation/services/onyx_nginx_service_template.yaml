@@ -22,6 +22,15 @@ Parameters:
   ServiceName:
     Type: String
     Default: onyx-nginx
+  OnyxNamespace:
+    Type: String
+    Default: onyx
+  OnyxBackendApiServiceName:
+    Type: String
+    Default: onyx-backend-api-server-service
+  OnyxWebServerServiceName:
+    Type: String
+    Default: onyx-web-server-service
 
 Resources:
   ECSService:
@@ -98,11 +107,9 @@ Resources:
             - Name: DOMAIN
               Value: !Ref DomainName
             - Name: ONYX_BACKEND_API_HOST
-              Value: !Sub ${Environment}-${ServiceName}
-            - Name: AWS_ONYX_NAMESPACE
-              Value:
-                Fn::ImportValue:
-                  Fn::Sub: ${Environment}-onyx-cluster-OnyxNamespaceName
+              Value: !Sub ${Environment}-${OnyxBackendApiServiceName}.${OnyxNamespace}
+            - Name: ONYX_WEB_SERVER_HOST
+              Value: !Sub ${Environment}-${OnyxWebServerServiceName}.${OnyxNamespace}
           MountPoints:
             - SourceVolume: efs-volume
               ContainerPath: /etc/nginx/conf.d
@@ -131,7 +138,7 @@ Resources:
           Command:
             - sh
             - -c
-            - !Sub aws s3 cp s3://${Environment}-onyx-ecs-fargate-configs/nginx/conf.d/ /etc/nginx/conf.d/ --recursive && exit 0 || exit 1
+            - !Sub aws s3 cp s3://${Environment}-onyx-ecs-fargate-configs/nginx/ /etc/nginx/conf.d/ --recursive && exit 0 || exit 1
           Environment:
             - Name: AWS_REGION
               Value: !Ref AWS::Region

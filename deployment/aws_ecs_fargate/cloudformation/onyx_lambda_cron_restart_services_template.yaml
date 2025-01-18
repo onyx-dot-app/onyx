@@ -3,6 +3,7 @@ Description: Lambda function to force new ECS Fargate service deployments, trigg
 Parameters:
   Environment:
     Type: String
+    Default: production
   CronScheduleState:
     Type: String
     Default: ENABLED
