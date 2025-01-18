@@ -528,7 +528,6 @@ def verify_user_logged_in(
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> UserInfo:
-    print(AUTH_TYPE)
     # NOTE: this does not use `current_user` / `current_admin_user` because we don't want
     # to enforce user verification here - the frontend always wants to get the info about
     # the current user regardless of if they are currently verified
@@ -715,7 +714,6 @@ def update_user_pinned_assistants(
             store = get_kv_store()
             no_auth_user = fetch_no_auth_user(store)
             no_auth_user.preferences.pinned_assistants = ordered_assistant_ids
-            print("ordered_assistant_ids", ordered_assistant_ids)
             set_no_auth_user_preferences(store, no_auth_user.preferences)
             return
         else:
