@@ -68,6 +68,7 @@ export const CustomTooltip = ({
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const triggerRef = useRef<HTMLSpanElement>(null);
+
   const { groupHovered, setGroupHovered, hoverCountRef } =
     useContext(TooltipGroupContext);
 

@@ -6,10 +6,8 @@ import { Button } from "@/components/ui/button";
 import { SubLabel, TextFormField } from "@/components/admin/connectors/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useLabels } from "@/lib/hooks";
-import { useState } from "react";
 import { PersonaLabel } from "./interfaces";
 import { Form, Formik, FormikHelpers } from "formik";
-import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
 import Title from "@/components/ui/title";
 
 interface FormValues {
@@ -20,7 +18,6 @@ interface FormValues {
 
 export default function LabelManagement() {
   const { labels, createLabel, updateLabel, deleteLabel } = useLabels();
-  const [labelToDelete, setLabelToDelete] = useState<PersonaLabel | null>(null);
   const { setPopup, popup } = usePopup();
 
   if (!labels) return null;
@@ -31,7 +28,6 @@ export default function LabelManagement() {
   ) => {
     if (values.newLabelName.trim()) {
       const response = await createLabel(values.newLabelName.trim());
-      console.log(response);
       if (response.ok) {
         setPopup({
           message: `Label "${values.newLabelName}" created successfully`,
@@ -155,7 +151,20 @@ export default function LabelManagement() {
                       ) : (
                         <Button
                           variant="destructive"
-                          onClick={() => setLabelToDelete(label)}
+                          onClick={async () => {
+                            const response = await deleteLabel(label.id);
+                            if (response.ok) {
+                              setPopup({
+                                message: `Label "${label.name}" deleted successfully`,
+                                type: "success",
+                              });
+                            } else {
+                              setPopup({
+                                message: `Failed to delete label - ${await response.text()}`,
+                                type: "error",
+                              });
+                            }
+                          }}
                         >
                           Delete
                         </Button>
@@ -168,30 +177,6 @@ export default function LabelManagement() {
           )}
         </Formik>
       </div>
-      {labelToDelete && (
-        <DeleteEntityModal
-          entityName={labelToDelete.name}
-          entityType="label"
-          onClose={() => setLabelToDelete(null)}
-          onSubmit={async () => {
-            if (labelToDelete) {
-              const response = await deleteLabel(labelToDelete.id);
-              if (response.ok) {
-                setPopup({
-                  message: `Label "${labelToDelete.name}" deleted successfully`,
-                  type: "success",
-                });
-              } else {
-                setPopup({
-                  message: `Failed to delete label - ${await response.text()}`,
-                  type: "error",
-                });
-              }
-            }
-            setLabelToDelete(null);
-          }}
-        />
-      )}
     </div>
   );
 }

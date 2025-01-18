@@ -47,6 +47,9 @@ module.exports = {
         "4xl": "2000px",
         mobile: { max: "767px" },
         desktop: "768px",
+        tall: { raw: "(min-height: 800px)" },
+        short: { raw: "(max-height: 799px)" },
+        "very-short": { raw: "(max-height: 600px)" },
       },
       fontFamily: {
         sans: ["Hanken Grotesk", "var(--font-inter)", "sans-serif"],

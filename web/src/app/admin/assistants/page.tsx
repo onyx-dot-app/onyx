@@ -53,10 +53,6 @@ export default async function Page() {
           top.
         </SubLabel>
         <PersonasTable />
-
-        <Separator className="my-12" />
-
-        <LabelManagement />
       </div>
     </div>
   );

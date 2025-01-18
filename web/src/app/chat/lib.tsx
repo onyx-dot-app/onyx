@@ -363,8 +363,8 @@ export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
   const groups: Record<string, ChatSession[]> = {
     Today: [],
     "Previous 7 Days": [],
-    "Previous 30 Days": [],
-    "Over 30 days ago": [],
+    "Previous 30 days": [],
+    "Over 30 days": [],
   };
 
   chatSessions.forEach((chatSession) => {

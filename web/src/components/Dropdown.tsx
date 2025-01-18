@@ -52,12 +52,14 @@ export function SearchMultiSelectDropdown({
   options,
   onSelect,
   itemComponent,
-  onCreateLabel,
+  onCreate,
+  onDelete,
 }: {
   options: StringOrNumberOption[];
   onSelect: (selected: StringOrNumberOption) => void;
   itemComponent?: FC<{ option: StringOrNumberOption }>;
-  onCreateLabel?: (name: string) => void;
+  onCreate?: (name: string) => void;
+  onDelete?: (name: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -175,7 +177,7 @@ export function SearchMultiSelectDropdown({
                 )
               )}
 
-              {onCreateLabel &&
+              {onCreate &&
                 searchTerm.trim() !== "" &&
                 !filteredOptions.some(
                   (option) =>
@@ -187,7 +189,7 @@ export function SearchMultiSelectDropdown({
                       className="w-full  text-left flex items-center px-4 py-2  text-sm hover:bg-hover"
                       role="menuitem"
                       onClick={() => {
-                        onCreateLabel(searchTerm);
+                        onCreate(searchTerm);
                         setIsOpen(false);
                         setSearchTerm("");
                       }}
@@ -199,7 +201,7 @@ export function SearchMultiSelectDropdown({
                 )}
 
               {filteredOptions.length === 0 &&
-                (!onCreateLabel || searchTerm.trim() === "") && (
+                (!onCreate || searchTerm.trim() === "") && (
                   <div className="px-4 py-2.5 text-sm text-text-muted">
                     No matches found
                   </div>

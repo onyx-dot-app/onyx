@@ -86,6 +86,7 @@ export default function LLMPopover({
       <PopoverTrigger asChild>
         <button className="focus:outline-none">
           <ChatInputOption
+            minimize
             toggle
             flexPriority="stiff"
             name={getDisplayNameForModel(

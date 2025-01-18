@@ -7,6 +7,7 @@ import { Modal } from "@/components/Modal";
 import AssistantCard from "./AssistantCard";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { useUser } from "@/components/user/UserProvider";
+import { FilterIcon } from "lucide-react";
 
 export const AssistantBadgeSelector = ({
   text,
@@ -23,7 +24,7 @@ export const AssistantBadgeSelector = ({
         selected
           ? "bg-neutral-900 text-white"
           : "bg-transparent text-neutral-900"
-      } h-5 px-1 py-0.5 rounded-lg cursor-pointer text-[12px] font-normal leading-[10px] border border-black justify-center items-center gap-1 inline-flex`}
+      } w-12 h-5 text-center px-1 py-0.5 rounded-lg cursor-pointer text-[12px] font-normal leading-[10px] border border-black justify-center items-center gap-1 inline-flex`}
       onClick={toggleFilter}
     >
       {text}
@@ -160,7 +161,8 @@ export default function AssistantModal({
               </div>
             </button>
           </div>
-          <div className="px-2 flex py-2 items-center gap-x-2 mb-2 flex-wrap">
+          <div className="px-2 flex py-4 items-center gap-x-2 flex-wrap">
+            <FilterIcon size={16} />
             <AssistantBadgeSelector
               text="Pinned"
               selected={assistantFilters[AssistantFilter.Pinned]}

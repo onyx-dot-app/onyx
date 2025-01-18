@@ -1,4 +1,4 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useRef, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   FiMoreHorizontal,
@@ -69,7 +69,6 @@ const AssistantCard: React.FC<{
 
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
-  const handleShare = () => setActivePopover("visibility");
   const handleDelete = () => setActivePopover("delete");
   const handleEdit = () => {
     router.push(`/assistants/edit/${persona.id}`);
@@ -77,6 +76,24 @@ const AssistantCard: React.FC<{
   };
 
   const closePopover = () => setActivePopover(undefined);
+
+  const nameRef = useRef<HTMLHeadingElement>(null);
+  const hiddenNameRef = useRef<HTMLSpanElement>(null);
+  const [isNameTruncated, setIsNameTruncated] = useState(false);
+
+  useLayoutEffect(() => {
+    const checkTruncation = () => {
+      if (nameRef.current && hiddenNameRef.current) {
+        const visibleWidth = nameRef.current.offsetWidth;
+        const fullTextWidth = hiddenNameRef.current.offsetWidth;
+        setIsNameTruncated(fullTextWidth > visibleWidth);
+      }
+    };
+
+    checkTruncation();
+    window.addEventListener("resize", checkTruncation);
+    return () => window.removeEventListener("resize", checkTruncation);
+  }, [persona.name]);
 
   return (
     <div className="w-full p-2 overflow-visible pb-4 pt-3 bg-[#fefcf9] rounded shadow-[0px_0px_4px_0px_rgba(0,0,0,0.25)] flex flex-col">
@@ -87,9 +104,28 @@ const AssistantCard: React.FC<{
         <div className="flex-1 mt-1 flex flex-col">
           <div className="flex justify-between items-start mb-1">
             <div className="flex items-end gap-x-2 leading-none">
-              <h3 className="text-black leading-none font-semibold text-base lg-normal">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <h3
+                      ref={nameRef}
+                      className="text-black line-clamp-1 text-ellipsis leading-none font-semibold text-base lg-normal max-w-full"
+                    >
+                      {persona.name}
+                    </h3>
+                  </TooltipTrigger>
+                  {isNameTruncated && (
+                    <TooltipContent>{persona.name}</TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+              <span
+                ref={hiddenNameRef}
+                className="absolute left-0 top-0 invisible whitespace-nowrap"
+                aria-hidden="true"
+              >
                 {persona.name}
-              </h3>
+              </span>
               {persona.labels && persona.labels.length > 0 && (
                 <>
                   {persona.labels.slice(0, 3).map((label, index) => (

@@ -2229,6 +2229,7 @@ export function ChatPage({
 
           <BlurBackground
             visible={!untoggled && (showHistorySidebar || toggledSidebar)}
+            onClick={() => toggleSidebar()}
           />
 
           <div
@@ -2313,7 +2314,7 @@ export function ChatPage({
                             currentSessionChatState == "input" &&
                             !loadingError &&
                             !submittedMessage && (
-                              <div className="h-full w-[95%] mx-auto flex flex-col justify-center items-center">
+                              <div className="h-full  w-[95%] mx-auto flex flex-col justify-center items-center">
                                 <ChatIntro selectedPersona={liveAssistant} />
 
                                 <StarterMessages

@@ -2,17 +2,42 @@ import React, { useState, useEffect } from "react";
 import { Tag } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 
-interface TagFilterProps {
-  tags: Tag[];
-  selectedTags: Tag[];
-  setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>;
-}
+export const SelectableDropdown = ({
+  value,
+  selected,
+  icon,
+  toggle,
+}: {
+  value: string;
+  selected: boolean;
+  icon?: React.ReactNode;
+  toggle: () => void;
+}) => {
+  return (
+    <div
+      key={value}
+      className={`p-2 flex gap-x-2 items-center rounded cursor-pointer transition-colors duration-200 ${
+        selected
+          ? "bg-gray-200 dark:bg-gray-700"
+          : "hover:bg-gray-100 dark:hover:bg-gray-800"
+      }`}
+      onClick={toggle}
+    >
+      {icon && <div className="flex-none">{icon}</div>}
+      <span className="text-sm">{value}</span>
+    </div>
+  );
+};
 
 export function TagFilter({
   tags,
   selectedTags,
   setSelectedTags,
-}: TagFilterProps) {
+}: {
+  tags: Tag[];
+  selectedTags: Tag[];
+  setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>;
+}) {
   const [filterValue, setFilterValue] = useState("");
   const [filteredTags, setFilteredTags] = useState<Tag[]>(tags);
 
@@ -38,38 +63,30 @@ export function TagFilter({
     );
   };
 
+  const isTagSelected = (tag: Tag) =>
+    selectedTags.some(
+      (t) => t.tag_key === tag.tag_key && t.tag_value === tag.tag_value
+    );
+
   return (
-    <div className="space-y-2">
-      <Input
-        placeholder="Search tags..."
-        value={filterValue}
-        onChange={(e) => setFilterValue(e.target.value)}
-        className="w-full"
-      />
-      <div className="space-y-1 max-h-48 overflow-y-auto">
-        {filteredTags
-          .sort((a, b) =>
-            selectedTags.some(
-              (t) => t.tag_key === a.tag_key && t.tag_value === a.tag_value
-            )
-              ? -1
-              : 1
-          )
+    <div className="pt-4 h-full flex flex-col w-full">
+      <div className="flex pb-2 px-4">
+        <Input
+          placeholder="Search tags..."
+          value={filterValue}
+          onChange={(e) => setFilterValue(e.target.value)}
+          className="border border-text-subtle w-full"
+        />
+      </div>
+      <div className="space-y-1 border-t pt-2 border-t-text-subtle px-4 default-scrollbar w-full max-h-64 overflow-y-auto">
+        {[...filteredTags, ...filteredTags, ...filteredTags, ...filteredTags]
+          .sort((a, b) => (isTagSelected(a) ? -1 : isTagSelected(b) ? 1 : 0))
           .map((tag) => (
-            <div
-              key={`${tag.tag_key}-${tag.tag_value}`}
-              className={`px-3 py-2 text-sm cursor-pointer transition-colors duration-200 ${
-                selectedTags.some(
-                  (t) =>
-                    t.tag_key === tag.tag_key && t.tag_value === tag.tag_value
-                )
-                  ? "bg-accent text-accent-foreground"
-                  : "hover:bg-accent hover:text-accent-foreground"
-              }`}
-              onClick={() => toggleTag(tag)}
-            >
-              {tag.tag_key}={tag.tag_value}
-            </div>
+            <SelectableDropdown
+              value={`${tag.tag_key}=${tag.tag_value}`}
+              selected={isTagSelected(tag)}
+              toggle={() => toggleTag(tag)}
+            />
           ))}
       </div>
     </div>
