@@ -18,13 +18,13 @@ export default function SourceCard({
       onClick={() => openDocument(doc, setPresentingDocument)}
       className="cursor-pointer text-left overflow-hidden flex flex-col gap-0.5 rounded-lg px-3 py-2 hover:bg-background-dark/80 bg-background-dark/60 w-[200px]"
     >
-      <div className="line-clamp-1 font-semibold text-ellipsis  text-text-900  flex h-6 items-center gap-2 text-sm">
+      <div className="line-clamp-1 font-semibold text-ellipsis text-text-900  flex h-6 items-center gap-2 text-sm">
         {doc.is_internet || doc.source_type === "web" ? (
           <WebResultIcon url={doc.link} />
         ) : (
           <SourceIcon sourceType={doc.source_type} iconSize={18} />
         )}
-        <p>{truncateString(doc.semantic_identifier || doc.document_id, 20)}</p>
+        <p>{truncateString(doc.semantic_identifier || doc.document_id, 16)}</p>
       </div>
       <div className="line-clamp-2 text-sm font-semibold"></div>
       <div className="line-clamp-2 text-sm font-normal leading-snug text-text-700">

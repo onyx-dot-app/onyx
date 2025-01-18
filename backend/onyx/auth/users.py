@@ -702,6 +702,9 @@ async def optional_user_(
     return user
 
 
+auth_type = AUTH_TYPE
+
+
 async def optional_user(
     request: Request,
     async_db_session: AsyncSession = Depends(get_async_session),

@@ -248,22 +248,27 @@ const AssistantCard: React.FC<{
 
           <div className="flex flex-col ">
             <div className="my-1.5">
-              <span className="flex items-center text-black text-xs opacity-50">
+              <p className="flex items-center text-black text-xs opacity-50">
                 {persona.owner?.email || persona.builtin_persona ? (
                   <>
-                    By {persona.owner?.email || "Onyx"}
+                    <span className="truncate">
+                      By {persona.owner?.email || "Onyx"}
+                    </span>
+
                     <span className="mx-2">•</span>
                   </>
                 ) : null}
-                {persona.tools.length > 0 ? (
-                  <>
-                    {persona.tools.length}
-                    {" Action"}
-                    {persona.tools.length !== 1 ? "s" : ""}
-                  </>
-                ) : (
-                  "No Actions"
-                )}
+                <span className="flex-none truncate">
+                  {persona.tools.length > 0 ? (
+                    <>
+                      {persona.tools.length}
+                      {" Action"}
+                      {persona.tools.length !== 1 ? "s" : ""}
+                    </>
+                  ) : (
+                    "No Actions"
+                  )}
+                </span>
                 <span className="mx-2">•</span>
                 {persona.is_public ? (
                   <>
@@ -276,7 +281,7 @@ const AssistantCard: React.FC<{
                     Private
                   </>
                 )}
-              </span>
+              </p>
             </div>
           </div>
           <div className="flex gap-2">

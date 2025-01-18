@@ -227,8 +227,11 @@ export function PagesTab({
       return (
         <div
           key={chat.id}
-          className="-ml-4 bg-transparent -mr-2"
+          className="-ml-4 bg-transparent  -mr-2"
           draggable
+          style={{
+            touchAction: "none",
+          }}
           onDragStart={(e) => {
             setIsDraggingSessionId(chat.id);
             e.dataTransfer.setData("text/plain", chat.id);

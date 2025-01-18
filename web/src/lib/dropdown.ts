@@ -15,6 +15,7 @@ export const useDropdownPosition = ({
   dropdownMenuRef,
 }: DropdownPositionProps) => {
   const updateMenuPosition = useCallback(() => {
+    console.log("isOpen", isOpen);
     if (isOpen && dropdownRef.current && dropdownMenuRef.current) {
       const rect = dropdownRef.current.getBoundingClientRect();
       const menuRect = dropdownMenuRef.current.getBoundingClientRect();
@@ -52,6 +53,7 @@ export const useDropdownPosition = ({
   useEffect(() => {
     updateMenuPosition();
     window.addEventListener("resize", updateMenuPosition);
+    console.log("SCROLL EENT");
     window.addEventListener("scroll", updateMenuPosition);
 
     return () => {

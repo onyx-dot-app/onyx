@@ -2063,8 +2063,7 @@ export function ChatPage({
         <div className="md:hidden">
           <Modal
             onOutsideClick={() => setDocumentSidebarToggled(false)}
-            noPadding
-            noScroll
+            title={"Sources"}
           >
             <DocumentResults
               setPresentingDocument={setPresentingDocument}
@@ -2081,6 +2080,7 @@ export function ChatPage({
               maxTokens={maxTokens}
               initialWidth={400}
               isOpen={true}
+              removeHeader
             />
           </Modal>
         </div>
@@ -2185,7 +2185,11 @@ export function ChatPage({
                 bg-opacity-80
                 duration-300
                 ease-in-out
-                ${documentSidebarToggled && "opacity-100 w-[350px]"}`}
+                ${
+                  documentSidebarToggled &&
+                  !settings?.isMobile &&
+                  "opacity-100 w-[350px]"
+                }`}
               ></div>
             </div>
           </div>
@@ -2206,7 +2210,11 @@ export function ChatPage({
                 duration-300
                 ease-in-out
                 h-full
-                ${documentSidebarToggled ? "w-[400px]" : "w-[0px]"}
+                ${
+                  documentSidebarToggled && !settings?.isMobile
+                    ? "w-[400px]"
+                    : "w-[0px]"
+                }
             `}
           >
             <DocumentResults
@@ -2223,7 +2231,7 @@ export function ChatPage({
               selectedDocumentTokens={selectedDocumentTokens}
               maxTokens={maxTokens}
               initialWidth={400}
-              isOpen={documentSidebarToggled}
+              isOpen={documentSidebarToggled && !settings?.isMobile}
             />
           </div>
 
@@ -2248,7 +2256,9 @@ export function ChatPage({
                       ? setSharingModalVisible
                       : undefined
                   }
-                  documentSidebarToggled={documentSidebarToggled}
+                  documentSidebarToggled={
+                    documentSidebarToggled && !settings?.isMobile
+                  }
                   toggleSidebar={toggleSidebar}
                   currentChatSession={selectedChatSession}
                   hideUserDropdown={user?.is_anonymous_user}
@@ -2793,7 +2803,11 @@ export function ChatPage({
                           duration-300 
                           ease-in-out
                           h-full
-                          ${documentSidebarToggled ? "w-[350px]" : "w-[0px]"}
+                          ${
+                            documentSidebarToggled && !settings?.isMobile
+                              ? "w-[350px]"
+                              : "w-[0px]"
+                          }
                       `}
                       ></div>
                     </div>

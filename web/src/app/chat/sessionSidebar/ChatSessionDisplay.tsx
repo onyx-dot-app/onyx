@@ -26,9 +26,7 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { DragHandle } from "@/components/table/DragHandle";
 import { WarningCircle } from "@phosphor-icons/react";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
-import SlideOverModal from "@/components/ui/SlideOverModal";
 import { useChatContext } from "@/components/context/ChatContext";
-import { Button } from "@/components/ui/button";
 
 export function ChatSessionDisplay({
   chatSession,
@@ -44,8 +42,6 @@ export function ChatSessionDisplay({
   chatSession: ChatSession;
   isSelected: boolean;
   search?: boolean;
-  // needed when the parent is trying to apply some background effect
-  // if not set, the gradient will still be applied and cause weirdness
   skipGradient?: boolean;
   closeSidebar?: () => void;
   showShareModal?: (chatSession: ChatSession) => void;
@@ -55,11 +51,7 @@ export function ChatSessionDisplay({
 }) {
   const router = useRouter();
   const [isHovered, setIsHovered] = useState(false);
-
-  const [isHovering, setIsHovering] = useState(false);
   const [isRenamingChat, setIsRenamingChat] = useState(false);
-  const [isMoreOptionsDropdownOpen, setIsMoreOptionsDropdownOpen] =
-    useState(false);
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [chatName, setChatName] = useState(chatSession.name);
   const settings = useContext(SettingsContext);
@@ -68,9 +60,20 @@ export function ChatSessionDisplay({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const renamingRef = useRef<HTMLDivElement>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
-  const { refreshChatSessions, reorderFolders, refreshFolders } =
-    useChatContext();
+  const { refreshChatSessions, refreshFolders } = useChatContext();
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    setIsMobile(mediaQuery.matches);
+
+    const handleResize = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mediaQuery.addListener(handleResize);
+
+    return () => mediaQuery.removeListener(handleResize);
+  }, []);
+
   const handlePopoverOpenChange = useCallback(
     (open: boolean) => {
       setPopoverOpen(open);
@@ -105,7 +108,7 @@ export function ChatSessionDisplay({
       setIsDeleteModalOpen(false);
       setPopoverOpen(false);
     },
-    [chatSession, showDeleteModal]
+    [chatSession, showDeleteModal, refreshChatSessions, refreshFolders]
   );
 
   const onRename = useCallback(
@@ -151,6 +154,34 @@ export function ChatSessionDisplay({
     settings?.settings
   );
 
+  const handleDragStart = (event: React.DragEvent<HTMLAnchorElement>) => {
+    event.dataTransfer.setData(CHAT_SESSION_ID_KEY, chatSession.id.toString());
+    event.dataTransfer.setData(
+      FOLDER_ID_KEY,
+      chatSession.folder_id?.toString() || ""
+    );
+  };
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    // Prevent default touch behavior
+    event.preventDefault();
+
+    // Create a custom event to mimic drag start
+    const customEvent = new Event("dragstart", { bubbles: true });
+    (customEvent as any).dataTransfer = new DataTransfer();
+    (customEvent as any).dataTransfer.setData(
+      CHAT_SESSION_ID_KEY,
+      chatSession.id.toString()
+    );
+    (customEvent as any).dataTransfer.setData(
+      FOLDER_ID_KEY,
+      chatSession.folder_id?.toString() || ""
+    );
+
+    // Dispatch the custom event
+    event.currentTarget.dispatchEvent(customEvent);
+  };
+
   return (
     <>
       {isShareModalVisible && (
@@ -167,8 +198,6 @@ export function ChatSessionDisplay({
             setIsHovered(true);
           }}
           onMouseLeave={() => {
-            setIsMoreOptionsDropdownOpen(false);
-            setIsHovering(false);
             setIsHovered(false);
           }}
           className="flex group items-center w-full relative"
@@ -184,25 +213,19 @@ export function ChatSessionDisplay({
               : `/chat?chatId=${chatSession.id}`
           }
           scroll={false}
-          draggable="true"
-          onDragStart={(event) => {
-            event.dataTransfer.setData(
-              CHAT_SESSION_ID_KEY,
-              chatSession.id.toString()
-            );
-            event.dataTransfer.setData(
-              FOLDER_ID_KEY,
-              chatSession.folder_id?.toString() || ""
-            );
-          }}
+          draggable={!isMobile}
+          onDragStart={!isMobile ? handleDragStart : undefined}
         >
-          <DragHandle
-            size={16}
-            className={`w-3 ml-[4px] mr-[2px] invisible flex-none ${
-              foldersExisting ? "group-hover:visible" : "invisible"
-            }`}
-          />
+          <div
+            className={`${
+              isMobile ? "visible" : "invisible group-hover:visible"
+            } flex-none`}
+            onTouchStart={isMobile ? handleTouchStart : undefined}
+          >
+            <DragHandle size={16} className="w-3 ml-[4px] mr-[2px]" />
+          </div>
           <BasicSelectable
+            padding="extra"
             isHovered={isHovered}
             isDragging={isDragging}
             fullWidth
@@ -254,7 +277,7 @@ export function ChatSessionDisplay({
                     </div>
                   </div>
                 ) : (
-                  <p className="break-all overflow-hidden whitespace-nowrap w-full mr-3 relative">
+                  <p className="break-all font-normal overflow-hidden whitespace-nowrap w-full mr-3 relative">
                     {chatName || `Unnamed Chat`}
                     <span
                       className={`absolute right-0 top-0 h-full w-8 bg-gradient-to-r from-transparent 
@@ -295,9 +318,7 @@ export function ChatSessionDisplay({
                         <div
                           onClick={(e) => {
                             e.preventDefault();
-                            setIsMoreOptionsDropdownOpen(
-                              !isMoreOptionsDropdownOpen
-                            );
+                            setPopoverOpen(!popoverOpen);
                           }}
                           className="-my-1"
                         >

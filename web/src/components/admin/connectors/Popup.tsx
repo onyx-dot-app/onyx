@@ -7,10 +7,10 @@ const popupVariants = cva(
   {
     variants: {
       type: {
-        success: "bg-[#10B981]",
-        error: "bg-[#EF4444]",
-        info: "bg-[#3B82F6]",
-        warning: "bg-[#F59E0B]",
+        success: "bg-green-500",
+        error: "bg-red-500",
+        info: "bg-blue-500",
+        warning: "bg-yellow-500",
       },
     },
     defaultVariants: {

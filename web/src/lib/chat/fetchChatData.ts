@@ -112,6 +112,7 @@ export async function fetchChatData(searchParams: {
       : fullUrl;
 
     if (!NEXT_PUBLIC_ENABLE_CHROME_EXTENSION) {
+      console.log("REDIRECTING TO LOGIN from fetch chat data");
       return {
         redirect: `/auth/login?next=${encodeURIComponent(redirectUrl)}`,
       };

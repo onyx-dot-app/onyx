@@ -155,13 +155,13 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
         ref={setNodeRef}
         style={style}
         {...attributes}
-        className="overflow-visible w-full"
+        className="overflow-visible mt-2 w-full"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
         <div
           ref={ref}
-          className="flex overflow-visible items-center w-full text-[#6c6c6c] rounded-md p-1 relative"
+          className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 relative"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
@@ -193,9 +193,7 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
               </div>
             ) : (
               <div className="flex items-center">
-                <span className="text-sm font-medium">
-                  {folder.folder_name}
-                </span>
+                <span className="text-sm font-[500]">{folder.folder_name}</span>
               </div>
             )}
           </button>

@@ -249,111 +249,56 @@ export const ColorSlackIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-    >
-      <Image src={slackIcon} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={slackIcon} />;
 };
 
 export const ColorDiscordIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-    >
-      <Image src={discordIcon} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={discordIcon} />;
 };
 
 export const LiteLLMIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
-      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
-    >
-      <Image src={litellmIcon} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={litellmIcon} />;
 };
 
 export const OpenSourceIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
-      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
-    >
-      <Image src={openSourceIcon} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={openSourceIcon} />;
 };
+
 export const MixedBreadIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
-      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
-    >
-      <Image src={mixedBreadSVG} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={mixedBreadSVG} />;
 };
 
 export const NomicIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
-      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
-    >
-      <Image src={nomicSVG} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={nomicSVG} />;
 };
 
 export const MicrosoftIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
-      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
-    >
-      <Image src={microsoftIcon} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={microsoftIcon} />;
 };
 
 export const AnthropicIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
-      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
-    >
-      <Image src={anthropicSVG} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={anthropicSVG} />;
 };
 
 export const LeftToLineIcon = ({
@@ -1835,7 +1780,6 @@ export const RobotIcon = ({
   return <FaRobot size={size} className={className} />;
 };
 
-slackIcon;
 export const SlackIconSkeleton = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -2798,28 +2742,14 @@ export const EgnyteIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-    >
-      <Image src={egnyteIcon} alt="Egnyte" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={egnyteIcon} />;
 };
 
 export const AirtableIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-    >
-      <Image src={airtableIcon} alt="Airtable" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={airtableIcon} />;
 };
 
 export const PinnedIcon = ({

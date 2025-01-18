@@ -8,6 +8,7 @@ import AssistantCard from "./AssistantCard";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { useUser } from "@/components/user/UserProvider";
 import { FilterIcon } from "lucide-react";
+import { checkUserOwnsAssistant } from "@/lib/assistants/checkOwnership";
 
 export const AssistantBadgeSelector = ({
   text,
@@ -35,6 +36,7 @@ export const AssistantBadgeSelector = ({
 export enum AssistantFilter {
   Pinned = "Pinned",
   Public = "Public",
+  Private = "Private",
   Mine = "Mine",
 }
 
@@ -44,6 +46,7 @@ const useAssistantFilter = () => {
   >({
     [AssistantFilter.Pinned]: false,
     [AssistantFilter.Public]: false,
+    [AssistantFilter.Private]: false,
     [AssistantFilter.Mine]: false,
   });
 
@@ -64,7 +67,7 @@ export default function AssistantModal({
 }) {
   const [showAllFeaturedAssistants, setShowAllFeaturedAssistants] =
     useState(false);
-  const { assistants, visibleAssistants, pinnedAssistants } = useAssistants();
+  const { assistants, visibleAssistants } = useAssistants();
   const { assistantFilters, toggleAssistantFilter, setAssistantFilters } =
     useAssistantFilter();
   const router = useRouter();
@@ -83,19 +86,24 @@ export default function AssistantModal({
       const publicFilter =
         !assistantFilters[AssistantFilter.Public] || assistant.is_public;
       const privateFilter =
-        !assistantFilters[AssistantFilter.Mine] || !assistant.is_public;
+        !assistantFilters[AssistantFilter.Private] || !assistant.is_public;
       const pinnedFilter =
         !assistantFilters[AssistantFilter.Pinned] ||
-        pinnedAssistants.map((a: Persona) => a.id).includes(assistant.id);
+        (user?.preferences?.pinned_assistants?.includes(assistant.id) ?? false);
+
+      const mineFilter =
+        !assistantFilters[AssistantFilter.Mine] ||
+        assistants.map((a: Persona) => checkUserOwnsAssistant(user, a));
 
       return (
         (nameMatches || labelMatches) &&
         publicFilter &&
         privateFilter &&
-        pinnedFilter
+        pinnedFilter &&
+        mineFilter
       );
     });
-  }, [assistants, searchQuery, assistantFilters, pinnedAssistants]);
+  }, [assistants, searchQuery, assistantFilters]);
 
   const featuredAssistants = [
     ...memoizedCurrentlyVisibleAssistants.filter(
@@ -178,6 +186,13 @@ export default function AssistantModal({
               selected={assistantFilters[AssistantFilter.Mine]}
               toggleFilter={() => toggleAssistantFilter(AssistantFilter.Mine)}
             />
+            <AssistantBadgeSelector
+              text="Private"
+              selected={assistantFilters[AssistantFilter.Private]}
+              toggleFilter={() =>
+                toggleAssistantFilter(AssistantFilter.Private)
+              }
+            />
           </div>
           <div className="w-full border-t border-neutral-200" />
         </div>
@@ -192,7 +207,11 @@ export default function AssistantModal({
               featuredAssistants.map((assistant, index) => (
                 <div key={index}>
                   <AssistantCard
-                    pinned={pinnedAssistants.includes(assistant)}
+                    pinned={
+                      user?.preferences?.pinned_assistants?.includes(
+                        assistant.id
+                      ) ?? false
+                    }
                     persona={assistant}
                     closeModal={hideModal}
                   />
@@ -217,7 +236,11 @@ export default function AssistantModal({
                   .map((assistant, index) => (
                     <div key={index}>
                       <AssistantCard
-                        pinned={pinnedAssistants.includes(assistant)}
+                        pinned={
+                          user?.preferences?.pinned_assistants?.includes(
+                            assistant.id
+                          ) ?? false
+                        }
                         persona={assistant}
                         closeModal={hideModal}
                       />
