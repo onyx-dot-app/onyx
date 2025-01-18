@@ -79,10 +79,11 @@ export function TagFilter({
         />
       </div>
       <div className="space-y-1 border-t pt-2 border-t-text-subtle px-4 default-scrollbar w-full max-h-64 overflow-y-auto">
-        {[...filteredTags, ...filteredTags, ...filteredTags, ...filteredTags]
+        {filteredTags
           .sort((a, b) => (isTagSelected(a) ? -1 : isTagSelected(b) ? 1 : 0))
-          .map((tag) => (
+          .map((tag, index) => (
             <SelectableDropdown
+              key={index}
               value={`${tag.tag_key}=${tag.tag_value}`}
               selected={isTagSelected(tag)}
               toggle={() => toggleTag(tag)}
