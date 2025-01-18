@@ -53,11 +53,13 @@ export function SearchMultiSelectDropdown({
   onSelect,
   itemComponent,
   onCreateLabel,
+  selectedValue,
 }: {
   options: StringOrNumberOption[];
   onSelect: (selected: StringOrNumberOption) => void;
   itemComponent?: FC<{ option: StringOrNumberOption }>;
   onCreateLabel?: (name: string) => void;
+  selectedValue?: string | number;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -67,7 +69,7 @@ export function SearchMultiSelectDropdown({
   const handleSelect = (option: StringOrNumberOption) => {
     onSelect(option);
     setIsOpen(false);
-    setSearchTerm(""); // Clear search term after selection
+    setSearchTerm(option.name);
   };
 
   const filteredOptions = options.filter((option) =>
