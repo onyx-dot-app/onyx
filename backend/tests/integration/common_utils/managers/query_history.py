@@ -3,6 +3,7 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 import requests
+from requests.models import CaseInsensitiveDict
 
 from ee.onyx.server.query_history.models import ChatSessionMinimal
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
@@ -66,7 +67,7 @@ class QueryHistoryManager:
         start_time: datetime | None = None,
         end_time: datetime | None = None,
         user_performing_action: DATestUser | None = None,
-    ) -> tuple[dict[str, str], str]:
+    ) -> tuple[CaseInsensitiveDict[str], str]:
         query_params: dict[str, str | int] = {}
         if start_time:
             query_params["start"] = start_time.isoformat()
@@ -80,4 +81,4 @@ class QueryHistoryManager:
             else GENERAL_HEADERS,
         )
         response.raise_for_status()
-        return dict(response.headers), response.content.decode()
+        return response.headers, response.content.decode()

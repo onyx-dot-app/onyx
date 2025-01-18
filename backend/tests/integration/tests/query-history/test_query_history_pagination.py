@@ -142,7 +142,8 @@ def setup_chat_session(
     with ThreadPoolExecutor(max_workers=5) as executor:
         # Submit all tasks and store futures
         j = 0
-        number_of_sessions = 2
+        # Will result in 40 sessions
+        number_of_sessions = 10
         futures = []
         for feedback_type in [
             QAFeedbackType.MIXED,
