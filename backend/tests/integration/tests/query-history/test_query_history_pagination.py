@@ -12,12 +12,12 @@ from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.query_history import QueryHistoryManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestChatSession
+from tests.integration.common_utils.test_models import DAQueryHistoryEntry
 from tests.integration.common_utils.test_models import DATestUser
 
 
 def _verify_query_history_pagination(
-    chat_sessions: list[DATestChatSession],
+    chat_sessions: list[DAQueryHistoryEntry],
     page_size: int = 5,
     feedback_type: QAFeedbackType | None = None,
     start_time: datetime | None = None,
@@ -58,7 +58,7 @@ def create_chat_session_with_feedback(
     admin_user: DATestUser,
     i: int,
     feedback_type: QAFeedbackType | None,
-) -> tuple[QAFeedbackType | None, DATestChatSession]:
+) -> tuple[QAFeedbackType | None, DAQueryHistoryEntry]:
     print(f"Creating chat session {i} with feedback type {feedback_type}")
     # Create chat session with timestamp spread over 30 days
     chat_session = ChatSessionManager.create(
@@ -67,7 +67,7 @@ def create_chat_session_with_feedback(
         user_performing_action=admin_user,
     )
 
-    test_session = DATestChatSession(
+    test_session = DAQueryHistoryEntry(
         id=chat_session.id,
         persona_id=0,
         description=f"Test chat session {i}",
@@ -118,7 +118,7 @@ def create_chat_session_with_feedback(
 @pytest.fixture
 def setup_chat_session(
     reset: None,
-) -> tuple[DATestUser, dict[QAFeedbackType | None, list[DATestChatSession]]]:
+) -> tuple[DATestUser, dict[QAFeedbackType | None, list[DAQueryHistoryEntry]]]:
     # Create admin user and required resources
     admin_user: DATestUser = UserManager.create(name="admin_user")
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
@@ -136,7 +136,7 @@ def setup_chat_session(
     )
 
     chat_sessions_by_feedback_type: dict[
-        QAFeedbackType | None, list[DATestChatSession]
+        QAFeedbackType | None, list[DAQueryHistoryEntry]
     ] = {}
     # Use ThreadPoolExecutor to create chat sessions in parallel
     with ThreadPoolExecutor(max_workers=5) as executor:
@@ -175,7 +175,7 @@ def setup_chat_session(
 
 def test_query_history_pagination(
     setup_chat_session: tuple[
-        DATestUser, dict[QAFeedbackType | None, list[DATestChatSession]]
+        DATestUser, dict[QAFeedbackType | None, list[DAQueryHistoryEntry]]
     ]
 ) -> None:
     admin_user, chat_sessions_by_feedback_type = setup_chat_session

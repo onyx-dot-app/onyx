@@ -131,9 +131,6 @@ class DATestPersona(BaseModel):
     label_ids: list[int]
 
 
-#
-
-
 class DATestChatMessage(BaseModel):
     id: int
     chat_session_id: UUID
@@ -145,7 +142,10 @@ class DATestChatSession(BaseModel):
     id: UUID
     persona_id: int
     description: str
-    feedback_type: QAFeedbackType | None = None
+
+
+class DAQueryHistoryEntry(DATestChatSession):
+    feedback_type: QAFeedbackType | None
 
 
 class StreamedResponse(BaseModel):
