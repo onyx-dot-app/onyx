@@ -33,6 +33,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/fully_wrapped_tabs";
+import { SearchMultiSelectDropdown } from "@/components/Dropdown";
 
 export const SlackChannelConfigCreationForm = ({
   slack_bot_id,
@@ -180,9 +181,19 @@ export const SlackChannelConfigCreationForm = ({
           {({ isSubmitting, values, setFieldValue }) => (
             <Form>
               <div className="px-6 pb-6 pt-4 w-full">
-                <TextFormField
-                  name="channel_name"
-                  label="Slack Channel Name:"
+                <Label htmlFor="channel_name">Slack Channel Name:</Label>
+                <SearchMultiSelectDropdown
+                  options={[
+                    { name: "general", value: "general" },
+                    { name: "random", value: "random" },
+                    { name: "budget", value: "budget" },
+                  ]}
+                  onSelect={(selected) =>
+                    setFieldValue("channel_name", selected.value)
+                  }
+                  onCreateLabel={(newLabel) =>
+                    setFieldValue("channel_name", newLabel)
+                  }
                 />
 
                 <div className="mt-6">
