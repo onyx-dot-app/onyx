@@ -44,6 +44,32 @@ describe("markdownToHtml", () => {
       "<p>Sure! Here is a sentence with one italicized word:</p>\n<p>The cake was <em>delicious</em> and everyone enjoyed it.</p>"
     );
   });
+
+  test("handles malformed markdown without crashing", () => {
+    expect(markdownToHtml("This is *malformed markdown")).toBe(
+      "<p>This is *malformed markdown</p>"
+    );
+    expect(markdownToHtml("This is _also malformed")).toBe(
+      "<p>This is _also malformed</p>"
+    );
+    expect(markdownToHtml("This has **unclosed bold")).toBe(
+      "<p>This has **unclosed bold</p>"
+    );
+    expect(markdownToHtml("This has __unclosed bold")).toBe(
+      "<p>This has __unclosed bold</p>"
+    );
+  });
+
+  test("handles empty or null input", () => {
+    expect(markdownToHtml("")).toBe("");
+    expect(markdownToHtml(" ")).toBe("");
+    expect(markdownToHtml("\n")).toBe("");
+  });
+
+  test("handles extremely long input without crashing", () => {
+    const longText = "This is *italic* ".repeat(1000);
+    expect(() => markdownToHtml(longText)).not.toThrow();
+  });
 });
 
 describe("parseMarkdownToSegments", () => {
@@ -118,5 +144,33 @@ describe("parseMarkdownToSegments", () => {
         length: 25,
       },
     ]);
+  });
+
+  test("handles malformed markdown without crashing", () => {
+    expect(() => parseMarkdownToSegments("This is *malformed")).not.toThrow();
+    expect(() =>
+      parseMarkdownToSegments("This is _also malformed")
+    ).not.toThrow();
+    expect(() =>
+      parseMarkdownToSegments("This has **unclosed bold")
+    ).not.toThrow();
+    expect(() =>
+      parseMarkdownToSegments("This has __unclosed bold")
+    ).not.toThrow();
+  });
+
+  test("handles empty or null input", () => {
+    expect(parseMarkdownToSegments("")).toEqual([]);
+    expect(parseMarkdownToSegments(" ")).toEqual([
+      { type: "text", text: " ", raw: " ", length: 1 },
+    ]);
+    expect(parseMarkdownToSegments("\n")).toEqual([
+      { type: "text", text: "\n", raw: "\n", length: 1 },
+    ]);
+  });
+
+  test("handles extremely long input without crashing", () => {
+    const longText = "This is *italic* ".repeat(1000);
+    expect(() => parseMarkdownToSegments(longText)).not.toThrow();
   });
 });

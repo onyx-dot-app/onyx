@@ -84,9 +84,13 @@ export const preprocessLaTeX = (content: string) => {
 };
 
 export const markdownToHtml = (content: string): string => {
+  if (!content || !content.trim()) {
+    return "";
+  }
+
   // Basic markdown to HTML conversion for common patterns
   const processedContent = content
-    .replace(/(\*\*|__)(.*?)\1/g, "<strong>$2</strong>") // Bold with ** or __
+    .replace(/(\*\*|__)((?:(?!\1).)*?)\1/g, "<strong>$2</strong>") // Bold with ** or __, non-greedy and no nesting
     .replace(/(\*|_)([^*_\n]+?)\1(?!\*|_)/g, "<em>$2</em>"); // Italic with * or _
 
   // Handle code blocks and links
@@ -116,37 +120,48 @@ interface MarkdownSegment {
 }
 
 export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
+  if (!markdown) {
+    return [];
+  }
+
   const segments: MarkdownSegment[] = [];
   let currentIndex = 0;
+  const maxIterations = markdown.length * 2; // Prevent infinite loops
+  let iterations = 0;
 
-  while (currentIndex < markdown.length) {
+  while (currentIndex < markdown.length && iterations < maxIterations) {
+    iterations++;
+    let matched = false;
+
     // Check for code blocks first (they take precedence)
     const codeBlockMatch = markdown
       .slice(currentIndex)
       .match(/^```(\w*)\n([\s\S]*?)```/);
-    if (codeBlockMatch) {
+    if (codeBlockMatch && codeBlockMatch[0]) {
       const [fullMatch, , code] = codeBlockMatch;
       segments.push({
         type: "codeblock",
-        text: code,
+        text: code || "",
         raw: fullMatch,
-        length: code.length,
+        length: (code || "").length,
       });
       currentIndex += fullMatch.length;
+      matched = true;
       continue;
     }
 
     // Check for inline code
     const inlineCodeMatch = markdown.slice(currentIndex).match(/^`([^`]+)`/);
-    if (inlineCodeMatch) {
+    if (inlineCodeMatch && inlineCodeMatch[0]) {
       const [fullMatch, code] = inlineCodeMatch;
       segments.push({
         type: "code",
-        text: code,
+        text: code || "",
         raw: fullMatch,
-        length: code.length,
+        length: (code || "").length,
       });
       currentIndex += fullMatch.length;
+      matched = true;
       continue;
     }
 
@@ -154,15 +169,16 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
     const linkMatch = markdown
       .slice(currentIndex)
       .match(/^\[([^\]]+)\]\(([^)]+)\)/);
-    if (linkMatch) {
+    if (linkMatch && linkMatch[0]) {
       const [fullMatch, text] = linkMatch;
       segments.push({
         type: "link",
-        text: text,
+        text: text || "",
         raw: fullMatch,
-        length: text.length,
+        length: (text || "").length,
       });
       currentIndex += fullMatch.length;
+      matched = true;
       continue;
     }
 
@@ -170,15 +186,16 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
     const boldMatch = markdown
       .slice(currentIndex)
       .match(/^(\*\*|__)([^*_\n]*?)\1/);
-    if (boldMatch) {
-      const [fullMatch, delimiter, text] = boldMatch;
+    if (boldMatch && boldMatch[0]) {
+      const [fullMatch, , text] = boldMatch;
       segments.push({
         type: "bold",
-        text: text,
+        text: text || "",
         raw: fullMatch,
-        length: text.length,
+        length: (text || "").length,
       });
       currentIndex += fullMatch.length;
+      matched = true;
       continue;
     }
 
@@ -186,45 +203,50 @@ export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
     const italicMatch = markdown
       .slice(currentIndex)
       .match(/^(\*|_)([^*_\n]+?)\1(?!\*|_)/);
-    if (italicMatch) {
-      const [fullMatch, delimiter, text] = italicMatch;
+    if (italicMatch && italicMatch[0]) {
+      const [fullMatch, , text] = italicMatch;
       segments.push({
         type: "italic",
-        text: text,
+        text: text || "",
         raw: fullMatch,
-        length: text.length,
+        length: (text || "").length,
       });
       currentIndex += fullMatch.length;
+      matched = true;
       continue;
     }
 
-    // Regular text
-    let nextSpecialChar = markdown.slice(currentIndex).search(/[`\[*_]/);
-    if (nextSpecialChar === -1) {
-      // No more special characters, add the rest as text
-      const text = markdown.slice(currentIndex);
-      if (text) {
-        segments.push({
-          type: "text",
-          text: text,
-          raw: text,
-          length: text.length,
-        });
+    // If no matches were found, handle regular text
+    if (!matched) {
+      let nextSpecialChar = markdown.slice(currentIndex).search(/[`\[*_]/);
+      if (nextSpecialChar === -1) {
+        // No more special characters, add the rest as text
+        const text = markdown.slice(currentIndex);
+        if (text) {
+          segments.push({
+            type: "text",
+            text: text,
+            raw: text,
+            length: text.length,
+          });
+        }
+        break;
+      } else {
+        // Add the text up to the next special character
+        const text = markdown.slice(
+          currentIndex,
+          currentIndex + nextSpecialChar
+        );
+        if (text) {
+          segments.push({
+            type: "text",
+            text: text,
+            raw: text,
+            length: text.length,
+          });
+        }
+        currentIndex += nextSpecialChar;
       }
-      break;
-    } else {
-      // Add the text up to the next special character
-      const text = markdown.slice(currentIndex, currentIndex + nextSpecialChar);
-      if (text) {
-        segments.push({
-          type: "text",
-          text: text,
-          raw: text,
-          length: text.length,
-        });
-      }
-      currentIndex += nextSpecialChar;
-      continue;
     }
   }
 
