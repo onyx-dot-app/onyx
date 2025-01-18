@@ -1108,6 +1108,45 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     advanced_values: [],
     overrideDefaultFreq: 60 * 60 * 24,
   },
+  lark_wiki: {
+    description: "Configure Lark Wiki connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Lark App ID:",
+        label: "Lark App ID",
+        name: "lark_app_id",
+        optional: false,
+        description: "The App ID of your Lark application.",
+      },
+      {
+        type: "text",
+        query: "Enter the Lark App Secret:",
+        label: "Lark App Secret",
+        name: "lark_app_secret",
+        optional: false,
+        description: "The App Secret of your Lark application.",
+      },
+      {
+        type: "text",
+        query: "Enter the workspace Domain:",
+        label: "workspace Domain",
+        name: "workspace_domain",
+        optional: false,
+        description: "The domain of the Lark Wiki space (e.g., example.feishu.cn).",
+      },
+      {
+        type: "text",
+        query: "Enter the Domain:",
+        label: "Domain",
+        name: "domain",
+        optional: true,
+        description: "https://open.feishu.cn or https://open.larksuite.com",
+      },
+    ],
+    advanced_values: [],
+    overrideDefaultFreq: 60 * 60 * 24,
+  }
 };
 export function createConnectorInitialValues(
   connector: ConfigurableSources

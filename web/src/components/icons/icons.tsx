@@ -3103,3 +3103,10 @@ export const SearchAssistantIcon = ({
     </svg>
   );
 };
+
+export const LarkSuiteIcon = ({
+                             size = 16,
+                             className = defaultTailwindCSS,
+                           }: IconProps) => (
+  <LogoIcon size={size} className={className} src="/LarkSuite.png" />
+);

@@ -150,6 +150,7 @@ class DocumentSource(str, Enum):
     FIREFLIES = "fireflies"
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
+    LARK_WIKI = "lark_wiki"
 
 
 DocumentSourceRequiringTenantContext: list[DocumentSource] = [DocumentSource.FILE]
