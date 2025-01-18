@@ -844,7 +844,7 @@ def monitor_ccpair_indexing_taskset(
     if redis_connector_index.watchdog_signaled():
         # if the generator is complete, don't clean up until the watchdog has exited
         task_logger.info(
-            f"Connector indexing - Waiting for watchdog to exit: "
+            f"Connector indexing - Delaying finalization until watchdog has exited: "
             f"attempt={payload.index_attempt_id} "
             f"cc_pair={cc_pair_id} "
             f"search_settings={search_settings_id} "
