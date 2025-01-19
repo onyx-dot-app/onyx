@@ -340,7 +340,7 @@ export function PagesTab({
           <p>Chats</p>
           <button
             onClick={handleCreateFolder}
-            className="flex group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium font-['KH Teka TRIAL'] leading-normal"
+            className="flex group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal"
           >
             <FiPlus size={12} className="flex-none" />
             Create Group

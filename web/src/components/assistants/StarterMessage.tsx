@@ -9,8 +9,6 @@ export function StarterMessages({
   currentPersona: Persona;
   onSubmit: (messageOverride: string) => void;
 }) {
-  console.log(currentPersona);
-  console.log(currentPersona.starter_messages);
   const settings = useContext(SettingsContext);
   const isMobile = settings?.isMobile;
   return (

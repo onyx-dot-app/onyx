@@ -806,6 +806,7 @@ def stream_chat_message_objects(
             lambda: AnswerPostInfo(ai_message_files=[])
         )
         for packet in answer.processed_streamed_output:
+            print(packet)
             if isinstance(packet, ToolResponse):
                 level, level_question_nr = (
                     (packet.level, packet.level_question_nr)

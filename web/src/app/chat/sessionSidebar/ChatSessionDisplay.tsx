@@ -203,6 +203,7 @@ export function ChatSessionDisplay({
             }`}
           />
           <BasicSelectable
+            padding="extra"
             isHovered={isHovered}
             isDragging={isDragging}
             fullWidth
@@ -254,7 +255,7 @@ export function ChatSessionDisplay({
                     </div>
                   </div>
                 ) : (
-                  <p className="break-all overflow-hidden whitespace-nowrap w-full mr-3 relative">
+                  <p className="break-all font-normal overflow-hidden whitespace-nowrap w-full mr-3 relative">
                     {chatName || `Unnamed Chat`}
                     <span
                       className={`absolute right-0 top-0 h-full w-8 bg-gradient-to-r from-transparent 

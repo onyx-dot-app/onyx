@@ -142,7 +142,7 @@
 
     --non-selectable: #f8d7da;
     /* Light pink for non-selectable elements */
-    --highlight-text: #fef9c3;
+    --highlight-text: rgba(255, 245, 180, 0.5);
     /* Very light yellow for highlighted text */
     --user-bubble: #f1eee8;
     /* near gray-100 - Very light grayish */
@@ -387,6 +387,7 @@
 
 body {
   overscroll-behavior-y: none;
+  overflow-anchor: none;
 }
 
 /* Base styles for code blocks */
@@ -458,6 +459,10 @@ code[class*="language-"] {
 .code-line .token.important,
 .code-line .token.bold {
   font-weight: theme("fontWeight.token-bold");
+}
+
+nextjs-portal {
+  display: none !important;
 }
 
 .code-line .token.italic {

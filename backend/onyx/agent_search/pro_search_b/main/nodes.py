@@ -682,7 +682,7 @@ def refined_answer_decision(state: MainState) -> RequireRefinedAnswerUpdate:
     )
 
     if not state["config"].allow_refinement or True:
-        return RequireRefinedAnswerUpdate(require_refined_answer=False)
+        return RequireRefinedAnswerUpdate(require_refined_answer=True)
 
     else:
         return RequireRefinedAnswerUpdate(require_refined_answer=True)

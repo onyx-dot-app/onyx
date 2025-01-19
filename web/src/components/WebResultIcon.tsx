@@ -4,23 +4,33 @@ import { ValidSources } from "@/lib/types";
 import { SourceIcon } from "./SourceIcon";
 import { useState } from "react";
 
-export function WebResultIcon({ url }: { url: string }) {
+export function WebResultIcon({
+  url,
+  size = 18,
+}: {
+  url: string;
+  size?: number;
+}) {
   const [error, setError] = useState(false);
   const hostname = new URL(url).hostname;
   return (
     <>
       {!error ? (
         <img
-          className="my-0 w-5 h-5  rounded-full py-0"
+          className="my-0 rounded-full py-0"
           src={`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${hostname}&size=128`}
-          style={{ background: "transparent" }}
           alt="favicon"
-          height={64}
+          height={size}
           onError={() => setError(true)}
-          width={64}
+          width={size}
+          style={{
+            height: `${size}px`,
+            width: `${size}px`,
+            background: "transparent",
+          }}
         />
       ) : (
-        <SourceIcon sourceType={ValidSources.Web} iconSize={18} />
+        <SourceIcon sourceType={ValidSources.Web} iconSize={size} />
       )}
     </>
   );

@@ -34,8 +34,78 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
+import { AgenticToggle } from "./AgenticToggle";
 
 const MAX_INPUT_HEIGHT = 200;
+export const SourceChip2 = ({
+  icon,
+  title,
+  onRemove,
+  onClick,
+  includeTooltip,
+  includeAnimation,
+  truncateTitle = true,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  onRemove?: () => void;
+  onClick?: () => void;
+  truncateTitle?: boolean;
+  includeTooltip?: boolean;
+  includeAnimation?: boolean;
+}) => {
+  const [isNew, setIsNew] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsNew(false), 300);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={0}>
+        <TooltipTrigger>
+          <div
+            onClick={onClick ? onClick : undefined}
+            className={`
+            h-6
+            px-2
+            bg-[#f1eee8]
+            rounded-2xl
+            justify-center
+            items-center
+            inline-flex
+            ${includeAnimation && isNew ? "animate-fade-in-scale" : ""}
+            ${onClick ? "cursor-pointer" : ""}
+          `}
+          >
+            <div className="w-[17px] h-4 p-[3px] flex-col justify-center items-center gap-2.5 inline-flex">
+              <div className="h-2.5 relative">{icon}</div>
+            </div>
+            <div className="text-[#4a4a4a] text-xs font-medium leading-normal">
+              {truncateTitle ? truncateString(title, 50) : title}
+            </div>
+            {onRemove && (
+              <XIcon
+                size={12}
+                className="text-[#4a4a4a] ml-2 cursor-pointer"
+                onClick={(e: React.MouseEvent<SVGSVGElement>) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+              />
+            )}
+          </div>
+        </TooltipTrigger>
+        {includeTooltip && title.length > 50 && (
+          <TooltipContent className="z-[2000000]">
+            <p>{title}</p>
+          </TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
 
 export const SourceChip = ({
   icon,
@@ -53,7 +123,7 @@ export const SourceChip = ({
   <div
     onClick={onClick ? onClick : undefined}
     className={`
-      flex-none
+        flex-none
         flex
         items-center
         px-1
@@ -68,6 +138,7 @@ export const SourceChip = ({
         gap-x-1
         h-6
         ${onClick ? "cursor-pointer" : ""}
+        animate-fade-in-scale
       `}
   >
     {icon}
@@ -109,6 +180,8 @@ interface ChatInputBarProps {
   availableDocumentSets: DocumentSet[];
   availableTags: Tag[];
   retrievalEnabled: boolean;
+  proSearchEnabled: boolean;
+  setProSearchEnabled: (proSearchEnabled: boolean) => void;
 }
 
 export function ChatInputBar({
@@ -137,6 +210,8 @@ export function ChatInputBar({
   availableDocumentSets,
   availableTags,
   llmOverrideManager,
+  proSearchEnabled,
+  setProSearchEnabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
   useEffect(() => {
@@ -646,7 +721,7 @@ export function ChatInputBar({
               </div>
             )}
 
-            <div className="flex items-center space-x-1 mr-12 px-4 pb-2">
+            <div className="flex items-center w-full space-x-1 mr-12 px-4 pb-2">
               <ChatInputOption
                 flexPriority="stiff"
                 name="File"
@@ -691,6 +766,11 @@ export function ChatInputBar({
                   }
                 />
               )}
+
+              <AgenticToggle
+                proSearchEnabled={proSearchEnabled}
+                setProSearchEnabled={setProSearchEnabled}
+              />
             </div>
 
             <div className="absolute bottom-2.5 mobile:right-4 desktop:right-10">
