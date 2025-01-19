@@ -35,19 +35,24 @@ import {
 import { PencilIcon } from "lucide-react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { truncateString } from "@/lib/utils";
 
 export const AssistantBadge = ({
   text,
   className,
+  maxLength,
 }: {
   text: string;
   className?: string;
+  maxLength?: number;
 }) => {
   return (
     <div
       className={`h-4 px-1.5 py-1 text-[10px] flex-none bg-[#e6e3dd]/50 rounded-lg justify-center items-center gap-1 inline-flex ${className}`}
     >
-      <div className="text-[#4a4a4a] font-normal leading-[8px]">{text}</div>
+      <div className="text-[#4a4a4a] font-normal leading-[8px]">
+        {maxLength ? truncateString(text, maxLength) : text}
+      </div>
     </div>
   );
 };
@@ -109,7 +114,7 @@ const AssistantCard: React.FC<{
                   <TooltipTrigger asChild>
                     <h3
                       ref={nameRef}
-                      className="text-black line-clamp-1 text-ellipsis leading-none font-semibold text-base lg-normal max-w-full"
+                      className={` text-black line-clamp-1 break-all	 text-ellipsis leading-none font-semibold text-base lg-normal w-full overflow-hidden`}
                     >
                       {persona.name}
                     </h3>
@@ -128,12 +133,16 @@ const AssistantCard: React.FC<{
               </span>
               {persona.labels && persona.labels.length > 0 && (
                 <>
-                  {persona.labels.slice(0, 3).map((label, index) => (
-                    <AssistantBadge key={index} text={label.name} />
-                  ))}
-                  {persona.labels.length > 3 && (
+                  {persona.labels.slice(0, 2).map((label, index) => (
                     <AssistantBadge
-                      text={`+${persona.labels.length - 3} more`}
+                      key={index}
+                      text={label.name}
+                      maxLength={10}
+                    />
+                  ))}
+                  {persona.labels.length > 2 && (
+                    <AssistantBadge
+                      text={`+${persona.labels.length - 2} more`}
                     />
                   )}
                 </>
