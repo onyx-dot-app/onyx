@@ -295,8 +295,8 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             </div>
           )}
 
-          <div>
-            <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-[#6c6c6c]/80 items-center font-normal leading-normal">
+          <div className="h-full overflow-y-auto">
+            <div className="flex px-4  font-normal text-sm gap-x-2 leading-normal text-[#6c6c6c]/80 items-center font-normal leading-normal">
               Assistants
             </div>
             <DndContext
@@ -343,17 +343,17 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                 Explore Assistants
               </button>
             </div>
-          </div>
 
-          <PagesTab
-            showDeleteModal={showDeleteModal}
-            showShareModal={showShareModal}
-            closeSidebar={removeToggle}
-            existingChats={existingChats}
-            currentChatId={currentChatId}
-            folders={folders}
-            showDeleteAllModal={showDeleteAllModal}
-          />
+            <PagesTab
+              showDeleteModal={showDeleteModal}
+              showShareModal={showShareModal}
+              closeSidebar={removeToggle}
+              existingChats={existingChats}
+              currentChatId={currentChatId}
+              folders={folders}
+              showDeleteAllModal={showDeleteAllModal}
+            />
+          </div>
         </div>
       </>
     );

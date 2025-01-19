@@ -749,115 +749,6 @@ export function AssistantEditor({
                 className="[&_input]:placeholder:text-text-muted/50"
               />
 
-              <div className=" w-full max-w-4xl">
-                <Separator />
-                <div className="flex gap-x-2 items-center mt-4 ">
-                  <div className="block font-medium text-sm">Labels</div>
-                </div>
-                <p
-                  className="text-sm text-subtle"
-                  style={{ color: "rgb(113, 114, 121)" }}
-                >
-                  Select labels to categorize this assistant
-                </p>
-                <div className="mt-3">
-                  <SearchMultiSelectDropdown
-                    onCreate={async (name: string) => {
-                      await createLabel(name);
-                      const currentLabels = await refreshLabels();
-
-                      setTimeout(() => {
-                        const newLabelId = currentLabels.find(
-                          (l: { name: string }) => l.name === name
-                        )?.id;
-                        const updatedLabelIds = [
-                          ...values.label_ids,
-                          newLabelId as number,
-                        ];
-                        setFieldValue("label_ids", updatedLabelIds);
-                      }, 300);
-                    }}
-                    options={Array.from(
-                      new Set(labels.map((label) => label.name))
-                    ).map((name) => ({
-                      name,
-                      value: name,
-                    }))}
-                    onSelect={(selected) => {
-                      const newLabelIds = [
-                        ...values.label_ids,
-                        labels.find((l) => l.name === selected.value)
-                          ?.id as number,
-                      ];
-                      setFieldValue("label_ids", newLabelIds);
-                    }}
-                    itemComponent={({ option }) => (
-                      <div className="flex items-center justify-between px-4 py-3 text-sm hover:bg-hover cursor-pointer border-b border-border last:border-b-0">
-                        <div
-                          className="flex-grow"
-                          onClick={() => {
-                            const label = labels.find(
-                              (l) => l.name === option.value
-                            );
-                            if (label) {
-                              const isSelected = values.label_ids.includes(
-                                label.id
-                              );
-                              const newLabelIds = isSelected
-                                ? values.label_ids.filter(
-                                    (id: number) => id !== label.id
-                                  )
-                                : [...values.label_ids, label.id];
-                              setFieldValue("label_ids", newLabelIds);
-                            }
-                          }}
-                        >
-                          <span className="font-normal leading-none">
-                            {option.name}
-                          </span>
-                        </div>
-                        {admin && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const label = labels.find(
-                                (l) => l.name === option.value
-                              );
-                              if (label) {
-                                deleteLabel(label.id);
-                              }
-                            }}
-                            className="ml-2 p-1 hover:bg-background-hover rounded"
-                          >
-                            <XIcon size={12} />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  />
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {values.label_ids.map((labelId: number) => {
-                      const label = labels.find((l) => l.id === labelId);
-                      return label ? (
-                        <SourceChip
-                          key={label.id}
-                          onRemove={() => {
-                            setFieldValue(
-                              "label_ids",
-                              values.label_ids.filter(
-                                (id: number) => id !== label.id
-                              )
-                            );
-                          }}
-                          title={label.name}
-                          icon={<TagIcon size={12} />}
-                        />
-                      ) : null;
-                    })}
-                  </div>
-                </div>
-              </div>
-
               <Separator />
 
               <TextFormField
@@ -1331,6 +1222,115 @@ export function AssistantEditor({
                           />
                         )}
                       />
+                    </div>
+                  </div>
+
+                  <div className=" w-full max-w-4xl">
+                    <Separator />
+                    <div className="flex gap-x-2 items-center mt-4 ">
+                      <div className="block font-medium text-sm">Labels</div>
+                    </div>
+                    <p
+                      className="text-sm text-subtle"
+                      style={{ color: "rgb(113, 114, 121)" }}
+                    >
+                      Select labels to categorize this assistant
+                    </p>
+                    <div className="mt-3">
+                      <SearchMultiSelectDropdown
+                        onCreate={async (name: string) => {
+                          await createLabel(name);
+                          const currentLabels = await refreshLabels();
+
+                          setTimeout(() => {
+                            const newLabelId = currentLabels.find(
+                              (l: { name: string }) => l.name === name
+                            )?.id;
+                            const updatedLabelIds = [
+                              ...values.label_ids,
+                              newLabelId as number,
+                            ];
+                            setFieldValue("label_ids", updatedLabelIds);
+                          }, 300);
+                        }}
+                        options={Array.from(
+                          new Set(labels.map((label) => label.name))
+                        ).map((name) => ({
+                          name,
+                          value: name,
+                        }))}
+                        onSelect={(selected) => {
+                          const newLabelIds = [
+                            ...values.label_ids,
+                            labels.find((l) => l.name === selected.value)
+                              ?.id as number,
+                          ];
+                          setFieldValue("label_ids", newLabelIds);
+                        }}
+                        itemComponent={({ option }) => (
+                          <div className="flex items-center justify-between px-4 py-3 text-sm hover:bg-hover cursor-pointer border-b border-border last:border-b-0">
+                            <div
+                              className="flex-grow"
+                              onClick={() => {
+                                const label = labels.find(
+                                  (l) => l.name === option.value
+                                );
+                                if (label) {
+                                  const isSelected = values.label_ids.includes(
+                                    label.id
+                                  );
+                                  const newLabelIds = isSelected
+                                    ? values.label_ids.filter(
+                                        (id: number) => id !== label.id
+                                      )
+                                    : [...values.label_ids, label.id];
+                                  setFieldValue("label_ids", newLabelIds);
+                                }
+                              }}
+                            >
+                              <span className="font-normal leading-none">
+                                {option.name}
+                              </span>
+                            </div>
+                            {admin && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const label = labels.find(
+                                    (l) => l.name === option.value
+                                  );
+                                  if (label) {
+                                    deleteLabel(label.id);
+                                  }
+                                }}
+                                className="ml-2 p-1 hover:bg-background-hover rounded"
+                              >
+                                <TrashIcon size={16} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      />
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {values.label_ids.map((labelId: number) => {
+                          const label = labels.find((l) => l.id === labelId);
+                          return label ? (
+                            <SourceChip
+                              key={label.id}
+                              onRemove={() => {
+                                setFieldValue(
+                                  "label_ids",
+                                  values.label_ids.filter(
+                                    (id: number) => id !== label.id
+                                  )
+                                );
+                              }}
+                              title={label.name}
+                              icon={<TagIcon size={12} />}
+                            />
+                          ) : null;
+                        })}
+                      </div>
                     </div>
                   </div>
                   <Separator />

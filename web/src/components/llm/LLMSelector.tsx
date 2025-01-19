@@ -32,13 +32,24 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
   onSelect,
   requiresImageGeneration,
 }) => {
-  const llmOptions = llmProviders.flatMap((provider) =>
-    (provider.display_model_names || provider.model_names).map((modelName) => ({
-      name: getDisplayNameForModel(modelName),
-      value: structureValue(provider.name, provider.provider, modelName),
-      icon: getProviderIcon(provider.provider, modelName),
-    }))
-  );
+  const seenModelNames = new Set();
+
+  const llmOptions = llmProviders.flatMap((provider) => {
+    return (provider.display_model_names || provider.model_names)
+      .filter((modelName) => {
+        const displayName = getDisplayNameForModel(modelName);
+        if (seenModelNames.has(displayName)) {
+          return false;
+        }
+        seenModelNames.add(displayName);
+        return true;
+      })
+      .map((modelName) => ({
+        name: getDisplayNameForModel(modelName),
+        value: structureValue(provider.name, provider.provider, modelName),
+        icon: getProviderIcon(provider.provider, modelName),
+      }));
+  });
 
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider

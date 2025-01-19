@@ -127,7 +127,7 @@ export default function AssistantModal({
       heightOverride={`${height}px`}
       onOutsideClick={hideModal}
       removeBottomPadding
-      className={`max-w-4xl ${height} w-[95%] overflow-hidden`}
+      className={`max-w-4xl max-h-[90vh] ${height} w-[95%] overflow-hidden`}
     >
       <div className="flex flex-col h-full">
         <div className="flex flex-col sticky top-0 z-10">
@@ -176,11 +176,7 @@ export default function AssistantModal({
               selected={assistantFilters[AssistantFilter.Pinned]}
               toggleFilter={() => toggleAssistantFilter(AssistantFilter.Pinned)}
             />
-            <AssistantBadgeSelector
-              text="Public"
-              selected={assistantFilters[AssistantFilter.Public]}
-              toggleFilter={() => toggleAssistantFilter(AssistantFilter.Public)}
-            />
+
             <AssistantBadgeSelector
               text="Mine"
               selected={assistantFilters[AssistantFilter.Mine]}
@@ -192,6 +188,11 @@ export default function AssistantModal({
               toggleFilter={() =>
                 toggleAssistantFilter(AssistantFilter.Private)
               }
+            />
+            <AssistantBadgeSelector
+              text="Public"
+              selected={assistantFilters[AssistantFilter.Public]}
+              toggleFilter={() => toggleAssistantFilter(AssistantFilter.Public)}
             />
           </div>
           <div className="w-full border-t border-neutral-200" />

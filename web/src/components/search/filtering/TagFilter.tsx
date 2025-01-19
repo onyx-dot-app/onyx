@@ -80,7 +80,7 @@ export function TagFilter({
       </div>
       <div className="space-y-1 border-t pt-2 border-t-text-subtle px-4 default-scrollbar w-full max-h-64 overflow-y-auto">
         {filteredTags
-          .sort((a, b) => (isTagSelected(a) ? -1 : isTagSelected(b) ? 1 : 0))
+          .sort((a, b) => a.tag_key.localeCompare(b.tag_key))
           .map((tag, index) => (
             <SelectableDropdown
               key={index}
