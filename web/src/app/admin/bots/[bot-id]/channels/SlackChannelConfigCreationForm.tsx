@@ -58,8 +58,13 @@ export const SlackChannelConfigCreationForm = ({
     existingSlackBotUsesPersona
   );
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [currentSearchTerm, setCurrentSearchTerm] = useState("");
 
   const knowledgePersona = personas.find((persona) => persona.id === 0);
+
+  const handleSearchTermChange = (newTerm: string) => {
+    setCurrentSearchTerm(newTerm);
+  };
 
   return (
     <div>
@@ -194,9 +199,11 @@ export const SlackChannelConfigCreationForm = ({
                     { name: "random", value: "random" },
                     { name: "budget", value: "budget" },
                   ]}
-                  onSelect={(selected) =>
-                    setFieldValue("channel_name", selected.value)
-                  }
+                  onSelect={(selected) => {
+                    setFieldValue("channel_name", selected.value as string);
+                    setCurrentSearchTerm(selected.value as string);
+                  }}
+                  onSearchTermChange={handleSearchTermChange}
                 />
 
                 <div className="mt-6">
@@ -397,7 +404,11 @@ export const SlackChannelConfigCreationForm = ({
                   <Button
                     type="submit"
                     variant="submit"
-                    disabled={isSubmitting || !values.channel_name}
+                    disabled={
+                      isSubmitting ||
+                      !values.channel_name ||
+                      values.channel_name !== currentSearchTerm
+                    }
                     className="mx-auto w-64"
                   >
                     {isUpdate ? "Update!" : "Create!"}

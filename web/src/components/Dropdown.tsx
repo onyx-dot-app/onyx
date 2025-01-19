@@ -53,18 +53,32 @@ export function SearchMultiSelectDropdown({
   onSelect,
   itemComponent,
   onCreateLabel,
-  selectedValue,
+  onSearchTermChange,
 }: {
   options: StringOrNumberOption[];
   onSelect: (selected: StringOrNumberOption) => void;
   itemComponent?: FC<{ option: StringOrNumberOption }>;
   onCreateLabel?: (name: string) => void;
-  selectedValue?: string | number;
+  onSearchTermChange?: (term: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const dropdownMenuRef = useRef<HTMLDivElement>(null);
+
+  const searchTermChangeCallback = (e: ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setSearchTerm(newValue);
+    if (onSearchTermChange) {
+      onSearchTermChange(newValue);
+    }
+
+    if (newValue) {
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  };
 
   const handleSelect = (option: StringOrNumberOption) => {
     onSelect(option);
@@ -103,14 +117,7 @@ export function SearchMultiSelectDropdown({
           type="text"
           placeholder="Search..."
           value={searchTerm}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => {
-            setSearchTerm(e.target.value);
-            if (e.target.value) {
-              setIsOpen(true);
-            } else {
-              setIsOpen(false);
-            }
-          }}
+          onChange={searchTermChangeCallback}
           onFocus={() => setIsOpen(true)}
           className={`inline-flex 
             justify-between 
