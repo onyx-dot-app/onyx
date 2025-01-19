@@ -245,6 +245,7 @@ export const AIMessage = ({
       (!isComplete && !toolCallGenerating ? " [*]() " : "")
     );
   };
+  console.log(content);
 
   const finalContent = processContent(content as string);
 
