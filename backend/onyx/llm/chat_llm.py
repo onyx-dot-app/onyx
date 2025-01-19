@@ -275,17 +275,22 @@ class DefaultMultiLLM(LLM):
         # addtional kwargs (and some kwargs MUST be passed in rather than set as
         # env variables)
         if custom_config:
-            # Specifically pass in "vertex_credentials" as a model_kwarg to the
-            # completion call for vertex AI. More details here:
+            # Specifically pass in "vertex_credentials" / "vertex_location" as a
+            # model_kwarg to the completion call for vertex AI. More details here:
             # https://docs.litellm.ai/docs/providers/vertex
             vertex_credentials_key = "vertex_credentials"
-            vertex_credentials = custom_config.get(vertex_credentials_key)
-            if vertex_credentials and model_provider == "vertex_ai":
-                model_kwargs[vertex_credentials_key] = vertex_credentials
-            else:
-                # standard case
-                for k, v in custom_config.items():
-                    os.environ[k] = v
+            vertex_location_key = "vertex_location"
+            for k, v in custom_config.items():
+                if model_provider == "vertex_ai":
+                    if k == vertex_credentials_key:
+                        model_kwargs[k] = v
+                        continue
+                    elif k == vertex_location_key:
+                        model_kwargs[k] = v
+                        continue
+
+                # for all values, set them as env variables
+                os.environ[k] = v
 
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
