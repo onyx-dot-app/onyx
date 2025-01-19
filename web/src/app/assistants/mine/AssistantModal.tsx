@@ -130,7 +130,7 @@ export default function AssistantModal({
       className={`max-w-4xl max-h-[90vh] ${height} w-[95%] overflow-hidden`}
     >
       <div className="flex flex-col h-full">
-        <div className="flex flex-col sticky top-0 z-10">
+        <div className="flex bg-background flex-col sticky top-0 z-10">
           <div className="flex px-2 justify-between items-center gap-x-2 mb-0">
             <div className="h-12 w-full rounded-lg flex-col justify-center items-start gap-2.5 inline-flex">
               <div className="h-12 rounded-md w-full shadow-[0px_0px_2px_0px_rgba(0,0,0,0.25)] border border-[#dcdad4] flex items-center px-3">
