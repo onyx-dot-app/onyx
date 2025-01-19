@@ -13,7 +13,7 @@ import { FiPlus, FiTrash2, FiCheck, FiX } from "react-icons/fi";
 import { NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED } from "@/lib/constants";
 import { FolderDropdown } from "../folders/FolderDropdown";
 import { ChatSessionDisplay } from "./ChatSessionDisplay";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useContext } from "react";
 import { Caret } from "@/components/icons/icons";
 import { groupSessionsByDateRange } from "../lib";
 import React from "react";
@@ -35,6 +35,7 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useChatContext } from "@/components/context/ChatContext";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 interface SortableFolderProps {
   folder: Folder;
@@ -46,9 +47,12 @@ interface SortableFolderProps {
   onEdit: (folderId: number, newName: string) => void;
   onDelete: (folderId: number) => void;
   onDrop: (folderId: number, chatSessionId: string) => void;
+  index: number;
 }
 
 const SortableFolder: React.FC<SortableFolderProps> = (props) => {
+  const settings = useContext(SettingsContext);
+  const mobile = settings?.isMobile;
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({
       id: props.folder.folder_id?.toString() ?? "",
@@ -57,6 +61,7 @@ const SortableFolder: React.FC<SortableFolderProps> = (props) => {
           distance: 8,
         },
       },
+      disabled: mobile,
     });
   const ref = useRef<HTMLDivElement>(null);
   const style = {
@@ -70,7 +75,12 @@ const SortableFolder: React.FC<SortableFolderProps> = (props) => {
       className="pr-3 ml-4 overflow-visible flex items-start"
       style={style}
     >
-      <FolderDropdown ref={ref} {...props} {...attributes} {...listeners} />
+      <FolderDropdown
+        ref={ref}
+        {...props}
+        {...(mobile ? {} : attributes)}
+        {...(mobile ? {} : listeners)}
+      />
     </div>
   );
 };
@@ -299,7 +309,7 @@ export function PagesTab({
   return (
     <div className="flex flex-col gap-y-2 flex-grow">
       {popup}
-      <div className="px-4 mt-2 group mr-2">
+      <div className="px-4 mt-2 group mr-2 bg-background-sidebar z-20">
         <div className="flex justify-between text-sm gap-x-2 text-[#6c6c6c]/80 items-center font-normal leading-normal">
           <p>Chats</p>
           <button
@@ -357,31 +367,35 @@ export function PagesTab({
             items={folders.map((f) => f.folder_id?.toString() ?? "")}
             strategy={verticalListSortingStrategy}
           >
-            {folders
-              .sort(
-                (a, b) => (a.display_priority ?? 0) - (b.display_priority ?? 0)
-              )
-              .map((folder) => (
-                <SortableFolder
-                  key={folder.folder_id}
-                  folder={folder}
-                  currentChatId={currentChatId}
-                  showShareModal={showShareModal}
-                  showDeleteModal={showDeleteModal}
-                  closeSidebar={closeSidebar}
-                  onEdit={handleEditFolder}
-                  onDelete={handleDeleteFolder}
-                  onDrop={handleDrop}
-                >
-                  {folder.chat_sessions &&
-                    folder.chat_sessions.map((chat) =>
-                      renderChatSession(
-                        chat,
-                        folders != undefined && folders.length > 0
-                      )
-                    )}
-                </SortableFolder>
-              ))}
+            <div className="space-y-2">
+              {folders
+                .sort(
+                  (a, b) =>
+                    (a.display_priority ?? 0) - (b.display_priority ?? 0)
+                )
+                .map((folder, index) => (
+                  <SortableFolder
+                    key={folder.folder_id}
+                    folder={folder}
+                    currentChatId={currentChatId}
+                    showShareModal={showShareModal}
+                    showDeleteModal={showDeleteModal}
+                    closeSidebar={closeSidebar}
+                    onEdit={handleEditFolder}
+                    onDelete={handleDeleteFolder}
+                    onDrop={handleDrop}
+                    index={index}
+                  >
+                    {folder.chat_sessions &&
+                      folder.chat_sessions.map((chat) =>
+                        renderChatSession(
+                          chat,
+                          folders != undefined && folders.length > 0
+                        )
+                      )}
+                  </SortableFolder>
+                ))}
+            </div>
           </SortableContext>
         </DndContext>
       )}
@@ -395,7 +409,7 @@ export function PagesTab({
           <>
             {Object.entries(groupedChatSesssions)
               .filter(([groupName, chats]) => chats.length > 0)
-              .map(([groupName, chats]) => (
+              .map(([groupName, chats], index) => (
                 <FolderDropdown
                   key={groupName}
                   folder={{
@@ -408,6 +422,7 @@ export function PagesTab({
                   closeSidebar={closeSidebar}
                   onEdit={handleEditFolder}
                   onDrop={handleDrop}
+                  index={folders ? folders.length + index : index}
                 >
                   {chats.map((chat) =>
                     renderChatSession(

@@ -60,20 +60,10 @@ export function ChatSessionDisplay({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const renamingRef = useRef<HTMLDivElement>(null);
-  const [isMobile, setIsMobile] = useState(false);
 
   const { refreshChatSessions, refreshFolders } = useChatContext();
 
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 768px)");
-    setIsMobile(mediaQuery.matches);
-
-    const handleResize = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mediaQuery.addListener(handleResize);
-
-    return () => mediaQuery.removeListener(handleResize);
-  }, []);
-
+  const isMobile = settings?.isMobile;
   const handlePopoverOpenChange = useCallback(
     (open: boolean) => {
       setPopoverOpen(open);
