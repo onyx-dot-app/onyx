@@ -9,8 +9,11 @@ from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GR
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.confluence.onyx_confluence import (
+    get_user_email_from_username__server,
+)
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.confluence.utils import get_user_email_from_username__server
+from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.models import SlimDocument
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -334,6 +337,7 @@ def _fetch_all_page_restrictions(
 
 
 def confluence_doc_sync(
+    tenant_id: str | None,
     cc_pair: ConnectorCredentialPair,
 ) -> list[DocExternalAccess]:
     """
@@ -346,7 +350,10 @@ def confluence_doc_sync(
     confluence_connector = ConfluenceConnector(
         **cc_pair.connector.connector_specific_config
     )
-    confluence_connector.load_credentials(cc_pair.credential.credential_json)
+
+    # confluence_connector.load_credentials(cc_pair.credential.credential_json)
+    provider = OnyxDBCredentialsProvider(tenant_id, "confluence", cc_pair.credential_id)
+    confluence_connector.set_credentials_provider(provider)
 
     is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)
 

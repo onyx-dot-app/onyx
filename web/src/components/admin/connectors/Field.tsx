@@ -126,7 +126,6 @@ export function TextFormField({
   label,
   subtext,
   placeholder,
-  value,
   type = "text",
   optional,
   includeRevert,
@@ -151,7 +150,6 @@ export function TextFormField({
   vertical,
   className,
 }: {
-  value?: string;
   name: string;
   removeLabel?: boolean;
   label: string;
@@ -251,7 +249,6 @@ export function TextFormField({
           min={min}
           as={isTextArea ? "textarea" : "input"}
           type={type}
-          defaultValue={value}
           data-testid={name}
           name={name}
           id={name}

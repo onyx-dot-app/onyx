@@ -1171,11 +1171,11 @@ export function AssistantEditor({
                           fontSize="sm"
                           name={`editLabelName_${label.id}`}
                           label="Label Name"
-                          value={
-                            values.editLabelId === label.id
-                              ? values.editLabelName
-                              : label.name
-                          }
+                          // value={
+                          //   values.editLabelId === label.id
+                          //     ? values.editLabelName
+                          //     : label.name
+                          // }
                           onChange={(e) => {
                             setFieldValue("editLabelId", label.id);
                             setFieldValue("editLabelName", e.target.value);
@@ -1440,7 +1440,6 @@ export function AssistantEditor({
                           small
                           subtext="Documents prior to this date will be ignored."
                           label="[Optional] Knowledge Cutoff Date"
-                          value={values.search_start_date}
                           name="search_start_date"
                         />
 

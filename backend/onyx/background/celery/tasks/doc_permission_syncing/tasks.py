@@ -310,7 +310,9 @@ def connector_permission_sync_generator_task(
             )
             redis_connector.permissions.set_fence(new_payload)
 
-            document_external_accesses: list[DocExternalAccess] = doc_sync_func(cc_pair)
+            document_external_accesses: list[DocExternalAccess] = doc_sync_func(
+                tenant_id, cc_pair
+            )
 
             task_logger.info(
                 f"RedisConnector.permissions.generate_tasks starting. cc_pair={cc_pair_id}"

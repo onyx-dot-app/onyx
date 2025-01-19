@@ -12,6 +12,7 @@ from onyx.connectors.blob.connector import BlobStorageConnector
 from onyx.connectors.bookstack.connector import BookstackConnector
 from onyx.connectors.clickup.connector import ClickupConnector
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.discord.connector import DiscordConnector
 from onyx.connectors.discourse.connector import DiscourseConnector
 from onyx.connectors.document360.connector import Document360Connector
@@ -29,6 +30,7 @@ from onyx.connectors.google_site.connector import GoogleSitesConnector
 from onyx.connectors.guru.connector import GuruConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import EventConnector
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -149,9 +151,14 @@ def instantiate_connector(
         connector_specific_config["tenant_id"] = tenant_id
 
     connector = connector_class(**connector_specific_config)
-    new_credentials = connector.load_credentials(credential.credential_json)
 
-    if new_credentials is not None:
-        backend_update_credential_json(credential, new_credentials, db_session)
+    if isinstance(connector, CredentialsConnector):
+        provider = OnyxDBCredentialsProvider(tenant_id, str(source), credential.id)
+        connector.set_credentials_provider(provider)
+    else:
+        new_credentials = connector.load_credentials(credential.credential_json)
+
+        if new_credentials is not None:
+            backend_update_credential_json(credential, new_credentials, db_session)
 
     return connector
