@@ -56,7 +56,7 @@ export function StarterMessages({
                       disabled:cursor-not-allowed
                       line-clamp-3
                     `}
-                    style={{ height: "5.2rem" }}
+                    style={{ height: "5.4rem" }}
                   >
                     {starterMessage.name}
                   </button>

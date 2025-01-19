@@ -321,14 +321,18 @@ export function FilterPopup({
               <div className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold">Sources</h3>
-                  <Checkbox
-                    id="select-all-sources"
-                    checked={
-                      filterManager.selectedSources.length ===
-                      availableSources.length
-                    }
-                    onCheckedChange={toggleAllSources}
-                  />
+                  <div className="flex gap-x-2 items-center ">
+                    <p className="text-xs text-text-dark">Select all</p>
+                    <Checkbox
+                      size="sm"
+                      id="select-all-sources"
+                      checked={
+                        filterManager.selectedSources.length ===
+                        availableSources.length
+                      }
+                      onCheckedChange={toggleAllSources}
+                    />
+                  </div>
                 </div>
                 <ul className="space-y-1">
                   {availableSources.map((source) => (

@@ -140,7 +140,7 @@ const AssistantCard: React.FC<{
               )}
             </div>
             {isOwnedByUser && (
-              <div className="flex items-center gap-x-2">
+              <div className="flex ml-2 items-center gap-x-2">
                 <Popover
                   open={activePopover !== undefined}
                   onOpenChange={(open) =>
