@@ -71,10 +71,20 @@ class AirtableConnector(LoadConnector):
         self.airtable_client = AirtableApi(credentials["airtable_access_token"])
         return None
 
-    def _get_field_value(self, field_info: Any, field_type: str) -> list[str]:
+    @staticmethod
+    def _extract_field_values(
+        field_id: str,
+        field_info: Any,
+        field_type: str,
+        base_id: str,
+        table_id: str,
+        view_id: str | None,
+        record_id: str,
+    ) -> list[tuple[str, str]]:
         """
-        Extract value(s) from a field regardless of its type.
-        Returns either a single string or list of strings for attachments.
+        Extract value(s) + links from a field regardless of its type.
+        Attachments are represented as multiple sections, and therefore
+        returned as a list of tuples (value, link).
         """
         if field_info is None:
             return []
@@ -85,8 +95,11 @@ class AirtableConnector(LoadConnector):
         if field_type == "multipleRecordLinks":
             return []
 
+        # default link to use for non-attachment fields
+        default_link = f"https://airtable.com/{base_id}/{table_id}/{record_id}"
+
         if field_type == "multipleAttachments":
-            attachment_texts: list[str] = []
+            attachment_texts: list[tuple[str, str]] = []
             for attachment in field_info:
                 url = attachment.get("url")
                 filename = attachment.get("filename", "")
@@ -109,6 +122,7 @@ class AirtableConnector(LoadConnector):
                 if attachment_content:
                     try:
                         file_ext = get_file_ext(filename)
+                        attachment_id = attachment["id"]
                         attachment_text = extract_file_text(
                             BytesIO(attachment_content),
                             filename,
@@ -116,7 +130,20 @@ class AirtableConnector(LoadConnector):
                             extension=file_ext,
                         )
                         if attachment_text:
-                            attachment_texts.append(f"{filename}:\n{attachment_text}")
+                            # slightly nicer loading experience if we can specify the view ID
+                            if view_id:
+                                attachment_link = (
+                                    f"https://airtable.com/{base_id}/{table_id}/{view_id}/{record_id}"
+                                    f"/{field_id}/{attachment_id}?blocks=hide"
+                                )
+                            else:
+                                attachment_link = (
+                                    f"https://airtable.com/{base_id}/{table_id}/{record_id}"
+                                    f"/{field_id}/{attachment_id}?blocks=hide"
+                                )
+                            attachment_texts.append(
+                                (f"{filename}:\n{attachment_text}", attachment_link)
+                            )
                     except Exception as e:
                         logger.warning(
                             f"Failed to process attachment {filename}: {str(e)}"
@@ -131,12 +158,12 @@ class AirtableConnector(LoadConnector):
                 combined.append(collab_name)
             if collab_email:
                 combined.append(f"({collab_email})")
-            return [" ".join(combined) if combined else str(field_info)]
+            return [(" ".join(combined) if combined else str(field_info), default_link)]
 
         if isinstance(field_info, list):
-            return [str(item) for item in field_info]
+            return [(item, default_link) for item in field_info]
 
-        return [str(field_info)]
+        return [(str(field_info), default_link)]
 
     def _should_be_metadata(self, field_type: str) -> bool:
         """Determine if a field type should be treated as metadata."""
@@ -144,10 +171,12 @@ class AirtableConnector(LoadConnector):
 
     def _process_field(
         self,
+        field_id: str,
         field_name: str,
         field_info: Any,
         field_type: str,
         table_id: str,
+        view_id: str | None,
         record_id: str,
     ) -> tuple[list[Section], dict[str, Any]]:
         """
@@ -165,12 +194,21 @@ class AirtableConnector(LoadConnector):
             return [], {}
 
         # Get the value(s) for the field
-        field_values = self._get_field_value(field_info, field_type)
-        if len(field_values) == 0:
+        field_value_and_links = self._extract_field_values(
+            field_id=field_id,
+            field_info=field_info,
+            field_type=field_type,
+            base_id=self.base_id,
+            table_id=table_id,
+            view_id=view_id,
+            record_id=record_id,
+        )
+        if len(field_value_and_links) == 0:
             return [], {}
 
         # Determine if it should be metadata or a section
         if self._should_be_metadata(field_type):
+            field_values = [value for value, _ in field_value_and_links]
             if len(field_values) > 1:
                 return [], {field_name: field_values}
             return [], {field_name: field_values[0]}
@@ -178,7 +216,7 @@ class AirtableConnector(LoadConnector):
         # Otherwise, create relevant sections
         sections = [
             Section(
-                link=f"https://airtable.com/{self.base_id}/{table_id}/{record_id}",
+                link=link,
                 text=(
                     f"{field_name}:\n"
                     "------------------------\n"
@@ -186,7 +224,7 @@ class AirtableConnector(LoadConnector):
                     "------------------------"
                 ),
             )
-            for text in field_values
+            for text, link in field_value_and_links
         ]
         return sections, {}
 
@@ -219,6 +257,7 @@ class AirtableConnector(LoadConnector):
         primary_field_value = (
             fields.get(primary_field_name) if primary_field_name else None
         )
+        view_id = table_schema.views[0].id if table_schema.views else None
 
         for field_schema in table_schema.fields:
             field_name = field_schema.name
@@ -226,10 +265,12 @@ class AirtableConnector(LoadConnector):
             field_type = field_schema.type
 
             field_sections, field_metadata = self._process_field(
+                field_id=field_schema.id,
                 field_name=field_name,
                 field_info=field_val,
                 field_type=field_type,
                 table_id=table_id,
+                view_id=view_id,
                 record_id=record_id,
             )
 
