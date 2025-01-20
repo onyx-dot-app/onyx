@@ -94,3 +94,17 @@ export const deleteSlackChannelConfig = async (id: number) => {
 export function isPersonaASlackBotPersona(persona: Persona) {
   return persona.name.startsWith("__slack_bot_persona__");
 }
+
+export const fetchSlackBotConfigs = async (botId: number) => {
+  return fetch(`/api/manage/admin/slack-app/bots/${botId}/config`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  }).then((response) => {
+    if (!response.ok) {
+      throw new Error("Failed to fetch Slack bot configs");
+    }
+    return response.json();
+  });
+};
