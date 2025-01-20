@@ -92,6 +92,11 @@ OAUTH_CLIENT_SECRET = (
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
+# How long the fastapiusers JWT lasts in user's browsers (defaults to be equivalent to the Redis expiry time)
+AUTH_COOKIE_EXPIRE_TIME_SECONDS = int(
+    os.environ.get("AUTH_COOKIE_EXPIRE_TIME_SECONDS") or 86400 * 7
+)  # 7 days
+
 # for basic auth
 REQUIRE_EMAIL_VERIFICATION = (
     os.environ.get("REQUIRE_EMAIL_VERIFICATION", "").lower() == "true"

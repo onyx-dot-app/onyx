@@ -55,6 +55,7 @@ from onyx.auth.invited_users import get_invited_users
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
 from onyx.auth.schemas import UserUpdate
+from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.app_configs import EMAIL_CONFIGURED
@@ -209,6 +210,7 @@ def verify_email_domain(email: str) -> None:
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
+    verification_token_lifetime_seconds = AUTH_COOKIE_EXPIRE_TIME_SECONDS
 
     user_db: SQLAlchemyUserDatabase[User, uuid.UUID]
 
