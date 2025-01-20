@@ -16,13 +16,13 @@ import {
   createSlackChannelConfig,
   isPersonaASlackBotPersona,
   updateSlackChannelConfig,
-  fetchSlackBotConfigs,
+  fetchSlackChannels,
 } from "../lib";
 import CardSection from "@/components/admin/CardSection";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
@@ -60,8 +60,24 @@ export const SlackChannelConfigCreationForm = ({
   );
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [currentSearchTerm, setCurrentSearchTerm] = useState("");
+  const [channelOptions, setChannelOptions] = useState<
+    { name: string; value: string }[] // ES5 doesn't support set lookups which is ideal here.
+  >([]);
 
   const knowledgePersona = personas.find((persona) => persona.id === 0);
+
+  useEffect(() => {
+    const fetchChannels = async () => {
+      const channels = await fetchSlackChannels(slack_bot_id);
+      setChannelOptions(
+        Object.entries(channels).map(([name, id]) => ({
+          name,
+          value: id as string,
+        }))
+      );
+    };
+    fetchChannels();
+  }, [slack_bot_id]);
 
   const handleSearchTermChange = (newTerm: string) => {
     setCurrentSearchTerm(newTerm);
@@ -195,18 +211,13 @@ export const SlackChannelConfigCreationForm = ({
                 </label>
 
                 <SearchMultiSelectDropdown
-                  options={[
-                    { name: "general", value: "general" },
-                    { name: "random", value: "random" },
-                    { name: "budget", value: "budget" },
-                  ]}
+                  options={channelOptions}
                   onSelect={(selected) => {
-                    setFieldValue("channel_name", selected.value as string);
-                    setCurrentSearchTerm(selected.value as string);
+                    setFieldValue("channel_name", selected.name);
+                    setCurrentSearchTerm(selected.name);
                   }}
                   onSearchTermChange={handleSearchTermChange}
                 />
-
                 <div className="mt-6">
                   <Label>Knowledge Sources</Label>
                   <SubLabel>

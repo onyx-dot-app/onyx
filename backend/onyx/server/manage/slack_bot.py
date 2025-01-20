@@ -1,6 +1,10 @@
+from typing import Dict
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -12,6 +16,7 @@ from onyx.db.models import ChannelConfig
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.slack_bot import fetch_slack_bot
+from onyx.db.slack_bot import fetch_slack_bot_tokens
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.db.slack_bot import insert_slack_bot
 from onyx.db.slack_bot import remove_slack_bot
@@ -315,3 +320,26 @@ def list_bot_configs(
         SlackChannelConfig.from_model(slack_bot_config_model)
         for slack_bot_config_model in slack_bot_config_models
     ]
+
+
+@router.get(
+    "/admin/slack-app/bots/{bot_id}/channels_from_slack_api",
+    response_model=Dict[str, str],
+)
+def get_all_channels_from_slack_api(
+    bot_id: int,
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_admin_user),
+) -> Dict[str, str]:
+    bot_token = fetch_slack_bot_tokens(db_session, bot_id)["bot_token"]
+
+    client = WebClient(token=bot_token)
+    try:
+        response = client.conversations_list(limit=1000)
+        channels = {channel["name"]: channel["id"] for channel in response["channels"]}
+        return channels
+    except SlackApiError as e:
+        print(f"Error fetching channels: {e.response['error']}")
+        raise HTTPException(
+            status_code=500, detail="Error fetching channels from Slack API"
+        )
