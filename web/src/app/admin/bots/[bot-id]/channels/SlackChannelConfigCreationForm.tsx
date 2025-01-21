@@ -217,6 +217,10 @@ export const SlackChannelConfigCreationForm = ({
                     setCurrentSearchTerm(selected.name);
                   }}
                   onSearchTermChange={handleSearchTermChange}
+                  initialSearchTerm={
+                    existingSlackChannelConfig?.channel_config.channel_name ||
+                    ""
+                  }
                 />
                 <div className="mt-6">
                   <Label>Knowledge Sources</Label>

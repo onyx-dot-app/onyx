@@ -54,15 +54,17 @@ export function SearchMultiSelectDropdown({
   itemComponent,
   onCreateLabel,
   onSearchTermChange,
+  initialSearchTerm = "",
 }: {
   options: StringOrNumberOption[];
   onSelect: (selected: StringOrNumberOption) => void;
   itemComponent?: FC<{ option: StringOrNumberOption }>;
   onCreateLabel?: (name: string) => void;
   onSearchTermChange?: (term: string) => void;
+  initialSearchTerm?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const dropdownMenuRef = useRef<HTMLDivElement>(null);
 
@@ -89,6 +91,10 @@ export function SearchMultiSelectDropdown({
   const filteredOptions = options.filter((option) =>
     option.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  useEffect(() => {
+    setSearchTerm(initialSearchTerm);
+  }, [initialSearchTerm]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
