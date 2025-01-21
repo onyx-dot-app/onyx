@@ -23,7 +23,7 @@ def upgrade() -> None:
     op.add_column(
         "tool",
         sa.Column(
-            "passthrough_auth", sa.Boolean(), nullable=False, server_default="false"
+            "passthrough_auth", sa.Boolean(), nullable=False, server_default=sa.false()
         ),
     )
 
