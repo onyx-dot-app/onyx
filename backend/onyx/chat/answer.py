@@ -263,6 +263,8 @@ class Answer:
         prompt_builder.update_system_prompt(
             default_build_system_message(self.prompt_config)
         )
+        print("TOOL LIST")
+        print(self._get_tools_list())
         llm_call = LLMCall(
             prompt_builder=prompt_builder,
             tools=self._get_tools_list(),

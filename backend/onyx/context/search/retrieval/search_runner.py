@@ -142,6 +142,9 @@ def doc_index_retrieval(
         num_to_retrieve=query.num_hits,
         offset=query.offset,
     )
+    print("THE TOP CHUNKS")
+    print(top_chunks)
+    print("\n\n\n\n\n")
 
     retrieval_requests: list[VespaChunkRequest] = []
     normal_chunks: list[InferenceChunkUncleaned] = []

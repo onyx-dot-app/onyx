@@ -227,12 +227,15 @@ def _handle_internet_search_tool_response_summary(
 def _get_force_search_settings(
     new_msg_req: CreateChatMessageRequest, tools: list[Tool]
 ) -> ForceUseTool:
+    print(new_msg_req.__dict__)
     internet_search_available = any(
         isinstance(tool, InternetSearchTool) for tool in tools
     )
     search_tool_available = any(isinstance(tool, SearchTool) for tool in tools)
 
     if not internet_search_available and not search_tool_available:
+        print("NO TOOLS AVAILABLE")
+
         # Does not matter much which tool is set here as force is false and neither tool is available
         return ForceUseTool(force_use=False, tool_name=SearchTool._NAME)
 
@@ -683,10 +686,15 @@ def stream_chat_message_objects(
                 additional_headers=custom_tool_additional_headers,
             ),
         )
+        print("TOOL DICT")
+        print(tool_dict)
 
         tools: list[Tool] = []
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
+
+        print("SHOULD FORCE SEARCH?")
+        print(_get_force_search_settings(new_msg_req, tools))
 
         # LLM prompt building, response capturing, etc.
         answer = Answer(

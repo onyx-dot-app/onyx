@@ -159,6 +159,9 @@ def handle_regular_answer(
         new_message_request: CreateChatMessageRequest, onyx_user: User | None
     ) -> ChatOnyxBotResponse:
         with get_session_with_tenant(tenant_id) as db_session:
+            print(new_message_request.__dict__)
+            print(bypass_acl)
+
             packets = stream_chat_message_objects(
                 new_msg_req=new_message_request,
                 user=onyx_user,
