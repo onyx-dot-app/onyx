@@ -98,6 +98,7 @@ def check_for_llm_model_update(self: Task, *, tenant_id: str | None) -> bool | N
 
         # Update the provider's model list
         default_provider.model_names = available_models
+        default_provider.display_model_names = available_models
         # if the default model is no longer available, set it to the first model in the list
         if default_provider.default_model_name not in available_models:
             task_logger.info(
