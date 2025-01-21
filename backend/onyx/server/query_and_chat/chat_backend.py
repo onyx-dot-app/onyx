@@ -5,7 +5,6 @@ import os
 import uuid
 from collections.abc import Callable
 from collections.abc import Generator
-from typing import Tuple
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -15,7 +14,6 @@ from fastapi import Request
 from fastapi import Response
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
-from PIL import Image
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -595,21 +593,6 @@ def seed_chat_from_slack(
 """File upload"""
 
 
-def convert_to_jpeg(file: UploadFile) -> Tuple[io.BytesIO, str]:
-    try:
-        with Image.open(file.file) as img:
-            if img.mode != "RGB":
-                img = img.convert("RGB")
-            jpeg_io = io.BytesIO()
-            img.save(jpeg_io, format="JPEG", quality=85)
-            jpeg_io.seek(0)
-        return jpeg_io, "image/jpeg"
-    except Exception as e:
-        raise HTTPException(
-            status_code=400, detail=f"Failed to convert image: {str(e)}"
-        )
-
-
 @router.post("/file")
 def upload_files_for_chat(
     files: list[UploadFile],
@@ -674,24 +657,22 @@ def upload_files_for_chat(
 
     file_store = get_default_file_store(db_session)
 
+    file_type_mapping = {
+        **{ct: ChatFileType.IMAGE for ct in image_content_types},
+        **{ct: ChatFileType.CSV for ct in csv_content_types},
+        **{ct: ChatFileType.DOC for ct in document_content_types},
+    }
+
     file_info: list[tuple[str, str | None, ChatFileType]] = []
     for file in files:
-        if file.content_type in image_content_types:
-            file_type = ChatFileType.IMAGE
-            # Convert image to JPEG
-            file_content, new_content_type = convert_to_jpeg(file)
-        elif file.content_type in csv_content_types:
-            file_type = ChatFileType.CSV
-            file_content = io.BytesIO(file.file.read())
-            new_content_type = file.content_type or ""
-        elif file.content_type in document_content_types:
-            file_type = ChatFileType.DOC
-            file_content = io.BytesIO(file.file.read())
-            new_content_type = file.content_type or ""
+        file_type = file_type_mapping.get(file.content_type, ChatFileType.PLAIN_TEXT)
+
+        if file_type == ChatFileType.IMAGE:
+            file_content = file.file
         else:
-            file_type = ChatFileType.PLAIN_TEXT
             file_content = io.BytesIO(file.file.read())
-            new_content_type = file.content_type or ""
+
+        new_content_type = file.content_type or ""
 
         # store the file (now JPEG for images)
         file_id = str(uuid.uuid4())
@@ -758,5 +739,6 @@ def fetch_chat_file(
 
     media_type = file_record.file_type
     file_io = file_store.read_file(file_id, mode="b")
+    print("Meidate type: ", media_type)
 
     return StreamingResponse(file_io, media_type=media_type)
