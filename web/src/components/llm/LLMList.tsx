@@ -107,7 +107,7 @@ export const LlmList: React.FC<LlmListProps> = ({
             <TooltipProvider>
               <Tooltip delayDuration={0}>
                 <TooltipTrigger className="my-auto flex ites-center ml-auto">
-                  <FiAlertTriangle className="text-error" size={16} />
+                  <FiAlertTriangle className="text-alert" size={16} />
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="text-xs">
