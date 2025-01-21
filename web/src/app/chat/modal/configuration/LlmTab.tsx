@@ -15,7 +15,7 @@ interface LlmTabProps {
   openModelSettings: () => void;
   chatSessionId?: string;
   close: () => void;
-  currentAssistant: Persona;
+  imageFilesPresent: boolean;
 }
 
 export const LlmTab = forwardRef<HTMLDivElement, LlmTabProps>(
@@ -26,7 +26,7 @@ export const LlmTab = forwardRef<HTMLDivElement, LlmTabProps>(
       currentLlm,
       close,
       openModelSettings,
-      currentAssistant,
+      imageFilesPresent,
     },
     ref
   ) => {
@@ -68,6 +68,7 @@ export const LlmTab = forwardRef<HTMLDivElement, LlmTabProps>(
         <LlmList
           llmProviders={llmProviders}
           currentLlm={currentLlm}
+          imageFilesPresent={imageFilesPresent}
           onSelect={(value: string | null) => {
             if (value == null) {
               return;

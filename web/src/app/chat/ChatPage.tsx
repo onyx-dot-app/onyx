@@ -1737,18 +1737,7 @@ export function ChatPage({
     end: 0,
     mostVisibleMessageId: null,
   };
-  useEffect(() => {
-    if (
-      imageFileInMessageHistory &&
-      !checkLLMSupportsImageInput(llmOverrideManager.llmOverride.modelName)
-    ) {
-      setPopup({
-        message:
-          "This LLM will not be able to process all files (i.e. image files) in your chat history",
-        type: "error",
-      });
-    }
-  }, [llmOverrideManager.llmOverride, imageFileInMessageHistory]);
+
   useEffect(() => {
     if (noAssistants) {
       return;
@@ -2456,6 +2445,9 @@ export function ChatPage({
                               </div>
                             )}
                             <ChatInputBar
+                              sessionContainsImageFiles={
+                                imageFileInMessageHistory
+                              }
                               showConfigureAPIKey={() =>
                                 setShowApiKeyModal(true)
                               }

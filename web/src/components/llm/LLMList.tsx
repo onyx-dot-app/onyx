@@ -6,6 +6,14 @@ import {
   LLMProviderDescriptor,
 } from "@/app/admin/configuration/llm/interfaces";
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { FiAlertTriangle } from "react-icons/fi";
+
 interface LlmListProps {
   llmProviders: LLMProviderDescriptor[];
   currentLlm: string;
@@ -13,6 +21,7 @@ interface LlmListProps {
   userDefault?: string | null;
   scrollable?: boolean;
   hideProviderIcon?: boolean;
+  imageFilesPresent?: boolean;
 }
 
 export const LlmList: React.FC<LlmListProps> = ({
@@ -21,6 +30,7 @@ export const LlmList: React.FC<LlmListProps> = ({
   onSelect,
   userDefault,
   scrollable,
+  imageFilesPresent,
 }) => {
   const llmOptionsByProvider: {
     [provider: string]: {
@@ -29,6 +39,7 @@ export const LlmList: React.FC<LlmListProps> = ({
       icon: React.FC<{ size?: number; className?: string }>;
     }[];
   } = {};
+
   const uniqueModelNames = new Set<string>();
 
   llmProviders.forEach((llmProvider) => {
@@ -83,7 +94,7 @@ export const LlmList: React.FC<LlmListProps> = ({
         <button
           type="button"
           key={index}
-          className={`w-full py-1.5 flex  gap-x-2 px-2 text-sm ${
+          className={`w-full py-1.5 flex items-center justify-start  gap-x-2 px-2 text-sm ${
             currentLlm == name
               ? "bg-background-200"
               : "bg-background hover:bg-background-100"
@@ -92,6 +103,21 @@ export const LlmList: React.FC<LlmListProps> = ({
         >
           {icon({ size: 16 })}
           {getDisplayNameForModel(name)}
+          {imageFilesPresent && !checkLLMSupportsImageInput(name) && (
+            <TooltipProvider>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger className="my-auto flex ites-center ml-auto">
+                  <FiAlertTriangle className="text-error" size={16} />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">
+                    This LLM is not vision-capable and cannot process image
+                    files present in your chat session.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </button>
       ))}
     </div>

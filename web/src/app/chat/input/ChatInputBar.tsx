@@ -68,6 +68,7 @@ export function ChatInputBar({
   alternativeAssistant,
   chatSessionId,
   inputPrompts,
+  sessionContainsImageFiles,
 }: {
   showConfigureAPIKey: () => void;
   openModelSettings: () => void;
@@ -90,6 +91,7 @@ export function ChatInputBar({
   handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   chatSessionId?: string;
+  sessionContainsImageFiles: boolean;
 }) {
   useEffect(() => {
     const textarea = textAreaRef.current;
@@ -558,7 +560,6 @@ export function ChatInputBar({
                 tab
                 content={(close, ref) => (
                   <LlmTab
-                    currentAssistant={alternativeAssistant || selectedAssistant}
                     openModelSettings={openModelSettings}
                     currentLlm={
                       llmOverrideManager.llmOverride.modelName ||
@@ -572,6 +573,7 @@ export function ChatInputBar({
                     ref={ref}
                     llmOverrideManager={llmOverrideManager}
                     chatSessionId={chatSessionId}
+                    imageFilesPresent={sessionContainsImageFiles}
                   />
                 )}
                 position="top"
