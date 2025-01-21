@@ -674,6 +674,11 @@ def upload_files_for_chat(
 
         if file_type == ChatFileType.IMAGE:
             file_content = file.file
+            # NOTE: Image conversion to JPEG used to be enforced here.
+            # This was removed to:
+            # 1. Preserve original file content for downloads
+            # 2. Maintain transparency in formats like PNG
+            # 3. Ameliorate issue with file conversion
         else:
             file_content = io.BytesIO(file.file.read())
 
@@ -744,6 +749,5 @@ def fetch_chat_file(
 
     media_type = file_record.file_type
     file_io = file_store.read_file(file_id, mode="b")
-    print("Meidate type: ", media_type)
 
     return StreamingResponse(file_io, media_type=media_type)
