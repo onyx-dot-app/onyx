@@ -207,7 +207,7 @@ export const SlackChannelConfigCreationForm = ({
                   htmlFor="channel_name"
                   className="block font-medium text-base"
                 >
-                  Slack Channel Name:
+                  Select A Slack Channel Name:
                 </label>
 
                 <SearchMultiSelectDropdown
