@@ -668,7 +668,9 @@ def upload_files_for_chat(
 
     file_info: list[tuple[str, str | None, ChatFileType]] = []
     for file in files:
-        file_type = file_type_mapping.get(file.content_type, ChatFileType.PLAIN_TEXT)
+        file_type = file_type_mapping.get(
+            str(file.content_type), ChatFileType.PLAIN_TEXT
+        )
 
         if file_type == ChatFileType.IMAGE:
             file_content = file.file
