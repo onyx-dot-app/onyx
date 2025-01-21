@@ -628,6 +628,9 @@ def upload_files_for_chat(
     )
 
     for file in files:
+        if not file.content_type:
+            raise HTTPException(status_code=400, detail="File content type is required")
+
         if file.content_type not in allowed_content_types:
             if file.content_type in image_content_types:
                 error_detail = "Unsupported image file type. Supported image types include .jpg, .jpeg, .png, .webp."
@@ -672,7 +675,7 @@ def upload_files_for_chat(
         else:
             file_content = io.BytesIO(file.file.read())
 
-        new_content_type = file.content_type or ""
+        new_content_type = file.content_type
 
         # store the file (now JPEG for images)
         file_id = str(uuid.uuid4())
