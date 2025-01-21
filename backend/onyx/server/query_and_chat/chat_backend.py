@@ -660,16 +660,16 @@ def upload_files_for_chat(
 
     file_store = get_default_file_store(db_session)
 
-    file_type_mapping = {
-        **{ct: ChatFileType.IMAGE for ct in image_content_types},
-        **{ct: ChatFileType.CSV for ct in csv_content_types},
-        **{ct: ChatFileType.DOC for ct in document_content_types},
-    }
-
     file_info: list[tuple[str, str | None, ChatFileType]] = []
     for file in files:
-        file_type = file_type_mapping.get(
-            str(file.content_type), ChatFileType.PLAIN_TEXT
+        file_type = (
+            ChatFileType.IMAGE
+            if file.content_type in image_content_types
+            else ChatFileType.CSV
+            if file.content_type in csv_content_types
+            else ChatFileType.DOC
+            if file.content_type in document_content_types
+            else ChatFileType.PLAIN_TEXT
         )
 
         if file_type == ChatFileType.IMAGE:
