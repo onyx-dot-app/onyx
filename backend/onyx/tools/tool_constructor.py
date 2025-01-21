@@ -146,6 +146,11 @@ def construct_tools(
     """Constructs tools based on persona configuration and available APIs"""
     tool_dict: dict[int, list[Tool]] = {}
 
+    # Get user's OAuth token if available
+    user_oauth_token = None
+    if user and user.oauth_accounts:
+        user_oauth_token = user.oauth_accounts[0].access_token
+
     for db_tool_model in persona.tools:
         if db_tool_model.in_code_tool_id:
             tool_cls = get_built_in_tool_by_id(
@@ -235,6 +240,9 @@ def construct_tools(
                         header_dict_to_header_list(
                             custom_tool_config.additional_headers or {}
                         )
+                    ),
+                    user_oauth_token=(
+                        user_oauth_token if db_tool_model.passthrough_auth else None
                     ),
                 ),
             )

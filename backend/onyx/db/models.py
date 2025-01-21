@@ -1430,6 +1430,8 @@ class Tool(Base):
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
     )
+    # whether to pass through the user's OAuth token as Authorization header
+    passthrough_auth: Mapped[bool] = mapped_column(Boolean, default=False)
 
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
     # Relationship to Persona through the association table

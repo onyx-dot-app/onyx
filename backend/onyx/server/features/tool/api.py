@@ -55,6 +55,7 @@ def create_custom_tool(
         custom_headers=tool_data.custom_headers,
         user_id=user.id if user else None,
         db_session=db_session,
+        passthrough_auth=tool_data.passthrough_auth,
     )
     return ToolSnapshot.from_model(tool)
 
@@ -76,6 +77,7 @@ def update_custom_tool(
         custom_headers=tool_data.custom_headers,
         user_id=user.id if user else None,
         db_session=db_session,
+        passthrough_auth=tool_data.passthrough_auth,
     )
     return ToolSnapshot.from_model(updated_tool)
 
