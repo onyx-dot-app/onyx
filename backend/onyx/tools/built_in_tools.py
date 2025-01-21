@@ -104,7 +104,7 @@ def load_builtin_tools(db_session: Session) -> None:
     logger.notice("All built-in tools are loaded/verified.")
 
 
-def get_search_tool(db_session: Session) -> InCodeToolInfo | None:
+def get_search_tool(db_session: Session) -> ToolDBModel | None:
     """
     Retrieves for the SearchTool from the BUILT_IN_TOOLS list.
     """

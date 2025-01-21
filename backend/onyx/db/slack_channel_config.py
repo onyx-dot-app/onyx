@@ -49,6 +49,8 @@ def create_slack_channel_persona(
     """NOTE: does not commit changes"""
 
     search_tool = get_search_tool(db_session)
+    if search_tool is None:
+        raise ValueError("Search tool not found")
 
     # create/update persona associated with the Slack channel
     persona_name = _build_persona_name(channel_name)
