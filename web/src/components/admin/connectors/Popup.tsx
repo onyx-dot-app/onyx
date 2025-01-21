@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
-import { CheckCircle, XCircle } from "lucide-react";
+import { Check, CheckCircle, XCircle } from "lucide-react";
+import { Warning } from "@phosphor-icons/react";
 const popupVariants = cva(
   "fixed bottom-4 left-4 p-4 rounded-lg shadow-xl text-white z-[10000] flex items-center space-x-3 transition-all duration-300 ease-in-out",
   {
@@ -26,9 +27,9 @@ export interface PopupSpec extends VariantProps<typeof popupVariants> {
 export const Popup: React.FC<PopupSpec> = ({ message, type }) => (
   <div className={cn(popupVariants({ type }))}>
     {type === "success" ? (
-      <CheckCircle className="w-6 h-6 animate-pulse" />
+      <Check className="w-6 h-6" />
     ) : type === "error" ? (
-      <XCircle className="w-6 h-6 animate-pulse" />
+      <Warning className="w-6 h-6 " />
     ) : type === "info" ? (
       <svg
         className="w-6 h-6"

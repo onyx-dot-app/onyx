@@ -49,6 +49,7 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -1845,6 +1846,14 @@ export function ChatPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messageHistory]);
 
+  const imageFileInMessageHistory = useMemo(() => {
+    return messageHistory
+      .filter((message) => message.type === "user")
+      .some((message) =>
+        message.files.some((file) => file.type === ChatFileType.IMAGE)
+      );
+  }, [messageHistory]);
+
   const currentVisibleRange = visibleRange.get(currentSessionId()) || {
     start: 0,
     end: 0,
@@ -1924,6 +1933,19 @@ export function ChatPage({
 
     handleSlackChatRedirect();
   }, [searchParams, router]);
+
+  useEffect(() => {
+    if (
+      imageFileInMessageHistory &&
+      !checkLLMSupportsImageInput(llmOverrideManager.llmOverride.modelName)
+    ) {
+      setPopup({
+        message:
+          "This LLM will not be able to process all files (i.e. image files) in your chat history",
+        type: "error",
+      });
+    }
+  }, [llmOverrideManager.llmOverride, imageFileInMessageHistory]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
