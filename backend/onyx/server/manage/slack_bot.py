@@ -331,9 +331,15 @@ def get_all_channels_from_slack_api(
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_admin_user),
 ) -> Dict[str, str]:
-    bot_token = fetch_slack_bot_tokens(db_session, bot_id)["bot_token"]
+    bot_tokens = fetch_slack_bot_tokens(db_session, bot_id)
+    if not bot_tokens or "bot_token" not in bot_tokens:
+        raise HTTPException(
+            status_code=404, detail="Bot token not found for the given bot ID"
+        )
 
+    bot_token = bot_tokens["bot_token"]
     client = WebClient(token=bot_token)
+
     try:
         response = client.conversations_list(limit=1000)
         channels = {channel["name"]: channel["id"] for channel in response["channels"]}
