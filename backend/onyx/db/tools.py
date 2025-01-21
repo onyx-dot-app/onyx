@@ -38,7 +38,7 @@ def create_tool(
     custom_headers: list[Header] | None,
     user_id: UUID | None,
     db_session: Session,
-    passthrough_auth: bool = False,
+    passthrough_auth: bool,
 ) -> Tool:
     new_tool = Tool(
         name=name,
@@ -64,7 +64,7 @@ def update_tool(
     custom_headers: list[Header] | None,
     user_id: UUID | None,
     db_session: Session,
-    passthrough_auth: bool | None = None,
+    passthrough_auth: bool | None,
 ) -> Tool:
     tool = get_tool_by_id(tool_id, db_session)
     if tool is None:

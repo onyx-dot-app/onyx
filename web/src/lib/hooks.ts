@@ -27,6 +27,8 @@ import {
 import { isAnthropic } from "@/app/admin/configuration/llm/interfaces";
 import { getSourceMetadata } from "./sources";
 import { buildFilters } from "./search/utils";
+import { AuthTypeMetadata } from "./userSS";
+import { AuthType } from "./constants";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -452,6 +454,19 @@ export function useLlmOverride(
     temperature,
     updateTemperature,
   };
+}
+
+export function useAuthType(): AuthType | null {
+  const { data, error } = useSWR<{ auth_type: AuthType }>(
+    "/api/auth/type",
+    errorHandlingFetcher
+  );
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data.auth_type;
 }
 
 /* 

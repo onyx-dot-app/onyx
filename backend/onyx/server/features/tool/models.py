@@ -39,7 +39,7 @@ class CustomToolCreate(BaseModel):
     description: str | None = None
     definition: dict[str, Any]
     custom_headers: list[Header] | None = None
-    passthrough_auth: bool = False
+    passthrough_auth: bool
 
 
 class CustomToolUpdate(BaseModel):
@@ -47,4 +47,4 @@ class CustomToolUpdate(BaseModel):
     description: str | None = None
     definition: dict[str, Any] | None = None
     custom_headers: list[Header] | None = None
-    passthrough_auth: bool = False
+    passthrough_auth: bool | None = None

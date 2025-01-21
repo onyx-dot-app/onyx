@@ -31,6 +31,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAuthType } from "@/lib/hooks";
 
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
@@ -76,6 +77,9 @@ function ToolForm({
   const [definitionError, setDefinitionError] = definitionErrorState;
   const [methodSpecs, setMethodSpecs] = methodSpecsState;
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const authType = useAuthType();
+  const isOAuthEnabled = authType === "oidc" || authType === "google_oauth";
+
   const debouncedValidateDefinition = useCallback(
     (definition: string) => {
       const validateDefinition = async () => {
@@ -279,58 +283,69 @@ function ToolForm({
             <h3 className="text-xl font-bold mb-2 text-primary-600">
               Authentication
             </h3>
-            <div className="flex items-center space-x-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <div
-                      className={
-                        values.customHeaders.some(
-                          (header) =>
-                            header.key.toLowerCase() === "authorization"
-                        )
-                          ? "opacity-50"
-                          : ""
-                      }
+            {isOAuthEnabled ? (
+              <div className="flex flex-col gap-y-2">
+                <div className="flex items-center space-x-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <div
+                          className={
+                            values.customHeaders.some(
+                              (header) =>
+                                header.key.toLowerCase() === "authorization"
+                            )
+                              ? "opacity-50"
+                              : ""
+                          }
+                        >
+                          <Checkbox
+                            id="passthrough_auth"
+                            size="sm"
+                            checked={values.passthrough_auth}
+                            disabled={values.customHeaders.some(
+                              (header) =>
+                                header.key.toLowerCase() === "authorization" &&
+                                !values.passthrough_auth
+                            )}
+                            onCheckedChange={(checked) => {
+                              setFieldValue("passthrough_auth", checked, true);
+                            }}
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      {values.customHeaders.some(
+                        (header) => header.key.toLowerCase() === "authorization"
+                      ) && (
+                        <TooltipContent side="top" align="center">
+                          <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
+                            Cannot enable OAuth passthrough when an
+                            Authorization header is already set
+                          </p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
+                  <div className="flex flex-col">
+                    <label
+                      htmlFor="passthrough_auth"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                     >
-                      <Checkbox
-                        id="passthrough_auth"
-                        size="sm"
-                        checked={values.passthrough_auth}
-                        disabled={values.customHeaders.some(
-                          (header) =>
-                            header.key.toLowerCase() === "authorization" &&
-                            !values.passthrough_auth
-                        )}
-                        onCheckedChange={(checked) => {
-                          setFieldValue("passthrough_auth", checked, true);
-                        }}
-                      />
-                    </div>
-                  </TooltipTrigger>
-                  {values.customHeaders.some(
-                    (header) => header.key.toLowerCase() === "authorization"
-                  ) && (
-                    <TooltipContent>
-                      <p>
-                        Remove any Authorization headers from Custom Headers to
-                        enable passthrough authentication
-                      </p>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
-              <div className="flex flex-col ml-2">
-                <span className="text-sm">
-                  Enable passthrough authentication
-                </span>
-                <span className="text-xs text-subtle">
-                  When enabled, the user&apos;s OAuth access token will be
-                  passed as the Authorization header to all API calls made by
-                  this tool.
-                </span>
+                      Pass through user's OAuth token
+                    </label>
+                    <p className="text-xs text-subtle mt-1">
+                      When enabled, the user's OAuth token will be passed as the
+                      Authorization header for all API calls
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <p className="text-sm text-subtle">
+                OAuth passthrough is only available when OIDC or OAuth
+                authentication is enabled
+              </p>
+            )}
           </div>
         </div>
       )}
