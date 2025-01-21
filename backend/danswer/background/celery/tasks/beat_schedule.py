@@ -1,8 +1,7 @@
 from datetime import timedelta
 from typing import Any
 
-from backend.danswer.configs.app_configs import LLM_MODEL_UPDATE_API_URL
-
+from danswer.configs.app_configs import LLM_MODEL_UPDATE_API_URL
 from danswer.configs.constants import DanswerCeleryPriority
 
 
