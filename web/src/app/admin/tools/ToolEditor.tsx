@@ -331,11 +331,11 @@ function ToolForm({
                       htmlFor="passthrough_auth"
                       className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                     >
-                      Pass through user's OAuth token
+                      Pass through user&apos;s OAuth token
                     </label>
                     <p className="text-xs text-subtle mt-1">
-                      When enabled, the user's OAuth token will be passed as the
-                      Authorization header for all API calls
+                      When enabled, the user&apos;s OAuth token will be passed
+                      as the Authorization header for all API calls
                     </p>
                   </div>
                 </div>

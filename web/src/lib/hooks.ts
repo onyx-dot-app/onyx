@@ -1,7 +1,6 @@
 "use client";
 import {
   ConnectorIndexingStatus,
-  OAuthSlackCallbackResponse,
   DocumentBoostStatus,
   Tag,
   UserGroup,
@@ -20,15 +19,10 @@ import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { PersonaLabel } from "@/app/admin/assistants/interfaces";
-import {
-  LLMProvider,
-  LLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { isAnthropic } from "@/app/admin/configuration/llm/interfaces";
 import { getSourceMetadata } from "./sources";
-import { buildFilters } from "./search/utils";
-import { AuthTypeMetadata } from "./userSS";
-import { AuthType } from "./constants";
+import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -461,6 +455,10 @@ export function useAuthType(): AuthType | null {
     "/api/auth/type",
     errorHandlingFetcher
   );
+
+  if (NEXT_PUBLIC_CLOUD_ENABLED) {
+    return "cloud";
+  }
 
   if (error || !data) {
     return null;
