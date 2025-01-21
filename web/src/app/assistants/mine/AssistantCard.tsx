@@ -1,17 +1,12 @@
-import React, { useState } from "react";
+import React, { useContext, useState, useRef, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   FiMoreHorizontal,
-  FiShare2,
-  FiEye,
-  FiEyeOff,
   FiTrash,
   FiEdit,
-  FiHash,
   FiBarChart,
   FiLock,
   FiUnlock,
-  FiSearch,
 } from "react-icons/fi";
 import { FaHashtag } from "react-icons/fa";
 import {
@@ -26,33 +21,38 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { useUser } from "@/components/user/UserProvider";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
-import { toggleAssistantPinnedStatus } from "@/lib/assistants/pinnedAssistants";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
 import { PinnedIcon } from "@/components/icons/icons";
 import {
   deletePersona,
   togglePersonaPublicStatus,
 } from "@/app/admin/assistants/lib";
-import { HammerIcon } from "lucide-react";
+import { PencilIcon } from "lucide-react";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { truncateString } from "@/lib/utils";
 
 export const AssistantBadge = ({
   text,
   className,
+  maxLength,
 }: {
   text: string;
   className?: string;
+  maxLength?: number;
 }) => {
   return (
     <div
-      className={`h-4 px-1.5 py-1 text-[10px]  bg-[#e6e3dd]/50 rounded-lg justify-center items-center gap-1 inline-flex ${className}`}
+      className={`h-4 px-1.5 py-1 text-[10px] flex-none bg-[#e6e3dd]/50 rounded-lg justify-center items-center gap-1 inline-flex ${className}`}
     >
-      <div className="text-[#4a4a4a] font-normal leading-[8px]">{text}</div>
+      <div className="text-[#4a4a4a] font-normal leading-[8px]">
+        {maxLength ? truncateString(text, maxLength) : text}
+      </div>
     </div>
   );
 };
@@ -62,9 +62,9 @@ const AssistantCard: React.FC<{
   pinned: boolean;
   closeModal: () => void;
 }> = ({ persona, pinned, closeModal }) => {
-  const { user, refreshUser } = useUser();
+  const { user, toggleAssistantPinnedStatus } = useUser();
   const router = useRouter();
-  const { refreshAssistants } = useAssistants();
+  const { refreshAssistants, pinnedAssistants } = useAssistants();
 
   const isOwnedByUser = checkUserOwnsAssistant(user, persona);
 
@@ -72,7 +72,8 @@ const AssistantCard: React.FC<{
     undefined
   );
 
-  const handleShare = () => setActivePopover("visibility");
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+
   const handleDelete = () => setActivePopover("delete");
   const handleEdit = () => {
     router.push(`/assistants/edit/${persona.id}`);
@@ -80,6 +81,24 @@ const AssistantCard: React.FC<{
   };
 
   const closePopover = () => setActivePopover(undefined);
+
+  const nameRef = useRef<HTMLHeadingElement>(null);
+  const hiddenNameRef = useRef<HTMLSpanElement>(null);
+  const [isNameTruncated, setIsNameTruncated] = useState(false);
+
+  useLayoutEffect(() => {
+    const checkTruncation = () => {
+      if (nameRef.current && hiddenNameRef.current) {
+        const visibleWidth = nameRef.current.offsetWidth;
+        const fullTextWidth = hiddenNameRef.current.offsetWidth;
+        setIsNameTruncated(fullTextWidth > visibleWidth);
+      }
+    };
+
+    checkTruncation();
+    window.addEventListener("resize", checkTruncation);
+    return () => window.removeEventListener("resize", checkTruncation);
+  }, [persona.name]);
 
   return (
     <div className="w-full p-2 overflow-visible pb-4 pt-3 bg-[#fefcf9] rounded shadow-[0px_0px_4px_0px_rgba(0,0,0,0.25)] flex flex-col">
@@ -90,24 +109,47 @@ const AssistantCard: React.FC<{
         <div className="flex-1 mt-1 flex flex-col">
           <div className="flex justify-between items-start mb-1">
             <div className="flex items-end gap-x-2 leading-none">
-              <h3 className="text-black leading-none font-semibold text-base lg-normal">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <h3
+                      ref={nameRef}
+                      className={` text-black line-clamp-1 break-all	 text-ellipsis leading-none font-semibold text-base lg-normal w-full overflow-hidden`}
+                    >
+                      {persona.name}
+                    </h3>
+                  </TooltipTrigger>
+                  {isNameTruncated && (
+                    <TooltipContent>{persona.name}</TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+              <span
+                ref={hiddenNameRef}
+                className="absolute left-0 top-0 invisible whitespace-nowrap"
+                aria-hidden="true"
+              >
                 {persona.name}
-              </h3>
+              </span>
               {persona.labels && persona.labels.length > 0 && (
                 <>
-                  {persona.labels.slice(0, 3).map((label, index) => (
-                    <AssistantBadge key={index} text={label.name} />
-                  ))}
-                  {persona.labels.length > 3 && (
+                  {persona.labels.slice(0, 2).map((label, index) => (
                     <AssistantBadge
-                      text={`+${persona.labels.length - 3} more`}
+                      key={index}
+                      text={label.name}
+                      maxLength={10}
+                    />
+                  ))}
+                  {persona.labels.length > 2 && (
+                    <AssistantBadge
+                      text={`+${persona.labels.length - 2} more`}
                     />
                   )}
                 </>
               )}
             </div>
             {isOwnedByUser && (
-              <div className="flex items-center gap-x-2">
+              <div className="flex ml-2 items-center gap-x-2">
                 <Popover
                   open={activePopover !== undefined}
                   onOpenChange={(open) =>
@@ -141,41 +183,29 @@ const AssistantCard: React.FC<{
                           <FiEdit size={12} className="inline mr-2" />
                           Edit
                         </button>
-                        {/* 
-                        <button
-                          onClick={isOwnedByUser ? handleShare : undefined}
-                          className={`w-full text-left flex items-center px-2 py-1 rounded ${
-                            isOwnedByUser
-                              ? "hover:bg-neutral-100"
-                              : "opacity-50 cursor-not-allowed"
-                          }`}
-                          disabled={!isOwnedByUser}
-                        >
-                          <FiShare2 size={12} className="inline mr-2" />
-                          Share
-                        </button> */}
-
-                        <button
-                          onClick={
-                            isOwnedByUser
-                              ? () => {
-                                  router.push(
-                                    `/assistants/stats/${persona.id}`
-                                  );
-                                  closePopover();
-                                }
-                              : undefined
-                          }
-                          className={`w-full text-left items-center px-2 py-1 rounded ${
-                            isOwnedByUser
-                              ? "hover:bg-neutral-100"
-                              : "opacity-50 cursor-not-allowed"
-                          }`}
-                          disabled={!isOwnedByUser}
-                        >
-                          <FiBarChart size={12} className="inline mr-2" />
-                          Stats
-                        </button>
+                        {isPaidEnterpriseFeaturesEnabled && (
+                          <button
+                            onClick={
+                              isOwnedByUser
+                                ? () => {
+                                    router.push(
+                                      `/assistants/stats/${persona.id}`
+                                    );
+                                    closePopover();
+                                  }
+                                : undefined
+                            }
+                            className={`w-full text-left items-center px-2 py-1 rounded ${
+                              isOwnedByUser
+                                ? "hover:bg-neutral-100"
+                                : "opacity-50 cursor-not-allowed"
+                            }`}
+                            disabled={!isOwnedByUser}
+                          >
+                            <FiBarChart size={12} className="inline mr-2" />
+                            Stats
+                          </button>
+                        )}
                         <button
                           onClick={isOwnedByUser ? handleDelete : undefined}
                           className={`w-full text-left items-center px-2 py-1 rounded ${
@@ -221,33 +251,33 @@ const AssistantCard: React.FC<{
             )}
           </div>
 
-          <p className="text-black font-[350] mt-0 text-sm mb-1 line-clamp-2 h-[2.7em]">
+          <p className="text-black font-[350] mt-0 text-sm line-clamp-2 h-[2.7em]">
             {persona.description || "\u00A0"}
           </p>
 
           <div className="flex flex-col ">
-            {/* <div className="mb-1 mt-1">
-              <div className="flex items-center">
-               
-              </div>
-            </div> */}
-
-            <div className="my-1">
-              <span className="flex items-center text-black text-xs opacity-50">
-                {(persona.owner?.email || persona.builtin_persona) && "By "}
-                {persona.owner?.email || (persona.builtin_persona && "Onyx")}
-                {(persona.owner?.email || persona.builtin_persona) && (
-                  <span className="mx-2">•</span>
-                )}
-                {persona.tools.length > 0 ? (
+            <div className="my-1.5">
+              <p className="flex items-center text-black text-xs opacity-50">
+                {persona.owner?.email || persona.builtin_persona ? (
                   <>
-                    {persona.tools.length}
-                    {" Action"}
-                    {persona.tools.length !== 1 ? "s" : ""}
+                    <span className="truncate">
+                      By {persona.owner?.email || "Onyx"}
+                    </span>
+
+                    <span className="mx-2">•</span>
                   </>
-                ) : (
-                  "No Actions"
-                )}
+                ) : null}
+                <span className="flex-none truncate">
+                  {persona.tools.length > 0 ? (
+                    <>
+                      {persona.tools.length}
+                      {" Action"}
+                      {persona.tools.length !== 1 ? "s" : ""}
+                    </>
+                  ) : (
+                    "No Actions"
+                  )}
+                </span>
                 <span className="mx-2">•</span>
                 {persona.is_public ? (
                   <>
@@ -260,17 +290,7 @@ const AssistantCard: React.FC<{
                     Private
                   </>
                 )}
-              </span>
-            </div>
-
-            <div className="mb-1 flex flex-wrap">
-              {persona.document_sets.slice(0, 5).map((set, index) => (
-                <AssistantBadge
-                  className="!text-base"
-                  key={index}
-                  text={set.name}
-                />
-              ))}
+              </p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -284,7 +304,7 @@ const AssistantCard: React.FC<{
                     }}
                     className="hover:bg-neutral-100 hover:text-text px-2 py-1 gap-x-1 rounded border border-black flex items-center"
                   >
-                    <FaHashtag size={12} className="flex-none" />
+                    <PencilIcon size={12} className="flex-none" />
                     <span className="text-xs">Start Chat</span>
                   </button>
                 </TooltipTrigger>
@@ -296,20 +316,25 @@ const AssistantCard: React.FC<{
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
+                  <div
                     onClick={async () => {
                       await toggleAssistantPinnedStatus(
-                        user?.preferences.pinned_assistants || [],
+                        pinnedAssistants.map((a) => a.id),
                         persona.id,
                         !pinned
                       );
-                      await refreshUser();
                     }}
-                    className="hover:bg-neutral-100 px-2 py-1 gap-x-1 rounded border border-black flex items-center w-[65px]"
+                    className="hover:bg-neutral-100 px-2 group cursor-pointer py-1 gap-x-1 relative rounded border border-black flex items-center w-[65px]"
                   >
                     <PinnedIcon size={12} />
-                    <p className="text-xs">{pinned ? "Unpin" : "Pin"}</p>
-                  </button>
+                    {!pinned ? (
+                      <p className="absolute w-full left-0 group-hover:text-black w-full text-center transform text-xs">
+                        Pin
+                      </p>
+                    ) : (
+                      <p className="text-xs group-hover:text-black">Unpin</p>
+                    )}
+                  </div>
                 </TooltipTrigger>
                 <TooltipContent>
                   {pinned ? "Remove from" : "Add to"} your pinned list

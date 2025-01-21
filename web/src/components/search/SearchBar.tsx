@@ -28,8 +28,8 @@ import { SendIcon } from "../icons/icons";
 import { Separator } from "@/components/ui/separator";
 import { CustomTooltip } from "../tooltip/CustomTooltip";
 import KeyboardSymbol from "@/lib/browserUtilities";
-import { HorizontalSourceSelector } from "./filtering/Filters";
 import { CCPairBasicInfo, DocumentSet, Tag } from "@/lib/types";
+import { HorizontalSourceSelector } from "./filtering/HorizontalSourceSelector";
 
 export const AnimatedToggle = ({
   isOn,

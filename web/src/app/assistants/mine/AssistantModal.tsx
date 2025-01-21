@@ -1,16 +1,14 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { useRouter } from "next/navigation";
-
 import { Modal } from "@/components/Modal";
 import AssistantCard from "./AssistantCard";
 import { useAssistants } from "@/components/context/AssistantsContext";
-import { checkUserOwnsAssistant } from "@/lib/assistants/checkOwnership";
 import { useUser } from "@/components/user/UserProvider";
-import { Button } from "@/components/ui/button";
-import { useLabels } from "@/lib/hooks";
+import { FilterIcon } from "lucide-react";
+import { checkUserOwnsAssistant } from "@/lib/assistants/checkOwnership";
 
 export const AssistantBadgeSelector = ({
   text,
@@ -27,7 +25,7 @@ export const AssistantBadgeSelector = ({
         selected
           ? "bg-neutral-900 text-white"
           : "bg-transparent text-neutral-900"
-      } h-5 px-1 py-0.5 rounded-lg cursor-pointer text-[12px] font-normal leading-[10px] border border-black justify-center items-center gap-1 inline-flex`}
+      } w-12 h-5 text-center px-1 py-0.5 rounded-lg cursor-pointer text-[12px] font-normal leading-[10px] border border-black justify-center items-center gap-1 inline-flex`}
       onClick={toggleFilter}
     >
       {text}
@@ -39,6 +37,7 @@ export enum AssistantFilter {
   Pinned = "Pinned",
   Public = "Public",
   Private = "Private",
+  Mine = "Mine",
 }
 
 const useAssistantFilter = () => {
@@ -48,6 +47,7 @@ const useAssistantFilter = () => {
     [AssistantFilter.Pinned]: false,
     [AssistantFilter.Public]: false,
     [AssistantFilter.Private]: false,
+    [AssistantFilter.Mine]: false,
   });
 
   const toggleAssistantFilter = (filter: AssistantFilter) => {
@@ -65,11 +65,8 @@ export default function AssistantModal({
 }: {
   hideModal: () => void;
 }) {
-  const [showAllFeaturedAssistants, setShowAllFeaturedAssistants] =
-    useState(false);
-  const { assistants, visibleAssistants, pinnedAssistants } = useAssistants();
-  const { assistantFilters, toggleAssistantFilter, setAssistantFilters } =
-    useAssistantFilter();
+  const { assistants, pinnedAssistants } = useAssistants();
+  const { assistantFilters, toggleAssistantFilter } = useAssistantFilter();
   const router = useRouter();
   const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
@@ -89,16 +86,21 @@ export default function AssistantModal({
         !assistantFilters[AssistantFilter.Private] || !assistant.is_public;
       const pinnedFilter =
         !assistantFilters[AssistantFilter.Pinned] ||
-        pinnedAssistants.map((a: Persona) => a.id).includes(assistant.id);
+        (user?.preferences?.pinned_assistants?.includes(assistant.id) ?? false);
+
+      const mineFilter =
+        !assistantFilters[AssistantFilter.Mine] ||
+        assistants.map((a: Persona) => checkUserOwnsAssistant(user, a));
 
       return (
         (nameMatches || labelMatches) &&
         publicFilter &&
         privateFilter &&
-        pinnedFilter
+        pinnedFilter &&
+        mineFilter
       );
     });
-  }, [assistants, searchQuery, assistantFilters, pinnedAssistants]);
+  }, [assistants, searchQuery, assistantFilters]);
 
   const featuredAssistants = [
     ...memoizedCurrentlyVisibleAssistants.filter(
@@ -122,10 +124,10 @@ export default function AssistantModal({
       heightOverride={`${height}px`}
       onOutsideClick={hideModal}
       removeBottomPadding
-      className={`max-w-4xl ${height} w-[95%] overflow-hidden`}
+      className={`max-w-4xl max-h-[90vh] ${height} w-[95%] overflow-hidden`}
     >
       <div className="flex flex-col h-full">
-        <div className="flex flex-col sticky top-0 z-10">
+        <div className="flex bg-background flex-col sticky top-0 z-10">
           <div className="flex px-2 justify-between items-center gap-x-2 mb-0">
             <div className="h-12 w-full rounded-lg flex-col justify-center items-start gap-2.5 inline-flex">
               <div className="h-12 rounded-md w-full shadow-[0px_0px_2px_0px_rgba(0,0,0,0.25)] border border-[#dcdad4] flex items-center px-3">
@@ -164,16 +166,18 @@ export default function AssistantModal({
               </div>
             </button>
           </div>
-          <div className="px-2 flex py-2 items-center gap-x-2 mb-2 flex-wrap">
+          <div className="px-2 flex py-4 items-center gap-x-2 flex-wrap">
+            <FilterIcon size={16} />
             <AssistantBadgeSelector
               text="Pinned"
               selected={assistantFilters[AssistantFilter.Pinned]}
               toggleFilter={() => toggleAssistantFilter(AssistantFilter.Pinned)}
             />
+
             <AssistantBadgeSelector
-              text="Public"
-              selected={assistantFilters[AssistantFilter.Public]}
-              toggleFilter={() => toggleAssistantFilter(AssistantFilter.Public)}
+              text="Mine"
+              selected={assistantFilters[AssistantFilter.Mine]}
+              toggleFilter={() => toggleAssistantFilter(AssistantFilter.Mine)}
             />
             <AssistantBadgeSelector
               text="Private"
@@ -181,6 +185,11 @@ export default function AssistantModal({
               toggleFilter={() =>
                 toggleAssistantFilter(AssistantFilter.Private)
               }
+            />
+            <AssistantBadgeSelector
+              text="Public"
+              selected={assistantFilters[AssistantFilter.Public]}
+              toggleFilter={() => toggleAssistantFilter(AssistantFilter.Public)}
             />
           </div>
           <div className="w-full border-t border-neutral-200" />
@@ -196,7 +205,9 @@ export default function AssistantModal({
               featuredAssistants.map((assistant, index) => (
                 <div key={index}>
                   <AssistantCard
-                    pinned={pinnedAssistants.includes(assistant)}
+                    pinned={pinnedAssistants
+                      .map((a) => a.id)
+                      .includes(assistant.id)}
                     persona={assistant}
                     closeModal={hideModal}
                   />
@@ -221,7 +232,11 @@ export default function AssistantModal({
                   .map((assistant, index) => (
                     <div key={index}>
                       <AssistantCard
-                        pinned={pinnedAssistants.includes(assistant)}
+                        pinned={
+                          user?.preferences?.pinned_assistants?.includes(
+                            assistant.id
+                          ) ?? false
+                        }
                         persona={assistant}
                         closeModal={hideModal}
                       />

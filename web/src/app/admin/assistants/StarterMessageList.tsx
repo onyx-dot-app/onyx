@@ -18,25 +18,20 @@ export default function StarterMessagesList({
   values,
   arrayHelpers,
   isRefreshing,
-  touchStarterMessages,
   debouncedRefreshPrompts,
   autoStarterMessageEnabled,
-  errors,
   setFieldValue,
 }: {
   values: StarterMessage[];
   arrayHelpers: ArrayHelpers;
   isRefreshing: boolean;
-  touchStarterMessages: () => void;
   debouncedRefreshPrompts: () => void;
   autoStarterMessageEnabled: boolean;
-  errors: any;
   setFieldValue: any;
 }) {
   const [tooltipOpen, setTooltipOpen] = useState(false);
 
   const handleInputChange = (index: number, value: string) => {
-    touchStarterMessages();
     setFieldValue(`starter_messages.${index}.message`, value);
 
     if (value && index === values.length - 1 && values.length < 4) {

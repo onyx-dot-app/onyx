@@ -23,8 +23,6 @@ import PostHogPageView from "./PostHogPageView";
 import Script from "next/script";
 import { LogoType } from "@/components/logo/Logo";
 import { Hanken_Grotesk } from "next/font/google";
-import { fetchChatData } from "@/lib/chat/fetchChatData";
-import { redirect } from "next/navigation";
 
 const inter = Inter({
   subsets: ["latin"],

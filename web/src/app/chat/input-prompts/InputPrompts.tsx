@@ -268,7 +268,7 @@ export default function InputPrompts() {
           <Title>Prompt Shortcuts</Title>
           <Text>
             Manage and customize prompt shortcuts for your assistants. Use your
-            prompt shortcuts by starting a new message “/” in chat
+            prompt shortcuts by starting a new message “/” in chat.
           </Text>
         </div>
       </div>

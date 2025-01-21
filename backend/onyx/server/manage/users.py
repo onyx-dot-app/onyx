@@ -714,7 +714,6 @@ def update_user_pinned_assistants(
             store = get_kv_store()
             no_auth_user = fetch_no_auth_user(store)
             no_auth_user.preferences.pinned_assistants = ordered_assistant_ids
-            print("ordered_assistant_ids", ordered_assistant_ids)
             set_no_auth_user_preferences(store, no_auth_user.preferences)
             return
         else:

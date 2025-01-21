@@ -4,10 +4,7 @@ import {
   LlmOverride,
   useLlmOverride,
 } from "@/lib/hooks";
-import {
-  DefaultDropdownElement,
-  StringOrNumberOption,
-} from "@/components/Dropdown";
+import { StringOrNumberOption } from "@/components/Dropdown";
 
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { destructureValue, getFinalLLM, structureValue } from "@/lib/llm/utils";
@@ -15,7 +12,7 @@ import { useState } from "react";
 import { Hoverable } from "@/components/Hoverable";
 import { Popover } from "@/components/popover/Popover";
 import { IconType } from "react-icons";
-import { FiRefreshCw } from "react-icons/fi";
+import { FiRefreshCw, FiCheck } from "react-icons/fi";
 
 export function RegenerateDropdown({
   options,
@@ -43,45 +40,33 @@ export function RegenerateDropdown({
   };
 
   const Dropdown = (
-    <div
-      className={`
-                border 
-                border 
-                rounded-lg 
-                flex 
-                flex-col
-                mx-2
-                bg-background
-                ${maxHeight || "max-h-72"}
-                overflow-y-auto 
-                overscroll-contain relative`}
-    >
-      <p
-        className="
-                sticky 
-                top-0 
-                flex
-                bg-background
-                font-medium
-                px-2
-                text-sm 
-                py-1.5 
-                "
-      >
-        Regenerate with
-      </p>
-      {options.map((option, ind) => {
-        const isSelected = option.value === selected;
-        return (
-          <DefaultDropdownElement
-            key={option.value}
-            name={getDisplayNameForModel(option.name)}
-            description={option.description}
-            onSelect={() => onSelect(option.value)}
-            isSelected={isSelected}
-          />
-        );
-      })}
+    <div className="overflow-y-auto py-2 min-w-fit bg-white dark:bg-gray-800 rounded-md shadow-lg">
+      <div className="mb-1 flex items-center justify-between px-4 pt-2">
+        <span className="text-sm text-text-500 dark:text-text-400">
+          Regenerate with
+        </span>
+      </div>
+      {options.map((option) => (
+        <div
+          key={option.value}
+          role="menuitem"
+          className={`flex items-center m-1.5 p-1.5 text-sm cursor-pointer focus-visible:outline-0 group relative hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md my-0 px-3 mx-2 gap-2.5 py-3 !pr-3 ${
+            option.value === selected ? "bg-gray-100 dark:bg-gray-700" : ""
+          }`}
+          onClick={() => onSelect(option.value)}
+        >
+          <div className="flex grow items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-3">
+                <div>{getDisplayNameForModel(option.name)}</div>
+              </div>
+            </div>
+          </div>
+          {option.value === selected && (
+            <FiCheck className="text-blue-500 dark:text-blue-400" />
+          )}
+        </div>
+      ))}
     </div>
   );
 

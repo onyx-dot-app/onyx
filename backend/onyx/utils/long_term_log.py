@@ -35,7 +35,7 @@ class LongTermLogger:
     def _cleanup_old_files(self, category_path: Path) -> None:
         try:
             files = sorted(
-                category_path.glob("*.json"),
+                [f for f in category_path.glob("*.json") if f.is_file()],
                 key=lambda x: x.stat().st_mtime,  # Sort by modification time
                 reverse=True,
             )

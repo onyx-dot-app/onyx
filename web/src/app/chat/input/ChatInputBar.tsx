@@ -328,6 +328,7 @@ export function ChatInputBar({
       <div className="flex  justify-center mx-auto">
         <div
           className="
+            max-w-full
             w-[800px]
             relative
             desktop:px-4
@@ -505,7 +506,10 @@ export function ChatInputBar({
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
-              placeholder={`Message ${selectedAssistant.name} assistant...`}
+              placeholder={`Message ${truncateString(
+                selectedAssistant.name,
+                70
+              )} assistant...`}
               value={message}
               onKeyDown={(event) => {
                 if (
@@ -649,92 +653,101 @@ export function ChatInputBar({
               </div>
             )}
 
-            <div className="flex items-center space-x-1 mr-12 px-4 pb-2">
-              <ChatInputOption
-                flexPriority="stiff"
-                name="File"
-                Icon={FiPlusCircle}
-                onClick={() => {
-                  const input = document.createElement("input");
-                  input.type = "file";
-                  input.multiple = true;
-                  input.onchange = (event: any) => {
-                    const files = Array.from(
-                      event?.target?.files || []
-                    ) as File[];
-                    if (files.length > 0) {
-                      handleFileUpload(files);
-                    }
-                  };
-                  input.click();
-                }}
-                tooltipContent={"Upload files"}
-              />
-
-              <LLMPopover
-                llmProviders={llmProviders}
-                llmOverrideManager={llmOverrideManager}
-                requiresImageGeneration={false}
-                currentAssistant={selectedAssistant}
-              />
-
-              {retrievalEnabled && (
-                <FilterPopup
-                  availableSources={availableSources}
-                  availableDocumentSets={availableDocumentSets}
-                  availableTags={availableTags}
-                  filterManager={filterManager}
-                  trigger={
-                    <ChatInputOption
-                      flexPriority="stiff"
-                      name="Filters"
-                      Icon={FiFilter}
-                      tooltipContent="Filter your search"
-                    />
-                  }
+            <div className="flex justify-between items-center overflow-hidden px-4 mb-2">
+              <div className="flex gap-x-1">
+                <ChatInputOption
+                  flexPriority="stiff"
+                  name="File"
+                  Icon={FiPlusCircle}
+                  onClick={() => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.multiple = true;
+                    input.onchange = (event: any) => {
+                      const files = Array.from(
+                        event?.target?.files || []
+                      ) as File[];
+                      if (files.length > 0) {
+                        handleFileUpload(files);
+                      }
+                    };
+                    input.click();
+                  }}
+                  tooltipContent={"Upload files"}
                 />
-              )}
-            </div>
 
-            <div className="absolute bottom-2.5 mobile:right-4 desktop:right-10">
-              {chatState == "streaming" ||
-              chatState == "toolBuilding" ||
-              chatState == "loading" ? (
+                <LLMPopover
+                  llmProviders={llmProviders}
+                  llmOverrideManager={llmOverrideManager}
+                  requiresImageGeneration={false}
+                  currentAssistant={selectedAssistant}
+                />
+
+                {retrievalEnabled && (
+                  <FilterPopup
+                    availableSources={availableSources}
+                    availableDocumentSets={availableDocumentSets}
+                    availableTags={availableTags}
+                    filterManager={filterManager}
+                    trigger={
+                      <ChatInputOption
+                        flexPriority="stiff"
+                        name="Filters"
+                        Icon={FiFilter}
+                        tooltipContent="Filter your search"
+                      />
+                    }
+                  />
+                )}
+              </div>
+              <div className="flex my-auto">
                 <button
                   className={`cursor-pointer ${
-                    chatState != "streaming"
-                      ? "bg-background-400"
-                      : "bg-background-800"
-                  }  h-[28px] w-[28px] rounded-full`}
-                  onClick={stopGenerating}
-                  disabled={chatState != "streaming"}
-                >
-                  <StopGeneratingIcon
-                    size={10}
-                    className={`text-emphasis m-auto text-white flex-none
-                      }`}
-                  />
-                </button>
-              ) : (
-                <button
-                  className="cursor-pointer"
+                    chatState == "streaming" ||
+                    chatState == "toolBuilding" ||
+                    chatState == "loading"
+                      ? chatState != "streaming"
+                        ? "bg-background-400"
+                        : "bg-background-800"
+                      : ""
+                  } h-[28px] w-[28px] rounded-full`}
                   onClick={() => {
-                    if (message) {
+                    if (
+                      chatState == "streaming" ||
+                      chatState == "toolBuilding" ||
+                      chatState == "loading"
+                    ) {
+                      stopGenerating();
+                    } else if (message) {
                       onSubmit();
                     }
                   }}
-                  disabled={chatState != "input"}
+                  disabled={
+                    (chatState == "streaming" ||
+                      chatState == "toolBuilding" ||
+                      chatState == "loading") &&
+                    chatState != "streaming"
+                  }
                 >
-                  <SendIcon
-                    size={26}
-                    className={`text-emphasis text-white p-1 rounded-full  ${
-                      chatState == "input" && message
-                        ? "bg-submit-background"
-                        : "bg-disabled-submit-background"
-                    } `}
-                  />
+                  {chatState == "streaming" ||
+                  chatState == "toolBuilding" ||
+                  chatState == "loading" ? (
+                    <StopGeneratingIcon
+                      size={10}
+                      className="text-emphasis m-auto text-white flex-none"
+                    />
+                  ) : (
+                    <SendIcon
+                      size={26}
+                      className={`text-emphasis text-white p-1 my-auto rounded-full ${
+                        chatState == "input" && message
+                          ? "bg-submit-background"
+                          : "bg-disabled-submit-background"
+                      }`}
+                    />
+                  )}
                 </button>
-              )}
+              </div>
             </div>
           </div>
         </div>

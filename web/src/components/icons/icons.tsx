@@ -249,111 +249,56 @@ export const ColorSlackIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-    >
-      <Image src={slackIcon} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={slackIcon} />;
 };
 
 export const ColorDiscordIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-    >
-      <Image src={discordIcon} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={discordIcon} />;
 };
 
 export const LiteLLMIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
-      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
-    >
-      <Image src={litellmIcon} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={litellmIcon} />;
 };
 
 export const OpenSourceIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
-      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
-    >
-      <Image src={openSourceIcon} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={openSourceIcon} />;
 };
+
 export const MixedBreadIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
-      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
-    >
-      <Image src={mixedBreadSVG} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={mixedBreadSVG} />;
 };
 
 export const NomicIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
-      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
-    >
-      <Image src={nomicSVG} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={nomicSVG} />;
 };
 
 export const MicrosoftIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
-      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
-    >
-      <Image src={microsoftIcon} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={microsoftIcon} />;
 };
 
 export const AnthropicIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
-      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
-    >
-      <Image src={anthropicSVG} alt="Logo" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={anthropicSVG} />;
 };
 
 export const LeftToLineIcon = ({
@@ -1835,7 +1780,6 @@ export const RobotIcon = ({
   return <FaRobot size={size} className={className} />;
 };
 
-slackIcon;
 export const SlackIconSkeleton = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -2798,28 +2742,14 @@ export const EgnyteIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-    >
-      <Image src={egnyteIcon} alt="Egnyte" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={egnyteIcon} />;
 };
 
 export const AirtableIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return (
-    <div
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-    >
-      <Image src={airtableIcon} alt="Airtable" width="96" height="96" />
-    </div>
-  );
+  return <LogoIcon size={size} className={className} src={airtableIcon} />;
 };
 
 export const PinnedIcon = ({
@@ -3065,7 +2995,7 @@ export const GeneralAssistantIcon = ({
         height="22.7"
         rx="11.35"
         stroke="black"
-        stroke-width="1.3"
+        strokeWidth="1.3"
       />
       <path
         d="M8.06264 10.3125C8.06253 9.66355 8.22283 9.02463 8.52926 8.45258C8.83569 7.88054 9.27876 7.3931 9.81906 7.03363C10.3594 6.67415 10.9801 6.4538 11.6261 6.39216C12.2722 6.33052 12.9234 6.42951 13.5219 6.68032C14.1204 6.93113 14.6477 7.32598 15.0568 7.82976C15.4659 8.33353 15.7441 8.93061 15.8667 9.56787C15.9893 10.2051 15.9525 10.8628 15.7596 11.4824C15.5667 12.102 15.2236 12.6644 14.7609 13.1194C14.5438 13.3331 14.3525 13.611 14.2603 13.9474L13.8721 15.375H10.1281L9.73889 13.9474C9.64847 13.6321 9.47612 13.3464 9.23939 13.1194C8.86681 12.753 8.57088 12.3161 8.36885 11.8342C8.16682 11.3523 8.06272 10.835 8.06264 10.3125ZM10.4364 16.5H13.5639L13.3715 17.211C13.3389 17.3301 13.2681 17.4351 13.1699 17.5099C13.0717 17.5847 12.9516 17.6252 12.8281 17.625H11.1721C11.0487 17.6252 10.9286 17.5847 10.8304 17.5099C10.7322 17.4351 10.6614 17.3301 10.6288 17.211L10.4364 16.5ZM12.0001 5.25C10.9954 5.25017 10.0134 5.5493 9.17925 6.10932C8.34506 6.66934 7.69637 7.46491 7.31577 8.39477C6.93516 9.32463 6.83985 10.3467 7.04197 11.3309C7.24409 12.3151 7.7345 13.2169 8.45076 13.9215C8.54562 14.0093 8.61549 14.1207 8.65326 14.2444L9.54426 17.5069C9.64173 17.8639 9.85387 18.179 10.148 18.4037C10.4422 18.6283 10.802 18.75 11.1721 18.75H12.8281C13.1983 18.75 13.5581 18.6283 13.8523 18.4037C14.1464 18.179 14.3585 17.8639 14.456 17.5069L15.3459 14.2444C15.384 14.1206 15.4542 14.0092 15.5495 13.9215C16.2658 13.2169 16.7562 12.3151 16.9583 11.3309C17.1604 10.3467 17.0651 9.32463 16.6845 8.39477C16.3039 7.46491 15.6552 6.66934 14.821 6.10932C13.9868 5.5493 13.0049 5.25017 12.0001 5.25Z"
@@ -3094,7 +3024,7 @@ export const SearchAssistantIcon = ({
         height="22.7"
         rx="11.35"
         stroke="black"
-        stroke-width="1.3"
+        strokeWidth="1.3"
       />
       <path
         d="M17.0667 18L12.8667 13.8C12.5333 14.0667 12.15 14.2778 11.7167 14.4333C11.2833 14.5889 10.8222 14.6667 10.3333 14.6667C9.12222 14.6667 8.09733 14.2471 7.25867 13.408C6.42 12.5689 6.00044 11.544 6 10.3333C5.99956 9.12267 6.41911 8.09778 7.25867 7.25867C8.09822 6.41956 9.12311 6 10.3333 6C11.5436 6 12.5687 6.41956 13.4087 7.25867C14.2487 8.09778 14.668 9.12267 14.6667 10.3333C14.6667 10.8222 14.5889 11.2833 14.4333 11.7167C14.2778 12.15 14.0667 12.5333 13.8 12.8667L18 17.0667L17.0667 18ZM10.3333 13.3333C11.1667 13.3333 11.8751 13.0418 12.4587 12.4587C13.0422 11.8756 13.3338 11.1671 13.3333 10.3333C13.3329 9.49956 13.0413 8.79133 12.4587 8.20867C11.876 7.626 11.1676 7.33422 10.3333 7.33333C9.49911 7.33244 8.79089 7.62422 8.20867 8.20867C7.62644 8.79311 7.33467 9.50133 7.33333 10.3333C7.332 11.1653 7.62378 11.8738 8.20867 12.4587C8.79356 13.0436 9.50178 13.3351 10.3333 13.3333Z"

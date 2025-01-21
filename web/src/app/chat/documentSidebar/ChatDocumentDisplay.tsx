@@ -79,13 +79,9 @@ export function ChatDocumentDisplay({
     document.updated_at || Object.keys(document.metadata).length > 0;
 
   return (
-    <div
-      className={`desktop:max-w-[400px] opacity-100 ${
-        modal ? "w-[90vw]" : "w-full"
-      }`}
-    >
+    <div className="desktop:max-w-[400px] opacity-100 w-full">
       <div
-        className={`flex relative flex-col px-3 py-2.5 gap-0.5 rounded-xl mx-2 my-1 ${
+        className={`flex relative flex-col px-3 py-2.5 gap-0.5 rounded-xl my-1 ${
           isSelected ? "bg-[#ebe7de]" : "bg- hover:bg-[#ebe7de]/80"
         }`}
       >

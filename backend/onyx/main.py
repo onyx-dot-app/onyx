@@ -212,7 +212,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     if not MULTI_TENANT:
         # We cache this at the beginning so there is no delay in the first telemetry
-        get_or_generate_uuid()
+        get_or_generate_uuid(tenant_id=None)
 
         # If we are multi-tenant, we need to only set up initial public tables
         with Session(engine) as db_session:

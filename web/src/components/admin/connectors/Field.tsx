@@ -151,7 +151,7 @@ export function TextFormField({
   vertical,
   className,
 }: {
-  value?: string;
+  value?: string; // Escape hatch for setting the value of the field - conflicts with Formik
   name: string;
   removeLabel?: boolean;
   label: string;
@@ -185,7 +185,7 @@ export function TextFormField({
     heightString = "h-28";
   }
 
-  const [field, , helpers] = useField(name);
+  const [, , helpers] = useField(name);
   const { setValue } = helpers;
 
   const handleChange = (

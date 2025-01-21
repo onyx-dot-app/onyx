@@ -177,6 +177,7 @@ export const getCurrentUserSS = async (): Promise<User | null> => {
     if (!response.ok) {
       return null;
     }
+
     const user = await response.json();
     return user;
   } catch (e) {

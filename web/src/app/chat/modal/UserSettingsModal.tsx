@@ -183,7 +183,6 @@ export function UserSettingsModal({
               checked={user?.preferences?.shortcut_enabled}
               onCheckedChange={(checked) => {
                 updateUserShortcuts(checked);
-                refreshUser();
               }}
             />
             <Label className="text-sm">Enable Prompt Shortcuts</Label>
@@ -205,6 +204,7 @@ export function UserSettingsModal({
             Scroll to see all options
           </div>
           <LLMSelector
+            userSettings
             llmProviders={llmProviders}
             currentLlm={
               defaultModelDestructured
@@ -215,7 +215,6 @@ export function UserSettingsModal({
                   )
                 : null
             }
-            userDefault={null}
             requiresImageGeneration={false}
             onSelect={(selected) => {
               if (selected === null) {

@@ -1,14 +1,10 @@
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
-
 import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
-
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { cookies } from "next/headers";
 import { ChatProvider } from "@/components/context/ChatContext";
-import WrappedAssistantsStats from "./WrappedAssistantsStats";
-import CardSection from "@/components/admin/CardSection";
 import { AssistantStats } from "./AssistantStats";
 import { BackButton } from "@/components/BackButton";
 

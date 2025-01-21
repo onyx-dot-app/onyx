@@ -26,6 +26,7 @@ interface DocumentResultsProps {
   isSharedChat?: boolean;
   modal: boolean;
   setPresentingDocument: Dispatch<SetStateAction<OnyxDocument | null>>;
+  removeHeader?: boolean;
 }
 
 export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
@@ -43,10 +44,10 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
       isSharedChat,
       isOpen,
       setPresentingDocument,
+      removeHeader,
     },
     ref: ForwardedRef<HTMLDivElement>
   ) => {
-    const { popup, setPopup } = usePopup();
     const [delayedSelectedDocumentCount, setDelayedSelectedDocumentCount] =
       useState(0);
 
@@ -98,21 +99,29 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
             }}
           >
             <div className="flex flex-col h-full">
-              {popup}
-              <div className="p-4 flex items-center justify-between gap-x-2">
-                <div className="flex items-center gap-x-2">
-                  {/* <SourcesIcon size={32} /> */}
-                  <h2 className="text-xl font-bold text-text-900">Sources</h2>
-                </div>
-                <button className="my-auto" onClick={closeSidebar}>
-                  <XIcon size={16} />
-                </button>
-              </div>
-              <div className="border-b border-divider-history-sidebar-bar mx-3" />
-              <div className="overflow-y-auto h-fit mb-8 pb-8 -mx-1 sm:mx-0 flex-grow gap-y-0 default-scrollbar dark-scrollbar flex flex-col">
+              {!removeHeader && (
+                <>
+                  <div className="p-4 flex items-center justify-between gap-x-2">
+                    <div className="flex items-center gap-x-2">
+                      <h2 className="text-xl font-bold text-text-900">
+                        Sources
+                      </h2>
+                    </div>
+                    <button className="my-auto" onClick={closeSidebar}>
+                      <XIcon size={16} />
+                    </button>
+                  </div>
+                  <div className="border-b border-divider-history-sidebar-bar mx-3" />
+                </>
+              )}
+
+              <div className="overflow-y-auto h-fit mb-8 pb-8 sm:mx-0 flex-grow gap-y-0 default-scrollbar dark-scrollbar flex flex-col">
                 {dedupedDocuments.length > 0 ? (
                   dedupedDocuments.map((document, ind) => (
-                    <div key={document.document_id} className="w-full">
+                    <div
+                      key={document.document_id}
+                      className={`desktop:px-2 w-full`}
+                    >
                       <ChatDocumentDisplay
                         setPresentingDocument={setPresentingDocument}
                         closeSidebar={closeSidebar}

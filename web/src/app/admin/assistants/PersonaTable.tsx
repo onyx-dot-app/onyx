@@ -102,12 +102,6 @@ export function PersonasTable() {
     <div>
       {popup}
 
-      <Text className="my-2">
-        Assistants will be displayed as options on the Chat / Search interfaces
-        in the order they are displayed below. Assistants marked as hidden will
-        not be displayed. Editable assistants are shown at the top.
-      </Text>
-
       <DraggableTable
         headers={["Name", "Description", "Type", "Is Visible", "Delete"]}
         isAdmin={isAdmin}

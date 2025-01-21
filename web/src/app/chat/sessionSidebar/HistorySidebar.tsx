@@ -1,6 +1,5 @@
 "use client";
 
-import { FiEdit, FiFolderPlus, FiMoreHorizontal, FiPlus } from "react-icons/fi";
 import React, {
   ForwardedRef,
   forwardRef,
@@ -16,14 +15,7 @@ import { Folder } from "../folders/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
-import {
-  AssistantsIconSkeleton,
-  DocumentIcon2,
-  NewChatIcon,
-  OnyxIcon,
-  PinnedIcon,
-  PlusIcon,
-} from "@/components/icons/icons";
+import { DocumentIcon2, NewChatIcon } from "@/components/icons/icons";
 import { PagesTab } from "./PagesTab";
 import { pageType } from "./types";
 import LogoWithText from "@/components/header/LogoWithText";
@@ -32,7 +24,7 @@ import { DragEndEvent } from "@dnd-kit/core";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { buildChatUrl } from "../lib";
-import { toggleAssistantPinnedStatus } from "@/lib/assistants/pinnedAssistants";
+import { reorderPinnedAssistants } from "@/lib/assistants/updateAssistantPreferences";
 import { useUser } from "@/components/user/UserProvider";
 import { DragHandle } from "@/components/table/DragHandle";
 import {
@@ -51,7 +43,6 @@ import {
 } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { reorderPinnedAssistants } from "@/lib/assistants/pinnedAssistants";
 import { CircleX } from "lucide-react";
 
 interface HistorySidebarProps {
@@ -59,18 +50,14 @@ interface HistorySidebarProps {
   existingChats?: ChatSession[];
   currentChatSession?: ChatSession | null | undefined;
   folders?: Folder[];
-  openedFolders?: { [key: number]: boolean };
   toggleSidebar?: () => void;
   toggled?: boolean;
   removeToggle?: () => void;
   reset?: () => void;
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
-  stopGenerating?: () => void;
   explicitlyUntoggle: () => void;
   showDeleteAllModal?: () => void;
-  backgroundToggled?: boolean;
-  assistants: Persona[];
   currentAssistantId?: number | null;
   setShowAssistantsModal: (show: boolean) => void;
 }
@@ -129,7 +116,9 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
         } relative flex items-center gap-x-2 py-1 px-2 rounded-md`}
       >
         <AssistantIcon assistant={assistant} size={16} className="flex-none" />
-        <p className="text-base text-black">{assistant.name}</p>
+        <p className="text-base text-left w-fit line-clamp-1 text-ellipsis text-black">
+          {assistant.name}
+        </p>
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -153,31 +142,22 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
       page,
       existingChats,
       currentChatSession,
-      assistants,
       folders,
-      openedFolders,
       explicitlyUntoggle,
       toggleSidebar,
       removeToggle,
-      stopGenerating = () => null,
       showShareModal,
       showDeleteModal,
       showDeleteAllModal,
-      backgroundToggled,
       currentAssistantId,
     },
     ref: ForwardedRef<HTMLDivElement>
   ) => {
     const searchParams = useSearchParams();
     const router = useRouter();
-    const { refreshUser, user } = useUser();
+    const { user, toggleAssistantPinnedStatus } = useUser();
     const { refreshAssistants, pinnedAssistants, setPinnedAssistants } =
       useAssistants();
-
-    const { popup, setPopup } = usePopup();
-
-    // For determining intial focus state
-    const [newFolderId, setNewFolderId] = useState<number | null>(null);
 
     const currentChatId = currentChatSession?.id;
 
@@ -235,7 +215,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
 
     return (
       <>
-        {popup}
         <div
           ref={ref}
           className={`
@@ -316,7 +295,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             </div>
           )}
 
-          <div>
+          <div className="h-full relative overflow-y-auto">
             <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-[#6c6c6c]/80 items-center font-normal leading-normal">
               Assistants
             </div>
@@ -349,7 +328,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                           assistant.id,
                           false
                         );
-                        await refreshUser();
                         await refreshAssistants();
                       }}
                     />
@@ -365,19 +343,17 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                 Explore Assistants
               </button>
             </div>
-          </div>
 
-          <PagesTab
-            setNewFolderId={setNewFolderId}
-            newFolderId={newFolderId}
-            showDeleteModal={showDeleteModal}
-            showShareModal={showShareModal}
-            closeSidebar={removeToggle}
-            existingChats={existingChats}
-            currentChatId={currentChatId}
-            folders={folders}
-            showDeleteAllModal={showDeleteAllModal}
-          />
+            <PagesTab
+              showDeleteModal={showDeleteModal}
+              showShareModal={showShareModal}
+              closeSidebar={removeToggle}
+              existingChats={existingChats}
+              currentChatId={currentChatId}
+              folders={folders}
+              showDeleteAllModal={showDeleteAllModal}
+            />
+          </div>
         </div>
       </>
     );
