@@ -265,5 +265,6 @@ celery_app.autodiscover_tasks(
         "danswer.background.celery.tasks.pruning",
         "danswer.background.celery.tasks.shared",
         "danswer.background.celery.tasks.vespa",
+        "danswer.background.celery.tasks.llm_model_update",
     ]
 )
