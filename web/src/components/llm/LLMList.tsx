@@ -13,7 +13,6 @@ interface LlmListProps {
   userDefault?: string | null;
   scrollable?: boolean;
   hideProviderIcon?: boolean;
-  requiresImageGeneration?: boolean;
 }
 
 export const LlmList: React.FC<LlmListProps> = ({
@@ -22,7 +21,6 @@ export const LlmList: React.FC<LlmListProps> = ({
   onSelect,
   userDefault,
   scrollable,
-  requiresImageGeneration,
 }) => {
   const llmOptionsByProvider: {
     [provider: string]: {
@@ -62,7 +60,9 @@ export const LlmList: React.FC<LlmListProps> = ({
 
   return (
     <div
-      className={`${scrollable ? "max-h-[200px] include-scrollbar" : "max-h-[300px]"} bg-background-175 flex flex-col gap-y-1 overflow-y-scroll`}
+      className={`${
+        scrollable ? "max-h-[200px] include-scrollbar" : "max-h-[300px]"
+      } bg-background-175 flex flex-col gap-y-1 overflow-y-scroll`}
     >
       {userDefault && (
         <button
@@ -79,25 +79,21 @@ export const LlmList: React.FC<LlmListProps> = ({
         </button>
       )}
 
-      {llmOptions.map(({ name, icon, value }, index) => {
-        if (!requiresImageGeneration || checkLLMSupportsImageInput(name)) {
-          return (
-            <button
-              type="button"
-              key={index}
-              className={`w-full py-1.5 flex  gap-x-2 px-2 text-sm ${
-                currentLlm == name
-                  ? "bg-background-200"
-                  : "bg-background hover:bg-background-100"
-              } text-left rounded`}
-              onClick={() => onSelect(value)}
-            >
-              {icon({ size: 16 })}
-              {getDisplayNameForModel(name)}
-            </button>
-          );
-        }
-      })}
+      {llmOptions.map(({ name, icon, value }, index) => (
+        <button
+          type="button"
+          key={index}
+          className={`w-full py-1.5 flex  gap-x-2 px-2 text-sm ${
+            currentLlm == name
+              ? "bg-background-200"
+              : "bg-background hover:bg-background-100"
+          } text-left rounded`}
+          onClick={() => onSelect(value)}
+        >
+          {icon({ size: 16 })}
+          {getDisplayNameForModel(name)}
+        </button>
+      ))}
     </div>
   );
 };

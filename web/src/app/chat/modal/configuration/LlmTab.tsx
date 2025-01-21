@@ -8,7 +8,6 @@ import { destructureValue } from "@/lib/llm/utils";
 import { updateModelOverrideForChatSession } from "../../lib";
 import { GearIcon } from "@/components/icons/icons";
 import { LlmList } from "@/components/llm/LLMList";
-import { checkPersonaRequiresImageGeneration } from "@/app/admin/assistants/lib";
 
 interface LlmTabProps {
   llmOverrideManager: LlmOverrideManager;
@@ -31,9 +30,6 @@ export const LlmTab = forwardRef<HTMLDivElement, LlmTabProps>(
     },
     ref
   ) => {
-    const requiresImageGeneration =
-      checkPersonaRequiresImageGeneration(currentAssistant);
-
     const { llmProviders } = useChatContext();
     const { updateLLMOverride, temperature, updateTemperature } =
       llmOverrideManager;
@@ -70,7 +66,6 @@ export const LlmTab = forwardRef<HTMLDivElement, LlmTabProps>(
           </button>
         </div>
         <LlmList
-          requiresImageGeneration={requiresImageGeneration}
           llmProviders={llmProviders}
           currentLlm={currentLlm}
           onSelect={(value: string | null) => {

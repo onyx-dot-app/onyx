@@ -106,6 +106,7 @@ def litellm_exception_to_error_msg(
 
 def translate_danswer_msg_to_langchain(
     msg: Union[ChatMessage, "PreviousMessage"],
+    exclude_images: bool = False,
 ) -> BaseMessage:
     files: list[InMemoryChatFile] = []
 
@@ -113,7 +114,9 @@ def translate_danswer_msg_to_langchain(
     # attached. Just ignore them for now.
     if not isinstance(msg, ChatMessage):
         files = msg.files
-    content = build_content_with_imgs(msg.message, files, message_type=msg.message_type)
+    content = build_content_with_imgs(
+        msg.message, files, message_type=msg.message_type, exclude_images=exclude_images
+    )
 
     if msg.message_type == MessageType.SYSTEM:
         raise ValueError("System messages are not currently part of history")
@@ -126,10 +129,10 @@ def translate_danswer_msg_to_langchain(
 
 
 def translate_history_to_basemessages(
-    history: list[ChatMessage] | list["PreviousMessage"],
+    history: list[ChatMessage] | list["PreviousMessage"], exclude_images: bool = False
 ) -> tuple[list[BaseMessage], list[int]]:
     history_basemessages = [
-        translate_danswer_msg_to_langchain(msg)
+        translate_danswer_msg_to_langchain(msg, exclude_images)
         for msg in history
         if msg.token_count != 0
     ]
