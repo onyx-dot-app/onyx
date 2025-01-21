@@ -1,4 +1,5 @@
 import re
+import time
 from typing import cast
 
 import httpx
@@ -7,6 +8,10 @@ from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.app_configs import VESPA_REQUEST_TIMEOUT
+from onyx.document_index.vespa_constants import VESPA_APP_CONTAINER_URL
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 # NOTE: This does not seem to be used in reality despite the Vespa Docs pointing to this code
 # See here for reference: https://docs.vespa.ai/en/documents.html
@@ -69,3 +74,37 @@ def get_vespa_http_client(no_timeout: bool = False, http2: bool = True) -> httpx
         timeout=None if no_timeout else VESPA_REQUEST_TIMEOUT,
         http2=http2,
     )
+
+
+def wait_for_vespa_with_timeout(wait_interval: int = 5, wait_limit: int = 60) -> bool:
+    """Waits for Vespa to become ready subject to a timeout.
+    Returns True if Vespa is ready, False otherwise."""
+
+    time_start = time.monotonic()
+    logger.info("Vespa: Readiness probe starting.")
+    while True:
+        try:
+            client = get_vespa_http_client()
+            response = client.get(f"{VESPA_APP_CONTAINER_URL}/state/v1/health")
+            response.raise_for_status()
+
+            response_dict = response.json()
+            if response_dict["status"]["code"] == "up":
+                logger.info("Vespa: Readiness probe succeeded. Continuing...")
+                return True
+        except Exception:
+            pass
+
+        time_elapsed = time.monotonic() - time_start
+        if time_elapsed > wait_limit:
+            logger.info(
+                f"Vespa: Readiness probe did not succeed within the timeout "
+                f"({wait_limit} seconds)."
+            )
+            return False
+
+        logger.info(
+            f"Vespa: Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={wait_limit:.1f}"
+        )
+
+        time.sleep(wait_interval)

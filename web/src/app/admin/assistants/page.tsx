@@ -1,3 +1,4 @@
+"use client";
 import { PersonasTable } from "./PersonaTable";
 import { FiPlusSquare } from "react-icons/fi";
 import Link from "next/link";
@@ -6,6 +7,8 @@ import Title from "@/components/ui/title";
 import { Separator } from "@/components/ui/separator";
 import { AssistantsIcon } from "@/components/icons/icons";
 import { AdminPageTitle } from "@/components/admin/Title";
+import LabelManagement from "./LabelManagement";
+import { SubLabel } from "@/components/admin/connectors/Field";
 
 export default async function Page() {
   return (
@@ -43,6 +46,12 @@ export default async function Page() {
         <Separator />
 
         <Title>Existing Assistants</Title>
+        <SubLabel>
+          Assistants will be displayed as options on the Chat / Search
+          interfaces in the order they are displayed below. Assistants marked as
+          hidden will not be displayed. Editable assistants are shown at the
+          top.
+        </SubLabel>
         <PersonasTable />
       </div>
     </div>

@@ -941,6 +941,12 @@ class DocumentByConnectorCredentialPair(Base):
         ForeignKey("credential.id"), primary_key=True
     )
 
+    # used to better keep track of document counts at a connector level
+    # e.g. if a document is added as part of permission syncing, it should
+    # not be counted as part of the connector's document count until
+    # the actual indexing is complete
+    has_been_indexed: Mapped[bool] = mapped_column(Boolean)
+
     connector: Mapped[Connector] = relationship(
         "Connector", back_populates="documents_by_connector"
     )
@@ -953,6 +959,14 @@ class DocumentByConnectorCredentialPair(Base):
             "idx_document_cc_pair_connector_credential",
             "connector_id",
             "credential_id",
+            unique=False,
+        ),
+        # Index to optimize get_document_counts_for_cc_pairs query pattern
+        Index(
+            "idx_document_cc_pair_counts",
+            "connector_id",
+            "credential_id",
+            "has_been_indexed",
             unique=False,
         ),
     )

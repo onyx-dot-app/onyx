@@ -326,13 +326,6 @@
   /* Handle color on hover */
 }
 
-::-webkit-scrollbar {
-  width: 0px;
-  /* Vertical scrollbar width */
-  height: 8px;
-  /* Horizontal scrollbar height */
-}
-
 /* Used to create alternatie to React Markdown */
 .preserve-lines {
   white-space: pre-wrap;

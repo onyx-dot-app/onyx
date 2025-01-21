@@ -1,35 +1,83 @@
 import { useRef, useState } from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+import { CheckCircle, XCircle } from "lucide-react";
+const popupVariants = cva(
+  "fixed bottom-4 left-4 p-4 rounded-lg shadow-xl text-white z-[10000] flex items-center space-x-3 transition-all duration-300 ease-in-out",
+  {
+    variants: {
+      type: {
+        success: "bg-green-500",
+        error: "bg-red-500",
+        info: "bg-blue-500",
+        warning: "bg-yellow-500",
+      },
+    },
+    defaultVariants: {
+      type: "info",
+    },
+  }
+);
 
-export interface PopupSpec {
+export interface PopupSpec extends VariantProps<typeof popupVariants> {
   message: string;
-  type: "success" | "error";
 }
 
 export const Popup: React.FC<PopupSpec> = ({ message, type }) => (
-  <div
-    className={`fixed bottom-4 left-4 p-4 rounded-md shadow-lg text-white z-[10000] ${
-      type === "success" ? "bg-green-500" : "bg-error"
-    }`}
-  >
-    {message}
+  <div className={cn(popupVariants({ type }))}>
+    {type === "success" ? (
+      <CheckCircle className="w-6 h-6 animate-pulse" />
+    ) : type === "error" ? (
+      <XCircle className="w-6 h-6 animate-pulse" />
+    ) : type === "info" ? (
+      <svg
+        className="w-6 h-6"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
+      </svg>
+    ) : (
+      <svg
+        className="w-6 h-6"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+        />
+      </svg>
+    )}
+    <span className="font-medium">{message}</span>
   </div>
 );
 
 export const usePopup = () => {
   const [popup, setPopup] = useState<PopupSpec | null>(null);
-  // using NodeJS.Timeout because setTimeout in NodeJS returns a different type than in browsers
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const setPopupWithExpiration = (popupSpec: PopupSpec | null) => {
-    // Clear any previous timeout
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
 
     setPopup(popupSpec);
-    timeoutRef.current = setTimeout(() => {
-      setPopup(null);
-    }, 4000);
+
+    if (popupSpec) {
+      timeoutRef.current = setTimeout(() => {
+        setPopup(null);
+      }, 4000);
+    }
   };
 
   return {

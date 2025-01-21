@@ -45,7 +45,7 @@ def create_test_document(
     submitted_by: str,
     assignee: str,
     days_since_status_change: int | None,
-    attachments: list | None = None,
+    attachments: list[tuple[str, str]] | None = None,
 ) -> Document:
     link_base = f"https://airtable.com/{os.environ['AIRTABLE_TEST_BASE_ID']}/{os.environ['AIRTABLE_TEST_TABLE_ID']}"
     sections = [
@@ -60,11 +60,11 @@ def create_test_document(
     ]
 
     if attachments:
-        for attachment in attachments:
+        for attachment_text, attachment_link in attachments:
             sections.append(
                 Section(
-                    text=f"Attachment:\n------------------------\n{attachment}\n------------------------",
-                    link=f"{link_base}/{id}",
+                    text=f"Attachment:\n------------------------\n{attachment_text}\n------------------------",
+                    link=attachment_link,
                 ),
             )
 
@@ -142,7 +142,13 @@ def test_airtable_connector_basic(
             days_since_status_change=0,
             assignee="Chris Weaver (chris@onyx.app)",
             submitted_by="Chris Weaver (chris@onyx.app)",
-            attachments=["Test.pdf:\ntesting!!!"],
+            attachments=[
+                (
+                    "Test.pdf:\ntesting!!!",
+                    # hard code link for now
+                    "https://airtable.com/appCXJqDFS4gea8tn/tblRxFQsTlBBZdRY1/viwVUEJjWPd8XYjh8/reccSlIA4pZEFxPBg/fld1u21zkJACIvAEF/attlj2UBWNEDZngCc?blocks=hide",
+                )
+            ],
         ),
     ]
 

@@ -23,8 +23,6 @@ interface AssistantsContextProps {
   hiddenAssistants: Persona[];
   finalAssistants: Persona[];
   ownedButHiddenAssistants: Persona[];
-  pinnedAssistants: Persona[];
-  setPinnedAssistants: Dispatch<SetStateAction<Persona[]>>;
   refreshAssistants: () => Promise<void>;
   isImageGenerationAvailable: boolean;
   recentAssistants: Persona[];
@@ -32,6 +30,8 @@ interface AssistantsContextProps {
   // Admin only
   editablePersonas: Persona[];
   allAssistants: Persona[];
+  pinnedAssistants: Persona[];
+  setPinnedAssistants: Dispatch<SetStateAction<Persona[]>>;
 }
 
 const AssistantsContext = createContext<AssistantsContextProps | undefined>(
@@ -52,10 +52,27 @@ export const AssistantsProvider: React.FC<{
   const [assistants, setAssistants] = useState<Persona[]>(
     initialAssistants || []
   );
-  const [pinnedAssistants, setPinnedAssistants] = useState<Persona[]>([]);
   const { user, isAdmin, isCurator } = useUser();
   const [editablePersonas, setEditablePersonas] = useState<Persona[]>([]);
   const [allAssistants, setAllAssistants] = useState<Persona[]>([]);
+
+  const [pinnedAssistants, setPinnedAssistants] = useState<Persona[]>(
+    user?.preferences.pinned_assistants
+      ? assistants.filter((assistant) =>
+          user?.preferences?.pinned_assistants?.includes(assistant.id)
+        )
+      : assistants.filter((a) => a.builtin_persona)
+  );
+
+  useEffect(() => {
+    setPinnedAssistants(
+      user?.preferences.pinned_assistants
+        ? assistants.filter((assistant) =>
+            user?.preferences?.pinned_assistants?.includes(assistant.id)
+          )
+        : assistants.filter((a) => a.builtin_persona)
+    );
+  }, [user?.preferences?.pinned_assistants, assistants]);
 
   const [recentAssistants, setRecentAssistants] = useState<Persona[]>(
     user?.preferences.recent_assistants
@@ -183,25 +200,6 @@ export const AssistantsProvider: React.FC<{
       user,
       assistants
     );
-    const pinnedAssistants = user?.preferences.pinned_assistants
-      ? visibleAssistants
-          .filter((assistant) =>
-            user.preferences.pinned_assistants.includes(assistant.id)
-          )
-          .sort((a, b) => {
-            const indexA = user.preferences.pinned_assistants.indexOf(a.id);
-            const indexB = user.preferences.pinned_assistants.indexOf(b.id);
-            return indexA - indexB;
-          })
-      : visibleAssistants.filter(
-          (assistant) =>
-            assistant.builtin_persona || assistant.is_default_persona
-        );
-
-    setPinnedAssistants(pinnedAssistants);
-    // Fallback to first 3 assistants if pinnedAssistants is empty
-    const finalPinnedAssistants =
-      pinnedAssistants.length > 0 ? pinnedAssistants : assistants.slice(0, 3);
 
     const finalAssistants = user
       ? orderAssistantsForUser(visibleAssistants, user)
@@ -216,7 +214,6 @@ export const AssistantsProvider: React.FC<{
       visibleAssistants,
       hiddenAssistants,
       finalAssistants,
-      pinnedAssistants,
       ownedButHiddenAssistants,
     };
   }, [user, assistants]);
@@ -228,8 +225,6 @@ export const AssistantsProvider: React.FC<{
         visibleAssistants,
         hiddenAssistants,
         finalAssistants,
-        pinnedAssistants,
-        setPinnedAssistants,
         ownedButHiddenAssistants,
         refreshAssistants,
         editablePersonas,
@@ -237,6 +232,8 @@ export const AssistantsProvider: React.FC<{
         isImageGenerationAvailable,
         recentAssistants,
         refreshRecentAssistants,
+        setPinnedAssistants,
+        pinnedAssistants,
       }}
     >
       {children}

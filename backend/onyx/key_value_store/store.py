@@ -31,27 +31,27 @@ class PgRedisKVStore(KeyValueStore):
     def __init__(
         self, redis_client: Redis | None = None, tenant_id: str | None = None
     ) -> None:
+        self.tenant_id = tenant_id or CURRENT_TENANT_ID_CONTEXTVAR.get()
+
         # If no redis_client is provided, fall back to the context var
         if redis_client is not None:
             self.redis_client = redis_client
         else:
-            tenant_id = tenant_id or CURRENT_TENANT_ID_CONTEXTVAR.get()
-            self.redis_client = get_redis_client(tenant_id=tenant_id)
+            self.redis_client = get_redis_client(tenant_id=self.tenant_id)
 
     @contextmanager
-    def get_session(self) -> Iterator[Session]:
+    def _get_session(self) -> Iterator[Session]:
         engine = get_sqlalchemy_engine()
         with Session(engine, expire_on_commit=False) as session:
             if MULTI_TENANT:
-                tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
-                if tenant_id == POSTGRES_DEFAULT_SCHEMA:
+                if self.tenant_id == POSTGRES_DEFAULT_SCHEMA:
                     raise HTTPException(
                         status_code=401, detail="User must authenticate"
                     )
-                if not is_valid_schema_name(tenant_id):
+                if not is_valid_schema_name(self.tenant_id):
                     raise HTTPException(status_code=400, detail="Invalid tenant ID")
                 # Set the search_path to the tenant's schema
-                session.execute(text(f'SET search_path = "{tenant_id}"'))
+                session.execute(text(f'SET search_path = "{self.tenant_id}"'))
             yield session
 
     def store(self, key: str, val: JSON_ro, encrypt: bool = False) -> None:
@@ -66,7 +66,7 @@ class PgRedisKVStore(KeyValueStore):
 
         encrypted_val = val if encrypt else None
         plain_val = val if not encrypt else None
-        with self.get_session() as session:
+        with self._get_session() as session:
             obj = session.query(KVStore).filter_by(key=key).first()
             if obj:
                 obj.value = plain_val
@@ -88,7 +88,7 @@ class PgRedisKVStore(KeyValueStore):
         except Exception as e:
             logger.error(f"Failed to get value from Redis for key '{key}': {str(e)}")
 
-        with self.get_session() as session:
+        with self._get_session() as session:
             obj = session.query(KVStore).filter_by(key=key).first()
             if not obj:
                 raise KvKeyNotFoundError
@@ -113,7 +113,7 @@ class PgRedisKVStore(KeyValueStore):
         except Exception as e:
             logger.error(f"Failed to delete value from Redis for key '{key}': {str(e)}")
 
-        with self.get_session() as session:
+        with self._get_session() as session:
             result = session.query(KVStore).filter_by(key=key).delete()  # type: ignore
             if result == 0:
                 raise KvKeyNotFoundError

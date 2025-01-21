@@ -13,6 +13,11 @@ interface UserContextType {
   isCloudSuperuser: boolean;
   updateUserAutoScroll: (autoScroll: boolean | null) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
+  toggleAssistantPinnedStatus: (
+    currentPinnedAssistantIDs: number[],
+    assistantId: number,
+    isPinned: boolean
+  ) => Promise<boolean>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -54,15 +59,6 @@ export function UserProvider({
   };
   const updateUserShortcuts = async (enabled: boolean) => {
     try {
-      const response = await fetch(
-        `/api/shortcut-enabled?shortcut_enabled=${enabled}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
       setUpToDateUser((prevUser) => {
         if (prevUser) {
           return {
@@ -76,7 +72,18 @@ export function UserProvider({
         return prevUser;
       });
 
+      const response = await fetch(
+        `/api/shortcut-enabled?shortcut_enabled=${enabled}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
       if (!response.ok) {
+        await refreshUser();
         throw new Error("Failed to update user shortcut setting");
       }
     } catch (error) {
@@ -116,6 +123,56 @@ export function UserProvider({
     }
   };
 
+  const toggleAssistantPinnedStatus = async (
+    currentPinnedAssistantIDs: number[],
+    assistantId: number,
+    isPinned: boolean
+  ) => {
+    setUpToDateUser((prevUser) => {
+      if (!prevUser) return prevUser;
+      return {
+        ...prevUser,
+        preferences: {
+          ...prevUser.preferences,
+          pinned_assistants: isPinned
+            ? [...currentPinnedAssistantIDs, assistantId]
+            : currentPinnedAssistantIDs.filter((id) => id !== assistantId),
+        },
+      };
+    });
+
+    let updatedPinnedAssistantsIds = currentPinnedAssistantIDs;
+
+    if (isPinned) {
+      updatedPinnedAssistantsIds.push(assistantId);
+    } else {
+      updatedPinnedAssistantsIds = updatedPinnedAssistantsIds.filter(
+        (id) => id !== assistantId
+      );
+    }
+    try {
+      const response = await fetch(`/api/user/pinned-assistants`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ordered_assistant_ids: updatedPinnedAssistantsIds,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update pinned assistants");
+      }
+
+      await refreshUser();
+      return true;
+    } catch (error) {
+      console.error("Error updating pinned assistants:", error);
+      return false;
+    }
+  };
+
   const refreshUser = async () => {
     await fetchUser();
   };
@@ -127,6 +184,7 @@ export function UserProvider({
         refreshUser,
         updateUserAutoScroll,
         updateUserShortcuts,
+        toggleAssistantPinnedStatus,
         isAdmin: upToDateUser?.role === UserRole.ADMIN,
         // Curator status applies for either global or basic curator
         isCurator:

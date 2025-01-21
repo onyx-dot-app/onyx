@@ -64,7 +64,7 @@ export function FilterDropdown({
                       select-none
                       cursor-pointer
                       flex-none
-                      w-fit
+                      w-full
                       text-emphasis
                       items-center
                       gap-x-1

@@ -117,7 +117,6 @@ export default function SidebarWrapper<T extends object>({
           {" "}
           <HistorySidebar
             setShowAssistantsModal={setShowAssistantsModal}
-            assistants={assistants}
             page={"chat"}
             explicitlyUntoggle={explicitlyUntoggle}
             ref={sidebarElementRef}
@@ -126,7 +125,6 @@ export default function SidebarWrapper<T extends object>({
             existingChats={chatSessions}
             currentChatSession={null}
             folders={folders}
-            openedFolders={openedFolders}
           />
         </div>
       </div>

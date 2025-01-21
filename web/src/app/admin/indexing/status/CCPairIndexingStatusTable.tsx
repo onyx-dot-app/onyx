@@ -59,7 +59,7 @@ function SummaryRow({
   return (
     <TableRow
       onClick={onToggle}
-      className="border-border bg-white py-4 rounded-sm !border cursor-pointer"
+      className="border-border group hover:bg-background-settings-hover bg-background-sidebar py-4 rounded-sm !border cursor-pointer"
     >
       <TableCell>
         <div className="text-xl flex items-center truncate ellipsis gap-x-2 font-semibold">
@@ -86,7 +86,7 @@ function SummaryRow({
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="flex items-center mt-1">
-                <div className="w-full bg-gray-200 rounded-full h-2 mr-2">
+                <div className="w-full bg-white rounded-full h-2 mr-2">
                   <div
                     className="bg-green-500 h-2 rounded-full"
                     style={{ width: `${activePercentage}%` }}

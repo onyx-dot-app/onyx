@@ -124,19 +124,72 @@ export const useBasicConnectorStatus = () => {
 
 export const useLabels = () => {
   const { mutate } = useSWRConfig();
-  const swrResponse = useSWR<PersonaLabel[]>(
+  const { data: labels, error } = useSWR<PersonaLabel[]>(
     "/api/persona/labels",
     errorHandlingFetcher
   );
 
   const refreshLabels = async () => {
-    const updatedLabels = await mutate("/api/persona/labels");
-    return updatedLabels;
+    return mutate("/api/persona/labels");
+  };
+
+  const createLabel = async (name: string) => {
+    const response = await fetch("/api/persona/labels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+
+    if (response.ok) {
+      const newLabel = await response.json();
+      mutate("/api/persona/labels", [...(labels || []), newLabel], false);
+    }
+
+    return response;
+  };
+
+  const updateLabel = async (id: number, name: string) => {
+    const response = await fetch(`/api/admin/persona/label/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label_name: name }),
+    });
+
+    if (response.ok) {
+      mutate(
+        "/api/persona/labels",
+        labels?.map((label) => (label.id === id ? { ...label, name } : label)),
+        false
+      );
+    }
+
+    return response;
+  };
+
+  const deleteLabel = async (id: number) => {
+    const response = await fetch(`/api/admin/persona/label/${id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (response.ok) {
+      mutate(
+        "/api/persona/labels",
+        labels?.filter((label) => label.id !== id),
+        false
+      );
+    }
+
+    return response;
   };
 
   return {
-    ...swrResponse,
+    labels,
+    error,
     refreshLabels,
+    createLabel,
+    updateLabel,
+    deleteLabel,
   };
 };
 

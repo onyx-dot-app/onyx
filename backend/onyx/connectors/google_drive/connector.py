@@ -258,7 +258,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
                         user_emails.append(email)
         return user_emails
 
-    def _get_all_drive_ids(self) -> set[str]:
+    def get_all_drive_ids(self) -> set[str]:
         primary_drive_service = get_drive_service(
             creds=self.creds,
             user_email=self.primary_admin_email,
@@ -353,7 +353,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> Iterator[GoogleDriveFileType]:
         all_org_emails: list[str] = self._get_all_user_emails()
 
-        all_drive_ids: set[str] = self._get_all_drive_ids()
+        all_drive_ids: set[str] = self.get_all_drive_ids()
 
         drive_ids_to_retrieve: set[str] = set()
         folder_ids_to_retrieve: set[str] = set()
@@ -437,7 +437,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             # If all 3 are true, we already yielded from get_all_files_for_oauth
             return
 
-        all_drive_ids = self._get_all_drive_ids()
+        all_drive_ids = self.get_all_drive_ids()
         drive_ids_to_retrieve: set[str] = set()
         folder_ids_to_retrieve: set[str] = set()
         if self._requested_shared_drive_ids or self._requested_folder_ids:

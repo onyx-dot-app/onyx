@@ -11,13 +11,13 @@ import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { ScoreSection } from "../ScoreEditor";
 import { useRouter } from "next/navigation";
-import { HorizontalFilters } from "@/components/search/filtering/Filters";
 import { useFilters } from "@/lib/hooks";
 import { buildFilters } from "@/lib/search/utils";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
 import { DocumentSet } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
+import { HorizontalFilters } from "@/app/chat/shared_chat_search/Filters";
 
 const DocumentDisplay = ({
   document,
@@ -200,6 +200,9 @@ export function Explorer({
             availableDocumentSets={documentSets}
             existingSources={connectors.map((connector) => connector.source)}
             availableTags={[]}
+            toggleFilters={() => {}}
+            filtersUntoggled={false}
+            tagsOnLeft={true}
           />
         </div>
       </div>

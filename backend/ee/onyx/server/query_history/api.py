@@ -134,7 +134,7 @@ def get_user_chat_sessions(
 @router.get("/admin/chat-session-history")
 def get_chat_session_history(
     page_num: int = Query(0, ge=0),
-    page_size: int = Query(10, ge=10),
+    page_size: int = Query(10, ge=1),
     feedback_type: QAFeedbackType | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,

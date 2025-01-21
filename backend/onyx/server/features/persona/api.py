@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import UploadFile
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -277,8 +278,14 @@ def create_label(
     _: User | None = Depends(current_user),
 ) -> PersonaLabelResponse:
     """Create a new assistant label"""
-    label_model = create_assistant_label(name=label.name, db_session=db)
-    return PersonaLabelResponse.from_model(label_model)
+    try:
+        label_model = create_assistant_label(name=label.name, db_session=db)
+        return PersonaLabelResponse.from_model(label_model)
+    except IntegrityError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Label with name '{label.name}' already exists. Please choose a different name.",
+        )
 
 
 @admin_router.patch("/label/{label_id}")

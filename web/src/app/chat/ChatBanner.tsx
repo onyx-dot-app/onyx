@@ -60,7 +60,6 @@ export function ChatBanner() {
       `}
       onMouseLeave={handleMouseLeave}
       aria-expanded={isExpanded}
-      role="region"
     >
       <div className="text-emphasis text-sm w-full">
         {/* Padding for consistent spacing */}

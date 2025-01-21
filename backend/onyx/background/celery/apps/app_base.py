@@ -23,8 +23,7 @@ from onyx.background.celery.celery_utils import celery_is_worker_primary
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine import get_sqlalchemy_engine
-from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
-from onyx.document_index.vespa_constants import VESPA_CONFIG_SERVER_URL
+from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_credential_pair import RedisConnectorCredentialPair
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
@@ -280,51 +279,6 @@ def wait_for_db(sender: Any, **kwargs: Any) -> None:
     return
 
 
-def wait_for_vespa(sender: Any, **kwargs: Any) -> None:
-    """Waits for Vespa to become ready subject to a hardcoded timeout.
-    Will raise WorkerShutdown to kill the celery worker if the timeout is reached."""
-
-    WAIT_INTERVAL = 5
-    WAIT_LIMIT = 60
-
-    ready = False
-    time_start = time.monotonic()
-    logger.info("Vespa: Readiness probe starting.")
-    while True:
-        try:
-            client = get_vespa_http_client()
-            response = client.get(f"{VESPA_CONFIG_SERVER_URL}/state/v1/health")
-            response.raise_for_status()
-
-            response_dict = response.json()
-            if response_dict["status"]["code"] == "up":
-                ready = True
-                break
-        except Exception:
-            pass
-
-        time_elapsed = time.monotonic() - time_start
-        if time_elapsed > WAIT_LIMIT:
-            break
-
-        logger.info(
-            f"Vespa: Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
-        )
-
-        time.sleep(WAIT_INTERVAL)
-
-    if not ready:
-        msg = (
-            f"Vespa: Readiness probe did not succeed within the timeout "
-            f"({WAIT_LIMIT} seconds). Exiting..."
-        )
-        logger.error(msg)
-        raise WorkerShutdown(msg)
-
-    logger.info("Vespa: Readiness probe succeeded. Continuing...")
-    return
-
-
 def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:
     logger.info("Running as a secondary celery worker.")
 
@@ -510,3 +464,13 @@ def reset_tenant_id(
 ) -> None:
     """Signal handler to reset tenant ID in context var after task ends."""
     CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
+
+
+def wait_for_vespa_or_shutdown(sender: Any, **kwargs: Any) -> None:
+    """Waits for Vespa to become ready subject to a timeout.
+    Raises WorkerShutdown if the timeout is reached."""
+
+    if not wait_for_vespa_with_timeout():
+        msg = "Vespa: Readiness probe did not succeed within the timeout. Exiting..."
+        logger.error(msg)
+        raise WorkerShutdown(msg)

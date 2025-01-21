@@ -34,6 +34,7 @@ interface FolderDropdownProps {
   onDelete?: (folderId: number) => void;
   onDrop?: (folderId: number, chatSessionId: string) => void;
   children?: ReactNode;
+  index: number;
 }
 
 export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
@@ -46,6 +47,7 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
       onEdit,
       onDrop,
       children,
+      index,
     },
     ref
   ) => {
@@ -155,117 +157,123 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
         ref={setNodeRef}
         style={style}
         {...attributes}
-        className="overflow-visible w-full"
+        className="overflow-visible mt-2 w-full"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
         <div
-          ref={ref}
-          className="flex overflow-visible items-center w-full text-[#6c6c6c] rounded-md p-1 relative"
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
+          className="sticky top-0 bg-background-sidebar z-10"
+          style={{ zIndex: 1000 - index }}
         >
-          <button
-            className="flex overflow-hidden items-center flex-grow"
-            onClick={() => !isEditing && setIsOpen(!isOpen)}
-            {...(isEditing ? {} : listeners)}
+          <div
+            ref={ref}
+            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 relative bg-background-sidebar sticky top-0"
+            style={{ zIndex: 10 - index }}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
           >
-            {isOpen ? (
-              <Caret size={16} className="mr-1" />
-            ) : (
-              <Caret size={16} className="-rotate-90 mr-1" />
-            )}
-            {isEditing ? (
-              <div ref={editingRef} className="flex-grow z-[9999] relative">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-[#6c6c6c] transition-colors duration-200"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleEdit();
-                    }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
-            ) : (
-              <div className="flex items-center">
-                <span className="text-sm font-medium">
-                  {folder.folder_name}
-                </span>
-              </div>
-            )}
-          </button>
-          {isHovered && !isEditing && folder.folder_id && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsEditing(true);
-              }}
-              className="ml-auto px-1"
+              className="flex overflow-hidden items-center flex-grow"
+              onClick={() => !isEditing && setIsOpen(!isOpen)}
+              {...(isEditing ? {} : listeners)}
             >
-              <PencilIcon size={14} />
-            </button>
-          )}
-          {(isHovered || isDeletePopoverOpen) &&
-            !isEditing &&
-            folder.folder_id && (
-              <Popover
-                open={isDeletePopoverOpen}
-                onOpenChange={setIsDeletePopoverOpen}
-                content={
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteClick();
+              {isOpen ? (
+                <Caret size={16} className="mr-1" />
+              ) : (
+                <Caret size={16} className="-rotate-90 mr-1" />
+              )}
+              {isEditing ? (
+                <div ref={editingRef} className="flex-grow z-[9999] relative">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-[#6c6c6c] transition-colors duration-200"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleEdit();
+                      }
                     }}
-                    className="px-1"
-                  >
-                    <FiTrash2 size={14} />
-                  </button>
-                }
-                popover={
-                  <div className="p-3 w-64 border border-border rounded-lg bg-background z-50">
-                    <p className="text-sm mb-3">
-                      Are you sure you want to delete this folder?
-                    </p>
-                    <div className="flex justify-center gap-2">
-                      <button
-                        className="px-3 py-1 text-sm bg-gray-200 rounded"
-                        onClick={handleCancelDelete}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="px-3 py-1 text-sm bg-red-500 text-white rounded"
-                        onClick={handleConfirmDelete}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                }
-                requiresContentPadding
-                sideOffset={6}
-              />
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center">
+                  <span className="text-sm font-[500]">
+                    {folder.folder_name}
+                  </span>
+                </div>
+              )}
+            </button>
+            {isHovered && !isEditing && folder.folder_id && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditing(true);
+                }}
+                className="ml-auto px-1"
+              >
+                <PencilIcon size={14} />
+              </button>
             )}
-          {isEditing && (
-            <div className="flex -my-1 z-[9999]">
-              <button onClick={handleEdit} className="p-1">
-                <FiCheck size={14} />
-              </button>
-              <button onClick={() => setIsEditing(false)} className="p-1">
-                <FiX size={14} />
-              </button>
-            </div>
+            {(isHovered || isDeletePopoverOpen) &&
+              !isEditing &&
+              folder.folder_id && (
+                <Popover
+                  open={isDeletePopoverOpen}
+                  onOpenChange={setIsDeletePopoverOpen}
+                  content={
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClick();
+                      }}
+                      className="px-1"
+                    >
+                      <FiTrash2 size={14} />
+                    </button>
+                  }
+                  popover={
+                    <div className="p-3 w-64 border border-border rounded-lg bg-background z-50">
+                      <p className="text-sm mb-3">
+                        Are you sure you want to delete this folder?
+                      </p>
+                      <div className="flex justify-center gap-2">
+                        <button
+                          className="px-3 py-1 text-sm bg-gray-200 rounded"
+                          onClick={handleCancelDelete}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="px-3 py-1 text-sm bg-red-500 text-white rounded"
+                          onClick={handleConfirmDelete}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  }
+                  requiresContentPadding
+                  sideOffset={6}
+                />
+              )}
+            {isEditing && (
+              <div className="flex -my-1 z-[9999]">
+                <button onClick={handleEdit} className="p-1">
+                  <FiCheck size={14} />
+                </button>
+                <button onClick={() => setIsEditing(false)} className="p-1">
+                  <FiX size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+          {isOpen && (
+            <div className="overflow-visible mr-3 ml-1 mt-1">{children}</div>
           )}
         </div>
-        {isOpen && (
-          <div className="overflow-visible mr-3 ml-1 mt-1">{children}</div>
-        )}
       </div>
     );
   }

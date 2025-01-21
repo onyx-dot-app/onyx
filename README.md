@@ -119,7 +119,7 @@ There are two editions of Onyx:
   - Whitelabeling
   - API key authentication
   - Encryption of secrets
-  - Any many more! Checkout [our website](https://www.onyx.app/) for the latest.
+  - And many more! Checkout [our website](https://www.onyx.app/) for the latest.
 
 To try the Onyx Enterprise Edition:
 
