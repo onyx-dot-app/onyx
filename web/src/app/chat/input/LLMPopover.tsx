@@ -150,8 +150,8 @@ export default function LLMPopover({
                     !checkLLMSupportsImageInput(name) && (
                       <TooltipProvider>
                         <Tooltip delayDuration={0}>
-                          <TooltipTrigger className="my-auto flex ites-center ml-auto">
-                            <FiAlertTriangle className="text-error" size={16} />
+                          <TooltipTrigger className="my-auto flex items-center ml-auto">
+                            <FiAlertTriangle className="text-alert" size={16} />
                           </TooltipTrigger>
                           <TooltipContent>
                             <p className="text-xs">
