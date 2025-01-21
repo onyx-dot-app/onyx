@@ -50,6 +50,7 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -1721,6 +1722,14 @@ export function ChatPage({
       scrollableDiv?.removeEventListener("scroll", handleScroll);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messageHistory]);
+
+  const imageFileInMessageHistory = useMemo(() => {
+    return messageHistory
+      .filter((message) => message.type === "user")
+      .some((message) =>
+        message.files.some((file) => file.type === ChatFileType.IMAGE)
+      );
   }, [messageHistory]);
 
   const currentVisibleRange = visibleRange.get(currentSessionId()) || {

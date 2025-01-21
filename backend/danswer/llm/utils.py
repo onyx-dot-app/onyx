@@ -1,3 +1,4 @@
+import copy
 import io
 import json
 from collections.abc import Callable
@@ -188,6 +189,7 @@ def build_content_with_imgs(
     files: list[InMemoryChatFile] | None = None,
     img_urls: list[str] | None = None,
     message_type: MessageType = MessageType.USER,
+    exclude_images: bool = False,
 ) -> str | list[str | dict[str, Any]]:  # matching Langchain's BaseMessage content type
     files = files or []
 
@@ -202,7 +204,7 @@ def build_content_with_imgs(
 
     message_main_content = _build_content(message, files)
 
-    if not img_files and not img_urls:
+    if exclude_images or (not img_files and not img_urls):
         return message_main_content
 
     return cast(
@@ -383,6 +385,72 @@ def test_llm(llm: LLM) -> str | None:
     return error_msg
 
 
+def get_model_map() -> dict:
+    starting_map = copy.deepcopy(cast(dict, litellm.model_cost))
+
+    # NOTE: we could add additional models here in the future,
+    # but for now there is no point. Ollama allows the user to
+    # to specify their desired max context window, and it's
+    # unlikely to be standard across users even for the same model
+    # (it heavily depends on their hardware). For now, we'll just
+    # rely on GEN_AI_MODEL_FALLBACK_MAX_TOKENS to cover this.
+    # for model_name in [
+    #     "llama3.2",
+    #     "llama3.2:1b",
+    #     "llama3.2:3b",
+    #     "llama3.2:11b",
+    #     "llama3.2:90b",
+    # ]:
+    #     starting_map[f"ollama/{model_name}"] = {
+    #         "max_tokens": 128000,
+    #         "max_input_tokens": 128000,
+    #         "max_output_tokens": 128000,
+    #     }
+
+    return starting_map
+
+
+def _strip_extra_provider_from_model_name(model_name: str) -> str:
+    return model_name.split("/")[1] if "/" in model_name else model_name
+
+
+def _strip_colon_from_model_name(model_name: str) -> str:
+    return ":".join(model_name.split(":")[:-1]) if ":" in model_name else model_name
+
+
+def _find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | None:
+    stripped_model_name = _strip_extra_provider_from_model_name(model_name)
+
+    model_names = [
+        model_name,
+        _strip_extra_provider_from_model_name(model_name),
+        # Remove leading extra provider. Usually for cases where user has a
+        # customer model proxy which appends another prefix
+        # remove :XXXX from the end, if present. Needed for ollama.
+        _strip_colon_from_model_name(model_name),
+        _strip_colon_from_model_name(stripped_model_name),
+    ]
+
+    # Filter out None values and deduplicate model names
+    filtered_model_names = [name for name in model_names if name]
+
+    # First try all model names with provider prefix
+    for model_name in filtered_model_names:
+        model_obj = model_map.get(f"{provider}/{model_name}")
+        if model_obj:
+            logger.debug(f"Using model object for {provider}/{model_name}")
+            return model_obj
+
+    # Then try all model names without provider prefix
+    for model_name in filtered_model_names:
+        model_obj = model_map.get(model_name)
+        if model_obj:
+            logger.debug(f"Using model object for {model_name}")
+            return model_obj
+
+    return None
+
+
 def get_llm_max_tokens(
     model_map: dict,
     model_name: str,
@@ -395,22 +463,11 @@ def get_llm_max_tokens(
         return GEN_AI_MAX_TOKENS
 
     try:
-        model_obj = model_map.get(f"{model_provider}/{model_name}")
-        if model_obj:
-            logger.debug(f"Using model object for {model_provider}/{model_name}")
-
-        if not model_obj:
-            model_obj = model_map.get(model_name)
-            if model_obj:
-                logger.debug(f"Using model object for {model_name}")
-
-        if not model_obj:
-            model_name_split = model_name.split("/")
-            if len(model_name_split) > 1:
-                model_obj = model_map.get(model_name_split[1])
-            if model_obj:
-                logger.debug(f"Using model object for {model_name_split[1]}")
-
+        model_obj = _find_model_obj(
+            model_map,
+            model_provider,
+            model_name,
+        )
         if not model_obj:
             raise RuntimeError(
                 f"No litellm entry found for {model_provider}/{model_name}"
@@ -501,3 +558,23 @@ def get_max_input_tokens(
         raise RuntimeError("No tokens for input for the LLM given settings")
 
     return input_toks
+
+
+def model_supports_image_input(model_name: str, model_provider: str) -> bool:
+    model_map = get_model_map()
+    try:
+        model_obj = _find_model_obj(
+            model_map,
+            model_provider,
+            model_name,
+        )
+        if not model_obj:
+            raise RuntimeError(
+                f"No litellm entry found for {model_provider}/{model_name}"
+            )
+        return model_obj.get("supports_vision", False)
+    except Exception:
+        logger.exception(
+            f"Failed to get model object for {model_provider}/{model_name}"
+        )
+        return False

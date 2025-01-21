@@ -13,6 +13,7 @@ from danswer.llm.interfaces import LLMConfig
 from danswer.llm.utils import build_content_with_imgs
 from danswer.llm.utils import check_message_tokens
 from danswer.llm.utils import message_to_prompt_and_imgs
+from danswer.llm.utils import model_supports_image_input
 from danswer.llm.utils import translate_history_to_basemessages
 from danswer.natural_language_processing.utils import get_tokenizer
 from danswer.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
@@ -67,6 +68,7 @@ class AnswerPromptBuilder:
             provider_type=llm_config.model_provider,
             model_name=llm_config.model_name,
         )
+        self.llm_config = llm_config
         self.llm_tokenizer_encode_func = cast(
             Callable[[str], list[int]], llm_tokenizer.encode
         )
@@ -75,7 +77,13 @@ class AnswerPromptBuilder:
         (
             self.message_history,
             self.history_token_cnts,
-        ) = translate_history_to_basemessages(message_history)
+        ) = translate_history_to_basemessages(
+            message_history,
+            exclude_images=not model_supports_image_input(
+                self.llm_config.model_name,
+                self.llm_config.model_provider,
+            ),
+        )
 
         # for cases where like the QA flow where we want to condense the chat history
         # into a single message rather than a sequence of User / Assistant messages
@@ -84,7 +92,10 @@ class AnswerPromptBuilder:
         self.system_message_and_token_cnt: tuple[SystemMessage, int] | None = None
         self.user_message_and_token_cnt = (
             user_message,
-            check_message_tokens(user_message, self.llm_tokenizer_encode_func),
+            check_message_tokens(
+                user_message,
+                self.llm_tokenizer_encode_func,
+            ),
         )
 
         self.new_messages_and_token_cnts: list[tuple[BaseMessage, int]] = []

@@ -14,6 +14,7 @@ from danswer.llm.answering.prompts.build import AnswerPromptBuilder
 from danswer.llm.interfaces import LLM
 from danswer.llm.utils import build_content_with_imgs
 from danswer.llm.utils import message_to_string
+from danswer.llm.utils import model_supports_image_input
 from danswer.prompts.constants import GENERAL_SEP_PAT
 from danswer.tools.message import ToolCallSummary
 from danswer.tools.models import ToolResponse
@@ -293,6 +294,11 @@ class ImageGenerationTool(Tool):
             build_image_generation_user_prompt(
                 query=prompt_builder.get_user_message_content(),
                 img_urls=img_urls,
+                prompts=[img.revised_prompt for img in img_generation_response],
+                supports_image_input=model_supports_image_input(
+                    prompt_builder.llm_config.model_name,
+                    prompt_builder.llm_config.model_provider,
+                ),
             )
         )
 

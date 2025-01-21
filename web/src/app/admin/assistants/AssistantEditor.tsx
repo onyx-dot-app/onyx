@@ -315,26 +315,10 @@ export function AssistantEditor({
           let enabledTools = Object.keys(values.enabled_tools_map)
             .map((toolId) => Number(toolId))
             .filter((toolId) => values.enabled_tools_map[toolId]);
+
           const searchToolEnabled = searchTool
             ? enabledTools.includes(searchTool.id)
             : false;
-          const imageGenerationToolEnabled = imageGenerationTool
-            ? enabledTools.includes(imageGenerationTool.id)
-            : false;
-
-          if (imageGenerationToolEnabled) {
-            if (
-              // model must support image input for image generation
-              // to work
-              !checkLLMSupportsImageInput(
-                values.llm_model_version_override || defaultModelName || ""
-              )
-            ) {
-              enabledTools = enabledTools.filter(
-                (toolId) => toolId !== imageGenerationTool!.id
-              );
-            }
-          }
 
           // if disable_retrieval is set, set num_chunks to 0
           // to tell the backend to not fetch any documents
@@ -743,7 +727,6 @@ export function AssistantEditor({
                         <TooltipTrigger asChild>
                           <div
                             className={`w-fit ${
-                              !currentLLMSupportsImageOutput ||
                               !isImageGenerationAvailable
                                 ? "opacity-70 cursor-not-allowed"
                                 : ""
@@ -756,30 +739,17 @@ export function AssistantEditor({
                               onChange={() => {
                                 toggleToolInValues(imageGenerationTool.id);
                               }}
-                              disabled={
-                                !currentLLMSupportsImageOutput ||
-                                !isImageGenerationAvailable
-                              }
+                              disabled={!isImageGenerationAvailable}
                             />
                           </div>
                         </TooltipTrigger>
-                        {!currentLLMSupportsImageOutput ? (
+                        {!isImageGenerationAvailable && (
                           <TooltipContent side="top" align="center">
                             <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                              To use Image Generation, select GPT-4o or another
-                              image compatible model as the default model for
-                              this Assistant.
+                              Image Generation requires an OpenAI or Azure Dalle
+                              configuration.
                             </p>
                           </TooltipContent>
-                        ) : (
-                          !isImageGenerationAvailable && (
-                            <TooltipContent side="top" align="center">
-                              <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                                Image Generation requires an OpenAI or Azure
-                                Dalle configuration.
-                              </p>
-                            </TooltipContent>
-                          )
                         )}
                       </Tooltip>
                     </TooltipProvider>
