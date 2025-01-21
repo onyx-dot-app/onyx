@@ -364,6 +364,8 @@ export interface LlmOverrideManager {
   temperature: number | null;
   updateTemperature: (temperature: number | null) => void;
   updateModelOverrideForChatSession: (chatSession?: ChatSession) => void;
+  imageFilesPresent: boolean;
+  updateImageFilesPresent: (present: boolean) => void;
 }
 export function useLlmOverride(
   llmProviders: LLMProviderDescriptor[],
@@ -386,6 +388,11 @@ export function useLlmOverride(
       }
     }
     return { name: "", provider: "", modelName: "" };
+  };
+  const [imageFilesPresent, setImageFilesPresent] = useState(false);
+
+  const updateImageFilesPresent = (present: boolean) => {
+    setImageFilesPresent(present);
   };
 
   const [globalDefault, setGlobalDefault] = useState<LlmOverride>(
@@ -451,6 +458,8 @@ export function useLlmOverride(
     setGlobalDefault,
     temperature,
     updateTemperature,
+    imageFilesPresent,
+    updateImageFilesPresent,
   };
 }
 

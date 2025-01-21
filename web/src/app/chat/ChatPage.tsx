@@ -1935,17 +1935,10 @@ export function ChatPage({
   }, [searchParams, router]);
 
   useEffect(() => {
-    if (
-      imageFileInMessageHistory &&
-      !checkLLMSupportsImageInput(llmOverrideManager.llmOverride.modelName)
-    ) {
-      setPopup({
-        message:
-          "This LLM will not be able to process all files (i.e. image files) in your chat history",
-        type: "error",
-      });
+    if (imageFileInMessageHistory) {
+      llmOverrideManager.updateImageFilesPresent(true);
     }
-  }, [llmOverrideManager.llmOverride, imageFileInMessageHistory]);
+  }, [imageFileInMessageHistory]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
