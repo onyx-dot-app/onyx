@@ -34,8 +34,89 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
+import { AgenticToggle } from "./AgenticToggle";
 
 const MAX_INPUT_HEIGHT = 200;
+export const SourceChip2 = ({
+  icon,
+  title,
+  onRemove,
+  onClick,
+  includeTooltip,
+  includeAnimation,
+  truncateTitle = true,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  onRemove?: () => void;
+  onClick?: () => void;
+  truncateTitle?: boolean;
+  includeTooltip?: boolean;
+  includeAnimation?: boolean;
+}) => {
+  const [isNew, setIsNew] = useState(true);
+  const [isTooltipOpen, setIsTooltipOpen] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsNew(false), 300);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <TooltipProvider>
+      <Tooltip
+        delayDuration={0}
+        open={isTooltipOpen}
+        onOpenChange={setIsTooltipOpen}
+      >
+        <TooltipTrigger
+          onMouseEnter={() => setIsTooltipOpen(true)}
+          onMouseLeave={() => setIsTooltipOpen(false)}
+        >
+          <div
+            onClick={onClick ? onClick : undefined}
+            className={`
+            h-6
+            px-2
+            bg-[#f1eee8]
+            rounded-2xl
+            justify-center
+            items-center
+            inline-flex
+            ${includeAnimation && isNew ? "animate-fade-in-scale" : ""}
+            ${onClick ? "cursor-pointer" : ""}
+          `}
+          >
+            <div className="w-[17px] h-4 p-[3px] flex-col justify-center items-center gap-2.5 inline-flex">
+              <div className="h-2.5 relative">{icon}</div>
+            </div>
+            <div className="text-[#4a4a4a] text-xs font-medium leading-normal">
+              {truncateTitle ? truncateString(title, 50) : title}
+            </div>
+            {onRemove && (
+              <XIcon
+                size={12}
+                className="text-[#4a4a4a] ml-2 cursor-pointer"
+                onClick={(e: React.MouseEvent<SVGSVGElement>) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+              />
+            )}
+          </div>
+        </TooltipTrigger>
+        {includeTooltip && title.length > 50 && (
+          <TooltipContent
+            className="!pointer-events-none z-[2000000]"
+            onMouseEnter={() => setIsTooltipOpen(false)}
+          >
+            <p>{title}</p>
+          </TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
 
 export const SourceChip = ({
   icon,
@@ -53,7 +134,7 @@ export const SourceChip = ({
   <div
     onClick={onClick ? onClick : undefined}
     className={`
-      flex-none
+        flex-none
         flex
         items-center
         px-1
@@ -68,6 +149,7 @@ export const SourceChip = ({
         gap-x-1
         h-6
         ${onClick ? "cursor-pointer" : ""}
+        animate-fade-in-scale
       `}
   >
     {icon}
@@ -109,6 +191,8 @@ interface ChatInputBarProps {
   availableDocumentSets: DocumentSet[];
   availableTags: Tag[];
   retrievalEnabled: boolean;
+  proSearchEnabled: boolean;
+  setProSearchEnabled: (proSearchEnabled: boolean) => void;
 }
 
 export function ChatInputBar({
@@ -137,6 +221,8 @@ export function ChatInputBar({
   availableDocumentSets,
   availableTags,
   llmOverrideManager,
+  proSearchEnabled,
+  setProSearchEnabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
   useEffect(() => {
@@ -653,91 +739,100 @@ export function ChatInputBar({
               </div>
             )}
 
-            <div className="flex items-center space-x-1 mr-12 overflow-hidden px-4 pb-2">
-              <ChatInputOption
-                flexPriority="stiff"
-                name="File"
-                Icon={FiPlusCircle}
-                onClick={() => {
-                  const input = document.createElement("input");
-                  input.type = "file";
-                  input.multiple = true;
-                  input.onchange = (event: any) => {
-                    const files = Array.from(
-                      event?.target?.files || []
-                    ) as File[];
-                    if (files.length > 0) {
-                      handleFileUpload(files);
-                    }
-                  };
-                  input.click();
-                }}
-                tooltipContent={"Upload files"}
-              />
-
-              <LLMPopover
-                llmProviders={llmProviders}
-                llmOverrideManager={llmOverrideManager}
-                requiresImageGeneration={false}
-                currentAssistant={selectedAssistant}
-              />
-
-              {retrievalEnabled && (
-                <FilterPopup
-                  availableSources={availableSources}
-                  availableDocumentSets={availableDocumentSets}
-                  availableTags={availableTags}
-                  filterManager={filterManager}
-                  trigger={
-                    <ChatInputOption
-                      flexPriority="stiff"
-                      name="Filters"
-                      Icon={FiFilter}
-                      tooltipContent="Filter your search"
-                    />
-                  }
-                />
-              )}
-            </div>
-
-            <div className="absolute bottom-2.5 mobile:right-4 desktop:right-10">
-              {chatState == "streaming" ||
-              chatState == "toolBuilding" ||
-              chatState == "loading" ? (
-                <button
-                  className={`cursor-pointer ${
-                    chatState != "streaming"
-                      ? "bg-background-400"
-                      : "bg-background-800"
-                  }  h-[28px] w-[28px] rounded-full`}
-                  onClick={stopGenerating}
-                  disabled={chatState != "streaming"}
-                >
-                  <StopGeneratingIcon
-                    size={10}
-                    className={`text-emphasis m-auto text-white flex-none
-                      }`}
-                  />
-                </button>
-              ) : (
-                <button
-                  className="cursor-pointer"
+            <div className="flex pr-4 pb-2 justify-between items-center w-full ">
+              <div className="space-x-1 flex  px-4 ">
+                <ChatInputOption
+                  flexPriority="stiff"
+                  name="File"
+                  Icon={FiPlusCircle}
                   onClick={() => {
-                    if (message) {
-                      onSubmit();
-                    }
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.multiple = true;
+                    input.onchange = (event: any) => {
+                      const files = Array.from(
+                        event?.target?.files || []
+                      ) as File[];
+                      if (files.length > 0) {
+                        handleFileUpload(files);
+                      }
+                    };
+                    input.click();
                   }}
-                  disabled={chatState != "input"}
-                >
-                  <SendIcon
-                    size={26}
-                    className={`text-emphasis text-white p-1 rounded-full  ${
-                      chatState == "input" && message
-                        ? "bg-submit-background"
-                        : "bg-disabled-submit-background"
-                    } `}
+                  tooltipContent={"Upload files"}
+                />
+
+                <LLMPopover
+                  llmProviders={llmProviders}
+                  llmOverrideManager={llmOverrideManager}
+                  requiresImageGeneration={false}
+                  currentAssistant={selectedAssistant}
+                />
+
+                {retrievalEnabled && (
+                  <FilterPopup
+                    availableSources={availableSources}
+                    availableDocumentSets={availableDocumentSets}
+                    availableTags={availableTags}
+                    filterManager={filterManager}
+                    trigger={
+                      <ChatInputOption
+                        flexPriority="stiff"
+                        name="Filters"
+                        Icon={FiFilter}
+                        tooltipContent="Filter your search"
+                      />
+                    }
                   />
-                </button>
+                )}
+              </div>
+              {retrievalEnabled && (
+                <div className="flex items-center gap-x-2">
+                  <AgenticToggle
+                    proSearchEnabled={proSearchEnabled}
+                    setProSearchEnabled={setProSearchEnabled}
+                  />
+                  <div className="flex items-center gap-x-2">
+                    {chatState == "streaming" ||
+                    chatState == "toolBuilding" ||
+                    chatState == "loading" ? (
+                      <button
+                        className={`cursor-pointer ${
+                          chatState != "streaming"
+                            ? "bg-background-400"
+                            : "bg-background-800"
+                        }  h-[28px] w-[28px] rounded-full`}
+                        onClick={stopGenerating}
+                        disabled={chatState != "streaming"}
+                      >
+                        <StopGeneratingIcon
+                          size={10}
+                          className={`text-emphasis m-auto text-white flex-none
+                      }`}
+                        />
+                      </button>
+                    ) : (
+                      <button
+                        className="cursor-pointer"
+                        onClick={() => {
+                          if (message) {
+                            onSubmit();
+                          }
+                        }}
+                        disabled={chatState != "input"}
+                      >
+                        <SendIcon
+                          size={26}
+                          className={`text-emphasis text-white p-1 rounded-full  ${
+                            chatState == "input" && message
+                              ? "bg-submit-background"
+                              : "bg-disabled-submit-background"
+                          } `}
+                        />
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </div>

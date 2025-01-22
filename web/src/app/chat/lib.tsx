@@ -4,6 +4,11 @@ import {
   Filters,
   DocumentInfoPacket,
   StreamStopInfo,
+  ProSearchPacket,
+  SubQueryPiece,
+  AgentAnswerPiece,
+  SubQuestionPiece,
+  ExtendedToolResponse,
 } from "@/lib/search/interfaces";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { ChatState, FeedbackType } from "./types";
@@ -99,6 +104,20 @@ export async function createChatSession(
   return chatSessionResponseJson.chat_session_id;
 }
 
+export const isPacketType = (data: any): data is PacketType => {
+  return (
+    data.hasOwnProperty("answer_piece") ||
+    data.hasOwnProperty("top_documents") ||
+    data.hasOwnProperty("tool_name") ||
+    data.hasOwnProperty("file_ids") ||
+    data.hasOwnProperty("error") ||
+    data.hasOwnProperty("message_id") ||
+    data.hasOwnProperty("stop_reason") ||
+    data.hasOwnProperty("user_message_id") ||
+    data.hasOwnProperty("reserved_assistant_message_id")
+  );
+};
+
 export type PacketType =
   | ToolCallMetadata
   | BackendMessage
@@ -108,7 +127,12 @@ export type PacketType =
   | FileChatDisplay
   | StreamingError
   | MessageResponseIDInfo
-  | StreamStopInfo;
+  | StreamStopInfo
+  | ProSearchPacket
+  | SubQueryPiece
+  | AgentAnswerPiece
+  | SubQuestionPiece
+  | ExtendedToolResponse;
 
 export async function* sendMessage({
   regenerate,
@@ -421,6 +445,10 @@ export function processRawChatHistory(
     } else {
       retrievalType = RetrievalType.None;
     }
+    const subQuestions = messageInfo.sub_questions?.map((q) => ({
+      ...q,
+      is_complete: true,
+    }));
 
     const message: Message = {
       messageId: messageInfo.message_id,
@@ -446,6 +474,7 @@ export function processRawChatHistory(
       childrenMessageIds: [],
       latestChildMessageId: messageInfo.latest_child_message,
       overridden_model: messageInfo.overridden_model,
+      sub_questions: subQuestions,
     };
 
     messages.set(messageInfo.message_id, message);
@@ -494,6 +523,7 @@ export function buildLatestMessageChain(
     }
   }
 
+  //
   // remove system message
   if (finalMessageList.length > 0 && finalMessageList[0].type === "system") {
     finalMessageList = finalMessageList.slice(1);

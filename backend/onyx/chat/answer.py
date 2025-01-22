@@ -212,7 +212,6 @@ class Answer:
 
         # In langgraph, whether we do the basic thing (call llm stream) or pro search
         # is based on a flag in the pro search config
-
         if self.pro_search_config.use_agentic_search:
             if self.pro_search_config.search_request is None:
                 raise ValueError("Search request must be provided for pro search")

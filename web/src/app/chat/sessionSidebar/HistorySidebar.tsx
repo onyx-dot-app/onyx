@@ -102,7 +102,7 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
         size={16}
         className="w-3 ml-[2px] mr-[2px] group-hover:visible invisible flex-none cursor-grab"
       />
-      <button
+      <div
         onClick={(e) => {
           e.preventDefault();
           if (!isDragging) {
@@ -128,7 +128,7 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
         >
           <CircleX size={16} className="text-text-history-sidebar-button" />
         </button>
-      </button>
+      </div>
     </div>
   );
 };
@@ -243,9 +243,9 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             />
           </div>
           {page == "chat" && (
-            <div className="px-4 px-1 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
+            <div className="px-4 px-1 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
               <Link
-                className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
+                className="w-full px-2 py-1 group rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
                 href={
                   `/${page}` +
                   (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA &&
@@ -262,11 +262,8 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                   }
                 }}
               >
-                <NewChatIcon
-                  size={20}
-                  className="flex-none text-text-history-sidebar-button"
-                />
-                <p className="my-auto flex font-normal items-center text-base">
+                <NewChatIcon size={20} className="flex-none" />
+                <p className="my-auto flex font-normal  items-center ">
                   Start New Chat
                 </p>
               </Link>

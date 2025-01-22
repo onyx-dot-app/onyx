@@ -5,6 +5,25 @@ import { truncateString } from "@/lib/utils";
 import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
 
+export const ResultIcon = ({
+  doc,
+  size,
+}: {
+  doc: OnyxDocument;
+  size: number;
+}) => {
+  return (
+    <div className="flex-none">
+      {" "}
+      {doc.is_internet || doc.source_type === "web" ? (
+        <WebResultIcon size={size} url={doc.link} />
+      ) : (
+        <SourceIcon iconSize={size} sourceType={doc.source_type} />
+      )}
+    </div>
+  );
+};
+
 export default function SourceCard({
   doc,
   setPresentingDocument,
@@ -24,7 +43,7 @@ export default function SourceCard({
         ) : (
           <SourceIcon sourceType={doc.source_type} iconSize={18} />
         )}
-        <p>{truncateString(doc.semantic_identifier || doc.document_id, 16)}</p>
+        <p>{truncateString(doc.semantic_identifier || doc.document_id, 20)}</p>
       </div>
       <div className="line-clamp-2 text-sm font-semibold"></div>
       <div className="line-clamp-2 text-sm font-normal leading-snug text-text-700">
@@ -69,11 +88,13 @@ export function SeeMoreBlock({
           {filteredUniqueSources.slice(0, 3).map((source, index) => (
             <SourceIcon key={index} sourceType={source} iconSize={16} />
           ))}
-          {webSourceDomains
+          {/* {webSourceDomains
             .slice(0, numOfWebSourcesToDisplay)
             .map((domain, ind) => (
               <WebResultIcon key={ind} url={domain} />
             ))}
+              <WebResultIcon url={domain} />
+            ))} */}
           {uniqueSources.length > 3 && (
             <span className="text-xs text-text-700 font-semibold ml-1">
               +{uniqueSources.length - 3}
