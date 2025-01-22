@@ -1,3 +1,4 @@
+import time
 from abc import ABC
 from abc import abstractmethod
 
@@ -106,6 +107,8 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         """Adds embeddings to the chunks, the title and metadata suffixes are added to the chunk as well
         if they exist. If there is no space for it, it would have been thrown out at the chunking step.
         """
+        start = time.monotonic()
+
         # All chunks at this point must have some non-empty content
         flat_chunk_texts: list[str] = []
         large_chunks_present = False
@@ -197,6 +200,13 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             embedded_chunks.append(new_embedded_chunk)
             embedding_ind_start += num_embeddings
 
+        elapsed = time.monotonic() - start
+        logger.info(
+            f"embed_chunks finished: "
+            f"elapsed={elapsed:.2f} "
+            f"chunks={len(chunks)} "
+            f"chunks_embedded={len(embedded_chunks)}"
+        )
         return embedded_chunks
 
     @classmethod
