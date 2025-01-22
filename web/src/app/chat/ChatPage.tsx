@@ -1935,9 +1935,7 @@ export function ChatPage({
   }, [searchParams, router]);
 
   useEffect(() => {
-    if (imageFileInMessageHistory) {
-      llmOverrideManager.updateImageFilesPresent(true);
-    }
+    llmOverrideManager.updateImageFilesPresent(imageFileInMessageHistory);
   }, [imageFileInMessageHistory]);
 
   useEffect(() => {
