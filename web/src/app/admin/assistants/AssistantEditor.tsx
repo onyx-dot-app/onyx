@@ -221,6 +221,7 @@ export function AssistantEditor({
   const initialValues = {
     name: existingPersona?.name ?? "",
     description: existingPersona?.description ?? "",
+    datetime_aware: existingPrompt?.datetime_aware ?? false,
     system_prompt: existingPrompt?.system_prompt ?? "",
     task_prompt: existingPrompt?.task_prompt ?? "",
     is_public: existingPersona?.is_public ?? defaultPublic,
@@ -1370,6 +1371,17 @@ export function AssistantEditor({
                       </div>
                     </div>
                   </div>
+                  <Separator />
+
+                  <BooleanFormField
+                    small
+                    removeIndent
+                    alignTop
+                    name="datetime_aware"
+                    label="Date and Time Aware"
+                    subtext='Toggle this option to let the assistant know the current date and time (formatted like: "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]]'
+                  />
+
                   <Separator />
 
                   <TextFormField

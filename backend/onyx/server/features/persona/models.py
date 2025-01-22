@@ -60,6 +60,7 @@ class PersonaUpsertRequest(BaseModel):
     description: str
     system_prompt: str
     task_prompt: str
+    datetime_aware: bool
     document_set_ids: list[int]
     num_chunks: float
     include_citations: bool

@@ -6,6 +6,7 @@ interface PersonaUpsertRequest {
   description: string;
   system_prompt: string;
   task_prompt: string;
+  datetime_aware: boolean;
   document_set_ids: number[];
   num_chunks: number | null;
   include_citations: boolean;
@@ -36,6 +37,7 @@ export interface PersonaUpsertParameters {
   system_prompt: string;
   existing_prompt_id: number | null;
   task_prompt: string;
+  datetime_aware: boolean;
   document_set_ids: number[];
   num_chunks: number | null;
   include_citations: boolean;
@@ -105,6 +107,7 @@ function buildPersonaUpsertRequest(
     is_public,
     groups,
     existing_prompt_id,
+    datetime_aware,
     users,
     tool_ids,
     icon_color,
@@ -129,6 +132,7 @@ function buildPersonaUpsertRequest(
     icon_shape,
     remove_image,
     search_start_date,
+    datetime_aware,
     is_default_persona: creationRequest.is_default_persona ?? false,
     recency_bias: "base_decay",
     prompt_ids: existing_prompt_id ? [existing_prompt_id] : [],

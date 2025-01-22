@@ -18,8 +18,8 @@ from onyx.llm.utils import message_to_prompt_and_imgs
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
 from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
-from onyx.prompts.prompt_utils import add_date_time_to_prompt
 from onyx.prompts.prompt_utils import drop_messages_history_overflow
+from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
@@ -31,15 +31,16 @@ def default_build_system_message(
     prompt_config: PromptConfig,
 ) -> SystemMessage | None:
     system_prompt = prompt_config.system_prompt.strip()
-    if prompt_config.datetime_aware:
-        system_prompt = add_date_time_to_prompt(prompt_str=system_prompt)
+    tag_handled_prompt = handle_onyx_date_awareness(
+        system_prompt,
+        prompt_config,
+        add_additional_info_if_no_tag=prompt_config.datetime_aware,
+    )
 
-    if not system_prompt:
+    if not tag_handled_prompt:
         return None
 
-    system_msg = SystemMessage(content=system_prompt)
-
-    return system_msg
+    return SystemMessage(content=tag_handled_prompt)
 
 
 def default_build_user_message(
@@ -64,8 +65,11 @@ def default_build_user_message(
         else user_query
     )
     user_prompt = user_prompt.strip()
+    tag_handled_prompt = handle_onyx_date_awareness(user_prompt, prompt_config)
     user_msg = HumanMessage(
-        content=build_content_with_imgs(user_prompt, files) if files else user_prompt
+        content=build_content_with_imgs(tag_handled_prompt, files)
+        if files
+        else tag_handled_prompt
     )
     return user_msg
 

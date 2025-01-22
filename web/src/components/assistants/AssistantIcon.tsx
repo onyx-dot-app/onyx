@@ -139,7 +139,7 @@ export function AssistantIcon({
                 alt={assistant.name}
                 src={buildImgUrl(assistant.uploaded_image_id)}
                 loading="lazy"
-                className={`object-cover object-center rounded-sm transition-opacity duration-300 ${wrapperClass}`}
+                className={`h-[${dimension}px] w-[${dimension}px] object-cover object-center rounded-sm transition-opacity duration-300 ${wrapperClass}`}
                 style={style}
               />
             ) : (

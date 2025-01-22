@@ -104,13 +104,10 @@ def load_builtin_tools(db_session: Session) -> None:
     logger.notice("All built-in tools are loaded/verified.")
 
 
-def auto_add_search_tool_to_personas(db_session: Session) -> None:
+def get_search_tool(db_session: Session) -> ToolDBModel | None:
     """
-    Automatically adds the SearchTool to all Persona objects in the database that have
-    `num_chunks` either unset or set to a value that isn't 0. This is done to migrate
-    Persona objects that were created before the concept of Tools were added.
+    Retrieves for the SearchTool from the BUILT_IN_TOOLS list.
     """
-    # Fetch the SearchTool from the database based on in_code_tool_id from BUILT_IN_TOOLS
     search_tool_id = next(
         (
             tool["in_code_tool_id"]
@@ -119,12 +116,25 @@ def auto_add_search_tool_to_personas(db_session: Session) -> None:
         ),
         None,
     )
+
     if not search_tool_id:
         raise RuntimeError("SearchTool not found in the BUILT_IN_TOOLS list.")
 
     search_tool = db_session.execute(
         select(ToolDBModel).where(ToolDBModel.in_code_tool_id == search_tool_id)
     ).scalar_one_or_none()
+
+    return search_tool
+
+
+def auto_add_search_tool_to_personas(db_session: Session) -> None:
+    """
+    Automatically adds the SearchTool to all Persona objects in the database that have
+    `num_chunks` either unset or set to a value that isn't 0. This is done to migrate
+    Persona objects that were created before the concept of Tools were added.
+    """
+    # Fetch the SearchTool from the database based on in_code_tool_id from BUILT_IN_TOOLS
+    search_tool = get_search_tool(db_session)
 
     if not search_tool:
         raise RuntimeError("SearchTool not found in the database.")

@@ -15,6 +15,7 @@ from onyx.db.models import User
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import upsert_persona
 from onyx.db.prompts import get_default_prompt
+from onyx.tools.built_in_tools import get_search_tool
 from onyx.utils.errors import EERequiredError
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
@@ -47,6 +48,10 @@ def create_slack_channel_persona(
 ) -> Persona:
     """NOTE: does not commit changes"""
 
+    search_tool = get_search_tool(db_session)
+    if search_tool is None:
+        raise ValueError("Search tool not found")
+
     # create/update persona associated with the Slack channel
     persona_name = _build_persona_name(channel_name)
     default_prompt = get_default_prompt(db_session)
@@ -60,6 +65,7 @@ def create_slack_channel_persona(
         llm_filter_extraction=enable_auto_filters,
         recency_bias=RecencyBiasSetting.AUTO,
         prompt_ids=[default_prompt.id],
+        tool_ids=[search_tool.id],
         document_set_ids=document_set_ids,
         llm_model_provider_override=None,
         llm_model_version_override=None,

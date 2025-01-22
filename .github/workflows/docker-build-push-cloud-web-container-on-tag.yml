@@ -67,6 +67,7 @@ jobs:
             NEXT_PUBLIC_SENTRY_DSN=${{ secrets.SENTRY_DSN }}
             NEXT_PUBLIC_GTM_ENABLED=true
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
+            NODE_OPTIONS=--max-old-space-size=8192
           # needed due to weird interactions with the builds for different platforms
           no-cache: true
           labels: ${{ steps.meta.outputs.labels }}

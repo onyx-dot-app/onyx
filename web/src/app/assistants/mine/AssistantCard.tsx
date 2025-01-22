@@ -103,7 +103,7 @@ const AssistantCard: React.FC<{
   return (
     <div className="w-full p-2 overflow-visible pb-4 pt-3 bg-[#fefcf9] rounded shadow-[0px_0px_4px_0px_rgba(0,0,0,0.25)] flex flex-col">
       <div className="w-full flex">
-        <div className="ml-2 mr-4 mt-1 w-8 h-8">
+        <div className="ml-2 flex-none mr-2 mt-1 w-10 h-10">
           <AssistantIcon assistant={persona} size="large" />
         </div>
         <div className="flex-1 mt-1 flex flex-col">
