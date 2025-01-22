@@ -287,9 +287,51 @@
   overflow-x: hidden;
 }
 
+.scrollbar {
+  width: 100%;
+  height: 100%;
+}
+
+/* Styling for textarea scrollbar */
+textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+textarea::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 4px;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+textarea::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Styling for textarea resize handle */
+textarea {
+  resize: vertical;
+}
+
+/* For Firefox */
+textarea {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
 .inputscroll::-webkit-scrollbar-track {
   background: #e5e7eb;
   scrollbar-width: none;
+}
+
+::-webkit-scrollbar {
+  width: 0px;
+  /* Vertical scrollbar width */
+  height: 8px;
+  /* Horizontal scrollbar height */
 }
 
 ::-webkit-scrollbar-track {

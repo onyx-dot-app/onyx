@@ -22,7 +22,7 @@ export const MemoizedAnchor = memo(
         const index = parseInt(match[1], 10) - 1;
         const associatedDoc = docs?.[index];
         if (!associatedDoc) {
-          return <>{children}</>;
+          return <a href={children as string}>{children}</a>;
         }
 
         let icon: React.ReactNode = null;
