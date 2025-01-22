@@ -22,7 +22,7 @@ class AgentSearchConfig:
     primary_llm: LLM
     fast_llm: LLM
     search_tool: SearchTool
-    use_agentic_search: bool = False
+    use_agentic_search: bool = True
 
     # For persisting agent search data
     chat_session_id: UUID | None = None
@@ -37,13 +37,13 @@ class AgentSearchConfig:
     db_session: Session | None = None
 
     # Whether to perform initial search to inform decomposition
-    perform_initial_search_path_decision: bool = False
+    perform_initial_search_path_decision: bool = True
 
     # Whether to perform initial search to inform decomposition
-    perform_initial_search_decomposition: bool = False
+    perform_initial_search_decomposition: bool = True
 
     # Whether to allow creation of refinement questions (and entity extraction, etc.)
-    allow_refinement: bool = False
+    allow_refinement: bool = True
 
     # Message history for the current chat session
     message_history: list[PreviousMessage] | None = None

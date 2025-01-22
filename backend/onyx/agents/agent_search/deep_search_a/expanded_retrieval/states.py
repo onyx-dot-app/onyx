@@ -1,6 +1,7 @@
 from operator import add
 from typing import Annotated
-from typing import TypedDict
+
+from pydantic import BaseModel
 
 from onyx.agents.agent_search.core_state import SubgraphCoreState
 from onyx.agents.agent_search.deep_search_a.expanded_retrieval.models import (
@@ -20,42 +21,44 @@ from onyx.context.search.models import InferenceSection
 
 
 class ExpandedRetrievalInput(SubgraphCoreState):
-    question: str
-    base_search: bool
-    sub_question_id: str | None
+    question: str = ""
+    base_search: bool = False
+    sub_question_id: str | None = None
 
 
 ## Update/Return States
 
 
-class QueryExpansionUpdate(TypedDict):
-    expanded_queries: list[str]
+class QueryExpansionUpdate(BaseModel):
+    expanded_queries: list[str] = ["aaa", "bbb"]
 
 
-class DocVerificationUpdate(TypedDict):
-    verified_documents: Annotated[list[InferenceSection], dedup_inference_sections]
+class DocVerificationUpdate(BaseModel):
+    verified_documents: Annotated[list[InferenceSection], dedup_inference_sections] = []
 
 
-class DocRetrievalUpdate(TypedDict):
-    expanded_retrieval_results: Annotated[list[QueryResult], add]
-    retrieved_documents: Annotated[list[InferenceSection], dedup_inference_sections]
+class DocRetrievalUpdate(BaseModel):
+    expanded_retrieval_results: Annotated[list[QueryResult], add] = []
+    retrieved_documents: Annotated[
+        list[InferenceSection], dedup_inference_sections
+    ] = []
 
 
-class DocRerankingUpdate(TypedDict):
-    reranked_documents: Annotated[list[InferenceSection], dedup_inference_sections]
-    sub_question_retrieval_stats: RetrievalFitStats | None
+class DocRerankingUpdate(BaseModel):
+    reranked_documents: Annotated[list[InferenceSection], dedup_inference_sections] = []
+    sub_question_retrieval_stats: RetrievalFitStats | None = None
 
 
-class ExpandedRetrievalUpdate(TypedDict):
+class ExpandedRetrievalUpdate(BaseModel):
     expanded_retrieval_result: ExpandedRetrievalResult
 
 
 ## Graph Output State
 
 
-class ExpandedRetrievalOutput(TypedDict):
-    expanded_retrieval_result: ExpandedRetrievalResult
-    base_expanded_retrieval_result: ExpandedRetrievalResult
+class ExpandedRetrievalOutput(BaseModel):
+    expanded_retrieval_result: ExpandedRetrievalResult = ExpandedRetrievalResult()
+    base_expanded_retrieval_result: ExpandedRetrievalResult = ExpandedRetrievalResult()
 
 
 ## Graph State
@@ -81,4 +84,4 @@ class DocVerificationInput(ExpandedRetrievalInput):
 
 
 class RetrievalInput(ExpandedRetrievalInput):
-    query_to_retrieve: str
+    query_to_retrieve: str = ""

@@ -61,12 +61,12 @@ def generate_refined_answer(
 
     history = build_history_prompt(agent_a_config.message_history)
 
-    initial_documents = state["documents"]
-    revised_documents = state["refined_documents"]
+    initial_documents = state.documents
+    revised_documents = state.refined_documents
 
     combined_documents = dedup_inference_sections(initial_documents, revised_documents)
 
-    query_info = get_query_info(state["original_question_retrieval_results"])
+    query_info = get_query_info(state.original_question_retrieval_results)
     # stream refined answer docs
     for tool_response in yield_search_responses(
         query=question,
@@ -93,8 +93,8 @@ def generate_refined_answer(
     else:
         revision_doc_effectiveness = 10.0
 
-    decomp_answer_results = state["decomp_answer_results"]
-    # revised_answer_results = state["refined_decomp_answer_results"]
+    decomp_answer_results = state.decomp_answer_results
+    # revised_answer_results = state.refined_decomp_answer_results
 
     good_qa_list: list[str] = []
     decomp_questions = []
@@ -147,7 +147,7 @@ def generate_refined_answer(
 
     # original answer
 
-    initial_answer = state["initial_answer"]
+    initial_answer = state.initial_answer
 
     # Determine which persona-specification prompt to use
 
@@ -218,7 +218,7 @@ def generate_refined_answer(
     answer = cast(str, response)
 
     # refined_agent_stats = _calculate_refined_agent_stats(
-    #     state["decomp_answer_results"], state["original_question_retrieval_stats"]
+    #     state.decomp_answer_results, state.original_question_retrieval_stats
     # )
 
     initial_good_sub_questions_str = "\n".join(list(set(initial_good_sub_questions)))
@@ -252,22 +252,22 @@ def generate_refined_answer(
 
     logger.debug("-" * 100)
 
-    if state["initial_agent_stats"]:
-        initial_doc_boost_factor = state["initial_agent_stats"].agent_effectiveness.get(
+    if state.initial_agent_stats:
+        initial_doc_boost_factor = state.initial_agent_stats.agent_effectiveness.get(
             "utilized_chunk_ratio", "--"
         )
-        initial_support_boost_factor = state[
-            "initial_agent_stats"
-        ].agent_effectiveness.get("support_ratio", "--")
-        num_initial_verified_docs = state["initial_agent_stats"].original_question.get(
+        initial_support_boost_factor = (
+            state.initial_agent_stats.agent_effectiveness.get("support_ratio", "--")
+        )
+        num_initial_verified_docs = state.initial_agent_stats.original_question.get(
             "num_verified_documents", "--"
         )
-        initial_verified_docs_avg_score = state[
-            "initial_agent_stats"
-        ].original_question.get("verified_avg_score", "--")
-        initial_sub_questions_verified_docs = state[
-            "initial_agent_stats"
-        ].sub_questions.get("num_verified_documents", "--")
+        initial_verified_docs_avg_score = (
+            state.initial_agent_stats.original_question.get("verified_avg_score", "--")
+        )
+        initial_sub_questions_verified_docs = (
+            state.initial_agent_stats.sub_questions.get("num_verified_documents", "--")
+        )
 
         logger.debug("INITIAL AGENT STATS")
         logger.debug(f"Document Boost Factor: {initial_doc_boost_factor}")
@@ -296,9 +296,9 @@ def generate_refined_answer(
     )
 
     agent_refined_end_time = datetime.now()
-    if state["agent_refined_start_time"]:
+    if state.agent_refined_start_time:
         agent_refined_duration = (
-            agent_refined_end_time - state["agent_refined_start_time"]
+            agent_refined_end_time - state.agent_refined_start_time
         ).total_seconds()
     else:
         agent_refined_duration = None

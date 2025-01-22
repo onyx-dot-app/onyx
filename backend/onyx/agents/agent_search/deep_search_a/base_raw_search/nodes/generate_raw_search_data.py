@@ -21,4 +21,5 @@ def generate_raw_search_data(
         question=agent_a_config.search_request.query,
         base_search=True,
         sub_question_id=None,  # This graph is always and only used for the original question
+        log_messages=[],
     )

@@ -32,8 +32,8 @@ def refined_answer_decision(
         f"--------{now_end}--{now_end - now_start}--------REFINED ANSWER DECISION END---"
     )
 
-    if not agent_a_config.allow_refinement:
+    if agent_a_config.allow_refinement:
         return RequireRefinedAnswerUpdate(require_refined_answer=decision)
 
     else:
-        return RequireRefinedAnswerUpdate(require_refined_answer=not decision)
+        return RequireRefinedAnswerUpdate(require_refined_answer=False)

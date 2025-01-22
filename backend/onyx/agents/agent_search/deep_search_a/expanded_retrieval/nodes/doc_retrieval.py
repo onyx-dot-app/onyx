@@ -35,7 +35,7 @@ def doc_retrieval(state: RetrievalInput, config: RunnableConfig) -> DocRetrieval
         expanded_retrieval_results: list[ExpandedRetrievalResult]
         retrieved_documents: list[InferenceSection]
     """
-    query_to_retrieve = state["query_to_retrieve"]
+    query_to_retrieve = state.query_to_retrieve
     agent_a_config = cast(AgentSearchConfig, config["metadata"]["config"])
     search_tool = agent_a_config.search_tool
 

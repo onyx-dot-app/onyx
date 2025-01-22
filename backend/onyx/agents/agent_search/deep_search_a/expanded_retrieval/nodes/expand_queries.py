@@ -28,10 +28,14 @@ def expand_queries(
     # When we are running this node on the original question, no question is explictly passed in.
     # Instead, we use the original question from the search request.
     agent_a_config = cast(AgentSearchConfig, config["metadata"]["config"])
-    question = state.get("question", agent_a_config.search_request.query)
+    question = (
+        state.question
+        if hasattr(state, "question")
+        else agent_a_config.search_request.query
+    )
     llm = agent_a_config.fast_llm
     chat_session_id = agent_a_config.chat_session_id
-    sub_question_id = state.get("sub_question_id")
+    sub_question_id = state.sub_question_id
     if sub_question_id is None:
         level, question_nr = 0, 0
     else:

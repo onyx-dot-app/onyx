@@ -19,10 +19,10 @@ def agent_logging(state: MainState, config: RunnableConfig) -> MainOutput:
 
     logger.debug(f"--------{now_start}--------LOGGING NODE---")
 
-    agent_start_time = state["agent_start_time"]
-    agent_base_end_time = state["agent_base_end_time"]
-    agent_refined_start_time = state["agent_refined_start_time"] or None
-    agent_refined_end_time = state["agent_refined_end_time"] or None
+    agent_start_time = state.agent_start_time
+    agent_base_end_time = state.agent_base_end_time
+    agent_refined_start_time = state.agent_refined_start_time or None
+    agent_refined_end_time = state.agent_refined_end_time or None
     agent_end_time = agent_refined_end_time or agent_base_end_time
 
     agent_base_duration = None
@@ -41,8 +41,8 @@ def agent_logging(state: MainState, config: RunnableConfig) -> MainOutput:
 
     agent_type = "refined" if agent_refined_duration else "base"
 
-    agent_base_metrics = state["agent_base_metrics"]
-    agent_refined_metrics = state["agent_refined_metrics"]
+    agent_base_metrics = state.agent_base_metrics
+    agent_refined_metrics = state.agent_refined_metrics
 
     combined_agent_metrics = CombinedAgentMetrics(
         timings=AgentTimings(
@@ -81,7 +81,7 @@ def agent_logging(state: MainState, config: RunnableConfig) -> MainOutput:
             db_session = agent_a_config.db_session
             chat_session_id = agent_a_config.chat_session_id
             primary_message_id = agent_a_config.message_id
-            sub_question_answer_results = state["decomp_answer_results"]
+            sub_question_answer_results = state.decomp_answer_results
 
             log_agent_sub_question_results(
                 db_session=db_session,

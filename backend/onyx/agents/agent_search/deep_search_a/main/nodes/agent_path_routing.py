@@ -8,7 +8,7 @@ from onyx.agents.agent_search.deep_search_a.main.states import MainState
 def agent_path_routing(
     state: MainState,
 ) -> Command[Literal["agent_search_start", "LLM"]]:
-    routing = state.get("routing", "agent_search")
+    routing = state.routing if hasattr(state, "routing") else "agent_search"
 
     if routing == "agent_search":
         agent_path = "agent_search_start"

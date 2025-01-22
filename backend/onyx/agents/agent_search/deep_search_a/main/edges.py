@@ -22,7 +22,7 @@ logger = setup_logger()
 def parallelize_initial_sub_question_answering(
     state: MainState,
 ) -> list[Send | Hashable]:
-    if len(state["initial_decomp_questions"]) > 0:
+    if len(state.initial_decomp_questions) > 0:
         # sub_question_record_ids = [subq_record.id for subq_record in state["sub_question_records"]]
         # if len(state["sub_question_records"]) == 0:
         #     if state["config"].use_persistence:
@@ -39,9 +39,10 @@ def parallelize_initial_sub_question_answering(
                 AnswerQuestionInput(
                     question=question,
                     question_id=make_question_id(0, question_nr + 1),
+                    log_messages=[],
                 ),
             )
-            for question_nr, question in enumerate(state["initial_decomp_questions"])
+            for question_nr, question in enumerate(state.initial_decomp_questions)
         ]
 
     else:
@@ -59,7 +60,7 @@ def parallelize_initial_sub_question_answering(
 def continue_to_refined_answer_or_end(
     state: RequireRefinedAnswerUpdate,
 ) -> Literal["refined_sub_question_creation", "logging_node"]:
-    if state["require_refined_answer"]:
+    if state.require_refined_answer:
         return "refined_sub_question_creation"
     else:
         return "logging_node"
@@ -68,16 +69,17 @@ def continue_to_refined_answer_or_end(
 def parallelize_refined_sub_question_answering(
     state: MainState,
 ) -> list[Send | Hashable]:
-    if len(state["refined_sub_questions"]) > 0:
+    if len(state.refined_sub_questions) > 0:
         return [
             Send(
                 "answer_refined_question",
                 AnswerQuestionInput(
                     question=question_data.sub_question,
                     question_id=make_question_id(1, question_nr),
+                    log_messages=[],
                 ),
             )
-            for question_nr, question_data in state["refined_sub_questions"].items()
+            for question_nr, question_data in state.refined_sub_questions.items()
         ]
 
     else:

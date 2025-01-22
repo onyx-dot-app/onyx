@@ -14,6 +14,9 @@ from onyx.agents.agent_search.deep_search_a.expanded_retrieval.nodes.doc_retriev
 from onyx.agents.agent_search.deep_search_a.expanded_retrieval.nodes.doc_verification import (
     doc_verification,
 )
+from onyx.agents.agent_search.deep_search_a.expanded_retrieval.nodes.dummy import (
+    dummy,
+)
 from onyx.agents.agent_search.deep_search_a.expanded_retrieval.nodes.expand_queries import (
     expand_queries,
 )
@@ -53,6 +56,11 @@ def expanded_retrieval_graph_builder() -> StateGraph:
     )
 
     graph.add_node(
+        node="dummy",
+        action=dummy,
+    )
+
+    graph.add_node(
         node="doc_retrieval",
         action=doc_retrieval,
     )
@@ -78,9 +86,13 @@ def expanded_retrieval_graph_builder() -> StateGraph:
         start_key=START,
         end_key="expand_queries",
     )
+    graph.add_edge(
+        start_key="expand_queries",
+        end_key="dummy",
+    )
 
     graph.add_conditional_edges(
-        source="expand_queries",
+        source="dummy",
         path=parallel_retrieval_edge,
         path_map=["doc_retrieval"],
     )
@@ -124,6 +136,7 @@ if __name__ == "__main__":
             question="what can you do with onyx?",
             base_search=False,
             sub_question_id=None,
+            log_messages=[],
         )
         for thing in compiled_graph.stream(
             input=inputs,

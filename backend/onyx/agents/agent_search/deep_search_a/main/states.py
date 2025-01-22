@@ -3,6 +3,8 @@ from operator import add
 from typing import Annotated
 from typing import TypedDict
 
+from pydantic import BaseModel
+
 from onyx.agents.agent_search.core_state import CoreState
 from onyx.agents.agent_search.deep_search_a.expanded_retrieval.models import (
     ExpandedRetrievalResult,
@@ -28,33 +30,36 @@ from onyx.agents.agent_search.shared_graph_utils.operators import (
 )
 from onyx.context.search.models import InferenceSection
 
-
 ### States ###
 
 ## Update States
 
 
-class RefinedAgentStartStats(TypedDict):
-    agent_refined_start_time: datetime | None
+class LoggerUpdate(BaseModel):
+    log_messages: Annotated[list[str], add] = []
 
 
-class RefinedAgentEndStats(TypedDict):
-    agent_refined_end_time: datetime | None
-    agent_refined_metrics: AgentRefinedMetrics
+class RefinedAgentStartStats(BaseModel):
+    agent_refined_start_time: datetime | None = None
 
 
-class BaseDecompUpdateBase(TypedDict):
-    agent_start_time: datetime
-    initial_decomp_questions: list[str]
+class RefinedAgentEndStats(BaseModel):
+    agent_refined_end_time: datetime | None = None
+    agent_refined_metrics: AgentRefinedMetrics = AgentRefinedMetrics()
 
 
-class RoutingDecisionBase(TypedDict):
-    routing: str
-    sample_doc_str: str
+class BaseDecompUpdateBase(BaseModel):
+    agent_start_time: datetime = datetime.now()
+    initial_decomp_questions: list[str] = []
 
 
-class RoutingDecision(RoutingDecisionBase):
-    log_messages: list[str]
+class RoutingDecisionBase(BaseModel):
+    routing: str = ""
+    sample_doc_str: str = ""
+
+
+class RoutingDecision(RoutingDecisionBase, LoggerUpdate):
+    pass
 
 
 class BaseDecompUpdate(
@@ -63,66 +68,72 @@ class BaseDecompUpdate(
     pass
 
 
-class InitialAnswerBASEUpdate(TypedDict):
-    initial_base_answer: str
+class InitialAnswerBASEUpdate(BaseModel):
+    initial_base_answer: str = ""
 
 
-class InitialAnswerUpdateBase(TypedDict):
-    initial_answer: str
-    initial_agent_stats: InitialAgentResultStats | None
-    generated_sub_questions: list[str]
-    agent_base_end_time: datetime
-    agent_base_metrics: AgentBaseMetrics | None
+class InitialAnswerUpdateBase(BaseModel):
+    initial_answer: str = ""
+    initial_agent_stats: InitialAgentResultStats | None = None
+    generated_sub_questions: list[str] = []
+    agent_base_end_time: datetime | None = None
+    agent_base_metrics: AgentBaseMetrics | None = None
 
 
-class InitialAnswerUpdate(InitialAnswerUpdateBase):
-    log_messages: list[str]
+class InitialAnswerUpdate(InitialAnswerUpdateBase, LoggerUpdate):
+    pass
 
 
-class RefinedAnswerUpdateBase(TypedDict):
-    refined_answer: str
-    refined_agent_stats: RefinedAgentStats | None
-    refined_answer_quality: bool
+class RefinedAnswerUpdateBase(BaseModel):
+    refined_answer: str = ""
+    refined_agent_stats: RefinedAgentStats | None = None
+    refined_answer_quality: bool = False
 
 
 class RefinedAnswerUpdate(RefinedAgentEndStats, RefinedAnswerUpdateBase):
     pass
 
 
-class InitialAnswerQualityUpdate(TypedDict):
-    initial_answer_quality: bool
+class InitialAnswerQualityUpdate(BaseModel):
+    initial_answer_quality: bool = False
 
 
-class RequireRefinedAnswerUpdate(TypedDict):
-    require_refined_answer: bool
+class RequireRefinedAnswerUpdate(BaseModel):
+    require_refined_answer: bool = True
 
 
-class DecompAnswersUpdate(TypedDict):
-    documents: Annotated[list[InferenceSection], dedup_inference_sections]
+class DecompAnswersUpdate(BaseModel):
+    documents: Annotated[list[InferenceSection], dedup_inference_sections] = []
     decomp_answer_results: Annotated[
         list[QuestionAnswerResults], dedup_question_answer_results
-    ]
+    ] = []
 
 
-class FollowUpDecompAnswersUpdate(TypedDict):
-    refined_documents: Annotated[list[InferenceSection], dedup_inference_sections]
-    refined_decomp_answer_results: Annotated[list[QuestionAnswerResults], add]
+class FollowUpDecompAnswersUpdate(BaseModel):
+    refined_documents: Annotated[list[InferenceSection], dedup_inference_sections] = []
+    refined_decomp_answer_results: Annotated[list[QuestionAnswerResults], add] = []
 
 
-class ExpandedRetrievalUpdate(TypedDict):
+class ExpandedRetrievalUpdate(BaseModel):
     all_original_question_documents: Annotated[
         list[InferenceSection], dedup_inference_sections
     ]
-    original_question_retrieval_results: list[QueryResult]
-    original_question_retrieval_stats: AgentChunkStats
+    original_question_retrieval_results: list[QueryResult] = []
+    original_question_retrieval_stats: AgentChunkStats = AgentChunkStats()
 
 
-class EntityTermExtractionUpdate(TypedDict):
-    entity_retlation_term_extractions: EntityRelationshipTermExtraction
+class EntityTermExtractionUpdateBase(BaseModel):
+    entity_retlation_term_extractions: EntityRelationshipTermExtraction = (
+        EntityRelationshipTermExtraction()
+    )
 
 
-class FollowUpSubQuestionsUpdateBase(TypedDict):
-    refined_sub_questions: dict[int, FollowUpSubQuestion]
+class EntityTermExtractionUpdate(EntityTermExtractionUpdateBase, LoggerUpdate):
+    pass
+
+
+class FollowUpSubQuestionsUpdateBase(BaseModel):
+    refined_sub_questions: dict[int, FollowUpSubQuestion] = {}
 
 
 class FollowUpSubQuestionsUpdate(
@@ -145,12 +156,13 @@ class MainInput(CoreState):
 class MainState(
     # This includes the core state
     MainInput,
+    LoggerUpdate,
     BaseDecompUpdateBase,
     InitialAnswerUpdateBase,
     InitialAnswerBASEUpdate,
     DecompAnswersUpdate,
     ExpandedRetrievalUpdate,
-    EntityTermExtractionUpdate,
+    EntityTermExtractionUpdateBase,
     InitialAnswerQualityUpdate,
     RequireRefinedAnswerUpdate,
     FollowUpSubQuestionsUpdateBase,

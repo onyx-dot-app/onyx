@@ -30,8 +30,8 @@ def doc_verification(
         verified_documents: list[InferenceSection]
     """
 
-    question = state["question"]
-    doc_to_verify = state["doc_to_verify"]
+    question = state.question
+    doc_to_verify = state.doc_to_verify
     document_content = doc_to_verify.combined_content
 
     agent_a_config = cast(AgentSearchConfig, config["metadata"]["config"])

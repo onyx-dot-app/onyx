@@ -147,6 +147,7 @@ def run_graph(
     # TODO: add these to the environment
     config.perform_initial_search_path_decision = True
     config.perform_initial_search_decomposition = True
+    config.allow_refinement = True
 
     for event in _manage_async_event_streaming(
         compiled_graph=compiled_graph, config=config, graph_input=input
@@ -176,9 +177,9 @@ def run_main_graph(
 ) -> AnswerStream:
     compiled_graph = load_compiled_graph(graph_name)
     if graph_name == "a":
-        input = MainInput_a()
+        input = MainInput_a(base_question=config.search_request.query, log_messages=[])
     else:
-        input = MainInput_a()
+        input = MainInput_a(base_question=config.search_request.query, log_messages=[])
 
     # Agent search is not a Tool per se, but this is helpful for the frontend
     yield ToolCallKickoff(
@@ -238,9 +239,13 @@ if __name__ == "__main__":
         config.perform_initial_search_path_decision = True
         config.perform_initial_search_decomposition = True
         if GRAPH_NAME == "a":
-            input = MainInput_a()
+            input = MainInput_a(
+                base_question=config.search_request.query, log_messages=[]
+            )
         else:
-            input = MainInput_a()
+            input = MainInput_a(
+                base_question=config.search_request.query, log_messages=[]
+            )
         # with open("output.txt", "w") as f:
         tool_responses: list = []
         for output in run_graph(compiled_graph, config, input):

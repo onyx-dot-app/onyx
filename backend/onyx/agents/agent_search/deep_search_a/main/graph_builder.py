@@ -65,6 +65,9 @@ from onyx.agents.agent_search.deep_search_a.main.nodes.refined_answer_decision i
 from onyx.agents.agent_search.deep_search_a.main.nodes.refined_sub_question_creation import (
     refined_sub_question_creation,
 )
+from onyx.agents.agent_search.deep_search_a.main.nodes.retrieval_consolidation import (
+    retrieval_consolidation,
+)
 from onyx.agents.agent_search.deep_search_a.main.states import MainInput
 from onyx.agents.agent_search.deep_search_a.main.states import MainState
 from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
@@ -153,6 +156,12 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
         node="ingest_initial_retrieval",
         action=ingest_initial_base_retrieval,
     )
+
+    graph.add_node(
+        node="retrieval_consolidation",
+        action=retrieval_consolidation,
+    )
+
     graph.add_node(
         node="ingest_initial_sub_question_answers",
         action=ingest_initial_sub_question_answers,
@@ -216,6 +225,21 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
     )
 
     graph.add_edge(
+        start_key=["ingest_initial_retrieval", "ingest_initial_sub_question_answers"],
+        end_key="retrieval_consolidation",
+    )
+
+    graph.add_edge(
+        start_key="retrieval_consolidation",
+        end_key="entity_term_extraction_llm",
+    )
+
+    graph.add_edge(
+        start_key="retrieval_consolidation",
+        end_key="generate_initial_answer",
+    )
+
+    graph.add_edge(
         start_key="LLM",
         end_key=END,
     )
@@ -236,14 +260,14 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
     )
 
     graph.add_edge(
-        start_key=["ingest_initial_sub_question_answers", "ingest_initial_retrieval"],
+        start_key="retrieval_consolidation",
         end_key="generate_initial_answer",
     )
 
-    graph.add_edge(
-        start_key="generate_initial_answer",
-        end_key="entity_term_extraction_llm",
-    )
+    # graph.add_edge(
+    #     start_key="generate_initial_answer",
+    #     end_key="entity_term_extraction_llm",
+    # )
 
     graph.add_edge(
         start_key="generate_initial_answer",
@@ -327,7 +351,9 @@ if __name__ == "__main__":
             db_session, primary_llm, fast_llm, search_request
         )
 
-        inputs = MainInput()
+        inputs = MainInput(
+            base_question=agent_a_config.search_request.query, log_messages=[]
+        )
 
         for thing in compiled_graph.stream(
             input=inputs,

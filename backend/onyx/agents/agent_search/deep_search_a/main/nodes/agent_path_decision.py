@@ -17,6 +17,7 @@ from onyx.agents.agent_search.shared_graph_utils.prompts import (
 )
 from onyx.context.search.models import InferenceSection
 from onyx.db.engine import get_session_context_manager
+from onyx.llm.utils import check_number_of_tokens
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -86,9 +87,13 @@ def agent_path_decision(state: MainState, config: RunnableConfig) -> RoutingDeci
         f"--------{now_end}--{now_end - now_start}--------DECIDING TO SEARCH OR GO TO LLM END---"
     )
 
+    check_number_of_tokens(agent_decision_prompt)
+
     return RoutingDecision(
         # Decide which route to take
         routing=routing,
         sample_doc_str=sample_doc_str,
-        log_messages=[f"Path decision: {routing},  Time taken: {now_end - now_start}"],
+        log_messages=[
+            f"{now_start} -- Path decision: {routing},  Time taken: {now_end - now_start}"
+        ],
     )

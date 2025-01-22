@@ -17,7 +17,7 @@ def ingest_initial_sub_question_answers(
 
     logger.debug(f"--------{now_start}--------INGEST ANSWERS---")
     documents = []
-    answer_results = state.get("answer_results", [])
+    answer_results = state.answer_results if hasattr(state, "answer_results") else []
     for answer_result in answer_results:
         documents.extend(answer_result.documents)
 

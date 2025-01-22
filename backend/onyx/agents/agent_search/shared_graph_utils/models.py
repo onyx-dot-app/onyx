@@ -40,12 +40,12 @@ class AgentChunkScores(BaseModel):
 
 
 class AgentChunkStats(BaseModel):
-    verified_count: int | None
-    verified_avg_scores: float | None
-    rejected_count: int | None
-    rejected_avg_scores: float | None
-    verified_doc_chunk_ids: list[str]
-    dismissed_doc_chunk_ids: list[str]
+    verified_count: int | None = None
+    verified_avg_scores: float | None = None
+    rejected_count: int | None = None
+    rejected_avg_scores: float | None = None
+    verified_doc_chunk_ids: list[str] = []
+    dismissed_doc_chunk_ids: list[str] = []
 
 
 class InitialAgentResultStats(BaseModel):
@@ -60,29 +60,29 @@ class RefinedAgentStats(BaseModel):
 
 
 class Term(BaseModel):
-    term_name: str
-    term_type: str
-    term_similar_to: list[str]
+    term_name: str = ""
+    term_type: str = ""
+    term_similar_to: list[str] = []
 
 
 ### Models ###
 
 
 class Entity(BaseModel):
-    entity_name: str
-    entity_type: str
+    entity_name: str = ""
+    entity_type: str = ""
 
 
 class Relationship(BaseModel):
-    relationship_name: str
-    relationship_type: str
-    relationship_entities: list[str]
+    relationship_name: str = ""
+    relationship_type: str = ""
+    relationship_entities: list[str] = []
 
 
 class EntityRelationshipTermExtraction(BaseModel):
-    entities: list[Entity]
-    relationships: list[Relationship]
-    terms: list[Term]
+    entities: list[Entity] = []
+    relationships: list[Relationship] = []
+    terms: list[Term] = []
 
 
 ### Models ###

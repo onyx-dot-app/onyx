@@ -1,18 +1,19 @@
 from operator import add
 from typing import Annotated
-from typing import TypedDict
+
+from pydantic import BaseModel
 
 
-class CoreState(TypedDict, total=False):
+class CoreState(BaseModel):
     """
     This is the core state that is shared across all subgraphs.
     """
 
-    base_question: str
-    log_messages: Annotated[list[str], add]
+    base_question: str = ""
+    log_messages: Annotated[list[str], add] = []
 
 
-class SubgraphCoreState(TypedDict, total=False):
+class SubgraphCoreState(BaseModel):
     """
     This is the core state that is shared across all subgraphs.
     """

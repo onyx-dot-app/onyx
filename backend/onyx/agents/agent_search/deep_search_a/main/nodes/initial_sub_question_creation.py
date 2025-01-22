@@ -53,7 +53,7 @@ def initial_sub_question_creation(
     history = build_history_prompt(agent_a_config.message_history)
 
     # Use the initial search results to inform the decomposition
-    sample_doc_str = state.get("sample_doc_str", "")
+    sample_doc_str = state.sample_doc_str if hasattr(state, "sample_doc_str") else ""
 
     if not chat_session_id or not primary_message_id:
         raise ValueError(

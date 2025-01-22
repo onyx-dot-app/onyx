@@ -17,15 +17,15 @@ from onyx.agents.agent_search.shared_graph_utils.prompts import UNKNOWN_ANSWER
 
 
 def answer_check(state: AnswerQuestionState, config: RunnableConfig) -> QACheckUpdate:
-    if state["answer"] == UNKNOWN_ANSWER:
+    if state.answer == UNKNOWN_ANSWER:
         return QACheckUpdate(
             answer_quality=SUB_CHECK_NO,
         )
     msg = [
         HumanMessage(
             content=SUB_CHECK_PROMPT.format(
-                question=state["question"],
-                base_answer=state["answer"],
+                question=state.question,
+                base_answer=state.answer,
             )
         )
     ]

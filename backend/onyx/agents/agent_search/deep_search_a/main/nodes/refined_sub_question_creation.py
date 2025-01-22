@@ -37,7 +37,7 @@ def refined_sub_question_creation(
             tool_name="agent_search_1",
             tool_args={
                 "query": agent_a_config.search_request.query,
-                "answer": state["initial_answer"],
+                "answer": state.initial_answer,
             },
         ),
     )
@@ -49,16 +49,16 @@ def refined_sub_question_creation(
     agent_refined_start_time = datetime.now()
 
     question = agent_a_config.search_request.query
-    base_answer = state["initial_answer"]
+    base_answer = state.initial_answer
     history = build_history_prompt(agent_a_config.message_history)
     # get the entity term extraction dict and properly format it
-    entity_retlation_term_extractions = state["entity_retlation_term_extractions"]
+    entity_retlation_term_extractions = state.entity_retlation_term_extractions
 
     entity_term_extraction_str = format_entity_term_extraction(
         entity_retlation_term_extractions
     )
 
-    initial_question_answers = state["decomp_answer_results"]
+    initial_question_answers = state.decomp_answer_results
 
     addressed_question_list = [
         x.question for x in initial_question_answers if "yes" in x.quality.lower()

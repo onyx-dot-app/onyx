@@ -40,9 +40,9 @@ def answer_generation(
     logger.debug(f"--------{now_start}--------START ANSWER GENERATION---")
 
     agent_search_config = cast(AgentSearchConfig, config["metadata"]["config"])
-    question = state["question"]
-    docs = state["documents"]
-    level, question_nr = parse_question_id(state["question_id"])
+    question = state.question
+    docs = state.documents
+    level, question_nr = parse_question_id(state.question_id)
     persona_prompt = get_persona_prompt(agent_search_config.search_request.persona)
 
     if len(docs) == 0:

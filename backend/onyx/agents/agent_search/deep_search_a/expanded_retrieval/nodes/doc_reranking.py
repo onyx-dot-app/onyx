@@ -24,13 +24,13 @@ from onyx.db.engine import get_session_context_manager
 def doc_reranking(
     state: ExpandedRetrievalState, config: RunnableConfig
 ) -> DocRerankingUpdate:
-    verified_documents = state["verified_documents"]
+    verified_documents = state.verified_documents
 
     # Rerank post retrieval and verification. First, create a search query
     # then create the list of reranked sections
 
     agent_a_config = cast(AgentSearchConfig, config["metadata"]["config"])
-    question = state.get("question", agent_a_config.search_request.query)
+    question = state.question if state.question else agent_a_config.search_request.query
     with get_session_context_manager() as db_session:
         _search_query = retrieval_preprocessing(
             search_request=SearchRequest(query=question),

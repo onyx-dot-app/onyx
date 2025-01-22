@@ -64,8 +64,8 @@ def generate_initial_answer(
 
     history = build_history_prompt(agent_a_config.message_history)
 
-    sub_question_docs = state["documents"]
-    all_original_question_documents = state["all_original_question_documents"]
+    sub_question_docs = state.documents
+    all_original_question_documents = state.all_original_question_documents
 
     relevant_docs = dedup_inference_sections(
         sub_question_docs, all_original_question_documents
@@ -92,7 +92,7 @@ def generate_initial_answer(
 
     else:
         # Use the query info from the base document retrieval
-        query_info = get_query_info(state["original_question_retrieval_results"])
+        query_info = get_query_info(state.original_question_retrieval_results)
 
         for tool_response in yield_search_responses(
             query=question,
@@ -117,7 +117,7 @@ def generate_initial_answer(
             if all_original_question_doc not in sub_question_docs:
                 net_new_original_question_docs.append(all_original_question_doc)
 
-        decomp_answer_results = state["decomp_answer_results"]
+        decomp_answer_results = state.decomp_answer_results
 
         good_qa_list: list[str] = []
 
@@ -206,7 +206,7 @@ def generate_initial_answer(
         answer = cast(str, response)
 
         initial_agent_stats = calculate_initial_agent_stats(
-            state["decomp_answer_results"], state["original_question_retrieval_stats"]
+            state.decomp_answer_results, state.original_question_retrieval_stats
         )
 
         logger.debug(
@@ -228,12 +228,8 @@ def generate_initial_answer(
 
     agent_base_metrics = AgentBaseMetrics(
         num_verified_documents_total=len(relevant_docs),
-        num_verified_documents_core=state[
-            "original_question_retrieval_stats"
-        ].verified_count,
-        verified_avg_score_core=state[
-            "original_question_retrieval_stats"
-        ].verified_avg_scores,
+        num_verified_documents_core=state.original_question_retrieval_stats.verified_count,
+        verified_avg_score_core=state.original_question_retrieval_stats.verified_avg_scores,
         num_verified_documents_base=initial_agent_stats.sub_questions.get(
             "num_verified_documents", None
         ),
@@ -246,7 +242,7 @@ def generate_initial_answer(
         support_boost_factor=initial_agent_stats.agent_effectiveness.get(
             "support_ratio", None
         ),
-        duration__s=(agent_base_end_time - state["agent_start_time"]).total_seconds(),
+        duration__s=(agent_base_end_time - state.agent_start_time).total_seconds(),
     )
 
     return InitialAnswerUpdate(
@@ -255,5 +251,7 @@ def generate_initial_answer(
         generated_sub_questions=decomp_questions,
         agent_base_end_time=agent_base_end_time,
         agent_base_metrics=agent_base_metrics,
-        log_messages=[f"Initial answer generation: {now_end - now_start}"],
+        log_messages=[
+            f"{now_start} -- Initial answer generation - Time taken: {now_end - now_start}"
+        ],
     )

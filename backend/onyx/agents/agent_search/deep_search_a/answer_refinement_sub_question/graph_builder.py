@@ -111,6 +111,7 @@ if __name__ == "__main__":
         inputs = AnswerQuestionInput(
             question="what can you do with onyx?",
             question_id="0_0",
+            log_messages=[],
         )
         for thing in compiled_graph.stream(
             input=inputs,

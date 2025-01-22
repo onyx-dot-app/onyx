@@ -25,7 +25,7 @@ def generate_initial_base_search_only_answer(
 
     agent_a_config = cast(AgentSearchConfig, config["metadata"]["config"])
     question = agent_a_config.search_request.query
-    original_question_docs = state["all_original_question_documents"]
+    original_question_docs = state.all_original_question_documents
 
     model = agent_a_config.fast_llm
 

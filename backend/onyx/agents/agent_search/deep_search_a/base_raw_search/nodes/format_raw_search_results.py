@@ -12,7 +12,7 @@ logger = setup_logger()
 def format_raw_search_results(state: ExpandedRetrievalOutput) -> BaseRawSearchOutput:
     logger.debug("format_raw_search_results")
     return BaseRawSearchOutput(
-        base_expanded_retrieval_result=state["expanded_retrieval_result"],
-        # base_retrieval_results=[state["expanded_retrieval_result"]],
+        base_expanded_retrieval_result=state.expanded_retrieval_result,
+        # base_retrieval_results=[state.expanded_retrieval_result],
         # base_search_documents=[],
     )

@@ -48,14 +48,13 @@ def entity_term_extraction_llm(
 
     # first four lines duplicates from generate_initial_answer
     question = agent_a_config.search_request.query
-    sub_question_docs = state["documents"]
-    all_original_question_documents = state["all_original_question_documents"]
+    sub_question_docs = state.documents
+    all_original_question_documents = state.all_original_question_documents
     relevant_docs = dedup_inference_sections(
         sub_question_docs, all_original_question_documents
     )
 
     # start with the entity/term/extraction
-
     doc_context = format_docs(relevant_docs)
 
     doc_context = trim_prompt_piece(
@@ -127,5 +126,8 @@ def entity_term_extraction_llm(
             entities=entities,
             relationships=relationships,
             terms=terms,
-        )
+        ),
+        log_messages=[
+            f"{now_start} -- Entity Term Extraction - Time taken: {now_end - now_start}"
+        ],
     )
