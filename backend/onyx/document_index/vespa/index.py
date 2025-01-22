@@ -743,27 +743,37 @@ class VespaIndex(DocumentIndex):
 
     def admin_retrieval(
         self,
-        query: str,
+        query: str | None,
         filters: IndexFilters,
         num_to_retrieve: int = NUM_RETURNED_HITS,
         offset: int = 0,
+        most_recent: bool = False,
     ) -> list[InferenceChunkUncleaned]:
         vespa_where_clauses = build_vespa_filters(filters, include_hidden=True)
-        yql = (
-            YQL_BASE.format(index_name=self.index_name)
-            + vespa_where_clauses
-            + '({grammar: "weakAnd"}userInput(@query) '
-            # `({defaultIndex: "content_summary"}userInput(@query))` section is
-            # needed for highlighting while the N-gram highlighting is broken /
-            # not working as desired
-            + f'or ({{defaultIndex: "{CONTENT_SUMMARY}"}}userInput(@query)))'
-        )
+
+        if query is None and most_recent:
+            # For most recent documents, sort by time in descending order
+            yql = (
+                f"select * from {self.index_name} where "
+                + vespa_where_clauses.strip()
+                + " order by time desc"
+            )
+        else:
+            yql = (
+                YQL_BASE.format(index_name=self.index_name)
+                + vespa_where_clauses
+                + '({grammar: "weakAnd"}userInput(@query) '
+                # `({defaultIndex: "content_summary"}userInput(@query))` section is
+                # needed for highlighting while the N-gram highlighting is broken /
+                # not working as desired
+                + f'or ({{defaultIndex: "{CONTENT_SUMMARY}"}}userInput(@query)))'
+            )
 
         params: dict[str, str | int] = {
             "yql": yql,
-            "query": query,
+            "query": query or "",  # Convert None to empty string
             "hits": num_to_retrieve,
-            "offset": 0,
+            "offset": offset,
             "ranking.profile": "admin_search",
             "timeout": VESPA_TIMEOUT,
         }

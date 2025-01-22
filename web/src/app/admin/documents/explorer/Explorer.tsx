@@ -148,16 +148,18 @@ export function Explorer({
       clearTimeout(timeoutId);
     }
 
-    if (query && query.trim() !== "") {
-      router.replace(
-        `/admin/documents/explorer?query=${encodeURIComponent(query)}`
-      );
-
-      const newTimeoutId = window.setTimeout(() => onSearch(query), 300);
-      setTimeoutId(newTimeoutId);
-    } else {
-      setResults([]);
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
     }
+
+    // Always update the URL with the current query (or empty string)
+    router.replace(
+      `/admin/documents/explorer?query=${encodeURIComponent(query)}`
+    );
+
+    // Always trigger a search, even with empty query to show most recent documents
+    const newTimeoutId = window.setTimeout(() => onSearch(query), 300);
+    setTimeoutId(newTimeoutId);
   }, [
     query,
     filterManager.selectedDocumentSets,
@@ -220,10 +222,9 @@ export function Explorer({
           })}
         </div>
       )}
-      {!query && (
+      {results.length === 0 && (
         <div className="flex text-emphasis mt-3">
-          Search for a document above to modify its boost or hide it from
-          searches.
+          No documents found. Try adjusting your search query or filters.
         </div>
       )}
     </div>
