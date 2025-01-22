@@ -32,7 +32,7 @@ cloud_tasks_to_schedule = [
     {
         "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check-alembic",
         "task": OnyxCeleryTask.CLOUD_CHECK_ALEMBIC,
-        "schedule": timedelta(minutes=5),
+        "schedule": timedelta(hours=1),
         "options": {
             "priority": OnyxCeleryPriority.HIGH,
             "expires": BEAT_EXPIRES_DEFAULT,
