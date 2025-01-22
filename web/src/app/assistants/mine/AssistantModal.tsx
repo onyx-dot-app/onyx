@@ -124,7 +124,7 @@ export default function AssistantModal({
       heightOverride={`${height}px`}
       onOutsideClick={hideModal}
       removeBottomPadding
-      className={`max-w-4xl max-h-[90vh] ${height} w-[95%] overflow-hidden`}
+      className={`max-w-4xl pb-4 max-h-[90vh] ${height} w-[95%] overflow-hidden`}
     >
       <div className="flex flex-col h-full">
         <div className="flex bg-background flex-col sticky top-0 z-10">
