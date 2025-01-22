@@ -11,11 +11,11 @@ Can you please summarize them in a sentence or two? Do NOT include image urls or
 
 IMG_GENERATION_SUMMARY_PROMPT_NO_IMAGES = """
 You have generated images based on the following query: "{query}".
-The prompts used to generate these images were: {prompts}
+The prompts used to create these images were: {prompts}
 
-Describe what the generated images depict based on the query and prompts provided.
-Summarize the key elements and content of the images in a sentence or two. Be specific
-about what was generated rather than speculating about what the images 'likely' contain.
+Describe the two images you generated, summarizing the key elements and content in a sentence or two.
+Be specific about what was generated and respond as if you have seen them,
+without including any disclaimers or speculations.
 """
 
 
