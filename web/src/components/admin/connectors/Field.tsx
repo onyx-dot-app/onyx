@@ -53,7 +53,7 @@ export function Label({
   return (
     <div
       className={`block font-medium base ${className} ${
-        small ? "text-sm" : "text-base"
+        small ? "text-xs" : "text-sm"
       }`}
     >
       {children}

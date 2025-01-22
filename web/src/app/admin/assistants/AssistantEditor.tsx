@@ -904,47 +904,6 @@ export function AssistantEditor({
                                 : "Image Generation requires an OpenAI or Azure Dalle configuration."
                             }
                           />
-                          {/* <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <CheckboxField
-                                  size="sm"
-                                  id={`enabled_tools_map.${imageGenerationTool.id}`}
-                                  name={`enabled_tools_map.${imageGenerationTool.id}`}
-                                  onCheckedChange={() => {
-                                    if (isImageGenerationAvailable) {
-                                      toggleToolInValues(
-                                        imageGenerationTool.id
-                                      );
-                                    }
-                                  }}
-                                  className={
-                                    !isImageGenerationAvailable
-                                      ? "opacity-50 cursor-not-allowed"
-                                      : ""
-                                  }
-                                />
-                              </TooltipTrigger>
-                              {!isImageGenerationAvailable && (
-                                <TooltipContent side="top" align="center">
-                                  <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                                    {!currentLLMSupportsImageOutput
-                                      ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
-                                      : "Image Generation requires an OpenAI or Azure Dalle configuration."}
-                                  </p>
-                                </TooltipContent>
-                              )}
-                            </Tooltip>
-                          </TooltipProvider> */}
-                          {/* <div className="flex flex-col ml-2">
-                            <span className="text-sm">
-                              {imageGenerationTool.display_name}
-                            </span>
-                            <span className="text-xs text-subtle">
-                              Generate and manipulate images using AI-powered
-                              tools
-                            </span>
-                          </div> */}
                         </div>
                       </>
                     )}
@@ -978,23 +937,12 @@ export function AssistantEditor({
 
                     {customTools.length > 0 &&
                       customTools.map((tool) => (
-                        <React.Fragment key={tool.id}>
-                          <div className="flex items-center content-start mb-2">
-                            <Checkbox
-                              size="sm"
-                              id={`enabled_tools_map.${tool.id}`}
-                              checked={values.enabled_tools_map[tool.id]}
-                              onCheckedChange={() => {
-                                toggleToolInValues(tool.id);
-                              }}
-                            />
-                            <div className="ml-2">
-                              <span className="text-sm">
-                                {tool.display_name}
-                              </span>
-                            </div>
-                          </div>
-                        </React.Fragment>
+                        <BooleanFormField
+                          key={tool.id}
+                          name={`enabled_tools_map.${tool.id}`}
+                          label={tool.display_name}
+                          subtext={tool.description}
+                        />
                       ))}
                   </div>
                 </div>
