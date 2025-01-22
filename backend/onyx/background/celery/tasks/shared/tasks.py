@@ -229,7 +229,7 @@ def cloud_beat_task_generator(
     redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
 
     lock_beat: RedisLock = redis_client.lock(
-        OnyxRedisLocks.CLOUD_CHECK_INDEXING_BEAT_LOCK,
+        OnyxRedisLocks.CLOUD_BEAT_TASK_GENERATOR_LOCK,
         timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     )
 

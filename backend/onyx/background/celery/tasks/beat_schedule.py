@@ -20,6 +20,18 @@ BEAT_EXPIRES_DEFAULT = 15 * 60  # 15 minutes (in seconds)
 # the name attribute must start with ONYX_CELERY_CLOUD_PREFIX = "cloud" to be filtered
 # by the DynamicTenantScheduler
 cloud_tasks_to_schedule = [
+    # cloud specific tasks
+    {
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check-alembic",
+        "task": OnyxCeleryTask.CLOUD_CHECK_ALEMBIC,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "queue": OnyxCeleryQueues.MONITORING,
+            "priority": OnyxCeleryPriority.HIGH,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    # remaining tasks are cloud generators for per tenant tasks
     {
         "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check-for-indexing",
         "task": OnyxCeleryTask.CLOUD_BEAT_TASK_GENERATOR,
