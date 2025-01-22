@@ -890,7 +890,21 @@ export function AssistantEditor({
                     {imageGenerationTool && (
                       <>
                         <div className="flex items-center content-start mb-2">
-                          <TooltipProvider>
+                          <BooleanFormField
+                            name={`enabled_tools_map.${imageGenerationTool.id}`}
+                            label={imageGenerationTool.display_name}
+                            subtext="Generate and manipulate images using AI-powered tools"
+                            disabled={
+                              !currentLLMSupportsImageOutput ||
+                              !isImageGenerationAvailable
+                            }
+                            disabledTooltip={
+                              !currentLLMSupportsImageOutput
+                                ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
+                                : "Image Generation requires an OpenAI or Azure Dalle configuration."
+                            }
+                          />
+                          {/* <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger>
                                 <CheckboxField
@@ -921,8 +935,8 @@ export function AssistantEditor({
                                 </TooltipContent>
                               )}
                             </Tooltip>
-                          </TooltipProvider>
-                          <div className="flex flex-col ml-2">
+                          </TooltipProvider> */}
+                          {/* <div className="flex flex-col ml-2">
                             <span className="text-sm">
                               {imageGenerationTool.display_name}
                             </span>
@@ -930,7 +944,7 @@ export function AssistantEditor({
                               Generate and manipulate images using AI-powered
                               tools
                             </span>
-                          </div>
+                          </div> */}
                         </div>
                       </>
                     )}
@@ -1333,7 +1347,6 @@ export function AssistantEditor({
                         <BooleanFormField
                           small
                           removeIndent
-                          alignTop
                           name="llm_relevance_filter"
                           label="AI Relevance Filter"
                           subtext="If enabled, the LLM will filter out documents that are not useful for answering the user query prior to generating a response. This typically improves the quality of the response but incurs slightly higher cost."
@@ -1342,7 +1355,6 @@ export function AssistantEditor({
                         <BooleanFormField
                           small
                           removeIndent
-                          alignTop
                           name="include_citations"
                           label="Citations"
                           subtext="Response will include citations ([1], [2], etc.) for documents referenced by the LLM. In general, we recommend to leave this enabled in order to increase trust in the LLM answer."
@@ -1355,7 +1367,6 @@ export function AssistantEditor({
                   <BooleanFormField
                     small
                     removeIndent
-                    alignTop
                     name="datetime_aware"
                     label="Date and Time Aware"
                     subtext='Toggle this option to let the assistant know the current date and time (formatted like: "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]]'
