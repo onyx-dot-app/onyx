@@ -221,6 +221,7 @@ def cloud_beat_task_generator(
     task_name: str,
     queue: str = OnyxCeleryTask.DEFAULT,
     priority: int = OnyxCeleryPriority.MEDIUM,
+    expires: int = BEAT_EXPIRES_DEFAULT,
 ) -> bool | None:
     """a lightweight task used to kick off individual beat tasks per tenant."""
     time_start = time.monotonic()
@@ -253,7 +254,7 @@ def cloud_beat_task_generator(
                 ),
                 queue=queue,
                 priority=priority,
-                expires=BEAT_EXPIRES_DEFAULT,
+                expires=expires,
             )
     except SoftTimeLimitExceeded:
         task_logger.info(
