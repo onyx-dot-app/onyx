@@ -47,3 +47,8 @@ class UserUpdate(schemas.BaseUserUpdate):
     Role updates are not allowed through the user update endpoint for security reasons
     Role changes should be handled through a separate, admin-only process
     """
+
+
+class AuthBackend(str, Enum):
+    REDIS = "redis"
+    POSTGRES = "postgres"
