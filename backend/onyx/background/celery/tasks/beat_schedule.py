@@ -17,7 +17,7 @@ from shared_configs.configs import MULTI_TENANT
 BEAT_EXPIRES_DEFAULT = 15 * 60  # 15 minutes (in seconds)
 
 # tasks that only run in the cloud
-# the name attribute must start with ONYX_CELERY_CLOUD_PREFIX = "cloud" to be filtered
+# the name attribute must start with ONYX_CLOUD_CELERY_TASK_PREFIX = "cloud" to be filtered
 # by the DynamicTenantScheduler
 cloud_tasks_to_schedule = [
     # cloud specific tasks
