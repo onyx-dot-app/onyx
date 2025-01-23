@@ -98,6 +98,7 @@ logger = setup_logger()
 # which bloats the result metadata considerably. trail=False prevents this.
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+    ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
     trail=False,
     bind=True,
@@ -872,7 +873,12 @@ def monitor_ccpair_indexing_taskset(
     redis_connector_index.reset()
 
 
-@shared_task(name=OnyxCeleryTask.MONITOR_VESPA_SYNC, soft_time_limit=300, bind=True)
+@shared_task(
+    name=OnyxCeleryTask.MONITOR_VESPA_SYNC,
+    ignore_result=True,
+    soft_time_limit=300,
+    bind=True,
+)
 def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool | None:
     """This is a celery beat task that monitors and finalizes various long running tasks.
 

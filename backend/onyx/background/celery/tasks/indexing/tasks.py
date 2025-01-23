@@ -796,6 +796,7 @@ def connector_indexing_proxy_task(
 
 @shared_task(
     name=OnyxCeleryTask.CLOUD_CHECK_FOR_INDEXING,
+    ignore_result=True,
     trail=False,
     bind=True,
 )

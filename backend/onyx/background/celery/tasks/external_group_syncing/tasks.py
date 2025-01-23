@@ -91,6 +91,7 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_EXTERNAL_GROUP_SYNC,
+    ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )
