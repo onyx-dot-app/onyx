@@ -418,6 +418,18 @@ services:
     # persistence. explicitly setting save and appendonly forces ephemeral behavior.
     command: redis-server --save "" --appendonly no
 
+  # web app to monitor and perform basic management of celery
+  flower:
+    profiles:
+      - beta
+    image: mher/flower:master
+    command: celery -A tasks.app flower
+    volumes:
+      - ../data/flower:/data
+    working_dir: /data
+    ports:
+      - 5555:5555
+      
 volumes:
   db_volume:
   vespa_volume: # Created by the container itself
