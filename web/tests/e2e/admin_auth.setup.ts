@@ -18,6 +18,9 @@ setup("authenticate", async ({ page }) => {
   // Click the login button
   await page.click('button[type="submit"]');
 
+  // Take a screenshot after successful login
+  await page.screenshot({ path: "admin_login_success.png" });
+
   await page.waitForURL("http://localhost:3000/chat");
 
   await page.context().storageState({ path: "admin_auth.json" });
