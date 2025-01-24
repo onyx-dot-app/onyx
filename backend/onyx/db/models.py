@@ -326,6 +326,17 @@ class ChatMessage__SearchDoc(Base):
     )
 
 
+class AgentSubQuery__SearchDoc(Base):
+    __tablename__ = "agent__sub_query__search_doc"
+
+    sub_query_id: Mapped[int] = mapped_column(
+        ForeignKey("agent__sub_query.id"), primary_key=True
+    )
+    search_doc_id: Mapped[int] = mapped_column(
+        ForeignKey("search_doc.id"), primary_key=True
+    )
+
+
 class Document__Tag(Base):
     __tablename__ = "document__tag"
 
@@ -1021,6 +1032,11 @@ class SearchDoc(Base):
         secondary=ChatMessage__SearchDoc.__table__,
         back_populates="search_docs",
     )
+    sub_queries = relationship(
+        "AgentSubQuery",
+        secondary=AgentSubQuery__SearchDoc.__table__,
+        back_populates="search_docs",
+    )
 
 
 class ToolCall(Base):
@@ -1183,6 +1199,11 @@ class ChatMessage(Base):
         uselist=False,
     )
 
+    sub_questions: Mapped[list["AgentSubQuestion"]] = relationship(
+        "AgentSubQuestion",
+        back_populates="primary_message",
+    )
+
     standard_answers: Mapped[list["StandardAnswer"]] = relationship(
         "StandardAnswer",
         secondary=ChatMessage__StandardAnswer.__table__,
@@ -1215,6 +1236,71 @@ class ChatFolder(Base):
             # Bigger ID (created later) show earlier
             return self.id > other.id
         return self.display_priority < other.display_priority
+
+
+class AgentSubQuestion(Base):
+    """
+    A sub-question is a question that is asked of the LLM to gather supporting
+    information to answer a primary question.
+    """
+
+    __tablename__ = "agent__sub_question"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    primary_question_id: Mapped[int] = mapped_column(ForeignKey("chat_message.id"))
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id")
+    )
+    sub_question: Mapped[str] = mapped_column(Text)
+    level: Mapped[int] = mapped_column(Integer)
+    level_question_nr: Mapped[int] = mapped_column(Integer)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    sub_answer: Mapped[str] = mapped_column(Text)
+    sub_question_doc_results: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
+
+    # Relationships
+    primary_message: Mapped["ChatMessage"] = relationship(
+        "ChatMessage",
+        foreign_keys=[primary_question_id],
+        back_populates="sub_questions",
+    )
+    chat_session: Mapped["ChatSession"] = relationship("ChatSession")
+    sub_queries: Mapped[list["AgentSubQuery"]] = relationship(
+        "AgentSubQuery", back_populates="parent_question"
+    )
+
+
+class AgentSubQuery(Base):
+    """
+    A sub-query is a vector DB query that gathers supporting information to answer a sub-question.
+    """
+
+    __tablename__ = "agent__sub_query"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    parent_question_id: Mapped[int] = mapped_column(
+        ForeignKey("agent__sub_question.id")
+    )
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id")
+    )
+    sub_query: Mapped[str] = mapped_column(Text)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships
+    parent_question: Mapped["AgentSubQuestion"] = relationship(
+        "AgentSubQuestion", back_populates="sub_queries"
+    )
+    chat_session: Mapped["ChatSession"] = relationship("ChatSession")
+    search_docs: Mapped[list["SearchDoc"]] = relationship(
+        "SearchDoc",
+        secondary=AgentSubQuery__SearchDoc.__table__,
+        back_populates="sub_queries",
+    )
 
 
 """
@@ -1718,6 +1804,25 @@ class PGFileStore(Base):
     file_type: Mapped[str] = mapped_column(String, default="text/plain")
     file_metadata: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
     lobj_oid: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class AgentSearchMetrics(Base):
+    __tablename__ = "agent__search_metrics"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
+    persona_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
+    agent_type: Mapped[str] = mapped_column(String)
+    start_time: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
+    base_duration__s: Mapped[float] = mapped_column(Float)
+    full_duration__s: Mapped[float] = mapped_column(Float)
+    base_metrics: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    refined_metrics: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    all_metrics: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
 
 
 """

@@ -8,3 +8,5 @@
 *.sw?
 /backend/tests/regression/answer_quality/search_test_config.yaml
 /web/test-results/
+backend/onyx/agent_search/main/test_data.json
+backend/tests/regression/answer_quality/test_data.json

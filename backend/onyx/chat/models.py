@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from typing import Literal
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
@@ -48,6 +49,8 @@ class QADocsResponse(RetrievalDocs):
     applied_source_filters: list[DocumentSource] | None
     applied_time_cutoff: datetime | None
     recency_bias_multiplier: float
+    level: int | None = None
+    level_question_nr: int | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
@@ -61,10 +64,16 @@ class QADocsResponse(RetrievalDocs):
 class StreamStopReason(Enum):
     CONTEXT_LENGTH = "context_length"
     CANCELLED = "cancelled"
+    FINISHED = "finished"
 
 
 class StreamStopInfo(BaseModel):
     stop_reason: StreamStopReason
+
+    stream_type: Literal["", "sub_questions", "sub_answer"] = ""
+    # used to identify the stream that was stopped for agent search
+    level: int | None = None
+    level_question_nr: int | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         data = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
@@ -108,6 +117,8 @@ class OnyxAnswerPiece(BaseModel):
 class CitationInfo(BaseModel):
     citation_num: int
     document_id: str
+    level: int | None = None
+    level_question_nr: int | None = None
 
 
 class AllCitations(BaseModel):
@@ -299,6 +310,40 @@ class PromptConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class SubQueryPiece(BaseModel):
+    sub_query: str
+    level: int
+    level_question_nr: int
+    query_id: int
+
+
+class AgentAnswerPiece(BaseModel):
+    answer_piece: str
+    level: int
+    level_question_nr: int
+    answer_type: Literal["agent_sub_answer", "agent_level_answer"]
+
+
+class SubQuestionPiece(BaseModel):
+    sub_question: str
+    level: int
+    level_question_nr: int
+
+
+class ExtendedToolResponse(ToolResponse):
+    level: int
+    level_question_nr: int
+
+
+ProSearchPacket = (
+    SubQuestionPiece | AgentAnswerPiece | SubQueryPiece | ExtendedToolResponse
+)
+
+AnswerPacket = (
+    AnswerQuestionPossibleReturn | ProSearchPacket | ToolCallKickoff | ToolResponse
+)
+
+
 ResponsePart = (
     OnyxAnswerPiece
     | CitationInfo
@@ -306,4 +351,7 @@ ResponsePart = (
     | ToolResponse
     | ToolCallFinalResult
     | StreamStopInfo
+    | ProSearchPacket
 )
+
+AnswerStream = Iterator[AnswerPacket]

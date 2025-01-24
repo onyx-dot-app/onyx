@@ -128,6 +128,7 @@ export async function* sendMessage({
   useExistingUserMessage,
   alternateAssistantId,
   signal,
+  useLanggraph,
 }: {
   regenerate: boolean;
   message: string;
@@ -146,6 +147,7 @@ export async function* sendMessage({
   useExistingUserMessage?: boolean;
   alternateAssistantId?: number;
   signal?: AbortSignal;
+  useLanggraph?: boolean;
 }): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
     selectedDocumentIds && selectedDocumentIds.length > 0;
@@ -186,6 +188,7 @@ export async function* sendMessage({
           }
         : null,
     use_existing_user_message: useExistingUserMessage,
+    use_agentic_search: useLanggraph,
   });
 
   const response = await fetch(`/api/chat/send-message`, {

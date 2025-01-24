@@ -38,6 +38,9 @@ DEFAULT_PERSONA_ID = 0
 
 DEFAULT_CC_PAIR_ID = 1
 
+# subquestion level and question number for basic flow
+BASIC_KEY = (-1, -1)
+AGENT_SEARCH_INITIAL_KEY = (0, 0)
 # Postgres connection constants for application_name
 POSTGRES_WEB_APP_NAME = "web"
 POSTGRES_INDEXER_APP_NAME = "indexer"

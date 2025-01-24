@@ -4,6 +4,7 @@ from collections.abc import Generator
 from onyx.chat.models import CitationInfo
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import OnyxAnswerPiece
+from onyx.chat.models import ResponsePart
 from onyx.chat.stream_processing.utils import DocumentIdOrderMapping
 from onyx.configs.chat_configs import STOP_STREAM_PAT
 from onyx.prompts.constants import TRIPLE_BACKTICK
@@ -39,6 +40,164 @@ class CitationProcessor:
         self.hold = ""
         self.current_citations: list[int] = []
         self.past_cite_count = 0
+
+    # TODO: should reference previous citation processing, rework previous, or completely use new one?
+    def multi_process_token(
+        self, parsed_object: ResponsePart
+    ) -> Generator[ResponsePart, None, None]:
+        # if isinstance(parsed_object,OnyxAnswerPiece):
+        #     # standard citation processing
+        #     yield from self.process_token(parsed_object.answer_piece)
+
+        # elif isinstance(parsed_object, AgentAnswerPiece):
+        #     # citation processing for agent answer pieces
+        #     for token in self.process_token(parsed_object.answer_piece):
+        #         if isinstance(token, CitationInfo):
+        #             yield token
+        #         else:
+        #             yield AgentAnswerPiece(answer_piece=token.answer_piece or '',
+        #  answer_type=parsed_object.answer_type, level=parsed_object.level,
+        # level_question_nr=parsed_object.level_question_nr)
+
+        # level = getattr(parsed_object, "level", None)
+        # level_question_nr = getattr(parsed_object, "level_question_nr", None)
+
+        # if isinstance(parsed_object, (AgentAnswerPiece, OnyxAnswerPiece)):
+        #     # logger.debug(f"FA {parsed_object.answer_piece}")
+        #     if isinstance(parsed_object, AgentAnswerPiece):
+        #         token = parsed_object.answer_piece
+        #         level = parsed_object.level
+        #         level_question_nr = parsed_object.level_question_nr
+        #     else:
+        #         yield parsed_object
+        #         return
+        #         # raise ValueError(
+        #         #     f"Invalid parsed object type: {type(parsed_object)}"
+        #         # )
+
+        #     if not citation_potential[level][level_question_nr] and token:
+        #         if token.startswith(" ["):
+        #             citation_potential[level][level_question_nr] = True
+        #             current_yield_components[level][level_question_nr] = [token]
+        #         else:
+        #             yield parsed_object
+        #     elif token and citation_potential[level][level_question_nr]:
+        #         current_yield_components[level][level_question_nr].append(token)
+        #         current_yield_str[level][level_question_nr] = "".join(
+        #             current_yield_components[level][level_question_nr]
+        #         )
+
+        #         if current_yield_str[level][level_question_nr].strip().startswith(
+        #             "[D"
+        #         ) or current_yield_str[level][level_question_nr].strip().startswith(
+        #             "[Q"
+        #         ):
+        #             citation_potential[level][level_question_nr] = True
+
+        #         else:
+        #             citation_potential[level][level_question_nr] = False
+        #             parsed_object = _set_combined_token_value(
+        #                 current_yield_str[level][level_question_nr], parsed_object
+        #             )
+        #             yield parsed_object
+
+        #         if (
+        #             len(current_yield_components[level][level_question_nr]) > 15
+        #         ):  # ??? 15?
+        #             citation_potential[level][level_question_nr] = False
+        #             parsed_object = _set_combined_token_value(
+        #                 current_yield_str[level][level_question_nr], parsed_object
+        #             )
+        #             yield parsed_object
+        #         elif "]" in current_yield_str[level][level_question_nr]:
+        #             section_split = current_yield_str[level][level_question_nr].split(
+        #                 "]"
+        #             )
+        #             section_split[0] + "]"  # dead code?
+        #             start_of_next_section = "]".join(section_split[1:])
+        #             citation_string = current_yield_str[level][level_question_nr][
+        #                 : -len(start_of_next_section)
+        #             ]
+        #             if "[D" in citation_string:
+        #                 cite_open_bracket_marker, cite_close_bracket_marker = (
+        #                     "[",
+        #                     "]",
+        #                 )
+        #                 cite_identifyer = "D"
+
+        #                 try:
+        #                     cited_document = int(
+        #                         citation_string[level][level_question_nr][2:-1]
+        #                     )
+        #                     if level and level_question_nr:
+        #                         link = agent_document_citations[int(level)][
+        #                             int(level_question_nr)
+        #                         ][cited_document].link
+        #                     else:
+        #                         link = ""
+        #                 except (ValueError, IndexError):
+        #                     link = ""
+        #             elif "[Q" in citation_string:
+        #                 cite_open_bracket_marker, cite_close_bracket_marker = (
+        #                     "{",
+        #                     "}",
+        #                 )
+        #                 cite_identifyer = "Q"
+        #             else:
+        #                 pass
+
+        #             citation_string = citation_string.replace(
+        #                 "[" + cite_identifyer,
+        #                 cite_open_bracket_marker * 2,
+        #             ).replace("]", cite_close_bracket_marker * 2)
+
+        #             if cite_identifyer == "D":
+        #                 citation_string += f"({link})"
+
+        #             parsed_object = _set_combined_token_value(
+        #                 citation_string, parsed_object
+        #             )
+
+        #             yield parsed_object
+
+        #             current_yield_components[level][level_question_nr] = [
+        #                 start_of_next_section
+        #             ]
+        #             if not start_of_next_section.strip().startswith("["):
+        #                 citation_potential[level][level_question_nr] = False
+
+        # elif isinstance(parsed_object, ExtendedToolResponse):
+        #     if parsed_object.id == "search_response_summary":
+        #         level = parsed_object.level
+        #         level_question_nr = parsed_object.level_question_nr
+        #         for inference_section in parsed_object.response.top_sections:
+        #             doc_link = inference_section.center_chunk.source_links[0]
+        #             doc_title = inference_section.center_chunk.title
+        #             doc_id = inference_section.center_chunk.document_id
+
+        #             if (
+        #                 doc_id
+        #                 not in agent_question_citations_used_docs[level][
+        #                     level_question_nr
+        #                 ]
+        #             ):
+        #                 if level not in agent_document_citations:
+        #                     agent_document_citations[level] = {}
+        #                 if level_question_nr not in agent_document_citations[level]:
+        #                     agent_document_citations[level][level_question_nr] = []
+
+        #                 agent_document_citations[level][level_question_nr].append(
+        #                     AgentDocumentCitations(
+        #                         document_id=doc_id,
+        #                         document_title=doc_title,
+        #                         link=doc_link,
+        #                     )
+        #                 )
+        #                 agent_question_citations_used_docs[level][
+        #                     level_question_nr
+        #                 ].append(doc_id)
+
+        yield parsed_object
 
     def process_token(
         self, token: str | None

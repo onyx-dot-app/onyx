@@ -3,15 +3,20 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
+from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 
+from onyx.agents.agent_search.models import AgentSearchConfig
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import SearchRequest
+from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.search_like_tool_utils import (
@@ -25,6 +30,31 @@ DEFAULT_SEARCH_ARGS = {"query": "search"}
 @pytest.fixture
 def answer_style_config() -> AnswerStyleConfig:
     return AnswerStyleConfig(citation_config=CitationConfig())
+
+
+@pytest.fixture
+def agent_search_config(
+    mock_llm: LLM, mock_search_tool: SearchTool
+) -> AgentSearchConfig:
+    return AgentSearchConfig(
+        search_request=SearchRequest(query=QUERY),
+        primary_llm=mock_llm,
+        fast_llm=mock_llm,
+        search_tool=mock_search_tool,
+        force_use_tool=ForceUseTool(force_use=False, tool_name=""),
+        prompt_builder=AnswerPromptBuilder(
+            user_message=HumanMessage(content=QUERY),
+            message_history=[],
+            llm_config=mock_llm.config,
+            raw_user_query=QUERY,
+            raw_user_uploaded_files=[],
+        ),
+        chat_session_id=None,
+        message_id=1,
+        use_persistence=True,
+        db_session=None,
+        use_agentic_search=False,
+    )
 
 
 @pytest.fixture

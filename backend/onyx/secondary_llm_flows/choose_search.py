@@ -81,7 +81,4 @@ def check_if_need_search(
 
     logger.debug(f"Run search prediction: {require_search_output}")
 
-    if (SKIP_SEARCH.split()[0]).lower() in require_search_output.lower():
-        return False
-
-    return True
+    return (SKIP_SEARCH.split()[0]).lower() not in require_search_output.lower()

@@ -5,10 +5,12 @@ from unittest.mock import Mock
 import pytest
 from pytest_mock import MockerFixture
 
+from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
 from onyx.chat.answer import Answer
 from onyx.chat.answer import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import PromptConfig
+from onyx.context.search.models import SearchRequest
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from tests.regression.answer_quality.run_qa import _process_and_write_query_results
@@ -41,6 +43,12 @@ def test_skip_gen_ai_answer_generation_flag(
     mock_llm.config.model_name = "gpt-4o-mini"
     mock_llm.stream = Mock()
     mock_llm.stream.return_value = [Mock()]
+
+    session = Mock()
+    agent_search_config, _ = get_test_config(
+        session, mock_llm, mock_llm, SearchRequest(query=question)
+    )
+
     answer = Answer(
         question=question,
         answer_style_config=answer_style_config,
@@ -58,6 +66,7 @@ def test_skip_gen_ai_answer_generation_flag(
         skip_explicit_tool_calling=True,
         return_contexts=True,
         skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
+        agent_search_config=agent_search_config,
     )
     count = 0
     for _ in cast(AnswerStream, answer.processed_streamed_output):

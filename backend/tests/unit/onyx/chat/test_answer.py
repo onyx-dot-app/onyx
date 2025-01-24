@@ -11,6 +11,7 @@ from langchain_core.messages import SystemMessage
 from langchain_core.messages import ToolCall
 from langchain_core.messages import ToolCallChunk
 
+from onyx.agents.agent_search.models import AgentSearchConfig
 from onyx.chat.answer import Answer
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationInfo
@@ -30,7 +31,10 @@ from tests.unit.onyx.chat.conftest import QUERY
 
 @pytest.fixture
 def answer_instance(
-    mock_llm: LLM, answer_style_config: AnswerStyleConfig, prompt_config: PromptConfig
+    mock_llm: LLM,
+    answer_style_config: AnswerStyleConfig,
+    prompt_config: PromptConfig,
+    agent_search_config: AgentSearchConfig,
 ) -> Answer:
     return Answer(
         question=QUERY,
@@ -38,6 +42,7 @@ def answer_instance(
         llm=mock_llm,
         prompt_config=prompt_config,
         force_use_tool=ForceUseTool(force_use=False, tool_name="", args=None),
+        agent_search_config=agent_search_config,
     )
 
 
@@ -284,7 +289,8 @@ def test_answer_with_search_no_tool_calling(
 def test_is_cancelled(answer_instance: Answer) -> None:
     # Set up the LLM mock to return multiple chunks
     mock_llm = Mock()
-    answer_instance.llm = mock_llm
+    answer_instance.agent_search_config.primary_llm = mock_llm
+    answer_instance.agent_search_config.fast_llm = mock_llm
     mock_llm.stream.return_value = [
         AIMessageChunk(content="This is the "),
         AIMessageChunk(content="first part."),
@@ -303,6 +309,7 @@ def test_is_cancelled(answer_instance: Answer) -> None:
         if i == 1:
             connection_status["connected"] = False
 
+    print(output)
     assert len(output) == 3
     assert output[0] == OnyxAnswerPiece(answer_piece="This is the ")
     assert output[1] == OnyxAnswerPiece(answer_piece="first part.")
