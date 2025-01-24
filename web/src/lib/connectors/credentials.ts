@@ -224,8 +224,6 @@ export interface AirtableCredentialJson {
 export interface LarkWikiCredentialJson{
   lark_app_id: string;
   lark_app_secret: string;
-  workspace_domain: string;
-  domain: string;
 }
 
 export const credentialTemplates: Record<ValidSources, any> = {
@@ -355,8 +353,6 @@ export const credentialTemplates: Record<ValidSources, any> = {
   lark_wiki:{
     lark_app_id: "",
     lark_app_secret: "",
-    workspace_domain: "",
-    domain: "",
   } as LarkWikiCredentialJson,
 };
 

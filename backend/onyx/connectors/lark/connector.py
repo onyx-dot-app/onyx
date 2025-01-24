@@ -30,22 +30,26 @@ def _parse_timestamp(timestamp: Any, node_token: str) -> Optional[datetime]:
 
 
 class LarkWikiConnector(LoadConnector, PollConnector, SlimConnector):
-    def __init__(self, batch_size: int = 100) -> None:
+    def __init__(self,
+                 api_domain: str = "https://open.feishu.cn",
+                 workspace_domain: str = "https://<your domain>.feishu.cn",
+                 batch_size: int = 100) -> None:
         self.batch_size = batch_size
         self.client = None
+        self.api_domain = api_domain
+        self.workspace_domain = workspace_domain
 
     def load_credentials(self, credentials: Dict[str, Any]) -> None:
-        self.lark_app_id = credentials.get("lark_app_id")
-        self.lark_app_secret = credentials.get("lark_app_secret")
-        self.workspace_domain = credentials.get("space_domain")
-        self.domain = credentials.get("domain","https://open.feishu.cn")
+        lark_app_id = credentials.get("lark_app_id")
+        lark_app_secret = credentials.get("lark_app_secret")
 
-        if not self.lark_app_id or not self.lark_app_secret or not self.workspace_domain:
+        if not lark_app_id or not lark_app_secret:
             raise ConnectorMissingCredentialError("Lark Wiki")
 
         self.client = lark.Client.builder() \
-            .app_id(self.lark_app_id) \
-            .app_secret(self.lark_app_secret) \
+            .app_id(lark_app_id) \
+            .app_secret(lark_app_secret) \
+            .domain(self.api_domain) \
             .build()
 
     def _get_all_spaces(self) -> List[Space]:
