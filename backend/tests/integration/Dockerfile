@@ -78,7 +78,8 @@ COPY supervisord.conf /usr/etc/supervisord.conf
 # Integration test stuff
 COPY ./requirements/dev.txt /tmp/dev-requirements.txt
 RUN pip install --no-cache-dir --upgrade \
-        -r /tmp/dev-requirements.txt
+        -r /tmp/dev-requirements.txt \
+        pytest-xdist==3.5.0  # Ensure pytest-xdist is installed for parallel test execution
 COPY ./tests/integration /app/tests/integration
 
 ENV PYTHONPATH=/app

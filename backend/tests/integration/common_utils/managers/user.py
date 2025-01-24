@@ -1,3 +1,4 @@
+import os
 from copy import deepcopy
 from urllib.parse import urlencode
 from uuid import uuid4
@@ -28,8 +29,14 @@ class UserManager:
         email: str | None = None,
         is_first_user: bool = False,
     ) -> DATestUser:
+        # Get worker ID for parallel execution
+        worker_id = os.environ.get("PYTEST_XDIST_WORKER", "0")
+
         if name is None:
             name = f"test{str(uuid4())}"
+        else:
+            # Make usernames unique per worker to avoid collisions
+            name = f"{name}_{worker_id}"
 
         if email is None:
             email = build_email(name)

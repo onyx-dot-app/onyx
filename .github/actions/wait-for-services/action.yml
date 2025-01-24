@@ -1,0 +1,62 @@
+name: 'Wait for Services'
+description: 'Wait for API and Vespa services to be ready'
+runs:
+  using: "composite"
+  steps:
+    - name: Wait for services to be ready
+      shell: bash
+      run: |
+        echo "Starting wait-for-service script..."
+        docker logs -f danswer-stack-api_server-1 &
+        start_time=$(date +%s)
+        timeout=300  # 5 minutes in seconds
+        
+        # Function to check service health
+        check_service() {
+          local service=$1
+          local url=$2
+          local response
+          response=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "curl_error")
+          if [ "$response" = "200" ]; then
+            echo "$service is ready!"
+            return 0
+          elif [ "$response" = "curl_error" ]; then
+            echo "$service not ready: Connection error"
+            return 1
+          else
+            echo "$service not ready: HTTP status $response"
+            return 1
+          fi
+        }
+        
+        while true; do
+          current_time=$(date +%s)
+          elapsed_time=$((current_time - start_time))
+          
+          if [ $elapsed_time -ge $timeout ]; then
+            echo "Timeout reached. Services did not become ready in 5 minutes."
+            exit 1
+          fi
+          
+          # Check API server health
+          api_ready=false
+          if check_service "API Server" "http://localhost:8080/health"; then
+            api_ready=true
+          fi
+          
+          # Check Vespa health
+          vespa_ready=false
+          if check_service "Vespa" "http://localhost:19071/state/v1/health"; then
+            vespa_ready=true
+          fi
+          
+          # Check if both services are ready
+          if [ "$api_ready" = true ] && [ "$vespa_ready" = true ]; then
+            echo "All services are ready!"
+            break
+          fi
+          
+          echo "Waiting for services to be ready... (${elapsed_time}s elapsed)"
+          sleep 5
+        done
+        echo "Finished waiting for service."

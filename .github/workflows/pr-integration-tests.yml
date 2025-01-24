@@ -18,7 +18,7 @@ env:
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
 
 jobs:
-  integration-tests:
+  build-images:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on, runner=32cpu-linux-x64, "run-id=${{ github.run_id }}"]
     steps:
@@ -88,7 +88,48 @@ jobs:
           cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/integration/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/integration-tests/integration/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
-      # Start containers for multi-tenant tests
+      - name: Save and compress Docker images
+        run: |
+          # Save and compress images in parallel
+          docker save onyxdotapp/onyx-web-server:test | gzip > web-server.tar.gz &
+          docker save onyxdotapp/onyx-backend:test | gzip > backend.tar.gz &
+          docker save onyxdotapp/onyx-model-server:test | gzip > model-server.tar.gz &
+          docker save onyxdotapp/onyx-integration:test | gzip > integration.tar.gz &
+          wait
+
+      - name: Upload Docker images
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          compression-level: 9  # Maximum compression
+          retention-days: 1     # Minimize storage
+          path: |
+            web-server.tar.gz
+            backend.tar.gz
+            model-server.tar.gz
+            integration.tar.gz
+
+  multi-tenant-tests:
+    needs: build-images
+    runs-on: [runs-on, runner=32cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Docker images
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+
+      - name: Load Docker images
+        run: |
+          # Decompress and load images in parallel
+          gunzip -c web-server.tar.gz | docker load &
+          gunzip -c backend.tar.gz | docker load &
+          gunzip -c model-server.tar.gz | docker load &
+          gunzip -c integration.tar.gz | docker load &
+          wait
+
       - name: Start Docker containers for multi-tenant tests
         run: |
           cd deployment/docker_compose
@@ -101,10 +142,12 @@ jobs:
           docker compose -f docker-compose.dev.yml -p danswer-stack up -d
         id: start_docker_multi_tenant
 
-      # In practice, `cloud` Auth type would require OAUTH credentials to be set.
+      - name: Wait for services to be ready
+        uses: ./.github/actions/wait-for-services
+
       - name: Run Multi-Tenant Integration Tests
         run: |
-          echo "Running integration tests..."
+          echo "Running multi-tenant integration tests..."
           docker run --rm --network danswer-stack_default \
             --name test-runner \
             -e POSTGRES_HOST=relational_db \
@@ -119,24 +162,51 @@ jobs:
             -e TEST_WEB_HOSTNAME=test-runner \
             -e AUTH_TYPE=cloud \
             -e MULTI_TENANT=true \
+            -e PYTEST_ADDOPTS="-n auto --dist=loadscope" \
             onyxdotapp/onyx-integration:test \
-            /app/tests/integration/multitenant_tests
-        continue-on-error: true
+            pytest /app/tests/integration/multitenant_tests
         id: run_multitenant_tests
 
-      - name: Check multi-tenant test results
+      - name: Save Docker logs
+        if: always()
         run: |
-          if [ ${{ steps.run_tests.outcome }} == 'failure' ]; then
-            echo "Integration tests failed. Exiting with error."
-            exit 1
-          else
-            echo "All integration tests passed successfully."
-          fi
+          cd deployment/docker_compose
+          docker compose -f docker-compose.dev.yml -p danswer-stack logs > docker-compose.log
+          mv docker-compose.log ${{ github.workspace }}/docker-compose.log
 
-      - name: Stop multi-tenant Docker containers
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-logs
+          path: ${{ github.workspace }}/docker-compose.log
+
+      - name: Stop Docker containers
+        if: always()
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p danswer-stack down -v
+
+  standard-tests:
+    needs: build-images
+    runs-on: [runs-on, runner=32cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Docker images
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+
+      - name: Load Docker images
+        run: |
+          # Decompress and load images in parallel
+          gunzip -c web-server.tar.gz | docker load &
+          gunzip -c backend.tar.gz | docker load &
+          gunzip -c model-server.tar.gz | docker load &
+          gunzip -c integration.tar.gz | docker load &
+          wait
 
       - name: Start Docker containers
         run: |
@@ -149,43 +219,12 @@ jobs:
           docker compose -f docker-compose.dev.yml -p danswer-stack up -d
         id: start_docker
 
-      - name: Wait for service to be ready
-        run: |
-          echo "Starting wait-for-service script..."
-
-          docker logs -f danswer-stack-api_server-1 &
-
-          start_time=$(date +%s)
-          timeout=300  # 5 minutes in seconds
-
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
-            
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. Service did not become ready in 5 minutes."
-              exit 1
-            fi
-            
-            # Use curl with error handling to ignore specific exit code 56
-            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
-            
-            if [ "$response" = "200" ]; then
-              echo "Service is ready!"
-              break
-            elif [ "$response" = "curl_error" ]; then
-              echo "Curl encountered an error, possibly exit code 56. Continuing to retry..."
-            else
-              echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
-            fi
-            
-            sleep 5
-          done
-          echo "Finished waiting for service."
+      - name: Wait for services to be ready
+        uses: ./.github/actions/wait-for-services
 
       - name: Run Standard Integration Tests
         run: |
-          echo "Running integration tests..."
+          echo "Running standard integration tests..."
           docker run --rm --network danswer-stack_default \
             --name test-runner \
             -e POSTGRES_HOST=relational_db \
@@ -201,42 +240,105 @@ jobs:
             -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
             -e CONFLUENCE_ACCESS_TOKEN=${CONFLUENCE_ACCESS_TOKEN} \
             -e TEST_WEB_HOSTNAME=test-runner \
+            -e PYTEST_ADDOPTS="-n auto --dist=loadscope" \
             onyxdotapp/onyx-integration:test \
-            /app/tests/integration/tests \
-            /app/tests/integration/connector_job_tests
-        continue-on-error: true
-        id: run_tests
+            pytest /app/tests/integration/tests
+        id: run_standard_tests
 
-      - name: Check test results
-        run: |
-          if [ ${{ steps.run_tests.outcome }} == 'failure' ]; then
-            echo "Integration tests failed. Exiting with error."
-            exit 1
-          else
-            echo "All integration tests passed successfully."
-          fi
-
-      # save before stopping the containers so the logs can be captured
       - name: Save Docker logs
-        if: success() || failure()
+        if: always()
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p danswer-stack logs > docker-compose.log
           mv docker-compose.log ${{ github.workspace }}/docker-compose.log
 
-      - name: Stop Docker containers
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p danswer-stack down -v
-
       - name: Upload logs
-        if: success() || failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: docker-logs
           path: ${{ github.workspace }}/docker-compose.log
 
       - name: Stop Docker containers
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.dev.yml -p danswer-stack down -v
+
+  connector-tests:
+    needs: build-images
+    runs-on: [runs-on, runner=32cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Docker images
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+
+      - name: Load Docker images
+        run: |
+          # Decompress and load images in parallel
+          gunzip -c web-server.tar.gz | docker load &
+          gunzip -c backend.tar.gz | docker load &
+          gunzip -c model-server.tar.gz | docker load &
+          gunzip -c integration.tar.gz | docker load &
+          wait
+
+      - name: Start Docker containers
+        run: |
+          cd deployment/docker_compose
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
+          AUTH_TYPE=basic \
+          REQUIRE_EMAIL_VERIFICATION=false \
+          DISABLE_TELEMETRY=true \
+          IMAGE_TAG=test \
+          docker compose -f docker-compose.dev.yml -p danswer-stack up -d
+        id: start_docker
+
+      - name: Wait for services to be ready
+        uses: ./.github/actions/wait-for-services
+
+      - name: Run Connector Integration Tests
+        run: |
+          echo "Running connector integration tests..."
+          docker run --rm --network danswer-stack_default \
+            --name test-runner \
+            -e POSTGRES_HOST=relational_db \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=password \
+            -e POSTGRES_DB=postgres \
+            -e VESPA_HOST=index \
+            -e REDIS_HOST=cache \
+            -e API_SERVER_HOST=api_server \
+            -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+            -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
+            -e CONFLUENCE_TEST_SPACE_URL=${CONFLUENCE_TEST_SPACE_URL} \
+            -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
+            -e CONFLUENCE_ACCESS_TOKEN=${CONFLUENCE_ACCESS_TOKEN} \
+            -e TEST_WEB_HOSTNAME=test-runner \
+            -e PYTEST_ADDOPTS="-n auto --dist=loadscope" \
+            onyxdotapp/onyx-integration:test \
+            pytest /app/tests/integration/connector_job_tests
+        id: run_connector_tests
+
+      - name: Save Docker logs
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.dev.yml -p danswer-stack logs > docker-compose.log
+          mv docker-compose.log ${{ github.workspace }}/docker-compose.log
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-logs
+          path: ${{ github.workspace }}/docker-compose.log
+
+      - name: Stop Docker containers
+        if: always()
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p danswer-stack down -v

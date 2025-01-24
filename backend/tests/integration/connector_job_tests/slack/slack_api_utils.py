@@ -176,9 +176,13 @@ class SlackManager:
 
     @staticmethod
     def get_and_provision_available_slack_channels(
-        slack_client: WebClient, admin_user_id: str
+        slack_client: WebClient,
+        admin_user_id: str,
+        channel_prefix: str | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any], str]:
         run_id = str(uuid4())
+        if channel_prefix:
+            run_id = f"{channel_prefix}_{run_id}"
         public_channels = _get_non_general_channels(
             slack_client, get_private=False, get_public=True, only_get_done=True
         )
@@ -271,6 +275,12 @@ class SlackManager:
         slack_client: WebClient,
         test_id: str,
     ) -> None:
+        """Clean up test channels.
+
+        Args:
+            slack_client: Slack client to use
+            test_id: The test run ID. For parallel tests, this includes the worker prefix.
+        """
         channel_types = ["private_channel", "public_channel"]
         channels: list[dict[str, Any]] = []
         for result in make_paginated_slack_api_call_w_retries(

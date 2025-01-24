@@ -165,15 +165,22 @@ def reset_postgres(
             setup_postgres(db_session)
 
 
-def reset_vespa() -> None:
-    """Wipe all data from the Vespa index."""
+def reset_vespa(index_name: str | None = None) -> None:
+    """Wipe all data from the Vespa index.
 
+    Args:
+        index_name: Optional index name for parallel test execution.
+    """
     with get_session_context_manager() as db_session:
         # swap to the correct default model
         check_index_swap(db_session)
 
+        # Get search settings first
         search_settings = get_current_search_settings(db_session)
-        index_name = search_settings.index_name
+
+        # Then handle index name
+        if not index_name:
+            index_name = str(search_settings.index_name)
 
     success = setup_vespa(
         document_index=VespaIndex(index_name=index_name, secondary_index_name=None),
@@ -207,9 +214,12 @@ def reset_vespa() -> None:
             time.sleep(5)
 
 
-def reset_postgres_multitenant() -> None:
-    """Reset the Postgres database for all tenants in a multitenant setup."""
+def reset_postgres_multitenant(worker_id: str = "0") -> None:
+    """Reset the Postgres database for all tenants in a multitenant setup.
 
+    Args:
+        worker_id: The worker ID for parallel test execution. Used to namespace schemas.
+    """
     conn = psycopg2.connect(
         dbname="postgres",
         user=POSTGRES_USER,
@@ -220,17 +230,18 @@ def reset_postgres_multitenant() -> None:
     conn.autocommit = True
     cur = conn.cursor()
 
-    # Get all tenant schemas
+    # Get all tenant schemas for this worker
     cur.execute(
         """
         SELECT schema_name
         FROM information_schema.schemata
-        WHERE schema_name LIKE 'tenant_%'
-        """
+        WHERE schema_name LIKE %s
+        """,
+        [f"tenant_%_{worker_id}"],
     )
     tenant_schemas = cur.fetchall()
 
-    # Drop all tenant schemas
+    # Drop all tenant schemas for this worker
     for schema in tenant_schemas:
         schema_name = schema[0]
         cur.execute(f'DROP SCHEMA "{schema_name}" CASCADE')
@@ -241,19 +252,28 @@ def reset_postgres_multitenant() -> None:
     reset_postgres(config_name="schema_private", setup_onyx=False)
 
 
-def reset_vespa_multitenant() -> None:
-    """Wipe all data from the Vespa index for all tenants."""
+def reset_vespa_multitenant(worker_id: str = "0") -> None:
+    """Wipe all data from the Vespa index for all tenants.
 
+    Args:
+        worker_id: The worker ID for parallel test execution. Used to namespace indices.
+    """
     for tenant_id in get_all_tenant_ids():
-        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        # Make tenant IDs unique per worker
+        worker_tenant_id = f"{tenant_id}_{worker_id}"
+        with get_session_with_tenant(tenant_id=worker_tenant_id) as db_session:
             # swap to the correct default model for each tenant
             check_index_swap(db_session)
 
             search_settings = get_current_search_settings(db_session)
-            index_name = search_settings.index_name
+            # Make index name worker-specific
+            base_index_name = search_settings.index_name
+            worker_index_name = f"{base_index_name}_{worker_id}"
 
         success = setup_vespa(
-            document_index=VespaIndex(index_name=index_name, secondary_index_name=None),
+            document_index=VespaIndex(
+                index_name=str(worker_index_name), secondary_index_name=None
+            ),
             index_setting=IndexingSetting.from_db_model(search_settings),
             secondary_index_setting=None,
         )
@@ -272,7 +292,7 @@ def reset_vespa_multitenant() -> None:
                     if continuation:
                         params = {**params, "continuation": continuation}
                     response = requests.delete(
-                        DOCUMENT_ID_ENDPOINT.format(index_name=index_name),
+                        DOCUMENT_ID_ENDPOINT.format(index_name=worker_index_name),
                         params=params,
                     )
                     response.raise_for_status()
@@ -288,17 +308,35 @@ def reset_vespa_multitenant() -> None:
                 time.sleep(5)
 
 
-def reset_all() -> None:
-    logger.info("Resetting Postgres...")
-    reset_postgres()
+def reset_all(schema_name: str | None = None) -> None:
+    """Reset both Postgres and Vespa.
+
+    Args:
+        schema_name: Optional schema name for parallel test execution.
+    """
+    logger.info(
+        f"Resetting Postgres{f' for schema {schema_name}' if schema_name else ''}..."
+    )
+    reset_postgres(database="postgres", config_name="alembic", setup_onyx=True)
     logger.info("Resetting Vespa...")
-    reset_vespa()
+    # Use schema_name as index suffix if provided
+    if schema_name:
+        with get_session_context_manager() as db_session:
+            search_settings = get_current_search_settings(db_session)
+            index_name = f"{search_settings.index_name}_{schema_name}"
+            reset_vespa(index_name=index_name)
+    else:
+        reset_vespa()
 
 
-def reset_all_multitenant() -> None:
-    """Reset both Postgres and Vespa for all tenants."""
-    logger.info("Resetting Postgres for all tenants...")
-    reset_postgres_multitenant()
-    logger.info("Resetting Vespa for all tenants...")
-    reset_vespa_multitenant()
+def reset_all_multitenant(worker_id: str = "0") -> None:
+    """Reset both Postgres and Vespa for all tenants.
+
+    Args:
+        worker_id: The worker ID for parallel test execution. Used to namespace schemas and indices.
+    """
+    logger.info(f"Resetting Postgres for all tenants (worker {worker_id})...")
+    reset_postgres_multitenant(worker_id=worker_id)
+    logger.info(f"Resetting Vespa for all tenants (worker {worker_id})...")
+    reset_vespa_multitenant(worker_id=worker_id)
     logger.info("Finished resetting all.")
