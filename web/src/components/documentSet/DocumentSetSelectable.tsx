@@ -1,15 +1,25 @@
 import { DocumentSet, ValidSources } from "@/lib/types";
 import { CustomCheckbox } from "../CustomCheckbox";
 import { SourceIcon } from "../SourceIcon";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function DocumentSetSelectable({
   documentSet,
   isSelected,
   onSelect,
+  disabled,
+  disabledTooltip,
 }: {
   documentSet: DocumentSet;
   isSelected: boolean;
   onSelect: () => void;
+  disabled?: boolean;
+  disabledTooltip?: string;
 }) {
   const uniqueSources = new Set<ValidSources>();
   documentSet.cc_pair_descriptors.forEach((ccPairDescriptor) => {
@@ -17,38 +27,59 @@ export function DocumentSetSelectable({
   });
 
   return (
-    <div
-      key={documentSet.id}
-      className={
-        `
-        w-72
-        px-3 
-        py-1
-        rounded-lg 
-        border
-        border-border
-        flex 
-        cursor-pointer ` +
-        (isSelected ? " bg-hover" : " bg-background hover:bg-hover-light")
-      }
-      onClick={onSelect}
-    >
-      <div className="flex w-full">
-        <div className="flex flex-col h-full">
-          <div className="font-bold">{documentSet.name}</div>
-          <div className="text-xs">{documentSet.description}</div>
-          <div className="flex gap-x-2 pt-1 mt-auto mb-1">
-            {Array.from(uniqueSources).map((source) => (
-              <SourceIcon key={source} sourceType={source} iconSize={16} />
-            ))}
+    <TooltipProvider delayDuration={0}>
+      <Tooltip>
+        <TooltipTrigger>
+          <div
+            key={documentSet.id}
+            className={
+              `
+              w-72
+              px-3 
+              py-1
+              rounded-lg 
+              border
+              border-border
+              ${disabled ? "bg-background" : ""}
+              flex 
+              cursor-pointer 
+              ` +
+              (isSelected ? " bg-hover" : " bg-background hover:bg-hover-light")
+            }
+            onClick={disabled ? () => null : onSelect}
+          >
+            <div className="flex w-full">
+              <div className="flex flex-col h-full">
+                <div className="font-bold">{documentSet.name}</div>
+                <div className="text-xs">{documentSet.description}</div>
+                <div className="flex gap-x-2 pt-1 mt-auto mb-1">
+                  {Array.from(uniqueSources).map((source) => (
+                    <SourceIcon
+                      key={source}
+                      sourceType={source}
+                      iconSize={16}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="ml-auto my-auto">
+                <div className="pl-1">
+                  <CustomCheckbox
+                    checked={isSelected}
+                    onChange={() => null}
+                    disabled={disabled}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="ml-auto my-auto">
-          <div className="pl-1">
-            <CustomCheckbox checked={isSelected} onChange={() => null} />
-          </div>
-        </div>
-      </div>
-    </div>
+        </TooltipTrigger>
+        {disabled && (
+          <TooltipContent>
+            <p>{disabledTooltip}</p>
+          </TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
   );
 }
