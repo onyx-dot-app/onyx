@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from httpx_oauth.clients.google import GoogleOAuth2
+from httpx_oauth.clients.openid import BASE_SCOPES
 from httpx_oauth.clients.openid import OpenID
 
 from ee.onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
@@ -93,9 +94,8 @@ def get_application() -> FastAPI:
                     OAUTH_CLIENT_ID,
                     OAUTH_CLIENT_SECRET,
                     OPENID_CONFIG_URL,
-                    # defaults to None, leaving it up to the lib
-                    # to determine the base scopes
-                    base_scopes=OIDC_SCOPE_OVERRIDE,
+                    # BASE_SCOPES is the same as not setting this
+                    base_scopes=OIDC_SCOPE_OVERRIDE or BASE_SCOPES,
                 ),
                 auth_backend,
                 USER_AUTH_SECRET,

@@ -8,11 +8,15 @@ OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL", "")
 # are requested from the OIDC provider. Currently used when passing
 # over access tokens to tool calls and the tool needs more scopes
 OIDC_SCOPE_OVERRIDE: list[str] | None = None
-try:
-    _OIDC_SCOPE_OVERRIDE = os.environ.get("OIDC_SCOPE_OVERRIDE", "")
-    OIDC_SCOPE_OVERRIDE = [scope.strip() for scope in _OIDC_SCOPE_OVERRIDE.split(",")]
-except Exception:
-    pass
+_OIDC_SCOPE_OVERRIDE = os.environ.get("OIDC_SCOPE_OVERRIDE")
+
+if _OIDC_SCOPE_OVERRIDE:
+    try:
+        OIDC_SCOPE_OVERRIDE = [
+            scope.strip() for scope in _OIDC_SCOPE_OVERRIDE.split(",")
+        ]
+    except Exception:
+        pass
 
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/ee/onyx/configs/saml_config"
