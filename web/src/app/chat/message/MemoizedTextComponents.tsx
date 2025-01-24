@@ -22,7 +22,7 @@ export const MemoizedAnchor = memo(
         const index = parseInt(match[1], 10) - 1;
         const associatedDoc = docs?.[index];
         if (!associatedDoc) {
-          return <>{children}</>;
+          return <a href={children as string}>{children}</a>;
         }
 
         let icon: React.ReactNode = null;
@@ -77,9 +77,24 @@ export const MemoizedLink = memo((props: any) => {
     );
   }
 
+  const handleMouseDown = () => {
+    let url = rest.href || rest.children?.toString();
+    if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
+      // Try to construct a valid URL
+      const httpsUrl = `https://${url}`;
+      try {
+        new URL(httpsUrl);
+        url = httpsUrl;
+      } catch {
+        // If not a valid URL, don't modify original url
+      }
+    }
+    window.open(url, "_blank");
+  };
+
   return (
     <a
-      onMouseDown={() => rest.href && window.open(rest.href, "_blank")}
+      onMouseDown={handleMouseDown}
       className="cursor-pointer text-link hover:text-link-hover"
     >
       {rest.children}
