@@ -444,26 +444,10 @@ export function AssistantEditor({
           let enabledTools = Object.keys(values.enabled_tools_map)
             .map((toolId) => Number(toolId))
             .filter((toolId) => values.enabled_tools_map[toolId]);
+
           const searchToolEnabled = searchTool
             ? enabledTools.includes(searchTool.id)
             : false;
-          const imageGenerationToolEnabled = imageGenerationTool
-            ? enabledTools.includes(imageGenerationTool.id)
-            : false;
-
-          if (imageGenerationToolEnabled) {
-            if (
-              // model must support image input for image generation
-              // to work
-              !checkLLMSupportsImageInput(
-                values.llm_model_version_override || defaultModelName || ""
-              )
-            ) {
-              enabledTools = enabledTools.filter(
-                (toolId) => toolId !== imageGenerationTool!.id
-              );
-            }
-          }
 
           // if disable_retrieval is set, set num_chunks to 0
           // to tell the backend to not fetch any documents
@@ -914,25 +898,20 @@ export function AssistantEditor({
                                   id={`enabled_tools_map.${imageGenerationTool.id}`}
                                   name={`enabled_tools_map.${imageGenerationTool.id}`}
                                   onCheckedChange={() => {
-                                    if (
-                                      currentLLMSupportsImageOutput &&
-                                      isImageGenerationAvailable
-                                    ) {
+                                    if (isImageGenerationAvailable) {
                                       toggleToolInValues(
                                         imageGenerationTool.id
                                       );
                                     }
                                   }}
                                   className={
-                                    !currentLLMSupportsImageOutput ||
                                     !isImageGenerationAvailable
                                       ? "opacity-50 cursor-not-allowed"
                                       : ""
                                   }
                                 />
                               </TooltipTrigger>
-                              {(!currentLLMSupportsImageOutput ||
-                                !isImageGenerationAvailable) && (
+                              {!isImageGenerationAvailable && (
                                 <TooltipContent side="top" align="center">
                                   <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
                                     {!currentLLMSupportsImageOutput

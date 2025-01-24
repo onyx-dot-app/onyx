@@ -175,7 +175,14 @@ export async function fetchChatData(searchParams: {
   );
   const sidebarToggled = requestCookies.get(SIDEBAR_TOGGLED_COOKIE_NAME);
 
-  const toggleSidebar = sidebarToggled
+  // IF user is an anoymous user, we don't want to show the sidebar (they have no access to chat history)
+  const toggleSidebar =
+    !user?.is_anonymous_user &&
+    (sidebarToggled
+      ? sidebarToggled.value.toLocaleLowerCase() == "true" || false
+      : NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN);
+
+  sidebarToggled
     ? sidebarToggled.value.toLocaleLowerCase() == "true" || false
     : NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN;
 

@@ -81,7 +81,7 @@ class DynamicTenantScheduler(PersistentScheduler):
                 cloud_task = {
                     "task": task["task"],
                     "schedule": task["schedule"],
-                    "kwargs": {},
+                    "kwargs": task.get("kwargs", {}),
                 }
                 if options := task.get("options"):
                     logger.debug(f"Adding options to task {task_name}: {options}")

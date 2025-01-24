@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from httpx_oauth.clients.google import GoogleOAuth2
+from httpx_oauth.clients.openid import BASE_SCOPES
 from httpx_oauth.clients.openid import OpenID
 
+from ee.onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
 from ee.onyx.configs.app_configs import OPENID_CONFIG_URL
 from ee.onyx.server.analytics.api import router as analytics_router
 from ee.onyx.server.auth_check import check_ee_router_auth
@@ -88,7 +90,13 @@ def get_application() -> FastAPI:
         include_auth_router_with_prefix(
             application,
             create_onyx_oauth_router(
-                OpenID(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OPENID_CONFIG_URL),
+                OpenID(
+                    OAUTH_CLIENT_ID,
+                    OAUTH_CLIENT_SECRET,
+                    OPENID_CONFIG_URL,
+                    # BASE_SCOPES is the same as not setting this
+                    base_scopes=OIDC_SCOPE_OVERRIDE or BASE_SCOPES,
+                ),
                 auth_backend,
                 USER_AUTH_SECRET,
                 associate_by_email=True,

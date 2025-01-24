@@ -62,4 +62,5 @@ export interface CombinedSettings {
   customAnalyticsScript: string | null;
   isMobile?: boolean;
   webVersion: string | null;
+  webDomain: string | null;
 }

@@ -112,6 +112,7 @@ export const getAuthUrlSS = async (
   nextUrl: string | null
 ): Promise<string> => {
   // Returns the auth url for the given auth type
+
   switch (authType) {
     case "disabled":
       return "";

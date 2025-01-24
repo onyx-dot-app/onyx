@@ -5,7 +5,6 @@ import os
 import uuid
 from collections.abc import Callable
 from collections.abc import Generator
-from typing import Tuple
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -15,7 +14,6 @@ from fastapi import Request
 from fastapi import Response
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
-from PIL import Image
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -595,21 +593,6 @@ def seed_chat_from_slack(
 """File upload"""
 
 
-def convert_to_jpeg(file: UploadFile) -> Tuple[io.BytesIO, str]:
-    try:
-        with Image.open(file.file) as img:
-            if img.mode != "RGB":
-                img = img.convert("RGB")
-            jpeg_io = io.BytesIO()
-            img.save(jpeg_io, format="JPEG", quality=85)
-            jpeg_io.seek(0)
-        return jpeg_io, "image/jpeg"
-    except Exception as e:
-        raise HTTPException(
-            status_code=400, detail=f"Failed to convert image: {str(e)}"
-        )
-
-
 @router.post("/file")
 def upload_files_for_chat(
     files: list[UploadFile],
@@ -645,6 +628,9 @@ def upload_files_for_chat(
     )
 
     for file in files:
+        if not file.content_type:
+            raise HTTPException(status_code=400, detail="File content type is required")
+
         if file.content_type not in allowed_content_types:
             if file.content_type in image_content_types:
                 error_detail = "Unsupported image file type. Supported image types include .jpg, .jpeg, .png, .webp."
@@ -676,22 +662,27 @@ def upload_files_for_chat(
 
     file_info: list[tuple[str, str | None, ChatFileType]] = []
     for file in files:
-        if file.content_type in image_content_types:
-            file_type = ChatFileType.IMAGE
-            # Convert image to JPEG
-            file_content, new_content_type = convert_to_jpeg(file)
-        elif file.content_type in csv_content_types:
-            file_type = ChatFileType.CSV
-            file_content = io.BytesIO(file.file.read())
-            new_content_type = file.content_type or ""
-        elif file.content_type in document_content_types:
-            file_type = ChatFileType.DOC
-            file_content = io.BytesIO(file.file.read())
-            new_content_type = file.content_type or ""
+        file_type = (
+            ChatFileType.IMAGE
+            if file.content_type in image_content_types
+            else ChatFileType.CSV
+            if file.content_type in csv_content_types
+            else ChatFileType.DOC
+            if file.content_type in document_content_types
+            else ChatFileType.PLAIN_TEXT
+        )
+
+        if file_type == ChatFileType.IMAGE:
+            file_content = file.file
+            # NOTE: Image conversion to JPEG used to be enforced here.
+            # This was removed to:
+            # 1. Preserve original file content for downloads
+            # 2. Maintain transparency in formats like PNG
+            # 3. Ameliorate issue with file conversion
         else:
-            file_type = ChatFileType.PLAIN_TEXT
             file_content = io.BytesIO(file.file.read())
-            new_content_type = file.content_type or ""
+
+        new_content_type = file.content_type
 
         # store the file (now JPEG for images)
         file_id = str(uuid.uuid4())

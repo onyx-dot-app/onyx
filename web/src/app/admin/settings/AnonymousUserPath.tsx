@@ -1,21 +1,21 @@
 "use client";
 
 import useSWR from "swr";
-import { useState } from "react";
+import { useContext, useState } from "react";
 
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { Button } from "@/components/ui/button";
-import { NEXT_PUBLIC_WEB_DOMAIN } from "@/lib/constants";
 import { ClipboardIcon } from "@/components/icons/icons";
 import { Input } from "@/components/ui/input";
 import { ThreeDotsLoader } from "@/components/Loading";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 export function AnonymousUserPath({
   setPopup,
 }: {
   setPopup: (popup: PopupSpec) => void;
 }) {
-  const fetcher = (url: string) => fetch(url).then((res) => res.json());
+  const settings = useContext(SettingsContext);
   const [customPath, setCustomPath] = useState<string | null>(null);
 
   const {
@@ -116,7 +116,7 @@ export function AnonymousUserPath({
         <div className="flex flex-col gap-2 justify-center items-start">
           <div className="w-full flex-grow  flex items-center rounded-md shadow-sm">
             <span className="inline-flex items-center rounded-l-md border border-r-0 border-gray-300 bg-gray-50 px-3 text-gray-500 sm:text-sm h-10">
-              {NEXT_PUBLIC_WEB_DOMAIN}/anonymous/
+              {settings?.webDomain}/anonymous/
             </span>
             <Input
               type="text"
@@ -141,7 +141,7 @@ export function AnonymousUserPath({
               className="h-10 px-4"
               onClick={() => {
                 navigator.clipboard.writeText(
-                  `${NEXT_PUBLIC_WEB_DOMAIN}/anonymous/${anonymousUserPath}`
+                  `${settings?.webDomain}/anonymous/${anonymousUserPath}`
                 );
                 setPopup({
                   message: "Invite link copied!",

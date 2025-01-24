@@ -36,6 +36,7 @@ export default function TextView({
       "text/plain",
       "text/x-rst",
       "text/x-org",
+      "txt",
     ];
     return markdownFormats.some((format) => mimeType.startsWith(format));
   };
@@ -117,7 +118,10 @@ export default function TextView({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl w-[90vw] flex flex-col justify-between gap-y-0 h-full max-h-[80vh] p-0">
+      <DialogContent
+        hideCloseIcon
+        className="max-w-5xl w-[90vw] flex flex-col justify-between gap-y-0 h-full max-h-[80vh] p-0"
+      >
         <DialogHeader className="px-4 mb-0 pt-2 pb-3 flex flex-row items-center justify-between border-b">
           <DialogTitle className="text-lg font-medium truncate">
             {fileName}

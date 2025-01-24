@@ -5,7 +5,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ChatInputOption } from "./ChatInputOption";
-import { AnthropicSVG } from "@/components/icons/icons";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
   checkLLMSupportsImageInput,
@@ -18,6 +17,14 @@ import {
 } from "@/app/admin/configuration/llm/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { LlmOverrideManager } from "@/lib/hooks";
+
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { FiAlertTriangle } from "react-icons/fi";
 
 interface LLMPopoverProps {
   llmProviders: LLMProviderDescriptor[];
@@ -139,6 +146,22 @@ export default function LLMPopover({
                       );
                     }
                   })()}
+                  {llmOverrideManager.imageFilesPresent &&
+                    !checkLLMSupportsImageInput(name) && (
+                      <TooltipProvider>
+                        <Tooltip delayDuration={0}>
+                          <TooltipTrigger className="my-auto flex items-center ml-auto">
+                            <FiAlertTriangle className="text-alert" size={16} />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">
+                              This LLM is not vision-capable and cannot process
+                              image files present in your chat session.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                 </button>
               );
             }

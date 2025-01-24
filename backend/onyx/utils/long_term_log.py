@@ -35,12 +35,16 @@ class LongTermLogger:
     def _cleanup_old_files(self, category_path: Path) -> None:
         try:
             files = sorted(
-                [f for f in category_path.glob("*.json") if f.is_file()],
+                [f for f in category_path.glob("*.json")],
                 key=lambda x: x.stat().st_mtime,  # Sort by modification time
                 reverse=True,
             )
+
             # Delete oldest files that exceed the limit
             for file in files[self.max_files_per_category :]:
+                if not file.is_file():
+                    logger.debug(f"File already deleted: {file}")
+                    continue
                 try:
                     file.unlink()
                 except Exception as e:

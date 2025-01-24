@@ -1,6 +1,8 @@
 import json
+import time
 from collections.abc import Callable
 from datetime import timedelta
+from itertools import islice
 from typing import Any
 
 from celery import shared_task
@@ -10,13 +12,17 @@ from pydantic import BaseModel
 from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.vespa.tasks import celery_get_queue_length
+from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
+from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
+from onyx.db.engine import get_all_tenant_ids
 from onyx.db.engine import get_db_current_time
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import IndexingStatus
@@ -26,7 +32,9 @@ from onyx.db.models import DocumentSet
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SyncRecord
 from onyx.db.models import UserGroup
+from onyx.db.search_settings import get_active_search_settings
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_pool import redis_lock_dump
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 
@@ -177,6 +185,10 @@ def _build_connector_start_latency_metric(
 
     start_latency = (recent_attempt.time_started - desired_start_time).total_seconds()
 
+    task_logger.info(
+        f"Start latency for index attempt {recent_attempt.id}: {start_latency:.2f}s "
+        f"(desired: {desired_start_time}, actual: {recent_attempt.time_started})"
+    )
     return Metric(
         key=metric_key,
         name="connector_start_latency",
@@ -210,6 +222,9 @@ def _build_run_success_metrics(
             IndexingStatus.FAILED,
             IndexingStatus.CANCELED,
         ]:
+            task_logger.info(
+                f"Adding run success metric for index attempt {attempt.id} with status {attempt.status}"
+            )
             metrics.append(
                 Metric(
                     key=metric_key,
@@ -230,25 +245,29 @@ def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Me
     # Get all connector credential pairs
     cc_pairs = db_session.scalars(select(ConnectorCredentialPair)).all()
 
+    active_search_settings = get_active_search_settings(db_session)
     metrics = []
-    for cc_pair in cc_pairs:
-        # Get all attempts in the last hour
+
+    for cc_pair, search_settings in zip(cc_pairs, active_search_settings):
         recent_attempts = (
             db_session.query(IndexAttempt)
             .filter(
                 IndexAttempt.connector_credential_pair_id == cc_pair.id,
-                IndexAttempt.time_created >= one_hour_ago,
+                IndexAttempt.search_settings_id == search_settings.id,
             )
             .order_by(IndexAttempt.time_created.desc())
+            .limit(2)
             .all()
         )
-        most_recent_attempt = recent_attempts[0] if recent_attempts else None
+        if not recent_attempts:
+            continue
+
+        most_recent_attempt = recent_attempts[0]
         second_most_recent_attempt = (
             recent_attempts[1] if len(recent_attempts) > 1 else None
         )
 
-        # if no metric to emit, skip
-        if most_recent_attempt is None:
+        if one_hour_ago > most_recent_attempt.time_created:
             continue
 
         # Connector start latency
@@ -291,7 +310,7 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
             f"{sync_record.entity_id}:{sync_record.id}"
         )
         if _has_metric_been_emitted(redis_std, metric_key):
-            task_logger.debug(
+            task_logger.info(
                 f"Skipping metric for sync record {sync_record.id} "
                 "because it has already been emitted"
             )
@@ -311,11 +330,15 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
 
         if sync_speed is None:
             task_logger.error(
-                "Something went wrong with sync speed calculation. "
-                f"Sync record: {sync_record.id}"
+                f"Something went wrong with sync speed calculation. "
+                f"Sync record: {sync_record.id}, duration: {sync_duration_mins}, "
+                f"docs synced: {sync_record.num_docs_synced}"
             )
             continue
 
+        task_logger.info(
+            f"Calculated sync speed for record {sync_record.id}: {sync_speed} docs/min"
+        )
         metrics.append(
             Metric(
                 key=metric_key,
@@ -334,7 +357,7 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
             f":{sync_record.entity_id}:{sync_record.id}"
         )
         if _has_metric_been_emitted(redis_std, start_latency_key):
-            task_logger.debug(
+            task_logger.info(
                 f"Skipping start latency metric for sync record {sync_record.id} "
                 "because it has already been emitted"
             )
@@ -352,7 +375,7 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
             )
         else:
             # Skip other sync types
-            task_logger.debug(
+            task_logger.info(
                 f"Skipping sync record {sync_record.id} "
                 f"with type {sync_record.sync_type} "
                 f"and id {sync_record.entity_id} "
@@ -371,12 +394,15 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
         start_latency = (
             sync_record.sync_start_time - entity.time_last_modified_by_user
         ).total_seconds()
+        task_logger.info(
+            f"Calculated start latency for sync record {sync_record.id}: {start_latency} seconds"
+        )
         if start_latency < 0:
             task_logger.error(
                 f"Start latency is negative for sync record {sync_record.id} "
-                f"with type {sync_record.sync_type} and id {sync_record.entity_id}."
-                "This is likely because the entity was updated between the time the "
-                "time the sync finished and this job ran. Skipping."
+                f"with type {sync_record.sync_type} and id {sync_record.entity_id}. "
+                f"Sync start time: {sync_record.sync_start_time}, "
+                f"Entity last modified: {entity.time_last_modified_by_user}"
             )
             continue
 
@@ -457,3 +483,116 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
             lock_monitoring.release()
 
         task_logger.info("Background monitoring task finished")
+
+
+@shared_task(
+    name=OnyxCeleryTask.CLOUD_CHECK_ALEMBIC,
+)
+def cloud_check_alembic() -> bool | None:
+    """A task to verify that all tenants are on the same alembic revision.
+
+    This check is expected to fail if a cloud alembic migration is currently running
+    across all tenants.
+
+    TODO: have the cloud migration script set an activity signal that this check
+    uses to know it doesn't make sense to run a check at the present time.
+    """
+    time_start = time.monotonic()
+
+    redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+
+    lock_beat: RedisLock = redis_client.lock(
+        OnyxRedisLocks.CLOUD_CHECK_ALEMBIC_BEAT_LOCK,
+        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    )
+
+    # these tasks should never overlap
+    if not lock_beat.acquire(blocking=False):
+        return None
+
+    last_lock_time = time.monotonic()
+
+    tenant_to_revision: dict[str, str | None] = {}
+    revision_counts: dict[str, int] = {}
+    out_of_date_tenants: dict[str, str | None] = {}
+    top_revision: str = ""
+
+    try:
+        # map each tenant_id to its revision
+        tenant_ids = get_all_tenant_ids()
+        for tenant_id in tenant_ids:
+            current_time = time.monotonic()
+            if current_time - last_lock_time >= (CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4):
+                lock_beat.reacquire()
+                last_lock_time = current_time
+
+            if tenant_id is None:
+                continue
+
+            with get_session_with_tenant(tenant_id=None) as session:
+                result = session.execute(
+                    text(f'SELECT * FROM "{tenant_id}".alembic_version LIMIT 1')
+                )
+
+                result_scalar: str | None = result.scalar_one_or_none()
+                tenant_to_revision[tenant_id] = result_scalar
+
+        # get the total count of each revision
+        for k, v in tenant_to_revision.items():
+            if v is None:
+                continue
+
+            revision_counts[v] = revision_counts.get(v, 0) + 1
+
+        # get the revision with the most counts
+        sorted_revision_counts = sorted(
+            revision_counts.items(), key=lambda item: item[1], reverse=True
+        )
+
+        if len(sorted_revision_counts) == 0:
+            task_logger.error(
+                f"cloud_check_alembic - No revisions found for {len(tenant_ids)} tenant ids!"
+            )
+        else:
+            top_revision, _ = sorted_revision_counts[0]
+
+            # build a list of out of date tenants
+            for k, v in tenant_to_revision.items():
+                if v == top_revision:
+                    continue
+
+                out_of_date_tenants[k] = v
+
+    except SoftTimeLimitExceeded:
+        task_logger.info(
+            "Soft time limit exceeded, task is being terminated gracefully."
+        )
+    except Exception:
+        task_logger.exception("Unexpected exception during cloud alembic check")
+        raise
+    finally:
+        if lock_beat.owned():
+            lock_beat.release()
+        else:
+            task_logger.error("cloud_check_alembic - Lock not owned on completion")
+            redis_lock_dump(lock_beat, redis_client)
+
+    if len(out_of_date_tenants) > 0:
+        task_logger.error(
+            f"Found out of date tenants: "
+            f"num_out_of_date_tenants={len(out_of_date_tenants)} "
+            f"num_tenants={len(tenant_ids)} "
+            f"revision={top_revision}"
+        )
+        for k, v in islice(out_of_date_tenants.items(), 5):
+            task_logger.info(f"Out of date tenant: tenant={k} revision={v}")
+    else:
+        task_logger.info(
+            f"All tenants are up to date: num_tenants={len(tenant_ids)} revision={top_revision}"
+        )
+
+    time_elapsed = time.monotonic() - time_start
+    task_logger.info(
+        f"cloud_check_alembic finished: num_tenants={len(tenant_ids)} elapsed={time_elapsed:.2f}"
+    )
+    return True

@@ -6,6 +6,7 @@ import {
 } from "@/app/admin/settings/interfaces";
 import {
   CUSTOM_ANALYTICS_ENABLED,
+  HOST_URL,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
 } from "@/lib/constants";
 import { fetchSS } from "@/lib/utilsSS";
@@ -99,6 +100,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       enterpriseSettings,
       customAnalyticsScript,
       webVersion,
+      webDomain: HOST_URL,
     };
 
     return combinedSettings;

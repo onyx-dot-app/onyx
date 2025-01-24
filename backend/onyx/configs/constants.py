@@ -294,7 +294,8 @@ class OnyxRedisLocks:
     SLACK_BOT_HEARTBEAT_PREFIX = "da_heartbeat:slack_bot"
     ANONYMOUS_USER_ENABLED = "anonymous_user_enabled"
 
-    CLOUD_CHECK_INDEXING_BEAT_LOCK = "da_lock:cloud_check_indexing_beat"
+    CLOUD_BEAT_TASK_GENERATOR_LOCK = "da_lock:cloud_beat_task_generator"
+    CLOUD_CHECK_ALEMBIC_BEAT_LOCK = "da_lock:cloud_check_alembic"
 
 
 class OnyxRedisSignals:
@@ -317,6 +318,11 @@ ONYX_CLOUD_TENANT_ID = "cloud"
 
 
 class OnyxCeleryTask:
+    DEFAULT = "celery"
+
+    CLOUD_BEAT_TASK_GENERATOR = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_generate_beat_tasks"
+    CLOUD_CHECK_ALEMBIC = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_alembic"
+
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
     CHECK_FOR_INDEXING = "check_for_indexing"
@@ -324,8 +330,10 @@ class OnyxCeleryTask:
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
+
     MONITOR_VESPA_SYNC = "monitor_vespa_sync"
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
+
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"
@@ -342,8 +350,6 @@ class OnyxCeleryTask:
     VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     AUTOGENERATE_USAGE_REPORT_TASK = "autogenerate_usage_report_task"
-
-    CLOUD_CHECK_FOR_INDEXING = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_for_indexing"
 
 
 REDIS_SOCKET_KEEPALIVE_OPTIONS = {}

@@ -49,6 +49,7 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -1623,7 +1624,7 @@ export function ChatPage({
       setPopup({
         type: "error",
         message:
-          "The current Assistant does not support image input. Please select an assistant with Vision support.",
+          "The current model does not support image input. Please select a model with Vision support.",
       });
       return;
     }
@@ -1841,6 +1842,14 @@ export function ChatPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messageHistory]);
 
+  const imageFileInMessageHistory = useMemo(() => {
+    return messageHistory
+      .filter((message) => message.type === "user")
+      .some((message) =>
+        message.files.some((file) => file.type === ChatFileType.IMAGE)
+      );
+  }, [messageHistory]);
+
   const currentVisibleRange = visibleRange.get(currentSessionId()) || {
     start: 0,
     end: 0,
@@ -1920,6 +1929,10 @@ export function ChatPage({
 
     handleSlackChatRedirect();
   }, [searchParams, router]);
+
+  useEffect(() => {
+    llmOverrideManager.updateImageFilesPresent(imageFileInMessageHistory);
+  }, [imageFileInMessageHistory]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
