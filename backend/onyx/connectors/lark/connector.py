@@ -130,7 +130,7 @@ class LarkWikiConnector(LoadConnector, PollConnector, SlimConnector):
                         id=f"lark_wiki:{space.space_id}:{node.obj_token}",
                         sections=[
                             Section(
-                                link=f"https://{self.workspace_domain}/wiki/{node.obj_token}",
+                                link=f"{self.workspace_domain}/wiki/{node.node_token}",
                                 text=document.content
                             )
                         ],
