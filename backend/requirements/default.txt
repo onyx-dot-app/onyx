@@ -87,3 +87,4 @@ mistune==0.8.4
 sentry-sdk==2.14.0
 prometheus_client==0.21.0
 fastapi-limiter==0.1.6
+lark_oapi==1.4.8
