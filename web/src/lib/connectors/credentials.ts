@@ -221,6 +221,13 @@ export interface AirtableCredentialJson {
   airtable_access_token: string;
 }
 
+export interface LarkWikiCredentialJson{
+  lark_app_id: string;
+  lark_app_secret: string;
+  workspace_domain: string;
+  domain: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -344,6 +351,13 @@ export const credentialTemplates: Record<ValidSources, any> = {
   // NOTE: These are Special Cases
   google_drive: { google_tokens: "" } as GoogleDriveCredentialJson,
   gmail: { google_tokens: "" } as GmailCredentialJson,
+
+  lark_wiki:{
+    lark_app_id: "",
+    lark_app_secret: "",
+    workspace_domain: "",
+    domain: "",
+  } as LarkWikiCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
