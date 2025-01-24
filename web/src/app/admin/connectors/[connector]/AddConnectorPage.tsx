@@ -2,6 +2,8 @@
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
+import { createConnectorAndAssociateCredential } from "@/lib/connector";
+import { ValidInputTypes } from "@/lib/types";
 
 import Title from "@/components/ui/title";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -11,7 +13,7 @@ import { useFormContext } from "@/components/context/FormContext";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useEffect, useState } from "react";
-import { deleteCredential, linkCredential } from "@/lib/credential";
+import { deleteCredential } from "@/lib/credential";
 import { submitFiles } from "./pages/utils/files";
 import { submitGoogleSite } from "./pages/utils/google_site";
 import AdvancedFormPage from "./pages/Advanced";
@@ -19,11 +21,7 @@ import DynamicConnectionForm from "./pages/DynamicConnectorCreationForm";
 import CreateCredential from "@/components/credentials/actions/CreateCredential";
 import ModifyCredential from "@/components/credentials/actions/ModifyCredential";
 import { ConfigurableSources, oauthSupportedSources } from "@/lib/types";
-import {
-  Credential,
-  credentialTemplates,
-  OAuthDetails,
-} from "@/lib/connectors/credentials";
+import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
 import {
   ConnectionConfiguration,
   connectorConfigs,
@@ -32,8 +30,6 @@ import {
   defaultPruneFreqDays,
   defaultRefreshFreqMinutes,
   isLoadState,
-  Connector,
-  ConnectorBase,
 } from "@/lib/connectors/connectors";
 import { Modal } from "@/components/Modal";
 import { GmailMain } from "./pages/gmail/GmailPage";
@@ -62,62 +58,6 @@ export interface AdvancedConfig {
   refreshFreq: number;
   pruneFreq: number;
   indexingStart: string;
-}
-
-const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
-
-export async function submitConnector<T>(
-  connector: ConnectorBase<T>,
-  connectorId?: number,
-  fakeCredential?: boolean
-): Promise<{ message: string; isSuccess: boolean; response?: Connector<T> }> {
-  const isUpdate = connectorId !== undefined;
-  if (!connector.connector_specific_config) {
-    connector.connector_specific_config = {} as T;
-  }
-
-  try {
-    if (fakeCredential) {
-      const response = await fetch(
-        "/api/manage/admin/connector-with-mock-credential",
-        {
-          method: isUpdate ? "PATCH" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ ...connector }),
-        }
-      );
-      if (response.ok) {
-        const responseJson = await response.json();
-        return { message: "Success!", isSuccess: true, response: responseJson };
-      } else {
-        const errorData = await response.json();
-        return { message: `Error: ${errorData.detail}`, isSuccess: false };
-      }
-    } else {
-      const response = await fetch(
-        BASE_CONNECTOR_URL + (isUpdate ? `/${connectorId}` : ""),
-        {
-          method: isUpdate ? "PATCH" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(connector),
-        }
-      );
-
-      if (response.ok) {
-        const responseJson = await response.json();
-        return { message: "Success!", isSuccess: true, response: responseJson };
-      } else {
-        const errorData = await response.json();
-        return { message: `Error: ${errorData.detail}`, isSuccess: false };
-      }
-    }
-  } catch (error) {
-    return { message: `Error: ${error}`, isSuccess: false };
-  }
 }
 
 export default function AddConnector({
@@ -236,8 +176,12 @@ export default function AddConnector({
     refresh();
   };
 
-  const onSuccess = () => {
-    router.push("/admin/indexing/status?message=connector-created");
+  const onSuccess = (cc_pair_id?: number) => {
+    if (cc_pair_id) {
+      router.push(`/admin/connector/${cc_pair_id}`);
+    } else {
+      router.push("/admin/indexing/status?message=connector-created");
+    }
   };
 
   const handleAuthorize = async () => {
@@ -372,55 +316,34 @@ export default function AddConnector({
           return;
         }
 
-        const { message, isSuccess, response } = await submitConnector<any>(
-          {
-            connector_specific_config: transformedConnectorSpecificConfig,
-            input_type: isLoadState(connector) ? "load_state" : "poll", // single case
-            name: name,
-            source: connector,
-            access_type: access_type,
-            refresh_freq: advancedConfiguration.refreshFreq || null,
-            prune_freq: advancedConfiguration.pruneFreq || null,
-            indexing_start: advancedConfiguration.indexingStart || null,
-            groups: groups,
-          },
-          undefined,
-          credentialActivated ? false : true
-        );
-        // If no credential
-        if (!credentialActivated) {
-          if (isSuccess) {
-            onSuccess();
-          } else {
-            setPopup({ message: message, type: "error" });
-          }
-        }
+        const credential =
+          currentCredential || liveGDriveCredential || liveGmailCredential;
 
-        // Without credential
-        if (credentialActivated && isSuccess && response) {
-          const credential =
-            currentCredential || liveGDriveCredential || liveGmailCredential;
-          const linkCredentialResponse = await linkCredential(
-            response.id,
-            credential?.id!,
-            name,
-            access_type,
-            groups,
-            auto_sync_options
-          );
-          if (linkCredentialResponse.ok) {
-            onSuccess();
-          } else {
-            const errorData = await linkCredentialResponse.json();
-            setPopup({
-              message: errorData.message,
-              type: "error",
-            });
-          }
-        } else if (isSuccess) {
-          onSuccess();
+        const connectorConfig = {
+          connector_specific_config: transformedConnectorSpecificConfig,
+          input_type: (isLoadState(connector)
+            ? "load_state"
+            : "poll") as ValidInputTypes,
+          name: name,
+          source: connector,
+          access_type: access_type,
+          refresh_freq: advancedConfiguration.refreshFreq || null,
+          prune_freq: advancedConfiguration.pruneFreq || null,
+          indexing_start: advancedConfiguration.indexingStart || null,
+          groups: groups,
+          credential_id: credential ? credential.id : undefined,
+          auto_sync_options: auto_sync_options,
+        };
+
+        const [error, response] =
+          await createConnectorAndAssociateCredential(connectorConfig);
+
+        if (error) {
+          setPopup({ message: error, type: "error" });
+        } else if (!response.success) {
+          setPopup({ message: response.message, type: "error" });
         } else {
-          setPopup({ message: message, type: "error" });
+          onSuccess(response.data.cc_pair_id);
         }
         return;
       }}

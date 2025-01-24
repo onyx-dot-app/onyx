@@ -1,5 +1,4 @@
 from typing import Any
-from typing import Dict
 
 import requests
 
@@ -12,10 +11,10 @@ def create_connector(
     name: str,
     source: str,
     input_type: str,
-    connector_specific_config: Dict[str, Any],
+    connector_specific_config: dict[str, Any],
     is_public: bool = True,
     groups: list[int] | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     connector_update_request = {
         "name": name,
         "source": source,
@@ -37,10 +36,10 @@ def create_connector(
 def create_credential(
     name: str,
     source: str,
-    credential_json: Dict[str, Any],
+    credential_json: dict[str, Any],
     is_public: bool = True,
     groups: list[int] | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     credential_request = {
         "name": name,
         "source": source,
@@ -64,7 +63,7 @@ def create_cc_pair(
     name: str,
     access_type: str = "public",
     groups: list[int] | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     cc_pair_request = {
         "name": name,
         "access_type": access_type,

@@ -475,7 +475,7 @@ def associate_credential_to_connector(
     )
 
     try:
-        response = add_credential_to_connector(
+        cc_pair_id = add_credential_to_connector(
             db_session=db_session,
             user=user,
             connector_id=connector_id,
@@ -486,7 +486,11 @@ def associate_credential_to_connector(
             groups=metadata.groups,
         )
 
-        return response
+        return StatusResponse(
+            success=True,
+            message="Credential associated successfully",
+            data=cc_pair_id,
+        )
     except IntegrityError as e:
         logger.error(f"IntegrityError: {e}")
         raise HTTPException(status_code=400, detail="Name must be unique")

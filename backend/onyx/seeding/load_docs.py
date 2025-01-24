@@ -179,7 +179,7 @@ def seed_initial_documents(
 
     last_index_time = datetime.datetime.now(datetime.timezone.utc)
 
-    result = add_credential_to_connector(
+    cc_pair_id = add_credential_to_connector(
         db_session=db_session,
         user=None,
         connector_id=connector_id,
@@ -191,7 +191,6 @@ def seed_initial_documents(
         last_successful_index_time=last_index_time,
         seeding_flow=True,
     )
-    cc_pair_id = cast(int, result.data)
     processed_docs = fetch_versioned_implementation(
         "onyx.seeding.load_docs",
         "load_processed_docs",

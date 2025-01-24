@@ -342,7 +342,7 @@ class ConnectorCredentialPairIdentifier(BaseModel):
 
 
 class ConnectorCredentialPairMetadata(BaseModel):
-    name: str | None = None
+    name: str
     access_type: AccessType
     auto_sync_options: dict[str, Any] | None = None
     groups: list[int] = Field(default_factory=list)
@@ -368,6 +368,12 @@ class RunConnectorRequest(BaseModel):
 class CCPropertyUpdateRequest(BaseModel):
     name: str
     value: str
+
+
+class ConnectorCreateAndAssociateRequest(
+    ConnectorUpdateRequest, ConnectorCredentialPairMetadata
+):
+    credential_id: int
 
 
 """Connectors Models"""
