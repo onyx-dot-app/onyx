@@ -1,4 +1,4 @@
-aiohttp==3.10.2
+aiohttp==3.10.11
 alembic==1.10.4
 asyncpg==0.27.0
 atlassian-python-api==3.41.16
