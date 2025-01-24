@@ -45,10 +45,10 @@ spec:
             - |
               alembic upgrade head &&
               echo "Starting Onyx Api Server" &&
-              uvicorn onyx.main:app --host 0.0.0.0 --port 8080
+              uvicorn onyx.main:app --host 0.0.0.0 --port {{ .Values.api.containerPorts.server }}
           ports:
             - name: api-server-port
-              containerPort: {{ .Values.api.service.port }}
+              containerPort: {{ .Values.api.containerPorts.server }}
               protocol: TCP
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}

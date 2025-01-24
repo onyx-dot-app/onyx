@@ -3,6 +3,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: {{ .Values.indexCapability.indexingModelPVC.name }}
 spec:
+  storageClassName: {{ .Values.persistent.storageClassName }}
   accessModes:
     - {{ .Values.indexCapability.indexingModelPVC.accessMode | quote }}
   resources:

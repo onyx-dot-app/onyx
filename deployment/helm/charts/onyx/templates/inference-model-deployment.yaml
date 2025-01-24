@@ -21,12 +21,14 @@ spec:
         {{- end }}
     spec:
       containers:
-      - name: {{ .Values.inferenceCapability.service.name }}
-        image: {{ .Values.inferenceCapability.deployment.image.repository }}:{{ .Values.inferenceCapability.deployment.image.tag }}
+      - name: model-server-inference
+        image: "{{ .Values.inferenceCapability.deployment.image.repository }}:{{ .Values.inferenceCapability.deployment.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.inferenceCapability.deployment.image.pullPolicy }}
-        command: {{ toYaml .Values.inferenceCapability.deployment.command | nindent 14 }}
+        command: [ "uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "{{ .Values.inferenceCapability.deployment.containerPorts.server }}" ]
         ports:
-        - containerPort: {{ .Values.inferenceCapability.service.port }}
+        - name: model-server
+          containerPort: {{ .Values.inferenceCapability.deployment.containerPorts.server }}
+          protocol: TCP
         envFrom:
         - configMapRef:
             name: {{ .Values.config.envConfigMapName }}

@@ -2,15 +2,32 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+postgresql:
+  global:
+    storageClass: ebsstorage
+  primary:
+    persistence:
+      storageClass: ebsstorage
+      size: 5Gi
+  enabled: true
+  auth:
+    existingSecret: onyx-secrets
+    secretKeys:
+      adminPasswordKey: postgres_password # overwriting as postgres typically expects 'postgres-password'
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+persistent:
+  storageClassName: ebsstorage
+
 inferenceCapability:
   service:
-    name: inference-model-server-service
+    portName: modelserver
     type: ClusterIP
-    port: 9000
+    servicePort: 9000
+    targetPort: 9000
   pvc:
     name: inference-model-pvc
     accessModes:
@@ -24,18 +41,11 @@ inferenceCapability:
         value: inference-model-server
     image:
       repository: onyxdotapp/onyx-model-server
-      tag: latest
+      # Overrides the image tag whose default is the chart appVersion.
+      tag: ""
       pullPolicy: IfNotPresent
-    command:
-      [
-        "uvicorn",
-        "model_server.main:app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "9000",
-      ]
-    port: 9000
+    containerPorts: 
+      server: 9000
     volumeMounts:
       - name: inference-model-storage
         mountPath: /root/.cache
@@ -49,15 +59,18 @@ inferenceCapability:
 
 indexCapability:
   service:
+    portName: modelserver
     type: ClusterIP
-    port: 9000
-    name: indexing-model-server-port
+    servicePort: 9000
+    targetPort: 9000
   deploymentLabels:
     app: indexing-model-server
   podLabels:
     app: indexing-model-server
   indexingOnly: "True"
   podAnnotations: {}
+  containerPorts:
+    server: 9000
   volumeMounts:
     - name: indexing-model-storage
       mountPath: /root/.cache
@@ -69,7 +82,11 @@ indexCapability:
     name: indexing-model-storage
     accessMode: "ReadWriteOnce"
     storage: "3Gi"
-
+  image:
+    repository: onyxdotapp/onyx-model-server
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: ""
+  limitConcurrency: 10
 config:
   envConfigMapName: env-configmap
 
@@ -83,16 +100,6 @@ serviceAccount:
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
-
-postgresql:
-  primary:
-    persistence:
-      size: 5Gi
-  enabled: true
-  auth:
-    existingSecret: onyx-secrets
-    secretKeys:
-      adminPasswordKey: postgres_password # overwriting as postgres typically expects 'postgres-password'
 
 nginx:
   containerPorts:
@@ -135,9 +142,13 @@ webserver:
     # runAsNonRoot: true
     # runAsUser: 1000
 
+  containerPorts:
+    server: 3000
+  
   service:
     type: ClusterIP
-    port: 3000
+    servicePort: 3000
+    targetPort: http
 
   resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -189,6 +200,9 @@ api:
     scope: onyx-backend
     app: api-server
 
+  containerPorts:
+    server: 8080
+
   podSecurityContext:
     {}
     # fsGroup: 2000
@@ -204,7 +218,9 @@ api:
 
   service:
     type: ClusterIP
-    port: 8080
+    servicePort: 8080
+    targetPort: api-server-port
+    portName: api-server-port
 
   resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -247,7 +263,7 @@ background:
     repository: onyxdotapp/onyx-backend
     pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
-    tag: latest
+    tag: ""
   podAnnotations: {}
   podLabels:
     scope: onyx-backend
@@ -381,7 +397,7 @@ persistence:
   vespa:
     enabled: true
     existingClaim: ""
-    storageClassName: ""
+    storageClassName: ebsstorage
     accessModes:
       - ReadWriteOnce
     size: 5Gi
