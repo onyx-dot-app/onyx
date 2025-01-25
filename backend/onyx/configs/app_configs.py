@@ -553,6 +553,13 @@ except json.JSONDecodeError:
 # LLM Model Update API endpoint
 LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")
 
+# Multimodal-Settings
+# # enable usage of summaries
+# -> add summaries to Vespa when indexing and therefore use them in the answer generation as well
+CONFLUENCE_IMAGE_SUMMARIZATION_ENABLED = (
+    os.environ.get("CONFLUENCE_IMAGE_SUMMARIZATION_ENABLED", "").lower() == "true"
+)
+
 #####
 # Enterprise Edition Configs
 #####

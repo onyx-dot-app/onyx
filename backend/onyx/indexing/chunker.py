@@ -225,6 +225,7 @@ class Chunker:
 
         for section_idx, section in enumerate(document.sections):
             section_text = clean_text(section.text)
+
             section_link_text = section.link or ""
             # If there is no useful content, not even the title, just drop it
             if not section_text and (not document.title or section_idx > 0):
@@ -287,10 +288,16 @@ class Chunker:
             current_offset = len(shared_precompare_cleanup(chunk_text))
             # In the case where the whole section is shorter than a chunk, either add
             # to chunk or start a new one
+            # If the next section is from a page attachment a new chunk is started
+            # (to ensure that especially image summaries are stored in separate chunks.)
+            prefix = "## Text representation of attachment "
             next_section_tokens = (
                 len(self.tokenizer.tokenize(SECTION_SEPARATOR)) + section_token_count
             )
-            if next_section_tokens + current_token_count <= content_token_limit:
+            if (
+                next_section_tokens + current_token_count <= content_token_limit
+                and prefix not in section_text
+            ):
                 if chunk_text:
                     chunk_text += SECTION_SEPARATOR
                 chunk_text += section_text

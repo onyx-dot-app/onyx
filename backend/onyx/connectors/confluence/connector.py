@@ -4,7 +4,8 @@ from datetime import timezone
 from typing import Any
 from urllib.parse import quote
 
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
+from onyx.llm.factory import get_default_llms
+from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP, CONFLUENCE_IMAGE_SUMMARIZATION_ENABLED
 from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -29,6 +30,7 @@ from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
 from onyx.utils.logger import setup_logger
 
+
 logger = setup_logger()
 
 # Potential Improvements
@@ -46,6 +48,7 @@ _ATTACHMENT_EXPANSION_FIELDS = [
     "version",
     "space",
     "metadata.labels",
+    "history.lastUpdated",
 ]
 
 _RESTRICTIONS_EXPANSION_FIELDS = [
@@ -129,7 +132,17 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             )
             self.cql_label_filter = f" and label not in ({comma_separated_labels})"
 
-        self.timezone: timezone = timezone(offset=timedelta(hours=timezone_offset))
+        # If image summarization is enabled, but not supported by the default LLM, raise an error.
+        if CONFLUENCE_IMAGE_SUMMARIZATION_ENABLED:
+            llm, _ = get_default_llms()
+            if not llm.vision_support():
+                raise ValueError(
+                    "The configured default LLM doesn't seem to have vision support for image summarization."
+                )
+
+            self.llm = llm
+        else:
+            self.llm = None
 
     @property
     def confluence_client(self) -> OnyxConfluence:
@@ -194,58 +207,53 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
 
         return comment_string
 
-    def _convert_object_to_document(
-        self, confluence_object: dict[str, Any]
-    ) -> Document | None:
+    def _convert_page_to_document(self, page: dict[str, Any]) -> Document | None:
         """
         Takes in a confluence object, extracts all metadata, and converts it into a document.
-        If its a page, it extracts the text, adds the comments for the document text.
-        If its an attachment, it just downloads the attachment and converts that into a document.
+        If it's a page, it extracts the text, adds the comments for the document text.
+        If it's an attachment, it just downloads the attachment and converts that into a document.
+        If image summarization is enabled (env var CONFLUENCE_IMAGE_SUMMARIZATION_ENABLED is set),
+        images are extracted and summarized by the default LLM.
         """
         # The url and the id are the same
         object_url = build_confluence_document_id(
-            self.wiki_base, confluence_object["_links"]["webui"], self.is_cloud
+            self.wiki_base, page["_links"]["webui"], self.is_cloud
         )
-
-        object_text = None
-        # Extract text from page
-        if confluence_object["type"] == "page":
-            object_text = extract_text_from_confluence_html(
-                confluence_client=self.confluence_client,
-                confluence_object=confluence_object,
-                fetched_titles={confluence_object.get("title", "")},
-            )
-            # Add comments to text
-            object_text += self._get_comment_string_for_page_id(confluence_object["id"])
-        elif confluence_object["type"] == "attachment":
-            object_text = attachment_to_content(
-                confluence_client=self.confluence_client, attachment=confluence_object
-            )
-
-        if object_text is None:
-            # This only happens for attachments that are not parseable
-            return None
+        logger.notice(f"processing page: {object_url}")
 
         # Get space name
         doc_metadata: dict[str, str | list[str]] = {
-            "Wiki Space Name": confluence_object["space"]["name"]
+            "Wiki Space Name": page["space"]["name"]
         }
 
         # Get labels
-        label_dicts = confluence_object["metadata"]["labels"]["results"]
+        label_dicts = page["metadata"]["labels"]["results"]
         page_labels = [label["name"] for label in label_dicts]
         if page_labels:
             doc_metadata["labels"] = page_labels
 
         # Get last modified and author email
-        last_modified = datetime_from_string(confluence_object["version"]["when"])
-        author_email = confluence_object["version"].get("by", {}).get("email")
+        last_modified = datetime_from_string(page["version"]["when"])
+        author_email = page["version"].get("by", {}).get("email")
+
+        # Extract text from page
+        object_text = extract_text_from_confluence_html(
+            confluence_client=self.confluence_client,
+            confluence_object=page,
+            fetched_titles={page.get("title", "")},
+        )
+        # Add comments to text
+        object_text += self._get_comment_string_for_page_id(page["id"])
+
+        if object_text is None:
+            # This only happens for attachments that are not parsable
+            return None
 
         return Document(
             id=object_url,
             sections=[Section(link=object_url, text=object_text)],
             source=DocumentSource.CONFLUENCE,
-            semantic_identifier=confluence_object["title"],
+            semantic_identifier=page["title"],
             doc_updated_at=last_modified,
             primary_owners=(
                 [BasicExpertInfo(email=author_email)] if author_email else None
@@ -269,11 +277,11 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             expand=",".join(_PAGE_EXPANSION_FIELDS),
             limit=self.batch_size,
         ):
-            logger.debug(f"_fetch_document_batches: {page['id']}")
-            confluence_page_ids.append(page["id"])
-            doc = self._convert_object_to_document(page)
+            doc = self._convert_page_to_document(page)
+
             if doc is not None:
                 doc_batch.append(doc)
+
             if len(doc_batch) >= self.batch_size:
                 yield doc_batch
                 doc_batch = []
@@ -282,16 +290,37 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         for confluence_page_id in confluence_page_ids:
             attachment_query = self._construct_attachment_query(confluence_page_id)
             # TODO: maybe should add time filter as well?
+            # fetch attachments of each page directly after each page
+            # to be able to use the XML text of each page as context when summarizing the images of each page
+            # (only if CONFLUENCE_IMAGE_SUMMARIZATION_ENABLED = True, otherwise images will be skipped)
+            attachment_cql = f"type=attachment and container='{page['id']}'"
+            attachment_cql += self.cql_label_filter
+
+            confluence_xml = page["body"]["storage"]["value"]
+
             for attachment in self.confluence_client.paginated_cql_retrieval(
                 cql=attachment_query,
                 expand=",".join(_ATTACHMENT_EXPANSION_FIELDS),
             ):
-                doc = self._convert_object_to_document(attachment)
-                if doc is not None:
-                    doc_batch.append(doc)
-                if len(doc_batch) >= self.batch_size:
-                    yield doc_batch
-                    doc_batch = []
+                content = attachment_to_content(
+                    confluence_client=self.confluence_client,
+                    attachment=attachment,
+                    page_context=confluence_xml,
+                    llm=self.llm,
+                )
+
+                if content:
+                    # get link to attachment in webui
+                    webui_link = _attachment_to_webui_link(
+                        self.confluence_client, attachment
+                    )
+                    # add prefix to text to mark attachments as such
+                    text = f"## Text representation of attachment {attachment['title']}:\n{content}"
+                    doc.sections.append(Section(text=text, link=webui_link))
+
+            if len(doc_batch) >= self.batch_size:
+                yield doc_batch
+                doc_batch = []
 
         if doc_batch:
             yield doc_batch
@@ -348,7 +377,8 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                 expand=restrictions_expand,
                 limit=_SLIM_DOC_BATCH_SIZE,
             ):
-                if not validate_attachment_filetype(attachment):
+                media_type = attachment["metadata"]["mediaType"]
+                if not validate_attachment_filetype(media_type):
                     continue
                 attachment_restrictions = attachment.get("restrictions")
                 if not attachment_restrictions:
@@ -370,11 +400,15 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                             attachment["_links"]["webui"],
                             self.is_cloud,
                         ),
-                        perm_sync_data=attachment_perm_sync_data,
+                        perm_sync_data=page_perm_sync_data,
                     )
                 )
-            if len(doc_metadata_list) > _SLIM_DOC_BATCH_SIZE:
-                yield doc_metadata_list[:_SLIM_DOC_BATCH_SIZE]
-                doc_metadata_list = doc_metadata_list[_SLIM_DOC_BATCH_SIZE:]
+            yield doc_metadata_list
+            doc_metadata_list = []
 
-        yield doc_metadata_list
+
+def _attachment_to_webui_link(
+    confluence_client: OnyxConfluence, attachment: dict[str, Any]
+) -> str:
+    """Extracts the webui link to images."""
+    return confluence_client.url + attachment["_links"]["webui"]

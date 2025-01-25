@@ -372,6 +372,10 @@ class DefaultMultiLLM(LLM):
     #     # Return the lesser of available tokens or configured max
     #     return min(self._max_output_tokens, available_output_tokens)
 
+    def vision_support(self) -> bool | None:
+        model = f"{self.config.model_provider}/{self.config.deployment_name or self.config.model_name}"
+        return litellm.supports_vision(model=model)
+
     def _completion(
         self,
         prompt: LanguageModelInput,

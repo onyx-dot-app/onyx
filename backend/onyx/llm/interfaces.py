@@ -84,6 +84,9 @@ class LLM(abc.ABC):
         if LOG_DANSWER_MODEL_INTERACTIONS:
             log_prompt(prompt)
 
+    def vision_support(self) -> bool | None:
+        return None
+
     def invoke(
         self,
         prompt: LanguageModelInput,
