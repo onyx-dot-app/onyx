@@ -20,6 +20,7 @@ import { CustomTooltip, TooltipGroup } from "../tooltip/CustomTooltip";
 import { WarningCircle } from "@phosphor-icons/react";
 import TextView from "../chat_search/TextView";
 import { openDocument } from "@/lib/search/utils";
+import { SubQuestionDetail } from "@/app/chat/interfaces";
 
 export const buildDocumentSummaryDisplay = (
   matchHighlights: string[],
@@ -86,7 +87,7 @@ export const buildDocumentSummaryDisplay = (
             finalJSX[finalJSX.length - 1] = finalJSX[finalJSX.length - 1] + " ";
           }
           finalJSX.push(
-            <b key={index} className="text-default bg-highlight-text">
+            <b key={index} className="text-text font-bold">
               {currentText}
             </b>
           );
@@ -430,6 +431,7 @@ export function CompactDocumentCard({
   url?: string;
   updatePresentingDocument: (document: OnyxDocument) => void;
 }) {
+  console.log("document", document);
   return (
     <div
       onClick={() => {
@@ -457,6 +459,38 @@ export function CompactDocumentCard({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+export function CompactQuestionCard({
+  question,
+  openQuestion,
+}: {
+  question: SubQuestionDetail;
+  openQuestion: (question: SubQuestionDetail) => void;
+}) {
+  return (
+    <div
+      onClick={() => openQuestion(question)}
+      className="max-w-[250px] gap-y-0 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0 flex-col content-start items-start gap-0"
+    >
+      <div className="text-sm !pb-0 !mb-0 font-semibold flex items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
+        Question
+      </div>
+      <div className="text-xs mb-0 text-gray-600 line-clamp-2">
+        {question.question}
+      </div>
+      <div className="flex mt-0 pt-0 items-center justify-between w-full">
+        <span className="text-xs text-gray-500">
+          {question.context_docs?.top_documents.length || 0} context docs
+        </span>
+        {question.sub_queries && (
+          <span className="text-xs text-gray-500">
+            {question.sub_queries.length} subqueries
+          </span>
+        )}
+      </div>
     </div>
   );
 }

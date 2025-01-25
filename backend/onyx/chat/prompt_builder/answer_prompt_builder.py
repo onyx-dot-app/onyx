@@ -4,6 +4,7 @@ from typing import cast
 from langchain_core.messages import BaseMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
+from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModel__v1
 
 from onyx.chat.models import PromptConfig
@@ -84,6 +85,7 @@ class AnswerPromptBuilder:
         raw_user_query: str,
         raw_user_uploaded_files: list[InMemoryChatFile],
         single_message_history: str | None = None,
+        system_message: SystemMessage | None = None,
     ) -> None:
         self.max_tokens = compute_max_llm_input_tokens(llm_config)
 
@@ -108,7 +110,14 @@ class AnswerPromptBuilder:
             ),
         )
 
-        self.system_message_and_token_cnt: tuple[SystemMessage, int] | None = None
+        self.system_message_and_token_cnt: tuple[SystemMessage, int] | None = (
+            (
+                system_message,
+                check_message_tokens(system_message, self.llm_tokenizer_encode_func),
+            )
+            if system_message
+            else None
+        )
         self.user_message_and_token_cnt = (
             user_message,
             check_message_tokens(
@@ -174,6 +183,14 @@ class AnswerPromptBuilder:
         )
 
 
+# Stores some parts of a prompt builder as needed for tool calls
+class PromptSnapshot(BaseModel):
+    raw_message_history: list[PreviousMessage]
+    raw_user_query: str
+    built_prompt: list[BaseMessage]
+
+
+# TODO: rename this? AnswerConfig maybe?
 class LLMCall(BaseModel__v1):
     prompt_builder: AnswerPromptBuilder
     tools: list[Tool]

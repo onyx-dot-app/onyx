@@ -192,14 +192,14 @@ export default function FunctionalHeader({
             <div
               style={{ transition: "width 0.30s ease-out" }}
               className={`
-            hidden
-            md:flex 
-            mx-auto
-            overflow-y-hidden 
-            transition-all 
-            duration-300 
-            ease-in-out
-            h-full
+                hidden
+                md:flex 
+                mx-auto
+                overflow-y-hidden 
+                transition-all 
+                duration-300 
+                ease-in-out
+                h-full
             `}
             />
             <div
@@ -221,6 +221,7 @@ export default function FunctionalHeader({
           {page != "assistants" && (
             <div
               className={`
+                pointer-events-none
               h-20 absolute top-0 z-10 w-full sm:w-[90%] lg:w-[70%]
               bg-gradient-to-b via-50% z-[-1] from-background via-background to-background/10 flex
               transition-all duration-300 ease-in-out

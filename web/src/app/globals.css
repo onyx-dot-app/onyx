@@ -142,7 +142,7 @@
 
     --non-selectable: #f8d7da;
     /* Light pink for non-selectable elements */
-    --highlight-text: #fef9c3;
+    --highlight-text: rgba(255, 245, 180, 0.5);
     /* Very light yellow for highlighted text */
     --user-bubble: #f1eee8;
     /* near gray-100 - Very light grayish */
@@ -320,6 +320,22 @@
   border-radius: 10px;
 }
 
+.nextjs-portal {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  position: absolute !important;
+  pointer-events: none !important;
+  clip: rect(0, 0, 0, 0) !important;
+}
+
+.nextjs-portal * {
+  display: none !important;
+}
+
 .dark-scrollbar::-webkit-scrollbar-thumb:hover {
   background: transparent;
   /* background: theme("colors.scrollbar.dark.thumb-hover"); */
@@ -380,6 +396,7 @@
 
 body {
   overscroll-behavior-y: none;
+  overflow-anchor: none;
 }
 
 /* Base styles for code blocks */

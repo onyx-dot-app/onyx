@@ -108,6 +108,7 @@ export function SharedChatDisplay({
         <div className="md:hidden">
           <Modal noPadding noScroll>
             <DocumentResults
+              agenticMessage={false}
               isSharedChat={true}
               selectedMessage={
                 selectedMessageForDocDisplay
@@ -163,6 +164,7 @@ export function SharedChatDisplay({
             `}
               >
                 <DocumentResults
+                  agenticMessage={false}
                   modal={false}
                   isSharedChat={true}
                   selectedMessage={

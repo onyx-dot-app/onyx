@@ -5,6 +5,25 @@ import { truncateString } from "@/lib/utils";
 import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
 
+export const ResultIcon = ({
+  doc,
+  size,
+}: {
+  doc: OnyxDocument;
+  size: number;
+}) => {
+  return (
+    <div className="flex-none">
+      {" "}
+      {doc.is_internet || doc.source_type === "web" ? (
+        <WebResultIcon size={size} url={doc.link} />
+      ) : (
+        <SourceIcon iconSize={size} sourceType={doc.source_type} />
+      )}
+    </div>
+  );
+};
+
 export default function SourceCard({
   doc,
   setPresentingDocument,
@@ -24,7 +43,7 @@ export default function SourceCard({
         ) : (
           <SourceIcon sourceType={doc.source_type} iconSize={18} />
         )}
-        <p>{truncateString(doc.semantic_identifier || doc.document_id, 16)}</p>
+        <p>{truncateString(doc.semantic_identifier || doc.document_id, 20)}</p>
       </div>
       <div className="line-clamp-2 text-sm font-semibold"></div>
       <div className="line-clamp-2 text-sm font-normal leading-snug text-text-700">
@@ -52,35 +71,29 @@ export function SeeMoreBlock({
   );
   const numOfWebSourcesToDisplay = 3 - filteredUniqueSources.length;
   return (
-    <div
+    <button
       onClick={toggleDocumentSelection}
-      className={`
-        cursor-pointer rounded-lg flex-none transition-all duration-500 hover:bg-background-dark/80 bg-background-dark/60 px-3 py-2
-      `}
+      className={`max-w-[260px] min-w-[100px] h-[80px] p-3 bg-[#f1eee8] hover:bg-[#ebe7de] cursor-pointer rounded-lg flex flex-col items-start justify-between transition-opacity duration-300`}
     >
-      <div className="flex gap-y-2 flex-col items-start text-sm">
-        <p
-          onClick={toggleDocumentSelection}
-          className="flex-1 mr-1 font-semibold text-text-900 overflow-hidden text-ellipsis whitespace-nowrap"
-        >
-          {toggled ? "Hide Results" : "Show Sources"}
-        </p>
-        <div className="flex-shrink-0 flex gap-x-1 items-center">
-          {filteredUniqueSources.slice(0, 3).map((source, index) => (
-            <SourceIcon key={index} sourceType={source} iconSize={16} />
+      <div className="flex items-center gap-1">
+        {filteredUniqueSources.slice(0, 3).map((source, index) => (
+          <SourceIcon key={index} sourceType={source} iconSize={14} />
+        ))}
+        {webSourceDomains
+          .slice(0, numOfWebSourcesToDisplay)
+          .map((domain, index) => (
+            <WebResultIcon key={index} url={domain} size={14} />
           ))}
-          {webSourceDomains
-            .slice(0, numOfWebSourcesToDisplay)
-            .map((domain, ind) => (
-              <WebResultIcon key={ind} url={domain} />
-            ))}
-          {uniqueSources.length > 3 && (
-            <span className="text-xs text-text-700 font-semibold ml-1">
-              +{uniqueSources.length - 3}
-            </span>
-          )}
-        </div>
+        {uniqueSources.length > 3 && (
+          <span className="text-xs text-[#4a4a4a] font-medium ml-1">
+            +{uniqueSources.length - 3}
+          </span>
+        )}
       </div>
-    </div>
+
+      <div className="text-text-darker text-xs font-semibold">
+        {toggled ? "Hide Results" : "Show All"}
+      </div>
+    </button>
   );
 }

@@ -5,18 +5,31 @@ from unittest.mock import MagicMock
 import pytest
 from langchain_core.messages import SystemMessage
 
+from onyx.agents.agent_search.models import AgentSearchConfig
+from onyx.chat.chat_utils import llm_doc_from_inference_section
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import LlmDoc
+from onyx.chat.models import OnyxContext
+from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
+from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import InferenceSection
+from onyx.context.search.models import SearchRequest
+from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool_implementations.search.search_tool import SEARCH_DOC_CONTENT_ID
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
+from onyx.tools.utils import explicit_tool_calling_supported
 
 QUERY = "Test question"
 DEFAULT_SEARCH_ARGS = {"query": "search"}
@@ -25,6 +38,43 @@ DEFAULT_SEARCH_ARGS = {"query": "search"}
 @pytest.fixture
 def answer_style_config() -> AnswerStyleConfig:
     return AnswerStyleConfig(citation_config=CitationConfig())
+
+
+@pytest.fixture
+def agent_search_config(
+    mock_llm: LLM, mock_search_tool: SearchTool, prompt_config: PromptConfig
+) -> AgentSearchConfig:
+    prompt_builder = AnswerPromptBuilder(
+        user_message=default_build_user_message(
+            user_query=QUERY,
+            prompt_config=prompt_config,
+            files=[],
+            single_message_history=None,
+        ),
+        message_history=[],
+        llm_config=mock_llm.config,
+        raw_user_query=QUERY,
+        raw_user_uploaded_files=[],
+        single_message_history=None,
+    )
+    prompt_builder.update_system_prompt(default_build_system_message(prompt_config))
+    using_tool_calling_llm = explicit_tool_calling_supported(
+        mock_llm.config.model_provider, mock_llm.config.model_name
+    )
+    return AgentSearchConfig(
+        search_request=SearchRequest(query=QUERY),
+        primary_llm=mock_llm,
+        fast_llm=mock_llm,
+        search_tool=mock_search_tool,
+        force_use_tool=ForceUseTool(force_use=False, tool_name=""),
+        prompt_builder=prompt_builder,
+        chat_session_id=None,
+        message_id=1,
+        use_persistence=True,
+        db_session=None,
+        use_agentic_search=False,
+        using_tool_calling_llm=using_tool_calling_llm,
+    )
 
 
 @pytest.fixture
@@ -52,37 +102,83 @@ def mock_llm() -> MagicMock:
 
 
 @pytest.fixture
-def mock_search_results() -> list[LlmDoc]:
+def mock_inference_sections() -> list[InferenceSection]:
     return [
-        LlmDoc(
-            content="Search result 1",
-            source_type=DocumentSource.WEB,
-            metadata={"id": "doc1"},
-            document_id="doc1",
-            blurb="Blurb 1",
-            semantic_identifier="Semantic ID 1",
-            updated_at=datetime(2023, 1, 1),
-            link="https://example.com/doc1",
-            source_links={0: "https://example.com/doc1"},
-            match_highlights=[],
+        InferenceSection(
+            combined_content="Search result 1",
+            center_chunk=InferenceChunk(
+                chunk_id=1,
+                section_continuation=False,
+                title=None,
+                boost=1,
+                recency_bias=0.5,
+                score=1.0,
+                hidden=False,
+                content="Search result 1",
+                source_type=DocumentSource.WEB,
+                metadata={"id": "doc1"},
+                document_id="doc1",
+                blurb="Blurb 1",
+                semantic_identifier="Semantic ID 1",
+                updated_at=datetime(2023, 1, 1),
+                source_links={0: "https://example.com/doc1"},
+                match_highlights=[],
+            ),
+            chunks=MagicMock(),
         ),
-        LlmDoc(
-            content="Search result 2",
-            source_type=DocumentSource.WEB,
-            metadata={"id": "doc2"},
-            document_id="doc2",
-            blurb="Blurb 2",
-            semantic_identifier="Semantic ID 2",
-            updated_at=datetime(2023, 1, 2),
-            link="https://example.com/doc2",
-            source_links={0: "https://example.com/doc2"},
-            match_highlights=[],
+        InferenceSection(
+            combined_content="Search result 2",
+            center_chunk=InferenceChunk(
+                chunk_id=2,
+                section_continuation=False,
+                title=None,
+                boost=1,
+                recency_bias=0.5,
+                score=1.0,
+                hidden=False,
+                content="Search result 2",
+                source_type=DocumentSource.WEB,
+                metadata={"id": "doc2"},
+                document_id="doc2",
+                blurb="Blurb 2",
+                semantic_identifier="Semantic ID 2",
+                updated_at=datetime(2023, 1, 2),
+                source_links={0: "https://example.com/doc2"},
+                match_highlights=[],
+            ),
+            chunks=MagicMock(),
         ),
     ]
 
 
 @pytest.fixture
-def mock_search_tool(mock_search_results: list[LlmDoc]) -> MagicMock:
+def mock_search_results(
+    mock_inference_sections: list[InferenceSection],
+) -> list[LlmDoc]:
+    return [
+        llm_doc_from_inference_section(section) for section in mock_inference_sections
+    ]
+
+
+@pytest.fixture
+def mock_contexts(mock_inference_sections: list[InferenceSection]) -> OnyxContexts:
+    return OnyxContexts(
+        contexts=[
+            OnyxContext(
+                content=section.combined_content,
+                document_id=section.center_chunk.document_id,
+                semantic_identifier=section.center_chunk.semantic_identifier,
+                blurb=section.center_chunk.blurb,
+            )
+            for section in mock_inference_sections
+        ]
+    )
+
+
+@pytest.fixture
+def mock_search_tool(
+    mock_contexts: OnyxContexts, mock_search_results: list[LlmDoc]
+) -> MagicMock:
     mock_tool = MagicMock(spec=SearchTool)
     mock_tool.name = "search"
     mock_tool.build_tool_message_content.return_value = "search_response"
@@ -91,7 +187,8 @@ def mock_search_tool(mock_search_results: list[LlmDoc]) -> MagicMock:
         json.loads(doc.model_dump_json()) for doc in mock_search_results
     ]
     mock_tool.run.return_value = [
-        ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=mock_search_results)
+        ToolResponse(id=SEARCH_DOC_CONTENT_ID, response=mock_contexts),
+        ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=mock_search_results),
     ]
     mock_tool.tool_definition.return_value = {
         "type": "function",

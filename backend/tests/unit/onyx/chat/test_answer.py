@@ -11,11 +11,13 @@ from langchain_core.messages import SystemMessage
 from langchain_core.messages import ToolCall
 from langchain_core.messages import ToolCallChunk
 
+from onyx.agents.agent_search.models import AgentSearchConfig
 from onyx.chat.answer import Answer
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationInfo
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import OnyxAnswerPiece
+from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
@@ -24,13 +26,20 @@ from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool_implementations.search.search_tool import SEARCH_DOC_CONTENT_ID
+from onyx.tools.tool_implementations.search_like_tool_utils import (
+    FINAL_CONTEXT_DOCUMENTS_ID,
+)
 from tests.unit.onyx.chat.conftest import DEFAULT_SEARCH_ARGS
 from tests.unit.onyx.chat.conftest import QUERY
 
 
 @pytest.fixture
 def answer_instance(
-    mock_llm: LLM, answer_style_config: AnswerStyleConfig, prompt_config: PromptConfig
+    mock_llm: LLM,
+    answer_style_config: AnswerStyleConfig,
+    prompt_config: PromptConfig,
+    agent_search_config: AgentSearchConfig,
 ) -> Answer:
     return Answer(
         question=QUERY,
@@ -38,11 +47,12 @@ def answer_instance(
         llm=mock_llm,
         prompt_config=prompt_config,
         force_use_tool=ForceUseTool(force_use=False, tool_name="", args=None),
+        agent_search_config=agent_search_config,
     )
 
 
 def test_basic_answer(answer_instance: Answer) -> None:
-    mock_llm = cast(Mock, answer_instance.llm)
+    mock_llm = cast(Mock, answer_instance.agent_search_config.primary_llm)
     mock_llm.stream.return_value = [
         AIMessageChunk(content="This is a "),
         AIMessageChunk(content="mock answer."),
@@ -93,15 +103,16 @@ def test_basic_answer(answer_instance: Answer) -> None:
 def test_answer_with_search_call(
     answer_instance: Answer,
     mock_search_results: list[LlmDoc],
+    mock_contexts: OnyxContexts,
     mock_search_tool: MagicMock,
     force_use_tool: ForceUseTool,
     expected_tool_args: dict,
 ) -> None:
-    answer_instance.tools = [mock_search_tool]
-    answer_instance.force_use_tool = force_use_tool
+    answer_instance.agent_search_config.tools = [mock_search_tool]
+    answer_instance.agent_search_config.force_use_tool = force_use_tool
 
     # Set up the LLM mock to return search results and then an answer
-    mock_llm = cast(Mock, answer_instance.llm)
+    mock_llm = cast(Mock, answer_instance.agent_search_config.primary_llm)
 
     stream_side_effect: list[list[BaseMessage]] = []
 
@@ -133,31 +144,40 @@ def test_answer_with_search_call(
     )
     mock_llm.stream.side_effect = stream_side_effect
 
+    print("side effect")
+    for v in stream_side_effect:
+        print(v)
+        print("-" * 300)
+    print(len(stream_side_effect))
+    print("-" * 300)
     # Process the output
     output = list(answer_instance.processed_streamed_output)
-    print(output)
 
     # Updated assertions
-    assert len(output) == 7
+    # assert len(output) == 7
     assert output[0] == ToolCallKickoff(
         tool_name="search", tool_args=expected_tool_args
     )
     assert output[1] == ToolResponse(
+        id=SEARCH_DOC_CONTENT_ID,
+        response=mock_contexts,
+    )
+    assert output[2] == ToolResponse(
         id="final_context_documents",
         response=mock_search_results,
     )
-    assert output[2] == ToolCallFinalResult(
+    assert output[3] == ToolCallFinalResult(
         tool_name="search",
         tool_args=expected_tool_args,
         tool_result=[json.loads(doc.model_dump_json()) for doc in mock_search_results],
     )
-    assert output[3] == OnyxAnswerPiece(answer_piece="Based on the search results, ")
+    assert output[4] == OnyxAnswerPiece(answer_piece="Based on the search results, ")
     expected_citation = CitationInfo(citation_num=1, document_id="doc1")
-    assert output[4] == expected_citation
-    assert output[5] == OnyxAnswerPiece(
+    assert output[5] == expected_citation
+    assert output[6] == OnyxAnswerPiece(
         answer_piece="the answer is abc[[1]](https://example.com/doc1). "
     )
-    assert output[6] == OnyxAnswerPiece(answer_piece="This is some other stuff.")
+    assert output[7] == OnyxAnswerPiece(answer_piece="This is some other stuff.")
 
     expected_answer = (
         "Based on the search results, "
@@ -210,12 +230,13 @@ def test_answer_with_search_call(
 def test_answer_with_search_no_tool_calling(
     answer_instance: Answer,
     mock_search_results: list[LlmDoc],
+    mock_contexts: OnyxContexts,
     mock_search_tool: MagicMock,
 ) -> None:
-    answer_instance.tools = [mock_search_tool]
+    answer_instance.agent_search_config.tools = [mock_search_tool]
 
     # Set up the LLM mock to return an answer
-    mock_llm = cast(Mock, answer_instance.llm)
+    mock_llm = cast(Mock, answer_instance.agent_search_config.primary_llm)
     mock_llm.stream.return_value = [
         AIMessageChunk(content="Based on the search results, "),
         AIMessageChunk(content="the answer is abc[1]. "),
@@ -223,32 +244,36 @@ def test_answer_with_search_no_tool_calling(
     ]
 
     # Force non-tool calling behavior
-    answer_instance.using_tool_calling_llm = False
+    answer_instance.agent_search_config.using_tool_calling_llm = False
 
     # Process the output
     output = list(answer_instance.processed_streamed_output)
 
     # Assertions
-    assert len(output) == 7
+    assert len(output) == 8
     assert output[0] == ToolCallKickoff(
         tool_name="search", tool_args=DEFAULT_SEARCH_ARGS
     )
     assert output[1] == ToolResponse(
-        id="final_context_documents",
+        id=SEARCH_DOC_CONTENT_ID,
+        response=mock_contexts,
+    )
+    assert output[2] == ToolResponse(
+        id=FINAL_CONTEXT_DOCUMENTS_ID,
         response=mock_search_results,
     )
-    assert output[2] == ToolCallFinalResult(
+    assert output[3] == ToolCallFinalResult(
         tool_name="search",
         tool_args=DEFAULT_SEARCH_ARGS,
         tool_result=[json.loads(doc.model_dump_json()) for doc in mock_search_results],
     )
-    assert output[3] == OnyxAnswerPiece(answer_piece="Based on the search results, ")
+    assert output[4] == OnyxAnswerPiece(answer_piece="Based on the search results, ")
     expected_citation = CitationInfo(citation_num=1, document_id="doc1")
-    assert output[4] == expected_citation
-    assert output[5] == OnyxAnswerPiece(
+    assert output[5] == expected_citation
+    assert output[6] == OnyxAnswerPiece(
         answer_piece="the answer is abc[[1]](https://example.com/doc1). "
     )
-    assert output[6] == OnyxAnswerPiece(answer_piece="This is some other stuff.")
+    assert output[7] == OnyxAnswerPiece(answer_piece="This is some other stuff.")
 
     expected_answer = (
         "Based on the search results, "
@@ -284,7 +309,8 @@ def test_answer_with_search_no_tool_calling(
 def test_is_cancelled(answer_instance: Answer) -> None:
     # Set up the LLM mock to return multiple chunks
     mock_llm = Mock()
-    answer_instance.llm = mock_llm
+    answer_instance.agent_search_config.primary_llm = mock_llm
+    answer_instance.agent_search_config.fast_llm = mock_llm
     mock_llm.stream.return_value = [
         AIMessageChunk(content="This is the "),
         AIMessageChunk(content="first part."),

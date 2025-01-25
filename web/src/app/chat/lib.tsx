@@ -4,6 +4,12 @@ import {
   Filters,
   DocumentInfoPacket,
   StreamStopInfo,
+  ProSearchPacket,
+  SubQueryPiece,
+  AgentAnswerPiece,
+  SubQuestionPiece,
+  ExtendedToolResponse,
+  RefinedAnswerImprovement,
 } from "@/lib/search/interfaces";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { ChatState, FeedbackType } from "./types";
@@ -99,6 +105,20 @@ export async function createChatSession(
   return chatSessionResponseJson.chat_session_id;
 }
 
+export const isPacketType = (data: any): data is PacketType => {
+  return (
+    data.hasOwnProperty("answer_piece") ||
+    data.hasOwnProperty("top_documents") ||
+    data.hasOwnProperty("tool_name") ||
+    data.hasOwnProperty("file_ids") ||
+    data.hasOwnProperty("error") ||
+    data.hasOwnProperty("message_id") ||
+    data.hasOwnProperty("stop_reason") ||
+    data.hasOwnProperty("user_message_id") ||
+    data.hasOwnProperty("reserved_assistant_message_id")
+  );
+};
+
 export type PacketType =
   | ToolCallMetadata
   | BackendMessage
@@ -108,7 +128,13 @@ export type PacketType =
   | FileChatDisplay
   | StreamingError
   | MessageResponseIDInfo
-  | StreamStopInfo;
+  | StreamStopInfo
+  | ProSearchPacket
+  | SubQueryPiece
+  | AgentAnswerPiece
+  | SubQuestionPiece
+  | ExtendedToolResponse
+  | RefinedAnswerImprovement;
 
 export async function* sendMessage({
   regenerate,
@@ -128,6 +154,7 @@ export async function* sendMessage({
   useExistingUserMessage,
   alternateAssistantId,
   signal,
+  useLanggraph,
 }: {
   regenerate: boolean;
   message: string;
@@ -146,6 +173,7 @@ export async function* sendMessage({
   useExistingUserMessage?: boolean;
   alternateAssistantId?: number;
   signal?: AbortSignal;
+  useLanggraph?: boolean;
 }): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
     selectedDocumentIds && selectedDocumentIds.length > 0;
@@ -186,6 +214,7 @@ export async function* sendMessage({
           }
         : null,
     use_existing_user_message: useExistingUserMessage,
+    use_agentic_search: useLanggraph,
   });
 
   const response = await fetch(`/api/chat/send-message`, {
@@ -418,6 +447,10 @@ export function processRawChatHistory(
     } else {
       retrievalType = RetrievalType.None;
     }
+    const subQuestions = messageInfo.sub_questions?.map((q) => ({
+      ...q,
+      is_complete: true,
+    }));
 
     const message: Message = {
       messageId: messageInfo.message_id,
@@ -443,6 +476,9 @@ export function processRawChatHistory(
       childrenMessageIds: [],
       latestChildMessageId: messageInfo.latest_child_message,
       overridden_model: messageInfo.overridden_model,
+      sub_questions: subQuestions,
+      isImprovement:
+        (messageInfo.refined_answer_improvement as unknown as boolean) || false,
     };
 
     messages.set(messageInfo.message_id, message);
@@ -491,6 +527,7 @@ export function buildLatestMessageChain(
     }
   }
 
+  //
   // remove system message
   if (finalMessageList.length > 0 && finalMessageList[0].type === "system") {
     finalMessageList = finalMessageList.slice(1);

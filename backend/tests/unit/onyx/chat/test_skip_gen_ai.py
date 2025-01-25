@@ -1,12 +1,11 @@
 from typing import Any
-from typing import cast
 from unittest.mock import Mock
 
 import pytest
 from pytest_mock import MockerFixture
 
+from onyx.agents.agent_search.models import AgentSearchConfig
 from onyx.chat.answer import Answer
-from onyx.chat.answer import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import PromptConfig
 from onyx.tools.force import ForceUseTool
@@ -31,6 +30,7 @@ def test_skip_gen_ai_answer_generation_flag(
     config: dict[str, Any],
     mock_search_tool: SearchTool,
     answer_style_config: AnswerStyleConfig,
+    agent_search_config: AgentSearchConfig,
     prompt_config: PromptConfig,
 ) -> None:
     question = config["question"]
@@ -41,6 +41,14 @@ def test_skip_gen_ai_answer_generation_flag(
     mock_llm.config.model_name = "gpt-4o-mini"
     mock_llm.stream = Mock()
     mock_llm.stream.return_value = [Mock()]
+
+    agent_search_config.primary_llm = mock_llm
+    agent_search_config.fast_llm = mock_llm
+    agent_search_config.skip_gen_ai_answer_generation = skip_gen_ai_answer_generation
+    agent_search_config.search_tool = mock_search_tool
+    agent_search_config.using_tool_calling_llm = False
+    agent_search_config.tools = [mock_search_tool]
+
     answer = Answer(
         question=question,
         answer_style_config=answer_style_config,
@@ -56,13 +64,15 @@ def test_skip_gen_ai_answer_generation_flag(
             )
         ),
         skip_explicit_tool_calling=True,
-        return_contexts=True,
         skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
+        agent_search_config=agent_search_config,
     )
-    count = 0
-    for _ in cast(AnswerStream, answer.processed_streamed_output):
-        count += 1
-    assert count == 3 if skip_gen_ai_answer_generation else 4
+    results = list(answer.processed_streamed_output)
+    for res in results:
+        print(res)
+
+    expected_count = 4 if skip_gen_ai_answer_generation else 5
+    assert len(results) == expected_count
     if not skip_gen_ai_answer_generation:
         mock_llm.stream.assert_called_once()
     else:

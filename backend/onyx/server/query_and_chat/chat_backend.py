@@ -145,6 +145,7 @@ def get_chat_session(
     user: User | None = Depends(current_chat_accesssible_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionDetailResponse:
+    print("get_chat_session called")
     user_id = user.id if user is not None else None
     try:
         chat_session = get_chat_session_by_id(
@@ -173,6 +174,8 @@ def get_chat_session(
         # we need the tool call objs anyways, so just fetch them in a single call
         prefetch_tool_calls=True,
     )
+    for message in session_messages:
+        translate_db_message_to_chat_message_detail(message)
 
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
@@ -386,6 +389,8 @@ def handle_new_chat_message(
                 ),
                 is_connected=is_connected_func,
             ):
+                # with open('chat_packets.log', 'a') as log_file:
+                #     log_file.write(json.dumps(packet) + '\n')
                 yield json.dumps(packet) if isinstance(packet, dict) else packet
 
         except Exception as e:

@@ -402,7 +402,7 @@ class DefaultMultiLLM(LLM):
                 # streaming choice
                 stream=stream,
                 # model params
-                temperature=self._temperature,
+                temperature=0,
                 timeout=self._timeout,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
