@@ -901,7 +901,7 @@ export function AssistantEditor({
                             disabledTooltip={
                               !currentLLMSupportsImageOutput
                                 ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
-                                : "Image Generation requires an OpenAI or Azure Dalle configuration."
+                                : "Image Generation requires an OpenAI or Azure Dall-E configuration."
                             }
                           />
                         </div>
