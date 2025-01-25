@@ -50,7 +50,7 @@ export const rerankingModels: RerankingModel[] = [
     cloud: true,
     displayName: "LiteLLM",
     description: "Host your own reranker or router with LiteLLM proxy",
-    link: "https://docs.litellm.ai/docs/proxy",
+    link: "https://docs.litellm.ai/docs/simple_proxy",
   },
   {
     rerank_provider_type: null,
@@ -82,7 +82,7 @@ export const rerankingModels: RerankingModel[] = [
     modelName: "rerank-english-v3.0",
     displayName: "Cohere English",
     description: "High-performance English-focused reranking model.",
-    link: "https://docs.cohere.com/docs/rerank",
+    link: "https://docs.cohere.com/v2/reference/rerank",
   },
   {
     cloud: true,
@@ -90,7 +90,7 @@ export const rerankingModels: RerankingModel[] = [
     modelName: "rerank-multilingual-v3.0",
     displayName: "Cohere Multilingual",
     description: "Powerful multilingual reranking model.",
-    link: "https://docs.cohere.com/docs/rerank",
+    link: "https://docs.cohere.com/v2/reference/rerank",
   },
 ];
 
