@@ -121,7 +121,7 @@ def extract_source_filter(
                     valid_sources=[s.value for s in valid_sources],
                     web_source_warning=web_warning,
                     file_source_warning=file_warning,
-                    sample_response=json.dumps(sample_json),
+                    sample_response=json.dumps(sample_json, ensure_ascii=False),
                 ),
             },
             {
@@ -130,12 +130,12 @@ def extract_source_filter(
             },
             {
                 "role": "assistant",
-                "content": json.dumps({SOURCES_KEY: msg_1_sources}),
+                "content": json.dumps({SOURCES_KEY: msg_1_sources}, ensure_ascii=False),
             },
             {"role": "user", "content": "What's the latest on project Corgies?"},
             {
                 "role": "assistant",
-                "content": json.dumps({SOURCES_KEY: None}),
+                "content": json.dumps({SOURCES_KEY: None}, ensure_ascii=False),
             },
             {
                 "role": "user",
@@ -144,7 +144,7 @@ def extract_source_filter(
             },
             {
                 "role": "assistant",
-                "content": json.dumps({SOURCES_KEY: [msg_2_real_source]}),
+                "content": json.dumps({SOURCES_KEY: [msg_2_real_source]}, ensure_ascii=False),
             },
             {
                 "role": "user",
@@ -152,7 +152,7 @@ def extract_source_filter(
             },
             {
                 "role": "assistant",
-                "content": json.dumps({SOURCES_KEY: None}),
+                "content": json.dumps({SOURCES_KEY: None}, ensure_ascii=False),
             },
             {"role": "user", "content": query},
         ]
