@@ -13,7 +13,7 @@ import { FiPlus, FiTrash2, FiCheck, FiX } from "react-icons/fi";
 import { NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED } from "@/lib/constants";
 import { FolderDropdown } from "../folders/FolderDropdown";
 import { ChatSessionDisplay } from "./ChatSessionDisplay";
-import { useState, useCallback, useRef, useContext } from "react";
+import { useState, useCallback, useRef, useContext, useEffect } from "react";
 import { Caret } from "@/components/icons/icons";
 import { groupSessionsByDateRange } from "../lib";
 import React from "react";
@@ -36,6 +36,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useChatContext } from "@/components/context/ChatContext";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 
 interface SortableFolderProps {
   folder: Folder;
@@ -53,34 +54,41 @@ interface SortableFolderProps {
 const SortableFolder: React.FC<SortableFolderProps> = (props) => {
   const settings = useContext(SettingsContext);
   const mobile = settings?.isMobile;
-  const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({
-      id: props.folder.folder_id?.toString() ?? "",
-      data: {
-        activationConstraint: {
-          distance: 8,
-        },
-      },
-      disabled: mobile,
-    });
+  const [isDragging, setIsDragging] = useState(false);
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging: isDraggingDndKit,
+  } = useSortable({
+    id: props.folder.folder_id?.toString() ?? "",
+    disabled: mobile,
+  });
   const ref = useRef<HTMLDivElement>(null);
-  const style = {
+
+  const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
+    zIndex: isDragging ? 1000 : "auto",
+    position: isDragging ? "relative" : "static",
+    opacity: isDragging ? 0.6 : 1,
   };
+
+  useEffect(() => {
+    setIsDragging(isDraggingDndKit);
+  }, [isDraggingDndKit]);
 
   return (
     <div
       ref={setNodeRef}
       className="pr-3 ml-4 overflow-visible flex items-start"
       style={style}
+      {...attributes}
+      {...listeners}
     >
-      <FolderDropdown
-        ref={ref}
-        {...props}
-        {...(mobile ? {} : attributes)}
-        {...(mobile ? {} : listeners)}
-      />
+      <FolderDropdown ref={ref} {...props} />
     </div>
   );
 };
@@ -359,6 +367,7 @@ export function PagesTab({
 
       {folders && folders.length > 0 && (
         <DndContext
+          modifiers={[restrictToVerticalAxis]}
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
