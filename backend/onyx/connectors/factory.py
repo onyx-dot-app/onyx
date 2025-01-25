@@ -49,6 +49,7 @@ from onyx.connectors.wikipedia.connector import WikipediaConnector
 from onyx.connectors.xenforo.connector import XenforoConnector
 from onyx.connectors.zendesk.connector import ZendeskConnector
 from onyx.connectors.zulip.connector import ZulipConnector
+from onyx.connectors.lark.connector import LarkWikiConnector
 from onyx.db.credentials import backend_update_credential_json
 from onyx.db.models import Credential
 
@@ -107,6 +108,7 @@ def identify_connector_class(
         DocumentSource.FIREFLIES: FirefliesConnector,
         DocumentSource.EGNYTE: EgnyteConnector,
         DocumentSource.AIRTABLE: AirtableConnector,
+        DocumentSource.LARK_WIKI: LarkWikiConnector,
     }
     connector_by_source = connector_map.get(source, {})
 

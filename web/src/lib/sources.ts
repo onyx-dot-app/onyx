@@ -43,6 +43,7 @@ import {
   AirtableIcon,
   GlobeIcon2,
   FileIcon2,
+  LarkSuiteIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import {
@@ -320,6 +321,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Airtable",
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/connectors/airtable",
+  },
+  lark_wiki: {
+    icon: LarkSuiteIcon,
+    displayName: "Lark Wiki",
+    category: SourceCategory.Wiki,
+    description: "Connect to Lark Wiki to sync documents.",
   },
   // currently used for the Internet Search tool docs, which is why
   // a globe is used
