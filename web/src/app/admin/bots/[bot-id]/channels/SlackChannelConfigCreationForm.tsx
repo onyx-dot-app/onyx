@@ -27,16 +27,12 @@ import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelec
 import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { StandardAnswerCategoryDropdownField } from "@/components/standardAnswers/StandardAnswerCategoryDropdown";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/fully_wrapped_tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
 import React from "react";
 import { SEARCH_TOOL_NAME } from "@/app/chat/tools/constants";
+import { AlertCircle } from "lucide-react";
 
 export const SlackChannelConfigCreationForm = ({
   slack_bot_id,
@@ -69,30 +65,59 @@ export const SlackChannelConfigCreationForm = ({
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   const knowledgePersona = personas.find((persona) => persona.id === 0);
-
-  const searchEnabledAssistants = personas.filter((persona) =>
-    persona.tools.some((tool) => (tool.name = SEARCH_TOOL_NAME))
-  );
-  console.log(searchEnabledAssistants);
-
+  const [personaId, setPersonaId] = useState<number | null>(null);
   const documentSetContainsSync = (documentSet: DocumentSet) => {
     return documentSet.cc_pair_descriptors.some(
-      (descriptor) => descriptor.connector.access_type === "synced"
+      (descriptor) => descriptor.access_type === "sync"
     );
   };
   const documentSetContainsPrivate = (documentSet: DocumentSet) => {
-    console.log(documentSet.cc_pair_descriptors);
-
-    for (const descriptor of documentSet.cc_pair_descriptors) {
-      console.log("DESCRIPTOR");
-      console.log(descriptor.connector.source);
-
-      console.log(descriptor.access_type);
-    }
     return documentSet.cc_pair_descriptors.some(
       (descriptor) => descriptor.access_type === "private"
     );
   };
+  const searchEnabledAssistants = personas.filter(
+    (persona) =>
+      persona.tools.some((tool) => (tool.name = SEARCH_TOOL_NAME)) &&
+      !persona.document_sets.some((ds) => documentSetContainsSync(ds))
+  );
+  const [document_sets, setDocumentSets] = useState<number[]>([]);
+
+  const shouldShowPrivacyAlert = React.useMemo(() => {
+    console.log("Recalculating shouldShowPrivacyAlert");
+    console.log("Current selectedOption:", selectedOption);
+    console.log("Current documentSets:", documentSets);
+    console.log("Current personaId:", personaId);
+    console.log("Current searchEnabledAssistants:", searchEnabledAssistants);
+
+    if (selectedOption === "document_sets") {
+      console.log("Checking privacy for document_sets option");
+      const hasPrivateDocuments = documentSets
+        .filter((ds) => document_sets.includes(ds.id))
+        .some((ds) => documentSetContainsPrivate(ds));
+      console.log("Has private documents:", hasPrivateDocuments);
+      return hasPrivateDocuments;
+    } else if (selectedOption === "assistant") {
+      console.log("Checking privacy for assistant option");
+      console.log(searchEnabledAssistants);
+      console.log(personaId);
+      const selectedAssistant = searchEnabledAssistants.find(
+        (persona) => persona.id == personaId
+      );
+      console.log("Selected assistant:", selectedAssistant);
+      const assistantHasPrivateDocuments =
+        selectedAssistant?.document_sets.some((ds) =>
+          documentSetContainsPrivate(ds)
+        );
+      console.log(
+        "Assistant has private documents:",
+        assistantHasPrivateDocuments
+      );
+      return assistantHasPrivateDocuments;
+    }
+    console.log("No privacy alert needed for current option");
+    return false;
+  }, [selectedOption, documentSets, personaId, searchEnabledAssistants]);
 
   return (
     <div>
@@ -233,6 +258,14 @@ export const SlackChannelConfigCreationForm = ({
               );
             }, [values.knowledge_source]);
 
+            React.useEffect(() => {
+              setPersonaId(values.persona_id);
+            }, [values.persona_id]);
+
+            React.useEffect(() => {
+              setDocumentSets(values.document_sets);
+            }, [values.document_sets]);
+
             return (
               <Form>
                 <div className="px-6 max-w-4xl pb-6 pt-4 w-full">
@@ -240,7 +273,6 @@ export const SlackChannelConfigCreationForm = ({
                     name="channel_name"
                     label="Slack Channel Name:"
                   />
-
                   <div className="mt-6">
                     <Label>Knowledge Sources</Label>
                     <SubLabel>
@@ -308,7 +340,7 @@ export const SlackChannelConfigCreationForm = ({
                     {values.knowledge_source === "document_sets" &&
                       documentSets &&
                       documentSets.length > 0 && (
-                        <div className="mt-4">
+                        <div className="mt-2">
                           <SubLabel>
                             Select the document sets OnyxBot will use while
                             answering questions in Slack.
@@ -326,19 +358,12 @@ export const SlackChannelConfigCreationForm = ({
 
                                     return (
                                       <>
-                                        {/* {documentSetContainsSync(
-                                          documentSet
-                                        ) && <div>Synced</div>}
-                                        {documentSetContainsPrivate(
-                                          documentSet
-                                        ) && <div>Private</div>} */}
-
                                         <DocumentSetSelectable
-                                          disabled={documentSetContainsPrivate(
+                                          disabled={documentSetContainsSync(
                                             documentSet
                                           )}
                                           disabledTooltip={
-                                            "This document set contains private documents, which OnyxBot cannot access"
+                                            "This document set contains auto-synced documents, which cannot be added to an OnyxBot"
                                           }
                                           key={documentSet.id}
                                           documentSet={documentSet}
@@ -364,7 +389,7 @@ export const SlackChannelConfigCreationForm = ({
                     {values.knowledge_source === "assistant" && (
                       <div className="mt-2">
                         <SubLabel>
-                          Select the search-enabeld assistant OnyxBot will use
+                          Select the search-enabled assistant OnyxBot will use
                           while answering questions in Slack.
                         </SubLabel>
                         <SelectorFormField
@@ -378,13 +403,26 @@ export const SlackChannelConfigCreationForm = ({
                     )}
                   </div>
 
+                  {shouldShowPrivacyAlert && (
+                    <Alert className="mt-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Connector Privacy</AlertTitle>
+                      <AlertDescription>
+                        Please note that at least one of the documents
+                        accessible by your Onyxbot is marked as private and may
+                        contain sensitive information. These documents will be
+                        accessible to all users of this Onyxbot. Ensure this
+                        aligns with your intended document sharing policy.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   <div className="mt-6">
                     <AdvancedOptionsToggle
                       showAdvancedOptions={showAdvancedOptions}
                       setShowAdvancedOptions={setShowAdvancedOptions}
                     />
                   </div>
-
                   {showAdvancedOptions && (
                     <div className="mt-4">
                       <div className="w-64 mb-4">
@@ -492,8 +530,7 @@ export const SlackChannelConfigCreationForm = ({
                       />
                     </div>
                   )}
-
-                  <div className="flex">
+                  <div className="flex mt-2">
                     <Button
                       type="submit"
                       variant="submit"

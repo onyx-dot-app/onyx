@@ -100,23 +100,12 @@ def list_document_sets_for_user(
         False, description="If true, return editable document sets"
     ),
 ) -> list[DocumentSet]:
-    print("I AM ETTING DOC SETS")
-
-    document_sets = [
+    return [
         DocumentSet.from_model(ds)
         for ds in fetch_all_document_sets_for_user(
             db_session=db_session, user=user, get_editable=get_editable
         )
     ]
-    for document_set in document_sets:
-        for descriptor in document_set.cc_pair_descriptors:
-            print(descriptor.__dict__)
-        print("----")
-
-    print("DOC SETS")
-    print(document_sets[1].__dict__)
-
-    return document_sets
 
 
 @router.get("/document-set-public")
