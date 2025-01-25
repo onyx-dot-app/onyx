@@ -25,9 +25,8 @@ import {
 } from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import remarkGfm from "remark-gfm";
-import { EditIcon } from "@/components/icons/icons";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
@@ -486,6 +485,7 @@ export const BooleanFormField = ({
           className={`${removeIndent ? "mr-2" : "mx-3"}     
               px-5 w-3.5 h-3.5 ${alignTop ? "mt-1" : "my-auto"}`}
         />
+
         {!noLabel && (
           <div>
             <div className="flex items-center gap-x-2">
@@ -721,6 +721,7 @@ export function SelectorFormField({
               ) : (
                 options.map((option) => (
                   <SelectItem
+                    hideCheck
                     icon={option.icon}
                     key={option.value}
                     value={String(option.value)}

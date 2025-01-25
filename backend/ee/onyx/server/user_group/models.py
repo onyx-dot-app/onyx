@@ -58,6 +58,7 @@ class UserGroup(BaseModel):
                     credential=CredentialSnapshot.from_credential_db_model(
                         cc_pair_relationship.cc_pair.credential
                     ),
+                    access_type=cc_pair_relationship.cc_pair.access_type,
                 )
                 for cc_pair_relationship in user_group_model.cc_pair_relationships
                 if cc_pair_relationship.is_current

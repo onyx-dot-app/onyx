@@ -67,7 +67,10 @@ async function EditslackChannelConfigPage(props: {
       />
     );
   }
-  const documentSets = (await documentSetsResponse.json()) as DocumentSet[];
+  const response = await documentSetsResponse.json();
+  console.log("DOC SET");
+  console.log(response);
+  const documentSets = response as DocumentSet[];
 
   if (assistantsFetchError) {
     return (

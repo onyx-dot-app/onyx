@@ -201,6 +201,7 @@ export interface CCPairDescriptor<ConnectorType, CredentialType> {
   name: string | null;
   connector: Connector<ConnectorType>;
   credential: Credential<CredentialType>;
+  access_type: AccessType;
 }
 
 export interface DocumentSet {
