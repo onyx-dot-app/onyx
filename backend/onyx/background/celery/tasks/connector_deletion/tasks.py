@@ -33,6 +33,7 @@ class TaskDependencyError(RuntimeError):
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
+    ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
     trail=False,
     bind=True,

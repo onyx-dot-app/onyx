@@ -32,6 +32,7 @@ def perform_ttl_management_task(
 
 @celery_app.task(
     name="check_ttl_management_task",
+    ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
 )
 def check_ttl_management_task(*, tenant_id: str | None) -> None:
@@ -56,6 +57,7 @@ def check_ttl_management_task(*, tenant_id: str | None) -> None:
 
 @celery_app.task(
     name="autogenerate_usage_report_task",
+    ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
 )
 def autogenerate_usage_report_task(*, tenant_id: str | None) -> None:

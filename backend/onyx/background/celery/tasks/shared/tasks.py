@@ -213,6 +213,7 @@ def document_by_cc_pair_cleanup_task(
 
 @shared_task(
     name=OnyxCeleryTask.CLOUD_BEAT_TASK_GENERATOR,
+    ignore_result=True,
     trail=False,
     bind=True,
 )

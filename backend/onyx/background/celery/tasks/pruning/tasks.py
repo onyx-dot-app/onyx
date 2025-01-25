@@ -78,6 +78,7 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_PRUNING,
+    ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )

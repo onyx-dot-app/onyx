@@ -54,6 +54,7 @@ def _process_model_list_response(model_list_json: Any) -> list[str]:
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_LLM_MODEL_UPDATE,
+    ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
     trail=False,
     bind=True,

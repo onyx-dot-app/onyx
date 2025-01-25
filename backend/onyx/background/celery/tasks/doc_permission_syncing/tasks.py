@@ -91,6 +91,7 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_DOC_PERMISSIONS_SYNC,
+    ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )
