@@ -21,11 +21,12 @@ export const AssistantBadgeSelector = ({
 }) => {
   return (
     <div
-      className={`${
-        selected
-          ? "bg-neutral-900 text-white"
-          : "bg-transparent text-neutral-900"
-      } w-12 h-5 text-center px-1 py-0.5 rounded-lg cursor-pointer text-[12px] font-normal leading-[10px] border border-black justify-center items-center gap-1 inline-flex`}
+      className={`
+        select-none ${
+          selected
+            ? "bg-neutral-900 text-white"
+            : "bg-transparent text-neutral-900"
+        } w-12 h-5 text-center px-1 py-0.5 rounded-lg cursor-pointer text-[12px] font-normal leading-[10px] border border-black justify-center items-center gap-1 inline-flex`}
       onClick={toggleFilter}
     >
       {text}
@@ -86,11 +87,11 @@ export default function AssistantModal({
         !assistantFilters[AssistantFilter.Private] || !assistant.is_public;
       const pinnedFilter =
         !assistantFilters[AssistantFilter.Pinned] ||
-        (user?.preferences?.pinned_assistants?.includes(assistant.id) ?? false);
+        (pinnedAssistants.map((a) => a.id).includes(assistant.id) ?? false);
 
       const mineFilter =
         !assistantFilters[AssistantFilter.Mine] ||
-        assistants.map((a: Persona) => checkUserOwnsAssistant(user, a));
+        checkUserOwnsAssistant(user, assistant);
 
       return (
         (nameMatches || labelMatches) &&
@@ -124,7 +125,7 @@ export default function AssistantModal({
       heightOverride={`${height}px`}
       onOutsideClick={hideModal}
       removeBottomPadding
-      className={`max-w-4xl max-h-[90vh] ${height} w-[95%] overflow-hidden`}
+      className={`max-w-4xl min-h-[500px] max-h-[90vh] pb-4 ${height} w-[95%] overflow-hidden`}
     >
       <div className="flex flex-col h-full">
         <div className="flex bg-background flex-col sticky top-0 z-10">
