@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: The template used to create an ECS Cluster from the ECS Console.
+
+Parameters:
+  Environment:
+    Type: String
+    Description: The environment that is used in the name of the cluster as well.
+  OnyxNamespace:
+    Type: String
+    Default: onyx
+  VpcID:
+    Type: String
+    Default: vpc-098cfa79d637dabff
+
+Resources:
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub ${Environment}-onyx-cluster
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enhanced
+      ServiceConnectDefaults:
+        Namespace: !Sub ${Environment}-onyx-cluster
+      Tags:
+        - Key: env
+          Value: !Ref Environment
+        - Key: app
+          Value: onyx
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${Environment}-onyx-ecs-fargate-configs
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  PrivateDnsNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Description: AWS Cloud Map private DNS namespace for resources for onyx website.
+      Vpc: !Ref VpcID
+      Name: !Ref OnyxNamespace
+      Properties:
+        DnsProperties:
+          SOA:
+            TTL: 50
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${Environment}-OnyxEcsTaskRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: "EFSPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: "VisualEditor0"
+                Effect: Allow
+                Action:
+                  - "elasticfilesystem:*"
+                Resource:
+                  - !Sub "arn:aws:elasticfilesystem:*:${AWS::AccountId}:access-point/*"
+                  - !Sub "arn:aws:elasticfilesystem:*:${AWS::AccountId}:file-system/*"
+              - Sid: "VisualEditor1"
+                Effect: Allow
+                Action: "elasticfilesystem:*"
+                Resource: "*"
+        - PolicyName: "S3Policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: "VisualEditor0"
+                Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:ListBucket"
+                Resource:
+                  - !Sub "arn:aws:s3:::${Environment}-onyx-ecs-fargate-configs/*"
+                  - !Sub "arn:aws:s3:::${Environment}-onyx-ecs-fargate-configs"
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${Environment}-OnyxECSTaskExecutionRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: "CloudWatchLogsPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: "VisualEditor0"
+                Effect: Allow
+                Action: "logs:CreateLogGroup"
+                Resource: !Sub "arn:aws:logs:*:${AWS::AccountId}:log-group:*"
+        - PolicyName: "SecretsManagerPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Environment}/postgres/user/password-*
+
+Outputs:
+  OutputEcsCluster:
+    Description: Onyx ECS Cluster
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub ${AWS::StackName}-ECSClusterName
+  OutputECSTaskRole:
+    Description: Onyx ECS Task Role
+    Value: !Ref ECSTaskRole
+    Export:
+      Name: !Sub ${AWS::StackName}-ECSTaskRole
+  OutputECSTaskExecutionRole:
+    Description: Onyx ECS TaskExecutionRole
+    Value: !Ref ECSTaskExecutionRole
+    Export:
+      Name: !Sub ${AWS::StackName}-ECSTaskExecutionRole
+  OutputOnyxNamespace:
+    Description: Onyx CloudMap namespace ID for ECS service discvoery.
+    Value: !Ref PrivateDnsNamespace
+    Export:
+      Name: !Sub ${AWS::StackName}-OnyxNamespace
+  OutputOnyxNamespaceName:
+    Description: Onyx CloudMap namespace domain name for ECS service discvoery.
+    Value: !Ref OnyxNamespace
+    Export:
+      Name: !Sub ${AWS::StackName}-OnyxNamespaceName

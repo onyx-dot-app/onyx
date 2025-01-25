@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Lambda function to force new ECS Fargate service deployments, triggered by EventBridge.
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+  CronScheduleState:
+    Type: String
+    Default: ENABLED
+
+Resources:
+  # IAM Role for Lambda
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: LambdaECSDeploymentRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaECSPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:ListServices
+                  - ecs:UpdateService
+                  - ecs:DescribeServices
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "arn:aws:logs:*:*:*"
+
+  OnyxECSForceDeploymentLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${Environment}-OnyxECSForceDeploymentLambda
+      Runtime: python3.9
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Handler: index.lambda_handler
+      Code:
+        ZipFile: |
+          import boto3
+          import logging
+          import os
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          ecs_client = boto3.client('ecs')
+
+          def lambda_handler(event, context):
+              cluster_name = os.getenv('CLUSTER_NAME', 'default')
+              try:
+                  # List all services in the cluster
+                  paginator = ecs_client.get_paginator('list_services')
+                  service_arns = []
+                  for page in paginator.paginate(cluster=cluster_name):
+                      service_arns.extend(page['serviceArns'])
+
+                  if not service_arns:
+                      logger.info(f"No services found in cluster {cluster_name}. Exiting.")
+                      return
+
+                  # Force new deployment for each service
+                  for service_arn in service_arns:
+                      service_name = service_arn.split("/")[-1]
+                      try:
+                          ecs_client.update_service(
+                              cluster=cluster_name,
+                              service=service_name,
+                              forceNewDeployment=True
+                          )
+                          logger.info(f"Successfully redeployed service: {service_name}")
+                      except Exception as e:
+                          logger.error(f"Failed to redeploy service {service_name}: {e}")
+
+              except Exception as e:
+                  logger.error(f"Error retrieving services in cluster {cluster_name}: {e}")
+                  raise e
+
+      Timeout: 120
+      MemorySize: 128
+      Environment:
+        Variables:
+          CLUSTER_NAME:
+            Fn::ImportValue:
+              Fn::Sub: ${Environment}-onyx-cluster-ECSClusterName
+      Tags:
+        - Key: service
+          Value: onyx-restart-services
+        - Key: app
+          Value: onyx
+        - Key: env
+          Value: !Ref Environment
+
+  # Lambda Permission for EventBridge
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt OnyxECSForceDeploymentLambda.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt MidnightEventRule.Arn
+
+  # EventBridge Rule
+  MidnightEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: MidnightECSDeploymentRule
+      ScheduleExpression: "cron(0 0 * * ? *)"  # Every day at midnight UTC
+      State: !Ref CronScheduleState
+      Targets:
+        - Id: OnyxECSForceDeploymentTarget
+          Arn: !GetAtt OnyxECSForceDeploymentLambda.Arn

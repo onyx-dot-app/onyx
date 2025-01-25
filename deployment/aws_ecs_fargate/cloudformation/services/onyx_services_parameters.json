@@ -1,0 +1,14 @@
+[
+{
+	"ParameterKey": "Environment",
+	"ParameterValue": "production"
+},
+{
+	"ParameterKey": "SubnetIDs",
+	"ParameterValue": "subnet-0af372d676f65b287,subnet-06721b79e2e51d22c"
+},
+{
+	"ParameterKey": "VpcID",
+	"ParameterValue": "vpc-098cfa79d637dabff"
+}
+]
