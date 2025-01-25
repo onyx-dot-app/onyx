@@ -45,6 +45,7 @@ from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
@@ -69,6 +70,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
     tasks_created = 0
     locked = False
     redis_client = get_redis_client(tenant_id=tenant_id)
+    redis_client_replica = get_redis_replica_client(tenant_id=tenant_id)
 
     # we need to use celery's redis client to access its redis data
     # (which lives on a different db number)
@@ -227,7 +229,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
             # or be currently executing
             try:
                 validate_indexing_fences(
-                    tenant_id, self.app, redis_client, redis_client_celery, lock_beat
+                    tenant_id, redis_client_replica, redis_client_celery, lock_beat
                 )
             except Exception:
                 task_logger.exception("Exception while validating indexing fences")

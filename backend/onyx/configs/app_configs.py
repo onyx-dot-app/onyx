@@ -200,6 +200,8 @@ REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
 
+# this assumes that other redis settings remain the same as the primary
+REDIS_REPLICA_HOST = os.environ.get("REDIS_REPLICA_HOST") or REDIS_HOST
 
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
 

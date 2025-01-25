@@ -33,6 +33,7 @@ from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
+from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
 
 DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES = 3
 
@@ -246,6 +247,10 @@ def cloud_beat_task_generator(
             if current_time - last_lock_time >= (CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4):
                 lock_beat.reacquire()
                 last_lock_time = current_time
+
+            # needed in the cloud
+            if IGNORED_SYNCING_TENANT_LIST and tenant_id in IGNORED_SYNCING_TENANT_LIST:
+                continue
 
             self.app.send_task(
                 task_name,
