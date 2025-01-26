@@ -890,47 +890,20 @@ export function AssistantEditor({
                     {imageGenerationTool && (
                       <>
                         <div className="flex items-center content-start mb-2">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <CheckboxField
-                                  size="sm"
-                                  id={`enabled_tools_map.${imageGenerationTool.id}`}
-                                  name={`enabled_tools_map.${imageGenerationTool.id}`}
-                                  onCheckedChange={() => {
-                                    if (isImageGenerationAvailable) {
-                                      toggleToolInValues(
-                                        imageGenerationTool.id
-                                      );
-                                    }
-                                  }}
-                                  className={
-                                    !isImageGenerationAvailable
-                                      ? "opacity-50 cursor-not-allowed"
-                                      : ""
-                                  }
-                                />
-                              </TooltipTrigger>
-                              {!isImageGenerationAvailable && (
-                                <TooltipContent side="top" align="center">
-                                  <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                                    {!currentLLMSupportsImageOutput
-                                      ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
-                                      : "Image Generation requires an OpenAI or Azure Dalle configuration."}
-                                  </p>
-                                </TooltipContent>
-                              )}
-                            </Tooltip>
-                          </TooltipProvider>
-                          <div className="flex flex-col ml-2">
-                            <span className="text-sm">
-                              {imageGenerationTool.display_name}
-                            </span>
-                            <span className="text-xs text-subtle">
-                              Generate and manipulate images using AI-powered
-                              tools
-                            </span>
-                          </div>
+                          <BooleanFormField
+                            name={`enabled_tools_map.${imageGenerationTool.id}`}
+                            label={imageGenerationTool.display_name}
+                            subtext="Generate and manipulate images using AI-powered tools"
+                            disabled={
+                              !currentLLMSupportsImageOutput ||
+                              !isImageGenerationAvailable
+                            }
+                            disabledTooltip={
+                              !currentLLMSupportsImageOutput
+                                ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
+                                : "Image Generation requires an OpenAI or Azure Dall-E configuration."
+                            }
+                          />
                         </div>
                       </>
                     )}
@@ -964,23 +937,12 @@ export function AssistantEditor({
 
                     {customTools.length > 0 &&
                       customTools.map((tool) => (
-                        <React.Fragment key={tool.id}>
-                          <div className="flex items-center content-start mb-2">
-                            <Checkbox
-                              size="sm"
-                              id={`enabled_tools_map.${tool.id}`}
-                              checked={values.enabled_tools_map[tool.id]}
-                              onCheckedChange={() => {
-                                toggleToolInValues(tool.id);
-                              }}
-                            />
-                            <div className="ml-2">
-                              <span className="text-sm">
-                                {tool.display_name}
-                              </span>
-                            </div>
-                          </div>
-                        </React.Fragment>
+                        <BooleanFormField
+                          key={tool.id}
+                          name={`enabled_tools_map.${tool.id}`}
+                          label={tool.display_name}
+                          subtext={tool.description}
+                        />
                       ))}
                   </div>
                 </div>
@@ -1333,7 +1295,6 @@ export function AssistantEditor({
                         <BooleanFormField
                           small
                           removeIndent
-                          alignTop
                           name="llm_relevance_filter"
                           label="AI Relevance Filter"
                           subtext="If enabled, the LLM will filter out documents that are not useful for answering the user query prior to generating a response. This typically improves the quality of the response but incurs slightly higher cost."
@@ -1342,7 +1303,6 @@ export function AssistantEditor({
                         <BooleanFormField
                           small
                           removeIndent
-                          alignTop
                           name="include_citations"
                           label="Citations"
                           subtext="Response will include citations ([1], [2], etc.) for documents referenced by the LLM. In general, we recommend to leave this enabled in order to increase trust in the LLM answer."
@@ -1355,7 +1315,6 @@ export function AssistantEditor({
                   <BooleanFormField
                     small
                     removeIndent
-                    alignTop
                     name="datetime_aware"
                     label="Date and Time Aware"
                     subtext='Toggle this option to let the assistant know the current date and time (formatted like: "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]]'

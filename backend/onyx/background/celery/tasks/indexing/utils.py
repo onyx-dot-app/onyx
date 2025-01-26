@@ -295,11 +295,15 @@ def validate_indexing_fences(
     r_celery: Redis,
     lock_beat: RedisLock,
 ) -> None:
+    """Validates all indexing fences for this tenant ... aka makes sure
+    indexing tasks sent to celery are still in flight.
+    """
     reserved_indexing_tasks = celery_get_unacked_task_ids(
         OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
     )
 
-    # validate all existing indexing jobs
+    # Use replica for this because the worst thing that happens
+    # is that we don't run the validation on this pass
     for key_bytes in r_replica.scan_iter(
         RedisConnectorIndex.FENCE_PREFIX + "*", count=SCAN_ITER_COUNT_DEFAULT
     ):

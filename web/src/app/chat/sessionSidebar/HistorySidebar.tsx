@@ -6,8 +6,17 @@ import React, {
   useContext,
   useState,
   useCallback,
+  useLayoutEffect,
+  useRef,
 } from "react";
 import Link from "next/link";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
+
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatSession } from "../interfaces";
 import { NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA } from "@/lib/constants";
@@ -44,6 +53,7 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CircleX } from "lucide-react";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 
 interface HistorySidebarProps {
   page: pageType;
@@ -90,6 +100,24 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
     ...(isDragging ? { zIndex: 1000, position: "relative" as const } : {}),
   };
 
+  const nameRef = useRef<HTMLParagraphElement>(null);
+  const hiddenNameRef = useRef<HTMLSpanElement>(null);
+  const [isNameTruncated, setIsNameTruncated] = useState(false);
+
+  useLayoutEffect(() => {
+    const checkTruncation = () => {
+      if (nameRef.current && hiddenNameRef.current) {
+        const visibleWidth = nameRef.current.offsetWidth;
+        const fullTextWidth = hiddenNameRef.current.offsetWidth;
+        setIsNameTruncated(fullTextWidth > visibleWidth);
+      }
+    };
+
+    checkTruncation();
+    window.addEventListener("resize", checkTruncation);
+    return () => window.removeEventListener("resize", checkTruncation);
+  }, [assistant.name]);
+
   return (
     <div
       ref={setNodeRef}
@@ -115,10 +143,28 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
             : ""
         } relative flex items-center gap-x-2 py-1 px-2 rounded-md`}
       >
-        <AssistantIcon assistant={assistant} size={16} className="flex-none" />
-        <p className="text-base text-left w-fit line-clamp-1 text-ellipsis text-black">
+        <AssistantIcon assistant={assistant} size={20} className="flex-none" />
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p
+                ref={nameRef}
+                className="text-base text-left w-fit line-clamp-1 text-ellipsis text-black"
+              >
+                {assistant.name}
+              </p>
+            </TooltipTrigger>
+            {isNameTruncated && (
+              <TooltipContent>{assistant.name}</TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+        <span
+          ref={hiddenNameRef}
+          className="absolute left-[-9999px] whitespace-nowrap"
+        >
           {assistant.name}
-        </p>
+        </span>
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -295,7 +341,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             </div>
           )}
 
-          <div className="h-full relative overflow-y-auto">
+          <div className="h-full relative overflow-x-hidden overflow-y-auto">
             <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-[#6c6c6c]/80 items-center font-normal leading-normal">
               Assistants
             </div>
@@ -303,6 +349,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={handleDragEnd}
+              modifiers={[restrictToVerticalAxis]}
             >
               <SortableContext
                 items={pinnedAssistants.map((a) =>

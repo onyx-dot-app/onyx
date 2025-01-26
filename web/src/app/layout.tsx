@@ -23,6 +23,7 @@ import PostHogPageView from "./PostHogPageView";
 import Script from "next/script";
 import { LogoType } from "@/components/logo/Logo";
 import { Hanken_Grotesk } from "next/font/google";
+import { WebVitals } from "./web-vitals";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -206,6 +207,7 @@ export default async function RootLayout({
         <PostHogPageView />
       </Suspense>
       {children}
+      {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
     </AppProvider>
   );
 }

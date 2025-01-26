@@ -375,7 +375,11 @@ export const AIMessage = ({
     return (
       <>
         <div
-          style={{ position: "absolute", left: "-9999px" }}
+          style={{
+            position: "absolute",
+            left: "-9999px",
+            display: "none",
+          }}
           dangerouslySetInnerHTML={{ __html: htmlContent }}
         />
         <ReactMarkdown

@@ -694,6 +694,7 @@ export function ChatInputBar({
                         flexPriority="stiff"
                         name="Filters"
                         Icon={FiFilter}
+                        toggle
                         tooltipContent="Filter your search"
                       />
                     }
