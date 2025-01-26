@@ -2599,6 +2599,7 @@ export function ChatPage({
                                                 });
                                                 return;
                                               }
+
                                               onSubmit({
                                                 messageIdToResend:
                                                   previousMessage.messageId,
