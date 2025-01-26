@@ -445,7 +445,7 @@ export function PagesTab({
         )}
 
         {isHistoryEmpty && (!folders || folders.length === 0) && (
-          <p className="text-sm mt-2 w-[250px]">
+          <p className="text-sm max-w-full mt-2 w-[250px]">
             Try sending a message! Your chat history will appear here.
           </p>
         )}

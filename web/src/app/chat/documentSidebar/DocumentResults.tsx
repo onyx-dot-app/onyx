@@ -147,24 +147,6 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
                 )}
               </div>
             </div>
-            <div
-              className={`sticky bottom-4 w-full left-0 flex justify-center transition-opacity duration-300 ${
-                hasSelectedDocuments
-                  ? "opacity-100"
-                  : "opacity-0 pointer-events-none"
-              }`}
-            >
-              <button
-                className="text-sm font-medium py-2 px-4 rounded-full transition-colors bg-neutral-900 text-white"
-                onClick={clearSelectedDocuments}
-              >
-                {`Remove ${
-                  delayedSelectedDocumentCount > 0
-                    ? delayedSelectedDocumentCount
-                    : ""
-                } Source${delayedSelectedDocumentCount > 1 ? "s" : ""}`}
-              </button>
-            </div>
           </div>
         </div>
       </>
