@@ -146,8 +146,10 @@ def fetch_existing_llm_providers_for_user(
                 ).all()
             )
         else:
+            # Use `fetch_existing_llm_providers` to fetch all existing providers
+            # As opposed to passing `user=None`
             raise ValueError(
-                "User is required for this operation when authentication is enabled. Please provide a valid user object."
+                "A valid user is required for this operation when authentication is enabled."
             )
 
     stmt = select(LLMProviderModel).distinct()
