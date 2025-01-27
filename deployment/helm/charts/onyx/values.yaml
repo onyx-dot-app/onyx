@@ -3,11 +3,8 @@
 # Declare variables to be passed into your templates.
 
 postgresql:
-  global:
-    storageClass: ebsstorage
   primary:
     persistence:
-      storageClass: ebsstorage
       size: 5Gi
   enabled: true
   auth:
@@ -33,26 +30,25 @@ inferenceCapability:
     accessModes:
       - ReadWriteOnce
     storage: 3Gi
-  deployment:
-    name: inference-model-server-deployment
-    replicas: 1
-    labels:
-      - key: app
-        value: inference-model-server
-    image:
-      repository: onyxdotapp/onyx-model-server
-      # Overrides the image tag whose default is the chart appVersion.
-      tag: ""
-      pullPolicy: IfNotPresent
-    containerPorts: 
-      server: 9000
-    volumeMounts:
-      - name: inference-model-storage
-        mountPath: /root/.cache
-    volumes:
-      - name: inference-model-storage
-        persistentVolumeClaim:
-          claimName: inference-model-pvc
+  name: inference-model-server
+  replicaCount: 1
+  labels:
+    - key: app
+      value: inference-model-server
+  image:
+    repository: onyxdotapp/onyx-model-server
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  containerPorts: 
+    server: 9000
+  volumeMounts:
+    - name: inference-model-storage
+      mountPath: /root/.cache
+  volumes:
+    - name: inference-model-storage
+      persistentVolumeClaim:
+        claimName: inference-model-pvc
   podLabels:
     - key: app
       value: inference-model-server
@@ -63,6 +59,8 @@ indexCapability:
     type: ClusterIP
     servicePort: 9000
     targetPort: 9000
+  replicaCount: 1
+  name: indexing-model-server
   deploymentLabels:
     app: indexing-model-server
   podLabels:
@@ -86,6 +84,7 @@ indexCapability:
     repository: onyxdotapp/onyx-model-server
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
+    pullPolicy: IfNotPresent
   limitConcurrency: 10
 config:
   envConfigMapName: env-configmap
@@ -167,7 +166,7 @@ webserver:
     minReplicas: 1
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80
-    # targetMemoryUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
 
   # Additional volumes on the output Deployment definition.
   volumes: []
@@ -239,7 +238,7 @@ api:
     minReplicas: 1
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80
-    # targetMemoryUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
 
   # Additional volumes on the output Deployment definition.
   volumes: []
@@ -300,7 +299,7 @@ background:
     minReplicas: 1
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80
-    # targetMemoryUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
 
   # Additional volumes on the output Deployment definition.
   volumes: []
@@ -319,6 +318,16 @@ background:
   tolerations: []
 
 vespa:
+  volumeClaimTemplates:
+     - metadata:
+         name: vespa-storage
+       spec:
+         accessModes:
+           - ReadWriteOnce
+         storageClassName: ""
+         resources:
+           requests:
+             storage: 1Gi
   enabled: true
   replicaCount: 1
   image:
@@ -393,14 +402,6 @@ redis:
 #  #    hosts:
 #  #      - chart-example.local
 
-persistence:
-  vespa:
-    enabled: true
-    existingClaim: ""
-    storageClassName: ebsstorage
-    accessModes:
-      - ReadWriteOnce
-    size: 5Gi
 
 auth:
   # for storing smtp, oauth, slack, and other secrets

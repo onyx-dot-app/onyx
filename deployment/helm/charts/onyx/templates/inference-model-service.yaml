@@ -10,6 +10,6 @@ spec:
       protocol: TCP
       name: {{ .Values.inferenceCapability.service.portName }}
   selector:
-    {{- range .Values.inferenceCapability.deployment.labels }}
+    {{- range .Values.inferenceCapability.labels }}
     {{ .key }}: {{ .value }}
     {{- end }}
