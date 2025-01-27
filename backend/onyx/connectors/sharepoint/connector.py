@@ -83,10 +83,13 @@ class SharepointConnector(LoadConnector, PollConnector):
                 sites_index = parts.index("sites")
                 site_url = "/".join(parts[: sites_index + 2])
                 folder = (
-                    unquote(parts[sites_index + 2])
+                    "/".join(unquote(part) for part in parts[sites_index + 2 :])
                     if len(parts) > sites_index + 2
                     else None
                 )
+                # Handling for new URL structure
+                if folder and folder.startswith("Shared Documents/"):
+                    folder = folder[len("Shared Documents/") :]
                 site_data_list.append(
                     SiteData(url=site_url, folder=folder, sites=[], driveitems=[])
                 )
@@ -114,11 +117,19 @@ class SharepointConnector(LoadConnector, PollConnector):
                         query = query.filter(filter_str)
                     driveitems = query.execute_query()
                     if element.folder:
+                        expected_path = f"/root:/{element.folder}"
                         filtered_driveitems = [
                             item
                             for item in driveitems
-                            if element.folder in item.parent_reference.path
+                            if item.parent_reference.path.endswith(expected_path)
                         ]
+                        if len(filtered_driveitems) == 0:
+                            all_paths = [
+                                item.parent_reference.path for item in driveitems
+                            ]
+                            logger.warning(
+                                f"Nothing found for folder '{expected_path}' in any of valid paths: {all_paths}"
+                            )
                         element.driveitems.extend(filtered_driveitems)
                     else:
                         element.driveitems.extend(driveitems)
