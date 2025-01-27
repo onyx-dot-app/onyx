@@ -481,7 +481,9 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
         name: "sites",
         optional: true,
         description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
+
 • Specifying 'https://onyxai.sharepoint.com/sites/support' for example will only index documents within this site.
+
 • Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example will only index documents within this folder.
 `,
       },

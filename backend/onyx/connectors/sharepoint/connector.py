@@ -6,6 +6,7 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 from typing import Optional
+from urllib.parse import unquote
 
 import msal  # type: ignore
 from office365.graph_client import GraphClient  # type: ignore
@@ -82,7 +83,9 @@ class SharepointConnector(LoadConnector, PollConnector):
                 sites_index = parts.index("sites")
                 site_url = "/".join(parts[: sites_index + 2])
                 folder = (
-                    parts[sites_index + 2] if len(parts) > sites_index + 2 else None
+                    unquote(parts[sites_index + 2])
+                    if len(parts) > sites_index + 2
+                    else None
                 )
                 site_data_list.append(
                     SiteData(url=site_url, folder=folder, sites=[], driveitems=[])

@@ -77,7 +77,9 @@ export function LabelWithTooltip({
 }
 
 export function SubLabel({ children }: { children: string | JSX.Element }) {
-  return <div className="text-xs text-subtle">{children}</div>;
+  return (
+    <div className="text-xs text-subtle whitespace-pre-line">{children}</div>
+  );
 }
 
 export function ManualErrorMessage({ children }: { children: string }) {
