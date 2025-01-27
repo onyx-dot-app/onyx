@@ -170,9 +170,10 @@ export interface SalesforceCredentialJson {
 }
 
 export interface SharepointCredentialJson {
-  sp_client_id: string;
-  sp_client_secret: string;
-  sp_directory_id: string;
+  sp_client_id: string | null;
+  sp_client_secret: string | null;
+  sp_directory_id: string | null;
+  sp_access_token: string | null;
 }
 
 export interface AsanaCredentialJson {
@@ -271,6 +272,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     sp_client_id: "",
     sp_client_secret: "",
     sp_directory_id: "",
+    sp_access_token: "",
   } as SharepointCredentialJson,
   asana: {
     asana_api_token_secret: "",
@@ -450,6 +452,7 @@ export const credentialDisplayNames: Record<string, string> = {
   sp_client_id: "SharePoint Client ID",
   sp_client_secret: "SharePoint Client Secret",
   sp_directory_id: "SharePoint Directory ID",
+  sp_access_token: "SharePoint Access Token",
 
   // Asana
   asana_api_token_secret: "Asana API Token",

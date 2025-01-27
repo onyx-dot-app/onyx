@@ -8,7 +8,6 @@ from typing import Any
 from typing import Optional
 from urllib.parse import unquote
 
-import msal  # type: ignore
 from office365.graph_client import GraphClient  # type: ignore
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore
 from office365.onedrive.sites.site import Site  # type: ignore
@@ -177,28 +176,19 @@ class SharepointConnector(LoadConnector, PollConnector):
                     doc_batch = []
         yield doc_batch
 
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        sp_client_id = credentials["sp_client_id"]
-        sp_client_secret = credentials["sp_client_secret"]
-        sp_directory_id = credentials["sp_directory_id"]
-
-        def _acquire_token_func() -> dict[str, Any]:
-            """
-            Acquire token via MSAL
-            """
-            authority_url = f"https://login.microsoftonline.com/{sp_directory_id}"
-            app = msal.ConfidentialClientApplication(
-                authority=authority_url,
-                client_id=sp_client_id,
-                client_credential=sp_client_secret,
+    def load_credentials(self, credentials: dict[str, Any]) -> None:
+        sp_access_token = credentials.get("sp_access_token")
+        if sp_access_token:
+            self.graph_client = GraphClient(
+                acquire_token_callback=lambda: {"access_token": sp_access_token}
             )
-            token = app.acquire_token_for_client(
-                scopes=["https://graph.microsoft.com/.default"]
+        else:
+            sp_client_id = credentials["sp_client_id"]
+            sp_client_secret = credentials["sp_client_secret"]
+            sp_directory_id = credentials["sp_directory_id"]
+            self.graph_client = GraphClient.with_client_secret(
+                sp_directory_id, sp_client_id, sp_client_secret
             )
-            return token
-
-        self.graph_client = GraphClient(_acquire_token_func)
-        return None
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         return self._fetch_from_sharepoint()
@@ -212,13 +202,14 @@ class SharepointConnector(LoadConnector, PollConnector):
 
 
 if __name__ == "__main__":
-    connector = SharepointConnector(sites=os.environ["SITES"].split(","))
+    connector = SharepointConnector(sites=os.environ.get("SITES", "").split(","))
 
     connector.load_credentials(
         {
-            "sp_client_id": os.environ["SP_CLIENT_ID"],
-            "sp_client_secret": os.environ["SP_CLIENT_SECRET"],
-            "sp_directory_id": os.environ["SP_CLIENT_DIRECTORY_ID"],
+            "sp_client_id": os.environ.get("SP_CLIENT_ID"),
+            "sp_client_secret": os.environ.get("SP_CLIENT_SECRET"),
+            "sp_directory_id": os.environ.get("SP_CLIENT_DIRECTORY_ID"),
+            "sp_access_token": os.environ.get("SP_ACCESS_TOKEN"),
         }
     )
     document_batches = connector.load_from_state()
