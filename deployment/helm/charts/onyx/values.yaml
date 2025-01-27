@@ -10,8 +10,8 @@ postgresql:
   auth:
     existingSecret: onyx-secrets
     secretKeys:
-      adminPasswordKey: postgres_password # overwriting as postgres typically expects 'postgres-password'
-
+      # overwriting as postgres typically expects 'postgres-password'
+      adminPasswordKey: postgres_password
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
@@ -40,7 +40,7 @@ inferenceCapability:
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
     pullPolicy: IfNotPresent
-  containerPorts: 
+  containerPorts:
     server: 9000
   volumeMounts:
     - name: inference-model-storage
@@ -143,7 +143,7 @@ webserver:
 
   containerPorts:
     server: 3000
-  
+
   service:
     type: ClusterIP
     servicePort: 3000
@@ -319,15 +319,15 @@ background:
 
 vespa:
   volumeClaimTemplates:
-     - metadata:
-         name: vespa-storage
-       spec:
-         accessModes:
-           - ReadWriteOnce
-         storageClassName: ""
-         resources:
-           requests:
-             storage: 1Gi
+    - metadata:
+        name: vespa-storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: ""
+        resources:
+          requests:
+            storage: 1Gi
   enabled: true
   replicaCount: 1
   image:
@@ -404,9 +404,9 @@ redis:
 
 
 auth:
-  # for storing smtp, oauth, slack, and other secrets
+  # existingSecret onyx-secret for storing smtp, oauth, slack, and other secrets
   # keys are lowercased version of env vars (e.g. SMTP_USER -> smtp_user)
-  existingSecret: "" # onyx-secrets
+  existingSecret: ""
   # optionally override the secret keys to reference in the secret
   # this is used to populate the env vars in individual deployments
   # the values here reference the keys in secrets below
@@ -430,14 +430,22 @@ auth:
     redis_password: "password"
 
 configMap:
-  AUTH_TYPE: "disabled" # Change this for production uses unless Onyx is only accessible behind VPN
-  SESSION_EXPIRE_TIME_SECONDS: "86400" # 1 Day Default
-  VALID_EMAIL_DOMAINS: "" # Can be something like onyx.app, as an extra double-check
-  SMTP_SERVER: "" # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
-  SMTP_PORT: "" # For sending verification emails, if unspecified then defaults to '587'
-  SMTP_USER: "" # 'your-email@company.com'
-  # SMTP_PASS: ""  # 'your-gmail-password'
-  EMAIL_FROM: "" # 'your-email@company.com' SMTP_USER missing used instead
+  # Change this for production uses unless Onyx is only accessible behind VPN
+  AUTH_TYPE: "disabled"
+  # 1 Day Default
+  SESSION_EXPIRE_TIME_SECONDS: "86400"
+  # Can be something like onyx.app, as an extra double-check
+  VALID_EMAIL_DOMAINS: ""
+  # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
+  SMTP_SERVER: ""
+  # For sending verification emails, if unspecified then defaults to '587'
+  SMTP_PORT: ""
+# 'your-email@company.com'
+  SMTP_USER: ""
+  # 'your-gmail-password'
+  # SMTP_PASS: ""
+  # 'your-email@company.com' SMTP_USER missing used instead
+  EMAIL_FROM: ""
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""
   QA_TIMEOUT: "60"
@@ -479,7 +487,7 @@ configMap:
   DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   DANSWER_BOT_DISPLAY_ERROR_MSGS: ""
   DANSWER_BOT_RESPOND_EVERY_CHANNEL: ""
-  DANSWER_BOT_DISABLE_COT: "" # Currently unused
+  DANSWER_BOT_DISABLE_COT: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
@@ -490,7 +498,8 @@ configMap:
   LOG_DANSWER_MODEL_INTERACTIONS: ""
   LOG_VESPA_TIMING_INFORMATION: ""
   # Shared or Non-backend Related
-  WEB_DOMAIN: "http://localhost:3000" # for web server and api server
-  DOMAIN: "localhost" # for nginx
+  WEB_DOMAIN: "http://localhost:3000"
+  # DOMAIN used by nginx
+  DOMAIN: "localhost"
   # Chat Configs
   HARD_DELETE_CHATS: ""
