@@ -124,10 +124,23 @@ def fetch_existing_tools(db_session: Session, tool_ids: list[int]) -> list[ToolM
 
 def fetch_existing_llm_providers(
     db_session: Session,
+) -> list[LLMProviderModel]:
+    stmt = select(LLMProviderModel)
+    return list(db_session.scalars(stmt).all())
+
+
+def fetch_existing_llm_providers_for_user(
+    db_session: Session,
     user: User | None = None,
 ) -> list[LLMProviderModel]:
     if not user:
-        return list(db_session.scalars(select(LLMProviderModel)).all())
+        return list(
+            db_session.scalars(
+                select(LLMProviderModel).where(
+                    LLMProviderModel.is_public == True  # noqa: E712
+                )
+            ).all()
+        )
     stmt = select(LLMProviderModel).distinct()
     user_groups_select = select(User__UserGroup.user_group_id).where(
         User__UserGroup.user_id == user.id
