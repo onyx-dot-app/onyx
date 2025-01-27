@@ -205,6 +205,13 @@ def handle_message(
                 text="The OnyxBot slash command is not enabled for this channel",
                 thread_ts=None,
             )
+            return False
+
+    if is_bot_msg:
+        if not sender_id:
+            logger.error("No sender id found for Slack slash command, nobody to DM to.")
+            return False
+        send_to = [sender_id]
 
     try:
         send_msg_ack_to_user(message_info, client)

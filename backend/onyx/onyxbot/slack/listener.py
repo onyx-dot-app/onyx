@@ -869,6 +869,8 @@ def create_process_slack_event() -> (
                 elif req.payload.get("type") == "view_submission":
                     return view_routing(req, client)
             elif req.type == "events_api" or req.type == "slash_commands":
+                # If you see dispatch_failed, it could be because of a conflict in the slash command
+                # as in more than 1 app is trying to use that one.
                 return process_message(req, client)
         except Exception:
             logger.exception("Failed to process slack event")
