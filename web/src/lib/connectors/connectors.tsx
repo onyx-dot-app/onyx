@@ -1121,11 +1121,19 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
       },
       {
         type: "text",
-        query: "Enter the API Domain:",
-        label: "OpenAPI Domain",
-        name: "api_domain",
+        query: "Enter the Space  ID:",
+        label: "Space ID",
+        name: "space_id",
         optional: true,
-        description: "https://open.feishu.cn or https://open.larksuite.com",
+        description: "The ID of the Lark Wiki space to index.",
+      },
+      {
+        type:"text",
+        query:"Enter the root page ID",
+        label:"Root Page ID",
+        name:"root_page_id",
+        optional:true,
+        description:"If specified, will only index the specified page + all of its child pages. If left blank, will index all pages the integration has been given access to."
       }
     ],
     advanced_values: [],

@@ -31,13 +31,19 @@ def _parse_timestamp(timestamp: Any, node_token: str) -> Optional[datetime]:
 
 class LarkWikiConnector(LoadConnector, PollConnector, SlimConnector):
     def __init__(self,
-                 api_domain: str = "https://open.feishu.cn",
                  workspace_domain: str = "https://<your domain>.feishu.cn",
+                 space_id: str = "",
+                 root_page_id: str = "",
                  batch_size: int = 100) -> None:
         self.batch_size = batch_size
         self.client = None
-        self.api_domain = api_domain
         self.workspace_domain = workspace_domain
+        self.space_id = space_id
+        self.root_page_id = root_page_id
+        if "feishu.cn" in self.workspace_domain:
+            self.api_domain = "https://open.feishu.cn"
+        else:
+            self.api_domain = "https://open.larksuite.com"
 
     def load_credentials(self, credentials: Dict[str, Any]) -> None:
         lark_app_id = credentials.get("lark_app_id")
@@ -68,16 +74,18 @@ class LarkWikiConnector(LoadConnector, PollConnector, SlimConnector):
             if not response.data.has_more:
                 break
             page_token = response.data.page_token
+        if self.space_id != "":
+            spaces = [space for space in spaces if space.space_id == self.space_id]
         return spaces
 
-    def _get_all_nodes(self, space_id: str, parent_node_token: Optional[str] = None) -> List[Node]:
+    def _get_all_nodes(self, space_id: str, parent_node_token: [str] = "") -> List[Node]:
         nodes = []
         page_token = None
         while True:
             request = ListSpaceNodeRequest.builder() \
                 .space_id(space_id) \
                 .page_size(50) \
-                .parent_node_token(parent_node_token if parent_node_token else "") \
+                .parent_node_token(parent_node_token) \
                 .page_token(page_token if page_token else "") \
                 .build()
             response:ListSpaceNodeResponse = self.client.wiki.v2.space_node.list(request)
@@ -110,7 +118,7 @@ class LarkWikiConnector(LoadConnector, PollConnector, SlimConnector):
         spaces = self._get_all_spaces()
         batch: List[Document] = []
         for space in spaces:
-            nodes = self._get_all_nodes(space.space_id)
+            nodes = self._get_all_nodes(space.space_id, self.root_page_id)
             for node in nodes:
                 if node.obj_type not in ["doc", "docx"]:
                     continue
@@ -169,7 +177,7 @@ class LarkWikiConnector(LoadConnector, PollConnector, SlimConnector):
         spaces = self._get_all_spaces()
         batch: List[SlimDocument] = []
         for space in spaces:
-            nodes = self._get_all_nodes(space.space_id)
+            nodes = self._get_all_nodes(space.space_id, self.root_page_id)
             for node in nodes:
                 if node.obj_type not in ["doc", "docx"]:
                     continue
