@@ -134,6 +134,7 @@ def fetch_existing_llm_providers_for_user(
     user: User | None = None,
 ) -> list[LLMProviderModel]:
     if not user:
+        # User is anonymous
         return list(
             db_session.scalars(
                 select(LLMProviderModel).where(
