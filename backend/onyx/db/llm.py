@@ -135,15 +135,21 @@ def fetch_existing_llm_providers_for_user(
     db_session: Session,
     user: User | None = None,
 ) -> list[LLMProviderModel]:
-    if not user and AUTH_TYPE == AuthType.DISABLED:
-        # User is anonymous
-        return list(
-            db_session.scalars(
-                select(LLMProviderModel).where(
-                    LLMProviderModel.is_public == True  # noqa: E712
-                )
-            ).all()
-        )
+    if not user:
+        if AUTH_TYPE == AuthType.DISABLED:
+            # User is anonymous
+            return list(
+                db_session.scalars(
+                    select(LLMProviderModel).where(
+                        LLMProviderModel.is_public == True  # noqa: E712
+                    )
+                ).all()
+            )
+        else:
+            raise ValueError(
+                "User is required for this operation when authentication is enabled. Please provide a valid user object."
+            )
+
     stmt = select(LLMProviderModel).distinct()
     user_groups_select = select(User__UserGroup.user_group_id).where(
         User__UserGroup.user_id == user.id
