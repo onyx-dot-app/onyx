@@ -561,10 +561,32 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
         # should not ignore it
         message_subtype = event.get("subtype")
         if message_subtype not in [None, "file_share"]:
-            channel_specific_logger.info(
-                f"Ignoring message with subtype '{message_subtype}' since it is a special message type"
-            )
-            return False
+            # Allow bot messages if respond_to_bots is enabled
+            if message_subtype == "bot_message":
+                channel_name, _ = get_channel_name_from_id(
+                    client=client.web_client, channel_id=channel
+                )
+
+                with get_session_with_tenant(client.tenant_id) as db_session:
+                    slack_channel_config = get_slack_channel_config_for_bot_and_channel(
+                        db_session=db_session,
+                        slack_bot_id=client.slack_bot_id,
+                        channel_name=channel_name,
+                    )
+                if slack_channel_config and slack_channel_config.channel_config.get(
+                    "respond_to_bots"
+                ):
+                    pass  # let it continue
+                else:
+                    channel_specific_logger.info(
+                        "Ignoring bot message since respond_to_bots is disabled"
+                    )
+                    return False
+            else:
+                channel_specific_logger.info(
+                    f"Ignoring message with subtype '{message_subtype}' since it is a special message type"
+                )
+                return False
 
         message_ts = event.get("ts")
         thread_ts = event.get("thread_ts")
