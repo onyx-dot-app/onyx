@@ -12,28 +12,27 @@ from onyx.connectors.models import Section
 
 @pytest.fixture(
     params=[
-        ("table_name", os.environ.get("AIRTABLE_TEST_TABLE_NAME")),
-        ("table_id", os.environ.get("AIRTABLE_TEST_TABLE_ID")),
+        ("table_name", "table_name"),
+        ("table_id", "table_id"),
     ]
 )
 def airtable_connector(request: pytest.FixtureRequest) -> AirtableConnector:
-    param_type, table_identifier = request.param
-    if table_identifier is None:
-        pytest.skip("Required environment variable not set")
-    
+    param_type, param_key = request.param
+    table_identifier = os.environ.get(f"AIRTABLE_TEST_{param_key.upper()}")
     base_id = os.environ.get("AIRTABLE_TEST_BASE_ID")
     access_token = os.environ.get("AIRTABLE_ACCESS_TOKEN")
-    if not base_id or not access_token:
+    
+    if not all([table_identifier, base_id, access_token]):
         pytest.skip("Required environment variables not set")
 
     connector = AirtableConnector(
-        base_id=base_id,
-        table_name_or_id=table_identifier,
+        base_id=str(base_id),
+        table_name_or_id=str(table_identifier),
     )
 
     connector.load_credentials(
         {
-            "airtable_access_token": access_token,
+            "airtable_access_token": str(access_token),
         }
     )
     return connector
@@ -110,7 +109,7 @@ def create_test_document(
         id=f"airtable__{id}",
         sections=sections,
         source=DocumentSource.AIRTABLE,
-        semantic_identifier=f"{os.environ['AIRTABLE_TEST_TABLE_NAME']}: {title}",
+        semantic_identifier=f"{os.environ.get('AIRTABLE_TEST_TABLE_NAME', '')}: {title}",
         metadata=metadata,
         doc_updated_at=None,
         primary_owners=None,
@@ -125,13 +124,6 @@ def create_test_document(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
-def test_airtable_connector_basic(
-    mock_get_api_key: MagicMock, airtable_connector: AirtableConnector
-) -> None:
-    """Test the default behavior where only specific field types are treated as metadata."""
-    doc_batch_generator = airtable_connector.load_from_state()
-
-
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -142,17 +134,17 @@ def test_airtable_connector_all_metadata(
     """Test behavior when all non-attachment fields are treated as metadata."""
     table_name = os.environ.get("AIRTABLE_TEST_TABLE_NAME")
     base_id = os.environ.get("AIRTABLE_TEST_BASE_ID")
-    if not table_name or not base_id:
+    access_token = os.environ.get("AIRTABLE_ACCESS_TOKEN")
+    if not all([table_name, base_id, access_token]):
         pytest.skip("Required environment variables not set")
-    param_type, table_identifier = ("table_name", table_name)
     connector = AirtableConnector(
-        base_id=base_id,
-        table_name_or_id=table_identifier,
+        base_id=str(base_id),
+        table_name_or_id=str(table_name),
         connector_config={"treat_all_non_attachment_fields_as_metadata": True},
     )
     connector.load_credentials(
         {
-            "airtable_access_token": os.environ["AIRTABLE_ACCESS_TOKEN"],
+            "airtable_access_token": str(access_token),
         }
     )
     
@@ -234,15 +226,14 @@ def test_airtable_connector_all_metadata(
         # Compare sections - should only contain attachments
         for section in actual.sections:
             assert "Attachment:" in section.text, f"Non-attachment section found in document {actual.id}"
-            assert "blocks=hide" in section.link, f"Non-attachment link found in document {actual.id}"
+            assert section.link and "blocks=hide" in section.link, f"Non-attachment link found in document {actual.id}"
 
 
-def test_airtable_connector_basic(
+def test_airtable_connector_with_attachments(
     mock_get_api_key: MagicMock, airtable_connector: AirtableConnector
 ) -> None:
     """Test the default behavior where only specific field types are treated as metadata."""
     doc_batch_generator = airtable_connector.load_from_state()
-
     doc_batch = next(doc_batch_generator)
     with pytest.raises(StopIteration):
         next(doc_batch_generator)
