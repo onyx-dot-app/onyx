@@ -537,56 +537,37 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
                 # Let the tag flow handle this case, don't reply twice
                 return False
 
-        if event.get("bot_profile"):
-            channel_name, _ = get_channel_name_from_id(
-                client=client.web_client, channel_id=channel
+        # Get channel config early since we'll need it for bot message checks
+        channel_name, _ = get_channel_name_from_id(
+            client=client.web_client, channel_id=channel
+        )
+        with get_session_with_tenant(client.tenant_id) as db_session:
+            slack_channel_config = get_slack_channel_config_for_bot_and_channel(
+                db_session=db_session,
+                slack_bot_id=client.slack_bot_id,
+                channel_name=channel_name,
             )
 
-            with get_session_with_tenant(client.tenant_id) as db_session:
-                slack_channel_config = get_slack_channel_config_for_bot_and_channel(
-                    db_session=db_session,
-                    slack_bot_id=client.slack_bot_id,
-                    channel_name=channel_name,
-                )
+        # Check if this is a bot message (either via bot_profile or bot_message subtype)
+        is_bot_message = bool(event.get("bot_profile") or event.get("subtype") == "bot_message")
+        if is_bot_message:
             # If OnyxBot is not specifically tagged and the channel is not set to respond to bots, ignore the message
             if (not bot_tag_id or bot_tag_id not in msg) and (
                 not slack_channel_config
                 or not slack_channel_config.channel_config.get("respond_to_bots")
             ):
-                channel_specific_logger.info("Ignoring message from bot")
+                channel_specific_logger.info("Ignoring message from bot since respond_to_bots is disabled")
                 return False
 
         # Ignore things like channel_join, channel_leave, etc.
         # NOTE: "file_share" is just a message with a file attachment, so we
         # should not ignore it
         message_subtype = event.get("subtype")
-        if message_subtype not in [None, "file_share"]:
-            # Allow bot messages if respond_to_bots is enabled
-            if message_subtype == "bot_message":
-                channel_name, _ = get_channel_name_from_id(
-                    client=client.web_client, channel_id=channel
-                )
-
-                with get_session_with_tenant(client.tenant_id) as db_session:
-                    slack_channel_config = get_slack_channel_config_for_bot_and_channel(
-                        db_session=db_session,
-                        slack_bot_id=client.slack_bot_id,
-                        channel_name=channel_name,
-                    )
-                if slack_channel_config and slack_channel_config.channel_config.get(
-                    "respond_to_bots"
-                ):
-                    pass  # let it continue
-                else:
-                    channel_specific_logger.info(
-                        "Ignoring bot message since respond_to_bots is disabled"
-                    )
-                    return False
-            else:
-                channel_specific_logger.info(
-                    f"Ignoring message with subtype '{message_subtype}' since it is a special message type"
-                )
-                return False
+        if message_subtype not in [None, "file_share", "bot_message"]:
+            channel_specific_logger.info(
+                f"Ignoring message with subtype '{message_subtype}' since it is a special message type"
+            )
+            return False
 
         message_ts = event.get("ts")
         thread_ts = event.get("thread_ts")
