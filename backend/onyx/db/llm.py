@@ -146,11 +146,8 @@ def fetch_existing_llm_providers_for_user(
                 ).all()
             )
         else:
-            # Use `fetch_existing_llm_providers` to fetch all existing providers
-            # As opposed to passing `user=None`
-            raise ValueError(
-                "A valid user is required for this operation when authentication is enabled."
-            )
+            # If auth is disabled, user has access to all providers
+            return fetch_existing_llm_providers(db_session)
 
     stmt = select(LLMProviderModel).distinct()
     user_groups_select = select(User__UserGroup.user_group_id).where(
