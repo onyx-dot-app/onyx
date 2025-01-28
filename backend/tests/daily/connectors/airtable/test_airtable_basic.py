@@ -1,5 +1,5 @@
 import os
-from typing import Generator
+from collections.abc import Generator
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
