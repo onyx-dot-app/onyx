@@ -485,6 +485,7 @@ def index_doc_batch(
         update_docs_last_modified__no_commit(
             document_ids=last_modified_ids, db_session=db_session
         )
+        logger.error(f"updating chunk count for {updatable_ids}")
 
         update_docs_chunk_count__no_commit(
             document_ids=updatable_ids,
