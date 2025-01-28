@@ -63,16 +63,18 @@ def create_test_document(
     sections = []
 
     if not all_fields_as_metadata:
-        sections.extend([
-            Section(
-                text=f"Title:\n------------------------\n{title}\n------------------------",
-                link=f"{link_base}/{id}",
-            ),
-            Section(
-                text=f"Description:\n------------------------\n{description}\n------------------------",
-                link=f"{link_base}/{id}",
-            ),
-        ])
+        sections.extend(
+            [
+                Section(
+                    text=f"Title:\n------------------------\n{title}\n------------------------",
+                    link=f"{link_base}/{id}",
+                ),
+                Section(
+                    text=f"Description:\n------------------------\n{description}\n------------------------",
+                    link=f"{link_base}/{id}",
+                ),
+            ]
+        )
 
     if attachments:
         for attachment_text, attachment_link in attachments:
@@ -100,10 +102,12 @@ def create_test_document(
     }
 
     if all_fields_as_metadata:
-        metadata.update({
-            "Title": title,
-            "Description": description,
-        })
+        metadata.update(
+            {
+                "Title": title,
+                "Description": description,
+            }
+        )
 
     return Document(
         id=f"airtable__{id}",
@@ -120,14 +124,14 @@ def create_test_document(
     )
 
 
-@patch(
-    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
-    return_value=None,
-)
-@patch(
-    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
-    return_value=None,
-)
+@pytest.fixture
+def mock_get_api_key():
+    with patch(
+        "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+        return_value=None,
+    ) as mock:
+        yield mock
+
 def test_airtable_connector_all_metadata(
     mock_get_api_key: MagicMock, request: pytest.FixtureRequest
 ) -> None:
@@ -147,7 +151,6 @@ def test_airtable_connector_all_metadata(
             "airtable_access_token": str(access_token),
         }
     )
-    
     doc_batch_generator = connector.load_from_state()
     doc_batch = next(doc_batch_generator)
     with pytest.raises(StopIteration):
@@ -225,8 +228,12 @@ def test_airtable_connector_all_metadata(
 
         # Compare sections - should only contain attachments
         for section in actual.sections:
-            assert "Attachment:" in section.text, f"Non-attachment section found in document {actual.id}"
-            assert section.link and "blocks=hide" in section.link, f"Non-attachment link found in document {actual.id}"
+            assert (
+                "Attachment:" in section.text
+            ), f"Non-attachment section found in document {actual.id}"
+            assert (
+                section.link and "blocks=hide" in section.link
+            ), f"Non-attachment link found in document {actual.id}"
 
 
 def test_airtable_connector_with_attachments(
