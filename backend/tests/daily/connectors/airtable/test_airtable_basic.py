@@ -12,20 +12,28 @@ from onyx.connectors.models import Section
 
 @pytest.fixture(
     params=[
-        ("table_name", os.environ["AIRTABLE_TEST_TABLE_NAME"]),
-        ("table_id", os.environ["AIRTABLE_TEST_TABLE_ID"]),
+        ("table_name", os.environ.get("AIRTABLE_TEST_TABLE_NAME")),
+        ("table_id", os.environ.get("AIRTABLE_TEST_TABLE_ID")),
     ]
 )
 def airtable_connector(request: pytest.FixtureRequest) -> AirtableConnector:
     param_type, table_identifier = request.param
+    if table_identifier is None:
+        pytest.skip("Required environment variable not set")
+    
+    base_id = os.environ.get("AIRTABLE_TEST_BASE_ID")
+    access_token = os.environ.get("AIRTABLE_ACCESS_TOKEN")
+    if not base_id or not access_token:
+        pytest.skip("Required environment variables not set")
+
     connector = AirtableConnector(
-        base_id=os.environ["AIRTABLE_TEST_BASE_ID"],
+        base_id=base_id,
         table_name_or_id=table_identifier,
     )
 
     connector.load_credentials(
         {
-            "airtable_access_token": os.environ["AIRTABLE_ACCESS_TOKEN"],
+            "airtable_access_token": access_token,
         }
     )
     return connector
@@ -48,7 +56,11 @@ def create_test_document(
     attachments: list[tuple[str, str]] | None = None,
     all_fields_as_metadata: bool = False,
 ) -> Document:
-    link_base = f"https://airtable.com/{os.environ['AIRTABLE_TEST_BASE_ID']}/{os.environ['AIRTABLE_TEST_TABLE_ID']}"
+    base_id = os.environ.get("AIRTABLE_TEST_BASE_ID")
+    table_id = os.environ.get("AIRTABLE_TEST_TABLE_ID")
+    if not base_id or not table_id:
+        pytest.skip("Required environment variables not set")
+    link_base = f"https://airtable.com/{base_id}/{table_id}"
     sections = []
 
     if not all_fields_as_metadata:
@@ -128,9 +140,13 @@ def test_airtable_connector_all_metadata(
     mock_get_api_key: MagicMock, request: pytest.FixtureRequest
 ) -> None:
     """Test behavior when all non-attachment fields are treated as metadata."""
-    param_type, table_identifier = ("table_name", os.environ["AIRTABLE_TEST_TABLE_NAME"])
+    table_name = os.environ.get("AIRTABLE_TEST_TABLE_NAME")
+    base_id = os.environ.get("AIRTABLE_TEST_BASE_ID")
+    if not table_name or not base_id:
+        pytest.skip("Required environment variables not set")
+    param_type, table_identifier = ("table_name", table_name)
     connector = AirtableConnector(
-        base_id=os.environ["AIRTABLE_TEST_BASE_ID"],
+        base_id=base_id,
         table_name_or_id=table_identifier,
         connector_config={"treat_all_non_attachment_fields_as_metadata": True},
     )
