@@ -549,14 +549,18 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
             )
 
         # Check if this is a bot message (either via bot_profile or bot_message subtype)
-        is_bot_message = bool(event.get("bot_profile") or event.get("subtype") == "bot_message")
+        is_bot_message = bool(
+            event.get("bot_profile") or event.get("subtype") == "bot_message"
+        )
         if is_bot_message:
             # If OnyxBot is not specifically tagged and the channel is not set to respond to bots, ignore the message
             if (not bot_tag_id or bot_tag_id not in msg) and (
                 not slack_channel_config
                 or not slack_channel_config.channel_config.get("respond_to_bots")
             ):
-                channel_specific_logger.info("Ignoring message from bot since respond_to_bots is disabled")
+                channel_specific_logger.info(
+                    "Ignoring message from bot since respond_to_bots is disabled"
+                )
                 return False
 
         # Ignore things like channel_join, channel_leave, etc.
