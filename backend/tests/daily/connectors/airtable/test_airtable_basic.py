@@ -23,8 +23,19 @@ def airtable_connector(request: pytest.FixtureRequest) -> AirtableConnector:
     base_id = os.environ.get("AIRTABLE_TEST_BASE_ID")
     access_token = os.environ.get("AIRTABLE_ACCESS_TOKEN")
 
-    if not all([table_identifier, base_id, access_token]):
-        pytest.skip("Required environment variables not set")
+    missing_vars = []
+    if not table_identifier:
+        missing_vars.append(f"AIRTABLE_TEST_{param_key.upper()}")
+    if not base_id:
+        missing_vars.append("AIRTABLE_TEST_BASE_ID")
+    if not access_token:
+        missing_vars.append("AIRTABLE_ACCESS_TOKEN")
+
+    if missing_vars:
+        raise RuntimeError(
+            f"Required environment variables not set: {', '.join(missing_vars)}. "
+            "These variables are required to run Airtable connector tests."
+        )
 
     connector = AirtableConnector(
         base_id=str(base_id),
@@ -59,8 +70,17 @@ def create_test_document(
 ) -> Document:
     base_id = os.environ.get("AIRTABLE_TEST_BASE_ID")
     table_id = os.environ.get("AIRTABLE_TEST_TABLE_ID")
-    if not base_id or not table_id:
-        pytest.skip("Required environment variables not set")
+    missing_vars = []
+    if not base_id:
+        missing_vars.append("AIRTABLE_TEST_BASE_ID")
+    if not table_id:
+        missing_vars.append("AIRTABLE_TEST_TABLE_ID")
+
+    if missing_vars:
+        raise RuntimeError(
+            f"Required environment variables not set: {', '.join(missing_vars)}. "
+            "These variables are required to run Airtable connector tests."
+        )
     link_base = f"https://airtable.com/{base_id}/{table_id}"
     sections = []
 
@@ -134,6 +154,14 @@ def mock_get_api_key() -> Generator[MagicMock, None, None]:
     ) as mock:
         yield mock
 
+
+def test_airtable_connector_parameter_validation() -> None:
+    """Test that treat_all_non_attachment_fields_as_metadata is required and has no default."""
+    with pytest.raises(TypeError, match="missing.*required.*argument.*treat_all_non_attachment_fields_as_metadata"):
+        AirtableConnector(
+            base_id="test_base",
+            table_name_or_id="test_table",
+        )
 
 def test_airtable_connector_all_metadata(
     mock_get_api_key: MagicMock, request: pytest.FixtureRequest
