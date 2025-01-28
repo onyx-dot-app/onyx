@@ -5,7 +5,6 @@ from dataclasses import field
 from datetime import datetime
 from datetime import timezone
 from typing import Any
-from typing import Optional
 from urllib.parse import unquote
 
 import msal  # type: ignore
@@ -32,14 +31,28 @@ logger = setup_logger()
 
 @dataclass
 class SiteData:
+    """Data class for storing SharePoint site information.
+
+    Args:
+        url: The base site URL (e.g. https://danswerai.sharepoint.com/sites/sharepoint-tests)
+        drive_name: The name of the drive to access (e.g. "Shared Documents", "Other Library")
+                   If None, all drives will be accessed.
+        folder_path: The folder path within the drive to access (e.g. "test/nested with spaces")
+                    If None, all folders will be accessed.
+        sites: List of SharePoint Site objects (populated during execution)
+        driveitems: List of tuples containing DriveItem and its library name (populated during execution)
+    """
+
     url: str | None
-    folder: Optional[str]
-    sites: list = field(default_factory=list)
-    driveitems: list = field(default_factory=list)
+    drive_name: str | None
+    folder_path: str | None
+    sites: list[Site] = field(default_factory=list)
+    driveitems: list[tuple[DriveItem, str]] = field(default_factory=list)
 
 
 def _convert_driveitem_to_document(
     driveitem: DriveItem,
+    library_name: str,
 ) -> Document:
     file_text = extract_file_text(
         file=io.BytesIO(driveitem.get_content().execute_query().value),
@@ -59,7 +72,7 @@ def _convert_driveitem_to_document(
                 email=driveitem.last_modified_by.user.email,
             )
         ],
-        metadata={},
+        metadata={"library": library_name},
     )
     return doc
 
@@ -72,26 +85,38 @@ class SharepointConnector(LoadConnector, PollConnector):
     ) -> None:
         self.batch_size = batch_size
         self.graph_client: GraphClient | None = None
-        self.site_data: list[SiteData] = self._extract_site_and_folder(sites)
+        self.site_data: list[SiteData] = self._extract_site_and_drive_info(sites)
 
     @staticmethod
-    def _extract_site_and_folder(site_urls: list[str]) -> list[SiteData]:
+    def _extract_site_and_drive_info(site_urls: list[str]) -> list[SiteData]:
         site_data_list = []
         for url in site_urls:
             parts = url.strip().split("/")
             if "sites" in parts:
                 sites_index = parts.index("sites")
                 site_url = "/".join(parts[: sites_index + 2])
-                folder = (
-                    "/".join(unquote(part) for part in parts[sites_index + 2 :])
-                    if len(parts) > sites_index + 2
-                    else None
-                )
-                # Handling for new URL structure
-                if folder and folder.startswith("Shared Documents/"):
-                    folder = folder[len("Shared Documents/") :]
+                remaining_parts = parts[sites_index + 2 :]
+
+                # Extract drive name and folder path
+                if remaining_parts:
+                    drive_name = unquote(remaining_parts[0])
+                    folder_path = (
+                        "/".join(unquote(part) for part in remaining_parts[1:])
+                        if len(remaining_parts) > 1
+                        else None
+                    )
+                else:
+                    drive_name = None
+                    folder_path = None
+
                 site_data_list.append(
-                    SiteData(url=site_url, folder=folder, sites=[], driveitems=[])
+                    SiteData(
+                        url=site_url,
+                        drive_name=drive_name,
+                        folder_path=folder_path,
+                        sites=[],
+                        driveitems=[],
+                    )
                 )
         return site_data_list
 
@@ -105,39 +130,93 @@ class SharepointConnector(LoadConnector, PollConnector):
             filter_str = f"last_modified_datetime ge {start.isoformat()} and last_modified_datetime le {end.isoformat()}"
 
         for element in self.site_data:
-            sites: list[Site] = []
             for site in element.sites:
-                site_sublist = site.lists.get().execute_query()
-                sites.extend(site_sublist)
-
-            for site in sites:
                 try:
-                    query = site.drive.root.get_files(True, 1000)
-                    if filter_str:
-                        query = query.filter(filter_str)
-                    driveitems = query.execute_query()
-                    if element.folder:
-                        expected_path = f"/root:/{element.folder}"
-                        filtered_driveitems = [
-                            item
-                            for item in driveitems
-                            if item.parent_reference.path.endswith(expected_path)
-                        ]
-                        if len(filtered_driveitems) == 0:
-                            all_paths = [
-                                item.parent_reference.path for item in driveitems
-                            ]
-                            logger.warning(
-                                f"Nothing found for folder '{expected_path}' in any of valid paths: {all_paths}"
-                            )
-                        element.driveitems.extend(filtered_driveitems)
-                    else:
-                        element.driveitems.extend(driveitems)
+                    # Get all drives in the site
+                    drives = site.drives.get().execute_query()
+                    logger.debug(f"Found drives: {[drive.name for drive in drives]}")
 
-                except Exception:
-                    # Sites include things that do not contain .drive.root so this fails
-                    # but this is fine, as there are no actually documents in those
-                    pass
+                    # Filter drives based on the requested drive name
+                    if element.drive_name:
+                        drives = [
+                            drive
+                            for drive in drives
+                            if drive.name == element.drive_name
+                            or (
+                                drive.name == "Documents"
+                                and element.drive_name == "Shared Documents"
+                            )
+                        ]
+                        if not drives:
+                            logger.warning(f"Drive '{element.drive_name}' not found")
+                            continue
+
+                    # Process each matching drive
+                    for drive in drives:
+                        try:
+                            root_folder = drive.root
+                            if element.folder_path:
+                                # If a specific folder is requested, navigate to it
+                                for folder_part in element.folder_path.split("/"):
+                                    root_folder = root_folder.get_by_path(folder_part)
+
+                            # Get all items recursively
+                            query = root_folder.get_files(True, 1000)
+                            if filter_str:
+                                query = query.filter(filter_str)
+                            driveitems = query.execute_query()
+                            logger.debug(
+                                f"Found {len(driveitems)} items in drive '{drive.name}'"
+                            )
+
+                            # Use "Shared Documents" as the library name for the default "Documents" drive
+                            library_name = (
+                                "Shared Documents"
+                                if drive.name == "Documents"
+                                else drive.name
+                            )
+
+                            if element.folder_path:
+                                # Filter items to ensure they're in the specified folder or its subfolders
+                                # The path will be in format: /drives/{drive_id}/root:/folder/path
+                                filtered_driveitems = [
+                                    (item, library_name)
+                                    for item in driveitems
+                                    if any(
+                                        path_part == element.folder_path
+                                        or path_part.startswith(
+                                            element.folder_path + "/"
+                                        )
+                                        for path_part in item.parent_reference.path.split(
+                                            "root:/"
+                                        )[
+                                            1
+                                        ].split(
+                                            "/"
+                                        )
+                                    )
+                                ]
+                                if len(filtered_driveitems) == 0:
+                                    all_paths = [
+                                        item.parent_reference.path
+                                        for item in driveitems
+                                    ]
+                                    logger.warning(
+                                        f"Nothing found for folder '{element.folder_path}' in any of valid paths: {all_paths}"
+                                    )
+                                element.driveitems.extend(filtered_driveitems)
+                            else:
+                                element.driveitems.extend(
+                                    [(item, library_name) for item in driveitems]
+                                )
+                        except Exception as e:
+                            # Some drives might not be accessible
+                            logger.warning(f"Failed to process drive: {str(e)}")
+
+                except Exception as e:
+                    # Sites include things that do not contain drives so this fails
+                    # but this is fine, as there are no actual documents in those
+                    logger.warning(f"Failed to process site: {str(e)}")
 
     def _populate_sitedata_sites(self) -> None:
         if self.graph_client is None:
@@ -153,7 +232,13 @@ class SharepointConnector(LoadConnector, PollConnector):
         else:
             sites = self.graph_client.sites.get_all().execute_query()
             self.site_data = [
-                SiteData(url=None, folder=None, sites=sites, driveitems=[])
+                SiteData(
+                    url=None,
+                    drive_name=None,
+                    folder_path=None,
+                    sites=sites,
+                    driveitems=[],
+                )
             ]
 
     def _fetch_from_sharepoint(
@@ -168,9 +253,11 @@ class SharepointConnector(LoadConnector, PollConnector):
         # goes over all urls, converts them into Document objects and then yields them in batches
         doc_batch: list[Document] = []
         for element in self.site_data:
-            for driveitem in element.driveitems:
+            for driveitem, library_name in element.driveitems:
                 logger.debug(f"Processing: {driveitem.web_url}")
-                doc_batch.append(_convert_driveitem_to_document(driveitem))
+                doc_batch.append(
+                    _convert_driveitem_to_document(driveitem, library_name)
+                )
 
                 if len(doc_batch) >= self.batch_size:
                     yield doc_batch
