@@ -61,7 +61,13 @@ export const SlackTokensForm = ({
               : "Successfully created Slack Bot!",
             type: "success",
           });
-          router.push(`/admin/bots/${encodeURIComponent(botId)}`);
+          if (isUpdate) {
+            router.push(`/admin/bots/${encodeURIComponent(botId)}`);
+          } else {
+            router.push(
+              `/admin/bots/${encodeURIComponent(botId)}/channels/new`
+            );
+          }
         } else {
           const responseJson = await response.json();
           let errorMsg = responseJson.detail || responseJson.message;

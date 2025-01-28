@@ -52,26 +52,49 @@ export function SearchMultiSelectDropdown({
   itemComponent,
   onCreate,
   onDelete,
+  onSearchTermChange,
+  initialSearchTerm = "",
 }: {
   options: StringOrNumberOption[];
   onSelect: (selected: StringOrNumberOption) => void;
   itemComponent?: FC<{ option: StringOrNumberOption }>;
   onCreate?: (name: string) => void;
   onDelete?: (name: string) => void;
+  onSearchTermChange?: (term: string) => void;
+  initialSearchTerm?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownMenuRef = useRef<HTMLDivElement>(null);
+
+  const searchTermChangeCallback = (e: ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setSearchTerm(newValue);
+    if (onSearchTermChange) {
+      onSearchTermChange(newValue);
+    }
+
+    if (newValue) {
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  };
 
   const handleSelect = (option: StringOrNumberOption) => {
     onSelect(option);
     setIsOpen(false);
-    setSearchTerm(""); // Clear search term after selection
+    setSearchTerm(option.name);
   };
 
   const filteredOptions = options.filter((option) =>
     option.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  useEffect(() => {
+    setSearchTerm(initialSearchTerm);
+  }, [initialSearchTerm]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -96,14 +119,7 @@ export function SearchMultiSelectDropdown({
           type="text"
           placeholder="Search..."
           value={searchTerm}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => {
-            setSearchTerm(e.target.value);
-            if (e.target.value) {
-              setIsOpen(true);
-            } else {
-              setIsOpen(false);
-            }
-          }}
+          onChange={searchTermChangeCallback}
           onFocus={() => setIsOpen(true)}
           className="inline-flex justify-between w-full px-4 py-2 text-sm bg-background border border-border rounded-md shadow-sm"
         />
@@ -154,7 +170,7 @@ export function SearchMultiSelectDropdown({
                 <>
                   <div className="border-t border-border"></div>
                   <button
-                    className="w-full text-left flex items-center px-4 py-2 text-sm hover:bg-hover"
+                    className="w-full  text-left flex items-center px-4 py-2  text-sm hover:bg-hover"
                     role="menuitem"
                     onClick={() => {
                       onCreate(searchTerm);

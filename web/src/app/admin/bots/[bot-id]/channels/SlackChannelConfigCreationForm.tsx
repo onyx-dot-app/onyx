@@ -16,12 +16,13 @@ import {
   createSlackChannelConfig,
   isPersonaASlackBotPersona,
   updateSlackChannelConfig,
+  fetchSlackChannels,
 } from "../lib";
 import CardSection from "@/components/admin/CardSection";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
@@ -33,6 +34,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/fully_wrapped_tabs";
+import { SearchMultiSelectDropdown } from "@/components/Dropdown";
 
 export const SlackChannelConfigCreationForm = ({
   slack_bot_id,
@@ -57,8 +59,29 @@ export const SlackChannelConfigCreationForm = ({
     existingSlackBotUsesPersona
   );
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [currentSearchTerm, setCurrentSearchTerm] = useState("");
+  const [channelOptions, setChannelOptions] = useState<
+    { name: string; value: string }[] // ES5 doesn't support set lookups which is ideal here.
+  >([]);
 
   const knowledgePersona = personas.find((persona) => persona.id === 0);
+
+  useEffect(() => {
+    const fetchChannels = async () => {
+      const channels = await fetchSlackChannels(slack_bot_id);
+      setChannelOptions(
+        Object.entries(channels).map(([name, id]) => ({
+          name,
+          value: id as string,
+        }))
+      );
+    };
+    fetchChannels();
+  }, [slack_bot_id]);
+
+  const handleSearchTermChange = (newTerm: string) => {
+    setCurrentSearchTerm(newTerm);
+  };
 
   return (
     <div>
@@ -180,11 +203,25 @@ export const SlackChannelConfigCreationForm = ({
           {({ isSubmitting, values, setFieldValue }) => (
             <Form>
               <div className="px-6 pb-6 pt-4 w-full">
-                <TextFormField
-                  name="channel_name"
-                  label="Slack Channel Name:"
-                />
+                <label
+                  htmlFor="channel_name"
+                  className="block font-medium text-base"
+                >
+                  Select A Slack Channel Name:
+                </label>
 
+                <SearchMultiSelectDropdown
+                  options={channelOptions}
+                  onSelect={(selected) => {
+                    setFieldValue("channel_name", selected.name);
+                    setCurrentSearchTerm(selected.name);
+                  }}
+                  onSearchTermChange={handleSearchTermChange}
+                  initialSearchTerm={
+                    existingSlackChannelConfig?.channel_config.channel_name ||
+                    ""
+                  }
+                />
                 <div className="mt-6">
                   <Label>Knowledge Sources</Label>
                   <SubLabel>
@@ -383,7 +420,11 @@ export const SlackChannelConfigCreationForm = ({
                   <Button
                     type="submit"
                     variant="submit"
-                    disabled={isSubmitting || !values.channel_name}
+                    disabled={
+                      isSubmitting ||
+                      !values.channel_name ||
+                      values.channel_name !== currentSearchTerm
+                    }
                     className="mx-auto w-64"
                   >
                     {isUpdate ? "Update!" : "Create!"}
