@@ -594,7 +594,6 @@ class VespaIndex(DocumentIndex):
                         primary_index=index_name == self.index_name,
                     )
                     large_chunks_enabled = multipass_config.enable_large_chunks
-
                 enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
                     index_name=index_name,
                     http_client=http_client,
@@ -608,11 +607,6 @@ class VespaIndex(DocumentIndex):
                     tenant_id=tenant_id,
                     large_chunks_enabled=large_chunks_enabled,
                 )
-
-                logger.error("checking chunks")
-                logger.error(doc_chunk_ids)
-                logger.error(doc_id)
-                logger.error(enriched_doc_infos)
 
                 doc_chunk_count += len(doc_chunk_ids)
 
