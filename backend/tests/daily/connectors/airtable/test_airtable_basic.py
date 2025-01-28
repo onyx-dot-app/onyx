@@ -85,7 +85,7 @@ def create_test_document(
                 ),
             )
 
-    metadata = {
+    metadata: dict[str, str | list[str]] = {
         # "Category": category,
         "Assignee": assignee,
         "Submitted by": submitted_by,
