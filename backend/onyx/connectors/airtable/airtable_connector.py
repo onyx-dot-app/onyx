@@ -171,7 +171,7 @@ class AirtableConnector(LoadConnector):
 
     def _should_be_metadata(self, field_type: str) -> bool:
         """Determine if a field type should be treated as metadata.
-        
+
         When treat_all_non_attachment_fields_as_metadata is True, all fields except
         attachments are treated as metadata. Otherwise, only fields with types listed
         in DEFAULT_METADATA_FIELD_TYPES are treated as metadata."""
