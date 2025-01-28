@@ -1,4 +1,5 @@
 import os
+from typing import Generator
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -125,7 +126,7 @@ def create_test_document(
 
 
 @pytest.fixture
-def mock_get_api_key():
+def mock_get_api_key() -> Generator[MagicMock, None, None]:
     with patch(
         "onyx.file_processing.extract_file_text.get_unstructured_api_key",
         return_value=None,
