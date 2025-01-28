@@ -357,7 +357,8 @@ export type ConfigurableSources = Exclude<
 
 export const oauthSupportedSources: ConfigurableSources[] = [
   ValidSources.Slack,
-  ValidSources.GoogleDrive,
+  // NOTE: temporarily disabled until our GDrive App is approved
+  // ValidSources.GoogleDrive,
 ];
 
 export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
