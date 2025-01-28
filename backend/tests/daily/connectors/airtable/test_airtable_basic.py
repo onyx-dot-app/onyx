@@ -21,7 +21,7 @@ def airtable_connector(request: pytest.FixtureRequest) -> AirtableConnector:
     table_identifier = os.environ.get(f"AIRTABLE_TEST_{param_key.upper()}")
     base_id = os.environ.get("AIRTABLE_TEST_BASE_ID")
     access_token = os.environ.get("AIRTABLE_ACCESS_TOKEN")
-    
+
     if not all([table_identifier, base_id, access_token]):
         pytest.skip("Required environment variables not set")
 
@@ -131,6 +131,7 @@ def mock_get_api_key():
         return_value=None,
     ) as mock:
         yield mock
+
 
 def test_airtable_connector_all_metadata(
     mock_get_api_key: MagicMock, request: pytest.FixtureRequest
