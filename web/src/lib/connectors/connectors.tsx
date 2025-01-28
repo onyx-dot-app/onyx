@@ -1112,8 +1112,7 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         name: "treat_all_non_attachment_fields_as_metadata",
         description:
           "Choose this if the primary content to index are attachments and all other columns are metadata for these attachments.",
-        optional: true,
-        default: false,
+        optional: false,
       },
     ],
     advanced_values: [],

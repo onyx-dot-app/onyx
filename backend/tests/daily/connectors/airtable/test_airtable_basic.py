@@ -29,6 +29,7 @@ def airtable_connector(request: pytest.FixtureRequest) -> AirtableConnector:
     connector = AirtableConnector(
         base_id=str(base_id),
         table_name_or_id=str(table_identifier),
+        treat_all_non_attachment_fields_as_metadata=False,
     )
 
     connector.load_credentials(
@@ -146,7 +147,7 @@ def test_airtable_connector_all_metadata(
     connector = AirtableConnector(
         base_id=str(base_id),
         table_name_or_id=str(table_name),
-        connector_config={"treat_all_non_attachment_fields_as_metadata": True},
+        treat_all_non_attachment_fields_as_metadata=True,
     )
     connector.load_credentials(
         {
