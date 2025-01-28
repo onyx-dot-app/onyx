@@ -166,6 +166,7 @@ def test_airtable_connector_parameter_validation() -> None:
             table_name_or_id="test_table",
         )
 
+
 def test_airtable_connector_all_metadata(
     mock_get_api_key: MagicMock, request: pytest.FixtureRequest
 ) -> None:
