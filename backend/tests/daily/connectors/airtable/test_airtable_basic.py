@@ -159,12 +159,13 @@ def test_airtable_connector_parameter_validation() -> None:
     """Test that treat_all_non_attachment_fields_as_metadata is required and has no default."""
     with pytest.raises(
         TypeError,
-        match="missing.*required.*argument.*treat_all_non_attachment_fields_as_metadata",
+        match=r"missing required positional argument 'treat_all_non_attachment_fields_as_metadata'",
     ):
         AirtableConnector(
             base_id="test_base",
             table_name_or_id="test_table",
         )
+
 
 
 def test_airtable_connector_all_metadata(
