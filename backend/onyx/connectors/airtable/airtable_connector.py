@@ -20,9 +20,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 # NOTE: all are made lowercase to avoid case sensitivity issues
-# these are the field types that are considered metadata rather
-# than sections
-_METADATA_FIELD_TYPES = {
+# These field types are considered metadata by default when
+# treat_all_non_attachment_fields_as_metadata is False
+DEFAULT_METADATA_FIELD_TYPES = {
     "singlecollaborator",
     "collaborator",
     "createdby",
@@ -170,10 +170,14 @@ class AirtableConnector(LoadConnector):
         return [(str(field_info), default_link)]
 
     def _should_be_metadata(self, field_type: str) -> bool:
-        """Determine if a field type should be treated as metadata."""
+        """Determine if a field type should be treated as metadata.
+        
+        When treat_all_non_attachment_fields_as_metadata is True, all fields except
+        attachments are treated as metadata. Otherwise, only fields with types listed
+        in DEFAULT_METADATA_FIELD_TYPES are treated as metadata."""
         if self.treat_all_non_attachment_fields_as_metadata:
             return field_type.lower() != "multipleattachments"
-        return field_type.lower() in _METADATA_FIELD_TYPES
+        return field_type.lower() in DEFAULT_METADATA_FIELD_TYPES
 
     def _process_field(
         self,
