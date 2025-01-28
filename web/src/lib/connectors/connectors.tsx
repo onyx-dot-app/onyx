@@ -1106,6 +1106,14 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         name: "table_name_or_id",
         optional: false,
       },
+      {
+        type: "checkbox",
+        label: "Treat all fields except attachments as metadata",
+        name: "treat_all_non_attachment_fields_as_metadata",
+        description: "Choose this if the primary content to index are attachments and all other columns are metadata for these attachments.",
+        optional: true,
+        default: false
+      },
     ],
     advanced_values: [],
     overrideDefaultFreq: 60 * 60 * 24,

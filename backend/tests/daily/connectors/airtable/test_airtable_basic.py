@@ -46,18 +46,22 @@ def create_test_document(
     assignee: str,
     days_since_status_change: int | None,
     attachments: list[tuple[str, str]] | None = None,
+    all_fields_as_metadata: bool = False,
 ) -> Document:
     link_base = f"https://airtable.com/{os.environ['AIRTABLE_TEST_BASE_ID']}/{os.environ['AIRTABLE_TEST_TABLE_ID']}"
-    sections = [
-        Section(
-            text=f"Title:\n------------------------\n{title}\n------------------------",
-            link=f"{link_base}/{id}",
-        ),
-        Section(
-            text=f"Description:\n------------------------\n{description}\n------------------------",
-            link=f"{link_base}/{id}",
-        ),
-    ]
+    sections = []
+
+    if not all_fields_as_metadata:
+        sections.extend([
+            Section(
+                text=f"Title:\n------------------------\n{title}\n------------------------",
+                link=f"{link_base}/{id}",
+            ),
+            Section(
+                text=f"Description:\n------------------------\n{description}\n------------------------",
+                link=f"{link_base}/{id}",
+            ),
+        ])
 
     if attachments:
         for attachment_text, attachment_link in attachments:
@@ -68,26 +72,34 @@ def create_test_document(
                 ),
             )
 
+    metadata = {
+        # "Category": category,
+        "Assignee": assignee,
+        "Submitted by": submitted_by,
+        "Priority": priority,
+        "Status": status,
+        "Created time": created_time,
+        "ID": ticket_id,
+        "Status last changed": status_last_changed,
+        **(
+            {"Days since status change": str(days_since_status_change)}
+            if days_since_status_change is not None
+            else {}
+        ),
+    }
+
+    if all_fields_as_metadata:
+        metadata.update({
+            "Title": title,
+            "Description": description,
+        })
+
     return Document(
         id=f"airtable__{id}",
         sections=sections,
         source=DocumentSource.AIRTABLE,
         semantic_identifier=f"{os.environ['AIRTABLE_TEST_TABLE_NAME']}: {title}",
-        metadata={
-            # "Category": category,
-            "Assignee": assignee,
-            "Submitted by": submitted_by,
-            "Priority": priority,
-            "Status": status,
-            "Created time": created_time,
-            "ID": ticket_id,
-            "Status last changed": status_last_changed,
-            **(
-                {"Days since status change": str(days_since_status_change)}
-                if days_since_status_change is not None
-                else {}
-            ),
-        },
+        metadata=metadata,
         doc_updated_at=None,
         primary_owners=None,
         secondary_owners=None,
@@ -104,6 +116,115 @@ def create_test_document(
 def test_airtable_connector_basic(
     mock_get_api_key: MagicMock, airtable_connector: AirtableConnector
 ) -> None:
+    """Test the default behavior where only specific field types are treated as metadata."""
+    doc_batch_generator = airtable_connector.load_from_state()
+
+
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+def test_airtable_connector_all_metadata(
+    mock_get_api_key: MagicMock, request: pytest.FixtureRequest
+) -> None:
+    """Test behavior when all non-attachment fields are treated as metadata."""
+    param_type, table_identifier = ("table_name", os.environ["AIRTABLE_TEST_TABLE_NAME"])
+    connector = AirtableConnector(
+        base_id=os.environ["AIRTABLE_TEST_BASE_ID"],
+        table_name_or_id=table_identifier,
+        connector_config={"treat_all_non_attachment_fields_as_metadata": True},
+    )
+    connector.load_credentials(
+        {
+            "airtable_access_token": os.environ["AIRTABLE_ACCESS_TOKEN"],
+        }
+    )
+    
+    doc_batch_generator = connector.load_from_state()
+    doc_batch = next(doc_batch_generator)
+    with pytest.raises(StopIteration):
+        next(doc_batch_generator)
+
+    assert len(doc_batch) == 2
+
+    expected_docs = [
+        create_test_document(
+            id="rec8BnxDLyWeegOuO",
+            title="Slow Internet",
+            description="The internet connection is very slow.",
+            priority="Medium",
+            status="In Progress",
+            ticket_id="2",
+            created_time="2024-12-24T21:02:49.000Z",
+            status_last_changed="2024-12-24T21:02:49.000Z",
+            days_since_status_change=0,
+            assignee="Chris Weaver (chris@onyx.app)",
+            submitted_by="Chris Weaver (chris@onyx.app)",
+            all_fields_as_metadata=True,
+        ),
+        create_test_document(
+            id="reccSlIA4pZEFxPBg",
+            title="Printer Issue",
+            description="The office printer is not working.",
+            priority="High",
+            status="Open",
+            ticket_id="1",
+            created_time="2024-12-24T21:02:49.000Z",
+            status_last_changed="2024-12-24T21:02:49.000Z",
+            days_since_status_change=0,
+            assignee="Chris Weaver (chris@onyx.app)",
+            submitted_by="Chris Weaver (chris@onyx.app)",
+            attachments=[
+                (
+                    "Test.pdf:\ntesting!!!",
+                    "https://airtable.com/appCXJqDFS4gea8tn/tblRxFQsTlBBZdRY1/viwVUEJjWPd8XYjh8/reccSlIA4pZEFxPBg/fld1u21zkJACIvAEF/attlj2UBWNEDZngCc?blocks=hide",
+                )
+            ],
+            all_fields_as_metadata=True,
+        ),
+    ]
+
+    # Compare each document field by field
+    for actual, expected in zip(doc_batch, expected_docs):
+        assert actual.id == expected.id, f"ID mismatch for document {actual.id}"
+        assert (
+            actual.source == expected.source
+        ), f"Source mismatch for document {actual.id}"
+        assert (
+            actual.semantic_identifier == expected.semantic_identifier
+        ), f"Semantic identifier mismatch for document {actual.id}"
+        assert (
+            actual.metadata == expected.metadata
+        ), f"Metadata mismatch for document {actual.id}"
+        assert (
+            actual.doc_updated_at == expected.doc_updated_at
+        ), f"Updated at mismatch for document {actual.id}"
+        assert (
+            actual.primary_owners == expected.primary_owners
+        ), f"Primary owners mismatch for document {actual.id}"
+        assert (
+            actual.secondary_owners == expected.secondary_owners
+        ), f"Secondary owners mismatch for document {actual.id}"
+        assert (
+            actual.title == expected.title
+        ), f"Title mismatch for document {actual.id}"
+        assert (
+            actual.from_ingestion_api == expected.from_ingestion_api
+        ), f"Ingestion API flag mismatch for document {actual.id}"
+        assert (
+            actual.additional_info == expected.additional_info
+        ), f"Additional info mismatch for document {actual.id}"
+
+        # Compare sections - should only contain attachments
+        for section in actual.sections:
+            assert "Attachment:" in section.text, f"Non-attachment section found in document {actual.id}"
+            assert "blocks=hide" in section.link, f"Non-attachment link found in document {actual.id}"
+
+
+def test_airtable_connector_basic(
+    mock_get_api_key: MagicMock, airtable_connector: AirtableConnector
+) -> None:
+    """Test the default behavior where only specific field types are treated as metadata."""
     doc_batch_generator = airtable_connector.load_from_state()
 
     doc_batch = next(doc_batch_generator)

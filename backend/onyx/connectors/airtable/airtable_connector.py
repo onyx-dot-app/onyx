@@ -61,11 +61,13 @@ class AirtableConnector(LoadConnector):
         base_id: str,
         table_name_or_id: str,
         batch_size: int = INDEX_BATCH_SIZE,
+        connector_config: dict[str, Any] | None = None,
     ) -> None:
         self.base_id = base_id
         self.table_name_or_id = table_name_or_id
         self.batch_size = batch_size
         self.airtable_client: AirtableApi | None = None
+        self.connector_config = connector_config or {}
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.airtable_client = AirtableApi(credentials["airtable_access_token"])
@@ -167,6 +169,9 @@ class AirtableConnector(LoadConnector):
 
     def _should_be_metadata(self, field_type: str) -> bool:
         """Determine if a field type should be treated as metadata."""
+        if self.connector_config.get("treat_all_non_attachment_fields_as_metadata"):
+            # If user chose to treat everything as metadata except attachments
+            return field_type.lower() != "multipleattachments"
         return field_type.lower() in _METADATA_FIELD_TYPES
 
     def _process_field(
