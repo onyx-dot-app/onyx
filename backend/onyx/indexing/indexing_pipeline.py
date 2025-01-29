@@ -358,15 +358,7 @@ def index_doc_batch(
         is_public=False,
     )
 
-    logger.debug("Filtering Documents")
-
-    logger.debug("Document IDs before filtering")
-    logger.debug([doc.id for doc in document_batch])
-
     filtered_documents = filter_fnc(document_batch)
-
-    logger.debug("Document IDs after filtering")
-    logger.debug([doc.id for doc in filtered_documents])
 
     ctx = index_doc_batch_prepare(
         documents=filtered_documents,
