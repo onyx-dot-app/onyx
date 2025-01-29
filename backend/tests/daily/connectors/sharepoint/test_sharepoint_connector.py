@@ -77,9 +77,9 @@ def find_document(documents: list[Document], semantic_identifier: str) -> Docume
 @pytest.fixture
 def sharepoint_credentials() -> dict[str, str]:
     return {
-        "sp_client_id": os.environ["SP_CLIENT_ID"],
-        "sp_client_secret": os.environ["SP_CLIENT_SECRET"],
-        "sp_directory_id": os.environ["SP_CLIENT_DIRECTORY_ID"],
+        "sp_client_id": os.environ["SHAREPOINT_CLIENT_ID"],
+        "sp_client_secret": os.environ["SHAREPOINT_CLIENT_SECRET"],
+        "sp_directory_id": os.environ["SHAREPOINT_CLIENT_DIRECTORY_ID"],
     }
 
 
@@ -88,7 +88,7 @@ def test_sharepoint_connector_specific_folder(
 ) -> None:
     # Initialize connector with the test site URL and specific folder
     connector = SharepointConnector(
-        sites=[os.environ["SITE"] + "/Shared Documents/test"]
+        sites=[os.environ["SHAREPOINT_SITE"] + "/Shared Documents/test"]
     )
 
     # Load credentials

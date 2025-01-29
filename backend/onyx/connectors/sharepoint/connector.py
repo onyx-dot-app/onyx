@@ -283,13 +283,13 @@ class SharepointConnector(LoadConnector, PollConnector):
 
 
 if __name__ == "__main__":
-    connector = SharepointConnector(sites=os.environ["SITES"].split(","))
+    connector = SharepointConnector(sites=os.environ["SHAREPOINT_SITES"].split(","))
 
     connector.load_credentials(
         {
-            "sp_client_id": os.environ["SP_CLIENT_ID"],
-            "sp_client_secret": os.environ["SP_CLIENT_SECRET"],
-            "sp_directory_id": os.environ["SP_CLIENT_DIRECTORY_ID"],
+            "sp_client_id": os.environ["SHAREPOINT_CLIENT_ID"],
+            "sp_client_secret": os.environ["SHAREPOINT_CLIENT_SECRET"],
+            "sp_directory_id": os.environ["SHAREPOINT_CLIENT_DIRECTORY_ID"],
         }
     )
     document_batches = connector.load_from_state()
