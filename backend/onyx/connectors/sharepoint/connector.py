@@ -159,8 +159,11 @@ class SharepointConnector(LoadConnector, PollConnector):
                         for folder_part in site_descriptor.folder_path.split("/"):
                             root_folder = root_folder.get_by_path(folder_part)
 
-                    # First get all items metadata recursively without content
-                    query = root_folder.get_files(True, 1000)
+                    # Get all items recursively
+                    query = root_folder.get_files(
+                        recursive=True,
+                        page_size=1000,
+                    )
                     driveitems = query.execute_query()
                     logger.debug(
                         f"Found {len(driveitems)} items in drive '{drive.name}'"
@@ -173,6 +176,8 @@ class SharepointConnector(LoadConnector, PollConnector):
 
                     # Filter items based on folder path if specified
                     if site_descriptor.folder_path:
+                        # Filter items to ensure they're in the specified folder or its subfolders
+                        # The path will be in format: /drives/{drive_id}/root:/folder/path
                         driveitems = [
                             item
                             for item in driveitems
@@ -210,7 +215,6 @@ class SharepointConnector(LoadConnector, PollConnector):
 
                     # Now fetch content only for items that passed all filters
                     for item in driveitems:
-                        item.get_content().execute_query()
                         final_driveitems.append((item, drive_name))
 
                 except Exception as e:
