@@ -27,7 +27,7 @@ from onyx.db.document import mark_document_as_synced
 from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.engine import get_all_tenant_ids
 from onyx.db.engine import get_session_with_tenant
-from onyx.document_index.document_index_utils import get_both_index_properties
+from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.httpx.httpx_pool import HttpxPool
@@ -80,17 +80,10 @@ def document_by_cc_pair_cleanup_task(
             action = "skip"
             chunks_affected = 0
 
-            (
-                curr_ind_name,
-                sec_ind_name,
-                large_chunks,
-                secondary_large_chunks,
-            ) = get_both_index_properties(db_session)
+            active_search_settings = get_active_search_settings(db_session)
             doc_index = get_default_document_index(
-                primary_index_name=curr_ind_name,
-                secondary_index_name=sec_ind_name,
-                large_chunks_enabled=large_chunks,
-                secondary_large_chunks_enabled=secondary_large_chunks,
+                active_search_settings.primary,
+                active_search_settings.secondary,
                 httpx_client=HttpxPool.get("vespa"),
             )
 

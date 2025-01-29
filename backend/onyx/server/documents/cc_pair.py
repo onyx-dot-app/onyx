@@ -42,7 +42,7 @@ from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id
 from onyx.db.models import SearchSettings
 from onyx.db.models import User
-from onyx.db.search_settings import get_active_search_settings
+from onyx.db.search_settings import get_active_search_settings_list
 from onyx.db.search_settings import get_current_search_settings
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client
@@ -192,7 +192,7 @@ def update_cc_pair_status(
     if status_update_request.status == ConnectorCredentialPairStatus.PAUSED:
         redis_connector.stop.set_fence(True)
 
-        search_settings_list: list[SearchSettings] = get_active_search_settings(
+        search_settings_list: list[SearchSettings] = get_active_search_settings_list(
             db_session
         )
 

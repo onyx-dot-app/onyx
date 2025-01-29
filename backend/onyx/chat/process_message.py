@@ -63,7 +63,6 @@ from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
-from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
@@ -426,13 +425,7 @@ def stream_chat_message_objects(
         )
 
         search_settings = get_current_search_settings(db_session)
-        mp_config = get_multipass_config(search_settings)
-        document_index = get_default_document_index(
-            primary_index_name=search_settings.index_name,
-            secondary_index_name=None,
-            large_chunks_enabled=mp_config.enable_large_chunks,
-            secondary_large_chunks_enabled=None,
-        )
+        document_index = get_default_document_index(search_settings, None)
 
         # Every chat Session begins with an empty root message
         root_message = get_or_create_root_message(

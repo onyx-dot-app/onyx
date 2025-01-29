@@ -98,14 +98,9 @@ def set_new_search_settings(
     )
 
     # Ensure Vespa has the new index immediately
-    mp_config_1 = get_multipass_config(search_settings)
-    mp_config_2 = get_multipass_config(new_search_settings)
-    document_index = get_default_document_index(
-        primary_index_name=search_settings.index_name,
-        secondary_index_name=new_search_settings.index_name,
-        large_chunks_enabled=mp_config_1.enable_large_chunks,
-        secondary_large_chunks_enabled=mp_config_2.enable_large_chunks,
-    )
+    get_multipass_config(search_settings)
+    get_multipass_config(new_search_settings)
+    document_index = get_default_document_index(search_settings, new_search_settings)
 
     document_index.ensure_indices_exist(
         index_embedding_dim=search_settings.model_dim,

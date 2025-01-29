@@ -61,10 +61,10 @@ from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.models import DocumentSet
 from onyx.db.models import UserGroup
+from onyx.db.search_settings import get_active_search_settings
 from onyx.db.sync_record import cleanup_sync_records
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
-from onyx.document_index.document_index_utils import get_both_index_properties
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.httpx.httpx_pool import HttpxPool
@@ -1097,17 +1097,10 @@ def vespa_metadata_sync_task(
 
     try:
         with get_session_with_tenant(tenant_id) as db_session:
-            (
-                curr_ind_name,
-                sec_ind_name,
-                large_chunks,
-                secondary_large_chunks,
-            ) = get_both_index_properties(db_session)
+            active_search_settings = get_active_search_settings(db_session)
             doc_index = get_default_document_index(
-                primary_index_name=curr_ind_name,
-                secondary_index_name=sec_ind_name,
-                large_chunks_enabled=large_chunks,
-                secondary_large_chunks_enabled=secondary_large_chunks,
+                search_settings=active_search_settings.primary,
+                secondary_search_settings=active_search_settings.secondary,
                 httpx_client=HttpxPool.get("vespa"),
             )
 

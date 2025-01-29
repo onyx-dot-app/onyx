@@ -26,7 +26,6 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.index_attempt import mock_successful_index_attempt
 from onyx.db.models import Document as DbDocument
 from onyx.db.search_settings import get_current_search_settings
-from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
@@ -159,13 +158,7 @@ def seed_initial_documents(
         logger.info("Embedding model has been updated, skipping")
         return
 
-    mp_config = get_multipass_config(search_settings)
-    document_index = get_default_document_index(
-        primary_index_name=search_settings.index_name,
-        secondary_index_name=None,
-        large_chunks_enabled=mp_config.enable_large_chunks,
-        secondary_large_chunks_enabled=None,
-    )
+    document_index = get_default_document_index(search_settings, None)
 
     # Create a connector so the user can delete it if they want
     # or reindex it with a new search model if they want

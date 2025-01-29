@@ -55,6 +55,7 @@ from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import TaskStatus
 from onyx.db.pydantic_type import PydanticType
+from onyx.document_index.document_index_utils import can_use_large_chunks
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 from onyx.file_store.models import FileDescriptor
@@ -746,6 +747,10 @@ class SearchSettings(Base):
     @property
     def api_key(self) -> str | None:
         return self.cloud_provider.api_key if self.cloud_provider is not None else None
+
+    @property
+    def large_chunks_enabled(self) -> bool:
+        return can_use_large_chunks(self.multipass_indexing, self)
 
 
 class IndexAttempt(Base):

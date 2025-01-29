@@ -25,12 +25,12 @@ from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.persona import delete_old_default_personas
+from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_secondary_search_settings
 from onyx.db.swap_index import check_index_swap
-from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.vespa.index import VespaIndex
@@ -71,14 +71,19 @@ def setup_onyx(
     The Tenant Service calls the tenants/create endpoint which runs this.
     """
     check_index_swap(db_session=db_session)
-    search_settings = get_current_search_settings(db_session)
-    multipass_config_1 = get_multipass_config(search_settings)
 
-    secondary_large_chunks_enabled: bool | None = None
-    secondary_search_settings = get_secondary_search_settings(db_session)
-    if secondary_search_settings:
-        multipass_config_2 = get_multipass_config(secondary_search_settings)
-        secondary_large_chunks_enabled = multipass_config_2.enable_large_chunks
+    active_search_settings = get_active_search_settings(db_session)
+    search_settings = active_search_settings.primary
+    secondary_search_settings = active_search_settings.secondary
+
+    # search_settings = get_current_search_settings(db_session)
+    # multipass_config_1 = get_multipass_config(search_settings)
+
+    # secondary_large_chunks_enabled: bool | None = None
+    # secondary_search_settings = get_secondary_search_settings(db_session)
+    # if secondary_search_settings:
+    #     multipass_config_2 = get_multipass_config(secondary_search_settings)
+    #     secondary_large_chunks_enabled = multipass_config_2.enable_large_chunks
 
     # Break bad state for thrashing indexes
     if secondary_search_settings and DISABLE_INDEX_UPDATE_ON_SWAP:
@@ -129,12 +134,8 @@ def setup_onyx(
     # takes a bit of time to start up
     logger.notice("Verifying Document Index(s) is/are available.")
     document_index = get_default_document_index(
-        primary_index_name=search_settings.index_name,
-        large_chunks_enabled=multipass_config_1.enable_large_chunks,
-        secondary_index_name=secondary_search_settings.index_name
-        if secondary_search_settings
-        else None,
-        secondary_large_chunks_enabled=secondary_large_chunks_enabled,
+        search_settings,
+        secondary_search_settings,
     )
 
     success = setup_vespa(

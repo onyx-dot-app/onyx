@@ -41,8 +41,7 @@ from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_last_attempt_for_cc_pair
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
-from onyx.db.models import SearchSettings
-from onyx.db.search_settings import get_active_search_settings
+from onyx.db.search_settings import get_active_search_settings_list
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.swap_index import check_index_swap
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
@@ -125,9 +124,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
 
             redis_connector = RedisConnector(tenant_id, cc_pair_id)
             with get_session_with_tenant(tenant_id) as db_session:
-                search_settings_list: list[SearchSettings] = get_active_search_settings(
-                    db_session
-                )
+                search_settings_list = get_active_search_settings_list(db_session)
                 for search_settings_instance in search_settings_list:
                     redis_connector_index = redis_connector.new_index(
                         search_settings_instance.id

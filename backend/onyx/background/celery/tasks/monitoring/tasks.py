@@ -34,7 +34,7 @@ from onyx.db.models import DocumentSet
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SyncRecord
 from onyx.db.models import UserGroup
-from onyx.db.search_settings import get_active_search_settings
+from onyx.db.search_settings import get_active_search_settings_list
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.utils.telemetry import optional_telemetry
@@ -315,13 +315,13 @@ def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Me
     # Get all connector credential pairs
     cc_pairs = db_session.scalars(select(ConnectorCredentialPair)).all()
     # Might be more than one search setting, or just one
-    active_search_settings = get_active_search_settings(db_session)
+    active_search_settings_list = get_active_search_settings_list(db_session)
 
     metrics = []
 
     # If you want to process each cc_pair against each search setting:
     for cc_pair in cc_pairs:
-        for search_settings in active_search_settings:
+        for search_settings in active_search_settings_list:
             recent_attempts = (
                 db_session.query(IndexAttempt)
                 .filter(
