@@ -174,6 +174,7 @@ def try_creating_permissions_sync_task(
 
         custom_task_id = f"{redis_connector.permissions.generator_task_key}_{uuid4()}"
 
+        # set a basic fence to start
         payload = RedisConnectorPermissionSyncPayload(started=None, celery_task_id=None)
 
         result = app.send_task(
@@ -187,7 +188,7 @@ def try_creating_permissions_sync_task(
             priority=OnyxCeleryPriority.HIGH,
         )
 
-        # set a basic fence to start
+        # fill in the celery task id
         payload.celery_task_id = result.id
         redis_connector.permissions.set_fence(payload)
     except Exception:
