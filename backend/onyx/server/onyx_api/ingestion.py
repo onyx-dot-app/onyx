@@ -125,7 +125,7 @@ def upsert_ingestion_doc(
     )
 
     # If there's a secondary index being built, index the doc but don't use it for return here
-    if sec_ind_name:
+    if sec_ind_name and secondary_large_chunks:
         sec_search_settings = get_secondary_search_settings(db_session)
 
         if sec_search_settings is None:
