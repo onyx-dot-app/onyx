@@ -60,7 +60,7 @@ class AirtableConnector(LoadConnector):
         self,
         base_id: str,
         table_name_or_id: str,
-        treat_all_non_attachment_fields_as_metadata: bool,
+        treat_all_non_attachment_fields_as_metadata: bool = False,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.base_id = base_id
