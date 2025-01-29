@@ -34,6 +34,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import IndexModelStatus
+from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.factory import get_default_document_index
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -149,6 +150,7 @@ class RunIndexingContext(BaseModel):
     from_beginning: bool
     is_primary: bool
     search_settings_status: IndexModelStatus
+    large_chunks_enabled: bool
 
 
 def _run_indexing(
@@ -179,6 +181,8 @@ def _run_indexing(
                 "Search settings must be set for indexing. This should not be possible."
             )
 
+        multipass_config = get_multipass_config(index_attempt_start.search_settings)
+
         # search_settings = index_attempt_start.search_settings
         db_connector = index_attempt_start.connector_credential_pair.connector
         db_credential = index_attempt_start.connector_credential_pair.credential
@@ -200,6 +204,7 @@ def _run_indexing(
                 index_attempt_start.search_settings.status == IndexModelStatus.PRESENT
             ),
             search_settings_status=index_attempt_start.search_settings.status,
+            large_chunks_enabled=multipass_config.enable_large_chunks,
         )
 
         last_successful_index_time = (
@@ -221,7 +226,10 @@ def _run_indexing(
 
     # Indexing is only done into one index at a time
     document_index = get_default_document_index(
-        primary_index_name=ctx.index_name, secondary_index_name=None
+        primary_index_name=ctx.index_name,
+        secondary_index_name=None,
+        large_chunks_enabled=ctx.large_chunks_enabled,
+        secondary_large_chunks_enabled=None,
     )
 
     indexing_pipeline = build_indexing_pipeline(

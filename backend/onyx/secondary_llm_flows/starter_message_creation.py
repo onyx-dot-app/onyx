@@ -34,8 +34,18 @@ def get_random_chunks_from_doc_sets(
     """
     Retrieves random chunks from the specified document sets.
     """
-    curr_ind_name, sec_ind_name = get_both_index_names(db_session)
-    document_index = get_default_document_index(curr_ind_name, sec_ind_name)
+    (
+        curr_ind_name,
+        sec_ind_name,
+        large_chunks,
+        secondary_large_chunks,
+    ) = get_both_index_names(db_session)
+    document_index = get_default_document_index(
+        curr_ind_name,
+        sec_ind_name,
+        large_chunks_enabled=large_chunks,
+        secondary_large_chunks_enabled=secondary_large_chunks,
+    )
 
     acl_filters = build_access_filters_for_user(user, db_session)
     filters = IndexFilters(document_set=doc_sets, access_control_list=acl_filters)

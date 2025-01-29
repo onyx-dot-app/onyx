@@ -55,9 +55,7 @@ class DocAwareChunk(BaseChunk):
 
     def to_short_descriptor(self) -> str:
         """Used when logging the identity of a chunk"""
-        return (
-            f"Chunk ID: '{self.chunk_id}'; {self.source_document.to_short_descriptor()}"
-        )
+        return f"{self.source_document.to_short_descriptor()} Chunk ID: {self.chunk_id}"
 
 
 class IndexChunk(DocAwareChunk):

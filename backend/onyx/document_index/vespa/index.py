@@ -10,6 +10,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timedelta
+from typing import Any
 from typing import BinaryIO
 from typing import cast
 from typing import List
@@ -25,7 +26,6 @@ from onyx.configs.chat_configs import VESPA_SEARCHER_THREADS
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
-from onyx.db.engine import get_session_with_tenant
 from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentInsertionRecord
@@ -44,9 +44,6 @@ from onyx.document_index.vespa.deletion import delete_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import batch_index_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import check_for_final_chunk_existence
 from onyx.document_index.vespa.indexing_utils import clean_chunk_id_copy
-from onyx.document_index.vespa.indexing_utils import (
-    get_multipass_config,
-)
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
@@ -132,12 +129,25 @@ class VespaIndex(DocumentIndex):
         self,
         index_name: str,
         secondary_index_name: str | None,
+        large_chunks_enabled: bool,
+        secondary_large_chunks_enabled: bool | None,
         multitenant: bool = False,
     ) -> None:
         self.index_name = index_name
         self.secondary_index_name = secondary_index_name
+
+        self.large_chunks_enabled = large_chunks_enabled
+        self.secondary_large_chunks_enabled = secondary_large_chunks_enabled
+
         self.multitenant = multitenant
         self.http_client = get_vespa_http_client()
+
+        self.index_to_large_chunks_enabled: dict[str, bool] = {}
+        self.index_to_large_chunks_enabled[index_name] = large_chunks_enabled
+        if secondary_index_name and secondary_large_chunks_enabled:
+            self.index_to_large_chunks_enabled[
+                secondary_index_name
+            ] = secondary_large_chunks_enabled
 
     def ensure_indices_exist(
         self,
@@ -349,6 +359,12 @@ class VespaIndex(DocumentIndex):
                 for doc_id in doc_id_to_new_chunk_cnt.keys()
             ]
 
+            logger.debug("Indexing these doc IDs / counts")
+            logger.debug(doc_id_to_new_chunk_cnt)
+
+            logger.debug("Enriched docs are as follows")
+            logger.debug(enriched_doc_infos)
+
             for cleaned_doc_info in enriched_doc_infos:
                 # If the document has previously indexed chunks, we know it previously existed
                 if cleaned_doc_info.chunk_end_index:
@@ -523,6 +539,7 @@ class VespaIndex(DocumentIndex):
         index_name: str,
         fields: VespaDocumentFields,
         doc_id: str,
+        http_client: httpx.Client,
     ) -> None:
         """
         Update a single "chunk" (document) in Vespa using its chunk ID.
@@ -554,18 +571,17 @@ class VespaIndex(DocumentIndex):
 
         vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}?create=true"
 
-        with get_vespa_http_client(http2=False) as http_client:
-            try:
-                resp = http_client.put(
-                    vespa_url,
-                    headers={"Content-Type": "application/json"},
-                    json=update_dict,
-                )
-                resp.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                error_message = f"Failed to update doc chunk {doc_chunk_id} (doc_id={doc_id}). Details: {e.response.text}"
-                logger.error(error_message)
-                raise
+        try:
+            resp = http_client.put(
+                vespa_url,
+                headers={"Content-Type": "application/json"},
+                json=update_dict,
+            )
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            error_message = f"Failed to update doc chunk {doc_chunk_id} (doc_id={doc_id}). Details: {e.response.text}"
+            logger.error(error_message)
+            raise
 
     def update_single(
         self,
@@ -579,21 +595,22 @@ class VespaIndex(DocumentIndex):
         function will complete with no errors or exceptions.
         Handle other exceptions if you wish to implement retry behavior
         """
+        start = time.monotonic()
+
+        timings: dict[str, Any] = {}
 
         doc_chunk_count = 0
 
-        index_names = [self.index_name]
-        if self.secondary_index_name:
-            index_names.append(self.secondary_index_name)
-
+        index = 0
         with get_vespa_http_client(http2=False) as http_client:
-            for index_name in index_names:
-                with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-                    multipass_config = get_multipass_config(
-                        db_session=db_session,
-                        primary_index=index_name == self.index_name,
-                    )
-                    large_chunks_enabled = multipass_config.enable_large_chunks
+            timings["get_vespa_http_client_enter"] = time.monotonic() - start
+            for (
+                index_name,
+                large_chunks_enabled,
+            ) in self.index_to_large_chunks_enabled.items():
+                index += 1
+
+                phase_start = time.monotonic()
                 enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
                     index_name=index_name,
                     http_client=http_client,
@@ -608,16 +625,35 @@ class VespaIndex(DocumentIndex):
                     large_chunks_enabled=large_chunks_enabled,
                 )
 
-                doc_chunk_count += len(doc_chunk_ids)
-
-                for doc_chunk_id in doc_chunk_ids:
-                    self.update_single_chunk(
-                        doc_chunk_id=doc_chunk_id,
-                        index_name=index_name,
-                        fields=fields,
-                        doc_id=doc_id,
+                if len(doc_chunk_ids) == 0:
+                    logger.warning(
+                        f"len(doc_chunk_ids) == 0: "
+                        f"tenant_id={tenant_id} "
+                        f"enriched_doc_infos={enriched_doc_infos} "
+                        f"large_chunks_enabled={large_chunks_enabled}"
                     )
 
+                doc_chunk_count += len(doc_chunk_ids)
+                timings[f"prep_{index}"] = time.monotonic() - phase_start
+
+                chunk = 0
+                for doc_chunk_id in doc_chunk_ids:
+                    chunk += 1
+
+                    phase_start = time.monotonic()
+                    self.update_single_chunk(
+                        doc_chunk_id, index_name, fields, doc_id, http_client
+                    )
+                    timings[f"chunk_{index}_{chunk}"] = time.monotonic() - phase_start
+
+            phase_start = time.monotonic()
+
+        timings["get_vespa_http_client_exit"] = time.monotonic() - phase_start
+
+        elapsed = time.monotonic() - start
+        logger.debug(
+            f"num_chunks={doc_chunk_count} elapsed={elapsed:.2f} timings={timings}"
+        )
         return doc_chunk_count
 
     def delete_single(
@@ -642,14 +678,10 @@ class VespaIndex(DocumentIndex):
         ) as http_client, concurrent.futures.ThreadPoolExecutor(
             max_workers=NUM_THREADS
         ) as executor:
-            for index_name in index_names:
-                with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-                    multipass_config = get_multipass_config(
-                        db_session=db_session,
-                        primary_index=index_name == self.index_name,
-                    )
-                    large_chunks_enabled = multipass_config.enable_large_chunks
-
+            for (
+                index_name,
+                large_chunks_enabled,
+            ) in self.index_to_large_chunks_enabled.items():
                 enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
                     index_name=index_name,
                     http_client=http_client,

@@ -89,10 +89,23 @@ def upsert_ingestion_doc(
         )
 
     # Need to index for both the primary and secondary index if possible
-    curr_ind_name, sec_ind_name = get_both_index_names(db_session)
+    (
+        curr_ind_name,
+        sec_ind_name,
+        large_chunks,
+        secondary_large_chunks,
+    ) = get_both_index_names(db_session)
     curr_doc_index = get_default_document_index(
-        primary_index_name=curr_ind_name, secondary_index_name=None
+        primary_index_name=curr_ind_name,
+        secondary_index_name=None,
+        large_chunks_enabled=large_chunks,
+        secondary_large_chunks_enabled=None,
     )
+
+    # curr_ind_name, sec_ind_name = get_both_index_names(db_session)
+    # curr_doc_index = get_default_document_index(
+    #     primary_index_name=curr_ind_name, secondary_index_name=None
+    # )
 
     search_settings = get_current_search_settings(db_session)
 
@@ -118,8 +131,12 @@ def upsert_ingestion_doc(
 
     # If there's a secondary index being built, index the doc but don't use it for return here
     if sec_ind_name:
+        # rkuo: i don't understand why we create the secondaray index with the current index again
         sec_doc_index = get_default_document_index(
-            primary_index_name=curr_ind_name, secondary_index_name=None
+            primary_index_name=curr_ind_name,
+            secondary_index_name=None,
+            large_chunks_enabled=large_chunks,
+            secondary_large_chunks_enabled=None,
         )
 
         sec_search_settings = get_secondary_search_settings(db_session)

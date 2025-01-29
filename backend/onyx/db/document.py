@@ -452,10 +452,16 @@ def update_docs_chunk_count__no_commit(
     doc_id_to_chunk_count: dict[str, int],
     db_session: Session,
 ) -> None:
+    logger.debug("Updating chunk count for these documents")
+    logger.debug(document_ids)
+    logger.debug(doc_id_to_chunk_count)
     documents_to_update = (
         db_session.query(DbDocument).filter(DbDocument.id.in_(document_ids)).all()
     )
     for doc in documents_to_update:
+        logger.debug(
+            f"Updating chunk count for {doc.id} to {doc_id_to_chunk_count[doc.id]}"
+        )
         doc.chunk_count = doc_id_to_chunk_count[doc.id]
 
 

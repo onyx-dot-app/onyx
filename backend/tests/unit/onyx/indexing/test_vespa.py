@@ -19,7 +19,7 @@ def test_vespa_update() -> None:
     doc_id = "test-vespa-update"
 
     with Session(get_sqlalchemy_engine()) as db_session:
-        primary_index_name, _ = get_both_index_names(db_session)
+        primary_index_name, _, _, _ = get_both_index_names(db_session)
         endpoint = (
             f"{DOCUMENT_ID_ENDPOINT.format(index_name=primary_index_name)}/{doc_id}"
         )

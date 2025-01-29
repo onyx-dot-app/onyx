@@ -191,9 +191,17 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
     )
     try:
         logger.notice("Deleting information from Vespa and Postgres")
-        curr_ind_name, sec_ind_name = get_both_index_names(db_session)
+        (
+            curr_ind_name,
+            sec_ind_name,
+            large_chunks,
+            secondary_large_chunks,
+        ) = get_both_index_names(db_session)
         document_index = get_default_document_index(
-            primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
+            primary_index_name=curr_ind_name,
+            secondary_index_name=sec_ind_name,
+            large_chunks_enabled=large_chunks,
+            secondary_large_chunks_enabled=secondary_large_chunks,
         )
 
         files_deleted_count = _unsafe_deletion(

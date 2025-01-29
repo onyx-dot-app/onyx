@@ -79,9 +79,17 @@ def document_by_cc_pair_cleanup_task(
             action = "skip"
             chunks_affected = 0
 
-            curr_ind_name, sec_ind_name = get_both_index_names(db_session)
+            (
+                curr_ind_name,
+                sec_ind_name,
+                large_chunks,
+                secondary_large_chunks,
+            ) = get_both_index_names(db_session)
             doc_index = get_default_document_index(
-                primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
+                primary_index_name=curr_ind_name,
+                secondary_index_name=sec_ind_name,
+                large_chunks_enabled=large_chunks,
+                secondary_large_chunks_enabled=secondary_large_chunks,
             )
 
             retry_index = RetryDocumentIndex(doc_index)
