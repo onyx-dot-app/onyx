@@ -168,7 +168,6 @@ def test_airtable_connector_parameter_validation() -> None:
         AirtableConnector(
             base_id="test_base",
             table_name_or_id="test_table",
-            treat_all_non_attachment_fields_as_metadata=False,
         )
 
     # Test that treat_all_non_attachment_fields_as_metadata must be a boolean
