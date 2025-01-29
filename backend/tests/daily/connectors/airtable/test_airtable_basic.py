@@ -160,7 +160,7 @@ def test_airtable_connector_parameter_validation() -> None:
     with pytest.raises(
         TypeError,
         match=(
-            r"AirtableConnector\.__init__\(\) missing 1 required positional argument: "
+            r"missing 1 required positional argument: "
             r"'treat_all_non_attachment_fields_as_metadata'"
         ),
     ):
