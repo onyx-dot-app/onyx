@@ -28,6 +28,9 @@ class SyncType(str, PyEnum):
     DOCUMENT_SET = "document_set"
     USER_GROUP = "user_group"
     CONNECTOR_DELETION = "connector_deletion"
+    PRUNING = "pruning"  # not really a sync, but close enough
+    EXTERNAL_PERMISSIONS = "external_permissions"
+    EXTERNAL_GROUP = "external_group"
 
     def __str__(self) -> str:
         return self.value

@@ -92,7 +92,7 @@ class RedisConnectorPrune:
         if fence_bytes is None:
             return None
 
-        fence_int = cast(int, fence_bytes)
+        fence_int = int(cast(bytes, fence_bytes))
         return fence_int
 
     @generator_complete.setter

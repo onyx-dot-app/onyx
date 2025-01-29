@@ -24,6 +24,10 @@ from onyx.access.access import get_access_for_document
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.tasks.doc_permission_syncing.tasks import (
+    monitor_ccpair_permissions_taskset,
+)
+from onyx.background.celery.tasks.pruning.tasks import monitor_ccpair_pruning_taskset
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.background.celery.tasks.shared.tasks import LIGHT_SOFT_TIME_LIMIT
 from onyx.background.celery.tasks.shared.tasks import LIGHT_TIME_LIMIT
@@ -34,8 +38,6 @@ from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.connector import mark_cc_pair_as_permissions_synced
-from onyx.db.connector import mark_ccpair_as_pruned
 from onyx.db.connector_credential_pair import add_deletion_failure_message
 from onyx.db.connector_credential_pair import (
     delete_connector_credential_pair__no_commit,
@@ -72,9 +74,6 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_credential_pair import RedisConnectorCredentialPair
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
-from onyx.redis.redis_connector_doc_perm_sync import (
-    RedisConnectorPermissionSyncPayload,
-)
 from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_document_set import RedisDocumentSet
@@ -651,83 +650,6 @@ def monitor_connector_deletion_taskset(
     )
 
     redis_connector.delete.reset()
-
-
-def monitor_ccpair_pruning_taskset(
-    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
-) -> None:
-    fence_key = key_bytes.decode("utf-8")
-    cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)
-    if cc_pair_id_str is None:
-        task_logger.warning(
-            f"monitor_ccpair_pruning_taskset: could not parse cc_pair_id from {fence_key}"
-        )
-        return
-
-    cc_pair_id = int(cc_pair_id_str)
-
-    redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    if not redis_connector.prune.fenced:
-        return
-
-    initial = redis_connector.prune.generator_complete
-    if initial is None:
-        return
-
-    remaining = redis_connector.prune.get_remaining()
-    task_logger.info(
-        f"Connector pruning progress: cc_pair={cc_pair_id} remaining={remaining} initial={initial}"
-    )
-    if remaining > 0:
-        return
-
-    mark_ccpair_as_pruned(int(cc_pair_id), db_session)
-    task_logger.info(
-        f"Successfully pruned connector credential pair. cc_pair={cc_pair_id}"
-    )
-
-    redis_connector.prune.taskset_clear()
-    redis_connector.prune.generator_clear()
-    redis_connector.prune.set_fence(False)
-
-
-def monitor_ccpair_permissions_taskset(
-    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
-) -> None:
-    fence_key = key_bytes.decode("utf-8")
-    cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)
-    if cc_pair_id_str is None:
-        task_logger.warning(
-            f"monitor_ccpair_permissions_taskset: could not parse cc_pair_id from {fence_key}"
-        )
-        return
-
-    cc_pair_id = int(cc_pair_id_str)
-
-    redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    if not redis_connector.permissions.fenced:
-        return
-
-    initial = redis_connector.permissions.generator_complete
-    if initial is None:
-        return
-
-    remaining = redis_connector.permissions.get_remaining()
-    task_logger.info(
-        f"Permissions sync progress: cc_pair={cc_pair_id} remaining={remaining} initial={initial}"
-    )
-    if remaining > 0:
-        return
-
-    payload: RedisConnectorPermissionSyncPayload | None = (
-        redis_connector.permissions.payload
-    )
-    start_time: datetime | None = payload.started if payload else None
-
-    mark_cc_pair_as_permissions_synced(db_session, int(cc_pair_id), start_time)
-    task_logger.info(f"Successfully synced permissions for cc_pair={cc_pair_id}")
-
-    redis_connector.permissions.reset()
 
 
 def monitor_ccpair_indexing_taskset(

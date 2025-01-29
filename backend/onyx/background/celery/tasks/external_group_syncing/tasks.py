@@ -33,7 +33,11 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import SyncStatus
+from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.sync_record import insert_sync_record
+from onyx.db.sync_record import update_sync_record_status
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_ext_group_sync import (
     RedisConnectorExternalGroupSyncPayload,
@@ -200,6 +204,15 @@ def try_creating_external_group_sync_task(
             celery_task_id=result.id,
         )
 
+        # create before setting fence to avoid race condition where the monitoring
+        # task updates the sync record before it is created
+        with get_session_with_tenant(tenant_id) as db_session:
+            insert_sync_record(
+                db_session=db_session,
+                entity_id=cc_pair_id,
+                sync_type=SyncType.EXTERNAL_GROUP,
+            )
+
         redis_connector.external_group_sync.set_fence(payload)
 
     except Exception:
@@ -289,10 +302,25 @@ def connector_external_group_sync_generator_task(
             )
 
             mark_cc_pair_as_external_group_synced(db_session, cc_pair.id)
+
+            update_sync_record_status(
+                db_session=db_session,
+                entity_id=cc_pair_id,
+                sync_type=SyncType.EXTERNAL_GROUP,
+                sync_status=SyncStatus.SUCCESS,
+            )
     except Exception as e:
         task_logger.exception(
             f"Failed to run external group sync: cc_pair={cc_pair_id}"
         )
+
+        with get_session_with_tenant(tenant_id) as db_session:
+            update_sync_record_status(
+                db_session=db_session,
+                entity_id=cc_pair_id,
+                sync_type=SyncType.EXTERNAL_GROUP,
+                sync_status=SyncStatus.FAILED,
+            )
 
         redis_connector.external_group_sync.generator_clear()
         redis_connector.external_group_sync.taskset_clear()

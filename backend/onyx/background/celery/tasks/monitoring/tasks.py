@@ -58,6 +58,11 @@ _SYNC_START_LATENCY_KEY_FMT = (
     "sync_start_latency:{sync_type}:{entity_id}:{sync_record_id}"
 )
 
+_CONNECTOR_START_TIME_KEY_FMT = "connector_start_time:{cc_pair_id}:{index_attempt_id}"
+_CONNECTOR_END_TIME_KEY_FMT = "connector_end_time:{cc_pair_id}:{index_attempt_id}"
+_SYNC_START_TIME_KEY_FMT = "sync_start_time:{sync_type}:{entity_id}:{sync_record_id}"
+_SYNC_END_TIME_KEY_FMT = "sync_end_time:{sync_type}:{entity_id}:{sync_record_id}"
+
 
 def _mark_metric_as_emitted(redis_std: Redis, key: str) -> None:
     """Mark a metric as having been emitted by setting a Redis key with expiration"""
@@ -303,8 +308,6 @@ def _build_connector_final_metrics(
                 )
             )
 
-        _mark_metric_as_emitted(redis_std, metric_key)
-
     return metrics
 
 
@@ -344,6 +347,52 @@ def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Me
             if one_hour_ago > most_recent_attempt.time_created:
                 continue
 
+            # Build a job_id for correlation
+            job_id = build_job_id(
+                "connector", str(cc_pair.id), str(most_recent_attempt.id)
+            )
+
+            # Add raw start time metric if available
+            if most_recent_attempt.time_started:
+                start_time_key = _CONNECTOR_START_TIME_KEY_FMT.format(
+                    cc_pair_id=cc_pair.id,
+                    index_attempt_id=most_recent_attempt.id,
+                )
+                metrics.append(
+                    Metric(
+                        key=start_time_key,
+                        name="connector_start_time",
+                        value=most_recent_attempt.time_started.timestamp(),
+                        tags={
+                            "job_id": job_id,
+                            "connector_id": str(cc_pair.connector.id),
+                            "source": str(cc_pair.connector.source),
+                        },
+                    )
+                )
+
+            # Add raw end time metric if available and in terminal state
+            if (
+                most_recent_attempt.status.is_terminal()
+                and most_recent_attempt.time_updated
+            ):
+                end_time_key = _CONNECTOR_END_TIME_KEY_FMT.format(
+                    cc_pair_id=cc_pair.id,
+                    index_attempt_id=most_recent_attempt.id,
+                )
+                metrics.append(
+                    Metric(
+                        key=end_time_key,
+                        name="connector_end_time",
+                        value=most_recent_attempt.time_updated.timestamp(),
+                        tags={
+                            "job_id": job_id,
+                            "connector_id": str(cc_pair.connector.id),
+                            "source": str(cc_pair.connector.source),
+                        },
+                    )
+                )
+
             # Connector start latency
             start_latency_metric = _build_connector_start_latency_metric(
                 cc_pair, most_recent_attempt, second_most_recent_attempt, redis_std
@@ -365,9 +414,10 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
     """
     Collect metrics for document set and group syncing:
       - Success/failure status
-      - Start latency (always)
+      - Start latency (for doc sets / user groups)
       - Duration & doc count (only if success)
       - Throughput (docs/min) (only if success)
+      - Raw start/end times for each sync
     """
     one_hour_ago = get_db_current_time(db_session) - timedelta(hours=1)
 
@@ -388,6 +438,43 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
     for sync_record in recent_sync_records:
         # Build a job_id for correlation
         job_id = build_job_id("sync_record", str(sync_record.id))
+
+        # Add raw start time metric
+        start_time_key = _SYNC_START_TIME_KEY_FMT.format(
+            sync_type=sync_record.sync_type,
+            entity_id=sync_record.entity_id,
+            sync_record_id=sync_record.id,
+        )
+        metrics.append(
+            Metric(
+                key=start_time_key,
+                name="sync_start_time",
+                value=sync_record.sync_start_time.timestamp(),
+                tags={
+                    "job_id": job_id,
+                    "sync_type": str(sync_record.sync_type),
+                },
+            )
+        )
+
+        # Add raw end time metric if available
+        if sync_record.sync_end_time:
+            end_time_key = _SYNC_END_TIME_KEY_FMT.format(
+                sync_type=sync_record.sync_type,
+                entity_id=sync_record.entity_id,
+                sync_record_id=sync_record.id,
+            )
+            metrics.append(
+                Metric(
+                    key=end_time_key,
+                    name="sync_end_time",
+                    value=sync_record.sync_end_time.timestamp(),
+                    tags={
+                        "job_id": job_id,
+                        "sync_type": str(sync_record.sync_type),
+                    },
+                )
+            )
 
         # Emit a SUCCESS/FAIL boolean metric
         #    Use a single Redis key to avoid re-emitting final metrics
@@ -439,7 +526,7 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
                 if duration_seconds is not None:
                     metrics.append(
                         Metric(
-                            key=None,
+                            key=final_metric_key,
                             name="sync_duration_seconds",
                             value=duration_seconds,
                             tags={
@@ -455,7 +542,7 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
 
                 metrics.append(
                     Metric(
-                        key=None,
+                        key=final_metric_key,
                         name="sync_doc_count",
                         value=doc_count,
                         tags={
@@ -468,7 +555,7 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
                 if sync_speed is not None:
                     metrics.append(
                         Metric(
-                            key=None,
+                            key=final_metric_key,
                             name="sync_speed_docs_per_min",
                             value=sync_speed,
                             tags={
@@ -481,9 +568,6 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
                     task_logger.error(
                         f"Invalid sync record {sync_record.id} with no duration"
                     )
-
-            # Mark final metrics as emitted so we don't re-emit
-            _mark_metric_as_emitted(redis_std, final_metric_key)
 
         # Emit start latency
         start_latency_key = _SYNC_START_LATENCY_KEY_FMT.format(
@@ -502,22 +586,20 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
                 entity = db_session.scalar(
                     select(UserGroup).where(UserGroup.id == sync_record.entity_id)
                 )
-            else:
-                task_logger.info(
-                    f"Skipping sync record {sync_record.id} of type {sync_record.sync_type}."
-                )
-                continue
 
             if entity is None:
                 task_logger.error(
-                    f"Could not find entity for sync record {sync_record.id} "
-                    f"(type={sync_record.sync_type}, id={sync_record.entity_id})."
+                    f"Sync record of type {sync_record.sync_type} doesn't have an entity "
+                    f"associated with it (id={sync_record.entity_id}). Skipping start latency metric."
                 )
-                continue
 
             # Calculate start latency in seconds:
             #    (actual sync start) - (last modified time)
-            if entity.time_last_modified_by_user and sync_record.sync_start_time:
+            if (
+                entity is not None
+                and entity.time_last_modified_by_user
+                and sync_record.sync_start_time
+            ):
                 start_latency = (
                     sync_record.sync_start_time - entity.time_last_modified_by_user
                 ).total_seconds()
@@ -540,8 +622,6 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
                         },
                     )
                 )
-
-                _mark_metric_as_emitted(redis_std, start_latency_key)
 
     return metrics
 
@@ -607,9 +687,12 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
             for metric_fn in metric_functions:
                 metrics = metric_fn()
                 for metric in metrics:
-                    metric.log()
-                    metric.emit(tenant_id)
-                    if metric.key:
+                    # double check to make sure we aren't double-emitting metrics
+                    if metric.key is not None and not _has_metric_been_emitted(
+                        redis_std, metric.key
+                    ):
+                        metric.log()
+                        metric.emit(tenant_id)
                         _mark_metric_as_emitted(redis_std, metric.key)
 
         task_logger.info("Successfully collected background metrics")

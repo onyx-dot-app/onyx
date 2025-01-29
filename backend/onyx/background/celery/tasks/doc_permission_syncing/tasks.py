@@ -11,6 +11,7 @@ from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 from redis import Redis
 from redis.lock import Lock as RedisLock
+from sqlalchemy.orm import Session
 
 from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.db.document import upsert_document_external_perms
@@ -31,12 +32,17 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
+from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import SyncStatus
+from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.sync_record import insert_sync_record
+from onyx.db.sync_record import update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_doc_perm_sync import (
@@ -55,6 +61,9 @@ DOCUMENT_PERMISSIONS_UPDATE_MAX_RETRIES = 3
 # 5 seconds more than RetryDocumentIndex STOP_AFTER+MAX_WAIT
 LIGHT_SOFT_TIME_LIMIT = 105
 LIGHT_TIME_LIMIT = LIGHT_SOFT_TIME_LIMIT + 15
+
+
+"""Jobs / utils for kicking off doc permissions sync tasks."""
 
 
 def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
@@ -173,6 +182,15 @@ def try_creating_permissions_sync_task(
         redis_connector.permissions.taskset_clear()
 
         custom_task_id = f"{redis_connector.permissions.generator_task_key}_{uuid4()}"
+
+        # create before setting fence to avoid race condition where the monitoring
+        # task updates the sync record before it is created
+        with get_session_with_tenant(tenant_id) as db_session:
+            insert_sync_record(
+                db_session=db_session,
+                entity_id=cc_pair_id,
+                sync_type=SyncType.EXTERNAL_PERMISSIONS,
+            )
 
         # set a basic fence to start
         payload = RedisConnectorPermissionSyncPayload(started=None, celery_task_id=None)
@@ -400,3 +418,53 @@ def update_external_document_permissions_task(
             f"Error Syncing Document Permissions: connector_id={connector_id} doc_id={doc_id}"
         )
         return False
+
+
+"""Monitoring CCPair permissions utils, called in monitor_vespa_sync"""
+
+
+def monitor_ccpair_permissions_taskset(
+    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
+) -> None:
+    fence_key = key_bytes.decode("utf-8")
+    cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)
+    if cc_pair_id_str is None:
+        task_logger.warning(
+            f"monitor_ccpair_permissions_taskset: could not parse cc_pair_id from {fence_key}"
+        )
+        return
+
+    cc_pair_id = int(cc_pair_id_str)
+
+    redis_connector = RedisConnector(tenant_id, cc_pair_id)
+    if not redis_connector.permissions.fenced:
+        return
+
+    initial = redis_connector.permissions.generator_complete
+    if initial is None:
+        return
+
+    remaining = redis_connector.permissions.get_remaining()
+    task_logger.info(
+        f"Permissions sync progress: cc_pair={cc_pair_id} remaining={remaining} initial={initial}"
+    )
+    if remaining > 0:
+        return
+
+    payload: RedisConnectorPermissionSyncPayload | None = (
+        redis_connector.permissions.payload
+    )
+    start_time: datetime | None = payload.started if payload else None
+
+    mark_cc_pair_as_permissions_synced(db_session, int(cc_pair_id), start_time)
+    task_logger.info(f"Successfully synced permissions for cc_pair={cc_pair_id}")
+
+    update_sync_record_status(
+        db_session=db_session,
+        entity_id=cc_pair_id,
+        sync_type=SyncType.EXTERNAL_PERMISSIONS,
+        sync_status=SyncStatus.SUCCESS,
+        num_docs_synced=initial,
+    )
+
+    redis_connector.permissions.reset()
