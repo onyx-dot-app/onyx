@@ -176,6 +176,7 @@ def try_creating_permissions_sync_task(
 
         # set a basic fence to start
         payload = RedisConnectorPermissionSyncPayload(started=None, celery_task_id=None)
+        redis_connector.permissions.set_fence(payload)
 
         result = app.send_task(
             OnyxCeleryTask.CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK,
