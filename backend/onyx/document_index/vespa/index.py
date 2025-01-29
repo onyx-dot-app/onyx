@@ -370,12 +370,6 @@ class VespaIndex(DocumentIndex):
                 for doc_id in doc_id_to_new_chunk_cnt.keys()
             ]
 
-            logger.debug("Indexing these doc IDs / counts")
-            logger.debug(doc_id_to_new_chunk_cnt)
-
-            logger.debug("Enriched docs are as follows")
-            logger.debug(enriched_doc_infos)
-
             for cleaned_doc_info in enriched_doc_infos:
                 # If the document has previously indexed chunks, we know it previously existed
                 if cleaned_doc_info.chunk_end_index:
