@@ -537,22 +537,21 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
                 # Let the tag flow handle this case, don't reply twice
                 return False
 
-        # Get channel config early since we'll need it for bot message checks
-        channel_name, _ = get_channel_name_from_id(
-            client=client.web_client, channel_id=channel
-        )
-        with get_session_with_tenant(client.tenant_id) as db_session:
-            slack_channel_config = get_slack_channel_config_for_bot_and_channel(
-                db_session=db_session,
-                slack_bot_id=client.slack_bot_id,
-                channel_name=channel_name,
-            )
-
         # Check if this is a bot message (either via bot_profile or bot_message subtype)
         is_bot_message = bool(
             event.get("bot_profile") or event.get("subtype") == "bot_message"
         )
         if is_bot_message:
+            channel_name, _ = get_channel_name_from_id(
+                client=client.web_client, channel_id=channel
+            )
+            with get_session_with_tenant(client.tenant_id) as db_session:
+                slack_channel_config = get_slack_channel_config_for_bot_and_channel(
+                    db_session=db_session,
+                    slack_bot_id=client.slack_bot_id,
+                    channel_name=channel_name,
+                )
+
             # If OnyxBot is not specifically tagged and the channel is not set to respond to bots, ignore the message
             if (not bot_tag_id or bot_tag_id not in msg) and (
                 not slack_channel_config
