@@ -10,7 +10,6 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import EmbeddingProvider
 from onyx.indexing.models import MultipassConfig
 from shared_configs.configs import MULTI_TENANT
 
@@ -28,20 +27,6 @@ def should_use_multipass(search_settings: SearchSettings | None) -> bool:
     return ENABLE_MULTIPASS_INDEXING
 
 
-def can_use_large_chunks(multipass: bool, search_settings: SearchSettings) -> bool:
-    """
-    Given multipass usage and an embedder, decides whether large chunks are allowed
-    based on model/provider constraints.
-    """
-    # Only local models that support a larger context are from Nomic
-    # Cohere does not support larger contexts (they recommend not going above ~512 tokens)
-    return (
-        multipass
-        and search_settings.model_name.startswith("nomic-ai")
-        and search_settings.provider_type != EmbeddingProvider.COHERE
-    )
-
-
 def get_multipass_config(search_settings: SearchSettings) -> MultipassConfig:
     """
     Determines whether to enable multipass and large chunks by examining
@@ -51,7 +36,9 @@ def get_multipass_config(search_settings: SearchSettings) -> MultipassConfig:
         return MultipassConfig(multipass_indexing=False, enable_large_chunks=False)
 
     multipass = should_use_multipass(search_settings)
-    enable_large_chunks = can_use_large_chunks(multipass, search_settings)
+    enable_large_chunks = SearchSettings.can_use_large_chunks(
+        multipass, search_settings.model_name, search_settings.provider_type
+    )
     return MultipassConfig(
         multipass_indexing=multipass, enable_large_chunks=enable_large_chunks
     )

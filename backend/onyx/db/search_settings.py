@@ -1,4 +1,3 @@
-from pydantic import BaseModel
 from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import select
@@ -34,9 +33,15 @@ from shared_configs.enums import EmbeddingProvider
 logger = setup_logger()
 
 
-class ActiveSearchSettings(BaseModel):
+class ActiveSearchSettings:
     primary: SearchSettings
     secondary: SearchSettings | None
+
+    def __init__(
+        self, primary: SearchSettings, secondary: SearchSettings | None
+    ) -> None:
+        self.primary = primary
+        self.secondary = secondary
 
 
 def create_search_settings(

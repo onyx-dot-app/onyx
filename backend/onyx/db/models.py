@@ -55,7 +55,6 @@ from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import TaskStatus
 from onyx.db.pydantic_type import PydanticType
-from onyx.document_index.document_index_utils import can_use_large_chunks
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 from onyx.file_store.models import FileDescriptor
@@ -750,7 +749,31 @@ class SearchSettings(Base):
 
     @property
     def large_chunks_enabled(self) -> bool:
-        return can_use_large_chunks(self.multipass_indexing, self)
+        """
+        Given multipass usage and an embedder, decides whether large chunks are allowed
+        based on model/provider constraints.
+        """
+        # Only local models that support a larger context are from Nomic
+        # Cohere does not support larger contexts (they recommend not going above ~512 tokens)
+        return SearchSettings.can_use_large_chunks(
+            self.multipass_indexing, self.model_name, self.provider_type
+        )
+
+    @staticmethod
+    def can_use_large_chunks(
+        multipass: bool, model_name: str, provider_type: EmbeddingProvider | None
+    ) -> bool:
+        """
+        Given multipass usage and an embedder, decides whether large chunks are allowed
+        based on model/provider constraints.
+        """
+        # Only local models that support a larger context are from Nomic
+        # Cohere does not support larger contexts (they recommend not going above ~512 tokens)
+        return (
+            multipass
+            and model_name.startswith("nomic-ai")
+            and provider_type != EmbeddingProvider.COHERE
+        )
 
 
 class IndexAttempt(Base):
