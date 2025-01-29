@@ -1093,14 +1093,10 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool | None:
 def vespa_metadata_sync_task(
     self: Task, document_id: str, tenant_id: str | None
 ) -> bool:
-    timings: dict[str, Any] = {}
-
     start = time.monotonic()
-    timings["start"] = start
 
     try:
         with get_session_with_tenant(tenant_id) as db_session:
-            phase_start = time.monotonic()
             (
                 curr_ind_name,
                 sec_ind_name,
@@ -1114,30 +1110,22 @@ def vespa_metadata_sync_task(
                 secondary_large_chunks_enabled=secondary_large_chunks,
                 httpx_client=HttpxPool.get("vespa"),
             )
-            timings["get_index"] = time.monotonic() - phase_start
 
-            phase_start = time.monotonic()
             retry_index = RetryDocumentIndex(doc_index)
 
             doc = get_document(document_id, db_session)
             if not doc:
                 return False
-            timings["get_document"] = time.monotonic() - phase_start
 
             # document set sync
-            phase_start = time.monotonic()
             doc_sets = fetch_document_sets_for_document(document_id, db_session)
             update_doc_sets: set[str] = set(doc_sets)
-            timings["fetch_document_sets_for_document"] = time.monotonic() - phase_start
 
             # User group sync
-            phase_start = time.monotonic()
             doc_access = get_access_for_document(
                 document_id=document_id, db_session=db_session
             )
-            timings["get_access_for_document"] = time.monotonic() - phase_start
 
-            phase_start = time.monotonic()
             fields = VespaDocumentFields(
                 document_sets=update_doc_sets,
                 access=doc_access,
@@ -1152,13 +1140,10 @@ def vespa_metadata_sync_task(
                 chunk_count=doc.chunk_count,
                 fields=fields,
             )
-            timings["index.update_single"] = time.monotonic() - phase_start
 
             # update db last. Worst case = we crash right before this and
             # the sync might repeat again later
-            phase_start = time.monotonic()
             mark_document_as_synced(document_id, db_session)
-            timings["mark_document_as_synced"] = time.monotonic() - phase_start
 
             # this code checks for and removes a per document sync key that is
             # used to block out the same doc from continualy resyncing
@@ -1174,8 +1159,7 @@ def vespa_metadata_sync_task(
                 f"doc={document_id} "
                 f"action=sync "
                 f"chunks={chunks_affected} "
-                f"elapsed={elapsed:.2f} "
-                f"debug_timings={timings}"
+                f"elapsed={elapsed:.2f}"
             )
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")

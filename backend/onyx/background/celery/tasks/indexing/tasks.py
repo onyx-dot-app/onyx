@@ -23,6 +23,9 @@ from onyx.background.celery.tasks.indexing.utils import try_creating_indexing_ta
 from onyx.background.celery.tasks.indexing.utils import validate_indexing_fences
 from onyx.background.indexing.job_client import SimpleJobClient
 from onyx.background.indexing.run_indexing import run_indexing_entrypoint
+from onyx.configs.app_configs import MANAGED_VESPA
+from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
+from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
@@ -303,6 +306,13 @@ def connector_indexing_task(
 
     attempt_found = False
     n_final_progress: int | None = None
+
+    if MANAGED_VESPA:
+        httpx_init_vespa_pool(
+            20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
+        )
+    else:
+        httpx_init_vespa_pool(20)
 
     httpx_init_vespa_pool(20)  # documented default
 

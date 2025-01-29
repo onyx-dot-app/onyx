@@ -231,6 +231,7 @@ def _get_chunks_via_visit_api(
     return document_chunks
 
 
+# TODO(rkuo): candidate for removal if not being used
 # @retry(tries=10, delay=1, backoff=2)
 # def get_all_vespa_ids_for_document_id(
 #     document_id: str,

@@ -102,11 +102,6 @@ def upsert_ingestion_doc(
         secondary_large_chunks_enabled=None,
     )
 
-    # curr_ind_name, sec_ind_name = get_both_index_names(db_session)
-    # curr_doc_index = get_default_document_index(
-    #     primary_index_name=curr_ind_name, secondary_index_name=None
-    # )
-
     search_settings = get_current_search_settings(db_session)
 
     index_embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
@@ -131,7 +126,7 @@ def upsert_ingestion_doc(
 
     # If there's a secondary index being built, index the doc but don't use it for return here
     if sec_ind_name:
-        # rkuo: i don't understand why we create the secondaray index with the current index again
+        # rkuo: i don't understand why we create the secondary index with the current index again
         sec_doc_index = get_default_document_index(
             primary_index_name=curr_ind_name,
             secondary_index_name=None,

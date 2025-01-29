@@ -272,27 +272,6 @@ def check_for_final_chunk_existence(
         index += 1
 
 
-# def get_multipass_config(
-#     db_session: Session, primary_index: bool = True
-# ) -> MultipassConfig:
-#     """
-#     Determines whether to enable multipass and large chunks by examining
-#     the current search settings and the embedder configuration.
-#     """
-#     search_settings = (
-#         get_current_search_settings(db_session)
-#         if primary_index
-#         else get_secondary_search_settings(db_session)
-#     )
-#     multipass = should_use_multipass(search_settings)
-#     if not search_settings:
-#         return MultipassConfig(multipass_indexing=False, enable_large_chunks=False)
-#     enable_large_chunks = can_use_large_chunks(multipass, search_settings)
-#     return MultipassConfig(
-#         multipass_indexing=multipass, enable_large_chunks=enable_large_chunks
-#     )
-
-
 class BaseHTTPXClientContext(ABC):
     """Abstract base class for an HTTPX client context manager."""
 

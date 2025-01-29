@@ -10,7 +10,6 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timedelta
-from typing import Any
 from typing import BinaryIO
 from typing import cast
 from typing import List
@@ -610,23 +609,13 @@ class VespaIndex(DocumentIndex):
         function will complete with no errors or exceptions.
         Handle other exceptions if you wish to implement retry behavior
         """
-        start = time.monotonic()
-
-        timings: dict[str, Any] = {}
-
         doc_chunk_count = 0
 
-        index = 0
         with self.httpx_client_context as httpx_client:
-            timings["get_vespa_http_client_enter"] = time.monotonic() - start
             for (
                 index_name,
                 large_chunks_enabled,
             ) in self.index_to_large_chunks_enabled.items():
-                index += 1
-
-                phase_start = time.monotonic()
-
                 enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
                     index_name=index_name,
                     http_client=httpx_client,
@@ -657,26 +646,15 @@ class VespaIndex(DocumentIndex):
                     )
 
                 doc_chunk_count += len(doc_chunk_ids)
-                timings[f"prep_{index}"] = time.monotonic() - phase_start
 
                 chunk = 0
                 for doc_chunk_id in doc_chunk_ids:
                     chunk += 1
 
-                    phase_start = time.monotonic()
                     self.update_single_chunk(
                         doc_chunk_id, index_name, fields, doc_id, httpx_client
                     )
-                    timings[f"chunk_{index}_{chunk}"] = time.monotonic() - phase_start
 
-            phase_start = time.monotonic()
-
-        timings["get_vespa_http_client_exit"] = time.monotonic() - phase_start
-
-        elapsed = time.monotonic() - start
-        logger.debug(
-            f"num_chunks={doc_chunk_count} elapsed={elapsed:.2f} timings={timings}"
-        )
         return doc_chunk_count
 
     def delete_single(

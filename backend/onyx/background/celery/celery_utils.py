@@ -6,10 +6,7 @@ from typing import cast
 import httpx
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
-from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
-from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.app_configs import VESPA_REQUEST_TIMEOUT
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
@@ -163,20 +160,23 @@ def celery_is_worker_primary(worker: Any) -> bool:
     return False
 
 
-def httpx_init_vespa_pool(max_keepalive_connections: int) -> None:
+def httpx_init_vespa_pool(
+    max_keepalive_connections: int,
+    timeout: int = VESPA_REQUEST_TIMEOUT,
+    ssl_cert: str | None = None,
+    ssl_key: str | None = None,
+) -> None:
     httpx_cert = None
     httpx_verify = False
-    if MANAGED_VESPA:
-        httpx_cert = cast(
-            tuple[str, str], (VESPA_CLOUD_CERT_PATH, VESPA_CLOUD_KEY_PATH)
-        )
+    if ssl_cert and ssl_key:
+        httpx_cert = cast(tuple[str, str], (ssl_cert, ssl_key))
         httpx_verify = True
 
     HttpxPool.init_client(
         name="vespa",
         cert=httpx_cert,
         verify=httpx_verify,
-        timeout=VESPA_REQUEST_TIMEOUT,
+        timeout=timeout,
         http2=False,
         limits=httpx.Limits(max_keepalive_connections=max_keepalive_connections),
     )
