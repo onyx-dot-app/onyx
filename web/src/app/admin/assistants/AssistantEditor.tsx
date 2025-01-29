@@ -231,10 +231,9 @@ export function AssistantEditor({
       existingPersona?.llm_model_provider_override ?? null,
     llm_model_version_override:
       existingPersona?.llm_model_version_override ?? null,
-    starter_messages:
-      existingPersona?.starter_messages?.length
-        ? existingPersona.starter_messages
-        : [{ message: "" }],
+    starter_messages: existingPersona?.starter_messages?.length
+      ? existingPersona.starter_messages
+      : [{ message: "" }],
     enabled_tools_map: enabledToolsMap,
     icon_color: existingPersona?.icon_color ?? defautIconColor,
     icon_shape: existingPersona?.icon_shape ?? defaultIconShape,
