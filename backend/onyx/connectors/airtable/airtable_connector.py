@@ -64,12 +64,16 @@ class AirtableConnector(LoadConnector):
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         if not isinstance(treat_all_non_attachment_fields_as_metadata, bool):
-            raise TypeError("treat_all_non_attachment_fields_as_metadata must be a boolean")
+            raise TypeError(
+                "treat_all_non_attachment_fields_as_metadata must be a boolean"
+            )
         self.base_id = base_id
         self.table_name_or_id = table_name_or_id
         self.batch_size = batch_size
         self.airtable_client: AirtableApi | None = None
-        self.treat_all_non_attachment_fields_as_metadata = treat_all_non_attachment_fields_as_metadata
+        self.treat_all_non_attachment_fields_as_metadata = (
+            treat_all_non_attachment_fields_as_metadata
+        )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.airtable_client = AirtableApi(credentials["airtable_access_token"])
