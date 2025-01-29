@@ -157,6 +157,7 @@ def mock_get_api_key() -> Generator[MagicMock, None, None]:
 
 def test_airtable_connector_parameter_validation() -> None:
     """Test that treat_all_non_attachment_fields_as_metadata is required and has no default."""
+    # Test that treat_all_non_attachment_fields_as_metadata is required
     with pytest.raises(
         TypeError,
         match=(
@@ -167,6 +168,14 @@ def test_airtable_connector_parameter_validation() -> None:
         AirtableConnector(
             base_id="test_base",
             table_name_or_id="test_table",
+        )
+
+    # Test that treat_all_non_attachment_fields_as_metadata must be a boolean
+    with pytest.raises(TypeError):
+        AirtableConnector(
+            base_id="test_base",
+            table_name_or_id="test_table",
+            treat_all_non_attachment_fields_as_metadata="not_a_boolean",  # type: ignore
         )
 
 
