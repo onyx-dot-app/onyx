@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
+from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.airtable.airtable_connector import AirtableConnector
@@ -11,44 +12,24 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 
 
-@pytest.fixture(
-    params=[
-        ("table_name", "table_name"),
-        ("table_id", "table_id"),
-    ]
-)
-def airtable_connector(request: pytest.FixtureRequest) -> AirtableConnector:
-    param_type, param_key = request.param
-    table_identifier = os.environ.get(f"AIRTABLE_TEST_{param_key.upper()}")
-    base_id = os.environ.get("AIRTABLE_TEST_BASE_ID")
-    access_token = os.environ.get("AIRTABLE_ACCESS_TOKEN")
+class AirtableConfig(BaseModel):
+    base_id: str
+    table_identifier: str
+    access_token: str
 
-    missing_vars = []
-    if not table_identifier:
-        missing_vars.append(f"AIRTABLE_TEST_{param_key.upper()}")
-    if not base_id:
-        missing_vars.append("AIRTABLE_TEST_BASE_ID")
-    if not access_token:
-        missing_vars.append("AIRTABLE_ACCESS_TOKEN")
 
-    if missing_vars:
-        raise RuntimeError(
-            f"Required environment variables not set: {', '.join(missing_vars)}. "
-            "These variables are required to run Airtable connector tests."
-        )
-
-    connector = AirtableConnector(
-        base_id=str(base_id),
-        table_name_or_id=str(table_identifier),
-        treat_all_non_attachment_fields_as_metadata=False,
+@pytest.fixture(params=[True, False])
+def airtable_config(request: pytest.FixtureRequest) -> AirtableConfig:
+    table_identifier = (
+        os.environ["AIRTABLE_TEST_TABLE_NAME"]
+        if request.param
+        else os.environ["AIRTABLE_TEST_TABLE_ID"]
     )
-
-    connector.load_credentials(
-        {
-            "airtable_access_token": str(access_token),
-        }
+    return AirtableConfig(
+        base_id=os.environ["AIRTABLE_TEST_BASE_ID"],
+        table_identifier=table_identifier,
+        access_token=os.environ["AIRTABLE_ACCESS_TOKEN"],
     )
-    return connector
 
 
 def create_test_document(
@@ -155,23 +136,72 @@ def mock_get_api_key() -> Generator[MagicMock, None, None]:
         yield mock
 
 
-def test_airtable_connector_all_metadata(
-    mock_get_api_key: MagicMock, request: pytest.FixtureRequest
+def compare_documents(
+    actual_docs: list[Document], expected_docs: list[Document]
+) -> None:
+    """Utility function to compare actual and expected documents, ignoring order."""
+    actual_docs_dict = {doc.id: doc for doc in actual_docs}
+    expected_docs_dict = {doc.id: doc for doc in expected_docs}
+
+    assert actual_docs_dict.keys() == expected_docs_dict.keys(), "Document ID mismatch"
+
+    for doc_id in actual_docs_dict:
+        actual = actual_docs_dict[doc_id]
+        expected = expected_docs_dict[doc_id]
+
+        assert (
+            actual.source == expected.source
+        ), f"Source mismatch for document {doc_id}"
+        assert (
+            actual.semantic_identifier == expected.semantic_identifier
+        ), f"Semantic identifier mismatch for document {doc_id}"
+        assert (
+            actual.metadata == expected.metadata
+        ), f"Metadata mismatch for document {doc_id}"
+        assert (
+            actual.doc_updated_at == expected.doc_updated_at
+        ), f"Updated at mismatch for document {doc_id}"
+        assert (
+            actual.primary_owners == expected.primary_owners
+        ), f"Primary owners mismatch for document {doc_id}"
+        assert (
+            actual.secondary_owners == expected.secondary_owners
+        ), f"Secondary owners mismatch for document {doc_id}"
+        assert actual.title == expected.title, f"Title mismatch for document {doc_id}"
+        assert (
+            actual.from_ingestion_api == expected.from_ingestion_api
+        ), f"Ingestion API flag mismatch for document {doc_id}"
+        assert (
+            actual.additional_info == expected.additional_info
+        ), f"Additional info mismatch for document {doc_id}"
+
+        # Compare sections
+        assert len(actual.sections) == len(
+            expected.sections
+        ), f"Number of sections mismatch for document {doc_id}"
+        for i, (actual_section, expected_section) in enumerate(
+            zip(actual.sections, expected.sections)
+        ):
+            assert (
+                actual_section.text == expected_section.text
+            ), f"Section {i} text mismatch for document {doc_id}"
+            assert (
+                actual_section.link == expected_section.link
+            ), f"Section {i} link mismatch for document {doc_id}"
+
+
+def test_airtable_connector_basic(
+    mock_get_api_key: MagicMock, airtable_config: AirtableConfig
 ) -> None:
     """Test behavior when all non-attachment fields are treated as metadata."""
-    table_name = os.environ.get("AIRTABLE_TEST_TABLE_NAME")
-    base_id = os.environ.get("AIRTABLE_TEST_BASE_ID")
-    access_token = os.environ.get("AIRTABLE_ACCESS_TOKEN")
-    if not all([table_name, base_id, access_token]):
-        pytest.skip("Required environment variables not set")
     connector = AirtableConnector(
-        base_id=str(base_id),
-        table_name_or_id=str(table_name),
-        treat_all_non_attachment_fields_as_metadata=True,
+        base_id=airtable_config.base_id,
+        table_name_or_id=airtable_config.table_identifier,
+        treat_all_non_attachment_fields_as_metadata=False,
     )
     connector.load_credentials(
         {
-            "airtable_access_token": str(access_token),
+            "airtable_access_token": airtable_config.access_token,
         }
     )
     doc_batch_generator = connector.load_from_state()
@@ -181,7 +211,6 @@ def test_airtable_connector_all_metadata(
 
     assert len(doc_batch) == 2
 
-    # TODO: remove duplication here compared to above test
     expected_docs = [
         create_test_document(
             id="rec8BnxDLyWeegOuO",
@@ -195,7 +224,7 @@ def test_airtable_connector_all_metadata(
             days_since_status_change=0,
             assignee="Chris Weaver (chris@onyx.app)",
             submitted_by="Chris Weaver (chris@onyx.app)",
-            all_fields_as_metadata=True,
+            all_fields_as_metadata=False,
         ),
         create_test_document(
             id="reccSlIA4pZEFxPBg",
@@ -215,78 +244,36 @@ def test_airtable_connector_all_metadata(
                     "https://airtable.com/appCXJqDFS4gea8tn/tblRxFQsTlBBZdRY1/viwVUEJjWPd8XYjh8/reccSlIA4pZEFxPBg/fld1u21zkJACIvAEF/attlj2UBWNEDZngCc?blocks=hide",
                 )
             ],
-            all_fields_as_metadata=True,
+            all_fields_as_metadata=False,
         ),
     ]
 
-    # Compare each document field by field
-    for actual, expected in zip(doc_batch, expected_docs):
-        assert actual.id == expected.id, f"ID mismatch for document {actual.id}"
-        assert (
-            actual.source == expected.source
-        ), f"Source mismatch for document {actual.id}"
-        assert (
-            actual.semantic_identifier == expected.semantic_identifier
-        ), f"Semantic identifier mismatch for document {actual.id}"
-        assert (
-            actual.metadata == expected.metadata
-        ), f"Metadata mismatch for document {actual.id}"
-        assert (
-            actual.doc_updated_at == expected.doc_updated_at
-        ), f"Updated at mismatch for document {actual.id}"
-        assert (
-            actual.primary_owners == expected.primary_owners
-        ), f"Primary owners mismatch for document {actual.id}"
-        assert (
-            actual.secondary_owners == expected.secondary_owners
-        ), f"Secondary owners mismatch for document {actual.id}"
-        assert (
-            actual.title == expected.title
-        ), f"Title mismatch for document {actual.id}"
-        assert (
-            actual.from_ingestion_api == expected.from_ingestion_api
-        ), f"Ingestion API flag mismatch for document {actual.id}"
-        assert (
-            actual.additional_info == expected.additional_info
-        ), f"Additional info mismatch for document {actual.id}"
-
-        # Compare sections - should only contain attachments
-        for section in actual.sections:
-            assert (
-                "Attachment:" in section.text
-            ), f"Non-attachment section found in document {actual.id}"
-            assert (
-                section.link and "blocks=hide" in section.link
-            ), f"Non-attachment link found in document {actual.id}"
+    # Compare documents using the utility function
+    compare_documents(doc_batch, expected_docs)
 
 
-def test_airtable_connector_with_attachments(
-    mock_get_api_key: MagicMock, airtable_connector: AirtableConnector
+def test_airtable_connector_all_metadata(
+    mock_get_api_key: MagicMock, airtable_config: AirtableConfig
 ) -> None:
-    """Test the default behavior where only specific field types are treated as metadata."""
-    doc_batch_generator = airtable_connector.load_from_state()
+    connector = AirtableConnector(
+        base_id=airtable_config.base_id,
+        table_name_or_id=airtable_config.table_identifier,
+        treat_all_non_attachment_fields_as_metadata=True,
+    )
+    connector.load_credentials(
+        {
+            "airtable_access_token": airtable_config.access_token,
+        }
+    )
+    doc_batch_generator = connector.load_from_state()
     doc_batch = next(doc_batch_generator)
     with pytest.raises(StopIteration):
         next(doc_batch_generator)
 
-    assert len(doc_batch) == 2
+    # NOTE: one of the rows has no attachments -> no content -> no document
+    assert len(doc_batch) == 1
 
     expected_docs = [
-        create_test_document(
-            id="rec8BnxDLyWeegOuO",
-            title="Slow Internet",
-            description="The internet connection is very slow.",
-            priority="Medium",
-            status="In Progress",
-            # Link to another record is skipped for now
-            # category="Data Science",
-            ticket_id="2",
-            created_time="2024-12-24T21:02:49.000Z",
-            status_last_changed="2024-12-24T21:02:49.000Z",
-            days_since_status_change=0,
-            assignee="Chris Weaver (chris@onyx.app)",
-            submitted_by="Chris Weaver (chris@onyx.app)",
-        ),
         create_test_document(
             id="reccSlIA4pZEFxPBg",
             title="Printer Issue",
@@ -308,50 +295,9 @@ def test_airtable_connector_with_attachments(
                     "https://airtable.com/appCXJqDFS4gea8tn/tblRxFQsTlBBZdRY1/viwVUEJjWPd8XYjh8/reccSlIA4pZEFxPBg/fld1u21zkJACIvAEF/attlj2UBWNEDZngCc?blocks=hide",
                 )
             ],
+            all_fields_as_metadata=True,
         ),
     ]
 
-    # Compare each document field by field
-    for actual, expected in zip(doc_batch, expected_docs):
-        assert actual.id == expected.id, f"ID mismatch for document {actual.id}"
-        assert (
-            actual.source == expected.source
-        ), f"Source mismatch for document {actual.id}"
-        assert (
-            actual.semantic_identifier == expected.semantic_identifier
-        ), f"Semantic identifier mismatch for document {actual.id}"
-        assert (
-            actual.metadata == expected.metadata
-        ), f"Metadata mismatch for document {actual.id}"
-        assert (
-            actual.doc_updated_at == expected.doc_updated_at
-        ), f"Updated at mismatch for document {actual.id}"
-        assert (
-            actual.primary_owners == expected.primary_owners
-        ), f"Primary owners mismatch for document {actual.id}"
-        assert (
-            actual.secondary_owners == expected.secondary_owners
-        ), f"Secondary owners mismatch for document {actual.id}"
-        assert (
-            actual.title == expected.title
-        ), f"Title mismatch for document {actual.id}"
-        assert (
-            actual.from_ingestion_api == expected.from_ingestion_api
-        ), f"Ingestion API flag mismatch for document {actual.id}"
-        assert (
-            actual.additional_info == expected.additional_info
-        ), f"Additional info mismatch for document {actual.id}"
-
-        # Compare sections
-        assert len(actual.sections) == len(
-            expected.sections
-        ), f"Number of sections mismatch for document {actual.id}"
-        for i, (actual_section, expected_section) in enumerate(
-            zip(actual.sections, expected.sections)
-        ):
-            assert (
-                actual_section.text == expected_section.text
-            ), f"Section {i} text mismatch for document {actual.id}"
-            assert (
-                actual_section.link == expected_section.link
-            ), f"Section {i} link mismatch for document {actual.id}"
+    # Compare documents using the utility function
+    compare_documents(doc_batch, expected_docs)
