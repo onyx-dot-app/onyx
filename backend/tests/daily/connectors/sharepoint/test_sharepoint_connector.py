@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timezone
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -84,7 +85,8 @@ def sharepoint_credentials() -> dict[str, str]:
 
 
 def test_sharepoint_connector_specific_folder(
-    sharepoint_credentials: dict[str, str]
+    mock_get_unstructured_api_key: MagicMock,
+    sharepoint_credentials: dict[str, str],
 ) -> None:
     # Initialize connector with the test site URL and specific folder
     connector = SharepointConnector(
@@ -117,7 +119,8 @@ def test_sharepoint_connector_specific_folder(
 
 
 def test_sharepoint_connector_root_folder(
-    sharepoint_credentials: dict[str, str]
+    mock_get_unstructured_api_key: MagicMock,
+    sharepoint_credentials: dict[str, str],
 ) -> None:
     # Initialize connector with the base site URL
     connector = SharepointConnector(sites=[os.environ["SHAREPOINT_SITE"]])
@@ -142,7 +145,8 @@ def test_sharepoint_connector_root_folder(
 
 
 def test_sharepoint_connector_other_library(
-    sharepoint_credentials: dict[str, str]
+    mock_get_unstructured_api_key: MagicMock,
+    sharepoint_credentials: dict[str, str],
 ) -> None:
     # Initialize connector with the other library
     connector = SharepointConnector(

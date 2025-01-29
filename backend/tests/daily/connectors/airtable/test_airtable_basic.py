@@ -1,7 +1,5 @@
 import os
-from collections.abc import Generator
 from unittest.mock import MagicMock
-from unittest.mock import patch
 
 import pytest
 from pydantic import BaseModel
@@ -127,15 +125,6 @@ def create_test_document(
     )
 
 
-@pytest.fixture
-def mock_get_api_key() -> Generator[MagicMock, None, None]:
-    with patch(
-        "onyx.file_processing.extract_file_text.get_unstructured_api_key",
-        return_value=None,
-    ) as mock:
-        yield mock
-
-
 def compare_documents(
     actual_docs: list[Document], expected_docs: list[Document]
 ) -> None:
@@ -191,7 +180,7 @@ def compare_documents(
 
 
 def test_airtable_connector_basic(
-    mock_get_api_key: MagicMock, airtable_config: AirtableConfig
+    mock_get_unstructured_api_key: MagicMock, airtable_config: AirtableConfig
 ) -> None:
     """Test behavior when all non-attachment fields are treated as metadata."""
     connector = AirtableConnector(
@@ -253,7 +242,7 @@ def test_airtable_connector_basic(
 
 
 def test_airtable_connector_all_metadata(
-    mock_get_api_key: MagicMock, airtable_config: AirtableConfig
+    mock_get_unstructured_api_key: MagicMock, airtable_config: AirtableConfig
 ) -> None:
     connector = AirtableConnector(
         base_id=airtable_config.base_id,
