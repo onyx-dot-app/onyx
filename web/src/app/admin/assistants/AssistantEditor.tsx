@@ -970,7 +970,9 @@ export function AssistantEditor({
                 </div>
 
                 <SubLabel>
-                  Sample messages that help users understand what this assistant can do and how to interact with it effectively. New input fields will appear automatically as you type.
+                  Sample messages that help users understand what this assistant
+                  can do and how to interact with it effectively. New input
+                  fields will appear automatically as you type.
                 </SubLabel>
 
                 <div className="w-full">
