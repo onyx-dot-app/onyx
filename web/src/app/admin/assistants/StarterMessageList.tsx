@@ -62,13 +62,18 @@ export default function StarterMessagesList({
             type="button"
             variant="ghost"
             size="icon"
-            onClick={() => arrayHelpers.remove(index)}
+            onClick={() => {
+              arrayHelpers.remove(index);
+            }}
             className={`text-gray-400 hover:text-red-500 ${
               index === values.length - 1 && !starterMessage.message
                 ? "opacity-50 cursor-not-allowed"
                 : ""
             }`}
-            disabled={index === values.length - 1 && !starterMessage.message}
+            disabled={
+              (index === values.length - 1 && !starterMessage.message) ||
+              (values.length === 1 && index === 0) // should never happen, but just in case
+            }
           >
             <FiTrash2 className="h-4 w-4" />
           </Button>
