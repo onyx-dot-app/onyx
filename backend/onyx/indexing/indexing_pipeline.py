@@ -489,7 +489,6 @@ def index_doc_batch(
         update_docs_updated_at__no_commit(
             ids_to_new_updated_at=ids_to_new_updated_at, db_session=db_session
         )
-        logger.info("UPDATING DOCS")
 
         update_docs_last_modified__no_commit(
             document_ids=last_modified_ids, db_session=db_session
