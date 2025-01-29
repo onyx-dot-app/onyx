@@ -176,3 +176,35 @@ def test_sharepoint_connector_other_library(
     for expected in expected_documents:
         doc = find_document(found_documents, expected.semantic_identifier)
         verify_document_content(doc, expected)
+
+
+def test_sharepoint_connector_poll(
+    mock_get_unstructured_api_key: MagicMock,
+    sharepoint_credentials: dict[str, str],
+) -> None:
+    # Initialize connector with the base site URL
+    connector = SharepointConnector(
+        sites=["https://danswerai.sharepoint.com/sites/sharepoint-tests"]
+    )
+
+    # Load credentials
+    connector.load_credentials(sharepoint_credentials)
+
+    # Set time window to only capture test1.docx (modified at 2025-01-28 20:51:42+00:00)
+    start = datetime(2025, 1, 28, 20, 51, 30, tzinfo=timezone.utc)  # 12 seconds before
+    end = datetime(2025, 1, 28, 20, 51, 50, tzinfo=timezone.utc)  # 8 seconds after
+
+    # Get documents within the time window
+    document_batches = list(connector._fetch_from_sharepoint(start=start, end=end))
+    found_documents: list[Document] = [
+        doc for batch in document_batches for doc in batch
+    ]
+
+    # Should only find test1.docx
+    assert len(found_documents) == 1, "Should only find one document in the time window"
+    doc = found_documents[0]
+    assert doc.semantic_identifier == "test1.docx"
+    verify_document_metadata(doc)
+    verify_document_content(
+        doc, [d for d in EXPECTED_DOCUMENTS if d.semantic_identifier == "test1.docx"][0]
+    )
