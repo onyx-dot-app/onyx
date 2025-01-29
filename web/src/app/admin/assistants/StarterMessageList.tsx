@@ -62,15 +62,7 @@ export default function StarterMessagesList({
             type="button"
             variant="ghost"
             size="icon"
-            onClick={() => {
-              arrayHelpers.remove(index);
-              if (
-                index === values.length - 2 &&
-                !values[values.length - 1].message
-              ) {
-                arrayHelpers.pop();
-              }
-            }}
+            onClick={() => arrayHelpers.remove(index)}
             className={`text-gray-400 hover:text-red-500 ${
               index === values.length - 1 && !starterMessage.message
                 ? "opacity-50 cursor-not-allowed"
