@@ -962,6 +962,42 @@ export function AssistantEditor({
               </div>
 
               <Separator />
+
+              <div className="w-full flex flex-col">
+                <div className="flex gap-x-2 items-center">
+                  <div className="block font-medium text-sm">
+                    Starter Messages
+                  </div>
+                </div>
+
+                <SubLabel>
+                  Sample messages that help users understand what this
+                  assistant can do and how to interact with it effectively.
+                  New input fields will appear automatically as you type.
+                </SubLabel>
+
+                <div className="w-full">
+                  <FieldArray
+                    name="starter_messages"
+                    render={(arrayHelpers: ArrayHelpers) => (
+                      <StarterMessagesList
+                        debouncedRefreshPrompts={() =>
+                          debouncedRefreshPrompts(values, setFieldValue)
+                        }
+                        autoStarterMessageEnabled={
+                          autoStarterMessageEnabled
+                        }
+                        isRefreshing={isRefreshing}
+                        values={values.starter_messages}
+                        arrayHelpers={arrayHelpers}
+                        setFieldValue={setFieldValue}
+                      />
+                    )}
+                  />
+                </div>
+              </div>
+
+              <Separator />
               <AdvancedOptionsToggle
                 showAdvancedOptions={showAdvancedOptions}
                 setShowAdvancedOptions={setShowAdvancedOptions}
@@ -1096,39 +1132,6 @@ export function AssistantEditor({
                           </div>
                         </>
                       )}
-                    </div>
-                  </div>
-                  <Separator />
-                  <div className="w-full flex flex-col">
-                    <div className="flex gap-x-2 items-center">
-                      <div className="block font-medium text-sm">
-                        [Optional] Starter Messages
-                      </div>
-                    </div>
-
-                    <SubLabel>
-                      Sample messages that help users understand what this
-                      assistant can do and how to interact with it effectively.
-                    </SubLabel>
-
-                    <div className="w-full">
-                      <FieldArray
-                        name="starter_messages"
-                        render={(arrayHelpers: ArrayHelpers) => (
-                          <StarterMessagesList
-                            debouncedRefreshPrompts={() =>
-                              debouncedRefreshPrompts(values, setFieldValue)
-                            }
-                            autoStarterMessageEnabled={
-                              autoStarterMessageEnabled
-                            }
-                            isRefreshing={isRefreshing}
-                            values={values.starter_messages}
-                            arrayHelpers={arrayHelpers}
-                            setFieldValue={setFieldValue}
-                          />
-                        )}
-                      />
                     </div>
                   </div>
 
