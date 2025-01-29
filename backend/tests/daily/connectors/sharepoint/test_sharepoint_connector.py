@@ -120,7 +120,7 @@ def test_sharepoint_connector_root_folder(
     sharepoint_credentials: dict[str, str]
 ) -> None:
     # Initialize connector with the base site URL
-    connector = SharepointConnector(sites=[os.environ["SITE"]])
+    connector = SharepointConnector(sites=[os.environ["SHAREPOINT_SITE"]])
 
     # Load credentials
     connector.load_credentials(sharepoint_credentials)
@@ -147,7 +147,7 @@ def test_sharepoint_connector_other_library(
     # Initialize connector with the other library
     connector = SharepointConnector(
         sites=[
-            os.environ["SITE"] + "/Other Library",
+            os.environ["SHAREPOINT_SITE"] + "/Other Library",
         ]
     )
 
