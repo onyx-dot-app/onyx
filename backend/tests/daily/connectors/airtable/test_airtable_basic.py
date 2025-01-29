@@ -163,7 +163,10 @@ def test_airtable_connector_parameter_validation() -> None:
             base_id="test_base",
             table_name_or_id="test_table",
         )
-    assert "missing 1 required positional argument: 'treat_all_non_attachment_fields_as_metadata'" in str(exc_info.value)
+    assert (
+        "missing 1 required positional argument: 'treat_all_non_attachment_fields_as_metadata'"
+        in str(exc_info.value)
+    )
 
     # Test that treat_all_non_attachment_fields_as_metadata must be a boolean
     with pytest.raises(TypeError):
