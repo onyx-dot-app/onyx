@@ -626,10 +626,7 @@ class VespaIndex(DocumentIndex):
 
                 doc_chunk_count += len(doc_chunk_ids)
 
-                chunk = 0
                 for doc_chunk_id in doc_chunk_ids:
-                    chunk += 1
-
                     self.update_single_chunk(
                         doc_chunk_id, index_name, fields, doc_id, httpx_client
                     )
@@ -818,14 +815,18 @@ class VespaIndex(DocumentIndex):
         )
         return enriched_doc_info
 
+    @classmethod
     def delete_entries_by_tenant_id(
-        self,
+        cls,
         *,
         tenant_id: str,
         index_name: str,
     ) -> None:
         """
         Deletes all entries in the specified index with the given tenant_id.
+
+        Currently unused, but we anticipate this being useful. The entire flow does not
+        use the httpx connection pool of an instance.
 
         Parameters:
             tenant_id (str): The tenant ID whose documents are to be deleted.
@@ -836,7 +837,7 @@ class VespaIndex(DocumentIndex):
         )
 
         # Step 1: Retrieve all document IDs with the given tenant_id
-        document_ids = self._get_all_document_ids_by_tenant_id(tenant_id, index_name)
+        document_ids = cls._get_all_document_ids_by_tenant_id(tenant_id, index_name)
 
         if not document_ids:
             logger.info(
@@ -850,13 +851,16 @@ class VespaIndex(DocumentIndex):
             for doc_id in document_ids
         ]
 
-        self._apply_deletes_batched(delete_requests)
+        cls._apply_deletes_batched(delete_requests)
 
+    @classmethod
     def _get_all_document_ids_by_tenant_id(
-        self, tenant_id: str, index_name: str
+        cls, tenant_id: str, index_name: str
     ) -> List[str]:
         """
         Retrieves all document IDs with the specified tenant_id, handling pagination.
+
+        Internal helper function for delete_entries_by_tenant_id.
 
         Parameters:
             tenant_id (str): The tenant ID to search for.
@@ -890,7 +894,7 @@ class VespaIndex(DocumentIndex):
                 f"Querying for document IDs with tenant_id: {tenant_id}, offset: {offset}"
             )
 
-            with self.httpx_client_context as http_client:
+            with get_vespa_http_client() as http_client:
                 response = http_client.get(url, params=query_params, timeout=None)
                 response.raise_for_status()
 
@@ -912,13 +916,19 @@ class VespaIndex(DocumentIndex):
         )
         return document_ids
 
+    @classmethod
     def _apply_deletes_batched(
-        self,
+        cls,
         delete_requests: List["_VespaDeleteRequest"],
         batch_size: int = BATCH_SIZE,
     ) -> None:
         """
         Deletes documents in batches using multiple threads.
+
+        Internal helper function for delete_entries_by_tenant_id.
+
+        This is a class method and does not use the httpx pool of the instance.
+        This is OK because we don't use this method often.
 
         Parameters:
             delete_requests (List[_VespaDeleteRequest]): The list of delete requests.
@@ -939,7 +949,7 @@ class VespaIndex(DocumentIndex):
         logger.debug(f"Starting batch deletion for {len(delete_requests)} documents")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
-            with self.httpx_client_context as http_client:
+            with get_vespa_http_client() as http_client:
                 for batch_start in range(0, len(delete_requests), batch_size):
                     batch = delete_requests[batch_start : batch_start + batch_size]
 

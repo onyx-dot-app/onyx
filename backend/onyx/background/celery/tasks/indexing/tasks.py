@@ -307,14 +307,13 @@ def connector_indexing_task(
     attempt_found = False
     n_final_progress: int | None = None
 
+    # 20 is the documented default for httpx max_keepalive_connections
     if MANAGED_VESPA:
         httpx_init_vespa_pool(
             20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
         )
     else:
         httpx_init_vespa_pool(20)
-
-    httpx_init_vespa_pool(20)  # documented default
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     redis_connector_index = redis_connector.new_index(search_settings_id)
