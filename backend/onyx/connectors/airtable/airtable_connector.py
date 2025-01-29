@@ -247,7 +247,7 @@ class AirtableConnector(LoadConnector):
         record: RecordDict,
         table_schema: TableSchema,
         primary_field_name: str | None,
-    ) -> Document:
+    ) -> Document | None:
         """Process a single Airtable record into a Document.
 
         Args:
@@ -290,6 +290,10 @@ class AirtableConnector(LoadConnector):
 
             sections.extend(field_sections)
             metadata.update(field_metadata)
+
+        if not sections:
+            logger.warning(f"No sections found for record {record_id}")
+            return None
 
         semantic_id = (
             f"{table_name}: {primary_field_value}"
@@ -334,7 +338,8 @@ class AirtableConnector(LoadConnector):
                 table_schema=table_schema,
                 primary_field_name=primary_field_name,
             )
-            record_documents.append(document)
+            if document:
+                record_documents.append(document)
 
             if len(record_documents) >= self.batch_size:
                 yield record_documents
