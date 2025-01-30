@@ -580,6 +580,7 @@ def validate_permission_sync_fence(
         )
 
         redis_connector.permissions.reset()
+        return
 
     if not payload:
         return
