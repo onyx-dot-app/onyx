@@ -274,6 +274,11 @@ class AirtableConnector(LoadConnector):
             field_val = fields.get(field_name)
             field_type = field_schema.type
 
+            logger.debug(
+                f"Processing field '{field_name}' of type '{field_type}' "
+                f"for record '{record_id}'."
+            )
+
             field_sections, field_metadata = self._process_field(
                 field_id=field_schema.id,
                 field_name=field_name,
@@ -327,8 +332,12 @@ class AirtableConnector(LoadConnector):
                 primary_field_name = field.name
                 break
 
+        logger.info(f"Starting to process Airtable records for {table.name}.")
+
         record_documents: list[Document] = []
         for record in records:
+            logger.info(f"Processing record {record['id']} of {table.name}.")
+
             document = self._process_record(
                 record=record,
                 table_schema=table_schema,

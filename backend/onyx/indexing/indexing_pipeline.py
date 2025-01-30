@@ -380,6 +380,15 @@ def index_doc_batch(
             new_docs=0, total_docs=len(filtered_documents), total_chunks=0
         )
 
+    doc_descriptors = [
+        {
+            "doc_id": doc.id,
+            "doc_length": doc.get_total_char_length(),
+        }
+        for doc in ctx.updatable_docs
+    ]
+    logger.debug(f"Starting indexing process for documents: {doc_descriptors}")
+
     logger.debug("Starting chunking")
     chunks: list[DocAwareChunk] = chunker.chunk(ctx.updatable_docs)
 
