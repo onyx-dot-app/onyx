@@ -213,7 +213,6 @@ class SharepointConnector(LoadConnector, PollConnector):
                             f"Found {len(driveitems)} items within time window in drive '{drive.name}'"
                         )
 
-                    # Now fetch content only for items that passed all filters
                     for item in driveitems:
                         final_driveitems.append((item, drive_name))
 
