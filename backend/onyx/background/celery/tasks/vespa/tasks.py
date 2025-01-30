@@ -1080,6 +1080,7 @@ def vespa_metadata_sync_task(
             )
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
+        return False
     except Exception as ex:
         if isinstance(ex, RetryError):
             task_logger.warning(
