@@ -144,13 +144,15 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str | None) -> bool
 
         lock_beat.reacquire()
         for cc_pair_id in cc_pair_ids_to_sync:
-            tasks_created = try_creating_permissions_sync_task(
+            payload_id = try_creating_permissions_sync_task(
                 self.app, cc_pair_id, r, tenant_id
             )
-            if not tasks_created:
+            if not payload_id:
                 continue
 
-            task_logger.info(f"Doc permissions sync queued: cc_pair={cc_pair_id}")
+            task_logger.info(
+                f"Permissions sync queued: cc_pair={cc_pair_id} id={payload_id}"
+            )
 
         # we want to run this less frequently than the overall task
         lock_beat.reacquire()
@@ -184,12 +186,14 @@ def try_creating_permissions_sync_task(
     cc_pair_id: int,
     r: Redis,
     tenant_id: str | None,
-) -> int | None:
-    """Returns an int if syncing is needed. The int represents the number of sync tasks generated.
+) -> str | None:
+    """Returns a randomized payload id on success.
     Returns None if no syncing is required."""
-    redis_connector = RedisConnector(tenant_id, cc_pair_id)
-
     LOCK_TIMEOUT = 30
+
+    payload_id: str | None = None
+
+    redis_connector = RedisConnector(tenant_id, cc_pair_id)
 
     lock: RedisLock = r.lock(
         DANSWER_REDIS_FUNCTION_LOCK_PREFIX + "try_generate_permissions_sync_tasks",
@@ -249,6 +253,8 @@ def try_creating_permissions_sync_task(
         redis_connector.permissions.set_active()
         payload.celery_task_id = result.id
         redis_connector.permissions.set_fence(payload)
+
+        payload_id = payload.celery_task_id
     except Exception:
         task_logger.exception(f"Unexpected exception: cc_pair={cc_pair_id}")
         return None
@@ -256,7 +262,7 @@ def try_creating_permissions_sync_task(
         if lock.owned():
             lock.release()
 
-    return 1
+    return payload_id
 
 
 @shared_task(
@@ -753,7 +759,11 @@ def monitor_ccpair_permissions_taskset(
 
     remaining = redis_connector.permissions.get_remaining()
     task_logger.info(
-        f"Permissions sync progress: cc_pair={cc_pair_id} remaining={remaining} initial={initial}"
+        f"Permissions sync progress: "
+        f"cc_pair={cc_pair_id} "
+        f"id={payload.id} "
+        f"remaining={remaining} "
+        f"initial={initial}"
     )
     if remaining > 0:
         return
