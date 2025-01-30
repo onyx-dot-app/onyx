@@ -89,6 +89,7 @@ postgresql:
     persistence:
       size: 5Gi
   enabled: true
+  externalHost: ""
   auth:
     existingSecret: onyx-secrets
     secretKeys:
@@ -304,6 +305,7 @@ background:
 
 vespa:
   enabled: true
+  externalHost: ""
   replicaCount: 1
   image:
     repository: vespa
@@ -339,6 +341,7 @@ vespa:
 
 redis:
   enabled: true
+  externalHost: ""
   architecture: standalone
   commonConfiguration: |-
     # Enable AOF https://redis.io/topics/persistence#append-only-file
