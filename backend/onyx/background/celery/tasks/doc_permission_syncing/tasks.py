@@ -613,8 +613,13 @@ def validate_permission_sync_fence(
 
     # this check isn't very exact, but should be sufficient over a period of time
     # A single successful check over some number of attempts is sufficient.
-    tasks_not_in_celery = 0  # a non-zero number after completing our check is bad
+
+    # TODO: if the number of tasks in celery is much lower than than the taskset length
+    # we might be able to shortcut the lookup since by definition some of the tasks
+    # must not exist in celery.
+
     tasks_scanned = 0
+    tasks_not_in_celery = 0  # a non-zero number after completing our check is bad
 
     for member in r.sscan_iter(redis_connector.permissions.taskset_key):
         tasks_scanned += 1
