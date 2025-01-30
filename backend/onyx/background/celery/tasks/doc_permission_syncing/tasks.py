@@ -614,8 +614,11 @@ def validate_permission_sync_fence(
     # this check isn't very exact, but should be sufficient over a period of time
     # A single successful check over some number of attempts is sufficient.
     tasks_not_in_celery = 0  # a non-zero number after completing our check is bad
+    tasks_scanned = 0
 
     for member in r.sscan_iter(redis_connector.permissions.taskset_key):
+        tasks_scanned += 1
+
         member_bytes = cast(bytes, member)
         member_str = member_bytes.decode("utf-8")
         if member_str in queued_tasks:
@@ -628,7 +631,7 @@ def validate_permission_sync_fence(
 
     logger.info(
         "validate_permission_sync_fence task check: "
-        f"tasks_not_in_celery={tasks_not_in_celery}"
+        f"tasks_scanned={tasks_scanned} tasks_not_in_celery={tasks_not_in_celery}"
     )
 
     if tasks_not_in_celery == 0:
