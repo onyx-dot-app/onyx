@@ -70,11 +70,11 @@ def build_jira_url(jira_client: JIRA, issue_key: str) -> str:
 
 def build_jira_client(credentials: dict[str, Any], jira_base: str) -> JIRA:
     api_token = credentials["jira_api_token"]
+    user_email = credentials["jira_user_email"]
     # if user provide an email we assume it's cloud
-    if "jira_user_email" in credentials:
-        email = credentials["jira_user_email"]
+    if user_email:
         return JIRA(
-            basic_auth=(email, api_token),
+            basic_auth=(user_email, api_token),
             server=jira_base,
             options={"rest_api_version": JIRA_API_VERSION},
         )
