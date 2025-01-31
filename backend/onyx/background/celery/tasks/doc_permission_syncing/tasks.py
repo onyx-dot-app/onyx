@@ -578,7 +578,7 @@ def validate_permission_sync_fence(
     try:
         payload = redis_connector.permissions.payload
     except ValidationError:
-        logger.warning(
+        task_logger.exception(
             "validate_permission_sync_fence - "
             "Resetting fence because fence schema is out of date: "
             f"cc_pair={cc_pair_id} "
@@ -640,7 +640,7 @@ def validate_permission_sync_fence(
 
         tasks_not_in_celery += 1
 
-    logger.info(
+    task_logger.info(
         "validate_permission_sync_fence task check: "
         f"tasks_scanned={tasks_scanned} tasks_not_in_celery={tasks_not_in_celery}"
     )
@@ -661,7 +661,7 @@ def validate_permission_sync_fence(
         return
 
     # celery tasks don't exist and the active signal has expired, possibly due to a crash. Clean it up.
-    logger.warning(
+    task_logger.warning(
         "validate_permission_sync_fence - "
         "Resetting fence because no associated celery tasks were found: "
         f"cc_pair={cc_pair_id} "
@@ -750,9 +750,14 @@ def monitor_ccpair_permissions_taskset(
     if initial is None:
         return
 
-    payload: RedisConnectorPermissionSyncPayload | None = (
-        redis_connector.permissions.payload
-    )
+    try:
+        payload = redis_connector.permissions.payload
+    except ValidationError:
+        task_logger.exception(
+            "Permissions sync payload failed to validate. "
+            "Schema may have been updated."
+        )
+        return
 
     if not payload:
         return
