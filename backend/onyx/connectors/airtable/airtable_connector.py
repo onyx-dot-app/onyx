@@ -368,10 +368,8 @@ class AirtableConnector(LoadConnector):
                         logger.exception(f"Failed to process record {record['id']}")
                         raise e
 
-            # After batch is complete, yield if we've hit the batch size
-            if len(record_documents) >= self.batch_size:
-                yield record_documents
-                record_documents = []
+            yield record_documents
+            record_documents = []
 
         # Yield any remaining records
         if record_documents:
