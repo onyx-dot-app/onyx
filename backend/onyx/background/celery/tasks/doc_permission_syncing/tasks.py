@@ -118,6 +118,8 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
     bind=True,
 )
 def check_for_doc_permissions_sync(self: Task, *, tenant_id: str | None) -> bool | None:
+    # TODO(rkuo): merge into check function after lookup table for fences is added
+
     # we need to use celery's redis client to access its redis data
     # (which lives on a different db number)
     r = get_redis_client(tenant_id=tenant_id)

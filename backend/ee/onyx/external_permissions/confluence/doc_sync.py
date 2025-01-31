@@ -258,6 +258,7 @@ def _fetch_all_page_restrictions(
     slim_docs: list[SlimDocument],
     space_permissions_by_space_key: dict[str, ExternalAccess],
     is_cloud: bool,
+    callback: IndexingHeartbeatInterface | None,
 ) -> list[DocExternalAccess]:
     """
     For all pages, if a page has restrictions, then use those restrictions.
@@ -266,6 +267,12 @@ def _fetch_all_page_restrictions(
     document_restrictions: list[DocExternalAccess] = []
 
     for slim_doc in slim_docs:
+        if callback:
+            if callback.should_stop():
+                raise RuntimeError("confluence_doc_sync: Stop signal detected")
+
+            callback.progress("confluence_doc_sync:fetch_all_page_restrictions", 1)
+
         if slim_doc.perm_sync_data is None:
             raise ValueError(
                 f"No permission sync data found for document {slim_doc.id}"
@@ -374,4 +381,5 @@ def confluence_doc_sync(
         slim_docs=slim_docs,
         space_permissions_by_space_key=space_permissions_by_space_key,
         is_cloud=is_cloud,
+        callback=callback,
     )
