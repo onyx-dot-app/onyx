@@ -28,10 +28,8 @@ KV_REDIS_KEY_EXPIRATION = 60 * 60 * 24  # 1 Day
 
 
 class PgRedisKVStore(KeyValueStore):
-    def __init__(
-        self, redis_client: Redis | None = None, tenant_id: str | None = None
-    ) -> None:
-        self.tenant_id = tenant_id or CURRENT_TENANT_ID_CONTEXTVAR.get()
+    def __init__(self, redis_client: Redis | None = None) -> None:
+        self.tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
 
         # If no redis_client is provided, fall back to the context var
         if redis_client is not None:

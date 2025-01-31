@@ -1,3 +1,4 @@
+import contextvars
 from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
@@ -345,14 +346,18 @@ class AirtableConnector(LoadConnector):
             batch_records = records[i : i + PARALLEL_BATCH_SIZE]
             record_documents: list[Document] = []
 
+            # Capture the current context so that the thread gets the current tenant ID
+            current_context = contextvars.copy_context()
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit batch tasks
                 future_to_record = {
                     executor.submit(
-                        self._process_record,
-                        record=record,
-                        table_schema=table_schema,
-                        primary_field_name=primary_field_name,
+                        lambda: current_context.run(
+                            self._process_record,
+                            record=record,
+                            table_schema=table_schema,
+                            primary_field_name=primary_field_name,
+                        )
                     ): record
                     for record in batch_records
                 }
