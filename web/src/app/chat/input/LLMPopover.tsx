@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Popover,
   PopoverContent,
@@ -26,6 +26,9 @@ import {
 } from "@/components/ui/tooltip";
 import { FiAlertTriangle } from "react-icons/fi";
 
+import { Slider } from "@/components/ui/slider";
+import { useUser } from "@/components/user/UserProvider";
+
 interface LLMPopoverProps {
   llmProviders: LLMProviderDescriptor[];
   llmOverrideManager: LlmOverrideManager;
@@ -40,6 +43,7 @@ export default function LLMPopover({
   currentAssistant,
 }: LLMPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const { user } = useUser();
   const { llmOverride, updateLLMOverride } = llmOverrideManager;
   const currentLlm = llmOverride.modelName;
 
@@ -88,6 +92,22 @@ export default function LLMPopover({
     ? getDisplayNameForModel(defaultModelName)
     : null;
 
+  const [localTemperature, setLocalTemperature] = useState(
+    llmOverrideManager.temperature ?? 0.5
+  );
+
+  useEffect(() => {
+    setLocalTemperature(llmOverrideManager.temperature ?? 0.5);
+  }, [llmOverrideManager.temperature]);
+
+  const handleTemperatureChange = (value: number[]) => {
+    setLocalTemperature(value[0]);
+  };
+
+  const handleTemperatureChangeComplete = (value: number[]) => {
+    llmOverrideManager.updateTemperature(value[0]);
+  };
+
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
@@ -118,9 +138,9 @@ export default function LLMPopover({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-64 p-1 bg-background border border-gray-200 rounded-md shadow-lg"
+        className="w-64 p-1 bg-background border border-gray-200 rounded-md shadow-lg flex flex-col"
       >
-        <div className="max-h-[300px] overflow-y-auto">
+        <div className="flex-grow max-h-[300px] default-scrollbar overflow-y-auto">
           {llmOptions.map(({ name, icon, value }, index) => {
             if (!requiresImageGeneration || checkLLMSupportsImageInput(name)) {
               return (
@@ -171,6 +191,25 @@ export default function LLMPopover({
             return null;
           })}
         </div>
+        {user?.preferences?.temperature_override_enabled && (
+          <div className="mt-2 pt-2 border-t border-gray-200">
+            <div className="w-full px-3 py-2">
+              <Slider
+                value={[localTemperature]}
+                max={llmOverrideManager.maxTemperature}
+                min={0}
+                step={0.01}
+                onValueChange={handleTemperatureChange}
+                onValueCommit={handleTemperatureChangeComplete}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-2">
+                <span>Temperature (creativity)</span>
+                <span>{localTemperature.toFixed(1)}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

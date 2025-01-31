@@ -103,7 +103,7 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="flex-shrink-0">
+        <div className="items-start flex-shrink-0">
           {title && (
             <>
               <div className="flex">

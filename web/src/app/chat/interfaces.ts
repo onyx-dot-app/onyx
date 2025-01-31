@@ -68,6 +68,7 @@ export interface ChatSession {
   shared_status: ChatSessionSharedStatus;
   folder_id: number | null;
   current_alternate_model: string;
+  current_temperature_override: number;
 }
 
 export interface SearchSession {
@@ -108,6 +109,7 @@ export interface BackendChatSession {
   time_created: string;
   shared_status: ChatSessionSharedStatus;
   current_alternate_model?: string;
+  current_temperature_override?: number;
 }
 
 export interface BackendMessage {

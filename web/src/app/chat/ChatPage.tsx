@@ -404,9 +404,6 @@ export function ChatPage({
       filterManager.setSelectedTags([]);
       filterManager.setTimeRange(null);
 
-      // reset LLM overrides (based on chat session!)
-      llmOverrideManager.updateTemperature(null);
-
       // remove uploaded files
       setCurrentMessageFiles([]);
 
@@ -449,6 +446,7 @@ export function ChatPage({
       );
 
       const chatSession = (await response.json()) as BackendChatSession;
+
       setSelectedAssistantFromId(chatSession.persona_id);
 
       const newMessageMap = processRawChatHistory(chatSession.messages);

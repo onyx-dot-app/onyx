@@ -12,6 +12,7 @@ interface UserPreferences {
   recent_assistants: number[];
   auto_scroll: boolean | null;
   shortcut_enabled: boolean;
+  temperature_override_enabled: boolean;
 }
 
 export enum UserRole {

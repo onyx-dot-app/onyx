@@ -30,8 +30,13 @@ export function UserSettingsModal({
   defaultModel: string | null;
 }) {
   const { inputPrompts, refreshInputPrompts } = useChatContext();
-  const { refreshUser, user, updateUserAutoScroll, updateUserShortcuts } =
-    useUser();
+  const {
+    refreshUser,
+    user,
+    updateUserAutoScroll,
+    updateUserShortcuts,
+    updateUserTemperatureOverrideEnabled,
+  } = useUser();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
 
@@ -178,6 +183,16 @@ export function UserSettingsModal({
               }}
             />
             <Label className="text-sm">Enable Prompt Shortcuts</Label>
+          </div>
+          <div className="flex items-center gap-x-2">
+            <Switch
+              size="sm"
+              checked={user?.preferences?.temperature_override_enabled}
+              onCheckedChange={(checked) => {
+                updateUserTemperatureOverrideEnabled(checked);
+              }}
+            />
+            <Label className="text-sm">Enable Temperature Override</Label>
           </div>
         </div>
 

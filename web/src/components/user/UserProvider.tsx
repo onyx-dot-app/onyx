@@ -18,6 +18,7 @@ interface UserContextType {
     assistantId: number,
     isPinned: boolean
   ) => Promise<boolean>;
+  updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -57,6 +58,41 @@ export function UserProvider({
       console.error("Error fetching current user:", error);
     }
   };
+  const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              temperature_override_enabled: enabled,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(
+        `/api/temperature-override-enabled?temperature_override_enabled=${enabled}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update user temperature override setting");
+      }
+    } catch (error) {
+      console.error("Error updating user temperature override setting:", error);
+      throw error;
+    }
+  };
+
   const updateUserShortcuts = async (enabled: boolean) => {
     try {
       setUpToDateUser((prevUser) => {
@@ -184,6 +220,7 @@ export function UserProvider({
         refreshUser,
         updateUserAutoScroll,
         updateUserShortcuts,
+        updateUserTemperatureOverrideEnabled,
         toggleAssistantPinnedStatus,
         isAdmin: upToDateUser?.role === UserRole.ADMIN,
         // Curator status applies for either global or basic curator

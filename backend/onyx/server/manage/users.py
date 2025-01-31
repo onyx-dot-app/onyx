@@ -568,6 +568,32 @@ def verify_user_logged_in(
 """APIs to adjust user preferences"""
 
 
+@router.patch("/temperature-override-enabled")
+def update_user_temperature_override_enabled(
+    temperature_override_enabled: bool,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            no_auth_user.preferences.temperature_override_enabled = (
+                temperature_override_enabled
+            )
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    db_session.execute(
+        update(User)
+        .where(User.id == user.id)  # type: ignore
+        .values(temperature_override_enabled=temperature_override_enabled)
+    )
+    db_session.commit()
+
+
 class ChosenDefaultModelRequest(BaseModel):
     default_model: str | None = None
 

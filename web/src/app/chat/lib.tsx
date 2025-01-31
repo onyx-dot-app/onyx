@@ -75,6 +75,23 @@ export async function updateModelOverrideForChatSession(
   return response;
 }
 
+export async function updateTemperatureOverrideForChatSession(
+  chatSessionId: string,
+  newTemperature: number
+) {
+  const response = await fetch("/api/chat/update-chat-session-temperature", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      chat_session_id: chatSessionId,
+      temperature_override: newTemperature,
+    }),
+  });
+  return response;
+}
+
 export async function createChatSession(
   personaId: number,
   description: string | null

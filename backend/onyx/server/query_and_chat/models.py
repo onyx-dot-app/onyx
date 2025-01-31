@@ -42,6 +42,11 @@ class UpdateChatSessionThreadRequest(BaseModel):
     new_alternate_model: str
 
 
+class UpdateChatSessionTemperatureRequest(BaseModel):
+    chat_session_id: UUID
+    temperature_override: float
+
+
 class ChatSessionCreationRequest(BaseModel):
     # If not specified, use Onyx default persona
     persona_id: int = 0
@@ -108,6 +113,10 @@ class CreateChatMessageRequest(ChunkContext):
     llm_override: LLMOverride | None = None
     prompt_override: PromptOverride | None = None
 
+    # Allows the caller to override the temperature for the chat session
+    # this does persist in the chat thread details
+    temperature_override: float | None = None
+
     # allow user to specify an alternate assistnat
     alternate_assistant_id: int | None = None
 
@@ -168,6 +177,7 @@ class ChatSessionDetails(BaseModel):
     shared_status: ChatSessionSharedStatus
     folder_id: int | None = None
     current_alternate_model: str | None = None
+    current_temperature_override: float | None = None
 
 
 class ChatSessionsResponse(BaseModel):
@@ -231,6 +241,7 @@ class ChatSessionDetailResponse(BaseModel):
     time_created: datetime
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None
+    current_temperature_override: float | None
 
 
 # This one is not used anymore

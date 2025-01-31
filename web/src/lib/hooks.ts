@@ -10,7 +10,7 @@ import {
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 import { Filters, SourceMetadata } from "./search/interfaces";
 import {
@@ -28,6 +28,8 @@ import { isAnthropic } from "@/app/admin/configuration/llm/interfaces";
 import { getSourceMetadata } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
+import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
+import { updateTemperatureOverrideForChatSession } from "@/app/chat/lib";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -360,12 +362,13 @@ export interface LlmOverride {
 export interface LlmOverrideManager {
   llmOverride: LlmOverride;
   updateLLMOverride: (newOverride: LlmOverride) => void;
-  temperature: number | null;
-  updateTemperature: (temperature: number | null) => void;
+  temperature: number;
+  updateTemperature: (temperature: number) => void;
   updateModelOverrideForChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
   liveAssistant: Persona | null;
+  maxTemperature: number;
 }
 
 // Things to test
@@ -407,11 +410,6 @@ export function useLlmOverride(
   const [chatSession, setChatSession] = useState<ChatSession | null>(null);
 
   const llmOverrideUpdate = () => {
-    if (!chatSession && currentChatSession) {
-      setChatSession(currentChatSession || null);
-      return;
-    }
-
     if (liveAssistant?.llm_model_version_override) {
       setLlmOverride(
         getValidLlmOverride(liveAssistant.llm_model_version_override)
@@ -499,23 +497,67 @@ export function useLlmOverride(
     }
   };
 
-  const [temperature, setTemperature] = useState<number | null>(0);
-
-  useEffect(() => {
+  const [temperature, setTemperature] = useState<number>(() => {
     llmOverrideUpdate();
-  }, [liveAssistant, currentChatSession]);
+
+    if (currentChatSession?.current_temperature_override) {
+      return Math.min(
+        currentChatSession.current_temperature_override,
+        isAnthropic(llmOverride.provider, llmOverride.modelName) ? 1.0 : 2.0
+      );
+    } else if (
+      liveAssistant?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)
+    ) {
+      return 0;
+    }
+    return 0.5;
+  });
+
+  const maxTemperature = useMemo(() => {
+    return isAnthropic(llmOverride.provider, llmOverride.modelName) ? 1.0 : 2.0;
+  }, [llmOverride]);
 
   useEffect(() => {
     if (isAnthropic(llmOverride.provider, llmOverride.modelName)) {
-      setTemperature((prevTemp) => Math.min(prevTemp ?? 0, 1.0));
+      const newTemperature = Math.min(temperature, 1.0);
+      setTemperature(newTemperature);
+      if (chatSession?.id) {
+        updateTemperatureOverrideForChatSession(chatSession.id, newTemperature);
+      }
     }
   }, [llmOverride]);
 
-  const updateTemperature = (temperature: number | null) => {
+  useEffect(() => {
+    if (!chatSession && currentChatSession) {
+      setChatSession(currentChatSession || null);
+      if (temperature) {
+        updateTemperatureOverrideForChatSession(
+          currentChatSession.id,
+          temperature
+        );
+      }
+      return;
+    }
+
+    if (currentChatSession?.current_temperature_override) {
+      setTemperature(currentChatSession.current_temperature_override);
+    } else if (
+      liveAssistant?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)
+    ) {
+      setTemperature(0);
+    } else {
+      setTemperature(0.5);
+    }
+  }, [liveAssistant, currentChatSession]);
+
+  const updateTemperature = (temperature: number) => {
     if (isAnthropic(llmOverride.provider, llmOverride.modelName)) {
-      setTemperature((prevTemp) => Math.min(temperature ?? 0, 1.0));
+      setTemperature((prevTemp) => Math.min(temperature, 1.0));
     } else {
       setTemperature(temperature);
+    }
+    if (chatSession) {
+      updateTemperatureOverrideForChatSession(chatSession.id, temperature);
     }
   };
 
@@ -528,6 +570,7 @@ export function useLlmOverride(
     imageFilesPresent,
     updateImageFilesPresent,
     liveAssistant: liveAssistant ?? null,
+    maxTemperature,
   };
 }
 

@@ -333,6 +333,11 @@ def stream_chat_message_objects(
             db_session=db_session,
         )
 
+        if new_msg_req.temperature_override:
+            chat_session.temperature_override = new_msg_req.temperature_override
+            db_session.add(chat_session)
+            db_session.commit()
+
         message_text = new_msg_req.message
         chat_session_id = new_msg_req.chat_session_id
         parent_id = new_msg_req.parent_message_id

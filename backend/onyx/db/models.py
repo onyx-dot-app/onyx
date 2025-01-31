@@ -150,6 +150,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # if specified, controls the assistants that are shown to the user + their order
     # if not specified, all assistants are shown
+    temperature_override_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_scroll: Mapped[bool] = mapped_column(Boolean, default=True)
     shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
@@ -1115,6 +1116,10 @@ class ChatSession(Base):
     llm_override: Mapped[LLMOverride | None] = mapped_column(
         PydanticType(LLMOverride), nullable=True
     )
+
+    # The latest temperature override specified by the user
+    temperature_override: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
     )
