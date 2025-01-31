@@ -16,16 +16,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # First drop the existing FK constraints
-    op.drop_constraint(
-        "inputprompt__user_input_prompt_id_fkey",
-        "inputprompt__user",
-        type_="foreignkey",
+    # Safely drop constraints if exists
+    op.execute(
+        """
+        ALTER TABLE inputprompt__user
+        DROP CONSTRAINT IF EXISTS inputprompt__user_input_prompt_id_fkey
+        """
     )
-    op.drop_constraint(
-        "inputprompt__user_user_id_fkey",
-        "inputprompt__user",
-        type_="foreignkey",
+    op.execute(
+        """
+        ALTER TABLE inputprompt__user
+        DROP CONSTRAINT IF EXISTS inputprompt__user_user_id_fkey
+        """
     )
 
     # Recreate with ON DELETE CASCADE
@@ -37,10 +39,11 @@ def upgrade() -> None:
         ["id"],
         ondelete="CASCADE",
     )
+
     op.create_foreign_key(
         "inputprompt__user_user_id_fkey",
         "inputprompt__user",
-        '"user"',
+        "user",
         ["user_id"],
         ["id"],
         ondelete="CASCADE",
@@ -71,7 +74,7 @@ def downgrade() -> None:
     op.create_foreign_key(
         "inputprompt__user_user_id_fkey",
         "inputprompt__user",
-        '"user"',
+        "user",
         ["user_id"],
         ["id"],
     )
