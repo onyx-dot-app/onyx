@@ -49,13 +49,13 @@ class ConnectorRunner:
             start = time.monotonic()
             for batch in self.doc_batch_generator:
                 # to know how long connector is taking
-                end = time.monotonic()
                 logger.debug(
-                    f"Connector tool in {end - start} seconds to build a batch."
+                    f"Connector took {time.monotonic() - start} seconds to build a batch."
                 )
-                start = end
 
                 yield batch
+
+                start = time.monotonic()
 
         except Exception:
             exc_type, _, exc_traceback = sys.exc_info()

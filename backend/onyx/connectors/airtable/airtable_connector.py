@@ -1,3 +1,5 @@
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from typing import Any
 
@@ -312,7 +314,7 @@ class AirtableConnector(LoadConnector):
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """
-        Fetch all records from the table.
+        Fetch all records from the table in parallel batches.
 
         NOTE: Airtable does not support filtering by time updated, so
         we have to fetch all records every time.
@@ -334,21 +336,43 @@ class AirtableConnector(LoadConnector):
 
         logger.info(f"Starting to process Airtable records for {table.name}.")
 
-        record_documents: list[Document] = []
-        for record in records:
-            logger.info(f"Processing record {record['id']} of {table.name}.")
+        # Process records in parallel batches using ThreadPoolExecutor
+        PARALLEL_BATCH_SIZE = 16
+        max_workers = min(PARALLEL_BATCH_SIZE, len(records))
 
-            document = self._process_record(
-                record=record,
-                table_schema=table_schema,
-                primary_field_name=primary_field_name,
-            )
-            if document:
-                record_documents.append(document)
+        # Process records in batches
+        for i in range(0, len(records), PARALLEL_BATCH_SIZE):
+            batch_records = records[i : i + PARALLEL_BATCH_SIZE]
+            record_documents: list[Document] = []
 
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit batch tasks
+                future_to_record = {
+                    executor.submit(
+                        self._process_record,
+                        record=record,
+                        table_schema=table_schema,
+                        primary_field_name=primary_field_name,
+                    ): record
+                    for record in batch_records
+                }
+
+                # Wait for all tasks in this batch to complete
+                for future in as_completed(future_to_record):
+                    record = future_to_record[future]
+                    try:
+                        document = future.result()
+                        if document:
+                            record_documents.append(document)
+                    except Exception as e:
+                        logger.exception(f"Failed to process record {record['id']}")
+                        raise e
+
+            # After batch is complete, yield if we've hit the batch size
             if len(record_documents) >= self.batch_size:
                 yield record_documents
                 record_documents = []
 
+        # Yield any remaining records
         if record_documents:
             yield record_documents
