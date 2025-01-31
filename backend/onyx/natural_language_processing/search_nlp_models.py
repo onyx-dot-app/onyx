@@ -296,7 +296,7 @@ class EmbeddingModel:
         )
 
 
-class RerankingModel:  #
+class RerankingModel:
     def __init__(
         self,
         model_name: str,
