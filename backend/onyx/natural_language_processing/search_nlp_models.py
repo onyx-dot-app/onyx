@@ -194,6 +194,10 @@ class EmbeddingModel:
             response = self._make_model_server_request(embed_request)
             return batch_idx, response.embeddings
 
+        # only multi thread if:
+        #   1. num_threads is greater than 1
+        #   2. we are using an API-based embedding model (provider_type is not None)
+        #   3. there are more than 1 batch (no point in threading if only 1)
         if num_threads >= 1 and self.provider_type and len(text_batches) > 1:
             with ThreadPoolExecutor(max_workers=num_threads) as executor:
                 future_to_batch = {
@@ -292,7 +296,7 @@ class EmbeddingModel:
         )
 
 
-class RerankingModel:
+class RerankingModel:  #
     def __init__(
         self,
         model_name: str,

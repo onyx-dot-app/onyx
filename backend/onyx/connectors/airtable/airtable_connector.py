@@ -314,7 +314,7 @@ class AirtableConnector(LoadConnector):
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """
-        Fetch all records from the table in parallel batches.
+        Fetch all records from the table.
 
         NOTE: Airtable does not support filtering by time updated, so
         we have to fetch all records every time.
