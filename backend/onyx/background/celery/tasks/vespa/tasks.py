@@ -991,6 +991,7 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool | None:
         )
     except Exception:
         task_logger.exception("monitor_vespa_sync exceptioned.")
+        return False
     finally:
         if lock_beat.owned():
             lock_beat.release()
