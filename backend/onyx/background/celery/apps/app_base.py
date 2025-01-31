@@ -198,7 +198,8 @@ def on_celeryd_init(sender: str, conf: Any = None, **kwargs: Any) -> None:
 
 def wait_for_redis(sender: Any, **kwargs: Any) -> None:
     """Waits for redis to become ready subject to a hardcoded timeout.
-    Will raise WorkerShutdown to kill the celery worker if the timeout is reached."""
+    Will raise WorkerShutdown to kill the celery worker if the timeout
+    is reached."""
 
     r = get_redis_client(tenant_id=None)
 
