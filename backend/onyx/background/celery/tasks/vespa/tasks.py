@@ -989,6 +989,7 @@ def monitor_vespa_sync(self: Task, tenant_id: str | None) -> bool | None:
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
         )
+        return False
     except Exception:
         task_logger.exception("monitor_vespa_sync exceptioned.")
         return False
