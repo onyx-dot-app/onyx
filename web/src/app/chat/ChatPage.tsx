@@ -111,6 +111,7 @@ import {
 import AssistantModal from "../assistants/mine/AssistantModal";
 import { getSourceMetadata } from "@/lib/sources";
 import { UserSettingsModal } from "./modal/UserSettingsModal";
+import { AlignStartVertical } from "lucide-react";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -189,7 +190,11 @@ export function ChatPage({
 
   const [userSettingsToggled, setUserSettingsToggled] = useState(false);
 
-  const { assistants: availableAssistants, finalAssistants } = useAssistants();
+  const {
+    assistants: availableAssistants,
+    finalAssistants,
+    pinnedAssistants,
+  } = useAssistants();
 
   const [showApiKeyModal, setShowApiKeyModal] = useState(
     !shouldShowWelcomeModal
@@ -272,16 +277,6 @@ export function ChatPage({
     SEARCH_PARAM_NAMES.TEMPERATURE
   );
 
-  const defaultTemperature = search_param_temperature
-    ? parseFloat(search_param_temperature)
-    : selectedAssistant?.tools.some(
-          (tool) =>
-            tool.in_code_tool_id === SEARCH_TOOL_ID ||
-            tool.in_code_tool_id === INTERNET_SEARCH_TOOL_ID
-        )
-      ? 0
-      : 0.7;
-
   const setSelectedAssistantFromId = (assistantId: number) => {
     // NOTE: also intentionally look through available assistants here, so that
     // even if the user has hidden an assistant they can still go back to it
@@ -297,20 +292,21 @@ export function ChatPage({
   const [presentingDocument, setPresentingDocument] =
     useState<OnyxDocument | null>(null);
 
-  const { recentAssistants, refreshRecentAssistants } = useAssistants();
-
+  // Current assistant is decided based on this ordering
+  // 1. Alternative assistant (assistant selected explicitly by user)
+  // 2. Selected assistant (assistnat default in this chat session)
+  // 3. First pinned assistants (ordered list of pinned assistants)
+  // 4. Available assistants (ordered list of available assistants)
   const liveAssistant: Persona | undefined = useMemo(
     () =>
       alternativeAssistant ||
       selectedAssistant ||
-      recentAssistants[0] ||
-      finalAssistants[0] ||
+      pinnedAssistants[0] ||
       availableAssistants[0],
     [
       alternativeAssistant,
       selectedAssistant,
-      recentAssistants,
-      finalAssistants,
+      pinnedAssistants,
       availableAssistants,
     ]
   );
@@ -816,7 +812,6 @@ export function ChatPage({
         setMaxTokens(maxTokens);
       }
     }
-    refreshRecentAssistants(liveAssistant?.id);
     fetchMaxTokens();
   }, [liveAssistant]);
 

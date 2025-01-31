@@ -161,9 +161,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     hidden_assistants: Mapped[list[int]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=[]
     )
-    recent_assistants: Mapped[list[dict]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=list, server_default="[]"
-    )
+
     pinned_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
     )

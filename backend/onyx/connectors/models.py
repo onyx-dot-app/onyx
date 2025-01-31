@@ -150,6 +150,16 @@ class Document(DocumentBase):
     id: str  # This must be unique or during indexing/reindexing, chunks will be overwritten
     source: DocumentSource
 
+    def get_total_char_length(self) -> int:
+        """Calculate the total character length of the document including sections, metadata, and identifiers."""
+        section_length = sum(len(section.text) for section in self.sections)
+        identifier_length = len(self.semantic_identifier) + len(self.title or "")
+        metadata_length = sum(
+            len(k) + len(v) if isinstance(v, str) else len(k) + sum(len(x) for x in v)
+            for k, v in self.metadata.items()
+        )
+        return section_length + identifier_length + metadata_length
+
     def to_short_descriptor(self) -> str:
         """Used when logging the identity of a document"""
         return f"ID: '{self.id}'; Semantic ID: '{self.semantic_identifier}'"

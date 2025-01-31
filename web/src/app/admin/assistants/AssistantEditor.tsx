@@ -232,11 +232,9 @@ export function AssistantEditor({
       existingPersona?.llm_model_provider_override ?? null,
     llm_model_version_override:
       existingPersona?.llm_model_version_override ?? null,
-    starter_messages: existingPersona?.starter_messages ?? [
-      {
-        message: "",
-      },
-    ],
+    starter_messages: existingPersona?.starter_messages?.length
+      ? existingPersona.starter_messages
+      : [{ message: "" }],
     enabled_tools_map: enabledToolsMap,
     icon_color: existingPersona?.icon_color ?? defautIconColor,
     icon_shape: existingPersona?.icon_shape ?? defaultIconShape,
@@ -1099,7 +1097,9 @@ export function AssistantEditor({
                       )}
                     </div>
                   </div>
+
                   <Separator />
+
                   <div className="w-full flex flex-col">
                     <div className="flex gap-x-2 items-center">
                       <div className="block font-medium text-sm">
@@ -1110,6 +1110,7 @@ export function AssistantEditor({
                     <SubLabel>
                       Sample messages that help users understand what this
                       assistant can do and how to interact with it effectively.
+                      New input fields will appear automatically as you type.
                     </SubLabel>
 
                     <div className="w-full">

@@ -11,7 +11,7 @@ from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import aliased
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
@@ -291,8 +291,9 @@ def get_personas_for_user(
     include_deleted: bool = False,
     joinedload_all: bool = False,
 ) -> Sequence[Persona]:
-    stmt = select(Persona).distinct()
-    stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
+    stmt = select(Persona)
+    stmt = _add_user_filters(stmt, user, get_editable)
+
     if not include_default:
         stmt = stmt.where(Persona.builtin_persona.is_(False))
     if not include_slack_bot_personas:
@@ -302,14 +303,16 @@ def get_personas_for_user(
 
     if joinedload_all:
         stmt = stmt.options(
-            joinedload(Persona.prompts),
-            joinedload(Persona.tools),
-            joinedload(Persona.document_sets),
-            joinedload(Persona.groups),
-            joinedload(Persona.users),
+            selectinload(Persona.prompts),
+            selectinload(Persona.tools),
+            selectinload(Persona.document_sets),
+            selectinload(Persona.groups),
+            selectinload(Persona.users),
+            selectinload(Persona.labels),
         )
 
-    return db_session.execute(stmt).unique().scalars().all()
+    results = db_session.execute(stmt).scalars().all()
+    return results
 
 
 def get_personas(db_session: Session) -> Sequence[Persona]:

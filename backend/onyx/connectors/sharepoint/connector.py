@@ -127,13 +127,6 @@ class SharepointConnector(LoadConnector, PollConnector):
         start: datetime | None = None,
         end: datetime | None = None,
     ) -> list[tuple[DriveItem, str]]:
-        filter_str = ""
-        if start is not None and end is not None:
-            filter_str = (
-                f"last_modified_datetime ge {start.isoformat()} and "
-                f"last_modified_datetime le {end.isoformat()}"
-            )
-
         final_driveitems: list[tuple[DriveItem, str]] = []
         try:
             site = self.graph_client.sites.get_by_url(site_descriptor.url)
@@ -167,9 +160,10 @@ class SharepointConnector(LoadConnector, PollConnector):
                             root_folder = root_folder.get_by_path(folder_part)
 
                     # Get all items recursively
-                    query = root_folder.get_files(True, 1000)
-                    if filter_str:
-                        query = query.filter(filter_str)
+                    query = root_folder.get_files(
+                        recursive=True,
+                        page_size=1000,
+                    )
                     driveitems = query.execute_query()
                     logger.debug(
                         f"Found {len(driveitems)} items in drive '{drive.name}'"
@@ -180,11 +174,12 @@ class SharepointConnector(LoadConnector, PollConnector):
                         "Shared Documents" if drive.name == "Documents" else drive.name
                     )
 
+                    # Filter items based on folder path if specified
                     if site_descriptor.folder_path:
                         # Filter items to ensure they're in the specified folder or its subfolders
                         # The path will be in format: /drives/{drive_id}/root:/folder/path
-                        filtered_driveitems = [
-                            (item, drive_name)
+                        driveitems = [
+                            item
                             for item in driveitems
                             if any(
                                 path_part == site_descriptor.folder_path
@@ -196,7 +191,7 @@ class SharepointConnector(LoadConnector, PollConnector):
                                 )[1].split("/")
                             )
                         ]
-                        if len(filtered_driveitems) == 0:
+                        if len(driveitems) == 0:
                             all_paths = [
                                 item.parent_reference.path for item in driveitems
                             ]
@@ -204,11 +199,23 @@ class SharepointConnector(LoadConnector, PollConnector):
                                 f"Nothing found for folder '{site_descriptor.folder_path}' "
                                 f"in; any of valid paths: {all_paths}"
                             )
-                        final_driveitems.extend(filtered_driveitems)
-                    else:
-                        final_driveitems.extend(
-                            [(item, drive_name) for item in driveitems]
+
+                    # Filter items based on time window if specified
+                    if start is not None and end is not None:
+                        driveitems = [
+                            item
+                            for item in driveitems
+                            if start
+                            <= item.last_modified_datetime.replace(tzinfo=timezone.utc)
+                            <= end
+                        ]
+                        logger.debug(
+                            f"Found {len(driveitems)} items within time window in drive '{drive.name}'"
                         )
+
+                    for item in driveitems:
+                        final_driveitems.append((item, drive_name))
+
                 except Exception as e:
                     # Some drives might not be accessible
                     logger.warning(f"Failed to process drive: {str(e)}")

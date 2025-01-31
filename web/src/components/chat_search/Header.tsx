@@ -2,7 +2,6 @@
 import { UserDropdown } from "../UserDropdown";
 import { FiShare2 } from "react-icons/fi";
 import { SetStateAction, useContext, useEffect } from "react";
-import { NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA } from "@/lib/constants";
 import { ChatSession } from "@/app/chat/interfaces";
 import Link from "next/link";
 import { pageType } from "@/app/chat/sessionSidebar/types";
@@ -42,8 +41,7 @@ export default function FunctionalHeader({
             event.preventDefault();
             window.open(
               `/${page}` +
-                (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA &&
-                currentChatSession
+                (currentChatSession
                   ? `?assistantId=${currentChatSession.persona_id}`
                   : ""),
               "_self"
@@ -63,7 +61,7 @@ export default function FunctionalHeader({
     reset();
     const newChatUrl =
       `/${page}` +
-      (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA && currentChatSession
+      (currentChatSession
         ? `?assistantId=${currentChatSession.persona_id}`
         : "");
     router.push(newChatUrl);
@@ -128,25 +126,6 @@ export default function FunctionalHeader({
             </div>
           )}
 
-          {/* <div
-            className={`absolute 
-              ${
-                documentSidebarToggled && !sidebarToggled
-                  ? "left-[calc(50%-125px)]"
-                  : !documentSidebarToggled && sidebarToggled
-                    ? "left-[calc(50%+125px)]"
-                    : "left-1/2"
-              }
-              ${
-                documentSidebarToggled || sidebarToggled
-                  ? "mobile:w-[40vw] max-w-[50vw]"
-                  : "mobile:w-[50vw] max-w-[60vw]"
-              }
-              top-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300`}
-          >
-            <ChatBanner />
-          </div> */}
-
           <div className="invisible">
             <LogoWithText
               page={page}
@@ -155,8 +134,6 @@ export default function FunctionalHeader({
               handleNewChat={handleNewChat}
             />
           </div>
-
-          {/* className="fixed cursor-pointer flex z-40 left-4 bg-black top-3 h-8" */}
 
           <div className="absolute right-2 mobile:top-1 desktop:top-1 h-8  flex">
             {setSharingModalVisible && !hideUserDropdown && (
@@ -179,8 +156,7 @@ export default function FunctionalHeader({
               className="desktop:hidden ml-2 my-auto"
               href={
                 `/${page}` +
-                (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA &&
-                currentChatSession
+                (currentChatSession
                   ? `?assistantId=${currentChatSession.persona_id}`
                   : "")
               }
