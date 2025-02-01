@@ -398,6 +398,18 @@ Changes take place as
 If we have a live assistant, we should use that model override
 
 Relevant test: `llm_ordering.spec.ts`.
+
+Temperature override is set as follows:
+- For existing chat sessions:
+  - If the user has previously overridden the temperature for a specific chat session, 
+    that value is persisted and used when the user returns to that chat.
+  - This persistence applies even if the temperature was set before sending the first message in the chat.
+- For new chat sessions:
+  - If the search tool is available, the default temperature is set to 0.
+  - If the search tool is not available, the default temperature is set to 0.5.
+
+This approach ensures that user preferences are maintained for existing chats while 
+providing appropriate defaults for new conversations based on the available tools.
 */
 
 export function useLlmOverride(
@@ -500,7 +512,7 @@ export function useLlmOverride(
   const [temperature, setTemperature] = useState<number>(() => {
     llmOverrideUpdate();
 
-    if (currentChatSession?.current_temperature_override) {
+    if (currentChatSession?.current_temperature_override != null) {
       return Math.min(
         currentChatSession.current_temperature_override,
         isAnthropic(llmOverride.provider, llmOverride.modelName) ? 1.0 : 2.0

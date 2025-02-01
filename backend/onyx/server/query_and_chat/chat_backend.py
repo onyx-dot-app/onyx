@@ -133,6 +133,28 @@ def update_chat_session_temperature(
         user_id=user.id if user is not None else None,
         db_session=db_session,
     )
+
+    # Validate temperature_override
+    if update_thread_req.temperature_override is not None:
+        if (
+            update_thread_req.temperature_override < 0
+            or update_thread_req.temperature_override > 2
+        ):
+            raise HTTPException(
+                status_code=400, detail="Temperature must be between 0 and 2"
+            )
+
+        # Additional check for Anthropic models
+        if (
+            chat_session.current_alternate_model
+            and "anthropic" in chat_session.current_alternate_model.lower()
+        ):
+            if update_thread_req.temperature_override > 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Temperature for Anthropic models must be between 0 and 1",
+                )
+
     chat_session.temperature_override = update_thread_req.temperature_override
 
     db_session.add(chat_session)
@@ -191,7 +213,6 @@ def get_chat_session(
         # we need the tool call objs anyways, so just fetch them in a single call
         prefetch_tool_calls=True,
     )
-    print("returning with emperature override", chat_session.temperature_override)
 
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
