@@ -692,11 +692,13 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
                 metrics = metric_fn()
                 for metric in metrics:
                     # double check to make sure we aren't double-emitting metrics
-                    if metric.key is not None and not _has_metric_been_emitted(
+                    if metric.key is None or not _has_metric_been_emitted(
                         redis_std, metric.key
                     ):
                         metric.log()
                         metric.emit(tenant_id)
+
+                    if metric.key is not None:
                         _mark_metric_as_emitted(redis_std, metric.key)
 
         task_logger.info("Successfully collected background metrics")
