@@ -387,10 +387,6 @@ class DefaultMultiLLM(LLM):
         self._record_call(processed_prompt)
 
         try:
-            logger.warning(
-                f"Model: {self.config.model_provider}/{self.config.deployment_name or self.config.model_name}"
-            )
-            logger.warning(f"Temperature: {self._temperature}")
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice

@@ -175,19 +175,6 @@ class EmbeddingModel:
                 if self.callback.should_stop():
                     raise RuntimeError("_batch_encode_texts detected stop signal")
 
-            total_chars = sum(len(text) for text in text_batch)
-            max_text_length = max(len(text) for text in text_batch)
-            avg_text_length = total_chars / len(text_batch)
-
-            logger.debug(f"Encoding batch {batch_idx} of {len(text_batches)}")
-            logger.info(
-                f"Batch {batch_idx} stats: "
-                f"texts={len(text_batch)}, "
-                f"total_chars={total_chars}, "
-                f"max_length={max_text_length}, "
-                f"avg_length={avg_text_length:.2f}"
-            )
-
             embed_request = EmbedRequest(
                 model_name=self.model_name,
                 texts=text_batch,
