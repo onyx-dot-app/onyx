@@ -122,9 +122,8 @@ class AirtableConnector(LoadConnector):
                 )
                 def get_attachment_with_retry(url: str) -> bytes | None:
                     attachment_response = requests.get(url)
-                    if attachment_response.status_code == 200:
-                        return attachment_response.content
-                    return None
+                    attachment_response.raise_for_status()
+                    return attachment_response.content
 
                 attachment_content = get_attachment_with_retry(url)
                 if attachment_content:
@@ -339,7 +338,7 @@ class AirtableConnector(LoadConnector):
         logger.info(f"Starting to process Airtable records for {table.name}.")
 
         # Process records in parallel batches using ThreadPoolExecutor
-        PARALLEL_BATCH_SIZE = 16
+        PARALLEL_BATCH_SIZE = 8
         max_workers = min(PARALLEL_BATCH_SIZE, len(records))
 
         # Process records in batches
