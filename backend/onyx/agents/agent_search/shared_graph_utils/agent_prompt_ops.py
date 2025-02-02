@@ -7,8 +7,6 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.models import (
     AgentPromptEnrichmentComponents,
 )
-from onyx.agents.agent_search.shared_graph_utils.prompts import HISTORY_FRAMING_PROMPT
-from onyx.agents.agent_search.shared_graph_utils.prompts import SUB_QUESTION_RAG_PROMPT
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_persona_agent_prompt_expressions,
 )
@@ -20,6 +18,8 @@ from onyx.llm.interfaces import LLMConfig
 from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
+from onyx.prompts.agent_search import HISTORY_FRAMING_PROMPT
+from onyx.prompts.agent_search import SUB_QUESTION_RAG_PROMPT
 from onyx.prompts.prompt_utils import build_date_time_string
 
 

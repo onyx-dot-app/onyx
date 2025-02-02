@@ -18,19 +18,14 @@ from onyx.agents.agent_search.shared_graph_utils.models import EntityExtractionR
 from onyx.agents.agent_search.shared_graph_utils.models import (
     EntityRelationshipTermExtraction,
 )
-
-
-from onyx.agents.agent_search.shared_graph_utils.models import Relationship
-from onyx.agents.agent_search.shared_graph_utils.models import Term
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
-    ENTITY_TERM_EXTRACTION_PROMPT,
-)
-
 from onyx.agents.agent_search.shared_graph_utils.utils import format_docs
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.configs.constants import NUM_EXPLORATORY_DOCS
+from onyx.prompts.agent_search import (
+    ENTITY_TERM_EXTRACTION_PROMPT,
+)
 
 
 def extract_entities_terms(

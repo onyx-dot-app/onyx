@@ -1,55 +1,53 @@
-# The prompts for the agentic framework. The order follows approximately the order
-# of the actions in the graph
 # Standards
-
+SEPARATOR_LINE = "-------"
 UNKNOWN_ANSWER = "I do not have enough information to answer this question."
-
 NO_RECOVERED_DOCS = "No relevant information recovered"
-
-DATE_PROMPT = """Today is {date}.\n\n"""
-
+DATE_PROMPT = "Today is {date}.\n\n"
 SUB_CHECK_YES = "yes"
 SUB_CHECK_NO = "no"
 
+
 # Framing/Support/Template Prompts
-
-HISTORY_FRAMING_PROMPT = """\n
+HISTORY_FRAMING_PROMPT = f"""
 For more context, here is the history of the conversation so far that preceded this question:
-\n-------\n
-{history}
-\n-------\n\n
-"""
+{SEPARATOR_LINE}
+{{history}}
+{SEPARATOR_LINE}
+""".strip()
 
-ASSISTANT_SYSTEM_PROMPT_DEFAULT = """
-You are an assistant for question-answering tasks."""
 
-ASSISTANT_SYSTEM_PROMPT_PERSONA = """
+ASSISTANT_SYSTEM_PROMPT_DEFAULT = (
+    """You are an assistant for question-answering tasks."""
+)
+
+ASSISTANT_SYSTEM_PROMPT_PERSONA = f"""
 You are an assistant for question-answering tasks. Here is more information about you:
-\n-------\n
-{persona_prompt}
-\n-------\n
-"""
+{SEPARATOR_LINE}
+{{persona_prompt}}
+{SEPARATOR_LINE}
+""".strip()
+
 
 SUB_QUESTION_ANSWER_TEMPLATE = """\n
 Sub-Question: Q{sub_question_num}\n  Sub-Question:\n  - \n{sub_question}\n  --\nAnswer:\n  -\n {sub_answer}\n\n
 """
 
-SUB_QUESTION_ANSWER_TEMPLATE_REFINED = """\n
-Sub-Question: Q{sub_question_num}\n
+
+SUB_QUESTION_ANSWER_TEMPLATE_REFINED = f"""
+Sub-Question: Q{{sub_question_num}}\n
 Type:
-\n----\n
-{sub_question_type}
-\n----\n
+{SEPARATOR_LINE}
+{{sub_question_type}}
+{SEPARATOR_LINE}
 Sub-Question:
-\n----\n
-{sub_question}
-\n----\n
-\nAnswer:
-\n----\n
-{sub_answer}
-\n----\n
-\n
-"""
+{SEPARATOR_LINE}
+{{sub_question}}
+{SEPARATOR_LINE}
+Answer:
+{SEPARATOR_LINE}
+{{sub_answer}}
+{SEPARATOR_LINE}
+""".strip()
 
 
 SUB_QUESTION_ANSWER_TEMPLATE_REFINED = """\n
@@ -58,230 +56,206 @@ Sub-Question: Q{sub_question_num}\n  Type: {sub_question_type}\n Sub-Question:\n
     """
 
 
-# Setap/Util Prompts
-
-ENTITY_TERM_EXTRACTION_PROMPT = """ \n
+# Step/Utility Prompts
+ENTITY_TERM_EXTRACTION_PROMPT = f"""
 Based on the original question and some context retrieved from a dataset, please generate a list of
 entities (e.g. companies, organizations, industries, products, locations, etc.), terms and concepts
 (e.g. sales, revenue, etc.) that are relevant for the question, plus their relations to each other.
 
-\n\n
 Here is the original question:
-\n-------\n
-{question}
-\n-------\n
+{SEPARATOR_LINE}
+{{question}}
+{SEPARATOR_LINE}
+
 And here is the context retrieved:
-\n-------\n
-{context}
-\n-------\n
+{SEPARATOR_LINE}
+{{context}}
+{SEPARATOR_LINE}
 
 Please format your answer as a json object in the following format:
-
-{{"retrieved_entities_relationships": {{
-    "entities": [{{
-        "entity_name": <assign a name for the entity>,
-        "entity_type": <specify a short type name for the entity, such as 'company', 'location',...>
-    }}],
-    "relationships": [{{
-        "relationship_name": <assign a name for the relationship>,
-        "relationship_type": <specify a short type name for the relationship, such as 'sales_to', 'is_location_of',...>,
-        "relationship_entities": [<related entity name 1>, <related entity name 2>, ...]
-    }}],
-    "terms": [{{
-        "term_name": <assign a name for the term>,
-        "term_type": <specify a short type name for the term, such as 'revenue', 'market_share',...>,
-        "term_similar_to": <list terms that are similar to this term>
-    }}]
+{{
+    "retrieved_entities_relationships": {{
+        "entities": [
+            {{
+                "entity_name": "<assign a name for the entity>",
+                "entity_type": "<specify a short type name for the entity, such as 'company', 'location',...>"
+            }}
+        ],
+        "relationships": [
+            {{
+                "relationship_name": "<assign a name for the relationship>",
+                "relationship_type": "<specify a short type name for the relationship, such as 'sales_to', 'is_location_of',...>",
+                "relationship_entities": ["<related entity name 1>", "<related entity name 2>", "..."]
+            }}
+        ],
+        "terms": [
+            {{
+                "term_name": "<assign a name for the term>",
+                "term_type": "<specify a short type name for the term, such as 'revenue', 'market_share',...>",
+                "term_similar_to": ["<list terms that are similar to this term>"]
+            }}
+        ]
+    }}
 }}
-}}
-   """
+""".strip()
 
-HISTORY_CONTEXT_SUMMARY_PROMPT = """\n
-{persona_specification}
 
-Your task now is to summarize the key parts of the history of a conversation between a user and an agent. The
-summary has two purposes:
-  1) providing the suitable context for a new question, and
-  2) To capture the key information that was discussed and that the user may have a follow-up question about.
-\n-------\n
-{question}
-\n-------\n
+HISTORY_CONTEXT_SUMMARY_PROMPT = (
+    "{persona_specification}\n\n"
+    "Your task now is to summarize the key parts of the history of a conversation between a user and an agent."
+    " The summary has two purposes:\n"
+    "  1) providing the suitable context for a new question, and\n"
+    "  2) To capture the key information that was discussed and that the user may have a follow-up question about.\n\n"
+    "Here is the question:\n"
+    f"{SEPARATOR_LINE}\n"
+    "{question}\n"
+    f"{SEPARATOR_LINE}\n\n"
+    "And here is the history:\n"
+    f"{SEPARATOR_LINE}\n"
+    "{history}\n"
+    f"{SEPARATOR_LINE}\n\n"
+    "Please provide a summarized context from the history so that the question makes sense and can"
+    " - with suitable extra information - be answered.\n\n"
+    "Do not use more than three or four sentences.\n\n"
+    "History summary:"
+).strip()
 
-And here is the history:
-\n-------\n
-{history}
-\n-------\n
-
-Please provide a summarized context from the history so that the question makes sense and can - with
-suitable extra information - be answered.
-
-Please do not use more than three or four sentences.
-
-History summary:
-"""
 
 # INITIAL PHASE
+# Sub-question
+# Intentionally left a copy in case we want to modify this one differently
+INITIAL_QUESTION_DECOMPOSITION_PROMPT = (
+    "Decompose the initial user question into no more than 3 appropriate sub-questions that help to answer the"
+    " original question. The purpose for this decomposition may be to:\n"
+    "  1) isolate individual entities (i.e., 'compare sales of company A and company B' ->"
+    " ['what are sales for company A', 'what are sales for company B'])\n"
+    "  2) clarify or disambiguate ambiguous terms (i.e., 'what is our success with company A' ->"
+    " ['what are our sales with company A','what is our market share with company A',"
+    " 'is company A a reference customer for us', etc.])\n"
+    "  3) if a term or a metric is essentially clear, but it could relate to various components of an entity and you"
+    " are generally familiar with the entity, then you can decompose the question into sub-questions that are more"
+    " specific to components (i.e., 'what do we do to improve scalability of product X', 'what do we to to improve"
+    " scalability of product X', 'what do we do to improve stability of product X', ...])\n"
+    "  4) research an area that could really help to answer the question.\n\n"
+    "Here is the initial question to decompose:\n"
+    f"{SEPARATOR_LINE}\n"
+    "{question}\n"
+    f"{SEPARATOR_LINE}\n\n"
+    "{history}\n\n"
+    "Please formulate your answer as a newline-separated list of questions like so:\n"
+    " <sub-question>\n"
+    " <sub-question>\n"
+    " <sub-question>\n"
+    " ...\n\n"
+    "Answer:"
+).strip()
 
 
-## Sub-question
+INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH = (
+    "Decompose the initial user question into no more than 3 appropriate sub-questions that help to answer the"
+    " original question. The purpose for this decomposition may be to:\n"
+    "  1) isolate individual entities (i.e., 'compare sales of company A and company B' ->"
+    " ['what are sales for company A', 'what are sales for company B'])\n"
+    "  2) clarify or disambiguate ambiguous terms (i.e., 'what is our success with company A' ->"
+    " ['what are our sales with company A','what is our market share with company A',"
+    " 'is company A a reference customer for us', etc.])\n"
+    "  3) if a term or a metric is essentially clear, but it could relate to various components of an entity and you"
+    " are generally familiar with the entity, then you can decompose the question into sub-questions that are more"
+    " specific to components (i.e., 'what do we do to improve scalability of product X', 'what do we to to improve"
+    " scalability of product X', 'what do we do to improve stability of product X', ...])\n"
+    "  4) research an area that could really help to answer the question.\n\n"
+    "To give you some context, you will see below also some documents that may relate to the question. Please only"
+    " use this information to learn what the question is approximately asking about, but do not focus on the details"
+    " to construct the sub-questions! Also, some of the entities, relationships and terms that are in the dataset may"
+    " not be in these few documents, so DO NOT focussed too much on the documents when constructing the sub-questions!"
+    " Decomposition and disambiguations are most important!\n\n"
+    "Here are the sample docs to give you some context:\n"
+    f"{SEPARATOR_LINE}\n"
+    "{sample_doc_str}\n"
+    f"{SEPARATOR_LINE}\n\n"
+    "And here is the initial question to decompose:\n"
+    f"{SEPARATOR_LINE}\n"
+    "{question}\n"
+    f"{SEPARATOR_LINE}\n\n"
+    "{history}\n\n"
+    "Please formulate your answer as a newline-separated list of questions like so:\n"
+    " <sub-question>\n"
+    " <sub-question>\n"
+    " <sub-question>\n"
+    " ...\n\n"
+    "Answer:"
+).strip()
 
-INITIAL_QUESTION_DECOMPOSITION_PROMPT = """
-If you think it is helpful, please decompose an initial user question into no more than 3 appropriate sub-questions that help to
-answer the original question. The purpose for this decomposition may be to
-  1) isolate individual entities (i.e., 'compare sales of company A and company B' -> ['what are sales for company A',
-     'what are sales for company B')]
-  2) clarify or disambiguate ambiguous terms (i.e., 'what is our success with company A' -> ['what are our sales with company A',
-      'what is our market share with company A', 'is company A a reference customer for us', etc.])
-  3) if a term or a metric is essentially clear, but it could relate to various components of an entity and you are generally
-    familiar with the entity, then you can decompose the question into sub-questions that are more specific to components
-     (i.e., 'what do we do to improve scalability of product X', 'what do we to to improve scalability of product X',
-     'what do we do to improve stability of product X', ...])
-  4) research an area that could really help to answer the question. (But clarifications or disambiguations are more important.)
-
-If you think that a decomposition is not needed or helpful, please just return an empty string. That is ok too.
-
-Here is the initial question:
-\n-------\n
-{question}
-\n-------\n
-{history}
-
-Please formulate your answer as a newline-separated list of questions like so:
- <sub-question>
- <sub-question>
- <sub-question>
-
-Answer:"""
-
-
-INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH = """
-If you think it is helpful, please decompose an initial user question into no more than 3 appropriate sub-questions that help to
-answer the original question. The purpose for this decomposition may be to
-  1) isolate individual entities (i.e., 'compare sales of company A and company B' -> ['what are sales for company A',
-     'what are sales for company B')]
-  2) clarify or disambiguate ambiguous terms (i.e., 'what is our success with company A' -> ['what are our sales with company A',
-      'what is our market share with company A', 'is company A a reference customer for us', etc.])
-  3) if a term or a metric is essentially clear, but it could relate to various components of an entity and you are generally
-    familiar with the entity, then you can decompose the question into sub-questions that are more specific to components
-     (i.e., 'what do we do to improve scalability of product X', 'what do we to to improve scalability of product X',
-     'what do we do to improve stability of product X', ...])
-  4) research an area that could really help to answer the question. (But clarifications or disambiguations are more important.)
-
-Here are some other rules:
-
-1) To give you some context, you will see below also some documents that relate to the question. Please only
-use this information to learn what the question is approximately asking about, but do not focus on the details
-to construct the sub-questions! Also, some of the entities, relationships and terms that are in the dataset may
-not be in these few documents, so DO NOT focussed too much on the documents when constructing the sub-questions! Decomposition and
-disambiguations are most important!
-2) If you think that a decomposition is not needed or helpful, please just return an empty string. That is very much ok too.
-
-Here are the sample docs to give you some context:
-\n-------\n
-{sample_doc_str}
-\n-------\n
-
-And here is the initial question that you should think about decomposing:
-\n-------\n
-{question}
-\n-------\n
-
-{history}
-
-Please formulate your answer as a newline-separated list of questions like so:
- <sub-question>
- <sub-question>
- <sub-question>
- ...
-
-Answer:"""
 
 # Retrieval
+QUERY_REWRITING_PROMPT = (
+    "Please convert the initial user question into a 2-3 more appropriate short and pointed search queries for"
+    " retrieval from a document store. Particularly, try to think about resolving ambiguities and make the search"
+    " queries more specific, enabling the system to search more broadly.\n"
+    "Also, try to make the search queries not redundant, i.e. not too similar!\n\n"
+    "Here is the initial question:\n"
+    f"{SEPARATOR_LINE}\n"
+    "{question}\n"
+    f"{SEPARATOR_LINE}\n\n"
+    "Formulate the queries separated by newlines (Do not say 'Query 1: ...', just write the querytext) as follows:\n"
+    "<query 1>\n"
+    "<query 2>\n"
+    "...\n\n"
+    "Queries:"
+)
 
-QUERY_REWRITING_PROMPT = """ \n
-Please convert an initial user question into a 2-3 more appropriate short and pointed search queries for retrivel from a
-document store. Particularly, try to think about resolving ambiguities and make the search queries more specific,
-enabling the system to search more broadly.
-Also, try to make the search queries not redundant, i.e. not too similar! \n\n
-Here is the initial question:
-\n-------\n
-{question}
-\n-------\n
-Formulate the queries separated by newlines (Do not say 'Query 1: ...', just write the querytext) as follows:
-<query 1>
-<query 2>
-...
-queries: """
 
-DOCUMENT_VERIFICATION_PROMPT = """
-You are supposed to judge whether a document text contains data or information that is potentially relevant
-for a question. It does not have to be fully relevant, but check whether it has some information that
-would help - possibly in conjunction with other documents - to address the question.
+DOCUMENT_VERIFICATION_PROMPT = (
+    "Determine whether the following document text contains data or information that is potentially relevant "
+    "for a question. It does not have to be fully relevant, but check whether it has some information that "
+    "would help - possibly in conjunction with other documents - to address the question.\n\n"
+    "Be careful that you do not use a document where you are not sure whether the text applies to the objects "
+    "or entities that are relevant for the question. For example, a book about chess could have long passage "
+    "discussing the psychology of chess without - within the passage - mentioning chess. If now a question "
+    "is asked about the psychology of football, one could be tempted to use the document as it does discuss "
+    "psychology in sports. However, it is NOT about football and should not be deemed relevant. Please "
+    "consider this logic.\n\n"
+    "DOCUMENT TEXT:\n"
+    f"{SEPARATOR_LINE}\n"
+    "{document_content}\n"
+    f"{SEPARATOR_LINE}\n\n"
+    "Do you think that this document text is useful and relevant to answer the following question?\n\n"
+    "QUESTION:\n"
+    f"{SEPARATOR_LINE}\n"
+    "{question}\n"
+    f"{SEPARATOR_LINE}\n\n"
+    "Please answer with exactly and only a 'yes' or 'no':\n\n"
+    "Answer:"
+).strip()
 
-Be careful that you do not use a document where you are not sure whether the text applies to the objects
-or entities that are relevant for the question. For example, a book about chess could have long passage
-discussing the psychology of chess without - within the passage - mentioning chess. If now a question
-is asked about the psychology of football, one could be tempted to use the document as it does discuss
-psychology in sports. However, it is NOT about football and should not be deemed relevant. Please
-consider this logic.
-
-Here is a document text that you can take as a fact:
-
-DOCUMENT INFORMATION:
-\n-------\n
-{document_content}
-\n-------\n
-
-Do you think that this document text is useful and relevant to answer the following question?
-
-QUESTION:
-\n-------\n
-{question}
-\n-------\n
-
-Please answer with 'yes' or 'no':
-
-Answer:
-
-"""
 
 # Sub-Question Anser Generation
-
 SUB_QUESTION_RAG_PROMPT = (
-    """ \n
-{date_prompt}
-Use the context provided below - and only the
-provided context - to answer the given question. (Note that the answer is in service of answering a broader
-question, given below as 'motivation'.)
-
-Again, only use the provided context and do not use your internal knowledge! If you cannot answer the
-question based on the context, say """
-    + f'"{UNKNOWN_ANSWER}"'
-    + """. It is a matter of life and death that you do NOT
-use your internal knowledge, just the provided information!
-
-Make sure that you keep all relevant information, specifically as it concerns to the ultimate goal.
-(But keep other details as well.)
-
-It is critical that you provide inline citations in the format [[D1]](), [[D2]](), [[D3]](), etc!
-It is important that the citation is close to the information it supports.
-Proper citations are very important to the user!\n\n\n
-
-For your general information, here is the ultimate motivation:
-\n--\n
-{original_question}
-\n--\n
-\n
-And here is the actual question I want you to answer based on the context above (with the motivation in mind):
-\n--\n {question} \n--\n
-
-Here is the context:
-\n\n\n--\n {context} \n--\n
-Please keep your answer brief and concise, and focus on facts and data.
-
-Answer:
-"""
-)
+    "Use the context provided below - and only the provided context - to answer the given question. "
+    "(Note that the answer is in service of answering a broader question, given below as 'motivation'.)\n\n"
+    "Again, only use the provided context and do not use your internal knowledge! If you cannot answer the "
+    f'question based on the context, say "{UNKNOWN_ANSWER}". It is a matter of life and death that you do NOT '
+    "use your internal knowledge, just the provided information!\n\n"
+    "Make sure that you keep all relevant information, specifically as it concerns to the ultimate goal. "
+    "(But keep other details as well.)\n\n"
+    "It is critical that you provide inline citations in the format [[D1]](), [[D2]](), [[D3]](), etc! "
+    "It is important that the citation is close to the information it supports. "
+    "Proper citations are very important to the user!\n\n"
+    "For your general information, here is the ultimate motivation:\n"
+    f"{SEPARATOR_LINE}\n"
+    "{original_question}\n"
+    f"{SEPARATOR_LINE}\n\n"
+    "And here is the actual question I want you to answer based on the context above (with the motivation in mind):\n"
+    f"{SEPARATOR_LINE}\n"
+    "{question}\n"
+    f"{SEPARATOR_LINE}\n\n"
+    "Here is the context:\n"
+    f"{SEPARATOR_LINE}\n"
+    "{context}\n"
+    f"{SEPARATOR_LINE}\n\n"
+    "Please keep your answer brief and concise, and focus on facts and data.\n\n"
+    "Answer:"
+).strip()
 
 
 SUB_ANSWER_CHECK_PROMPT = (
@@ -301,8 +275,8 @@ Does the suggested answer address the question? Please answer with """
     + f'"{SUB_CHECK_YES}" or "{SUB_CHECK_NO}".'
 )
 
-# Initial Answer Generation
 
+# Initial Answer Generation
 INITIAL_ANSWER_PROMPT_W_SUB_QUESTIONS = (
     """ \n
 {persona_specification}

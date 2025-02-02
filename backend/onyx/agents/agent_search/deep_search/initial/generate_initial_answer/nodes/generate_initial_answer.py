@@ -30,16 +30,6 @@ from onyx.agents.agent_search.shared_graph_utils.models import InitialAgentResul
 from onyx.agents.agent_search.shared_graph_utils.operators import (
     dedup_inference_sections,
 )
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
-    INITIAL_ANSWER_PROMPT_W_SUB_QUESTIONS,
-)
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
-    INITIAL_ANSWER_PROMPT_WO_SUB_QUESTIONS,
-)
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
-    SUB_QUESTION_ANSWER_TEMPLATE,
-)
-from onyx.agents.agent_search.shared_graph_utils.prompts import UNKNOWN_ANSWER
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     dispatch_main_answer_stop_info,
 )
@@ -57,6 +47,16 @@ from onyx.chat.models import ExtendedToolResponse
 from onyx.configs.agent_configs import AGENT_MAX_ANSWER_CONTEXT_DOCS
 from onyx.configs.agent_configs import AGENT_MIN_ORIG_QUESTION_DOCS
 from onyx.context.search.models import InferenceSection
+from onyx.prompts.agent_search import (
+    INITIAL_ANSWER_PROMPT_W_SUB_QUESTIONS,
+)
+from onyx.prompts.agent_search import (
+    INITIAL_ANSWER_PROMPT_WO_SUB_QUESTIONS,
+)
+from onyx.prompts.agent_search import (
+    SUB_QUESTION_ANSWER_TEMPLATE,
+)
+from onyx.prompts.agent_search import UNKNOWN_ANSWER
 from onyx.tools.tool_implementations.search.search_tool import yield_search_responses
 
 

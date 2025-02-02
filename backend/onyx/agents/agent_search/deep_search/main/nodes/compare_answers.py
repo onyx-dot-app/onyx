@@ -10,14 +10,14 @@ from onyx.agents.agent_search.deep_search.main.states import (
 )
 from onyx.agents.agent_search.deep_search.main.states import MainState
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
-    INITIAL_REFINED_ANSWER_COMPARISON_PROMPT,
-)
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import RefinedAnswerImprovement
+from onyx.prompts.agent_search import (
+    INITIAL_REFINED_ANSWER_COMPARISON_PROMPT,
+)
 
 
 def compare_answers(

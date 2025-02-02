@@ -13,7 +13,7 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     trim_prompt_piece,
 )
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
+from onyx.prompts.agent_search import (
     DOCUMENT_VERIFICATION_PROMPT,
 )
 

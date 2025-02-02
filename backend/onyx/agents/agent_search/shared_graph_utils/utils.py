@@ -24,15 +24,6 @@ from onyx.agents.agent_search.shared_graph_utils.models import (
     EntityRelationshipTermExtraction,
 )
 from onyx.agents.agent_search.shared_graph_utils.models import PersonaPromptExpressions
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
-    ASSISTANT_SYSTEM_PROMPT_DEFAULT,
-)
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
-    ASSISTANT_SYSTEM_PROMPT_PERSONA,
-)
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
-    HISTORY_CONTEXT_SUMMARY_PROMPT,
-)
 from onyx.chat.models import AnswerPacket
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationConfig
@@ -56,6 +47,15 @@ from onyx.db.engine import get_session_context_manager
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import Persona
 from onyx.llm.interfaces import LLM
+from onyx.prompts.agent_search import (
+    ASSISTANT_SYSTEM_PROMPT_DEFAULT,
+)
+from onyx.prompts.agent_search import (
+    ASSISTANT_SYSTEM_PROMPT_PERSONA,
+)
+from onyx.prompts.agent_search import (
+    HISTORY_CONTEXT_SUMMARY_PROMPT,
+)
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.tools.tool_implementations.search.search_tool import (

@@ -20,9 +20,6 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     build_history_prompt,
 )
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
-    REFINEMENT_QUESTION_DECOMPOSITION_PROMPT,
-)
 from onyx.agents.agent_search.shared_graph_utils.utils import dispatch_separated
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     format_entity_term_extraction,
@@ -32,6 +29,9 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import make_question_id
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.prompts.agent_search import (
+    REFINEMENT_QUESTION_DECOMPOSITION_PROMPT,
+)
 from onyx.tools.models import ToolCallKickoff
 
 

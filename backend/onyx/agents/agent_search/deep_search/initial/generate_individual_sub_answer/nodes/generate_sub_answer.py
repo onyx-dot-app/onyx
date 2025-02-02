@@ -16,7 +16,6 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     build_sub_question_answer_prompt,
 )
-from onyx.agents.agent_search.shared_graph_utils.prompts import NO_RECOVERED_DOCS
 from onyx.agents.agent_search.shared_graph_utils.utils import get_answer_citation_ids
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
@@ -31,6 +30,7 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.configs.agent_configs import AGENT_MAX_ANSWER_CONTEXT_DOCS
+from onyx.prompts.agent_search import NO_RECOVERED_DOCS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

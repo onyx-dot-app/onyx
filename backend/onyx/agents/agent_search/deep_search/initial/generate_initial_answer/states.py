@@ -24,17 +24,15 @@ from onyx.agents.agent_search.deep_search.main.states import (
 from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.models import (
     QuestionRetrievalResult,
 )
+from onyx.context.search.models import InferenceSection
+
 
 ### States ###
-
-
 class SubQuestionRetrievalInput(CoreState):
-    pass
+    exploratory_search_results: list[InferenceSection]
 
 
 ## Graph State
-
-
 class SubQuestionRetrievalState(
     # This includes the core state
     SubQuestionRetrievalInput,
@@ -48,8 +46,6 @@ class SubQuestionRetrievalState(
     base_raw_search_result: Annotated[list[QuestionRetrievalResult], add]
 
 
-## Graph Output State - presently not used
-
-
+## Graph Output State
 class SubQuestionRetrievalOutput(TypedDict):
     log_messages: list[str]

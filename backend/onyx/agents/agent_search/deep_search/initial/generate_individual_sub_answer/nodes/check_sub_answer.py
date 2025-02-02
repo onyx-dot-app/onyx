@@ -12,12 +12,12 @@ from onyx.agents.agent_search.deep_search.initial.generate_individual_sub_answer
     SubQuestionAnswerCheckUpdate,
 )
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.shared_graph_utils.prompts import SUB_ANSWER_CHECK_PROMPT
-from onyx.agents.agent_search.shared_graph_utils.prompts import UNKNOWN_ANSWER
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import parse_question_id
+from onyx.prompts.agent_search import SUB_ANSWER_CHECK_PROMPT
+from onyx.prompts.agent_search import UNKNOWN_ANSWER
 
 
 def check_sub_answer(

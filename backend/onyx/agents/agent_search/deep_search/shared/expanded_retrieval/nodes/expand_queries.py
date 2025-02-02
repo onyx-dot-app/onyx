@@ -16,14 +16,14 @@ from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states impor
     QueryExpansionUpdate,
 )
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
-    QUERY_REWRITING_PROMPT,
-)
 from onyx.agents.agent_search.shared_graph_utils.utils import dispatch_separated
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import parse_question_id
+from onyx.prompts.agent_search import (
+    QUERY_REWRITING_PROMPT,
+)
 
 
 def expand_queries(

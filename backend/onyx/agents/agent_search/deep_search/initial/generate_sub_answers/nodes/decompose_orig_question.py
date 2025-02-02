@@ -22,12 +22,6 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     build_history_prompt,
 )
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
-    INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH,
-)
-from onyx.agents.agent_search.shared_graph_utils.prompts import (
-    INITIAL_QUESTION_DECOMPOSITION_PROMPT,
-)
 from onyx.agents.agent_search.shared_graph_utils.utils import dispatch_separated
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
@@ -38,6 +32,15 @@ from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.chat.models import SubQuestionPiece
 from onyx.configs.agent_configs import AGENT_NUM_DOCS_FOR_DECOMPOSITION
+from onyx.prompts.agent_search import (
+    INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH,
+)
+from onyx.prompts.agent_search import (
+    INITIAL_QUESTION_DECOMPOSITION_PROMPT,
+)
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def decompose_orig_question(
@@ -63,6 +66,12 @@ def decompose_orig_question(
     # Initial search to inform decomposition. Just get top 3 fits
 
     if perform_initial_search_decomposition:
+        # Due to unfortunate state representation in LangGraph, we need here to double check that the retrieval has
+        # happened prior to this point, allowing silent failure here since it is not critical for decomposition in
+        # all queries.
+        if not state.exploratory_search_results:
+            logger.error("Initial search for decomposition failed")
+
         sample_doc_str = "\n\n".join(
             [
                 doc.combined_content
