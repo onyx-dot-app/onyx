@@ -5,6 +5,7 @@
 postgresql:
   primary:
     persistence:
+      storageClass: ebsstorage
       size: 5Gi
   enabled: true
   auth:
@@ -12,12 +13,37 @@ postgresql:
     secretKeys:
       # overwriting as postgres typically expects 'postgres-password'
       adminPasswordKey: postgres_password
+
+vespa:
+  volumeClaimTemplates:
+    - metadata:
+        name: vespa-storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+        storageClassName: ebsstorage
+
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: vespa
+    pullPolicy: IfNotPresent
+    tag: "8.277.17"
+  podAnnotations: {}
+  podLabels:
+    app: vespa
+    app.kubernetes.io/instance: onyx
+    app.kubernetes.io/name: vespa
+
+persistent:
+  storageClassName: ebsstorage
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
-
-persistent:
-  storageClassName: ""
 
 inferenceCapability:
   service:
@@ -316,29 +342,6 @@ background:
 
   nodeSelector: {}
   tolerations: []
-
-vespa:
-  volumeClaimTemplates:
-    - metadata:
-        name: vespa-storage
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        storageClassName: ""
-        resources:
-          requests:
-            storage: 1Gi
-  enabled: true
-  replicaCount: 1
-  image:
-    repository: vespa
-    pullPolicy: IfNotPresent
-    tag: "8.277.17"
-  podAnnotations: {}
-  podLabels:
-    app: vespa
-    app.kubernetes.io/instance: onyx
-    app.kubernetes.io/name: vespa
 
   podSecurityContext:
     {}
