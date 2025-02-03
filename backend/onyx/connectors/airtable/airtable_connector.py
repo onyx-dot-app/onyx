@@ -88,6 +88,7 @@ class AirtableConnector(LoadConnector):
     def _extract_field_values(
         self,
         field_id: str,
+        field_name: str,
         field_info: Any,
         field_type: str,
         base_id: str,
@@ -133,19 +134,23 @@ class AirtableConnector(LoadConnector):
                         return attachment_response.content
                     except requests.exceptions.HTTPError as e:
                         if e.response.status_code == 410:
+                            logger.info(f"Refreshing attachment for {filename}")
                             # Re-fetch the record to get a fresh URL
                             refreshed_record = self.airtable_client.table(
                                 base_id, table_id
                             ).get(record_id)
-                            for refreshed_attachment in refreshed_record["fields"].get(
-                                field_id, []
-                            ):
+                            for refreshed_attachment in refreshed_record["fields"][
+                                field_name
+                            ]:
                                 if refreshed_attachment.get("filename") == filename:
                                     new_url = refreshed_attachment.get("url")
                                     if new_url:
                                         attachment_response = requests.get(new_url)
                                         attachment_response.raise_for_status()
                                         return attachment_response.content
+
+                            logger.error(f"Failed to refresh attachment for {filename}")
+
                         raise
 
                 attachment_content = get_attachment_with_retry(url, record_id)
@@ -232,6 +237,7 @@ class AirtableConnector(LoadConnector):
         # Get the value(s) for the field
         field_value_and_links = self._extract_field_values(
             field_id=field_id,
+            field_name=field_name,
             field_info=field_info,
             field_type=field_type,
             base_id=self.base_id,
