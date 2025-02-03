@@ -1,8 +1,8 @@
 [
-    {"ParameterKey": "DomainName", "ParameterValue": "demo2.danswer.ai"},
+    {"ParameterKey": "DomainName", "ParameterValue": "ecs-chris.danswer.dev"},
     {"ParameterKey": "Environment", "ParameterValue": "production"},
     {"ParameterKey": "HostedZoneId", "ParameterValue": ""},
-    {"ParameterKey": "SubnetIDs", "ParameterValue": "subnet-0af372d676f65b287,subnet-06721b79e2e51d22c"},
-    {"ParameterKey": "VpcID", "ParameterValue": "vpc-098cfa79d637dabff"},
-    {"ParameterKey": "OnyxNamespace", "ParameterValue": "onyx2"}
+    {"ParameterKey": "SubnetIDs", "ParameterValue": "subnet-0cf9acc0cbbeb2ec3,subnet-0bdbce01335e31546"},
+    {"ParameterKey": "VpcID", "ParameterValue": "vpc-0dac18b1f5913dbb9"},
+    {"ParameterKey": "OnyxNamespace", "ParameterValue": "onyx-chris"}
 ]
