@@ -7,6 +7,7 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.orchestration.nodes.tool_call import ToolCallException
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
@@ -943,19 +944,25 @@ def stream_chat_message_objects(
         return
 
     except Exception as e:
-        logger.exception("Failed to process chat message.")
-
+        logger.exception(f"Failed to process chat message due to {e}")
         error_msg = str(e)
         stack_trace = traceback.format_exc()
-        if llm:
-            client_error_msg = litellm_exception_to_error_msg(e, llm)
-            if llm.config.api_key and len(llm.config.api_key) > 2:
-                error_msg = error_msg.replace(llm.config.api_key, "[REDACTED_API_KEY]")
-                stack_trace = stack_trace.replace(
-                    llm.config.api_key, "[REDACTED_API_KEY]"
-                )
 
-            yield StreamingError(error=client_error_msg, stack_trace=stack_trace)
+        if isinstance(e, ToolCallException):
+            yield StreamingError(error=error_msg, stack_trace=stack_trace)
+        else:
+            if llm:
+                client_error_msg = litellm_exception_to_error_msg(e, llm)
+                if llm.config.api_key and len(llm.config.api_key) > 2:
+                    error_msg = error_msg.replace(
+                        llm.config.api_key, "[REDACTED_API_KEY]"
+                    )
+                    stack_trace = stack_trace.replace(
+                        llm.config.api_key, "[REDACTED_API_KEY]"
+                    )
+
+                yield StreamingError(error=client_error_msg, stack_trace=stack_trace)
+
         db_session.rollback()
         return
 

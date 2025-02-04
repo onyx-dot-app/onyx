@@ -218,6 +218,9 @@ class InternetSearchTool(Tool):
             headers=self.headers,
             params={"q": query, "count": self.num_results},
         )
+
+        response.raise_for_status()
+
         results = response.json()
 
         # If no hits, Bing does not include the webPages key

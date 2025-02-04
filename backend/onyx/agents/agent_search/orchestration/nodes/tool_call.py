@@ -20,6 +20,10 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+class ToolCallException(Exception):
+    """Exception raised for errors during tool calls."""
+
+
 def emit_packet(packet: AnswerPacket, writer: StreamWriter) -> None:
     write_custom_event("basic_response", packet, writer)
 
@@ -45,13 +49,18 @@ def tool_call(
 
     emit_packet(tool_kickoff, writer)
 
-    tool_responses = []
-    for response in tool_runner.tool_responses():
-        tool_responses.append(response)
-        emit_packet(response, writer)
+    try:
+        tool_responses = []
+        for response in tool_runner.tool_responses():
+            tool_responses.append(response)
+            emit_packet(response, writer)
 
-    tool_final_result = tool_runner.tool_final_result()
-    emit_packet(tool_final_result, writer)
+        tool_final_result = tool_runner.tool_final_result()
+        emit_packet(tool_final_result, writer)
+    except Exception as e:
+        raise ToolCallException(
+            f"Error during tool call for {tool.display_name}: {e}"
+        ) from e
 
     tool_call = ToolCall(name=tool.name, args=tool_args, id=tool_id)
     tool_call_summary = ToolCallSummary(
