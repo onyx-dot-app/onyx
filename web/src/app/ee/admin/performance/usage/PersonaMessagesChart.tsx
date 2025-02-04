@@ -172,8 +172,6 @@ export function PersonaMessagesChart({
     );
   }
 
-  const selectedPersona = personaList?.find((p) => p.id === selectedPersonaId);
-
   return (
     <CardSection className="mt-8">
       <Title>Persona Analytics</Title>

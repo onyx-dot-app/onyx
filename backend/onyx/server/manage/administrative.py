@@ -16,20 +16,18 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import KV_GEN_AI_KEY_CHECK_TIME
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.db.connector_credential_pair import get_connector_credential_pair
+from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
 from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
 )
 from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.feedback import fetch_docs_ranked_by_boost
-from onyx.db.feedback import update_document_boost
-from onyx.db.feedback import update_document_hidden
+from onyx.db.feedback import fetch_docs_ranked_by_boost_for_user
+from onyx.db.feedback import update_document_boost_for_user
+from onyx.db.feedback import update_document_hidden_for_user
 from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 from onyx.db.models import User
-from onyx.document_index.document_index_utils import get_both_index_names
-from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -55,7 +53,7 @@ def get_most_boosted_docs(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[BoostDoc]:
-    boost_docs = fetch_docs_ranked_by_boost(
+    boost_docs = fetch_docs_ranked_by_boost_for_user(
         ascending=ascending,
         limit=limit,
         db_session=db_session,
@@ -80,7 +78,7 @@ def document_boost_update(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
-    update_document_boost(
+    update_document_boost_for_user(
         db_session=db_session,
         document_id=boost_update.document_id,
         boost=boost_update.boost,
@@ -95,16 +93,10 @@ def document_hidden_update(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
-    curr_ind_name, sec_ind_name = get_both_index_names(db_session)
-    document_index = get_default_document_index(
-        primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
-    )
-
-    update_document_hidden(
+    update_document_hidden_for_user(
         db_session=db_session,
         document_id=hidden_update.document_id,
         hidden=hidden_update.hidden,
-        document_index=document_index,
         user=user,
     )
     return StatusResponse(success=True, message="Updated document boost")
@@ -152,7 +144,7 @@ def create_deletion_attempt_for_connector_id(
     connector_id = connector_credential_pair_identifier.connector_id
     credential_id = connector_credential_pair_identifier.credential_id
 
-    cc_pair = get_connector_credential_pair(
+    cc_pair = get_connector_credential_pair_for_user(
         db_session=db_session,
         connector_id=connector_id,
         credential_id=credential_id,

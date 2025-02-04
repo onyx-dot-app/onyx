@@ -39,3 +39,12 @@ class TenantCreationPayload(BaseModel):
     tenant_id: str
     email: str
     referral_source: str | None = None
+
+
+class TenantDeletionPayload(BaseModel):
+    tenant_id: str
+    email: str
+
+
+class AnonymousUserPath(BaseModel):
+    anonymous_user_path: str | None

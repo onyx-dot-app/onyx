@@ -71,19 +71,22 @@ mock_doc_mapping_rerank = {
 
 
 @pytest.fixture
-def mock_data() -> tuple[list[LlmDoc], dict[str, int]]:
-    return mock_docs, mock_doc_mapping
+def mock_data() -> tuple[list[LlmDoc], dict[str, int], dict[str, int]]:
+    return mock_docs, mock_doc_mapping, mock_doc_mapping_rerank
 
 
 def process_text(
-    tokens: list[str], mock_data: tuple[list[LlmDoc], dict[str, int]]
+    tokens: list[str], mock_data: tuple[list[LlmDoc], dict[str, int], dict[str, int]]
 ) -> tuple[str, list[CitationInfo]]:
-    mock_docs, mock_doc_id_to_rank_map = mock_data
-    mapping = DocumentIdOrderMapping(order_mapping=mock_doc_id_to_rank_map)
+    mock_docs, mock_doc_id_to_rank_map, mock_doc_id_to_rank_map_rerank = mock_data
+    final_mapping = DocumentIdOrderMapping(order_mapping=mock_doc_id_to_rank_map)
+    display_mapping = DocumentIdOrderMapping(
+        order_mapping=mock_doc_id_to_rank_map_rerank
+    )
     processor = CitationProcessor(
         context_docs=mock_docs,
-        doc_id_to_rank_map=mapping,
-        display_doc_order_dict=mock_doc_mapping_rerank,
+        final_doc_id_to_rank_map=final_mapping,
+        display_doc_id_to_rank_map=display_mapping,
         stop_stream=None,
     )
 
@@ -115,7 +118,7 @@ def process_text(
     ],
 )
 def test_citation_substitution(
-    mock_data: tuple[list[LlmDoc], dict[str, int]],
+    mock_data: tuple[list[LlmDoc], dict[str, int], dict[str, int]],
     test_name: str,
     input_tokens: list[str],
     expected_text: str,

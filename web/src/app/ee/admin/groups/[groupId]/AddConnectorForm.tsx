@@ -5,11 +5,11 @@ import { useState } from "react";
 import { FiPlus, FiX } from "react-icons/fi";
 import { updateUserGroup } from "./lib";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { ConnectorIndexingStatus, UserGroup } from "@/lib/types";
+import { ConnectorStatus, UserGroup } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { Connector } from "@/lib/connectors/connectors";
 interface AddConnectorFormProps {
-  ccPairs: ConnectorIndexingStatus<any, any>[];
+  ccPairs: ConnectorStatus<any, any>[];
   userGroup: UserGroup;
   onClose: () => void;
   setPopup: (popupSpec: PopupSpec) => void;

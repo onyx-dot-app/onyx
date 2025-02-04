@@ -8,12 +8,7 @@ import {
   updateDocumentSet,
   DocumentSetCreationRequest,
 } from "./lib";
-import {
-  ConnectorIndexingStatus,
-  DocumentSet,
-  UserGroup,
-  UserRole,
-} from "@/lib/types";
+import { ConnectorStatus, DocumentSet, UserGroup, UserRole } from "@/lib/types";
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { Separator } from "@/components/ui/separator";
@@ -24,7 +19,7 @@ import React, { useEffect, useState } from "react";
 import { useUser } from "@/components/user/UserProvider";
 
 interface SetCreationPopupProps {
-  ccPairs: ConnectorIndexingStatus<any, any>[];
+  ccPairs: ConnectorStatus<any, any>[];
   userGroups: UserGroup[] | undefined;
   onClose: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;

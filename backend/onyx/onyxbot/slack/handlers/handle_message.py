@@ -28,12 +28,12 @@ logger_base = setup_logger()
 
 
 def send_msg_ack_to_user(details: SlackMessageInfo, client: WebClient) -> None:
-    if details.is_bot_msg and details.sender:
+    if details.is_bot_msg and details.sender_id:
         respond_in_thread(
             client=client,
             channel=details.channel_to_respond,
             thread_ts=details.msg_to_respond,
-            receiver_ids=[details.sender],
+            receiver_ids=[details.sender_id],
             text="Hi, we're evaluating your query :face_with_monocle:",
         )
         return
@@ -70,7 +70,7 @@ def schedule_feedback_reminder(
 
     try:
         response = client.chat_scheduleMessage(
-            channel=details.sender,  # type:ignore
+            channel=details.sender_id,  # type:ignore
             post_at=int(future.timestamp()),
             blocks=[
                 get_feedback_reminder_blocks(
@@ -123,7 +123,7 @@ def handle_message(
     logger = setup_logger(extra={SLACK_CHANNEL_ID: channel})
 
     messages = message_info.thread_messages
-    sender_id = message_info.sender
+    sender_id = message_info.sender_id
     bypass_filters = message_info.bypass_filters
     is_bot_msg = message_info.is_bot_msg
     is_bot_dm = message_info.is_bot_dm

@@ -82,6 +82,7 @@ class RedisObjectHelper(ABC):
     @abstractmethod
     def generate_tasks(
         self,
+        max_tasks: int,
         celery_app: Celery,
         db_session: Session,
         redis_client: Redis,

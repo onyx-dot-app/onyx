@@ -22,7 +22,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
   } else {
     body = (
       <>
-        <CardSection>
+        <CardSection className="!border-none !bg-transparent !ring-none">
           <AssistantEditor
             {...values}
             admin
@@ -30,24 +30,12 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
             redirectType={SuccessfulPersonaUpdateRedirectType.ADMIN}
           />
         </CardSection>
-
-        <div className="mt-12">
-          <Title>Delete Assistant</Title>
-
-          <div className="flex mt-6">
-            <DeletePersonaButton
-              personaId={values.existingPersona!.id}
-              redirectType={SuccessfulPersonaUpdateRedirectType.ADMIN}
-            />
-          </div>
-        </div>
       </>
     );
   }
 
   return (
     <div className="w-full">
-      <BackButton />
       <AdminPageTitle title="Edit Assistant" icon={<RobotIcon size={32} />} />
       {body}
     </div>

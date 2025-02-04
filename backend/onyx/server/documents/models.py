@@ -1,10 +1,13 @@
 from datetime import datetime
 from typing import Any
+from typing import Generic
+from typing import TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import Field
 
+from ee.onyx.server.query_history.models import ChatSessionMinimal
 from onyx.configs.app_configs import MASK_CREDENTIAL_PREFIX
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import DocumentErrorSummary
@@ -19,6 +22,8 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError as DbIndexAttemptError
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
+from onyx.server.models import FullUserSnapshot
+from onyx.server.models import InvitedUserSnapshot
 from onyx.server.utils import mask_credential_dict
 
 
@@ -201,26 +206,20 @@ class IndexAttemptError(BaseModel):
         )
 
 
-class PaginatedIndexAttempts(BaseModel):
-    index_attempts: list[IndexAttemptSnapshot]
-    page: int
-    total_pages: int
+# These are the types currently supported by the pagination hook
+# More api endpoints can be refactored and be added here for use with the pagination hook
+PaginatedType = TypeVar(
+    "PaginatedType",
+    IndexAttemptSnapshot,
+    FullUserSnapshot,
+    InvitedUserSnapshot,
+    ChatSessionMinimal,
+)
 
-    @classmethod
-    def from_models(
-        cls,
-        index_attempt_models: list[IndexAttempt],
-        page: int,
-        total_pages: int,
-    ) -> "PaginatedIndexAttempts":
-        return cls(
-            index_attempts=[
-                IndexAttemptSnapshot.from_index_attempt_db_model(index_attempt_model)
-                for index_attempt_model in index_attempt_models
-            ],
-            page=page,
-            total_pages=total_pages,
-        )
+
+class PaginatedReturn(BaseModel, Generic[PaginatedType]):
+    items: list[PaginatedType]
+    total_items: int
 
 
 class CCPairFullInfo(BaseModel):
@@ -310,28 +309,30 @@ class FailedConnectorIndexingStatus(BaseModel):
     credential_id: int
 
 
-class ConnectorIndexingStatus(BaseModel):
-    """Represents the latest indexing status of a connector"""
+class ConnectorStatus(BaseModel):
+    """
+    Represents the status of a connector,
+    including indexing status elated information
+    """
 
     cc_pair_id: int
     name: str | None
-    cc_pair_status: ConnectorCredentialPairStatus
     connector: ConnectorSnapshot
     credential: CredentialSnapshot
-    owner: str
-    groups: list[int]
     access_type: AccessType
+    groups: list[int]
+
+
+class ConnectorIndexingStatus(ConnectorStatus):
+    """Represents the full indexing status of a connector"""
+
+    cc_pair_status: ConnectorCredentialPairStatus
+    owner: str
     last_finished_status: IndexingStatus | None
     last_status: IndexingStatus | None
     last_success: datetime | None
-    docs_indexed: int
-    error_msg: str | None
     latest_index_attempt: IndexAttemptSnapshot | None
-    deletion_attempt: DeletionAttemptSnapshot | None
-    is_deletable: bool
-
-    # index attempt in db can be marked successful while celery/redis
-    # is stil running/cleaning up
+    docs_indexed: int
     in_progress: bool
 
 

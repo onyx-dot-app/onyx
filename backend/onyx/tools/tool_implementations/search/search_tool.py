@@ -16,7 +16,7 @@ from onyx.chat.models import OnyxContext
 from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import SectionRelevancePiece
-from onyx.chat.prompt_builder.build import AnswerPromptBuilder
+from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.citations_prompt import compute_max_llm_input_tokens
 from onyx.chat.prune_and_merge import prune_and_merge_sections
 from onyx.chat.prune_and_merge import prune_sections
@@ -396,7 +396,7 @@ class SearchTool(Tool):
     @classmethod
     def get_search_result(
         cls, llm_call: LLMCall
-    ) -> tuple[list[LlmDoc], dict[str, int]] | None:
+    ) -> tuple[list[LlmDoc], list[LlmDoc]] | None:
         """
         Returns the final search results and a map of docs to their original search rank (which is what is displayed to user)
         """
@@ -404,7 +404,7 @@ class SearchTool(Tool):
             return None
 
         final_search_results = []
-        doc_id_to_original_search_rank_map = {}
+        initial_search_results = []
 
         for yield_item in llm_call.tool_call_info:
             if (
@@ -417,12 +417,11 @@ class SearchTool(Tool):
                 and yield_item.id == ORIGINAL_CONTEXT_DOCUMENTS_ID
             ):
                 search_contexts = yield_item.response.contexts
-                original_doc_search_rank = 1
-                for idx, doc in enumerate(search_contexts):
-                    if doc.document_id not in doc_id_to_original_search_rank_map:
-                        doc_id_to_original_search_rank_map[
-                            doc.document_id
-                        ] = original_doc_search_rank
-                        original_doc_search_rank += 1
+                # original_doc_search_rank = 1
+                for doc in search_contexts:
+                    if doc.document_id not in initial_search_results:
+                        initial_search_results.append(doc)
 
-        return final_search_results, doc_id_to_original_search_rank_map
+                initial_search_results = cast(list[LlmDoc], initial_search_results)
+
+        return final_search_results, initial_search_results

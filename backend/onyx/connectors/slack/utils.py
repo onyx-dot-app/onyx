@@ -265,24 +265,6 @@ class SlackTextCleaner:
         return message
 
     @staticmethod
-    def replace_links(message: str) -> str:
-        """Replaces slack links e.g. `<URL>` -> `URL` and `<URL|DISPLAY>` -> `DISPLAY`"""
-        # Find user IDs in the message
-        possible_link_matches = re.findall(r"<(.*?)>", message)
-        for possible_link in possible_link_matches:
-            if not possible_link:
-                continue
-            # Special slack patterns that aren't for links
-            if possible_link[0] not in ["#", "@", "!"]:
-                link_display = (
-                    possible_link
-                    if "|" not in possible_link
-                    else possible_link.split("|")[1]
-                )
-                message = message.replace(f"<{possible_link}>", link_display)
-        return message
-
-    @staticmethod
     def replace_special_catchall(message: str) -> str:
         """Replaces pattern of <!something|another-thing> with another-thing
         This is added for <!subteam^TEAM-ID|@team-name> but may match other cases as well

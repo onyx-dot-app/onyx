@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from fastapi import Body
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import Request
 from psycopg2.errors import UniqueViolation
 from pydantic import BaseModel
@@ -21,12 +22,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import SUPER_USERS
+from onyx.auth.email_utils import send_user_email_invite
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.noauth_user import fetch_no_auth_user
 from onyx.auth.noauth_user import set_no_auth_user_preferences
 from onyx.auth.schemas import UserRole
-from onyx.auth.schemas import UserStatus
+from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
@@ -39,17 +41,18 @@ from onyx.configs.constants import AuthType
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_total_users_count
 from onyx.db.engine import CURRENT_TENANT_ID_CONTEXTVAR
+from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.models import AccessToken
-from onyx.db.models import DocumentSet__User
-from onyx.db.models import Persona__User
-from onyx.db.models import SamlAccount
 from onyx.db.models import User
-from onyx.db.models import User__UserGroup
+from onyx.db.users import delete_user_from_db
+from onyx.db.users import get_all_users
+from onyx.db.users import get_page_of_filtered_users
+from onyx.db.users import get_total_filtered_users_count
 from onyx.db.users import get_user_by_email
-from onyx.db.users import list_users
 from onyx.db.users import validate_user_role_update
 from onyx.key_value_store.factory import get_kv_store
+from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import UserByEmail
@@ -61,15 +64,12 @@ from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.server.utils import BasicAuthenticationError
-from onyx.server.utils import send_user_email_invite
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
-
 router = APIRouter()
-
 
 USERS_PAGE_SIZE = 10
 
@@ -115,21 +115,68 @@ def set_user_role(
     db_session.commit()
 
 
+@router.get("/manage/users/accepted")
+def list_accepted_users(
+    q: str | None = Query(default=None),
+    page_num: int = Query(0, ge=0),
+    page_size: int = Query(10, ge=1, le=1000),
+    roles: list[UserRole] = Query(default=[]),
+    is_active: bool | None = Query(default=None),
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> PaginatedReturn[FullUserSnapshot]:
+    filtered_accepted_users = get_page_of_filtered_users(
+        db_session=db_session,
+        page_size=page_size,
+        page_num=page_num,
+        email_filter_string=q,
+        is_active_filter=is_active,
+        roles_filter=roles,
+    )
+
+    total_accepted_users_count = get_total_filtered_users_count(
+        db_session=db_session,
+        email_filter_string=q,
+        is_active_filter=is_active,
+        roles_filter=roles,
+    )
+
+    if not filtered_accepted_users:
+        logger.info("No users found")
+        return PaginatedReturn(
+            items=[],
+            total_items=0,
+        )
+
+    return PaginatedReturn(
+        items=[
+            FullUserSnapshot.from_user_model(user) for user in filtered_accepted_users
+        ],
+        total_items=total_accepted_users_count,
+    )
+
+
+@router.get("/manage/users/invited")
+def list_invited_users(
+    _: User | None = Depends(current_admin_user),
+) -> list[InvitedUserSnapshot]:
+    invited_emails = get_invited_users()
+
+    return [InvitedUserSnapshot(email=email) for email in invited_emails]
+
+
 @router.get("/manage/users")
 def list_all_users(
     q: str | None = None,
     accepted_page: int | None = None,
     slack_users_page: int | None = None,
     invited_page: int | None = None,
-    user: User | None = Depends(current_curator_or_admin_user),
+    _: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> AllUsersResponse:
-    if not q:
-        q = ""
-
     users = [
         user
-        for user in list_users(db_session, email_filter_string=q)
+        for user in get_all_users(db_session, email_filter_string=q)
         if not is_api_key_email_address(user.email)
     ]
 
@@ -156,9 +203,7 @@ def list_all_users(
                     id=user.id,
                     email=user.email,
                     role=user.role,
-                    status=(
-                        UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED
-                    ),
+                    is_active=user.is_active,
                 )
                 for user in accepted_users
             ],
@@ -167,9 +212,7 @@ def list_all_users(
                     id=user.id,
                     email=user.email,
                     role=user.role,
-                    status=(
-                        UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED
-                    ),
+                    is_active=user.is_active,
                 )
                 for user in slack_users
             ],
@@ -186,7 +229,7 @@ def list_all_users(
                 id=user.id,
                 email=user.email,
                 role=user.role,
-                status=UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED,
+                is_active=user.is_active,
             )
             for user in accepted_users
         ][accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE],
@@ -195,7 +238,7 @@ def list_all_users(
                 id=user.id,
                 email=user.email,
                 role=user.role,
-                status=UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED,
+                is_active=user.is_active,
             )
             for user in slack_users
         ][
@@ -370,45 +413,10 @@ async def delete_user(
     db_session.expunge(user_to_delete)
 
     try:
-        for oauth_account in user_to_delete.oauth_accounts:
-            db_session.delete(oauth_account)
-
-        fetch_ee_implementation_or_noop(
-            "onyx.db.external_perm",
-            "delete_user__ext_group_for_user__no_commit",
-        )(
-            db_session=db_session,
-            user_id=user_to_delete.id,
-        )
-        db_session.query(SamlAccount).filter(
-            SamlAccount.user_id == user_to_delete.id
-        ).delete()
-        db_session.query(DocumentSet__User).filter(
-            DocumentSet__User.user_id == user_to_delete.id
-        ).delete()
-        db_session.query(Persona__User).filter(
-            Persona__User.user_id == user_to_delete.id
-        ).delete()
-        db_session.query(User__UserGroup).filter(
-            User__UserGroup.user_id == user_to_delete.id
-        ).delete()
-        db_session.delete(user_to_delete)
-        db_session.commit()
-
-        # NOTE: edge case may exist with race conditions
-        # with this `invited user` scheme generally.
-        user_emails = get_invited_users()
-        remaining_users = [
-            user for user in user_emails if user != user_email.user_email
-        ]
-        write_invited_users(remaining_users)
-
+        delete_user_from_db(user_to_delete, db_session)
         logger.info(f"Deleted user {user_to_delete.email}")
-    except Exception as e:
-        import traceback
 
-        full_traceback = traceback.format_exc()
-        logger.error(f"Full stack trace:\n{full_traceback}")
+    except Exception as e:
         db_session.rollback()
         logger.error(f"Error deleting user {user_to_delete.email}: {str(e)}")
         raise HTTPException(status_code=500, detail="Error deleting user")
@@ -449,7 +457,7 @@ def list_all_users_basic_info(
     _: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
-    users = list_users(db_session)
+    users = get_all_users(db_session)
     return [MinimalUserSnapshot(id=user.id, email=user.email) for user in users]
 
 
@@ -518,17 +526,20 @@ def get_current_token_creation(
 def verify_user_logged_in(
     user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
+    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> UserInfo:
     # NOTE: this does not use `current_user` / `current_admin_user` because we don't want
     # to enforce user verification here - the frontend always wants to get the info about
     # the current user regardless of if they are currently verified
-
     if user is None:
         # if auth type is disabled, return a dummy user with preferences from
         # the key-value store
         if AUTH_TYPE == AuthType.DISABLED:
             store = get_kv_store()
             return fetch_no_auth_user(store)
+        if anonymous_user_enabled(tenant_id=tenant_id):
+            store = get_kv_store()
+            return fetch_no_auth_user(store, anonymous_user_enabled=True)
 
         raise BasicAuthenticationError(detail="User Not Authenticated")
     if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
@@ -614,6 +625,30 @@ def update_user_recent_assistants(
     db_session.commit()
 
 
+@router.patch("/shortcut-enabled")
+def update_user_shortcut_enabled(
+    shortcut_enabled: bool,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            no_auth_user.preferences.shortcut_enabled = shortcut_enabled
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    db_session.execute(
+        update(User)
+        .where(User.id == user.id)  # type: ignore
+        .values(shortcut_enabled=shortcut_enabled)
+    )
+    db_session.commit()
+
+
 @router.patch("/auto-scroll")
 def update_user_auto_scroll(
     request: AutoScrollRequest,
@@ -658,6 +693,36 @@ def update_user_default_model(
         update(User)
         .where(User.id == user.id)  # type: ignore
         .values(default_model=request.default_model)
+    )
+    db_session.commit()
+
+
+class ReorderPinnedAssistantsRequest(BaseModel):
+    ordered_assistant_ids: list[int]
+
+
+@router.patch("/user/pinned-assistants")
+def update_user_pinned_assistants(
+    request: ReorderPinnedAssistantsRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    ordered_assistant_ids = request.ordered_assistant_ids
+
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            no_auth_user.preferences.pinned_assistants = ordered_assistant_ids
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    db_session.execute(
+        update(User)
+        .where(User.id == user.id)  # type: ignore
+        .values(pinned_assistants=ordered_assistant_ids)
     )
     db_session.commit()
 

@@ -31,8 +31,9 @@ CONTEXT:
 """.strip()
 
 
+# History block is optional.
 CHAT_USER_CONTEXT_FREE_PROMPT = f"""
-{{task_prompt}}
+{{history_block}}{{task_prompt}}
 
 {QUESTION_PAT.upper()}
 {{user_query}}

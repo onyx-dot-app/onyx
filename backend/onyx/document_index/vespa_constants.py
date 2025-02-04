@@ -35,6 +35,8 @@ DOCUMENT_ID_ENDPOINT = (
     f"{VESPA_APP_CONTAINER_URL}/document/v1/default/{{index_name}}/docid"
 )
 
+# the default document id endpoint is http://localhost:8080/document/v1/default/danswer_chunk/docid
+
 SEARCH_ENDPOINT = f"{VESPA_APP_CONTAINER_URL}/search/"
 
 NUM_THREADS = (

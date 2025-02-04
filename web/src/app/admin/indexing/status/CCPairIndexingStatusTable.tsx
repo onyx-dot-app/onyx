@@ -59,7 +59,7 @@ function SummaryRow({
   return (
     <TableRow
       onClick={onToggle}
-      className="border-border bg-white py-4 rounded-sm !border cursor-pointer"
+      className="border-border group hover:bg-background-settings-hover bg-background-sidebar py-4 rounded-sm !border cursor-pointer"
     >
       <TableCell>
         <div className="text-xl flex items-center truncate ellipsis gap-x-2 font-semibold">
@@ -86,7 +86,7 @@ function SummaryRow({
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="flex items-center mt-1">
-                <div className="w-full bg-gray-200 rounded-full h-2 mr-2">
+                <div className="w-full bg-white rounded-full h-2 mr-2">
                   <div
                     className="bg-green-500 h-2 rounded-full"
                     style={{ width: `${activePercentage}%` }}
@@ -411,11 +411,6 @@ export function CCPairIndexingStatusTable({
             last_success: "2023-07-01T12:00:00Z",
             last_finished_status: "success",
             latest_index_attempt: null,
-            owner: "1",
-            error_msg: "",
-            deletion_attempt: null,
-            is_deletable: true,
-            in_progress: false,
             groups: [], // Add this line
           }}
           isEditable={false}
@@ -428,7 +423,7 @@ export function CCPairIndexingStatusTable({
           placeholder="Search connectors..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="ml-1 w-96 h-9 flex-none rounded-md bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="ml-1 w-96 h-9  border border-border flex-none rounded-md bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
 
         <Button className="h-9" onClick={() => toggleSources()}>

@@ -30,6 +30,7 @@ from onyx.auth.users import fastapi_users
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
+from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
@@ -54,10 +55,15 @@ from onyx.server.documents.indexing import router as indexing_router
 from onyx.server.documents.standard_oauth import router as oauth_router
 from onyx.server.features.document_set.api import router as document_set_router
 from onyx.server.features.folder.api import router as folder_router
+from onyx.server.features.input_prompt.api import (
+    admin_router as admin_input_prompt_router,
+)
+from onyx.server.features.input_prompt.api import (
+    basic_router as input_prompt_router,
+)
 from onyx.server.features.notifications.api import router as notification_router
 from onyx.server.features.persona.api import admin_router as admin_persona_router
 from onyx.server.features.persona.api import basic_router as persona_router
-from onyx.server.features.prompt.api import basic_router as prompt_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
 from onyx.server.gpts.api import router as gpts_router
@@ -74,6 +80,9 @@ from onyx.server.manage.search_settings import router as search_settings_router
 from onyx.server.manage.slack_bot import router as slack_bot_management_router
 from onyx.server.manage.users import router as user_router
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
+from onyx.server.middleware.rate_limiting import close_auth_limiter
+from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
+from onyx.server.middleware.rate_limiting import setup_auth_limiter
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.openai_assistants_api.full_openai_assistants_api import (
     get_full_openai_assistants_api_router,
@@ -155,14 +164,32 @@ def include_router_with_global_prefix_prepended(
     application.include_router(router, **final_kwargs)
 
 
+def include_auth_router_with_prefix(
+    application: FastAPI,
+    router: APIRouter,
+    prefix: str | None = None,
+    tags: list[str] | None = None,
+) -> None:
+    """Wrapper function to include an 'auth' router with prefix + rate-limiting dependencies."""
+    final_tags = tags or ["auth"]
+    include_router_with_global_prefix_prepended(
+        application,
+        router,
+        prefix=prefix,
+        tags=final_tags,
+        dependencies=get_auth_rate_limiters(),
+    )
+
+
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Set recursion limit
     if SYSTEM_RECURSION_LIMIT is not None:
         sys.setrecursionlimit(SYSTEM_RECURSION_LIMIT)
         logger.notice(f"System recursion limit set to {SYSTEM_RECURSION_LIMIT}")
 
     SqlEngine.set_app_name(POSTGRES_WEB_APP_NAME)
+
     SqlEngine.init_engine(
         pool_size=POSTGRES_API_SERVER_POOL_SIZE,
         max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
@@ -187,7 +214,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     if not MULTI_TENANT:
         # We cache this at the beginning so there is no delay in the first telemetry
-        get_or_generate_uuid()
+        get_or_generate_uuid(tenant_id=None)
 
         # If we are multi-tenant, we need to only set up initial public tables
         with Session(engine) as db_session:
@@ -195,8 +222,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     else:
         setup_multitenant_onyx()
 
-    optional_telemetry(record_type=RecordType.VERSION, data={"version": __version__})
+    if not MULTI_TENANT:
+        # don't emit a metric for every pod rollover/restart
+        optional_telemetry(
+            record_type=RecordType.VERSION, data={"version": __version__}
+        )
+
+    if AUTH_RATE_LIMITING_ENABLED:
+        await setup_auth_limiter()
+
     yield
+
+    if AUTH_RATE_LIMITING_ENABLED:
+        await close_auth_limiter()
 
 
 def log_http_error(_: Request, exc: Exception) -> JSONResponse:
@@ -247,6 +285,8 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, connector_router)
     include_router_with_global_prefix_prepended(application, user_router)
     include_router_with_global_prefix_prepended(application, credential_router)
+    include_router_with_global_prefix_prepended(application, input_prompt_router)
+    include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
     include_router_with_global_prefix_prepended(application, cc_pair_router)
     include_router_with_global_prefix_prepended(application, folder_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
@@ -257,7 +297,6 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, persona_router)
     include_router_with_global_prefix_prepended(application, admin_persona_router)
     include_router_with_global_prefix_prepended(application, notification_router)
-    include_router_with_global_prefix_prepended(application, prompt_router)
     include_router_with_global_prefix_prepended(application, tool_router)
     include_router_with_global_prefix_prepended(application, admin_tool_router)
     include_router_with_global_prefix_prepended(application, state_router)
@@ -287,42 +326,37 @@ def get_application() -> FastAPI:
         pass
 
     if AUTH_TYPE == AuthType.BASIC or AUTH_TYPE == AuthType.CLOUD:
-        include_router_with_global_prefix_prepended(
+        include_auth_router_with_prefix(
             application,
             fastapi_users.get_auth_router(auth_backend),
             prefix="/auth",
-            tags=["auth"],
         )
 
-        include_router_with_global_prefix_prepended(
+        include_auth_router_with_prefix(
             application,
             fastapi_users.get_register_router(UserRead, UserCreate),
             prefix="/auth",
-            tags=["auth"],
         )
 
-        include_router_with_global_prefix_prepended(
+        include_auth_router_with_prefix(
             application,
             fastapi_users.get_reset_password_router(),
             prefix="/auth",
-            tags=["auth"],
         )
-        include_router_with_global_prefix_prepended(
+        include_auth_router_with_prefix(
             application,
             fastapi_users.get_verify_router(UserRead),
             prefix="/auth",
-            tags=["auth"],
         )
-        include_router_with_global_prefix_prepended(
+        include_auth_router_with_prefix(
             application,
             fastapi_users.get_users_router(UserRead, UserUpdate),
             prefix="/users",
-            tags=["users"],
         )
 
     if AUTH_TYPE == AuthType.GOOGLE_OAUTH:
         oauth_client = GoogleOAuth2(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET)
-        include_router_with_global_prefix_prepended(
+        include_auth_router_with_prefix(
             application,
             create_onyx_oauth_router(
                 oauth_client,
@@ -334,15 +368,13 @@ def get_application() -> FastAPI:
                 redirect_url=f"{WEB_DOMAIN}/auth/oauth/callback",
             ),
             prefix="/auth/oauth",
-            tags=["auth"],
         )
 
         # Need basic auth router for `logout` endpoint
-        include_router_with_global_prefix_prepended(
+        include_auth_router_with_prefix(
             application,
             fastapi_users.get_logout_router(auth_backend),
             prefix="/auth",
-            tags=["auth"],
         )
 
     application.add_exception_handler(

@@ -11,7 +11,7 @@ from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.configs.constants import KV_CUSTOMER_UUID_KEY
 from onyx.configs.constants import KV_INSTANCE_DOMAIN_KEY
 from onyx.configs.constants import MilestoneRecordType
-from onyx.db.engine import get_sqlalchemy_engine
+from onyx.db.engine import get_session_with_tenant
 from onyx.db.milestone import create_milestone_if_not_exists
 from onyx.db.models import User
 from onyx.key_value_store.factory import get_kv_store
@@ -21,6 +21,7 @@ from onyx.utils.variable_functionality import (
 )
 from onyx.utils.variable_functionality import noop_fallback
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 _DANSWER_TELEMETRY_ENDPOINT = "https://telemetry.onyx.app/anonymous_telemetry"
 _CACHED_UUID: str | None = None
@@ -33,15 +34,25 @@ class RecordType(str, Enum):
     USAGE = "usage"
     LATENCY = "latency"
     FAILURE = "failure"
+    METRIC = "metric"
 
 
-def get_or_generate_uuid() -> str:
+def _get_or_generate_customer_id_mt(tenant_id: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_X500, tenant_id))
+
+
+def get_or_generate_uuid(tenant_id: str | None) -> str:
+    # TODO: split out the whole "instance UUID" generation logic into a separate
+    # utility function. Telemetry should not be aware at all of how the UUID is
+    # generated/stored.
+    # TODO: handle potential race condition for UUID generation. Doesn't matter for
+    # the telemetry case, but if this is used generally it should be handled.
     global _CACHED_UUID
 
     if _CACHED_UUID is not None:
         return _CACHED_UUID
 
-    kv_store = get_kv_store()
+    kv_store = get_kv_store(tenant_id=tenant_id)
 
     try:
         _CACHED_UUID = cast(str, kv_store.load(KV_CUSTOMER_UUID_KEY))
@@ -52,18 +63,18 @@ def get_or_generate_uuid() -> str:
     return _CACHED_UUID
 
 
-def _get_or_generate_instance_domain() -> str | None:
+def _get_or_generate_instance_domain(tenant_id: str | None = None) -> str | None:  #
     global _CACHED_INSTANCE_DOMAIN
 
     if _CACHED_INSTANCE_DOMAIN is not None:
         return _CACHED_INSTANCE_DOMAIN
 
-    kv_store = get_kv_store()
+    kv_store = get_kv_store(tenant_id=tenant_id)
 
     try:
         _CACHED_INSTANCE_DOMAIN = cast(str, kv_store.load(KV_INSTANCE_DOMAIN_KEY))
     except KvKeyNotFoundError:
-        with Session(get_sqlalchemy_engine()) as db_session:
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             first_user = db_session.query(User).first()
             if first_user:
                 _CACHED_INSTANCE_DOMAIN = first_user.email.split("@")[-1]
@@ -75,16 +86,25 @@ def _get_or_generate_instance_domain() -> str | None:
 
 
 def optional_telemetry(
-    record_type: RecordType, data: dict, user_id: str | None = None
+    record_type: RecordType,
+    data: dict,
+    user_id: str | None = None,
+    tenant_id: str | None = None,
 ) -> None:
     if DISABLE_TELEMETRY:
         return
+
+    tenant_id = tenant_id or CURRENT_TENANT_ID_CONTEXTVAR.get()
 
     try:
 
         def telemetry_logic() -> None:
             try:
-                customer_uuid = get_or_generate_uuid()
+                customer_uuid = (
+                    _get_or_generate_customer_id_mt(tenant_id)
+                    if MULTI_TENANT
+                    else get_or_generate_uuid(tenant_id)
+                )
                 payload = {
                     "data": data,
                     "record": record_type,
@@ -92,9 +112,12 @@ def optional_telemetry(
                     # For cases where the User itself is None, a string is provided instead
                     "user_id": user_id,
                     "customer_uuid": customer_uuid,
+                    "is_cloud": MULTI_TENANT,
                 }
                 if ENTERPRISE_EDITION_ENABLED:
-                    payload["instance_domain"] = _get_or_generate_instance_domain()
+                    payload["instance_domain"] = _get_or_generate_instance_domain(
+                        tenant_id
+                    )
                 requests.post(
                     _DANSWER_TELEMETRY_ENDPOINT,
                     headers={"Content-Type": "application/json"},

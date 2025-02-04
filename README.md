@@ -3,7 +3,7 @@
 <a name="readme-top"></a>
 
 <h2 align="center">
-<a href="https://www.onyx.app/"> <img width="50%" src="https://github.com/onyx-dot-app/onyx/blob/logo/LogoOnyx.png?raw=true)" /></a>
+<a href="https://www.onyx.app/"> <img width="50%" src="https://github.com/onyx-dot-app/onyx/blob/logo/OnyxLogoCropped.jpg?raw=true)" /></a>
 </h2>
 
 <p align="center">
@@ -13,7 +13,7 @@
 <a href="https://docs.onyx.app/" target="_blank">
     <img src="https://img.shields.io/badge/docs-view-blue" alt="Documentation">
 </a>
-<a href="https://join.slack.com/t/danswer/shared_invite/zt-1w76msxmd-HJHLe3KNFIAIzk_0dSOKaQ" target="_blank">
+<a href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA" target="_blank">
     <img src="https://img.shields.io/badge/slack-join-blue.svg?logo=slack" alt="Slack">
 </a>
 <a href="https://discord.gg/TDJ59cGV2X" target="_blank">
@@ -24,7 +24,7 @@
 </a>
 </p>
 
-<strong>[Onyx](https://www.onyx.app/)</strong> (Formerly Danswer) is the AI Assistant connected to your company's docs, apps, and people.
+<strong>[Onyx](https://www.onyx.app/)</strong> (formerly Danswer) is the AI Assistant connected to your company's docs, apps, and people.
 Onyx provides a Chat interface and plugs into any LLM of your choice. Onyx can be deployed anywhere and for any
 scale - on a laptop, on-premise, or to cloud. Since you own the deployment, your user data and chats are fully in your
 own control. Onyx is dual Licensed with most of it under MIT license and designed to be modular and easily extensible. The system also comes fully ready
@@ -119,7 +119,7 @@ There are two editions of Onyx:
   - Whitelabeling
   - API key authentication
   - Encryption of secrets
-  - Any many more! Checkout [our website](https://www.onyx.app/) for the latest.
+  - And many more! Checkout [our website](https://www.onyx.app/) for the latest.
 
 To try the Onyx Enterprise Edition:
 
@@ -133,15 +133,3 @@ Looking to contribute? Please check out the [Contribution Guide](CONTRIBUTING.md
 ## ⭐Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=onyx-dot-app/onyx&type=Date)](https://star-history.com/#onyx-dot-app/onyx&Date)
-
-## ✨Contributors
-
-<a href="https://github.com/onyx-dot-app/onyx/graphs/contributors">
-  <img alt="contributors" src="https://contrib.rocks/image?repo=onyx-dot-app/onyx"/>
-</a>
-
-<p align="right" style="font-size: 14px; color: #555; margin-top: 20px;">
-    <a href="#readme-top" style="text-decoration: none; color: #007bff; font-weight: bold;">
-        ↑ Back to Top ↑
-    </a>
-</p>

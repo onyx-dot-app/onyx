@@ -37,6 +37,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from onyx.utils.timing import log_function_time
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
 
@@ -163,6 +164,17 @@ class SearchPipeline:
         # These chunks are ordered, deduped, and contain no large chunks
         retrieved_chunks = self._get_chunks()
 
+        # If ee is enabled, censor the chunk sections based on user access
+        # Otherwise, return the retrieved chunks
+        censored_chunks = fetch_ee_implementation_or_noop(
+            "onyx.external_permissions.post_query_censoring",
+            "_post_query_chunk_censoring",
+            retrieved_chunks,
+        )(
+            chunks=retrieved_chunks,
+            user=self.user,
+        )
+
         above = self.search_query.chunks_above
         below = self.search_query.chunks_below
 
@@ -175,7 +187,7 @@ class SearchPipeline:
             seen_document_ids = set()
 
             # This preserves the ordering since the chunks are retrieved in score order
-            for chunk in retrieved_chunks:
+            for chunk in censored_chunks:
                 if chunk.document_id not in seen_document_ids:
                     seen_document_ids.add(chunk.document_id)
                     chunk_requests.append(
@@ -225,7 +237,7 @@ class SearchPipeline:
         #   This maintains the original chunks ordering. Note, we cannot simply sort by score here
         #   as reranking flow may wipe the scores for a lot of the chunks.
         doc_chunk_ranges_map = defaultdict(list)
-        for chunk in retrieved_chunks:
+        for chunk in censored_chunks:
             # The list of ranges for each document is ordered by score
             doc_chunk_ranges_map[chunk.document_id].append(
                 ChunkRange(
@@ -274,11 +286,11 @@ class SearchPipeline:
 
         # In case of failed parallel calls to Vespa, at least we should have the initial retrieved chunks
         doc_chunk_ind_to_chunk.update(
-            {(chunk.document_id, chunk.chunk_id): chunk for chunk in retrieved_chunks}
+            {(chunk.document_id, chunk.chunk_id): chunk for chunk in censored_chunks}
         )
 
         # Build the surroundings for all of the initial retrieved chunks
-        for chunk in retrieved_chunks:
+        for chunk in censored_chunks:
             start_ind = max(0, chunk.chunk_id - above)
             end_ind = chunk.chunk_id + below
 

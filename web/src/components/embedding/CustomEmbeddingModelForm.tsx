@@ -102,7 +102,6 @@ export function CustomEmbeddingModelForm({
 
             <Button
               type="submit"
-              onClick={() => console.log(errors)}
               disabled={isSubmitting}
               className="w-64 mx-auto"
             >

@@ -3,10 +3,7 @@ import { use } from "react";
 
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { refreshDocumentSets, useDocumentSets } from "../hooks";
-import {
-  useConnectorCredentialIndexingStatus,
-  useUserGroups,
-} from "@/lib/hooks";
+import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { BookmarkIcon } from "@/components/icons/icons";
@@ -31,7 +28,7 @@ function Main({ documentSetId }: { documentSetId: number }) {
     data: ccPairs,
     isLoading: isCCPairsLoading,
     error: ccPairsError,
-  } = useConnectorCredentialIndexingStatus();
+  } = useConnectorStatus();
 
   // EE only
   const [userGroupsIsLoadingState, setUserGroupsIsLoadingState] =

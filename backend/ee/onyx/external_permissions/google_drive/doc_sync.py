@@ -120,9 +120,12 @@ def _get_permissions_from_slim_doc(
         elif permission_type == "anyone":
             public = True
 
+    drive_id = permission_info.get("drive_id")
+    group_ids = group_emails | ({drive_id} if drive_id is not None else set())
+
     return ExternalAccess(
         external_user_emails=user_emails,
-        external_user_group_ids=group_emails,
+        external_user_group_ids=group_ids,
         is_public=public,
     )
 

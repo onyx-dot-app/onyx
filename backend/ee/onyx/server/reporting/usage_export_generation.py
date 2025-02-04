@@ -13,9 +13,8 @@ from ee.onyx.db.usage_export import get_all_empty_chat_message_entries
 from ee.onyx.db.usage_export import write_usage_report
 from ee.onyx.server.reporting.usage_export_models import UsageReportMetadata
 from ee.onyx.server.reporting.usage_export_models import UserSkeleton
-from onyx.auth.schemas import UserStatus
 from onyx.configs.constants import FileOrigin
-from onyx.db.users import list_users
+from onyx.db.users import get_all_users
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
@@ -84,15 +83,15 @@ def generate_user_report(
         max_size=MAX_IN_MEMORY_SIZE, mode="w+"
     ) as temp_file:
         csvwriter = csv.writer(temp_file, delimiter=",")
-        csvwriter.writerow(["user_id", "status"])
+        csvwriter.writerow(["user_id", "is_active"])
 
-        users = list_users(db_session)
+        users = get_all_users(db_session)
         for user in users:
             user_skeleton = UserSkeleton(
                 user_id=str(user.id),
-                status=UserStatus.LIVE if user.is_active else UserStatus.DEACTIVATED,
+                is_active=user.is_active,
             )
-            csvwriter.writerow([user_skeleton.user_id, user_skeleton.status])
+            csvwriter.writerow([user_skeleton.user_id, user_skeleton.is_active])
 
         temp_file.seek(0)
         file_store.save_file(

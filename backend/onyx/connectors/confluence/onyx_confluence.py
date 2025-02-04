@@ -119,6 +119,7 @@ def handle_confluence_rate_limit(confluence_call: F) -> F:
 
 
 _DEFAULT_PAGINATION_LIMIT = 1000
+_MINIMUM_PAGINATION_LIMIT = 50
 
 
 class OnyxConfluence(Confluence):
@@ -131,32 +132,6 @@ class OnyxConfluence(Confluence):
     def __init__(self, url: str, *args: Any, **kwargs: Any) -> None:
         super(OnyxConfluence, self).__init__(url, *args, **kwargs)
         self._wrap_methods()
-
-    def get_current_user(self, expand: str | None = None) -> Any:
-        """
-        Implements a method that isn't in the third party client.
-
-        Get information about the current user
-        :param expand: OPTIONAL expand for get status of user.
-                Possible param is "status". Results are "Active, Deactivated"
-        :return: Returns the user details
-        """
-
-        from atlassian.errors import ApiPermissionError  # type:ignore
-
-        url = "rest/api/user/current"
-        params = {}
-        if expand:
-            params["expand"] = expand
-        try:
-            response = self.get(url, params=params)
-        except HTTPError as e:
-            if e.response.status_code == 403:
-                raise ApiPermissionError(
-                    "The calling user does not have permission", reason=e
-                )
-            raise
-        return response
 
     def _wrap_methods(self) -> None:
         """
@@ -184,27 +159,67 @@ class OnyxConfluence(Confluence):
         url_suffix += f"{connection_char}limit={limit}"
 
         while url_suffix:
+            logger.debug(f"Making confluence call to {url_suffix}")
             try:
-                logger.debug(f"Making confluence call to {url_suffix}")
-                next_response = self.get(url_suffix)
+                raw_response = self.get(
+                    path=url_suffix,
+                    advanced_mode=True,
+                )
+            except Exception as e:
+                logger.exception(f"Error in confluence call to {url_suffix}")
+                raise e
+
+            try:
+                raw_response.raise_for_status()
             except Exception as e:
                 logger.warning(f"Error in confluence call to {url_suffix}")
 
                 # If the problematic expansion is in the url, replace it
                 # with the replacement expansion and try again
                 # If that fails, raise the error
-                if _PROBLEMATIC_EXPANSIONS not in url_suffix:
-                    logger.exception(f"Error in confluence call to {url_suffix}")
-                    raise e
-                logger.warning(
-                    f"Replacing {_PROBLEMATIC_EXPANSIONS} with {_REPLACEMENT_EXPANSIONS}"
-                    " and trying again."
+                if _PROBLEMATIC_EXPANSIONS in url_suffix:
+                    logger.warning(
+                        f"Replacing {_PROBLEMATIC_EXPANSIONS} with {_REPLACEMENT_EXPANSIONS}"
+                        " and trying again."
+                    )
+                    url_suffix = url_suffix.replace(
+                        _PROBLEMATIC_EXPANSIONS,
+                        _REPLACEMENT_EXPANSIONS,
+                    )
+                    continue
+                if (
+                    raw_response.status_code == 500
+                    and limit > _MINIMUM_PAGINATION_LIMIT
+                ):
+                    new_limit = limit // 2
+                    logger.warning(
+                        f"Error in confluence call to {url_suffix} \n"
+                        f"Raw Response Text: {raw_response.text} \n"
+                        f"Full Response: {raw_response.__dict__} \n"
+                        f"Error: {e} \n"
+                        f"Reducing limit from {limit} to {new_limit} and trying again."
+                    )
+                    url_suffix = url_suffix.replace(
+                        f"limit={limit}", f"limit={new_limit}"
+                    )
+                    limit = new_limit
+                    continue
+
+                logger.exception(
+                    f"Error in confluence call to {url_suffix} \n"
+                    f"Raw Response Text: {raw_response.text} \n"
+                    f"Full Response: {raw_response.__dict__} \n"
+                    f"Error: {e} \n"
                 )
-                url_suffix = url_suffix.replace(
-                    _PROBLEMATIC_EXPANSIONS,
-                    _REPLACEMENT_EXPANSIONS,
+                raise e
+
+            try:
+                next_response = raw_response.json()
+            except Exception as e:
+                logger.exception(
+                    f"Failed to parse response as JSON. Response: {raw_response.__dict__}"
                 )
-                continue
+                raise e
 
             # yield the results individually
             yield from next_response.get("results", [])
@@ -311,6 +326,62 @@ class OnyxConfluence(Confluence):
         """
         group_name = quote(group_name)
         yield from self._paginate_url(f"rest/api/group/{group_name}/member", limit)
+
+    def get_all_space_permissions_server(
+        self,
+        space_key: str,
+    ) -> list[dict[str, Any]]:
+        """
+        This is a confluence server specific method that can be used to
+        fetch the permissions of a space.
+        This is better logging than calling the get_space_permissions method
+        because it returns a jsonrpc response.
+        TODO: Make this call these endpoints for newer confluence versions:
+        - /rest/api/space/{spaceKey}/permissions
+        - /rest/api/space/{spaceKey}/permissions/anonymous
+        """
+        url = "rpc/json-rpc/confluenceservice-v2"
+        data = {
+            "jsonrpc": "2.0",
+            "method": "getSpacePermissionSets",
+            "id": 7,
+            "params": [space_key],
+        }
+        response = self.post(url, data=data)
+        logger.debug(f"jsonrpc response: {response}")
+        if not response.get("result"):
+            logger.warning(
+                f"No jsonrpc response for space permissions for space {space_key}"
+                f"\nResponse: {response}"
+            )
+
+        return response.get("result", [])
+
+    def get_current_user(self, expand: str | None = None) -> Any:
+        """
+        Implements a method that isn't in the third party client.
+
+        Get information about the current user
+        :param expand: OPTIONAL expand for get status of user.
+                Possible param is "status". Results are "Active, Deactivated"
+        :return: Returns the user details
+        """
+
+        from atlassian.errors import ApiPermissionError  # type:ignore
+
+        url = "rest/api/user/current"
+        params = {}
+        if expand:
+            params["expand"] = expand
+        try:
+            response = self.get(url, params=params)
+        except HTTPError as e:
+            if e.response.status_code == 403:
+                raise ApiPermissionError(
+                    "The calling user does not have permission", reason=e
+                )
+            raise
+        return response
 
 
 def _validate_connector_configuration(

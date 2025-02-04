@@ -302,6 +302,11 @@ def stream_chat_message_objects(
     enforce_chat_session_id_for_search_docs: bool = True,
     bypass_acl: bool = False,
     include_contexts: bool = False,
+    # a string which represents the history of a conversation. Used in cases like
+    # Slack threads where the conversation cannot be represented by a chain of User/Assistant
+    # messages.
+    # NOTE: is not stored in the database at all.
+    single_message_history: str | None = None,
 ) -> ChatPacketStream:
     """Streams in order:
     1. [conditional] Retrieved documents if a search needs to be run
@@ -707,6 +712,7 @@ def stream_chat_message_objects(
             ],
             tools=tools,
             force_use_tool=_get_force_search_settings(new_msg_req, tools),
+            single_message_history=single_message_history,
         )
 
         reference_db_search_docs = None

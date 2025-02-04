@@ -29,6 +29,7 @@ import { useRef, useState } from "react";
 import remarkGfm from "remark-gfm";
 import { EditIcon } from "@/components/icons/icons";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export function SectionHeader({
   children,
@@ -90,7 +91,7 @@ export function ExplanationText({
 }) {
   return link ? (
     <a
-      className="underline text-text-500 cursor-pointer text-sm font-medium"
+      className="underline text-text-500 cursor-pointer text-xs font-medium"
       target="_blank"
       href={link}
     >
@@ -141,13 +142,16 @@ export function TextFormField({
   explanationText,
   explanationLink,
   small,
+  maxWidth,
   removeLabel,
   min,
+  includeForgotPassword,
   onChange,
   width,
   vertical,
+  className,
 }: {
-  value?: string;
+  value?: string; // Escape hatch for setting the value of the field - conflicts with Formik
   name: string;
   removeLabel?: boolean;
   label: string;
@@ -163,22 +167,25 @@ export function TextFormField({
   defaultHeight?: string;
   isCode?: boolean;
   fontSize?: "sm" | "md" | "lg";
+  maxWidth?: string;
   hideError?: boolean;
   tooltip?: string;
   explanationText?: string;
   explanationLink?: string;
   small?: boolean;
   min?: number;
+  includeForgotPassword?: boolean;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   width?: string;
   vertical?: boolean;
+  className?: string;
 }) {
   let heightString = defaultHeight || "";
   if (isTextArea && !heightString) {
     heightString = "h-28";
   }
 
-  const [field, , helpers] = useField(name);
+  const [, , helpers] = useField(name);
   const { setValue } = helpers;
 
   const handleChange = (
@@ -207,11 +214,15 @@ export function TextFormField({
     },
   };
 
-  const sizeClass = textSizeClasses[fontSize || "md"];
+  const sizeClass = textSizeClasses[fontSize || "sm"];
 
   return (
-    <div className={`w-full ${width}`}>
-      <div className={`flex ${vertical ? "flex-col" : "flex-row"} items-start`}>
+    <div className={`w-full ${maxWidth} ${width}`}>
+      <div
+        className={`flex ${
+          vertical ? "flex-col" : "flex-row"
+        } gap-x-2 items-start`}
+      >
         <div className="flex gap-x-2 items-center">
           {!removeLabel && (
             <Label className={sizeClass.label} small={small}>
@@ -234,7 +245,7 @@ export function TextFormField({
         )}
       </div>
       {subtext && <SubLabel>{subtext}</SubLabel>}
-      <div className={`w-full flex ${includeRevert && "gap-x-2"}`}>
+      <div className={`w-full flex ${includeRevert && "gap-x-2"} relative`}>
         <Field
           onChange={handleChange}
           min={min}
@@ -255,16 +266,26 @@ export function TextFormField({
             mt-1
             placeholder:font-description 
             placeholder:${sizeClass.placeholder}
-            placeholder:text-text-400
+            caret-accent
+            placeholder:text-text-muted
             ${heightString}
             ${sizeClass.input}
-            ${disabled ? " bg-background-strong" : " bg-white"}
+            ${disabled ? " bg-background-strong" : " bg-white/80"}
             ${isCode ? " font-mono" : ""}
+            ${className}
           `}
           disabled={disabled}
           placeholder={placeholder}
           autoComplete={autoCompleteDisabled ? "off" : undefined}
         />
+        {includeForgotPassword && (
+          <Link
+            href="/auth/forgot-password"
+            className="absolute right-3 top-1/2 mt-[3px] transform -translate-y-1/2 text-xs text-blue-500 cursor-pointer"
+          >
+            Forgot password?
+          </Link>
+        )}
       </div>
 
       {explanationText && (
@@ -610,6 +631,8 @@ interface SelectorFormFieldProps {
   defaultValue?: string;
   tooltip?: string;
   includeReset?: boolean;
+  fontSize?: "sm" | "md" | "lg";
+  small?: boolean;
 }
 
 export function SelectorFormField({
@@ -623,6 +646,8 @@ export function SelectorFormField({
   defaultValue,
   tooltip,
   includeReset = false,
+  fontSize = "sm",
+  small = false,
 }: SelectorFormFieldProps) {
   const [field] = useField<string>(name);
   const { setFieldValue } = useFormikContext();
@@ -632,11 +657,33 @@ export function SelectorFormField({
     (option) => option.value?.toString() === field.value?.toString()
   );
 
+  const textSizeClasses = {
+    sm: {
+      label: "text-sm",
+      input: "text-sm",
+      placeholder: "text-sm",
+    },
+    md: {
+      label: "text-base",
+      input: "text-base",
+      placeholder: "text-base",
+    },
+    lg: {
+      label: "text-lg",
+      input: "text-lg",
+      placeholder: "text-lg",
+    },
+  };
+
+  const sizeClass = textSizeClasses[fontSize];
+
   return (
     <div>
       {label && (
         <div className="flex gap-x-2 items-center">
-          <Label>{label}</Label>
+          <Label className={sizeClass.label} small={small}>
+            {label}
+          </Label>
           {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
         </div>
       )}
@@ -653,7 +700,7 @@ export function SelectorFormField({
           }
           defaultValue={defaultValue}
         >
-          <SelectTrigger>
+          <SelectTrigger className={sizeClass.input}>
             <SelectValue placeholder="Select...">
               {currentlySelected?.name || defaultValue || ""}
             </SelectValue>
@@ -665,6 +712,7 @@ export function SelectorFormField({
               className={`
                ${maxHeight ? `${maxHeight}` : "max-h-72"}
                overflow-y-scroll
+               ${sizeClass.input}
               `}
               container={container}
             >

@@ -28,13 +28,35 @@ class RetryDocumentIndex:
         wait=wait_random_exponential(multiplier=1, max=MAX_WAIT),
         stop=stop_after_delay(STOP_AFTER),
     )
-    def delete_single(self, doc_id: str) -> int:
-        return self.index.delete_single(doc_id)
+    def delete_single(
+        self,
+        doc_id: str,
+        *,
+        tenant_id: str | None,
+        chunk_count: int | None,
+    ) -> int:
+        return self.index.delete_single(
+            doc_id,
+            tenant_id=tenant_id,
+            chunk_count=chunk_count,
+        )
 
     @retry(
         retry=retry_if_exception_type(httpx.ReadTimeout),
         wait=wait_random_exponential(multiplier=1, max=MAX_WAIT),
         stop=stop_after_delay(STOP_AFTER),
     )
-    def update_single(self, doc_id: str, fields: VespaDocumentFields) -> int:
-        return self.index.update_single(doc_id, fields)
+    def update_single(
+        self,
+        doc_id: str,
+        *,
+        tenant_id: str | None,
+        chunk_count: int | None,
+        fields: VespaDocumentFields,
+    ) -> int:
+        return self.index.update_single(
+            doc_id,
+            tenant_id=tenant_id,
+            chunk_count=chunk_count,
+            fields=fields,
+        )

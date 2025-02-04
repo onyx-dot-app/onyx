@@ -6,6 +6,7 @@ from typing import TypeVar
 
 from dateutil.parser import parse
 
+from onyx.configs.app_configs import CONNECTOR_LOCALHOST_OVERRIDE
 from onyx.configs.constants import IGNORE_FOR_QA
 from onyx.connectors.models import BasicExpertInfo
 from onyx.utils.text_processing import is_valid_email
@@ -71,3 +72,10 @@ def process_in_batches(
 
 def get_metadata_keys_to_ignore() -> list[str]:
     return [IGNORE_FOR_QA]
+
+
+def get_oauth_callback_uri(base_domain: str, connector_id: str) -> str:
+    if CONNECTOR_LOCALHOST_OVERRIDE:
+        # Used for development
+        base_domain = CONNECTOR_LOCALHOST_OVERRIDE
+    return f"{base_domain.strip('/')}/connector/oauth/callback/{connector_id}"

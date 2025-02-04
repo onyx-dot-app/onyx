@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -5,6 +6,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
@@ -36,12 +38,13 @@ class DATestUser(BaseModel):
     email: str
     password: str
     headers: dict
+    role: UserRole
+    is_active: bool
 
 
-class DATestPersonaCategory(BaseModel):
+class DATestPersonaLabel(BaseModel):
     id: int | None = None
     name: str
-    description: str | None
 
 
 class DATestCredential(BaseModel):
@@ -125,14 +128,7 @@ class DATestPersona(BaseModel):
     llm_model_version_override: str | None
     users: list[str]
     groups: list[int]
-    category_id: int | None = None
-
-
-#
-class DATestChatSession(BaseModel):
-    id: UUID
-    persona_id: int
-    description: str
+    label_ids: list[int]
 
 
 class DATestChatMessage(BaseModel):
@@ -140,6 +136,16 @@ class DATestChatMessage(BaseModel):
     chat_session_id: UUID
     parent_message_id: int | None
     message: str
+
+
+class DATestChatSession(BaseModel):
+    id: UUID
+    persona_id: int
+    description: str
+
+
+class DAQueryHistoryEntry(DATestChatSession):
+    feedback_type: QAFeedbackType | None
 
 
 class StreamedResponse(BaseModel):
@@ -150,3 +156,18 @@ class StreamedResponse(BaseModel):
     relevance_summaries: list[dict[str, Any]] | None = None
     tool_result: Any | None = None
     user: str | None = None
+
+
+class DATestGatingType(str, Enum):
+    FULL = "full"
+    PARTIAL = "partial"
+    NONE = "none"
+
+
+class DATestSettings(BaseModel):
+    """General settings"""
+
+    maximum_chat_retention_days: int | None = None
+    gpu_enabled: bool | None = None
+    product_gating: DATestGatingType = DATestGatingType.NONE
+    anonymous_user_enabled: bool | None = None

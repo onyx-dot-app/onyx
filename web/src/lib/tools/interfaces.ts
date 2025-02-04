@@ -13,6 +13,9 @@ export interface ToolSnapshot {
 
   // only specified for Custom Tools. ID of the tool in the codebase.
   in_code_tool_id: string | null;
+
+  // whether to pass through the user's OAuth token as Authorization header
+  passthrough_auth: boolean;
 }
 
 export interface MethodSpec {

@@ -15,6 +15,7 @@ from onyx.document_index.vespa_constants import METADATA_LIST
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -59,7 +60,8 @@ def build_vespa_filters(
 
     filter_str = f"!({HIDDEN}=true) and " if not include_hidden else ""
 
-    if filters.tenant_id:
+    # If running in multi-tenant mode, we may want to filter by tenant_id
+    if filters.tenant_id and MULTI_TENANT:
         filter_str += f'({TENANT_ID} contains "{filters.tenant_id}") and '
 
     # CAREFUL touching this one, currently there is no second ACL double-check post retrieval

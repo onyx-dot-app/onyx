@@ -1,6 +1,7 @@
 import contextlib
 import time
 from collections.abc import Generator
+from collections.abc import Iterable
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timezone
@@ -13,6 +14,7 @@ from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import tuple_
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
@@ -20,10 +22,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import null
 
 from onyx.configs.constants import DEFAULT_BOOST
+from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
+from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Document as DbDocument
@@ -105,7 +109,8 @@ def get_all_documents_needing_vespa_sync_for_cc_pair(
     db_session: Session, cc_pair_id: int
 ) -> list[DbDocument]:
     cc_pair = get_connector_credential_pair_from_id(
-        cc_pair_id=cc_pair_id, db_session=db_session
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
     )
     if not cc_pair:
         raise ValueError(f"No CC pair found with ID: {cc_pair_id}")
@@ -135,7 +140,8 @@ def get_documents_for_cc_pair(
     cc_pair_id: int,
 ) -> list[DbDocument]:
     cc_pair = get_connector_credential_pair_from_id(
-        cc_pair_id=cc_pair_id, db_session=db_session
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
     )
     if not cc_pair:
         raise ValueError(f"No CC pair found with ID: {cc_pair_id}")
@@ -222,10 +228,13 @@ def get_document_counts_for_cc_pairs(
             func.count(),
         )
         .where(
-            tuple_(
-                DocumentByConnectorCredentialPair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id,
-            ).in_(cc_ids)
+            and_(
+                tuple_(
+                    DocumentByConnectorCredentialPair.connector_id,
+                    DocumentByConnectorCredentialPair.credential_id,
+                ).in_(cc_ids),
+                DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+            )
         )
         .group_by(
             DocumentByConnectorCredentialPair.connector_id,
@@ -378,16 +387,38 @@ def upsert_document_by_connector_credential_pair(
                     id=doc_id,
                     connector_id=connector_id,
                     credential_id=credential_id,
+                    has_been_indexed=False,
                 )
             )
             for doc_id in document_ids
         ]
     )
-    # for now, there are no columns to update. If more metadata is added, then this
-    # needs to change to an `on_conflict_do_update`
+    # this must be `on_conflict_do_nothing` rather than `on_conflict_do_update`
+    # since we don't want to update the `has_been_indexed` field for documents
+    # that already exist
     on_conflict_stmt = insert_stmt.on_conflict_do_nothing()
     db_session.execute(on_conflict_stmt)
     db_session.commit()
+
+
+def mark_document_as_indexed_for_cc_pair__no_commit(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    document_ids: Iterable[str],
+) -> None:
+    """Should be called only after a successful index operation for a batch."""
+    db_session.execute(
+        update(DocumentByConnectorCredentialPair)
+        .where(
+            and_(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+                DocumentByConnectorCredentialPair.id.in_(document_ids),
+            )
+        )
+        .values(has_been_indexed=True)
+    )
 
 
 def update_docs_updated_at__no_commit(
@@ -414,6 +445,18 @@ def update_docs_last_modified__no_commit(
     now = datetime.now(timezone.utc)
     for doc in documents_to_update:
         doc.last_modified = now
+
+
+def update_docs_chunk_count__no_commit(
+    document_ids: list[str],
+    doc_id_to_chunk_count: dict[str, int],
+    db_session: Session,
+) -> None:
+    documents_to_update = (
+        db_session.query(DbDocument).filter(DbDocument.id.in_(document_ids)).all()
+    )
+    for doc in documents_to_update:
+        doc.chunk_count = doc_id_to_chunk_count[doc.id]
 
 
 def mark_document_as_modified(
@@ -612,3 +655,86 @@ def get_document(
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc: DbDocument | None = db_session.execute(stmt).scalar_one_or_none()
     return doc
+
+
+def get_cc_pairs_for_document(
+    db_session: Session,
+    document_id: str,
+) -> list[ConnectorCredentialPair]:
+    stmt = (
+        select(ConnectorCredentialPair)
+        .join(
+            DocumentByConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(DocumentByConnectorCredentialPair.id == document_id)
+    )
+    return list(db_session.execute(stmt).scalars().all())
+
+
+def get_document_sources(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, DocumentSource]:
+    """Gets the sources for a list of document IDs.
+    Returns a dictionary mapping document ID to its source.
+    If a document has multiple sources (multiple CC pairs), returns the first one found.
+    """
+    stmt = (
+        select(
+            DocumentByConnectorCredentialPair.id,
+            Connector.source,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .join(
+            Connector,
+            ConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .distinct()
+    )
+
+    results = db_session.execute(stmt).all()
+    return {doc_id: source for doc_id, source in results}
+
+
+def fetch_chunk_counts_for_documents(
+    document_ids: list[str],
+    db_session: Session,
+) -> list[tuple[str, int]]:
+    """
+    Return a list of (document_id, chunk_count) tuples.
+    If a document_id is not found in the database, it will be returned with a chunk_count of 0.
+    """
+    stmt = select(DbDocument.id, DbDocument.chunk_count).where(
+        DbDocument.id.in_(document_ids)
+    )
+
+    results = db_session.execute(stmt).all()
+
+    # Create a dictionary of document_id to chunk_count
+    chunk_counts = {str(row.id): row.chunk_count or 0 for row in results}
+
+    # Return a list of tuples, using 0 for documents not found in the database
+    return [(doc_id, chunk_counts.get(doc_id, 0)) for doc_id in document_ids]
+
+
+def fetch_chunk_count_for_document(
+    document_id: str,
+    db_session: Session,
+) -> int | None:
+    stmt = select(DbDocument.chunk_count).where(DbDocument.id == document_id)
+    return db_session.execute(stmt).scalar_one_or_none()

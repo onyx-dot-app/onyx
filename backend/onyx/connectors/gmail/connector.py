@@ -4,6 +4,7 @@ from typing import Dict
 
 from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
+from googleapiclient.errors import HttpError  # type: ignore
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
@@ -249,17 +250,36 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
         return new_creds_dict
 
     def _get_all_user_emails(self) -> list[str]:
-        admin_service = get_admin_service(self.creds, self.primary_admin_email)
-        emails = []
-        for user in execute_paginated_retrieval(
-            retrieval_function=admin_service.users().list,
-            list_key="users",
-            fields=USER_FIELDS,
-            domain=self.google_domain,
-        ):
-            if email := user.get("primaryEmail"):
-                emails.append(email)
-        return emails
+        """
+        List all user emails if we are on a Google Workspace domain.
+        If the domain is gmail.com, or if we attempt to call the Admin SDK and
+        get a 404, fall back to using the single user.
+        """
+
+        try:
+            admin_service = get_admin_service(self.creds, self.primary_admin_email)
+            emails = []
+            for user in execute_paginated_retrieval(
+                retrieval_function=admin_service.users().list,
+                list_key="users",
+                fields=USER_FIELDS,
+                domain=self.google_domain,
+            ):
+                if email := user.get("primaryEmail"):
+                    emails.append(email)
+            return emails
+
+        except HttpError as e:
+            if e.resp.status == 404:
+                logger.warning(
+                    "Received 404 from Admin SDK; this may indicate a personal Gmail account "
+                    "with no Workspace domain. Falling back to single user."
+                )
+                return [self.primary_admin_email]
+            raise
+
+        except Exception:
+            raise
 
     def _fetch_threads(
         self,

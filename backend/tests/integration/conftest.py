@@ -4,8 +4,12 @@ from collections.abc import Generator
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.db.engine import get_session_context_manager
 from onyx.db.search_settings import get_current_search_settings
+from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.managers.user import build_email
+from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.reset import reset_all_multitenant
@@ -55,6 +59,30 @@ def new_admin_user(reset: None) -> DATestUser | None:
         return UserManager.create(name="admin_user")
     except Exception:
         return None
+
+
+@pytest.fixture
+def admin_user() -> DATestUser | None:
+    try:
+        return UserManager.create(name="admin_user")
+    except Exception:
+        pass
+
+    try:
+        return UserManager.login_as_user(
+            DATestUser(
+                id="",
+                email=build_email("admin_user"),
+                password=DEFAULT_PASSWORD,
+                headers=GENERAL_HEADERS,
+                role=UserRole.ADMIN,
+                is_active=True,
+            )
+        )
+    except Exception:
+        pass
+
+    return None
 
 
 @pytest.fixture

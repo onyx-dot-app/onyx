@@ -176,7 +176,6 @@ export function SourceSelector({
                 <SectionTitle>Tags</SectionTitle>
               </div>
               <TagFilter
-                showTagsOnLeft={true}
                 tags={availableTags}
                 selectedTags={selectedTags}
                 setSelectedTags={setSelectedTags}
@@ -337,11 +336,12 @@ export function HorizontalFilters({
   return (
     <div>
       <div className="flex gap-x-3">
-        <div className="w-64">
+        <div className="w-52">
           <DateRangeSelector value={timeRange} onValueChange={setTimeRange} />
         </div>
 
         <FilterDropdown
+          width="w-52"
           options={availableSources.map((source) => {
             return {
               key: source.displayName,
@@ -366,30 +366,32 @@ export function HorizontalFilters({
           }
           defaultDisplay="All Sources"
         />
-
-        <FilterDropdown
-          options={availableDocumentSets.map((documentSet) => {
-            return {
-              key: documentSet.name,
-              display: (
-                <>
-                  <div className="my-auto">
-                    <FiBookmark />
-                  </div>
-                  <span className="ml-2 text-sm">{documentSet.name}</span>
-                </>
-              ),
-            };
-          })}
-          selected={selectedDocumentSets}
-          handleSelect={(option) => handleDocumentSetSelect(option.key)}
-          icon={
-            <div className="my-auto mr-2 w-[16px] h-[16px]">
-              <FiBook size={16} />
-            </div>
-          }
-          defaultDisplay="All Document Sets"
-        />
+        {availableDocumentSets.length > 0 && (
+          <FilterDropdown
+            width="w-52"
+            options={availableDocumentSets.map((documentSet) => {
+              return {
+                key: documentSet.name,
+                display: (
+                  <>
+                    <div className="my-auto">
+                      <FiBookmark />
+                    </div>
+                    <span className="ml-2 text-sm">{documentSet.name}</span>
+                  </>
+                ),
+              };
+            })}
+            selected={selectedDocumentSets}
+            handleSelect={(option) => handleDocumentSetSelect(option.key)}
+            icon={
+              <div className="my-auto mr-2 w-[16px] h-[16px]">
+                <FiBook size={16} />
+              </div>
+            }
+            defaultDisplay="All Document Sets"
+          />
+        )}
       </div>
 
       <div className="flex pb-4 mt-2 h-12">

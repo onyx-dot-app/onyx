@@ -7,11 +7,13 @@ from sqlalchemy import exists
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
+from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
+from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import ConnectorCredentialPair
@@ -27,17 +29,17 @@ from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
-
 logger = setup_logger()
 
 
 def _add_user_filters(
     stmt: Select, user: User | None, get_editable: bool = True
 ) -> Select:
-    # If user is None, assume the user is an admin or auth is disabled
-    if user is None or user.role == UserRole.ADMIN:
+    # If user is None and auth is disabled, assume the user is an admin
+    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
 
+    stmt = stmt.distinct()
     UG__CCpair = aliased(UserGroup__ConnectorCredentialPair)
     User__UG = aliased(User__UserGroup)
 
@@ -61,6 +63,12 @@ def _add_user_filters(
     - if we are not editing, we show all cc_pairs in the groups the user is a curator
     for (as well as public cc_pairs)
     """
+
+    # If user is None, this is an anonymous user and we should only show public cc_pairs
+    if user is None:
+        where_clause = ConnectorCredentialPair.access_type == AccessType.PUBLIC
+        return stmt.where(where_clause)
+
     where_clause = User__UG.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:
         where_clause &= User__UG.is_curator == True  # noqa: E712
@@ -84,21 +92,34 @@ def _add_user_filters(
     return stmt.where(where_clause)
 
 
+def get_connector_credential_pairs_for_user(
+    db_session: Session,
+    user: User | None,
+    get_editable: bool = True,
+    ids: list[int] | None = None,
+    eager_load_connector: bool = False,
+) -> list[ConnectorCredentialPair]:
+    stmt = select(ConnectorCredentialPair).distinct()
+
+    if eager_load_connector:
+        stmt = stmt.options(joinedload(ConnectorCredentialPair.connector))
+
+    stmt = _add_user_filters(stmt, user, get_editable)
+    if ids:
+        stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
+
+    return list(db_session.scalars(stmt).all())
+
+
 def get_connector_credential_pairs(
     db_session: Session,
-    include_disabled: bool = True,
-    user: User | None = None,
-    get_editable: bool = True,
     ids: list[int] | None = None,
 ) -> list[ConnectorCredentialPair]:
     stmt = select(ConnectorCredentialPair).distinct()
-    stmt = _add_user_filters(stmt, user, get_editable)
-    if not include_disabled:
-        stmt = stmt.where(
-            ConnectorCredentialPair.status == ConnectorCredentialPairStatus.ACTIVE
-        )  # noqa
+
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
+
     return list(db_session.scalars(stmt).all())
 
 
@@ -107,7 +128,10 @@ def add_deletion_failure_message(
     cc_pair_id: int,
     failure_message: str,
 ) -> None:
-    cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+    )
     if not cc_pair:
         return
     cc_pair.deletion_failure_message = failure_message
@@ -117,24 +141,21 @@ def add_deletion_failure_message(
 def get_cc_pair_groups_for_ids(
     db_session: Session,
     cc_pair_ids: list[int],
-    user: User | None = None,
-    get_editable: bool = True,
 ) -> list[UserGroup__ConnectorCredentialPair]:
     stmt = select(UserGroup__ConnectorCredentialPair).distinct()
     stmt = stmt.outerjoin(
         ConnectorCredentialPair,
         UserGroup__ConnectorCredentialPair.cc_pair_id == ConnectorCredentialPair.id,
     )
-    stmt = _add_user_filters(stmt, user, get_editable)
     stmt = stmt.where(UserGroup__ConnectorCredentialPair.cc_pair_id.in_(cc_pair_ids))
     return list(db_session.scalars(stmt).all())
 
 
-def get_connector_credential_pair(
+def get_connector_credential_pair_for_user(
+    db_session: Session,
     connector_id: int,
     credential_id: int,
-    db_session: Session,
-    user: User | None = None,
+    user: User | None,
     get_editable: bool = True,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair)
@@ -145,28 +166,36 @@ def get_connector_credential_pair(
     return result.scalar_one_or_none()
 
 
-def get_connector_credential_source_from_id(
-    cc_pair_id: int,
+def get_connector_credential_pair(
     db_session: Session,
-    user: User | None = None,
-    get_editable: bool = True,
-) -> DocumentSource | None:
+    connector_id: int,
+    credential_id: int,
+) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair)
-    stmt = _add_user_filters(stmt, user, get_editable)
-    stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
+    stmt = stmt.where(ConnectorCredentialPair.connector_id == connector_id)
+    stmt = stmt.where(ConnectorCredentialPair.credential_id == credential_id)
     result = db_session.execute(stmt)
-    cc_pair = result.scalar_one_or_none()
-    return cc_pair.connector.source if cc_pair else None
+    return result.scalar_one_or_none()
 
 
-def get_connector_credential_pair_from_id(
+def get_connector_credential_pair_from_id_for_user(
     cc_pair_id: int,
     db_session: Session,
-    user: User | None = None,
+    user: User | None,
     get_editable: bool = True,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair).distinct()
     stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
+    result = db_session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+def get_connector_credential_pair_from_id(
+    db_session: Session,
+    cc_pair_id: int,
+) -> ConnectorCredentialPair | None:
+    stmt = select(ConnectorCredentialPair).distinct()
     stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
@@ -183,7 +212,9 @@ def get_last_successful_attempt_time(
     the CC Pair row in the database"""
     if search_settings.status == IndexModelStatus.PRESENT:
         connector_credential_pair = get_connector_credential_pair(
-            connector_id, credential_id, db_session
+            db_session=db_session,
+            connector_id=connector_id,
+            credential_id=credential_id,
         )
         if (
             connector_credential_pair is None
@@ -244,7 +275,10 @@ def update_connector_credential_pair_from_id(
     net_docs: int | None = None,
     run_dt: datetime | None = None,
 ) -> None:
-    cc_pair = get_connector_credential_pair_from_id(cc_pair_id, db_session)
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+    )
     if not cc_pair:
         logger.warning(
             f"Attempted to update pair for Connector Credential Pair '{cc_pair_id}'"
@@ -269,7 +303,11 @@ def update_connector_credential_pair(
     net_docs: int | None = None,
     run_dt: datetime | None = None,
 ) -> None:
-    cc_pair = get_connector_credential_pair(connector_id, credential_id, db_session)
+    cc_pair = get_connector_credential_pair(
+        db_session=db_session,
+        connector_id=connector_id,
+        credential_id=credential_id,
+    )
     if not cc_pair:
         logger.warning(
             f"Attempted to update pair for connector id {connector_id} "
@@ -310,6 +348,9 @@ def associate_default_cc_pair(db_session: Session) -> None:
     if existing_association is not None:
         return
 
+    # DefaultCCPair has id 1 since it is the first CC pair created
+    # It is DEFAULT_CC_PAIR_ID, but can't set it explicitly because it messed with the
+    # auto-incrementing id
     association = ConnectorCredentialPair(
         connector_id=0,
         credential_id=0,
@@ -348,9 +389,23 @@ def add_credential_to_connector(
     auto_sync_options: dict | None = None,
     initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
     last_successful_index_time: datetime | None = None,
+    seeding_flow: bool = False,
 ) -> StatusResponse:
     connector = fetch_connector_by_id(connector_id, db_session)
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+
+    # If we are in the seeding flow, we shouldn't need to check if the credential belongs to the user
+    if seeding_flow:
+        credential = fetch_credential_by_id(
+            db_session=db_session,
+            credential_id=credential_id,
+        )
+    else:
+        credential = fetch_credential_by_id_for_user(
+            credential_id,
+            user,
+            db_session,
+            get_editable=False,
+        )
 
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")
@@ -427,7 +482,12 @@ def remove_credential_from_connector(
     db_session: Session,
 ) -> StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)
-    credential = fetch_credential_by_id(credential_id, user, db_session)
+    credential = fetch_credential_by_id_for_user(
+        credential_id,
+        user,
+        db_session,
+        get_editable=False,
+    )
 
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")
@@ -438,10 +498,10 @@ def remove_credential_from_connector(
             detail="Credential does not exist or does not belong to user",
         )
 
-    association = get_connector_credential_pair(
+    association = get_connector_credential_pair_for_user(
+        db_session=db_session,
         connector_id=connector_id,
         credential_id=credential_id,
-        db_session=db_session,
         user=user,
         get_editable=True,
     )

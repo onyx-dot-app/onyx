@@ -1,6 +1,7 @@
 import json
 import os
 import urllib.parse
+from typing import cast
 
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import DocumentIndexType
@@ -16,6 +17,7 @@ APP_PORT = 8080
 # prefix from requests directed towards the API server. In these cases, set this to `/api`
 APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 
+SKIP_WARM_UP = os.environ.get("SKIP_WARM_UP", "").lower() == "true"
 
 #####
 # User Facing Features Configs
@@ -53,9 +55,16 @@ MASK_CREDENTIAL_PREFIX = (
     os.environ.get("MASK_CREDENTIAL_PREFIX", "True").lower() != "false"
 )
 
+REDIS_AUTH_EXPIRE_TIME_SECONDS = int(
+    os.environ.get("REDIS_AUTH_EXPIRE_TIME_SECONDS") or 86400 * 7
+)  # 7 days
+
 SESSION_EXPIRE_TIME_SECONDS = int(
     os.environ.get("SESSION_EXPIRE_TIME_SECONDS") or 86400 * 7
 )  # 7 days
+
+# Default request timeout, mostly used by connectors
+REQUEST_TIMEOUT_SECONDS = int(os.environ.get("REQUEST_TIMEOUT_SECONDS") or 60)
 
 # set `VALID_EMAIL_DOMAINS` to a comma seperated list of domains in order to
 # restrict access to Onyx to only users with emails from those domains.
@@ -83,6 +92,12 @@ OAUTH_CLIENT_SECRET = (
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
+# Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
+# By default, this is set to match the Redis expiry time for consistency.
+AUTH_COOKIE_EXPIRE_TIME_SECONDS = int(
+    os.environ.get("AUTH_COOKIE_EXPIRE_TIME_SECONDS") or 86400 * 7
+)  # 7 days
+
 # for basic auth
 REQUIRE_EMAIL_VERIFICATION = (
     os.environ.get("REQUIRE_EMAIL_VERIFICATION", "").lower() == "true"
@@ -91,6 +106,7 @@ SMTP_SERVER = os.environ.get("SMTP_SERVER") or "smtp.gmail.com"
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
 SMTP_USER = os.environ.get("SMTP_USER", None)
 SMTP_PASS = os.environ.get("SMTP_PASS", None)
+EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS])
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
 
 # If set, Onyx will listen to the `expires_at` returned by the identity
@@ -144,6 +160,7 @@ POSTGRES_PASSWORD = urllib.parse.quote_plus(
 POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "localhost"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
+AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
 
 POSTGRES_API_SERVER_POOL_SIZE = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 40
@@ -174,11 +191,35 @@ try:
 except ValueError:
     POSTGRES_IDLE_SESSIONS_TIMEOUT = POSTGRES_IDLE_SESSIONS_TIMEOUT_DEFAULT
 
+USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
+
+
 REDIS_SSL = os.getenv("REDIS_SSL", "").lower() == "true"
 REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
 
+
+REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
+
+# Rate limiting for auth endpoints
+RATE_LIMIT_WINDOW_SECONDS: int | None = None
+_rate_limit_window_seconds_str = os.environ.get("RATE_LIMIT_WINDOW_SECONDS")
+if _rate_limit_window_seconds_str is not None:
+    try:
+        RATE_LIMIT_WINDOW_SECONDS = int(_rate_limit_window_seconds_str)
+    except ValueError:
+        pass
+
+RATE_LIMIT_MAX_REQUESTS: int | None = None
+_rate_limit_max_requests_str = os.environ.get("RATE_LIMIT_MAX_REQUESTS")
+if _rate_limit_max_requests_str is not None:
+    try:
+        RATE_LIMIT_MAX_REQUESTS = int(_rate_limit_max_requests_str)
+    except ValueError:
+        pass
+
+AUTH_RATE_LIMITING_ENABLED = RATE_LIMIT_MAX_REQUESTS and RATE_LIMIT_WINDOW_SECONDS
 # Used for general redis things
 REDIS_DB_NUMBER = int(os.environ.get("REDIS_DB_NUMBER", 0))
 
@@ -245,6 +286,11 @@ try:
     CELERY_WORKER_INDEXING_CONCURRENCY = int(env_value)
 except ValueError:
     CELERY_WORKER_INDEXING_CONCURRENCY = CELERY_WORKER_INDEXING_CONCURRENCY_DEFAULT
+
+# The maximum number of tasks that can be queued up to sync to Vespa in a single pass
+VESPA_SYNC_MAX_TASKS = 1024
+
+DB_YIELD_PER_DEFAULT = 64
 
 #####
 # Connector Configs
@@ -342,11 +388,16 @@ GITLAB_CONNECTOR_INCLUDE_CODE_FILES = (
     os.environ.get("GITLAB_CONNECTOR_INCLUDE_CODE_FILES", "").lower() == "true"
 )
 
+# Typically set to http://localhost:3000 for OAuth connector development
+CONNECTOR_LOCALHOST_OVERRIDE = os.getenv("CONNECTOR_LOCALHOST_OVERRIDE")
+
 # Egnyte specific configs
-EGNYTE_LOCALHOST_OVERRIDE = os.getenv("EGNYTE_LOCALHOST_OVERRIDE")
-EGNYTE_BASE_DOMAIN = os.getenv("EGNYTE_DOMAIN")
 EGNYTE_CLIENT_ID = os.getenv("EGNYTE_CLIENT_ID")
 EGNYTE_CLIENT_SECRET = os.getenv("EGNYTE_CLIENT_SECRET")
+
+# Linear specific configs
+LINEAR_CLIENT_ID = os.getenv("LINEAR_CLIENT_ID")
+LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
 
 DASK_JOB_CLIENT_ENABLED = (
     os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"
@@ -483,6 +534,24 @@ SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
 
 PARSE_WITH_TRAFILATURA = os.environ.get("PARSE_WITH_TRAFILATURA", "").lower() == "true"
 
+# allow for custom error messages for different errors returned by litellm
+# for example, can specify: {"Violated content safety policy": "EVIL REQUEST!!!"}
+# to make it so that if an LLM call returns an error containing "Violated content safety policy"
+# the end user will see "EVIL REQUEST!!!" instead of the default error message.
+_LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS = os.environ.get(
+    "LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS", ""
+)
+LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS: dict[str, str] | None = None
+try:
+    LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS = cast(
+        dict[str, str], json.loads(_LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS)
+    )
+except json.JSONDecodeError:
+    pass
+
+# LLM Model Update API endpoint
+LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")
+
 #####
 # Enterprise Edition Configs
 #####
@@ -521,7 +590,6 @@ CONTROL_PLANE_API_BASE_URL = os.environ.get(
 
 # JWT configuration
 JWT_ALGORITHM = "HS256"
-
 
 #####
 # API Key Configs

@@ -49,10 +49,13 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
           maximum_chat_retention_days: null,
           notifications: [],
           needs_reindexing: false,
+          anonymous_user_enabled: false,
         };
       } else {
         throw new Error(
-          `fetchStandardSettingsSS failed: status=${results[0].status} body=${await results[0].text()}`
+          `fetchStandardSettingsSS failed: status=${
+            results[0].status
+          } body=${await results[0].text()}`
         );
       }
     } else {
@@ -64,7 +67,9 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       if (!results[1].ok) {
         if (results[1].status !== 403 && results[1].status !== 401) {
           throw new Error(
-            `fetchEnterpriseSettingsSS failed: status=${results[1].status} body=${await results[1].text()}`
+            `fetchEnterpriseSettingsSS failed: status=${
+              results[1].status
+            } body=${await results[1].text()}`
           );
         }
       } else {
@@ -77,7 +82,9 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       if (!results[2].ok) {
         if (results[2].status !== 403) {
           throw new Error(
-            `fetchCustomAnalyticsScriptSS failed: status=${results[2].status} body=${await results[2].text()}`
+            `fetchCustomAnalyticsScriptSS failed: status=${
+              results[2].status
+            } body=${await results[2].text()}`
           );
         }
       } else {

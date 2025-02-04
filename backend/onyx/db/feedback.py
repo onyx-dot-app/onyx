@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.db.chat import get_chat_message
@@ -26,7 +27,6 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
-from onyx.document_index.interfaces import DocumentIndex
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -46,10 +46,11 @@ def _fetch_db_doc_by_id(doc_id: str, db_session: Session) -> DbDocument:
 def _add_user_filters(
     stmt: Select, user: User | None, get_editable: bool = True
 ) -> Select:
-    # If user is None, assume the user is an admin or auth is disabled
-    if user is None or user.role == UserRole.ADMIN:
+    # If user is None and auth is disabled, assume the user is an admin
+    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
 
+    stmt = stmt.distinct()
     DocByCC = aliased(DocumentByConnectorCredentialPair)
     CCPair = aliased(ConnectorCredentialPair)
     UG__CCpair = aliased(UserGroup__ConnectorCredentialPair)
@@ -83,6 +84,12 @@ def _add_user_filters(
     - if we are not editing, we show all objects in the groups the user is a curator
     for (as well as public objects as well)
     """
+
+    # If user is None, this is an anonymous user and we should only show public documents
+    if user is None:
+        where_clause = CCPair.access_type == AccessType.PUBLIC
+        return stmt.where(where_clause)
+
     where_clause = User__UG.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:
         where_clause &= User__UG.is_curator == True  # noqa: E712
@@ -100,9 +107,9 @@ def _add_user_filters(
     return stmt.where(where_clause)
 
 
-def fetch_docs_ranked_by_boost(
+def fetch_docs_ranked_by_boost_for_user(
     db_session: Session,
-    user: User | None = None,
+    user: User | None,
     ascending: bool = False,
     limit: int = 100,
 ) -> list[DbDocument]:
@@ -121,11 +128,11 @@ def fetch_docs_ranked_by_boost(
     return list(doc_list)
 
 
-def update_document_boost(
+def update_document_boost_for_user(
     db_session: Session,
     document_id: str,
     boost: int,
-    user: User | None = None,
+    user: User | None,
 ) -> None:
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     stmt = _add_user_filters(stmt, user, get_editable=True)
@@ -143,12 +150,11 @@ def update_document_boost(
     db_session.commit()
 
 
-def update_document_hidden(
+def update_document_hidden_for_user(
     db_session: Session,
     document_id: str,
     hidden: bool,
-    document_index: DocumentIndex,
-    user: User | None = None,
+    user: User | None,
 ) -> None:
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     stmt = _add_user_filters(stmt, user, get_editable=True)
@@ -170,7 +176,6 @@ def create_doc_retrieval_feedback(
     message_id: int,
     document_id: str,
     document_rank: int,
-    document_index: DocumentIndex,
     db_session: Session,
     clicked: bool = False,
     feedback: SearchFeedbackType | None = None,

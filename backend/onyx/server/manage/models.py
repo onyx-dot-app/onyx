@@ -37,6 +37,7 @@ class AuthTypeResponse(BaseModel):
     # specifies whether the current auth setup requires
     # users to have verified emails
     requires_verification: bool
+    anonymous_user_enabled: bool | None = None
 
 
 class UserPreferences(BaseModel):
@@ -46,6 +47,8 @@ class UserPreferences(BaseModel):
     recent_assistants: list[int] | None = None
     default_model: str | None = None
     auto_scroll: bool | None = None
+    pinned_assistants: list[int] | None = None
+    shortcut_enabled: bool | None = None
 
 
 class UserInfo(BaseModel):
@@ -61,6 +64,7 @@ class UserInfo(BaseModel):
     current_token_expiry_length: int | None = None
     is_cloud_superuser: bool = False
     organization_name: str | None = None
+    is_anonymous_user: bool | None = None
 
     @classmethod
     def from_model(
@@ -70,6 +74,7 @@ class UserInfo(BaseModel):
         expiry_length: int | None = None,
         is_cloud_superuser: bool = False,
         organization_name: str | None = None,
+        is_anonymous_user: bool | None = None,
     ) -> "UserInfo":
         return cls(
             id=str(user.id),
@@ -80,10 +85,12 @@ class UserInfo(BaseModel):
             role=user.role,
             preferences=(
                 UserPreferences(
+                    shortcut_enabled=user.shortcut_enabled,
                     auto_scroll=user.auto_scroll,
                     chosen_assistants=user.chosen_assistants,
                     default_model=user.default_model,
                     hidden_assistants=user.hidden_assistants,
+                    pinned_assistants=user.pinned_assistants,
                     visible_assistants=user.visible_assistants,
                 )
             ),
@@ -96,6 +103,7 @@ class UserInfo(BaseModel):
             current_token_created_at=current_token_created_at,
             current_token_expiry_length=expiry_length,
             is_cloud_superuser=is_cloud_superuser,
+            is_anonymous_user=is_anonymous_user,
         )
 
 

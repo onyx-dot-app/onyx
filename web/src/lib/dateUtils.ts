@@ -1,4 +1,23 @@
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+import { useEffect } from "react";
+import { useState } from "react";
+
+export const useNightTime = () => {
+  const [isNight, setIsNight] = useState(false);
+
+  useEffect(() => {
+    const checkNightTime = () => {
+      const currentHour = new Date().getHours();
+      setIsNight(currentHour >= 18 || currentHour < 6);
+    };
+
+    checkNightTime();
+    const interval = setInterval(checkNightTime, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return { isNight };
+};
 
 export function getXDaysAgo(daysAgo: number) {
   const today = new Date();
@@ -55,6 +74,23 @@ export const buildDateString = (date: Date | null) => {
         (new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
       )} days ago`
     : "Select a time range";
+};
+
+export const getFormattedDateRangeString = (
+  from: Date | null,
+  to: Date | null
+) => {
+  if (!from || !to) return null;
+
+  const options: Intl.DateTimeFormatOptions = {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  };
+  const fromString = from.toLocaleDateString("en-US", options);
+  const toString = to.toLocaleDateString("en-US", options);
+
+  return `${fromString} - ${toString}`;
 };
 
 export const getDateRangeString = (from: Date | null, to: Date | null) => {

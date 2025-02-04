@@ -9,7 +9,6 @@ from sqlalchemy import desc
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy import update
-from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.connectors.models import Document
@@ -118,21 +117,14 @@ def get_in_progress_index_attempts(
 def get_all_index_attempts_by_status(
     status: IndexingStatus, db_session: Session
 ) -> list[IndexAttempt]:
-    """This eagerly loads the connector and credential so that the db_session can be expired
-    before running long-living indexing jobs, which causes increasing memory usage.
+    """Returns index attempts with the given status.
+    Only recommend calling this with non-terminal states as the full list of
+    terminal statuses may be quite large.
 
     Results are ordered by time_created (oldest to newest)."""
     stmt = select(IndexAttempt)
     stmt = stmt.where(IndexAttempt.status == status)
     stmt = stmt.order_by(IndexAttempt.time_created)
-    stmt = stmt.options(
-        joinedload(IndexAttempt.connector_credential_pair).joinedload(
-            ConnectorCredentialPair.connector
-        ),
-        joinedload(IndexAttempt.connector_credential_pair).joinedload(
-            ConnectorCredentialPair.credential
-        ),
-    )
     new_attempts = db_session.scalars(stmt)
     return list(new_attempts.all())
 
@@ -190,13 +182,13 @@ def mark_attempt_in_progress(
 
 
 def mark_attempt_succeeded(
-    index_attempt: IndexAttempt,
+    index_attempt_id: int,
     db_session: Session,
 ) -> None:
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
-            .where(IndexAttempt.id == index_attempt.id)
+            .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
         ).scalar_one()
 
@@ -208,13 +200,13 @@ def mark_attempt_succeeded(
 
 
 def mark_attempt_partially_succeeded(
-    index_attempt: IndexAttempt,
+    index_attempt_id: int,
     db_session: Session,
 ) -> None:
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
-            .where(IndexAttempt.id == index_attempt.id)
+            .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
         ).scalar_one()
 
@@ -273,17 +265,26 @@ def mark_attempt_failed(
 
 def update_docs_indexed(
     db_session: Session,
-    index_attempt: IndexAttempt,
+    index_attempt_id: int,
     total_docs_indexed: int,
     new_docs_indexed: int,
     docs_removed_from_index: int,
 ) -> None:
-    index_attempt.total_docs_indexed = total_docs_indexed
-    index_attempt.new_docs_indexed = new_docs_indexed
-    index_attempt.docs_removed_from_index = docs_removed_from_index
+    try:
+        attempt = db_session.execute(
+            select(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+        ).scalar_one()
 
-    db_session.add(index_attempt)
-    db_session.commit()
+        attempt.total_docs_indexed = total_docs_indexed
+        attempt.new_docs_indexed = new_docs_indexed
+        attempt.docs_removed_from_index = docs_removed_from_index
+        db_session.commit()
+    except Exception:
+        db_session.rollback()
+        logger.exception("update_docs_indexed exceptioned.")
+        raise
 
 
 def get_last_attempt(

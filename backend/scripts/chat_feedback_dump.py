@@ -43,17 +43,11 @@ logger = getLogger(__name__)
 #     GLOBAL_CURATOR = "global_curator"
 
 
-# class UserStatus(str, Enum):
-#     LIVE = "live"
-#     INVITED = "invited"
-#     DEACTIVATED = "deactivated"
-
-
 # class FullUserSnapshot(BaseModel):
 #     id: UUID
 #     email: str
 #     role: UserRole
-#     status: UserStatus
+#     is_active: bool
 
 
 # class InvitedUserSnapshot(BaseModel):
@@ -114,6 +108,7 @@ logger = getLogger(__name__)
 
 
 # class MessageSnapshot(BaseModel):
+#     id: int
 #     message: str
 #     message_type: MessageType
 #     documents: list[AbridgedSearchDoc]

@@ -3,20 +3,19 @@ import os
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
-from logging import Logger
 from typing import Any
-from typing import cast
 from typing import IO
+from urllib.parse import quote
 
-import requests
-from retry import retry
+from pydantic import Field
 
-from onyx.configs.app_configs import EGNYTE_BASE_DOMAIN
 from onyx.configs.app_configs import EGNYTE_CLIENT_ID
 from onyx.configs.app_configs import EGNYTE_CLIENT_SECRET
-from onyx.configs.app_configs import EGNYTE_LOCALHOST_OVERRIDE
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    get_oauth_callback_uri,
+)
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import OAuthConnector
@@ -33,53 +32,13 @@ from onyx.file_processing.extract_file_text import is_text_file_extension
 from onyx.file_processing.extract_file_text import is_valid_file_ext
 from onyx.file_processing.extract_file_text import read_text_file
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import request_with_retries
 
 
 logger = setup_logger()
 
 _EGNYTE_API_BASE = "https://{domain}.egnyte.com/pubapi/v1"
 _EGNYTE_APP_BASE = "https://{domain}.egnyte.com"
-_TIMEOUT = 60
-
-
-def _request_with_retries(
-    method: str,
-    url: str,
-    data: dict[str, Any] | None = None,
-    headers: dict[str, Any] | None = None,
-    params: dict[str, Any] | None = None,
-    timeout: int = _TIMEOUT,
-    stream: bool = False,
-    tries: int = 8,
-    delay: float = 1,
-    backoff: float = 2,
-) -> requests.Response:
-    @retry(tries=tries, delay=delay, backoff=backoff, logger=cast(Logger, logger))
-    def _make_request() -> requests.Response:
-        response = requests.request(
-            method,
-            url,
-            data=data,
-            headers=headers,
-            params=params,
-            timeout=timeout,
-            stream=stream,
-        )
-        try:
-            response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code != 403:
-                logger.exception(
-                    f"Failed to call Egnyte API.\n"
-                    f"URL: {url}\n"
-                    f"Headers: {headers}\n"
-                    f"Data: {data}\n"
-                    f"Params: {params}"
-                )
-            raise e
-        return response
-
-    return _make_request()
 
 
 def _parse_last_modified(last_modified: str) -> datetime:
@@ -166,6 +125,15 @@ def _process_egnyte_file(
 
 
 class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
+    class AdditionalOauthKwargs(OAuthConnector.AdditionalOauthKwargs):
+        egnyte_domain: str = Field(
+            title="Egnyte Domain",
+            description=(
+                "The domain for the Egnyte instance "
+                "(e.g. 'company' for company.egnyte.com)"
+            ),
+        )
+
     def __init__(
         self,
         folder_path: str | None = None,
@@ -181,18 +149,20 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         return DocumentSource.EGNYTE
 
     @classmethod
-    def oauth_authorization_url(cls, base_domain: str, state: str) -> str:
+    def oauth_authorization_url(
+        cls,
+        base_domain: str,
+        state: str,
+        additional_kwargs: dict[str, str],
+    ) -> str:
         if not EGNYTE_CLIENT_ID:
             raise ValueError("EGNYTE_CLIENT_ID environment variable must be set")
-        if not EGNYTE_BASE_DOMAIN:
-            raise ValueError("EGNYTE_DOMAIN environment variable must be set")
 
-        if EGNYTE_LOCALHOST_OVERRIDE:
-            base_domain = EGNYTE_LOCALHOST_OVERRIDE
+        oauth_kwargs = cls.AdditionalOauthKwargs(**additional_kwargs)
 
-        callback_uri = f"{base_domain.strip('/')}/connector/oauth/callback/egnyte"
+        callback_uri = get_oauth_callback_uri(base_domain, "egnyte")
         return (
-            f"https://{EGNYTE_BASE_DOMAIN}.egnyte.com/puboauth/token"
+            f"https://{oauth_kwargs.egnyte_domain}.egnyte.com/puboauth/token"
             f"?client_id={EGNYTE_CLIENT_ID}"
             f"&redirect_uri={callback_uri}"
             f"&scope=Egnyte.filesystem"
@@ -201,17 +171,23 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         )
 
     @classmethod
-    def oauth_code_to_token(cls, base_domain: str, code: str) -> dict[str, Any]:
+    def oauth_code_to_token(
+        cls,
+        base_domain: str,
+        code: str,
+        additional_kwargs: dict[str, str],
+    ) -> dict[str, Any]:
         if not EGNYTE_CLIENT_ID:
             raise ValueError("EGNYTE_CLIENT_ID environment variable must be set")
         if not EGNYTE_CLIENT_SECRET:
             raise ValueError("EGNYTE_CLIENT_SECRET environment variable must be set")
-        if not EGNYTE_BASE_DOMAIN:
-            raise ValueError("EGNYTE_DOMAIN environment variable must be set")
+
+        oauth_kwargs = cls.AdditionalOauthKwargs(**additional_kwargs)
 
         # Exchange code for token
-        url = f"https://{EGNYTE_BASE_DOMAIN}.egnyte.com/puboauth/token"
-        redirect_uri = f"{EGNYTE_LOCALHOST_OVERRIDE or base_domain}/connector/oauth/callback/egnyte"
+        url = f"https://{oauth_kwargs.egnyte_domain}.egnyte.com/puboauth/token"
+        redirect_uri = get_oauth_callback_uri(base_domain, "egnyte")
+
         data = {
             "client_id": EGNYTE_CLIENT_ID,
             "client_secret": EGNYTE_CLIENT_SECRET,
@@ -222,7 +198,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-        response = _request_with_retries(
+        response = request_with_retries(
             method="POST",
             url=url,
             data=data,
@@ -236,7 +212,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
 
         token_data = response.json()
         return {
-            "domain": EGNYTE_BASE_DOMAIN,
+            "domain": oauth_kwargs.egnyte_domain,
             "access_token": token_data["access_token"],
         }
 
@@ -248,7 +224,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
     def _get_files_list(
         self,
         path: str,
-    ) -> list[dict[str, Any]]:
+    ) -> Generator[dict[str, Any], None, None]:
         if not self.access_token or not self.domain:
             raise ConnectorMissingCredentialError("Egnyte")
 
@@ -260,67 +236,66 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
             "list_content": True,
         }
 
-        url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs/{path or ''}"
-        response = _request_with_retries(
-            method="GET", url=url, headers=headers, params=params, timeout=_TIMEOUT
+        url_encoded_path = quote(path or "")
+        url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs/{url_encoded_path}"
+        response = request_with_retries(
+            method="GET", url=url, headers=headers, params=params
         )
         if not response.ok:
             raise RuntimeError(f"Failed to fetch files from Egnyte: {response.text}")
 
         data = response.json()
-        all_files: list[dict[str, Any]] = []
 
-        # Add files from current directory
-        all_files.extend(data.get("files", []))
+        # Yield files from current directory
+        for file in data.get("files", []):
+            yield file
 
         # Recursively traverse folders
-        for item in data.get("folders", []):
-            all_files.extend(self._get_files_list(item["path"]))
+        for folder in data.get("folders", []):
+            yield from self._get_files_list(folder["path"])
 
-        return all_files
-
-    def _filter_files(
+    def _should_index_file(
         self,
-        files: list[dict[str, Any]],
+        file: dict[str, Any],
         start_time: datetime | None = None,
         end_time: datetime | None = None,
-    ) -> list[dict[str, Any]]:
-        filtered_files = []
-        for file in files:
-            if file["is_folder"]:
-                continue
+    ) -> bool:
+        """Return True if file should be included based on filters."""
+        if file["is_folder"]:
+            return False
 
-            file_modified = _parse_last_modified(file["last_modified"])
-            if start_time and file_modified < start_time:
-                continue
-            if end_time and file_modified > end_time:
-                continue
+        file_modified = _parse_last_modified(file["last_modified"])
+        if start_time and file_modified < start_time:
+            return False
+        if end_time and file_modified > end_time:
+            return False
 
-            filtered_files.append(file)
-
-        return filtered_files
+        return True
 
     def _process_files(
         self,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
     ) -> Generator[list[Document], None, None]:
-        files = self._get_files_list(self.folder_path)
-        files = self._filter_files(files, start_time, end_time)
-
         current_batch: list[Document] = []
-        for file in files:
+
+        # Iterate through yielded files and filter them
+        for file in self._get_files_list(self.folder_path):
+            if not self._should_index_file(file, start_time, end_time):
+                logger.debug(f"Skipping file '{file['path']}'.")
+                continue
+
             try:
                 # Set up request with streaming enabled
                 headers = {
                     "Authorization": f"Bearer {self.access_token}",
                 }
-                url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs-content/{file['path']}"
-                response = _request_with_retries(
+                url_encoded_path = quote(file["path"])
+                url = f"{_EGNYTE_API_BASE.format(domain=self.domain)}/fs-content/{url_encoded_path}"
+                response = request_with_retries(
                     method="GET",
                     url=url,
                     headers=headers,
-                    timeout=_TIMEOUT,
                     stream=True,
                 )
 

@@ -7,11 +7,12 @@ from celery import Celery
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 
 
 class RedisConnectorPrune:
@@ -63,7 +64,9 @@ class RedisConnectorPrune:
     def get_active_task_count(self) -> int:
         """Count of active pruning tasks"""
         count = 0
-        for key in self.redis.scan_iter(RedisConnectorPrune.FENCE_PREFIX + "*"):
+        for key in self.redis.scan_iter(
+            RedisConnectorPrune.FENCE_PREFIX + "*", count=SCAN_ITER_COUNT_DEFAULT
+        ):
             count += 1
         return count
 
@@ -112,14 +115,17 @@ class RedisConnectorPrune:
         last_lock_time = time.monotonic()
 
         async_results = []
-        cc_pair = get_connector_credential_pair_from_id(int(self.id), db_session)
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=int(self.id),
+        )
         if not cc_pair:
             return None
 
         for doc_id in documents_to_prune:
             current_time = time.monotonic()
             if lock and current_time - last_lock_time >= (
-                CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4
+                CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4
             ):
                 lock.reacquire()
                 last_lock_time = current_time

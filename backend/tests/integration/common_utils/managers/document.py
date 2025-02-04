@@ -21,8 +21,9 @@ def _verify_document_permissions(
     group_names: list[str] | None = None,
     doc_creating_user: DATestUser | None = None,
 ) -> None:
-    acl_keys = set(retrieved_doc["access_control_list"].keys())
+    acl_keys = set(retrieved_doc.get("access_control_list", {}).keys())
     print(f"ACL keys: {acl_keys}")
+
     if cc_pair.access_type == AccessType.PUBLIC:
         if "PUBLIC" not in acl_keys:
             raise ValueError(
@@ -42,8 +43,9 @@ def _verify_document_permissions(
         found_group_keys = {key for key in acl_keys if key.startswith("group:")}
         if found_group_keys != expected_group_keys:
             raise ValueError(
-                f"Document {retrieved_doc['document_id']} has incorrect group ACL keys. Found: {found_group_keys}, \n"
-                f"Expected: {expected_group_keys}"
+                f"Document {retrieved_doc['document_id']} has incorrect group ACL keys. "
+                f"Expected: {expected_group_keys}  Found: {found_group_keys}\n"
+                f"All ACL keys: {acl_keys}"
             )
 
     if doc_set_names is not None:
@@ -153,9 +155,11 @@ class DocumentManager:
     ) -> None:
         doc_ids = [document.id for document in cc_pair.documents]
         retrieved_docs_dict = vespa_client.get_documents_by_id(doc_ids)["documents"]
+
         retrieved_docs = {
             doc["fields"]["document_id"]: doc["fields"] for doc in retrieved_docs_dict
         }
+
         # Left this here for debugging purposes.
         # import json
         # for doc in retrieved_docs.values():

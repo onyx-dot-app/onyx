@@ -1,10 +1,10 @@
-import { ConnectorIndexingStatus } from "@/lib/types";
+import { ConnectorIndexingStatus, ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 
 interface ConnectorEditorProps {
   selectedCCPairIds: number[];
   setSetCCPairIds: (ccPairId: number[]) => void;
-  allCCPairs: ConnectorIndexingStatus<any, any>[];
+  allCCPairs: ConnectorStatus<any, any>[];
 }
 
 export const ConnectorEditor = ({

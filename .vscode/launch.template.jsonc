@@ -28,6 +28,7 @@
 		  		"Celery heavy", 
 		  		"Celery indexing", 
 		  		"Celery beat",
+                "Celery monitoring",
             ],
 			"presentation": {
 				 "group": "1",
@@ -51,7 +52,8 @@
 		  		"Celery light", 
 		  		"Celery heavy", 
 		  		"Celery indexing", 
-		  		"Celery beat"
+		  		"Celery beat",
+                "Celery monitoring",
 		  	],
 			"presentation": {
 				 "group": "1",
@@ -270,6 +272,31 @@
             "consoleTitle": "Celery indexing Console"
         },
         {
+            "name": "Celery monitoring",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "celery",
+            "cwd": "${workspaceFolder}/backend",
+            "envFile": "${workspaceFolder}/.vscode/.env",
+            "env": {},
+            "args": [
+                "-A",
+                "onyx.background.celery.versioned_apps.monitoring",
+                "worker",
+                "--pool=solo",
+                "--concurrency=1",
+                "--prefetch-multiplier=1",
+                "--loglevel=INFO",
+                "--hostname=monitoring@%n",
+                "-Q",
+                "monitoring",
+            ],
+            "presentation": {
+				 "group": "2",
+			 },
+            "consoleTitle": "Celery monitoring Console"
+        },
+        {
             "name": "Celery beat",
             "type": "debugpy",
             "request": "launch",
@@ -354,6 +381,21 @@
                 "PYTHONUNBUFFERED": "1",
                 "PYTHONPATH": "."
             },
+        },
+        {
+            "name": "Install Python Requirements",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "bash",
+            "runtimeArgs": [
+                "-c",
+                "pip install -r backend/requirements/default.txt && pip install -r backend/requirements/dev.txt && pip install -r backend/requirements/ee.txt && pip install -r backend/requirements/model_server.txt"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "presentation": {
+                 "group": "3"
+            }
         },
     ]
 }

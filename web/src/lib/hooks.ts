@@ -1,27 +1,28 @@
 "use client";
 import {
   ConnectorIndexingStatus,
-  OAuthSlackCallbackResponse,
   DocumentBoostStatus,
   Tag,
   UserGroup,
+  ConnectorStatus,
+  CCPairBasicInfo,
+  ValidSources,
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import { useContext, useEffect, useState } from "react";
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
-import { SourceMetadata } from "./search/interfaces";
+import { Filters, SourceMetadata } from "./search/interfaces";
 import { destructureValue, structureValue } from "./llm/utils";
 import { ChatSession } from "@/app/chat/interfaces";
-import { UsersResponse } from "./users/interfaces";
+import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { PersonaCategory } from "@/app/admin/assistants/interfaces";
-import {
-  LLMProvider,
-  LLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+import { PersonaLabel } from "@/app/admin/assistants/interfaces";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { isAnthropic } from "@/app/admin/configuration/llm/interfaces";
+import { getSourceMetadata } from "./sources";
+import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -71,6 +72,7 @@ export const useObjectState = <T>(
 };
 
 const INDEXING_STATUS_URL = "/api/manage/admin/connector/indexing-status";
+const CONNECTOR_STATUS_URL = "/api/manage/admin/connector/status";
 
 export const useConnectorCredentialIndexingStatus = (
   refreshInterval = 30000, // 30 seconds
@@ -92,16 +94,98 @@ export const useConnectorCredentialIndexingStatus = (
   };
 };
 
-export const useCategories = () => {
+export const useConnectorStatus = (refreshInterval = 30000) => {
   const { mutate } = useSWRConfig();
-  const swrResponse = useSWR<PersonaCategory[]>(
-    "/api/persona/categories",
-    errorHandlingFetcher
+  const url = CONNECTOR_STATUS_URL;
+  const swrResponse = useSWR<ConnectorStatus<any, any>[]>(
+    url,
+    errorHandlingFetcher,
+    { refreshInterval: refreshInterval }
   );
 
   return {
     ...swrResponse,
-    refreshCategories: () => mutate("/api/persona/categories"),
+    refreshIndexingStatus: () => mutate(url),
+  };
+};
+
+export const useBasicConnectorStatus = () => {
+  const url = "/api/manage/connector-status";
+  const swrResponse = useSWR<CCPairBasicInfo[]>(url, errorHandlingFetcher);
+  return {
+    ...swrResponse,
+    refreshIndexingStatus: () => mutate(url),
+  };
+};
+
+export const useLabels = () => {
+  const { mutate } = useSWRConfig();
+  const { data: labels, error } = useSWR<PersonaLabel[]>(
+    "/api/persona/labels",
+    errorHandlingFetcher
+  );
+
+  const refreshLabels = async () => {
+    return mutate("/api/persona/labels");
+  };
+
+  const createLabel = async (name: string) => {
+    const response = await fetch("/api/persona/labels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+
+    if (response.ok) {
+      const newLabel = await response.json();
+      mutate("/api/persona/labels", [...(labels || []), newLabel], false);
+    }
+
+    return response;
+  };
+
+  const updateLabel = async (id: number, name: string) => {
+    const response = await fetch(`/api/admin/persona/label/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label_name: name }),
+    });
+
+    if (response.ok) {
+      mutate(
+        "/api/persona/labels",
+        labels?.map((label) => (label.id === id ? { ...label, name } : label)),
+        false
+      );
+    }
+
+    return response;
+  };
+
+  const deleteLabel = async (id: number) => {
+    const response = await fetch(`/api/admin/persona/label/${id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (response.ok) {
+      mutate(
+        "/api/persona/labels",
+        labels?.filter((label) => label.id !== id),
+        false
+      );
+    }
+
+    return response;
+  };
+
+  return {
+    labels,
+    error,
+    refreshLabels,
+    createLabel,
+    updateLabel,
+    deleteLabel,
   };
 };
 
@@ -120,6 +204,14 @@ export interface FilterManager {
   setSelectedDocumentSets: React.Dispatch<React.SetStateAction<string[]>>;
   selectedTags: Tag[];
   setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>;
+  getFilterString: () => string;
+  buildFiltersFromQueryString: (
+    filterString: string,
+    availableSources: ValidSources[],
+    availableDocumentSets: string[],
+    availableTags: Tag[]
+  ) => void;
+  clearFilters: () => void;
 }
 
 export function useFilters(): FilterManager {
@@ -130,7 +222,106 @@ export function useFilters(): FilterManager {
   );
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
 
+  const getFilterString = () => {
+    const params = new URLSearchParams();
+
+    if (timeRange) {
+      params.set("from", timeRange.from.toISOString());
+      params.set("to", timeRange.to.toISOString());
+    }
+
+    if (selectedSources.length > 0) {
+      const sourcesParam = selectedSources
+        .map((source) => encodeURIComponent(source.internalName))
+        .join(",");
+      params.set("sources", sourcesParam);
+    }
+
+    if (selectedDocumentSets.length > 0) {
+      const docSetsParam = selectedDocumentSets
+        .map((ds) => encodeURIComponent(ds))
+        .join(",");
+      params.set("documentSets", docSetsParam);
+    }
+
+    if (selectedTags.length > 0) {
+      const tagsParam = selectedTags
+        .map((tag) => encodeURIComponent(tag.tag_value))
+        .join(",");
+      params.set("tags", tagsParam);
+    }
+
+    const queryString = params.toString();
+    return queryString ? `&${queryString}` : "";
+  };
+
+  const clearFilters = () => {
+    setTimeRange(null);
+    setSelectedSources([]);
+    setSelectedDocumentSets([]);
+    setSelectedTags([]);
+  };
+
+  function buildFiltersFromQueryString(
+    filterString: string,
+    availableSources: ValidSources[],
+    availableDocumentSets: string[],
+    availableTags: Tag[]
+  ): void {
+    const params = new URLSearchParams(filterString);
+
+    // Parse the "from" parameter as a DateRangePickerValue
+    let newTimeRange: DateRangePickerValue | null = null;
+    const fromParam = params.get("from");
+    const toParam = params.get("to");
+    if (fromParam && toParam) {
+      const fromDate = new Date(fromParam);
+      const toDate = new Date(toParam);
+      if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+        newTimeRange = { from: fromDate, to: toDate, selectValue: "" };
+      }
+    }
+
+    // Parse sources
+    const availableSourcesMetadata = availableSources.map(getSourceMetadata);
+    let newSelectedSources: SourceMetadata[] = [];
+    const sourcesParam = params.get("sources");
+    if (sourcesParam) {
+      const sourceNames = sourcesParam.split(",").map(decodeURIComponent);
+      newSelectedSources = availableSourcesMetadata.filter((source) =>
+        sourceNames.includes(source.internalName)
+      );
+    }
+
+    // Parse document sets
+    let newSelectedDocSets: string[] = [];
+    const docSetsParam = params.get("documentSets");
+    if (docSetsParam) {
+      const docSetNames = docSetsParam.split(",").map(decodeURIComponent);
+      newSelectedDocSets = availableDocumentSets.filter((ds) =>
+        docSetNames.includes(ds)
+      );
+    }
+
+    // Parse tags
+    let newSelectedTags: Tag[] = [];
+    const tagsParam = params.get("tags");
+    if (tagsParam) {
+      const tagValues = tagsParam.split(",").map(decodeURIComponent);
+      newSelectedTags = availableTags.filter((tag) =>
+        tagValues.includes(tag.tag_value)
+      );
+    }
+
+    // Update filter manager's values instead of returning
+    setTimeRange(newTimeRange);
+    setSelectedSources(newSelectedSources);
+    setSelectedDocumentSets(newSelectedDocSets);
+    setSelectedTags(newSelectedTags);
+  }
+
   return {
+    clearFilters,
     timeRange,
     setTimeRange,
     selectedSources,
@@ -139,13 +330,15 @@ export function useFilters(): FilterManager {
     setSelectedDocumentSets,
     selectedTags,
     setSelectedTags,
+    getFilterString,
+    buildFiltersFromQueryString,
   };
 }
 
 export const useUsers = () => {
   const url = "/api/manage/users";
 
-  const swrResponse = useSWR<UsersResponse>(url, errorHandlingFetcher);
+  const swrResponse = useSWR<AllUsersResponse>(url, errorHandlingFetcher);
 
   return {
     ...swrResponse,
@@ -257,6 +450,23 @@ export function useLlmOverride(
   };
 }
 
+export function useAuthType(): AuthType | null {
+  const { data, error } = useSWR<{ auth_type: AuthType }>(
+    "/api/auth/type",
+    errorHandlingFetcher
+  );
+
+  if (NEXT_PUBLIC_CLOUD_ENABLED) {
+    return "cloud";
+  }
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data.auth_type;
+}
+
 /* 
 EE Only APIs
 */
@@ -299,6 +509,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   // OpenAI models
   "o1-mini": "O1 Mini",
   "o1-preview": "O1 Preview",
+  "o1-2024-12-17": "O1",
   "gpt-4": "GPT 4",
   "gpt-4o": "GPT 4o",
   "gpt-4o-2024-08-06": "GPT 4o (Structured Outputs)",
@@ -318,6 +529,21 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "gpt-3.5-turbo-16k-0613": "GPT 3.5 Turbo 16k (June 2023)",
   "gpt-3.5-turbo-0301": "GPT 3.5 Turbo (March 2023)",
 
+  // Amazon models
+  "amazon.nova-micro@v1": "Amazon Nova Micro",
+  "amazon.nova-lite@v1": "Amazon Nova Lite",
+  "amazon.nova-pro@v1": "Amazon Nova Pro",
+
+  // Meta models
+  "llama-3.2-90b-vision-instruct": "Llama 3.2 90B",
+  "llama-3.2-11b-vision-instruct": "Llama 3.2 11B",
+  "llama-3.3-70b-instruct": "Llama 3.3 70B",
+
+  // Microsoft models
+  "phi-3.5-mini-instruct": "Phi 3.5 Mini",
+  "phi-3.5-moe-instruct": "Phi 3.5 MoE",
+  "phi-3.5-vision-instruct": "Phi 3.5 Vision",
+
   // Anthropic models
   "claude-3-opus-20240229": "Claude 3 Opus",
   "claude-3-sonnet-20240229": "Claude 3 Sonnet",
@@ -329,6 +555,9 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet (New)",
   "claude-3-5-sonnet-v2@20241022": "Claude 3.5 Sonnet (New)",
   "claude-3.5-sonnet-v2@20241022": "Claude 3.5 Sonnet (New)",
+  "claude-3-5-haiku-20241022": "Claude 3.5 Haiku",
+  "claude-3-5-haiku@20241022": "Claude 3.5 Haiku",
+  "claude-3.5-haiku@20241022": "Claude 3.5 Haiku",
 
   // Google Models
   "gemini-1.5-pro": "Gemini 1.5 Pro",
@@ -337,6 +566,11 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "gemini-1.5-flash-001": "Gemini 1.5 Flash",
   "gemini-1.5-pro-002": "Gemini 1.5 Pro (v2)",
   "gemini-1.5-flash-002": "Gemini 1.5 Flash (v2)",
+  "gemini-2.0-flash-exp": "Gemini 2.0 Flash (Experimental)",
+
+  // Mistral Models
+  "mistral-large-2411": "Mistral Large 24.11",
+  "mistral-large@2411": "Mistral Large 24.11",
 
   // Bedrock models
   "meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B",

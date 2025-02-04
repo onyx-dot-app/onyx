@@ -9,10 +9,11 @@ from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 
 from onyx.access.models import DocExternalAccess
-from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 
 
 class RedisConnectorPermissionSyncPayload(BaseModel):
@@ -68,7 +69,10 @@ class RedisConnectorPermissionSync:
     def get_active_task_count(self) -> int:
         """Count of active permission sync tasks"""
         count = 0
-        for _ in self.redis.scan_iter(RedisConnectorPermissionSync.FENCE_PREFIX + "*"):
+        for _ in self.redis.scan_iter(
+            RedisConnectorPermissionSync.FENCE_PREFIX + "*",
+            count=SCAN_ITER_COUNT_DEFAULT,
+        ):
             count += 1
         return count
 
@@ -143,7 +147,7 @@ class RedisConnectorPermissionSync:
         for doc_perm in new_permissions:
             current_time = time.monotonic()
             if lock and current_time - last_lock_time >= (
-                CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4
+                CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4
             ):
                 lock.reacquire()
                 last_lock_time = current_time
@@ -162,7 +166,7 @@ class RedisConnectorPermissionSync:
                 ),
                 queue=OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT,
                 task_id=custom_task_id,
-                priority=OnyxCeleryPriority.MEDIUM,
+                priority=OnyxCeleryPriority.HIGH,
             )
             async_results.append(result)
 

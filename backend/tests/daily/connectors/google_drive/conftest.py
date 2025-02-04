@@ -86,7 +86,6 @@ def google_drive_oauth_uploaded_connector_factory() -> (
 
         json_string = os.environ[_USER_TO_OAUTH_CREDENTIALS_MAP[primary_admin_email]]
         refried_json_string = json.dumps(parse_credentials(json_string))
-
         credentials_json = {
             DB_CREDENTIALS_DICT_TOKEN_KEY: refried_json_string,
             DB_CREDENTIALS_PRIMARY_ADMIN_KEY: primary_admin_email,

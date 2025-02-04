@@ -4,8 +4,6 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from onyx.auth.schemas import UserStatus
-
 
 class FlowType(str, Enum):
     CHAT = "chat"
@@ -22,7 +20,7 @@ class ChatMessageSkeleton(BaseModel):
 
 class UserSkeleton(BaseModel):
     user_id: str
-    status: UserStatus
+    is_active: bool
 
 
 class UsageReportMetadata(BaseModel):

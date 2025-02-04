@@ -1,11 +1,16 @@
 import {
   AnthropicIcon,
+  AmazonIcon,
   AWSIcon,
   AzureIcon,
   CPUIcon,
+  MicrosoftIconSVG,
+  MistralIcon,
+  MetaIcon,
   OpenAIIcon,
   GeminiIcon,
   OpenSourceIcon,
+  AnthropicSVG,
 } from "@/components/icons/icons";
 import { FaRobot } from "react-icons/fa";
 
@@ -72,15 +77,28 @@ export const getProviderIcon = (providerName: string, modelName?: string) => {
   switch (providerName) {
     case "openai":
       // Special cases for openai based on modelName
+      if (modelName?.toLowerCase().includes("amazon")) {
+        return AmazonIcon;
+      }
+      if (modelName?.toLowerCase().includes("phi")) {
+        return MicrosoftIconSVG;
+      }
+      if (modelName?.toLowerCase().includes("mistral")) {
+        return MistralIcon;
+      }
+      if (modelName?.toLowerCase().includes("llama")) {
+        return MetaIcon;
+      }
       if (modelName?.toLowerCase().includes("gemini")) {
         return GeminiIcon;
       }
       if (modelName?.toLowerCase().includes("claude")) {
         return AnthropicIcon;
       }
+
       return OpenAIIcon; // Default for openai
     case "anthropic":
-      return AnthropicIcon;
+      return AnthropicSVG;
     case "bedrock":
       return AWSIcon;
     case "azure":

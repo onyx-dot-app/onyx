@@ -1,17 +1,24 @@
 import datetime
 from collections import defaultdict
+from typing import List
 
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.analytics import fetch_assistant_message_analytics
+from ee.onyx.db.analytics import fetch_assistant_unique_users
+from ee.onyx.db.analytics import fetch_assistant_unique_users_total
 from ee.onyx.db.analytics import fetch_onyxbot_analytics
 from ee.onyx.db.analytics import fetch_per_user_query_analytics
 from ee.onyx.db.analytics import fetch_persona_message_analytics
 from ee.onyx.db.analytics import fetch_persona_unique_users
 from ee.onyx.db.analytics import fetch_query_analytics
+from ee.onyx.db.analytics import user_can_view_assistant_stats
 from onyx.auth.users import current_admin_user
+from onyx.auth.users import current_user
 from onyx.db.engine import get_session
 from onyx.db.models import User
 
@@ -191,3 +198,74 @@ def get_persona_unique_users(
             )
         )
     return unique_user_counts
+
+
+class AssistantDailyUsageResponse(BaseModel):
+    date: datetime.date
+    total_messages: int
+    total_unique_users: int
+
+
+class AssistantStatsResponse(BaseModel):
+    daily_stats: List[AssistantDailyUsageResponse]
+    total_messages: int
+    total_unique_users: int
+
+
+@router.get("/assistant/{assistant_id}/stats")
+def get_assistant_stats(
+    assistant_id: int,
+    start: datetime.datetime | None = None,
+    end: datetime.datetime | None = None,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> AssistantStatsResponse:
+    """
+    Returns daily message and unique user counts for a user's assistant,
+    along with the overall total messages and total distinct users.
+    """
+    start = start or (
+        datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+    )
+    end = end or datetime.datetime.utcnow()
+
+    if not user_can_view_assistant_stats(db_session, user, assistant_id):
+        raise HTTPException(
+            status_code=403, detail="Not allowed to access this assistant's stats."
+        )
+
+    # Pull daily usage from the DB calls
+    messages_data = fetch_assistant_message_analytics(
+        db_session, assistant_id, start, end
+    )
+    unique_users_data = fetch_assistant_unique_users(
+        db_session, assistant_id, start, end
+    )
+
+    # Map each day => (messages, unique_users).
+    daily_messages_map = {date: count for count, date in messages_data}
+    daily_unique_users_map = {date: count for count, date in unique_users_data}
+    all_dates = set(daily_messages_map.keys()) | set(daily_unique_users_map.keys())
+
+    # Merge both sets of metrics by date
+    daily_results: list[AssistantDailyUsageResponse] = []
+    for date in sorted(all_dates):
+        daily_results.append(
+            AssistantDailyUsageResponse(
+                date=date,
+                total_messages=daily_messages_map.get(date, 0),
+                total_unique_users=daily_unique_users_map.get(date, 0),
+            )
+        )
+
+    # Now pull a single total distinct user count across the entire time range
+    total_msgs = sum(d.total_messages for d in daily_results)
+    total_users = fetch_assistant_unique_users_total(
+        db_session, assistant_id, start, end
+    )
+
+    return AssistantStatsResponse(
+        daily_stats=daily_results,
+        total_messages=total_msgs,
+        total_unique_users=total_users,
+    )

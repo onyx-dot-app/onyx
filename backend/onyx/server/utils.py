@@ -1,20 +1,13 @@
 import json
-import smtplib
 from datetime import datetime
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from textwrap import dedent
 from typing import Any
 
 from fastapi import HTTPException
 from fastapi import status
 
-from onyx.configs.app_configs import SMTP_PASS
-from onyx.configs.app_configs import SMTP_PORT
-from onyx.configs.app_configs import SMTP_SERVER
-from onyx.configs.app_configs import SMTP_USER
-from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.db.models import User
+from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_AUTHENTICATION_METHOD,
+)
 
 
 class BasicAuthenticationError(HTTPException):
@@ -54,39 +47,22 @@ def mask_string(sensitive_str: str) -> str:
 def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, str]:
     masked_creds = {}
     for key, val in credential_dict.items():
-        if not isinstance(val, str):
-            raise ValueError(
-                f"Unable to mask credentials of type other than string, cannot process request."
-                f"Recieved type: {type(val)}"
-            )
+        if isinstance(val, str):
+            # we want to pass the authentication_method field through so the frontend
+            # can disambiguate credentials created by different methods
+            if key == DB_CREDENTIALS_AUTHENTICATION_METHOD:
+                masked_creds[key] = val
+            else:
+                masked_creds[key] = mask_string(val)
+            continue
 
-        masked_creds[key] = mask_string(val)
+        if isinstance(val, int):
+            masked_creds[key] = "*****"
+            continue
+
+        raise ValueError(
+            f"Unable to mask credentials of type other than string, cannot process request."
+            f"Recieved type: {type(val)}"
+        )
+
     return masked_creds
-
-
-def send_user_email_invite(user_email: str, current_user: User) -> None:
-    msg = MIMEMultipart()
-    msg["Subject"] = "Invitation to Join Onyx Workspace"
-    msg["From"] = current_user.email
-    msg["To"] = user_email
-
-    email_body = dedent(
-        f"""\
-        Hello,
-
-        You have been invited to join a workspace on Onyx.
-
-        To join the workspace, please visit the following link:
-
-        {WEB_DOMAIN}/auth/login
-
-        Best regards,
-        The Onyx Team
-    """
-    )
-
-    msg.attach(MIMEText(email_body, "plain"))
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp_server:
-        smtp_server.starttls()
-        smtp_server.login(SMTP_USER, SMTP_PASS)
-        smtp_server.send_message(msg)

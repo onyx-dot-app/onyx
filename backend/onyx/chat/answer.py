@@ -12,17 +12,19 @@ from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationInfo
 from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.models import PromptConfig
-from onyx.chat.prompt_builder.build import AnswerPromptBuilder
-from onyx.chat.prompt_builder.build import default_build_system_message
-from onyx.chat.prompt_builder.build import default_build_user_message
-from onyx.chat.prompt_builder.build import LLMCall
+from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
+from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
+from onyx.chat.prompt_builder.answer_prompt_builder import LLMCall
 from onyx.chat.stream_processing.answer_response_handler import (
     CitationResponseHandler,
 )
 from onyx.chat.stream_processing.answer_response_handler import (
     DummyAnswerResponseHandler,
 )
-from onyx.chat.stream_processing.utils import map_document_id_order
+from onyx.chat.stream_processing.utils import (
+    map_document_id_order,
+)
 from onyx.chat.tool_handling.tool_response_handler import ToolResponseHandler
 from onyx.file_store.utils import InMemoryChatFile
 from onyx.llm.interfaces import LLM
@@ -207,27 +209,14 @@ class Answer:
         # + figure out what the next LLM call should be
         tool_call_handler = ToolResponseHandler(current_llm_call.tools)
 
-        search_result, displayed_search_results_map = SearchTool.get_search_result(
+        final_search_results, displayed_search_results = SearchTool.get_search_result(
             current_llm_call
-        ) or ([], {})
+        ) or ([], [])
 
-        # Quotes are no longer supported
-        # answer_handler: AnswerResponseHandler
-        # if self.answer_style_config.citation_config:
-        #     answer_handler = CitationResponseHandler(
-        #         context_docs=search_result,
-        #         doc_id_to_rank_map=map_document_id_order(search_result),
-        #     )
-        # elif self.answer_style_config.quotes_config:
-        #     answer_handler = QuotesResponseHandler(
-        #         context_docs=search_result,
-        #     )
-        # else:
-        #     raise ValueError("No answer style config provided")
         answer_handler = CitationResponseHandler(
-            context_docs=search_result,
-            doc_id_to_rank_map=map_document_id_order(search_result),
-            display_doc_order_dict=displayed_search_results_map,
+            context_docs=final_search_results,
+            final_doc_id_to_rank_map=map_document_id_order(final_search_results),
+            display_doc_id_to_rank_map=map_document_id_order(displayed_search_results),
         )
 
         response_handler_manager = LLMResponseHandlerManager(
@@ -264,11 +253,13 @@ class Answer:
                 user_query=self.question,
                 prompt_config=self.prompt_config,
                 files=self.latest_query_files,
+                single_message_history=self.single_message_history,
             ),
             message_history=self.message_history,
             llm_config=self.llm.config,
+            raw_user_query=self.question,
+            raw_user_uploaded_files=self.latest_query_files or [],
             single_message_history=self.single_message_history,
-            raw_user_text=self.question,
         )
         prompt_builder.update_system_prompt(
             default_build_system_message(self.prompt_config)

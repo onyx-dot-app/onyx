@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
-from pydantic import model_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -261,13 +260,8 @@ class CitationConfig(BaseModel):
     all_docs_useful: bool = False
 
 
-class QuotesConfig(BaseModel):
-    pass
-
-
 class AnswerStyleConfig(BaseModel):
-    citation_config: CitationConfig | None = None
-    quotes_config: QuotesConfig | None = None
+    citation_config: CitationConfig
     document_pruning_config: DocumentPruningConfig = Field(
         default_factory=DocumentPruningConfig
     )
@@ -275,20 +269,6 @@ class AnswerStyleConfig(BaseModel):
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     # right now, only used by the simple chat API
     structured_response_format: dict | None = None
-
-    @model_validator(mode="after")
-    def check_quotes_and_citation(self) -> "AnswerStyleConfig":
-        if self.citation_config is None and self.quotes_config is None:
-            raise ValueError(
-                "One of `citation_config` or `quotes_config` must be provided"
-            )
-
-        if self.citation_config is not None and self.quotes_config is not None:
-            raise ValueError(
-                "Only one of `citation_config` or `quotes_config` must be provided"
-            )
-
-        return self
 
 
 class PromptConfig(BaseModel):

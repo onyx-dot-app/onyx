@@ -18,7 +18,7 @@ import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
 import { useState } from "react";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
-export const UserRoleDropdown = ({
+const UserRoleDropdown = ({
   user,
   onSuccess,
   onError,
@@ -121,3 +121,5 @@ export const UserRoleDropdown = ({
     </>
   );
 };
+
+export default UserRoleDropdown;

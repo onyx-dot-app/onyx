@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: celery-worker-monitoring
+  template:
+    metadata:
+      labels:
+        app: celery-worker-monitoring
+    spec:
+      containers:
+        - name: celery-worker-monitoring
+          image: onyxdotapp/onyx-backend-cloud:v0.14.0-cloud.beta.21
+          imagePullPolicy: IfNotPresent
+          command:
+            [
+              "celery",
+              "-A",
+              "onyx.background.celery.versioned_apps.monitoring",
+              "worker",
+              "--loglevel=INFO",
+              "--hostname=monitoring@%n",
+              "-Q",
+              "monitoring",
+              "--prefetch-multiplier=8",
+              "--concurrency=8",
+            ]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: onyx-secrets
+                  key: redis_password
+            - name: ONYX_VERSION
+              value: "v0.11.0-cloud.beta.8"
+          envFrom:
+            - configMapRef:
+                name: env-configmap
+          volumeMounts:
+            - name: vespa-certificates
+              mountPath: "/app/certs"
+              readOnly: true
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+      volumes:
+        - name: vespa-certificates
+          secret:
+            secretName: vespa-certificates
+            items:
+              - key: cert.pem
+                path: cert.pem
+              - key: key.pem
+                path: key.pem

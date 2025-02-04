@@ -133,3 +133,25 @@ class ChatSessionManager:
             )
             for msg in response.json()["messages"]
         ]
+
+    @staticmethod
+    def create_chat_message_feedback(
+        message_id: int,
+        is_positive: bool,
+        user_performing_action: DATestUser | None = None,
+        feedback_text: str | None = None,
+        predefined_feedback: str | None = None,
+    ) -> None:
+        response = requests.post(
+            url=f"{API_SERVER_URL}/chat/create-chat-message-feedback",
+            json={
+                "chat_message_id": message_id,
+                "is_positive": is_positive,
+                "feedback_text": feedback_text,
+                "predefined_feedback": predefined_feedback,
+            },
+            headers=user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS,
+        )
+        response.raise_for_status()

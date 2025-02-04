@@ -1,6 +1,4 @@
-import re
 from datetime import datetime
-from re import Match
 
 import pytz
 import timeago  # type: ignore
@@ -57,33 +55,6 @@ def get_feedback_reminder_blocks(thread_link: str, include_followup: bool) -> Bl
     text += "\n\nThanks!"
 
     return SectionBlock(text=text)
-
-
-def _process_citations_for_slack(text: str) -> str:
-    """
-    Converts instances of [[x]](LINK) in the input text to Slack's link format <LINK|[x]>.
-
-    Args:
-    - text (str): The input string containing markdown links.
-
-    Returns:
-    - str: The string with markdown links converted to Slack format.
-    """
-    # Regular expression to find all instances of [[x]](LINK)
-    pattern = r"\[\[(.*?)\]\]\((.*?)\)"
-
-    # Function to replace each found instance with Slack's format
-    def slack_link_format(match: Match) -> str:
-        link_text = match.group(1)
-        link_url = match.group(2)
-
-        # Account for empty link citations
-        if link_url == "":
-            return f"[{link_text}]"
-        return f"<{link_url}|[{link_text}]>"
-
-    # Substitute all matches in the input text
-    return re.sub(pattern, slack_link_format, text)
 
 
 def _split_text(text: str, limit: int = 3000) -> list[str]:
@@ -369,14 +340,11 @@ def _build_citations_blocks(
 
 def _build_qa_response_blocks(
     answer: ChatOnyxBotResponse,
-    process_message_for_citations: bool = False,
 ) -> list[Block]:
     retrieval_info = answer.docs
     if not retrieval_info:
         # This should not happen, even with no docs retrieved, there is still info returned
         raise RuntimeError("Failed to retrieve docs, cannot answer question.")
-
-    formatted_answer = format_slack_message(answer.answer) if answer.answer else None
 
     if DISABLE_GENERATIVE_AI:
         return []
@@ -408,18 +376,18 @@ def _build_qa_response_blocks(
 
         filter_block = SectionBlock(text=f"_{filter_text}_")
 
-    if not formatted_answer:
+    if not answer.answer:
         answer_blocks = [
             SectionBlock(
                 text="Sorry, I was unable to find an answer, but I did find some potentially relevant docs 🤓"
             )
         ]
     else:
+        # replaces markdown links with slack format links
+        formatted_answer = format_slack_message(answer.answer)
         answer_processed = decode_escapes(
             remove_slack_text_interactions(formatted_answer)
         )
-        if process_message_for_citations:
-            answer_processed = _process_citations_for_slack(answer_processed)
         answer_blocks = [
             SectionBlock(text=text) for text in _split_text(answer_processed)
         ]
@@ -525,7 +493,6 @@ def build_slack_response_blocks(
 
     answer_blocks = _build_qa_response_blocks(
         answer=answer,
-        process_message_for_citations=use_citations,
     )
 
     web_follow_up_block = []

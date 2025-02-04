@@ -7,7 +7,7 @@ from onyx.llm.utils import message_to_prompt_and_imgs
 from onyx.tools.tool import Tool
 
 if TYPE_CHECKING:
-    from onyx.chat.prompt_builder.build import AnswerPromptBuilder
+    from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
     from onyx.tools.tool_implementations.custom.custom_tool import (
         CustomToolCallSummary,
     )

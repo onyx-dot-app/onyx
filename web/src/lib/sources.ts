@@ -36,9 +36,13 @@ import {
   GoogleStorageIcon,
   ColorSlackIcon,
   XenforoIcon,
+  ColorDiscordIcon,
   FreshdeskIcon,
   FirefliesIcon,
   EgnyteIcon,
+  AirtableIcon,
+  GlobeIcon2,
+  FileIcon2,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import {
@@ -61,13 +65,13 @@ type SourceMap = {
 
 export const SOURCE_METADATA_MAP: SourceMap = {
   web: {
-    icon: GlobeIcon,
+    icon: GlobeIcon2,
     displayName: "Web",
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/connectors/web",
   },
   file: {
-    icon: FileIcon,
+    icon: FileIcon2,
     displayName: "File",
     category: SourceCategory.Storage,
     docs: "https://docs.onyx.app/connectors/file",
@@ -78,6 +82,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Messaging,
     docs: "https://docs.onyx.app/connectors/slack",
     oauthSupported: true,
+  },
+  discord: {
+    icon: ColorDiscordIcon,
+    displayName: "Discord",
+    category: SourceCategory.Messaging,
+    docs: "https://docs.onyx.app/connectors/discord",
   },
   gmail: {
     icon: GmailIcon,
@@ -299,18 +309,24 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/connectors/fireflies",
   },
+  egnyte: {
+    icon: EgnyteIcon,
+    displayName: "Egnyte",
+    category: SourceCategory.Storage,
+    docs: "https://docs.onyx.app/connectors/egnyte",
+  },
+  airtable: {
+    icon: AirtableIcon,
+    displayName: "Airtable",
+    category: SourceCategory.Other,
+    docs: "https://docs.onyx.app/connectors/airtable",
+  },
   // currently used for the Internet Search tool docs, which is why
   // a globe is used
   not_applicable: {
     icon: GlobeIcon,
     displayName: "Not Applicable",
     category: SourceCategory.Other,
-  },
-  egnyte: {
-    icon: EgnyteIcon,
-    displayName: "Egnyte",
-    category: SourceCategory.Storage,
-    docs: "https://docs.onyx.app/connectors/egnyte",
   },
 } as SourceMap;
 
@@ -373,4 +389,27 @@ export function getSourcesForPersona(persona: Persona): ValidSources[] {
     });
   });
   return personaSources;
+}
+
+export async function fetchTitleFromUrl(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      // If the remote site has no CORS header, this may fail in the browser
+      mode: "cors",
+    });
+    if (!response.ok) {
+      // Non-200 response, treat as a failure
+      return null;
+    }
+    const html = await response.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    // If the site has <title>My Demo Page</title>, we retrieve "My Demo Page"
+    const pageTitle = doc.querySelector("title")?.innerText.trim() ?? null;
+    return pageTitle;
+  } catch (error) {
+    console.error("Error fetching page title:", error);
+    return null;
+  }
 }

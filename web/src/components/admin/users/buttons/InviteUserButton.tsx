@@ -1,4 +1,7 @@
-import { type User } from "@/lib/types";
+import {
+  type InvitedUserSnapshot,
+  type AcceptedUserSnapshot,
+} from "@/lib/types";
 
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import useSWRMutation from "swr/mutation";
@@ -12,10 +15,10 @@ export const InviteUserButton = ({
   setPopup,
   mutate,
 }: {
-  user: User;
+  user: AcceptedUserSnapshot | InvitedUserSnapshot;
   invited: boolean;
   setPopup: (spec: PopupSpec) => void;
-  mutate: () => void;
+  mutate: (() => void) | (() => void)[];
 }) => {
   const { trigger: inviteTrigger, isMutating: isInviting } = useSWRMutation(
     "/api/manage/admin/users",
@@ -35,17 +38,23 @@ export const InviteUserButton = ({
     {
       onSuccess: () => {
         setShowInviteModal(false);
-        mutate();
+        if (typeof mutate === "function") {
+          mutate();
+        } else {
+          mutate.forEach((fn) => fn());
+        }
         setPopup({
           message: "User invited successfully!",
           type: "success",
         });
       },
-      onError: (errorMsg) =>
+      onError: (errorMsg) => {
+        setShowInviteModal(false);
         setPopup({
           message: `Unable to invite user - ${errorMsg}`,
           type: "error",
-        }),
+        });
+      },
     }
   );
 
@@ -67,17 +76,23 @@ export const InviteUserButton = ({
     {
       onSuccess: () => {
         setShowInviteModal(false);
-        mutate();
+        if (typeof mutate === "function") {
+          mutate();
+        } else {
+          mutate.forEach((fn) => fn());
+        }
         setPopup({
           message: "User uninvited successfully!",
           type: "success",
         });
       },
-      onError: (errorMsg) =>
+      onError: (errorMsg) => {
+        setShowInviteModal(false);
         setPopup({
           message: `Unable to uninvite user - ${errorMsg}`,
           type: "error",
-        }),
+        });
+      },
     }
   );
 

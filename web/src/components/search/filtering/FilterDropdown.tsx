@@ -5,6 +5,7 @@ interface Option {
   key: string;
   display: string | JSX.Element;
   displayName?: string;
+  icon?: JSX.Element;
 }
 export function FilterDropdown({
   options,
@@ -63,8 +64,9 @@ export function FilterDropdown({
                       select-none
                       cursor-pointer
                       flex-none
-                      w-fit
+                      w-full
                       text-emphasis
+                      items-center
                       gap-x-1
                       ${dropdownColor || "bg-background"}
                       hover:bg-hover
@@ -80,6 +82,7 @@ export function FilterDropdown({
                     event.stopPropagation();
                   }}
                 >
+                  {option.icon}
                   {option.display}
                   {isSelected && (
                     <div className="ml-auto my-auto mr-1">

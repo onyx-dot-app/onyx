@@ -2,16 +2,16 @@ from copy import deepcopy
 from urllib.parse import urlencode
 from uuid import uuid4
 
+import pytest
 import requests
+from requests import HTTPError
 
-from onyx.db.models import UserRole
-from onyx.server.manage.models import AllUsersResponse
+from onyx.auth.schemas import UserRole
+from onyx.server.documents.models import PaginatedReturn
 from onyx.server.models import FullUserSnapshot
-from onyx.server.models import InvitedUserSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser
-
 
 DOMAIN = "test.com"
 DEFAULT_PASSWORD = "TestPassword123!"
@@ -26,6 +26,7 @@ class UserManager:
     def create(
         name: str | None = None,
         email: str | None = None,
+        is_first_user: bool = False,
     ) -> DATestUser:
         if name is None:
             name = f"test{str(uuid4())}"
@@ -47,11 +48,15 @@ class UserManager:
         )
         response.raise_for_status()
 
+        role = UserRole.ADMIN if is_first_user else UserRole.BASIC
+
         test_user = DATestUser(
             id=response.json()["id"],
             email=email,
             password=password,
             headers=deepcopy(GENERAL_HEADERS),
+            role=role,
+            is_active=True,
         )
         print(f"Created user {test_user.email}")
 
@@ -89,53 +94,147 @@ class UserManager:
         return test_user
 
     @staticmethod
-    def verify_role(user_to_verify: DATestUser, target_role: UserRole) -> bool:
+    def is_role(
+        user_to_verify: DATestUser,
+        target_role: UserRole,
+    ) -> bool:
         response = requests.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_to_verify.headers,
         )
-        response.raise_for_status()
-        return target_role == UserRole(response.json().get("role", ""))
+
+        if user_to_verify.is_active is False:
+            with pytest.raises(HTTPError):
+                response.raise_for_status()
+            return user_to_verify.role == target_role
+        else:
+            response.raise_for_status()
+
+        role_from_response = response.json().get("role", None)
+
+        if role_from_response is None:
+            return user_to_verify.role == target_role
+
+        return target_role == UserRole(role_from_response)
 
     @staticmethod
     def set_role(
         user_to_set: DATestUser,
         target_role: UserRole,
-        user_to_perform_action: DATestUser | None = None,
-    ) -> None:
-        if user_to_perform_action is None:
-            user_to_perform_action = user_to_set
+        user_performing_action: DATestUser,
+    ) -> DATestUser:
         response = requests.patch(
             url=f"{API_SERVER_URL}/manage/set-user-role",
             json={"user_email": user_to_set.email, "new_role": target_role.value},
-            headers=user_to_perform_action.headers,
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
+        new_user_updated_role = DATestUser(
+            id=user_to_set.id,
+            email=user_to_set.email,
+            password=user_to_set.password,
+            headers=user_to_set.headers,
+            role=target_role,
+            is_active=user_to_set.is_active,
+        )
+        return new_user_updated_role
+
+    # TODO: Add a way to check invited status
     @staticmethod
-    def verify(
-        user: DATestUser, user_to_perform_action: DATestUser | None = None
-    ) -> None:
-        if user_to_perform_action is None:
-            user_to_perform_action = user
+    def is_status(user_to_verify: DATestUser, target_status: bool) -> bool:
         response = requests.get(
-            url=f"{API_SERVER_URL}/manage/users",
-            headers=user_to_perform_action.headers
-            if user_to_perform_action
+            url=f"{API_SERVER_URL}/me",
+            headers=user_to_verify.headers,
+        )
+
+        if target_status is False:
+            with pytest.raises(HTTPError):
+                response.raise_for_status()
+        else:
+            response.raise_for_status()
+
+        is_active = response.json().get("is_active", None)
+        if is_active is None:
+            return user_to_verify.is_active == target_status
+        return target_status == is_active
+
+    @staticmethod
+    def set_status(
+        user_to_set: DATestUser,
+        target_status: bool,
+        user_performing_action: DATestUser,
+    ) -> DATestUser:
+        if target_status is True:
+            url_substring = "activate"
+        elif target_status is False:
+            url_substring = "deactivate"
+        response = requests.patch(
+            url=f"{API_SERVER_URL}/manage/admin/{url_substring}-user",
+            json={"user_email": user_to_set.email},
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+
+        new_user_updated_status = DATestUser(
+            id=user_to_set.id,
+            email=user_to_set.email,
+            password=user_to_set.password,
+            headers=user_to_set.headers,
+            role=user_to_set.role,
+            is_active=target_status,
+        )
+        return new_user_updated_status
+
+    @staticmethod
+    def create_test_users(
+        user_performing_action: DATestUser,
+        user_name_prefix: str,
+        count: int,
+        role: UserRole = UserRole.BASIC,
+        is_active: bool | None = None,
+    ) -> list[DATestUser]:
+        users_list = []
+        for i in range(1, count + 1):
+            user = UserManager.create(name=f"{user_name_prefix}_{i}")
+            if role != UserRole.BASIC:
+                user = UserManager.set_role(user, role, user_performing_action)
+            if is_active is not None:
+                user = UserManager.set_status(user, is_active, user_performing_action)
+            users_list.append(user)
+        return users_list
+
+    @staticmethod
+    def get_user_page(
+        page_num: int = 0,
+        page_size: int = 10,
+        search_query: str | None = None,
+        role_filter: list[UserRole] | None = None,
+        is_active_filter: bool | None = None,
+        user_performing_action: DATestUser | None = None,
+    ) -> PaginatedReturn[FullUserSnapshot]:
+        query_params: dict[str, str | list[str] | int] = {
+            "page_num": page_num,
+            "page_size": page_size,
+        }
+        if search_query:
+            query_params["q"] = search_query
+        if role_filter:
+            query_params["roles"] = [role.value for role in role_filter]
+        if is_active_filter is not None:
+            query_params["is_active"] = is_active_filter
+
+        response = requests.get(
+            url=f"{API_SERVER_URL}/manage/users/accepted?{urlencode(query_params, doseq=True)}",
+            headers=user_performing_action.headers
+            if user_performing_action
             else GENERAL_HEADERS,
         )
         response.raise_for_status()
 
         data = response.json()
-        all_users = AllUsersResponse(
-            accepted=[FullUserSnapshot(**user) for user in data["accepted"]],
-            invited=[InvitedUserSnapshot(**user) for user in data["invited"]],
-            slack_users=[FullUserSnapshot(**user) for user in data["slack_users"]],
-            accepted_pages=data["accepted_pages"],
-            invited_pages=data["invited_pages"],
-            slack_users_pages=data["slack_users_pages"],
+        paginated_result = PaginatedReturn(
+            items=[FullUserSnapshot(**user) for user in data["items"]],
+            total_items=data["total_items"],
         )
-        for accepted_user in all_users.accepted:
-            if accepted_user.email == user.email and accepted_user.id == user.id:
-                return
-        raise ValueError(f"User {user.email} not found")
+        return paginated_result
