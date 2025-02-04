@@ -2975,8 +2975,7 @@ export function ChatPage({
                               } else {
                                 return (
                                   <div key={messageReactComponentKey}>
-                                    <AgenticMessage
-                                      subQuestions={message.sub_questions || []}
+                                    <AIMessage
                                       currentPersona={liveAssistant}
                                       messageId={message.messageId}
                                       content={
