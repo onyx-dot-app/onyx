@@ -1,14 +1,7 @@
-import React, { useState } from "react";
+import React from "react";
 import { DocumentSet, Tag, ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
-import {
-  GearIcon,
-  InfoIcon,
-  MinusIcon,
-  PlusCircleIcon,
-  PlusIcon,
-  defaultTailwindCSS,
-} from "@/components/icons/icons";
+import { InfoIcon, defaultTailwindCSS } from "@/components/icons/icons";
 import { HoverPopup } from "@/components/HoverPopup";
 import {
   FiBook,
@@ -27,7 +20,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { PopoverContent } from "@radix-ui/react-popover";
 import { CalendarIcon } from "lucide-react";
-import { buildDateString, getTimeAgoString } from "@/lib/dateUtils";
+import { getTimeAgoString } from "@/lib/dateUtils";
 import { Separator } from "@/components/ui/separator";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 

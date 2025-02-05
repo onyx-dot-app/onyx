@@ -64,9 +64,7 @@ import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
 import ToolResult from "../../../components/tools/ToolResult";
 import CsvContent from "../../../components/tools/CSVContent";
-import SourceCard, {
-  SeeMoreBlock,
-} from "@/components/chat_search/sources/SourceCard";
+import SourceCard, { SeeMoreBlock } from "@/components/chat/sources/SourceCard";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";

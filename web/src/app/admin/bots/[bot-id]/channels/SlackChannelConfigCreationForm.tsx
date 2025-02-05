@@ -1,21 +1,29 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { Formik } from "formik";
+import React, { useMemo, useState, useEffect } from "react";
+import { Formik, Form, Field } from "formik";
 import * as Yup from "yup";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { DocumentSet, SlackChannelConfig } from "@/lib/types";
+import {
+  DocumentSet,
+  SlackChannelConfig,
+  SlackBotResponseType,
+} from "@/lib/types";
 import {
   createSlackChannelConfig,
   isPersonaASlackBotPersona,
   updateSlackChannelConfig,
+  fetchSlackChannels,
 } from "../lib";
 import CardSection from "@/components/admin/CardSection";
 import { useRouter } from "next/navigation";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { SEARCH_TOOL_ID, SEARCH_TOOL_NAME } from "@/app/chat/tools/constants";
-import { SlackChannelConfigFormFields } from "./SlackChannelConfigFormFields";
+import {
+  SlackChannelConfigFormFields,
+  SlackChannelConfigFormFieldsProps,
+} from "./SlackChannelConfigFormFields";
 
 export const SlackChannelConfigCreationForm = ({
   slack_bot_id,
@@ -33,6 +41,7 @@ export const SlackChannelConfigCreationForm = ({
   const { popup, setPopup } = usePopup();
   const router = useRouter();
   const isUpdate = Boolean(existingSlackChannelConfig);
+  const isDefault = existingSlackChannelConfig?.is_default || false;
   const existingSlackBotUsesPersona = existingSlackChannelConfig?.persona
     ? !isPersonaASlackBotPersona(existingSlackChannelConfig.persona)
     : false;
@@ -46,13 +55,16 @@ export const SlackChannelConfigCreationForm = ({
   }, [personas]);
 
   return (
-    <CardSection className="max-w-4xl">
+    <CardSection className="!px-12 max-w-4xl">
       {popup}
+
       <Formik
         initialValues={{
           slack_bot_id: slack_bot_id,
-          channel_name:
-            existingSlackChannelConfig?.channel_config.channel_name || "",
+          channel_name: isDefault
+            ? ""
+            : existingSlackChannelConfig?.channel_config.channel_name || "",
+          response_type: "citations" as SlackBotResponseType,
           answer_validity_check_enabled: (
             existingSlackChannelConfig?.channel_config?.answer_filters || []
           ).includes("well_answered_postfilter"),
@@ -90,8 +102,6 @@ export const SlackChannelConfigCreationForm = ({
             !isPersonaASlackBotPersona(existingSlackChannelConfig.persona)
               ? existingSlackChannelConfig.persona.id
               : null,
-          response_type:
-            existingSlackChannelConfig?.response_type || "citations",
           standard_answer_categories:
             existingSlackChannelConfig?.standard_answer_categories || [],
           knowledge_source: existingSlackBotUsesPersona
@@ -102,10 +112,12 @@ export const SlackChannelConfigCreationForm = ({
         }}
         validationSchema={Yup.object().shape({
           slack_bot_id: Yup.number().required(),
-          channel_name: Yup.string().required("Channel Name is required"),
-          response_type: Yup.string()
+          channel_name: isDefault
+            ? Yup.string()
+            : Yup.string().required("Channel Name is required"),
+          response_type: Yup.mixed<SlackBotResponseType>()
             .oneOf(["quotes", "citations"])
-            .required("Response type is required"),
+            .required(),
           answer_validity_check_enabled: Yup.boolean().required(),
           questionmark_prefilter_enabled: Yup.boolean().required(),
           respond_tag_only: Yup.boolean().required(),
@@ -159,6 +171,7 @@ export const SlackChannelConfigCreationForm = ({
             standard_answer_categories: values.standard_answer_categories.map(
               (category: any) => category.id
             ),
+            response_type: values.response_type as SlackBotResponseType,
           };
 
           if (!cleanedValues.still_need_help_enabled) {
@@ -191,13 +204,22 @@ export const SlackChannelConfigCreationForm = ({
           }
         }}
       >
-        <SlackChannelConfigFormFields
-          isUpdate={isUpdate}
-          documentSets={documentSets}
-          searchEnabledAssistants={searchEnabledAssistants}
-          standardAnswerCategoryResponse={standardAnswerCategoryResponse}
-          setPopup={setPopup}
-        />
+        {({ isSubmitting, values, setFieldValue }) => (
+          <Form>
+            <div className="pb-6 w-full">
+              <SlackChannelConfigFormFields
+                {...values}
+                isUpdate={isUpdate}
+                isDefault={isDefault}
+                documentSets={documentSets}
+                searchEnabledAssistants={searchEnabledAssistants}
+                standardAnswerCategoryResponse={standardAnswerCategoryResponse}
+                setPopup={setPopup}
+                slack_bot_id={slack_bot_id}
+              />
+            </div>
+          </Form>
+        )}
       </Formik>
     </CardSection>
   );

@@ -258,23 +258,34 @@ export type SlackBotResponseType = "quotes" | "citations";
 export interface SlackChannelConfig {
   id: number;
   slack_bot_id: number;
+  persona_id: number | null;
   persona: Persona | null;
   channel_config: ChannelConfig;
-  response_type: SlackBotResponseType;
-  standard_answer_categories: StandardAnswerCategory[];
   enable_auto_filters: boolean;
+  standard_answer_categories: StandardAnswerCategory[];
+  is_default: boolean;
 }
 
-export interface SlackBot {
+export interface SlackChannelDescriptor {
+  id: string;
+  name: string;
+}
+
+export type SlackBot = {
   id: number;
   name: string;
   enabled: boolean;
   configs_count: number;
-
-  // tokens
+  slack_channel_configs: Array<{
+    id: number;
+    is_default: boolean;
+    channel_config: {
+      channel_name: string;
+    };
+  }>;
   bot_token: string;
   app_token: string;
-}
+};
 
 export interface SlackBotTokens {
   bot_token: string;

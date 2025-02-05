@@ -14,7 +14,7 @@ logger = setup_logger()
 def handle_standard_answers(
     message_info: SlackMessageInfo,
     receiver_ids: list[str] | None,
-    slack_channel_config: SlackChannelConfig | None,
+    slack_channel_config: SlackChannelConfig,
     prompt: Prompt | None,
     logger: OnyxLoggingAdapter,
     client: WebClient,
@@ -40,7 +40,7 @@ def handle_standard_answers(
 def _handle_standard_answers(
     message_info: SlackMessageInfo,
     receiver_ids: list[str] | None,
-    slack_channel_config: SlackChannelConfig | None,
+    slack_channel_config: SlackChannelConfig,
     prompt: Prompt | None,
     logger: OnyxLoggingAdapter,
     client: WebClient,

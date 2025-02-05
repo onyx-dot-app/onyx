@@ -39,7 +39,6 @@ export function DocumentMetadataBlock({
 
       {metadataEntries.length > 0 && (
         <>
-          <div className="mx-1 h-4 border-l border-border" />
           <div className="flex items-center overflow-hidden">
             {metadataEntries
               .slice(0, MAX_METADATA_ITEMS)

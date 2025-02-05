@@ -64,7 +64,7 @@ def rate_limits(
 
 def handle_regular_answer(
     message_info: SlackMessageInfo,
-    slack_channel_config: SlackChannelConfig | None,
+    slack_channel_config: SlackChannelConfig,
     receiver_ids: list[str] | None,
     client: WebClient,
     channel: str,
@@ -76,7 +76,7 @@ def handle_regular_answer(
     should_respond_with_error_msgs: bool = DANSWER_BOT_DISPLAY_ERROR_MSGS,
     disable_docs_only_answer: bool = DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER,
 ) -> bool:
-    channel_conf = slack_channel_config.channel_config if slack_channel_config else None
+    channel_conf = slack_channel_config.channel_config
 
     messages = message_info.thread_messages
 
@@ -92,7 +92,7 @@ def handle_regular_answer(
     prompt = None
     # If no persona is specified, use the default search based persona
     # This way slack flow always has a persona
-    persona = slack_channel_config.persona if slack_channel_config else None
+    persona = slack_channel_config.persona
     if not persona:
         with get_session_with_tenant(tenant_id) as db_session:
             persona = get_persona_by_id(DEFAULT_PERSONA_ID, user, db_session)
@@ -134,11 +134,7 @@ def handle_regular_answer(
     single_message_history = slackify_message_thread(history_messages) or None
 
     bypass_acl = False
-    if (
-        slack_channel_config
-        and slack_channel_config.persona
-        and slack_channel_config.persona.document_sets
-    ):
+    if slack_channel_config.persona and slack_channel_config.persona.document_sets:
         # For Slack channels, use the full document set, admin will be warned when configuring it
         # with non-public document sets
         bypass_acl = True
@@ -190,11 +186,7 @@ def handle_regular_answer(
         # auto_detect_filters = (
         #     persona.llm_filter_extraction if persona is not None else True
         # )
-        auto_detect_filters = (
-            slack_channel_config.enable_auto_filters
-            if slack_channel_config is not None
-            else False
-        )
+        auto_detect_filters = slack_channel_config.enable_auto_filters
         retrieval_details = RetrievalDetails(
             run_search=OptionalSearchSetting.ALWAYS,
             real_time=False,
