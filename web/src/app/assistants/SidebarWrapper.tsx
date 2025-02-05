@@ -20,6 +20,7 @@ import { useChatContext } from "@/components/context/ChatContext";
 import { HistorySidebar } from "../chat/sessionSidebar/HistorySidebar";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import AssistantModal from "./mine/AssistantModal";
+import { useSidebarShortcut } from "@/lib/browserUtilities";
 
 interface SidebarWrapperProps<T extends object> {
   initiallyToggled: boolean;
@@ -71,23 +72,8 @@ export default function SidebarWrapper<T extends object>({
 
   const [showAssistantsModal, setShowAssistantsModal] = useState(false);
   const router = useRouter();
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey) {
-        switch (event.key.toLowerCase()) {
-          case "e":
-            event.preventDefault();
-            toggleSidebar();
-            break;
-        }
-      }
-    };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [router]);
+  useSidebarShortcut(router, toggleSidebar);
 
   return (
     <div className="flex relative overflow-x-hidden overscroll-contain flex-col w-full h-screen">
