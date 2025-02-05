@@ -304,7 +304,7 @@ export function AssistantEditor({
   const [isRequestSuccessful, setIsRequestSuccessful] = useState(false);
 
   const { data: userGroups } = useUserGroups();
-  // const { data: allUsers } = useUsers() as {
+  // const { data: allUsers } = useUsers({ includeApiKeys: false }) as {
   //   data: MinimalUserSnapshot[] | undefined;
   // };
 

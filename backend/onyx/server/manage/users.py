@@ -171,13 +171,14 @@ def list_all_users(
     accepted_page: int | None = None,
     slack_users_page: int | None = None,
     invited_page: int | None = None,
+    include_api_keys: bool = False,
     _: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> AllUsersResponse:
     users = [
         user
         for user in get_all_users(db_session, email_filter_string=q)
-        if not is_api_key_email_address(user.email)
+        if (include_api_keys or not is_api_key_email_address(user.email))
     ]
 
     slack_users = [user for user in users if user.role == UserRole.SLACK_USER]

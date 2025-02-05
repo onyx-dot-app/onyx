@@ -28,7 +28,7 @@ const Main = () => {
     data: users,
     isLoading: userIsLoading,
     error: usersError,
-  } = useUsers();
+  } = useUsers({ includeApiKeys: true });
 
   const { isAdmin } = useUser();
 

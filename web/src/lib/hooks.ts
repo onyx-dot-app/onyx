@@ -342,8 +342,12 @@ export function useFilters(): FilterManager {
   };
 }
 
-export const useUsers = () => {
-  const url = "/api/manage/users";
+interface UseUsersParams {
+  includeApiKeys: boolean;
+}
+
+export const useUsers = ({ includeApiKeys }: UseUsersParams) => {
+  const url = `/api/manage/users?include_api_keys=${includeApiKeys}`;
 
   const swrResponse = useSWR<AllUsersResponse>(url, errorHandlingFetcher);
 
