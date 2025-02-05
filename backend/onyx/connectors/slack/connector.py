@@ -27,6 +27,7 @@ from onyx.connectors.slack.utils import get_message_link
 from onyx.connectors.slack.utils import make_paginated_slack_api_call_w_retries
 from onyx.connectors.slack.utils import make_slack_api_call_w_retries
 from onyx.connectors.slack.utils import SlackTextCleaner
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 
@@ -98,6 +99,7 @@ def get_channel_messages(
     channel: dict[str, Any],
     oldest: str | None = None,
     latest: str | None = None,
+    callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[list[MessageType], None, None]:
     """Get all messages in a channel"""
     # join so that the bot can access messages
@@ -115,6 +117,11 @@ def get_channel_messages(
         oldest=oldest,
         latest=latest,
     ):
+        if callback:
+            if callback.should_stop():
+                raise RuntimeError("get_channel_messages: Stop signal detected")
+
+            callback.progress("get_channel_messages", 0)
         yield cast(list[MessageType], result["messages"])
 
 
@@ -325,6 +332,7 @@ def _get_all_doc_ids(
     channels: list[str] | None = None,
     channel_name_regex_enabled: bool = False,
     msg_filter_func: Callable[[MessageType], bool] = default_msg_filter,
+    callback: IndexingHeartbeatInterface | None = None,
 ) -> GenerateSlimDocumentOutput:
     """
     Get all document ids in the workspace, channel by channel
@@ -342,6 +350,7 @@ def _get_all_doc_ids(
         channel_message_batches = get_channel_messages(
             client=client,
             channel=channel,
+            callback=callback,
         )
 
         message_ts_set: set[str] = set()
@@ -390,6 +399,7 @@ class SlackPollConnector(PollConnector, SlimConnector):
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         if self.client is None:
             raise ConnectorMissingCredentialError("Slack")
@@ -398,6 +408,7 @@ class SlackPollConnector(PollConnector, SlimConnector):
             client=self.client,
             channels=self.channels,
             channel_name_regex_enabled=self.channel_regex_enabled,
+            callback=callback,
         )
 
     def poll_source(

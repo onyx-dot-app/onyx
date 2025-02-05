@@ -21,6 +21,7 @@ from onyx.connectors.salesforce.sqlite_functions import get_affected_parent_ids_
 from onyx.connectors.salesforce.sqlite_functions import get_record
 from onyx.connectors.salesforce.sqlite_functions import init_db
 from onyx.connectors.salesforce.sqlite_functions import update_sf_db_with_csv
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -176,6 +177,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         doc_metadata_list: list[SlimDocument] = []
         for parent_object_type in self.parent_object_list:

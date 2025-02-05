@@ -29,6 +29,7 @@ from onyx.connectors.onyx_jira.utils import build_jira_url
 from onyx.connectors.onyx_jira.utils import extract_jira_project
 from onyx.connectors.onyx_jira.utils import extract_text_from_adf
 from onyx.connectors.onyx_jira.utils import get_comment_strs
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 
@@ -245,6 +246,7 @@ class JiraConnector(LoadConnector, PollConnector, SlimConnector):
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         jql = f"project = {self.quoted_jira_project}"
 

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 
 
 SecondsSinceUnixEpoch = float
@@ -63,6 +64,7 @@ class SlimConnector(BaseConnector):
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         raise NotImplementedError
 

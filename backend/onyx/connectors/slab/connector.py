@@ -21,6 +21,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 
@@ -242,6 +243,7 @@ class SlabConnector(LoadConnector, PollConnector, SlimConnector):
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         slim_doc_batch: list[SlimDocument] = []
         for post_id in get_all_post_ids(self.slab_bot_token):

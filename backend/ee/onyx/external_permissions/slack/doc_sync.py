@@ -20,7 +20,7 @@ def _get_slack_document_ids_and_channels(
     slack_connector = SlackPollConnector(**cc_pair.connector.connector_specific_config)
     slack_connector.load_credentials(cc_pair.credential.credential_json)
 
-    slim_doc_generator = slack_connector.retrieve_all_slim_documents()
+    slim_doc_generator = slack_connector.retrieve_all_slim_documents(callback=callback)
 
     channel_doc_map: dict[str, list[str]] = {}
     for doc_metadata_batch in slim_doc_generator:
