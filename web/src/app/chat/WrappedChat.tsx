@@ -1,7 +1,7 @@
 "use client";
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatPage } from "./ChatPage";
-import FunctionalWrapper from "./shared_chat_search/FunctionalWrapper";
+import FunctionalWrapper from "../../components/chat/FunctionalWrapper";
 
 export default function WrappedChat({
   firstMessage,

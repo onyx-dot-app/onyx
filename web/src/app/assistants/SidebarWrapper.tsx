@@ -10,11 +10,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSidebarVisibility } from "@/components/chat_search/hooks";
-import FunctionalHeader from "@/components/chat_search/Header";
+import { useSidebarVisibility } from "@/components/chat/hooks";
+import FunctionalHeader from "@/components/chat/Header";
 import { useRouter } from "next/navigation";
 import { pageType } from "../chat/sessionSidebar/types";
-import FixedLogo from "../chat/shared_chat_search/FixedLogo";
+import FixedLogo from "../../components/logo/FixedLogo";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useChatContext } from "@/components/context/ChatContext";
 import { HistorySidebar } from "../chat/sessionSidebar/HistorySidebar";

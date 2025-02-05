@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import {
-  ResultIcon,
-  SeeMoreBlock,
-} from "@/components/chat_search/sources/SourceCard";
+import { ResultIcon, SeeMoreBlock } from "@/components/chat/sources/SourceCard";
 import { openDocument } from "@/lib/search/utils";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { ValidSources } from "@/lib/types";
