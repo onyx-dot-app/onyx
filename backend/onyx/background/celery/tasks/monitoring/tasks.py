@@ -747,9 +747,9 @@ def cloud_check_alembic() -> bool | None:
 
     last_lock_time = time.monotonic()
 
-    tenant_to_revision: dict[str, str | None] = {}
+    tenant_to_revision: dict[str, str] = {}
     revision_counts: dict[str, int] = {}
-    out_of_date_tenants: dict[str, str | None] = {}
+    out_of_date_tenants: dict[str, str] = {}
     top_revision: str = ""
     tenant_ids: list[str] | list[None] = []
 
@@ -786,7 +786,7 @@ def cloud_check_alembic() -> bool | None:
 
         # error if any null revision tenants are found
         if ALEMBIC_NULL_REVISION in revision_counts:
-            num_null_revisions = len(revision_counts[ALEMBIC_NULL_REVISION])
+            num_null_revisions = revision_counts[ALEMBIC_NULL_REVISION]
             raise ValueError(f"No revision was found for {num_null_revisions} tenants!")
 
         # get the revision with the most counts
