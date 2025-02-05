@@ -50,6 +50,7 @@ from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ee.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
@@ -315,6 +316,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
 
         return
+
+    async def on_after_login(
+        self,
+        user: User,
+        request: Optional[Request] = None,
+        response: Optional[Response] = None,
+    ) -> None:
+        if response:
+            response.delete_cookie(ANONYMOUS_USER_COOKIE_NAME)
 
     async def oauth_callback(
         self,
