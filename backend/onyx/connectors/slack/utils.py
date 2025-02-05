@@ -104,8 +104,11 @@ def make_slack_api_rate_limited(
                         f"Slack call rate limited, retrying after {retry_after} seconds. Exception: {e}"
                     )
                     time.sleep(retry_after)
-                elif error in ["already_reacted", "no_reaction"]:
-                    # The response isn't used for reactions, this is basically just a pass
+                elif error in ["already_reacted", "no_reaction", "internal_error"]:
+                    # Log internal_error and return the response instead of failing
+                    logger.warning(
+                        f"Slack call encountered '{error}', skipping and continuing..."
+                    )
                     return e.response
                 else:
                     # Raise the error for non-transient errors

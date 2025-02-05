@@ -1,6 +1,8 @@
 import time
 from datetime import datetime
 from datetime import timezone
+from typing import Any
+from typing import cast
 
 import redis
 from celery import Celery
@@ -19,6 +21,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxRedisConstants
 from onyx.db.engine import get_db_current_time
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -37,7 +40,6 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_connector_index import RedisConnectorIndexPayload
 from onyx.redis.redis_pool import redis_lock_dump
-from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -291,20 +293,26 @@ def validate_indexing_fence(
 
 def validate_indexing_fences(
     tenant_id: str | None,
-    celery_app: Celery,
-    r: Redis,
+    r_replica: Redis,
     r_celery: Redis,
     lock_beat: RedisLock,
 ) -> None:
+    """Validates all indexing fences for this tenant ... aka makes sure
+    indexing tasks sent to celery are still in flight.
+    """
     reserved_indexing_tasks = celery_get_unacked_task_ids(
         OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
     )
 
-    # validate all existing indexing jobs
-    for key_bytes in r.scan_iter(
-        RedisConnectorIndex.FENCE_PREFIX + "*", count=SCAN_ITER_COUNT_DEFAULT
-    ):
-        lock_beat.reacquire()
+    # Use replica for this because the worst thing that happens
+    # is that we don't run the validation on this pass
+    keys = cast(set[Any], r_replica.smembers(OnyxRedisConstants.ACTIVE_FENCES))
+    for key in keys:
+        key_bytes = cast(bytes, key)
+        key_str = key_bytes.decode("utf-8")
+        if not key_str.startswith(RedisConnectorIndex.FENCE_PREFIX):
+            continue
+
         with get_session_with_tenant(tenant_id) as db_session:
             validate_indexing_fence(
                 tenant_id,
@@ -313,6 +321,9 @@ def validate_indexing_fences(
                 r_celery,
                 db_session,
             )
+
+        lock_beat.reacquire()
+
     return
 
 
@@ -435,6 +446,7 @@ def try_creating_indexing_task(
     if not acquired:
         return None
 
+    redis_connector_index: RedisConnectorIndex
     try:
         redis_connector = RedisConnector(tenant_id, cc_pair.id)
         redis_connector_index = redis_connector.new_index(search_settings.id)

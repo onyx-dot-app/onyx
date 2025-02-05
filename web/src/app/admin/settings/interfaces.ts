@@ -10,6 +10,7 @@ export interface Settings {
   notifications: Notification[];
   needs_reindexing: boolean;
   gpu_enabled: boolean;
+  pro_search_disabled: boolean;
   product_gating: GatingType;
   auto_scroll: boolean;
 }

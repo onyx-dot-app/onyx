@@ -15,11 +15,13 @@ from ee.onyx.external_permissions.slack.doc_sync import slack_doc_sync
 from onyx.access.models import DocExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import ConnectorCredentialPair
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 
 # Defining the input/output types for the sync functions
 DocSyncFuncType = Callable[
     [
         ConnectorCredentialPair,
+        IndexingHeartbeatInterface | None,
     ],
     list[DocExternalAccess],
 ]

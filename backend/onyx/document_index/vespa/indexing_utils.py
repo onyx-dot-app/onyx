@@ -1,21 +1,19 @@
 import concurrent.futures
 import json
 import uuid
+from abc import ABC
+from abc import abstractmethod
+from collections.abc import Callable
 from datetime import datetime
 from datetime import timezone
 from http import HTTPStatus
 
 import httpx
 from retry import retry
-from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import ENABLE_MULTIPASS_INDEXING
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
-from onyx.db.models import SearchSettings
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_secondary_search_settings
 from onyx.document_index.document_index_utils import get_uuid_from_chunk
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info_old
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
@@ -50,9 +48,8 @@ from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import TITLE_EMBEDDING
 from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import EmbeddingProvider
-from onyx.indexing.models import MultipassConfig
 from onyx.utils.logger import setup_logger
+
 
 logger = setup_logger()
 
@@ -275,46 +272,42 @@ def check_for_final_chunk_existence(
         index += 1
 
 
-def should_use_multipass(search_settings: SearchSettings | None) -> bool:
-    """
-    Determines whether multipass should be used based on the search settings
-    or the default config if settings are unavailable.
-    """
-    if search_settings is not None:
-        return search_settings.multipass_indexing
-    return ENABLE_MULTIPASS_INDEXING
+class BaseHTTPXClientContext(ABC):
+    """Abstract base class for an HTTPX client context manager."""
+
+    @abstractmethod
+    def __enter__(self) -> httpx.Client:
+        pass
+
+    @abstractmethod
+    def __exit__(self, exc_type, exc_value, traceback):  # type: ignore
+        pass
 
 
-def can_use_large_chunks(multipass: bool, search_settings: SearchSettings) -> bool:
-    """
-    Given multipass usage and an embedder, decides whether large chunks are allowed
-    based on model/provider constraints.
-    """
-    # Only local models that support a larger context are from Nomic
-    # Cohere does not support larger contexts (they recommend not going above ~512 tokens)
-    return (
-        multipass
-        and search_settings.model_name.startswith("nomic-ai")
-        and search_settings.provider_type != EmbeddingProvider.COHERE
-    )
+class GlobalHTTPXClientContext(BaseHTTPXClientContext):
+    """Context manager for a global HTTPX client that does not close it."""
+
+    def __init__(self, client: httpx.Client):
+        self._client = client
+
+    def __enter__(self) -> httpx.Client:
+        return self._client  # Reuse the global client
+
+    def __exit__(self, exc_type, exc_value, traceback):  # type: ignore
+        pass  # Do nothing; don't close the global client
 
 
-def get_multipass_config(
-    db_session: Session, primary_index: bool = True
-) -> MultipassConfig:
-    """
-    Determines whether to enable multipass and large chunks by examining
-    the current search settings and the embedder configuration.
-    """
-    search_settings = (
-        get_current_search_settings(db_session)
-        if primary_index
-        else get_secondary_search_settings(db_session)
-    )
-    multipass = should_use_multipass(search_settings)
-    if not search_settings:
-        return MultipassConfig(multipass_indexing=False, enable_large_chunks=False)
-    enable_large_chunks = can_use_large_chunks(multipass, search_settings)
-    return MultipassConfig(
-        multipass_indexing=multipass, enable_large_chunks=enable_large_chunks
-    )
+class TemporaryHTTPXClientContext(BaseHTTPXClientContext):
+    """Context manager for a temporary HTTPX client that closes it after use."""
+
+    def __init__(self, client_factory: Callable[[], httpx.Client]):
+        self._client_factory = client_factory
+        self._client: httpx.Client | None = None  # Client will be created in __enter__
+
+    def __enter__(self) -> httpx.Client:
+        self._client = self._client_factory()  # Create a new client
+        return self._client
+
+    def __exit__(self, exc_type, exc_value, traceback):  # type: ignore
+        if self._client:
+            self._client.close()

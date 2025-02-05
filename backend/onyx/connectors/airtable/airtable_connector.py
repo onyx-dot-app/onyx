@@ -1,3 +1,7 @@
+import contextvars
+from concurrent.futures import as_completed
+from concurrent.futures import Future
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from typing import Any
 
@@ -20,9 +24,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 # NOTE: all are made lowercase to avoid case sensitivity issues
-# these are the field types that are considered metadata rather
-# than sections
-_METADATA_FIELD_TYPES = {
+# These field types are considered metadata by default when
+# treat_all_non_attachment_fields_as_metadata is False
+DEFAULT_METADATA_FIELD_TYPES = {
     "singlecollaborator",
     "collaborator",
     "createdby",
@@ -60,20 +64,31 @@ class AirtableConnector(LoadConnector):
         self,
         base_id: str,
         table_name_or_id: str,
+        treat_all_non_attachment_fields_as_metadata: bool = False,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.base_id = base_id
         self.table_name_or_id = table_name_or_id
         self.batch_size = batch_size
-        self.airtable_client: AirtableApi | None = None
+        self._airtable_client: AirtableApi | None = None
+        self.treat_all_non_attachment_fields_as_metadata = (
+            treat_all_non_attachment_fields_as_metadata
+        )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self.airtable_client = AirtableApi(credentials["airtable_access_token"])
+        self._airtable_client = AirtableApi(credentials["airtable_access_token"])
         return None
 
-    @staticmethod
+    @property
+    def airtable_client(self) -> AirtableApi:
+        if not self._airtable_client:
+            raise AirtableClientNotSetUpError()
+        return self._airtable_client
+
     def _extract_field_values(
+        self,
         field_id: str,
+        field_name: str,
         field_info: Any,
         field_type: str,
         base_id: str,
@@ -112,13 +127,33 @@ class AirtableConnector(LoadConnector):
                     backoff=2,
                     max_delay=10,
                 )
-                def get_attachment_with_retry(url: str) -> bytes | None:
-                    attachment_response = requests.get(url)
-                    if attachment_response.status_code == 200:
+                def get_attachment_with_retry(url: str, record_id: str) -> bytes | None:
+                    try:
+                        attachment_response = requests.get(url)
+                        attachment_response.raise_for_status()
                         return attachment_response.content
-                    return None
+                    except requests.exceptions.HTTPError as e:
+                        if e.response.status_code == 410:
+                            logger.info(f"Refreshing attachment for {filename}")
+                            # Re-fetch the record to get a fresh URL
+                            refreshed_record = self.airtable_client.table(
+                                base_id, table_id
+                            ).get(record_id)
+                            for refreshed_attachment in refreshed_record["fields"][
+                                field_name
+                            ]:
+                                if refreshed_attachment.get("filename") == filename:
+                                    new_url = refreshed_attachment.get("url")
+                                    if new_url:
+                                        attachment_response = requests.get(new_url)
+                                        attachment_response.raise_for_status()
+                                        return attachment_response.content
 
-                attachment_content = get_attachment_with_retry(url)
+                            logger.error(f"Failed to refresh attachment for {filename}")
+
+                        raise
+
+                attachment_content = get_attachment_with_retry(url, record_id)
                 if attachment_content:
                     try:
                         file_ext = get_file_ext(filename)
@@ -166,8 +201,14 @@ class AirtableConnector(LoadConnector):
         return [(str(field_info), default_link)]
 
     def _should_be_metadata(self, field_type: str) -> bool:
-        """Determine if a field type should be treated as metadata."""
-        return field_type.lower() in _METADATA_FIELD_TYPES
+        """Determine if a field type should be treated as metadata.
+
+        When treat_all_non_attachment_fields_as_metadata is True, all fields except
+        attachments are treated as metadata. Otherwise, only fields with types listed
+        in DEFAULT_METADATA_FIELD_TYPES are treated as metadata."""
+        if self.treat_all_non_attachment_fields_as_metadata:
+            return field_type.lower() != "multipleattachments"
+        return field_type.lower() in DEFAULT_METADATA_FIELD_TYPES
 
     def _process_field(
         self,
@@ -196,6 +237,7 @@ class AirtableConnector(LoadConnector):
         # Get the value(s) for the field
         field_value_and_links = self._extract_field_values(
             field_id=field_id,
+            field_name=field_name,
             field_info=field_info,
             field_type=field_type,
             base_id=self.base_id,
@@ -233,7 +275,7 @@ class AirtableConnector(LoadConnector):
         record: RecordDict,
         table_schema: TableSchema,
         primary_field_name: str | None,
-    ) -> Document:
+    ) -> Document | None:
         """Process a single Airtable record into a Document.
 
         Args:
@@ -264,6 +306,11 @@ class AirtableConnector(LoadConnector):
             field_val = fields.get(field_name)
             field_type = field_schema.type
 
+            logger.debug(
+                f"Processing field '{field_name}' of type '{field_type}' "
+                f"for record '{record_id}'."
+            )
+
             field_sections, field_metadata = self._process_field(
                 field_id=field_schema.id,
                 field_name=field_name,
@@ -276,6 +323,10 @@ class AirtableConnector(LoadConnector):
 
             sections.extend(field_sections)
             metadata.update(field_metadata)
+
+        if not sections:
+            logger.warning(f"No sections found for record {record_id}")
+            return None
 
         semantic_id = (
             f"{table_name}: {primary_field_value}"
@@ -313,18 +364,48 @@ class AirtableConnector(LoadConnector):
                 primary_field_name = field.name
                 break
 
+        logger.info(f"Starting to process Airtable records for {table.name}.")
+
+        # Process records in parallel batches using ThreadPoolExecutor
+        PARALLEL_BATCH_SIZE = 8
+        max_workers = min(PARALLEL_BATCH_SIZE, len(records))
         record_documents: list[Document] = []
-        for record in records:
-            document = self._process_record(
-                record=record,
-                table_schema=table_schema,
-                primary_field_name=primary_field_name,
-            )
-            record_documents.append(document)
 
-            if len(record_documents) >= self.batch_size:
-                yield record_documents
-                record_documents = []
+        # Process records in batches
+        for i in range(0, len(records), PARALLEL_BATCH_SIZE):
+            batch_records = records[i : i + PARALLEL_BATCH_SIZE]
+            record_documents = []
 
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit batch tasks
+                future_to_record: dict[Future, RecordDict] = {}
+                for record in batch_records:
+                    # Capture the current context so that the thread gets the current tenant ID
+                    current_context = contextvars.copy_context()
+                    future_to_record[
+                        executor.submit(
+                            current_context.run,
+                            self._process_record,
+                            record=record,
+                            table_schema=table_schema,
+                            primary_field_name=primary_field_name,
+                        )
+                    ] = record
+
+                # Wait for all tasks in this batch to complete
+                for future in as_completed(future_to_record):
+                    record = future_to_record[future]
+                    try:
+                        document = future.result()
+                        if document:
+                            record_documents.append(document)
+                    except Exception as e:
+                        logger.exception(f"Failed to process record {record['id']}")
+                        raise e
+
+            yield record_documents
+            record_documents = []
+
+        # Yield any remaining records
         if record_documents:
             yield record_documents

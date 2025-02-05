@@ -57,6 +57,9 @@ class BasicCreateChatMessageRequest(ChunkContext):
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
 
+    # If True, uses agentic search instead of basic search
+    use_agentic_search: bool = False
+
 
 class BasicCreateChatMessageWithHistoryRequest(ChunkContext):
     # Last element is the new query. All previous elements are historical context
@@ -71,6 +74,8 @@ class BasicCreateChatMessageWithHistoryRequest(ChunkContext):
     # only works if using an OpenAI model. See the following for more details:
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
+    # If True, uses agentic search instead of basic search
+    use_agentic_search: bool = False
 
 
 class SimpleDoc(BaseModel):
@@ -120,8 +125,11 @@ class OneShotQARequest(ChunkContext):
     # will also disable Thread-based Rewording if specified
     query_override: str | None = None
 
-    # If True, skips generative an AI response to the search query
+    # If True, skips generating an AI response to the search query
     skip_gen_ai_answer_generation: bool = False
+
+    # If True, uses agentic search instead of basic search
+    use_agentic_search: bool = False
 
     @model_validator(mode="after")
     def check_persona_fields(self) -> "OneShotQARequest":

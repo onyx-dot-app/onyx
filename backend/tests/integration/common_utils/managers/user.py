@@ -165,6 +165,7 @@ class UserManager:
         target_status: bool,
         user_performing_action: DATestUser,
     ) -> DATestUser:
+        url_substring: str
         if target_status is True:
             url_substring = "activate"
         elif target_status is False:

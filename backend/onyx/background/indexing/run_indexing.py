@@ -35,6 +35,7 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import IndexModelStatus
 from onyx.document_index.factory import get_default_document_index
+from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import build_indexing_pipeline
@@ -219,9 +220,10 @@ def _run_indexing(
             callback=callback,
         )
 
-    # Indexing is only done into one index at a time
     document_index = get_default_document_index(
-        primary_index_name=ctx.index_name, secondary_index_name=None
+        index_attempt_start.search_settings,
+        None,
+        httpx_client=HttpxPool.get("vespa"),
     )
 
     indexing_pipeline = build_indexing_pipeline(
@@ -237,6 +239,7 @@ def _run_indexing(
         callback=callback,
     )
 
+    tracer: OnyxTracer
     if INDEXING_TRACER_INTERVAL > 0:
         logger.debug(f"Memory tracer starting: interval={INDEXING_TRACER_INTERVAL}")
         tracer = OnyxTracer()
@@ -253,6 +256,8 @@ def _run_indexing(
     document_count = 0
     chunk_count = 0
     run_end_dt = None
+    tracer_counter: int
+
     for ind, (window_start, window_end) in enumerate(
         get_time_windows_for_index_attempt(
             last_successful_run=datetime.fromtimestamp(
@@ -263,6 +268,7 @@ def _run_indexing(
     ):
         cc_pair_loop: ConnectorCredentialPair | None = None
         index_attempt_loop: IndexAttempt | None = None
+        tracer_counter = 0
 
         try:
             window_start = max(
@@ -287,7 +293,6 @@ def _run_indexing(
                     tenant_id=tenant_id,
                 )
 
-            tracer_counter = 0
             if INDEXING_TRACER_INTERVAL > 0:
                 tracer.snap()
             for doc_batch in connector_runner.run():

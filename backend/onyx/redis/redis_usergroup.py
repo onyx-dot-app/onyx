@@ -13,6 +13,7 @@ from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxRedisConstants
 from onyx.db.models import Document
 from onyx.redis.redis_object_helper import RedisObjectHelper
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -36,10 +37,12 @@ class RedisUserGroup(RedisObjectHelper):
 
     def set_fence(self, payload: int | None) -> None:
         if payload is None:
+            self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
             self.redis.delete(self.fence_key)
             return
 
         self.redis.set(self.fence_key, payload)
+        self.redis.sadd(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
 
     @property
     def payload(self) -> int | None:
@@ -109,6 +112,7 @@ class RedisUserGroup(RedisObjectHelper):
         return len(async_results), len(async_results)
 
     def reset(self) -> None:
+        self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
         self.redis.delete(self.taskset_key)
         self.redis.delete(self.fence_key)
 

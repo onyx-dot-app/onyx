@@ -57,7 +57,7 @@ from onyx.auth.invited_users import get_invited_users
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
-from onyx.auth.schemas import UserUpdate
+from onyx.auth.schemas import UserUpdateWithRole
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
@@ -216,7 +216,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
     verification_token_lifetime_seconds = AUTH_COOKIE_EXPIRE_TIME_SECONDS
-
     user_db: SQLAlchemyUserDatabase[User, uuid.UUID]
 
     async def create(
@@ -246,10 +245,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             referral_source=referral_source,
             request=request,
         )
+        user: User
 
         async with get_async_session_with_tenant(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-
             verify_email_is_invited(user_create.email)
             verify_email_domain(user_create.email)
             if MULTI_TENANT:
@@ -268,16 +267,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user_create.role = UserRole.ADMIN
                 else:
                     user_create.role = UserRole.BASIC
-
             try:
                 user = await super().create(user_create, safe=safe, request=request)  # type: ignore
             except exceptions.UserAlreadyExists:
                 user = await self.get_by_email(user_create.email)
                 # Handle case where user has used product outside of web and is now creating an account through web
                 if not user.role.is_web_login() and user_create.role.is_web_login():
-                    user_update = UserUpdate(
+                    user_update = UserUpdateWithRole(
                         password=user_create.password,
                         is_verified=user_create.is_verified,
+                        role=user_create.role,
                     )
                     user = await self.update(user_update, user)
                 else:
@@ -285,7 +284,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             finally:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
         return user
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
@@ -371,6 +369,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 "expires_at": expires_at,
                 "refresh_token": refresh_token,
             }
+
+            user: User
 
             try:
                 # Attempt to get user by OAuth account
@@ -1046,6 +1046,8 @@ async def api_key_dep(
 ) -> User | None:
     if AUTH_TYPE == AuthType.DISABLED:
         return None
+
+    user: User | None = None
 
     hashed_api_key = get_hashed_api_key_from_request(request)
     if not hashed_api_key:

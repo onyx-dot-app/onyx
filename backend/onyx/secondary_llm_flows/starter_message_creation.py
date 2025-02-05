@@ -16,7 +16,7 @@ from onyx.context.search.preprocessing.access_filters import (
 from onyx.db.document_set import get_document_sets_by_ids
 from onyx.db.models import StarterMessageModel as StarterMessage
 from onyx.db.models import User
-from onyx.document_index.document_index_utils import get_both_index_names
+from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.llm.factory import get_default_llms
 from onyx.prompts.starter_messages import format_persona_starter_message_prompt
@@ -34,8 +34,11 @@ def get_random_chunks_from_doc_sets(
     """
     Retrieves random chunks from the specified document sets.
     """
-    curr_ind_name, sec_ind_name = get_both_index_names(db_session)
-    document_index = get_default_document_index(curr_ind_name, sec_ind_name)
+    active_search_settings = get_active_search_settings(db_session)
+    document_index = get_default_document_index(
+        search_settings=active_search_settings.primary,
+        secondary_search_settings=active_search_settings.secondary,
+    )
 
     acl_filters = build_access_filters_for_user(user, db_session)
     filters = IndexFilters(document_set=doc_sets, access_control_list=acl_filters)

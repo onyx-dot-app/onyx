@@ -8,6 +8,9 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
+        "agent-faded":
+          "border-neutral-200 bg-neutral-100 text-neutral-600 hover:bg-neutral-200",
+        agent: "border-agent bg-agent text-white hover:bg-agent-hover",
         canceled:
           "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-75 dark:bg-gray-900 dark:text-neutral-50 dark:hover:bg-gray-850",
         orange:

@@ -5,6 +5,25 @@ import { truncateString } from "@/lib/utils";
 import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
 
+export const ResultIcon = ({
+  doc,
+  size,
+}: {
+  doc: OnyxDocument;
+  size: number;
+}) => {
+  return (
+    <div className="flex-none">
+      {" "}
+      {doc.is_internet || doc.source_type === "web" ? (
+        <WebResultIcon size={size} url={doc.link} />
+      ) : (
+        <SourceIcon iconSize={size} sourceType={doc.source_type} />
+      )}
+    </div>
+  );
+};
+
 export default function SourceCard({
   doc,
   setPresentingDocument,
@@ -16,7 +35,7 @@ export default function SourceCard({
     <div
       key={doc.document_id}
       onClick={() => openDocument(doc, setPresentingDocument)}
-      className="cursor-pointer text-left overflow-hidden flex flex-col gap-0.5 rounded-lg px-3 py-2 hover:bg-background-dark/80 bg-background-dark/60 w-[200px]"
+      className="cursor-pointer h-[80px] text-left overflow-hidden flex flex-col gap-0.5 rounded-lg px-3 py-2 bg-[#f1eee8] hover:bg-[#ebe7de] w-[200px]"
     >
       <div className="line-clamp-1 font-semibold text-ellipsis text-text-900  flex h-6 items-center gap-2 text-sm">
         {doc.is_internet || doc.source_type === "web" ? (
@@ -24,7 +43,7 @@ export default function SourceCard({
         ) : (
           <SourceIcon sourceType={doc.source_type} iconSize={18} />
         )}
-        <p>{truncateString(doc.semantic_identifier || doc.document_id, 16)}</p>
+        <p>{truncateString(doc.semantic_identifier || doc.document_id, 20)}</p>
       </div>
       <div className="line-clamp-2 text-sm font-semibold"></div>
       <div className="line-clamp-2 text-sm font-normal leading-snug text-text-700">
@@ -47,40 +66,63 @@ export function SeeMoreBlock({
   uniqueSources,
   toggled,
 }: SeeMoreBlockProps) {
+  // Gather total sources (unique + web).
+  const totalSources = uniqueSources.length + webSourceDomains.length;
+
+  // Filter out "web" from unique sources if we have any webSourceDomains
+  // (preserves the original logic).
   const filteredUniqueSources = uniqueSources.filter(
     (source) => source !== "web" && webSourceDomains.length > 0
   );
-  const numOfWebSourcesToDisplay = 3 - filteredUniqueSources.length;
+
+  // Build a list of up to three icons from the filtered unique sources and web sources.
+  // If we don't reach three icons but have at least one, we'll duplicate the last one.
+  const iconsToRender: Array<{ type: "source" | "web"; data: string }> = [];
+
+  // Push from filtered unique sources (max 3).
+  for (
+    let i = 0;
+    i < filteredUniqueSources.length && iconsToRender.length < 3;
+    i++
+  ) {
+    iconsToRender.push({ type: "source", data: filteredUniqueSources[i] });
+  }
+
+  // Then push from web source domains (until total of 3).
+  for (
+    let i = 0;
+    i < webSourceDomains.length && iconsToRender.length < 3;
+    i++
+  ) {
+    iconsToRender.push({ type: "web", data: webSourceDomains[i] });
+  }
+
+  // If we have fewer than 3 but at least one icon, duplicate the last until we reach 3.
+  while (iconsToRender.length < 3 && iconsToRender.length > 0) {
+    iconsToRender.push(iconsToRender[iconsToRender.length - 1]);
+  }
+
   return (
-    <div
+    <button
       onClick={toggleDocumentSelection}
-      className={`
-        cursor-pointer rounded-lg flex-none transition-all duration-500 hover:bg-background-dark/80 bg-background-dark/60 px-3 py-2
-      `}
+      className="w-full max-w-[260px] h-[80px] p-3 bg-[#f1eee8] text-left hover:bg-[#ebe7de] cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden"
     >
-      <div className="flex gap-y-2 flex-col items-start text-sm">
-        <p
-          onClick={toggleDocumentSelection}
-          className="flex-1 mr-1 font-semibold text-text-900 overflow-hidden text-ellipsis whitespace-nowrap"
-        >
-          {toggled ? "Hide Results" : "Show Sources"}
-        </p>
-        <div className="flex-shrink-0 flex gap-x-1 items-center">
-          {filteredUniqueSources.slice(0, 3).map((source, index) => (
-            <SourceIcon key={index} sourceType={source} iconSize={16} />
-          ))}
-          {webSourceDomains
-            .slice(0, numOfWebSourcesToDisplay)
-            .map((domain, ind) => (
-              <WebResultIcon key={ind} url={domain} />
-            ))}
-          {uniqueSources.length > 3 && (
-            <span className="text-xs text-text-700 font-semibold ml-1">
-              +{uniqueSources.length - 3}
-            </span>
-          )}
-        </div>
+      <div className="flex items-center gap-1">
+        {iconsToRender.map((icon, index) =>
+          icon.type === "source" ? (
+            <SourceIcon
+              key={index}
+              sourceType={icon.data as ValidSources}
+              iconSize={14}
+            />
+          ) : (
+            <WebResultIcon key={index} url={icon.data} size={14} />
+          )
+        )}
       </div>
-    </div>
+      <div className="text-text-darker text-xs font-semibold">
+        {toggled ? "Hide Results" : "Show All"}
+      </div>
+    </button>
   );
 }

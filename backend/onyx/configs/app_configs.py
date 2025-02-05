@@ -200,6 +200,8 @@ REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
 
+# this assumes that other redis settings remain the same as the primary
+REDIS_REPLICA_HOST = os.environ.get("REDIS_REPLICA_HOST") or REDIS_HOST
 
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
 
@@ -476,6 +478,12 @@ INDEXING_SIZE_WARNING_THRESHOLD = int(
 # 0 disables this behavior and is the default.
 INDEXING_TRACER_INTERVAL = int(os.environ.get("INDEXING_TRACER_INTERVAL") or 0)
 
+# Enable multi-threaded embedding model calls for parallel processing
+# Note: only applies for API-based embedding models
+INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
+    os.environ.get("INDEXING_EMBEDDING_MODEL_NUM_THREADS") or 1
+)
+
 # During an indexing attempt, specifies the number of batches which are allowed to
 # exception without aborting the attempt.
 INDEXING_EXCEPTION_LIMIT = int(os.environ.get("INDEXING_EXCEPTION_LIMIT") or 0)
@@ -609,3 +617,8 @@ POD_NAMESPACE = os.environ.get("POD_NAMESPACE")
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
 TEST_ENV = os.environ.get("TEST_ENV", "").lower() == "true"
+
+# Set to true to mock LLM responses for testing purposes
+MOCK_LLM_RESPONSE = (
+    os.environ.get("MOCK_LLM_RESPONSE") if os.environ.get("MOCK_LLM_RESPONSE") else None
+)

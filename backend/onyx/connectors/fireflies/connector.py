@@ -50,6 +50,9 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
     current_link = ""
     current_text = ""
 
+    if transcript["sentences"] is None:
+        return None
+
     for sentence in transcript["sentences"]:
         if sentence["speaker_name"] != current_speaker_name:
             if current_speaker_name is not None:

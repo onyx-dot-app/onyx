@@ -33,6 +33,7 @@ class TaskDependencyError(RuntimeError):
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
+    ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
     trail=False,
     bind=True,
@@ -139,13 +140,6 @@ def try_generate_document_cc_pair_cleanup_tasks(
         submitted=datetime.now(timezone.utc),
     )
 
-    # create before setting fence to avoid race condition where the monitoring
-    # task updates the sync record before it is created
-    insert_sync_record(
-        db_session=db_session,
-        entity_id=cc_pair_id,
-        sync_type=SyncType.CONNECTOR_DELETION,
-    )
     redis_connector.delete.set_fence(fence_payload)
 
     try:
@@ -184,6 +178,13 @@ def try_generate_document_cc_pair_cleanup_tasks(
         )
         if tasks_generated is None:
             raise ValueError("RedisConnectorDeletion.generate_tasks returned None")
+
+        insert_sync_record(
+            db_session=db_session,
+            entity_id=cc_pair_id,
+            sync_type=SyncType.CONNECTOR_DELETION,
+        )
+
     except TaskDependencyError:
         redis_connector.delete.set_fence(None)
         raise

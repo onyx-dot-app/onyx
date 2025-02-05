@@ -358,8 +358,14 @@ def extract_file_text(
 
     try:
         if get_unstructured_api_key():
-            return unstructured_to_text(file, file_name)
-
+            try:
+                return unstructured_to_text(file, file_name)
+            except Exception as unstructured_error:
+                logger.error(
+                    f"Failed to process with Unstructured: {str(unstructured_error)}. Falling back to normal processing."
+                )
+                # Fall through to normal processing
+        final_extension: str
         if file_name or extension:
             if extension is not None:
                 final_extension = extension

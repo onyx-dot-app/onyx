@@ -1,6 +1,5 @@
 from datetime import timedelta
 from typing import Any
-from typing import cast
 
 from celery import Celery
 from celery import signals
@@ -8,7 +7,6 @@ from celery.beat import PersistentScheduler  # type: ignore
 from celery.signals import beat_init
 
 import onyx.background.celery.apps.app_base as app_base
-from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import POSTGRES_CELERY_BEAT_APP_NAME
 from onyx.db.engine import get_all_tenant_ids
 from onyx.db.engine import SqlEngine
@@ -132,21 +130,25 @@ class DynamicTenantScheduler(PersistentScheduler):
         # get current schedule and extract current tenants
         current_schedule = self.schedule.items()
 
-        current_tenants = set()
-        for task_name, _ in current_schedule:
-            task_name = cast(str, task_name)
-            if task_name.startswith(ONYX_CLOUD_CELERY_TASK_PREFIX):
-                continue
+        # there are no more per tenant beat tasks, so comment this out
+        # NOTE: we may not actualy need this scheduler any more and should
+        # test reverting to a regular beat schedule implementation
 
-            if "_" in task_name:
-                # example: "check-for-condition-tenant_12345678-abcd-efgh-ijkl-12345678"
-                # -> "12345678-abcd-efgh-ijkl-12345678"
-                current_tenants.add(task_name.split("_")[-1])
-        logger.info(f"Found {len(current_tenants)} existing items in schedule")
+        # current_tenants = set()
+        # for task_name, _ in current_schedule:
+        #     task_name = cast(str, task_name)
+        #     if task_name.startswith(ONYX_CLOUD_CELERY_TASK_PREFIX):
+        #         continue
 
-        for tenant_id in tenant_ids:
-            if tenant_id not in current_tenants:
-                logger.info(f"Processing new tenant: {tenant_id}")
+        #     if "_" in task_name:
+        #         # example: "check-for-condition-tenant_12345678-abcd-efgh-ijkl-12345678"
+        #         # -> "12345678-abcd-efgh-ijkl-12345678"
+        #         current_tenants.add(task_name.split("_")[-1])
+        # logger.info(f"Found {len(current_tenants)} existing items in schedule")
+
+        # for tenant_id in tenant_ids:
+        #     if tenant_id not in current_tenants:
+        #         logger.info(f"Processing new tenant: {tenant_id}")
 
         new_schedule = self._generate_schedule(tenant_ids)
 

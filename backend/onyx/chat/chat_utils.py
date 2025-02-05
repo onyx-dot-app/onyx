@@ -48,6 +48,8 @@ def prepare_chat_message_request(
     retrieval_details: RetrievalDetails | None,
     rerank_settings: RerankingDetails | None,
     db_session: Session,
+    use_agentic_search: bool = False,
+    skip_gen_ai_answer_generation: bool = False,
 ) -> CreateChatMessageRequest:
     # Typically used for one shot flows like SlackBot or non-chat API endpoint use cases
     new_chat_session = create_chat_session(
@@ -72,6 +74,8 @@ def prepare_chat_message_request(
         search_doc_ids=None,
         retrieval_options=retrieval_details,
         rerank_settings=rerank_settings,
+        use_agentic_search=use_agentic_search,
+        skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
     )
 
 
@@ -162,6 +166,7 @@ def create_chat_chain(
         )
 
     current_message: ChatMessage | None = root_message
+    previous_message: ChatMessage | None = None
     while current_message is not None:
         child_msg = current_message.latest_child_message
 
@@ -179,7 +184,17 @@ def create_chat_chain(
                 "could not find next message in the same session"
             )
 
-        mainline_messages.append(current_message)
+        if (
+            current_message.message_type == MessageType.ASSISTANT
+            and previous_message is not None
+            and previous_message.message_type == MessageType.ASSISTANT
+            and mainline_messages
+        ):
+            mainline_messages[-1] = current_message
+        else:
+            mainline_messages.append(current_message)
+
+        previous_message = current_message
 
     if not mainline_messages:
         raise RuntimeError("Could not trace chat message history")

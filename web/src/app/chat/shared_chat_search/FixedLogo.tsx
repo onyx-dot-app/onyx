@@ -26,7 +26,7 @@ export const LogoComponent = memo(function LogoComponent({
   const router = useRouter();
 
   return (
-    <button
+    <div
       onClick={isAdmin ? () => router.push("/chat") : () => {}}
       className={`max-w-[200px]
         ${!show && "mobile:hidden"}
@@ -51,7 +51,7 @@ export const LogoComponent = memo(function LogoComponent({
       ) : (
         <LogoType />
       )}
-    </button>
+    </div>
   );
 });
 

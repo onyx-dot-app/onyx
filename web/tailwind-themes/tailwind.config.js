@@ -31,11 +31,16 @@ module.exports = {
           "0%, 100%": { opacity: 0.9 },
           "50%": { opacity: 0.4 },
         },
+        "fade-in-scale": {
+          "0%": { opacity: "0", transform: "scale(0.95)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
       },
       animation: {
         "fade-in-up": "fadeInUp 0.5s ease-out",
         "subtle-pulse": "subtle-pulse 2s ease-in-out infinite",
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "fade-in-scale": "fade-in-scale 0.3s ease-out",
       },
 
       gradientColorStops: {
@@ -255,6 +260,13 @@ module.exports = {
         success: "var(--success)",
         alert: "var(--alert)",
         accent: "var(--accent)",
+        // -        agent: "#6C6AD6",
+        "agent-sidebar": "#BE5D0E",
+        agent: "#E47011",
+        // agent: "#FE8B09",
+
+        // agent: "#6C6AD6",
+        // agent: "#FE8B09",
 
         // hover
         "hover-light": "#F1EEE8",

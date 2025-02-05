@@ -18,7 +18,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -28,10 +28,8 @@ KV_REDIS_KEY_EXPIRATION = 60 * 60 * 24  # 1 Day
 
 
 class PgRedisKVStore(KeyValueStore):
-    def __init__(
-        self, redis_client: Redis | None = None, tenant_id: str | None = None
-    ) -> None:
-        self.tenant_id = tenant_id or CURRENT_TENANT_ID_CONTEXTVAR.get()
+    def __init__(self, redis_client: Redis | None = None) -> None:
+        self.tenant_id = get_current_tenant_id()
 
         # If no redis_client is provided, fall back to the context var
         if redis_client is not None:

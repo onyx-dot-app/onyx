@@ -481,7 +481,9 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
         name: "sites",
         optional: true,
         description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
+
 • Specifying 'https://onyxai.sharepoint.com/sites/support' for example will only index documents within this site.
+
 • Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example will only index documents within this folder.
 `,
       },
@@ -1102,6 +1104,14 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         query: "Enter the table name or ID:",
         label: "Table Name or Table ID",
         name: "table_name_or_id",
+        optional: false,
+      },
+      {
+        type: "checkbox",
+        label: "Treat all fields except attachments as metadata",
+        name: "treat_all_non_attachment_fields_as_metadata",
+        description:
+          "Choose this if the primary content to index are attachments and all other columns are metadata for these attachments.",
         optional: false,
       },
     ],

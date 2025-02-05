@@ -1,5 +1,8 @@
+import mimetypes
 import os
 import uuid
+import zipfile
+from io import BytesIO
 from typing import cast
 
 from fastapi import APIRouter
@@ -386,10 +389,43 @@ def upload_files(
     for file in files:
         if not file.filename:
             raise HTTPException(status_code=400, detail="File name cannot be empty")
+
+    # Skip directories and known macOS metadata entries
+    def should_process_file(file_path: str) -> bool:
+        normalized_path = os.path.normpath(file_path)
+        return not any(part.startswith(".") for part in normalized_path.split(os.sep))
+
     try:
         file_store = get_default_file_store(db_session)
         deduped_file_paths = []
+
         for file in files:
+            if file.content_type and file.content_type.startswith("application/zip"):
+                with zipfile.ZipFile(file.file, "r") as zf:
+                    for file_info in zf.namelist():
+                        if zf.getinfo(file_info).is_dir():
+                            continue
+
+                        if not should_process_file(file_info):
+                            continue
+
+                        sub_file_bytes = zf.read(file_info)
+                        sub_file_name = os.path.join(str(uuid.uuid4()), file_info)
+                        deduped_file_paths.append(sub_file_name)
+
+                        mime_type, __ = mimetypes.guess_type(file_info)
+                        if mime_type is None:
+                            mime_type = "application/octet-stream"
+
+                        file_store.save_file(
+                            file_name=sub_file_name,
+                            content=BytesIO(sub_file_bytes),
+                            display_name=os.path.basename(file_info),
+                            file_origin=FileOrigin.CONNECTOR,
+                            file_type=mime_type,
+                        )
+                continue
+
             file_path = os.path.join(str(uuid.uuid4()), cast(str, file.filename))
             deduped_file_paths.append(file_path)
             file_store.save_file(

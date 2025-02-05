@@ -2,6 +2,8 @@ import { test, expect } from "@playwright/test";
 import chromaticSnpashots from "./chromaticSnpashots.json";
 import type { Page } from "@playwright/test";
 
+test.use({ storageState: "admin_auth.json" });
+
 async function verifyAdminPageNavigation(
   page: Page,
   path: string,
@@ -13,7 +15,10 @@ async function verifyAdminPageNavigation(
   }
 ) {
   await page.goto(`http://localhost:3000/admin/${path}`);
-  await expect(page.locator("h1.text-3xl")).toHaveText(pageTitle);
+
+  await expect(page.locator("h1.text-3xl")).toHaveText(pageTitle, {
+    timeout: 2000,
+  });
 
   if (options?.paragraphText) {
     await expect(page.locator("p.text-sm").nth(0)).toHaveText(
@@ -35,18 +40,12 @@ async function verifyAdminPageNavigation(
 }
 
 for (const chromaticSnapshot of chromaticSnpashots) {
-  test(
-    `Admin - ${chromaticSnapshot.name}`,
-    {
-      tag: "@admin",
-    },
-    async ({ page }) => {
-      await verifyAdminPageNavigation(
-        page,
-        chromaticSnapshot.path,
-        chromaticSnapshot.pageTitle,
-        chromaticSnapshot.options
-      );
-    }
-  );
+  test(`Admin - ${chromaticSnapshot.name}`, async ({ page }) => {
+    await verifyAdminPageNavigation(
+      page,
+      chromaticSnapshot.path,
+      chromaticSnapshot.pageTitle,
+      chromaticSnapshot.options
+    );
+  });
 }

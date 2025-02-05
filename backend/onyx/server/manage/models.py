@@ -44,11 +44,11 @@ class UserPreferences(BaseModel):
     chosen_assistants: list[int] | None = None
     hidden_assistants: list[int] = []
     visible_assistants: list[int] = []
-    recent_assistants: list[int] | None = None
     default_model: str | None = None
     auto_scroll: bool | None = None
     pinned_assistants: list[int] | None = None
     shortcut_enabled: bool | None = None
+    temperature_override_enabled: bool | None = None
 
 
 class UserInfo(BaseModel):
@@ -92,6 +92,7 @@ class UserInfo(BaseModel):
                     hidden_assistants=user.hidden_assistants,
                     pinned_assistants=user.pinned_assistants,
                     visible_assistants=user.visible_assistants,
+                    temperature_override_enabled=user.temperature_override_enabled,
                 )
             ),
             organization_name=organization_name,

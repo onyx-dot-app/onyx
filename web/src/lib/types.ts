@@ -12,6 +12,7 @@ interface UserPreferences {
   recent_assistants: number[];
   auto_scroll: boolean | null;
   shortcut_enabled: boolean;
+  temperature_override_enabled: boolean;
 }
 
 export enum UserRole {
@@ -201,6 +202,7 @@ export interface CCPairDescriptor<ConnectorType, CredentialType> {
   name: string | null;
   connector: Connector<ConnectorType>;
   credential: Credential<CredentialType>;
+  access_type: AccessType;
 }
 
 export interface DocumentSet {
@@ -357,7 +359,8 @@ export type ConfigurableSources = Exclude<
 
 export const oauthSupportedSources: ConfigurableSources[] = [
   ValidSources.Slack,
-  ValidSources.GoogleDrive,
+  // NOTE: temporarily disabled until our GDrive App is approved
+  // ValidSources.GoogleDrive,
 ];
 
 export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];

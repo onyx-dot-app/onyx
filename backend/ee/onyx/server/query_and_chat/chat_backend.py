@@ -179,6 +179,7 @@ def handle_simplified_chat_message(
         chunks_below=0,
         full_doc=chat_message_req.full_doc,
         structured_response_format=chat_message_req.structured_response_format,
+        use_agentic_search=chat_message_req.use_agentic_search,
     )
 
     packets = stream_chat_message_objects(
@@ -301,6 +302,7 @@ def handle_send_message_simple_with_history(
         chunks_below=0,
         full_doc=req.full_doc,
         structured_response_format=req.structured_response_format,
+        use_agentic_search=req.use_agentic_search,
     )
 
     packets = stream_chat_message_objects(

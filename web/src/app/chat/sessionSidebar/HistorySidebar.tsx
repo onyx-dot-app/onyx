@@ -6,13 +6,20 @@ import React, {
   useContext,
   useState,
   useCallback,
+  useLayoutEffect,
+  useRef,
 } from "react";
 import Link from "next/link";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
+
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatSession } from "../interfaces";
-import { NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA } from "@/lib/constants";
 import { Folder } from "../folders/interfaces";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 import { DocumentIcon2, NewChatIcon } from "@/components/icons/icons";
@@ -44,6 +51,7 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CircleX } from "lucide-react";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 
 interface HistorySidebarProps {
   page: pageType;
@@ -90,6 +98,24 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
     ...(isDragging ? { zIndex: 1000, position: "relative" as const } : {}),
   };
 
+  const nameRef = useRef<HTMLParagraphElement>(null);
+  const hiddenNameRef = useRef<HTMLSpanElement>(null);
+  const [isNameTruncated, setIsNameTruncated] = useState(false);
+
+  useLayoutEffect(() => {
+    const checkTruncation = () => {
+      if (nameRef.current && hiddenNameRef.current) {
+        const visibleWidth = nameRef.current.offsetWidth;
+        const fullTextWidth = hiddenNameRef.current.offsetWidth;
+        setIsNameTruncated(fullTextWidth > visibleWidth);
+      }
+    };
+
+    checkTruncation();
+    window.addEventListener("resize", checkTruncation);
+    return () => window.removeEventListener("resize", checkTruncation);
+  }, [assistant.name]);
+
   return (
     <div
       ref={setNodeRef}
@@ -102,7 +128,8 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
         size={16}
         className="w-3 ml-[2px] mr-[2px] group-hover:visible invisible flex-none cursor-grab"
       />
-      <button
+      <div
+        data-testid={`assistant-[${assistant.id}]`}
         onClick={(e) => {
           e.preventDefault();
           if (!isDragging) {
@@ -115,10 +142,28 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
             : ""
         } relative flex items-center gap-x-2 py-1 px-2 rounded-md`}
       >
-        <AssistantIcon assistant={assistant} size={16} className="flex-none" />
-        <p className="text-base text-left w-fit line-clamp-1 text-ellipsis text-black">
+        <AssistantIcon assistant={assistant} size={20} className="flex-none" />
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p
+                ref={nameRef}
+                className="text-base text-left w-fit line-clamp-1 text-ellipsis text-black"
+              >
+                {assistant.name}
+              </p>
+            </TooltipTrigger>
+            {isNameTruncated && (
+              <TooltipContent>{assistant.name}</TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+        <span
+          ref={hiddenNameRef}
+          className="absolute left-[-9999px] whitespace-nowrap"
+        >
           {assistant.name}
-        </p>
+        </span>
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -128,7 +173,7 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
         >
           <CircleX size={16} className="text-text-history-sidebar-button" />
         </button>
-      </button>
+      </div>
     </div>
   );
 };
@@ -205,9 +250,11 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
 
     const handleNewChat = () => {
       reset();
+      console.log("currentChatSession", currentChatSession);
+
       const newChatUrl =
         `/${page}` +
-        (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA && currentChatSession
+        (currentChatSession
           ? `?assistantId=${currentChatSession.persona_id}`
           : "");
       router.push(newChatUrl);
@@ -229,7 +276,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             flex-col relative
             h-screen
             pt-2
-            
             transition-transform 
             `}
         >
@@ -243,13 +289,12 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             />
           </div>
           {page == "chat" && (
-            <div className="px-4 px-1 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
+            <div className="px-4 px-1 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
               <Link
-                className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
+                className="w-full px-2 py-1 group rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
                 href={
                   `/${page}` +
-                  (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA &&
-                  currentChatSession?.persona_id
+                  (currentChatSession
                     ? `?assistantId=${currentChatSession?.persona_id}`
                     : "")
                 }
@@ -262,11 +307,8 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                   }
                 }}
               >
-                <NewChatIcon
-                  size={20}
-                  className="flex-none text-text-history-sidebar-button"
-                />
-                <p className="my-auto flex font-normal items-center text-base">
+                <NewChatIcon size={20} className="flex-none" />
+                <p className="my-auto flex font-normal  items-center ">
                   Start New Chat
                 </p>
               </Link>
@@ -274,14 +316,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                 <Link
                   className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
                   href="/chat/input-prompts"
-                  onClick={(e) => {
-                    if (e.metaKey || e.ctrlKey) {
-                      return;
-                    }
-                    if (handleNewChat) {
-                      handleNewChat();
-                    }
-                  }}
                 >
                   <DocumentIcon2
                     size={20}
@@ -295,7 +329,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             </div>
           )}
 
-          <div className="h-full relative overflow-y-auto">
+          <div className="h-full relative overflow-x-hidden overflow-y-auto">
             <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-[#6c6c6c]/80 items-center font-normal leading-normal">
               Assistants
             </div>
@@ -303,6 +337,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={handleDragEnd}
+              modifiers={[restrictToVerticalAxis]}
             >
               <SortableContext
                 items={pinnedAssistants.map((a) =>

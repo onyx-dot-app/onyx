@@ -271,6 +271,8 @@ def bulk_invite_users(
 
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     new_invited_emails = []
+    email: str
+
     try:
         for email in emails:
             email_info = validate_email(email)
@@ -568,33 +570,9 @@ def verify_user_logged_in(
 """APIs to adjust user preferences"""
 
 
-class ChosenDefaultModelRequest(BaseModel):
-    default_model: str | None = None
-
-
-class RecentAssistantsRequest(BaseModel):
-    current_assistant: int
-
-
-def update_recent_assistants(
-    recent_assistants: list[int] | None, current_assistant: int
-) -> list[int]:
-    if recent_assistants is None:
-        recent_assistants = []
-    else:
-        recent_assistants = [x for x in recent_assistants if x != current_assistant]
-
-    # Add current assistant to start of list
-    recent_assistants.insert(0, current_assistant)
-
-    # Keep only the 5 most recent assistants
-    recent_assistants = recent_assistants[:5]
-    return recent_assistants
-
-
-@router.patch("/user/recent-assistants")
-def update_user_recent_assistants(
-    request: RecentAssistantsRequest,
+@router.patch("/temperature-override-enabled")
+def update_user_temperature_override_enabled(
+    temperature_override_enabled: bool,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
@@ -602,27 +580,24 @@ def update_user_recent_assistants(
         if AUTH_TYPE == AuthType.DISABLED:
             store = get_kv_store()
             no_auth_user = fetch_no_auth_user(store)
-            preferences = no_auth_user.preferences
-            recent_assistants = preferences.recent_assistants
-            updated_preferences = update_recent_assistants(
-                recent_assistants, request.current_assistant
+            no_auth_user.preferences.temperature_override_enabled = (
+                temperature_override_enabled
             )
-            preferences.recent_assistants = updated_preferences
-            set_no_auth_user_preferences(store, preferences)
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
             return
         else:
             raise RuntimeError("This should never happen")
 
-    recent_assistants = UserInfo.from_model(user).preferences.recent_assistants
-    updated_recent_assistants = update_recent_assistants(
-        recent_assistants, request.current_assistant
-    )
     db_session.execute(
         update(User)
         .where(User.id == user.id)  # type: ignore
-        .values(recent_assistants=updated_recent_assistants)
+        .values(temperature_override_enabled=temperature_override_enabled)
     )
     db_session.commit()
+
+
+class ChosenDefaultModelRequest(BaseModel):
+    default_model: str | None = None
 
 
 @router.patch("/shortcut-enabled")
@@ -729,30 +704,6 @@ def update_user_pinned_assistants(
 
 class ChosenAssistantsRequest(BaseModel):
     chosen_assistants: list[int]
-
-
-@router.patch("/user/assistant-list")
-def update_user_assistant_list(
-    request: ChosenAssistantsRequest,
-    user: User | None = Depends(current_user),
-    db_session: Session = Depends(get_session),
-) -> None:
-    if user is None:
-        if AUTH_TYPE == AuthType.DISABLED:
-            store = get_kv_store()
-            no_auth_user = fetch_no_auth_user(store)
-            no_auth_user.preferences.chosen_assistants = request.chosen_assistants
-            set_no_auth_user_preferences(store, no_auth_user.preferences)
-            return
-        else:
-            raise RuntimeError("This should never happen")
-
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(chosen_assistants=request.chosen_assistants)
-    )
-    db_session.commit()
 
 
 def update_assistant_visibility(

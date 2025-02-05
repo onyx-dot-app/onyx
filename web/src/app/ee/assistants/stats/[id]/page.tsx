@@ -35,6 +35,7 @@ export default async function GalleryPage(props: {
     llmProviders,
     defaultAssistantId,
     inputPrompts,
+    proSearchToggled,
   } = data;
 
   return (
@@ -43,6 +44,7 @@ export default async function GalleryPage(props: {
         inputPrompts,
         chatSessions,
         toggledSidebar: toggleSidebar,
+        proSearchToggled,
         availableSources,
         ccPairs,
         documentSets,

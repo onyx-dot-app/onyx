@@ -26,6 +26,7 @@ from langchain_core.messages.tool import ToolMessage
 from langchain_core.prompt_values import PromptValue
 
 from onyx.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
+from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.configs.model_configs import (
     DISABLE_LITELLM_STREAMING,
 )
@@ -387,6 +388,7 @@ class DefaultMultiLLM(LLM):
 
         try:
             return litellm.completion(
+                mock_response=MOCK_LLM_RESPONSE,
                 # model choice
                 model=f"{self.config.model_provider}/{self.config.deployment_name or self.config.model_name}",
                 # NOTE: have to pass in None instead of empty string for these
@@ -402,7 +404,7 @@ class DefaultMultiLLM(LLM):
                 # streaming choice
                 stream=stream,
                 # model params
-                temperature=self._temperature,
+                temperature=0,
                 timeout=self._timeout,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified

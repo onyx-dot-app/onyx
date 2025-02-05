@@ -6,13 +6,11 @@ import { BackendChatSession } from "../../interfaces";
 import {
   buildLatestMessageChain,
   getCitedDocumentsFromMessage,
-  getHumanAndAIMessageFromMessageNumber,
   processRawChatHistory,
 } from "../../lib";
 import { AIMessage, HumanMessage } from "../../message/Messages";
+import { AgenticMessage } from "../../message/AgenticMessage";
 import { Callout } from "@/components/ui/callout";
-import { Separator } from "@/components/ui/separator";
-import { useRouter } from "next/navigation";
 import { useContext, useEffect, useState } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
@@ -24,7 +22,7 @@ import { DocumentResults } from "../../documentSidebar/DocumentResults";
 import { Modal } from "@/components/Modal";
 import FunctionalHeader from "@/components/chat_search/Header";
 import FixedLogo from "../../shared_chat_search/FixedLogo";
-import { useDocumentSelection } from "../../useDocumentSelection";
+import { useRouter } from "next/navigation";
 
 function BackToOnyxButton({
   documentSidebarToggled,
@@ -108,6 +106,7 @@ export function SharedChatDisplay({
         <div className="md:hidden">
           <Modal noPadding noScroll>
             <DocumentResults
+              agenticMessage={false}
               isSharedChat={true}
               selectedMessage={
                 selectedMessageForDocDisplay
@@ -163,6 +162,7 @@ export function SharedChatDisplay({
             `}
               >
                 <DocumentResults
+                  agenticMessage={false}
                   modal={false}
                   isSharedChat={true}
                   selectedMessage={
@@ -224,7 +224,7 @@ export function SharedChatDisplay({
                 </div>
                 {isReady ? (
                   <div className="w-full pt-24 pb-16">
-                    {messages.map((message) => {
+                    {messages.map((message, i) => {
                       if (message.type === "user") {
                         return (
                           <HumanMessage
@@ -234,44 +234,155 @@ export function SharedChatDisplay({
                             files={message.files}
                           />
                         );
+                      } else if (message.type === "assistant") {
+                        const secondLevelMessage =
+                          messages[messages.indexOf(message) + 1]?.type ===
+                          "assistant"
+                            ? messages[messages.indexOf(message) + 1]
+                            : undefined;
+
+                        const secondLevelAssistantMessage =
+                          messages[messages.indexOf(message) + 1]?.type ===
+                          "assistant"
+                            ? messages[messages.indexOf(message) + 1]?.message
+                            : undefined;
+
+                        const agenticDocs =
+                          messages[messages.indexOf(message) + 1]?.type ===
+                          "assistant"
+                            ? messages[messages.indexOf(message) + 1]?.documents
+                            : undefined;
+
+                        if (messages[i - 1]?.type === "assistant") {
+                          return null;
+                        }
+
+                        if (
+                          message.sub_questions &&
+                          message.sub_questions.length > 0
+                        ) {
+                          return (
+                            <AgenticMessage
+                              shared
+                              key={message.messageId}
+                              isImprovement={message.isImprovement}
+                              secondLevelGenerating={false}
+                              secondLevelSubquestions={message.sub_questions?.filter(
+                                (subQuestion) => subQuestion.level === 1
+                              )}
+                              secondLevelAssistantMessage={
+                                (message.second_level_message &&
+                                message.second_level_message.length > 0
+                                  ? message.second_level_message
+                                  : secondLevelAssistantMessage) || undefined
+                              }
+                              subQuestions={
+                                message.sub_questions?.filter(
+                                  (subQuestion) => subQuestion.level === 0
+                                ) || []
+                              }
+                              agenticDocs={message.agentic_docs || agenticDocs}
+                              toggleDocDisplay={(agentic: boolean) => {
+                                if (agentic) {
+                                  setSelectedMessageForDocDisplay(
+                                    message.messageId
+                                  );
+                                } else {
+                                  setSelectedMessageForDocDisplay(
+                                    secondLevelMessage
+                                      ? secondLevelMessage.messageId
+                                      : null
+                                  );
+                                }
+                              }}
+                              docs={message?.documents}
+                              setPresentingDocument={setPresentingDocument}
+                              overriddenModel={message.overridden_model}
+                              currentPersona={persona}
+                              messageId={message.messageId}
+                              content={message.message}
+                              files={message.files}
+                              query={message.query || undefined}
+                              citedDocuments={getCitedDocumentsFromMessage(
+                                message
+                              )}
+                              toolCall={message.toolCall}
+                              isComplete={true}
+                              selectedDocuments={[]}
+                              toggleDocumentSelection={() => {
+                                if (
+                                  !documentSidebarToggled ||
+                                  (documentSidebarToggled &&
+                                    selectedMessageForDocDisplay ===
+                                      message.messageId)
+                                ) {
+                                  setDocumentSidebarToggled(
+                                    !documentSidebarToggled
+                                  );
+                                }
+                                setSelectedMessageForDocDisplay(
+                                  message.messageId
+                                );
+                              }}
+                            />
+                          );
+                        } else {
+                          return (
+                            <AIMessage
+                              shared
+                              key={message.messageId}
+                              docs={message?.documents}
+                              setPresentingDocument={setPresentingDocument}
+                              overriddenModel={message.overridden_model}
+                              currentPersona={persona}
+                              messageId={message.messageId}
+                              content={message.message}
+                              files={message.files}
+                              query={message.query || undefined}
+                              citedDocuments={getCitedDocumentsFromMessage(
+                                message
+                              )}
+                              toolCall={message.toolCall}
+                              isComplete={true}
+                              hasDocs={
+                                (message.documents &&
+                                  message.documents.length > 0) === true
+                              }
+                              selectedDocuments={[]}
+                              toggleDocumentSelection={() => {
+                                if (
+                                  !documentSidebarToggled ||
+                                  (documentSidebarToggled &&
+                                    selectedMessageForDocDisplay ===
+                                      message.messageId)
+                                ) {
+                                  setDocumentSidebarToggled(
+                                    !documentSidebarToggled
+                                  );
+                                }
+                                setSelectedMessageForDocDisplay(
+                                  message.messageId
+                                );
+                              }}
+                              retrievalDisabled={false}
+                            />
+                          );
+                        }
                       } else {
                         return (
-                          <AIMessage
-                            shared
-                            query={message.query || undefined}
-                            hasDocs={
-                              (message.documents &&
-                                message.documents.length > 0) === true
-                            }
-                            toolCall={message.toolCall}
-                            docs={message.documents}
-                            setPresentingDocument={setPresentingDocument}
-                            currentPersona={persona}
-                            key={message.messageId}
-                            messageId={message.messageId}
-                            content={message.message}
-                            files={message.files || []}
-                            citedDocuments={getCitedDocumentsFromMessage(
-                              message
-                            )}
-                            // toggleDocumentSelection={() => {
-                            //   setDocumentSidebarToggled(true);
-                            // }}
-                            toggleDocumentSelection={() => {
-                              if (
-                                !documentSidebarToggled ||
-                                (documentSidebarToggled &&
-                                  selectedMessageForDocDisplay ===
-                                    message.messageId)
-                              ) {
-                                toggleDocumentSidebar();
+                          <div key={message.messageId}>
+                            <AgenticMessage
+                              shared
+                              subQuestions={message.sub_questions || []}
+                              currentPersona={persona}
+                              messageId={message.messageId}
+                              content={
+                                <p className="text-red-700 text-sm my-auto">
+                                  {message.message}
+                                </p>
                               }
-                              setSelectedMessageForDocDisplay(
-                                message.messageId
-                              );
-                            }}
-                            isComplete
-                          />
+                            />
+                          </div>
                         );
                       }
                     })}

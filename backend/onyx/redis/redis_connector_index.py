@@ -1,9 +1,12 @@
 from datetime import datetime
+from typing import Any
 from typing import cast
 from uuid import uuid4
 
 import redis
 from pydantic import BaseModel
+
+from onyx.configs.constants import OnyxRedisConstants
 
 
 class RedisConnectorIndexPayload(BaseModel):
@@ -33,8 +36,8 @@ class RedisConnectorIndex:
     TERMINATE_TTL = 600
 
     # used to signal the overall workflow is still active
-    # there are gaps in time between states where we need some slack
-    # to correctly transition
+    # it's impossible to get the exact state of the system at a single point in time
+    # so we need a signal with a TTL to bridge gaps in our checks
     ACTIVE_PREFIX = PREFIX + "_active"
     ACTIVE_TTL = 3600
 
@@ -89,7 +92,7 @@ class RedisConnectorIndex:
     @property
     def payload(self) -> RedisConnectorIndexPayload | None:
         # read related data and evaluate/print task progress
-        fence_bytes = cast(bytes, self.redis.get(self.fence_key))
+        fence_bytes = cast(Any, self.redis.get(self.fence_key))
         if fence_bytes is None:
             return None
 
@@ -103,10 +106,12 @@ class RedisConnectorIndex:
         payload: RedisConnectorIndexPayload | None,
     ) -> None:
         if not payload:
+            self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
             self.redis.delete(self.fence_key)
             return
 
         self.redis.set(self.fence_key, payload.model_dump_json())
+        self.redis.sadd(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
 
     def terminating(self, celery_task_id: str) -> bool:
         if self.redis.exists(f"{self.terminate_key}_{celery_task_id}"):
@@ -188,6 +193,7 @@ class RedisConnectorIndex:
         return status
 
     def reset(self) -> None:
+        self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
         self.redis.delete(self.active_key)
         self.redis.delete(self.generator_lock_key)
         self.redis.delete(self.generator_progress_key)

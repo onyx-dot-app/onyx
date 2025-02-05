@@ -111,6 +111,7 @@ async def login_as_anonymous_user(
     token = generate_anonymous_user_jwt_token(tenant_id)
 
     response = Response()
+    response.delete_cookie("fastapiusersauth")
     response.set_cookie(
         key=ANONYMOUS_USER_COOKIE_NAME,
         value=token,

@@ -31,14 +31,15 @@ from onyx.db.document import upsert_documents
 from onyx.db.document_set import fetch_document_sets_for_documents
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.models import Document as DBDocument
+from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import create_or_add_document_tag
 from onyx.db.tag import create_or_add_document_tag_list
+from onyx.document_index.document_index_utils import (
+    get_multipass_config,
+)
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
-from onyx.document_index.vespa.indexing_utils import (
-    get_multipass_config,
-)
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -357,7 +358,6 @@ def index_doc_batch(
         is_public=False,
     )
 
-    logger.debug("Filtering Documents")
     filtered_documents = filter_fnc(document_batch)
 
     ctx = index_doc_batch_prepare(
@@ -379,6 +379,15 @@ def index_doc_batch(
         return IndexingPipelineResult(
             new_docs=0, total_docs=len(filtered_documents), total_chunks=0
         )
+
+    doc_descriptors = [
+        {
+            "doc_id": doc.id,
+            "doc_length": doc.get_total_char_length(),
+        }
+        for doc in ctx.updatable_docs
+    ]
+    logger.debug(f"Starting indexing process for documents: {doc_descriptors}")
 
     logger.debug("Starting chunking")
     chunks: list[DocAwareChunk] = chunker.chunk(ctx.updatable_docs)
@@ -527,7 +536,8 @@ def build_indexing_pipeline(
     callback: IndexingHeartbeatInterface | None = None,
 ) -> IndexingPipelineProtocol:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
-    multipass_config = get_multipass_config(db_session, primary_index=True)
+    search_settings = get_current_search_settings(db_session)
+    multipass_config = get_multipass_config(search_settings)
 
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,

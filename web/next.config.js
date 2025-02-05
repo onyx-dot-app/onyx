@@ -86,14 +86,16 @@ const sentryWebpackPluginOptions = {
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: !sentryEnabled, // Silence output when Sentry is disabled
   dryRun: !sentryEnabled, // Don't upload source maps when Sentry is disabled
-  sourceMaps: {
-    include: ["./.next"],
-    ignore: ["node_modules"],
-    urlPrefix: "~/_next",
-    stripPrefix: ["webpack://_N_E/"],
-    validate: true,
-    cleanArtifacts: true,
-  },
+  ...(sentryEnabled && {
+    sourceMaps: {
+      include: ["./.next"],
+      ignore: ["node_modules"],
+      urlPrefix: "~/_next",
+      stripPrefix: ["webpack://_N_E/"],
+      validate: true,
+      cleanArtifacts: true,
+    },
+  }),
 };
 
 // Export the module with conditional Sentry configuration

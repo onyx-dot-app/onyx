@@ -198,7 +198,7 @@ export function SearchSummary({
   ) : null;
 
   return (
-    <div className="flex items-center">
+    <div className="flex group w-fit items-center">
       {isEditing ? (
         editInput
       ) : (
@@ -225,7 +225,7 @@ export function SearchSummary({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="ml-2 -my-2 mobile:hidden hover:bg-hover p-1 rounded flex-shrink-0"
+                    className="ml-2 -my-2 mobile:hidden hover:bg-hover p-1 rounded flex-shrink-0 group-hover:opacity-100 opacity-0"
                     onClick={() => {
                       setIsEditing(true);
                     }}

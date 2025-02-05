@@ -1,4 +1,5 @@
 import sys
+import time
 from datetime import datetime
 
 from onyx.connectors.interfaces import BaseConnector
@@ -45,7 +46,17 @@ class ConnectorRunner:
     def run(self) -> GenerateDocumentsOutput:
         """Adds additional exception logging to the connector."""
         try:
-            yield from self.doc_batch_generator
+            start = time.monotonic()
+            for batch in self.doc_batch_generator:
+                # to know how long connector is taking
+                logger.debug(
+                    f"Connector took {time.monotonic() - start} seconds to build a batch."
+                )
+
+                yield batch
+
+                start = time.monotonic()
+
         except Exception:
             exc_type, _, exc_traceback = sys.exc_info()
 

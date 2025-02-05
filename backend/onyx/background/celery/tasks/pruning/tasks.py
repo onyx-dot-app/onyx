@@ -25,19 +25,28 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.models import InputType
+from onyx.db.connector import mark_ccpair_as_pruned
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.document import get_documents_for_connector_credential_pair
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import SyncStatus
+from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.sync_record import insert_sync_record
+from onyx.db.sync_record import update_sync_record_status
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client
+from onyx.utils.logger import LoggerContextVars
 from onyx.utils.logger import pruning_ctx
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+"""Jobs / utils for kicking off pruning tasks."""
 
 
 def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
@@ -78,6 +87,7 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_PRUNING,
+    ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )
@@ -203,6 +213,14 @@ def try_creating_prune_generator_task(
             priority=OnyxCeleryPriority.LOW,
         )
 
+        # create before setting fence to avoid race condition where the monitoring
+        # task updates the sync record before it is created
+        insert_sync_record(
+            db_session=db_session,
+            entity_id=cc_pair.id,
+            sync_type=SyncType.PRUNING,
+        )
+
         # set this only after all tasks have been added
         redis_connector.prune.set_fence(True)
     except Exception:
@@ -233,6 +251,8 @@ def connector_pruning_generator_task(
     """connector pruning task. For a cc pair, this task pulls all document IDs from the source
     and compares those IDs to locally stored documents and deletes all locally stored IDs missing
     from the most recently pulled document ID list"""
+
+    LoggerContextVars.reset()
 
     pruning_ctx_dict = pruning_ctx.get()
     pruning_ctx_dict["cc_pair_id"] = cc_pair_id
@@ -347,3 +367,52 @@ def connector_pruning_generator_task(
             lock.release()
 
         task_logger.info(f"Pruning generator finished: cc_pair={cc_pair_id}")
+
+
+"""Monitoring pruning utils, called in monitor_vespa_sync"""
+
+
+def monitor_ccpair_pruning_taskset(
+    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
+) -> None:
+    fence_key = key_bytes.decode("utf-8")
+    cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)
+    if cc_pair_id_str is None:
+        task_logger.warning(
+            f"monitor_ccpair_pruning_taskset: could not parse cc_pair_id from {fence_key}"
+        )
+        return
+
+    cc_pair_id = int(cc_pair_id_str)
+
+    redis_connector = RedisConnector(tenant_id, cc_pair_id)
+    if not redis_connector.prune.fenced:
+        return
+
+    initial = redis_connector.prune.generator_complete
+    if initial is None:
+        return
+
+    remaining = redis_connector.prune.get_remaining()
+    task_logger.info(
+        f"Connector pruning progress: cc_pair={cc_pair_id} remaining={remaining} initial={initial}"
+    )
+    if remaining > 0:
+        return
+
+    mark_ccpair_as_pruned(int(cc_pair_id), db_session)
+    task_logger.info(
+        f"Connector pruning finished: cc_pair={cc_pair_id} num_pruned={initial}"
+    )
+
+    update_sync_record_status(
+        db_session=db_session,
+        entity_id=cc_pair_id,
+        sync_type=SyncType.PRUNING,
+        sync_status=SyncStatus.SUCCESS,
+        num_docs_synced=initial,
+    )
+
+    redis_connector.prune.taskset_clear()
+    redis_connector.prune.generator_clear()
+    redis_connector.prune.set_fence(False)

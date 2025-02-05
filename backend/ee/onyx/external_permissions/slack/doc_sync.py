@@ -7,6 +7,7 @@ from onyx.connectors.slack.connector import get_channels
 from onyx.connectors.slack.connector import make_paginated_slack_api_call_w_retries
 from onyx.connectors.slack.connector import SlackPollConnector
 from onyx.db.models import ConnectorCredentialPair
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 
@@ -14,7 +15,7 @@ logger = setup_logger()
 
 
 def _get_slack_document_ids_and_channels(
-    cc_pair: ConnectorCredentialPair,
+    cc_pair: ConnectorCredentialPair, callback: IndexingHeartbeatInterface | None
 ) -> dict[str, list[str]]:
     slack_connector = SlackPollConnector(**cc_pair.connector.connector_specific_config)
     slack_connector.load_credentials(cc_pair.credential.credential_json)
@@ -24,6 +25,14 @@ def _get_slack_document_ids_and_channels(
     channel_doc_map: dict[str, list[str]] = {}
     for doc_metadata_batch in slim_doc_generator:
         for doc_metadata in doc_metadata_batch:
+            if callback:
+                if callback.should_stop():
+                    raise RuntimeError(
+                        "_get_slack_document_ids_and_channels: Stop signal detected"
+                    )
+
+                callback.progress("_get_slack_document_ids_and_channels", 1)
+
             if doc_metadata.perm_sync_data is None:
                 continue
             channel_id = doc_metadata.perm_sync_data["channel_id"]
@@ -114,7 +123,7 @@ def _fetch_channel_permissions(
 
 
 def slack_doc_sync(
-    cc_pair: ConnectorCredentialPair,
+    cc_pair: ConnectorCredentialPair, callback: IndexingHeartbeatInterface | None
 ) -> list[DocExternalAccess]:
     """
     Adds the external permissions to the documents in postgres
@@ -127,7 +136,7 @@ def slack_doc_sync(
     )
     user_id_to_email_map = fetch_user_id_to_email_map(slack_client)
     channel_doc_map = _get_slack_document_ids_and_channels(
-        cc_pair=cc_pair,
+        cc_pair=cc_pair, callback=callback
     )
     workspace_permissions = _fetch_workspace_permissions(
         user_id_to_email_map=user_id_to_email_map,

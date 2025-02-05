@@ -45,6 +45,8 @@ class Settings(BaseModel):
     gpu_enabled: bool | None = None
     product_gating: GatingType = GatingType.NONE
     anonymous_user_enabled: bool | None = None
+    pro_search_disabled: bool | None = None
+    auto_scroll: bool | None = None
 
 
 class UserSettings(Settings):

@@ -1,10 +1,13 @@
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import cast
 
+import httpx
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
+from onyx.configs.app_configs import VESPA_REQUEST_TIMEOUT
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
 )
@@ -17,6 +20,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import TaskStatus
 from onyx.db.models import TaskQueueState
+from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.server.documents.models import DeletionAttemptSnapshot
@@ -154,3 +158,25 @@ def celery_is_worker_primary(worker: Any) -> bool:
         return True
 
     return False
+
+
+def httpx_init_vespa_pool(
+    max_keepalive_connections: int,
+    timeout: int = VESPA_REQUEST_TIMEOUT,
+    ssl_cert: str | None = None,
+    ssl_key: str | None = None,
+) -> None:
+    httpx_cert = None
+    httpx_verify = False
+    if ssl_cert and ssl_key:
+        httpx_cert = cast(tuple[str, str], (ssl_cert, ssl_key))
+        httpx_verify = True
+
+    HttpxPool.init_client(
+        name="vespa",
+        cert=httpx_cert,
+        verify=httpx_verify,
+        timeout=timeout,
+        http2=False,
+        limits=httpx.Limits(max_keepalive_connections=max_keepalive_connections),
+    )

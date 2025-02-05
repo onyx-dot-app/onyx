@@ -51,6 +51,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
           notifications: [],
           needs_reindexing: false,
           anonymous_user_enabled: false,
+          pro_search_disabled: false,
         };
       } else {
         throw new Error(
@@ -62,6 +63,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
     } else {
       settings = await results[0].json();
     }
+    console.log(JSON.stringify(settings));
 
     let enterpriseSettings: EnterpriseSettings | null = null;
     if (tasks.length > 1) {

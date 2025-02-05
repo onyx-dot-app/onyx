@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from contextvars import Token
 from threading import Event
 from types import FrameType
 from typing import Any
@@ -30,7 +31,9 @@ from onyx.configs.onyxbot_configs import DANSWER_BOT_REPHRASE_MESSAGE
 from onyx.configs.onyxbot_configs import DANSWER_BOT_RESPOND_EVERY_CHANNEL
 from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
 from onyx.connectors.slack.utils import expert_info_from_slack_id
-from onyx.context.search.retrieval.search_runner import download_nltk_data
+from onyx.context.search.retrieval.search_runner import (
+    download_nltk_data,
+)
 from onyx.db.engine import get_all_tenant_ids
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import SlackBot
@@ -247,6 +250,8 @@ class SlackbotHandler:
         - If a tenant in self.tenant_ids no longer has Slack bots, remove it (and release the lock in this scope).
         """
         all_tenants = get_all_tenant_ids()
+
+        token: Token[str]
 
         # 1) Try to acquire locks for new tenants
         for tenant_id in all_tenants:
@@ -537,30 +542,36 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
                 # Let the tag flow handle this case, don't reply twice
                 return False
 
-        if event.get("bot_profile"):
+        # Check if this is a bot message (either via bot_profile or bot_message subtype)
+        is_bot_message = bool(
+            event.get("bot_profile") or event.get("subtype") == "bot_message"
+        )
+        if is_bot_message:
             channel_name, _ = get_channel_name_from_id(
                 client=client.web_client, channel_id=channel
             )
-
             with get_session_with_tenant(client.tenant_id) as db_session:
                 slack_channel_config = get_slack_channel_config_for_bot_and_channel(
                     db_session=db_session,
                     slack_bot_id=client.slack_bot_id,
                     channel_name=channel_name,
                 )
+
             # If OnyxBot is not specifically tagged and the channel is not set to respond to bots, ignore the message
             if (not bot_tag_id or bot_tag_id not in msg) and (
                 not slack_channel_config
                 or not slack_channel_config.channel_config.get("respond_to_bots")
             ):
-                channel_specific_logger.info("Ignoring message from bot")
+                channel_specific_logger.info(
+                    "Ignoring message from bot since respond_to_bots is disabled"
+                )
                 return False
 
         # Ignore things like channel_join, channel_leave, etc.
         # NOTE: "file_share" is just a message with a file attachment, so we
         # should not ignore it
         message_subtype = event.get("subtype")
-        if message_subtype not in [None, "file_share"]:
+        if message_subtype not in [None, "file_share", "bot_message"]:
             channel_specific_logger.info(
                 f"Ignoring message with subtype '{message_subtype}' since it is a special message type"
             )
@@ -763,6 +774,7 @@ def process_message(
         client=client.web_client, channel_id=channel
     )
 
+    token: Token[str] | None = None
     # Set the current tenant ID at the beginning for all DB calls within this thread
     if client.tenant_id:
         logger.info(f"Setting tenant ID to {client.tenant_id}")
@@ -817,7 +829,7 @@ def process_message(
                 if notify_no_answer:
                     apologize_for_fail(details, client)
     finally:
-        if client.tenant_id:
+        if token:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 

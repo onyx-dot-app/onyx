@@ -59,6 +59,9 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+persistent:
+  storageClassName: ""
+
 inferenceCapability:
   service:
     portName: modelserver

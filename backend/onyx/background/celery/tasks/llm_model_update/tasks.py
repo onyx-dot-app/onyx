@@ -14,8 +14,16 @@ from onyx.db.models import LLMProvider
 
 def _process_model_list_response(model_list_json: Any) -> list[str]:
     # Handle case where response is wrapped in a "data" field
-    if isinstance(model_list_json, dict) and "data" in model_list_json:
-        model_list_json = model_list_json["data"]
+    if isinstance(model_list_json, dict):
+        if "data" in model_list_json:
+            model_list_json = model_list_json["data"]
+        elif "models" in model_list_json:
+            model_list_json = model_list_json["models"]
+        else:
+            raise ValueError(
+                "Invalid response from API - expected dict with 'data' or "
+                f"'models' field, got {type(model_list_json)}"
+            )
 
     if not isinstance(model_list_json, list):
         raise ValueError(
@@ -27,11 +35,18 @@ def _process_model_list_response(model_list_json: Any) -> list[str]:
     for item in model_list_json:
         if isinstance(item, str):
             model_names.append(item)
-        elif isinstance(item, dict) and "model_name" in item:
-            model_names.append(item["model_name"])
+        elif isinstance(item, dict):
+            if "model_name" in item:
+                model_names.append(item["model_name"])
+            elif "id" in item:
+                model_names.append(item["id"])
+            else:
+                raise ValueError(
+                    f"Invalid item in model list - expected dict with model_name or id, got {type(item)}"
+                )
         else:
             raise ValueError(
-                f"Invalid item in model list - expected string or dict with model_name, got {type(item)}"
+                f"Invalid item in model list - expected string or dict, got {type(item)}"
             )
 
     return model_names
@@ -39,6 +54,7 @@ def _process_model_list_response(model_list_json: Any) -> list[str]:
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_LLM_MODEL_UPDATE,
+    ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
     trail=False,
     bind=True,
