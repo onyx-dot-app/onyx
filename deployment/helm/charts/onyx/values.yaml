@@ -5,7 +5,7 @@
 postgresql:
   primary:
     persistence:
-      storageClass: ebsstorage
+      storageClass: ""
       size: 5Gi
   enabled: true
   auth:
@@ -27,7 +27,7 @@ vespa:
         resources:
           requests:
             storage: 1Gi
-        storageClassName: ebsstorage
+        storageClassName: ""
   enabled: true
   replicaCount: 1
   image:
@@ -53,7 +53,7 @@ vespa:
       memory: 4000Mi
 
 persistent:
-  storageClassName: ebsstorage
+  storageClassName: ""
 
 imagePullSecrets: []
 nameOverride: ""
