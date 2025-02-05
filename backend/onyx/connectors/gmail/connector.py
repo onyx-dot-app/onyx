@@ -322,6 +322,7 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
         self,
         time_range_start: SecondsSinceUnixEpoch | None = None,
         time_range_end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         query = _build_time_range_query(time_range_start, time_range_end)
         doc_batch = []
@@ -344,6 +345,15 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
                 if len(doc_batch) > SLIM_BATCH_SIZE:
                     yield doc_batch
                     doc_batch = []
+
+                    if callback:
+                        if callback.should_stop():
+                            raise RuntimeError(
+                                "retrieve_all_slim_documents: Stop signal detected"
+                            )
+
+                        callback.progress("retrieve_all_slim_documents", 1)
+
         if doc_batch:
             yield doc_batch
 
@@ -372,7 +382,7 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         try:
-            yield from self._fetch_slim_threads(start, end)
+            yield from self._fetch_slim_threads(start, end, callback=callback)
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e

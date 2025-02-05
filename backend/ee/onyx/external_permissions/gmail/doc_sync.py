@@ -15,6 +15,7 @@ logger = setup_logger()
 def _get_slim_doc_generator(
     cc_pair: ConnectorCredentialPair,
     gmail_connector: GmailConnector,
+    callback: IndexingHeartbeatInterface | None = None,
 ) -> GenerateSlimDocumentOutput:
     current_time = datetime.now(timezone.utc)
     start_time = (
@@ -24,7 +25,9 @@ def _get_slim_doc_generator(
     )
 
     return gmail_connector.retrieve_all_slim_documents(
-        start=start_time, end=current_time.timestamp()
+        start=start_time,
+        end=current_time.timestamp(),
+        callback=callback,
     )
 
 
@@ -40,7 +43,9 @@ def gmail_doc_sync(
     gmail_connector = GmailConnector(**cc_pair.connector.connector_specific_config)
     gmail_connector.load_credentials(cc_pair.credential.credential_json)
 
-    slim_doc_generator = _get_slim_doc_generator(cc_pair, gmail_connector)
+    slim_doc_generator = _get_slim_doc_generator(
+        cc_pair, gmail_connector, callback=callback
+    )
 
     document_external_access: list[DocExternalAccess] = []
     for slim_doc_batch in slim_doc_generator:

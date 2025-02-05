@@ -388,4 +388,12 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                 yield doc_metadata_list[:_SLIM_DOC_BATCH_SIZE]
                 doc_metadata_list = doc_metadata_list[_SLIM_DOC_BATCH_SIZE:]
 
+                if callback:
+                    if callback.should_stop():
+                        raise RuntimeError(
+                            "retrieve_all_slim_documents: Stop signal detected"
+                        )
+
+                    callback.progress("retrieve_all_slim_documents", 1)
+
         yield doc_metadata_list

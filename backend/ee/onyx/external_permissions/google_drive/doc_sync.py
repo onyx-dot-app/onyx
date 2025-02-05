@@ -21,6 +21,7 @@ _PERMISSION_ID_PERMISSION_MAP: dict[str, dict[str, Any]] = {}
 def _get_slim_doc_generator(
     cc_pair: ConnectorCredentialPair,
     google_drive_connector: GoogleDriveConnector,
+    callback: IndexingHeartbeatInterface | None = None,
 ) -> GenerateSlimDocumentOutput:
     current_time = datetime.now(timezone.utc)
     start_time = (
@@ -30,7 +31,9 @@ def _get_slim_doc_generator(
     )
 
     return google_drive_connector.retrieve_all_slim_documents(
-        start=start_time, end=current_time.timestamp()
+        start=start_time,
+        end=current_time.timestamp(),
+        callback=callback,
     )
 
 

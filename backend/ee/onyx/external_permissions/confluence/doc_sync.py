@@ -365,7 +365,9 @@ def confluence_doc_sync(
 
     slim_docs = []
     logger.debug("Fetching all slim documents from confluence")
-    for doc_batch in confluence_connector.retrieve_all_slim_documents():
+    for doc_batch in confluence_connector.retrieve_all_slim_documents(
+        callback=callback
+    ):
         logger.debug(f"Got {len(doc_batch)} slim documents from confluence")
         if callback:
             if callback.should_stop():
