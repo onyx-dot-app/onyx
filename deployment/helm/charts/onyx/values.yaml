@@ -15,6 +15,9 @@ postgresql:
       adminPasswordKey: postgres_password
 
 vespa:
+  name: da-vespa-0
+  service:
+    name: vespa-service
   volumeClaimTemplates:
     - metadata:
         name: vespa-storage
@@ -25,7 +28,6 @@ vespa:
           requests:
             storage: 1Gi
         storageClassName: ebsstorage
-
   enabled: true
   replicaCount: 1
   image:
@@ -37,6 +39,18 @@ vespa:
     app: vespa
     app.kubernetes.io/instance: onyx
     app.kubernetes.io/name: vespa
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  resources:
+    # The Vespa Helm chart specifies default resources, which are quite modest. We override
+    # them here to increase chances of the chart running successfully.
+    requests:
+      cpu: 1500m
+      memory: 4000Mi
+    limits:
+      cpu: 1500m
+      memory: 4000Mi
 
 persistent:
   storageClassName: ebsstorage
@@ -300,13 +314,12 @@ background:
     # fsGroup: 2000
 
   securityContext:
-    {}
     # capabilities:
     #   drop:
     #   - ALL
     # readOnlyRootFilesystem: true
     # runAsNonRoot: true
-    # runAsUser: 1000
+    runAsUser: 1000
   enableMiniChunk: "true"
   resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -350,16 +363,6 @@ background:
   securityContext:
     privileged: true
     runAsUser: 0
-
-  resources:
-    # The Vespa Helm chart specifies default resources, which are quite modest. We override
-    # them here to increase chances of the chart running successfully.
-    requests:
-      cpu: 1500m
-      memory: 4000Mi
-    limits:
-      cpu: 1500m
-      memory: 4000Mi
 
   nodeSelector: {}
   tolerations: []
