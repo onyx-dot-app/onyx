@@ -9,6 +9,7 @@ from onyx.agents.agent_search.basic.states import BasicState
 from onyx.agents.agent_search.basic.utils import process_llm_stream
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.chat.models import LlmDoc
+from onyx.chat.models import OnyxContexts
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_DOC_CONTENT_ID,
 )
@@ -50,12 +51,10 @@ def basic_use_tool_response(
         if yield_item.id == FINAL_CONTEXT_DOCUMENTS_ID:
             final_search_results = cast(list[LlmDoc], yield_item.response)
         elif yield_item.id == SEARCH_DOC_CONTENT_ID:
-            search_contexts = yield_item.response.contexts
+            search_contexts = cast(OnyxContexts, yield_item.response).contexts
             for doc in search_contexts:
                 if doc.document_id not in initial_search_results:
                     initial_search_results.append(doc)
-
-            initial_search_results = cast(list[LlmDoc], initial_search_results)
 
     new_tool_call_chunk = AIMessageChunk(content="")
     if not agent_config.behavior.skip_gen_ai_answer_generation:
@@ -70,7 +69,9 @@ def basic_use_tool_response(
             True,
             writer,
             final_search_results=final_search_results,
-            displayed_search_results=initial_search_results,
+            # when the search tool is called with specific doc ids, initial search
+            # results are not output. But, we still want i.e. citations to be processed.
+            displayed_search_results=initial_search_results or final_search_results,
         )
 
     return BasicOutput(tool_call_chunk=new_tool_call_chunk)

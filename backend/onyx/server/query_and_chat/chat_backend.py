@@ -743,7 +743,7 @@ def upload_files_for_chat(
         # to re-extract it every time we send a message
         if file_type == ChatFileType.DOC:
             extracted_text = extract_file_text(
-                file=file_content_io, # use the bytes we already read
+                file=file_content_io,  # use the bytes we already read
                 file_name=file.filename or "",
             )
             text_file_id = str(uuid.uuid4())
