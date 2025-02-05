@@ -242,9 +242,9 @@ def batch_index_vespa_chunks(
 def clean_chunk_id_copy(
     chunk: DocMetadataAwareIndexChunk,
 ) -> DocMetadataAwareIndexChunk:
-    clean_chunk = chunk.copy(
+    clean_chunk = chunk.model_copy(
         update={
-            "source_document": chunk.source_document.copy(
+            "source_document": chunk.source_document.model_copy(
                 update={
                     "id": replace_invalid_doc_id_characters(chunk.source_document.id)
                 }

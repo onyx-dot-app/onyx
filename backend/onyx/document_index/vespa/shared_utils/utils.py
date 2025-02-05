@@ -45,7 +45,9 @@ def is_text_character(codepoint: int) -> bool:
 
 
 def replace_invalid_doc_id_characters(text: str) -> str:
-    """Replaces invalid document ID characters in text."""
+    """Replaces invalid document ID characters in text.
+    NOTE: this must be called at the start of every vespa-related operation or else we
+    risk discrepancies -> silent failures on deletion/update/insertion."""
     # There may be a more complete set of replacements that need to be made but Vespa docs are unclear
     # and users only seem to be running into this error with single quotes
     return text.replace("'", "_")

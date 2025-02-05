@@ -142,6 +142,8 @@ def get_uuid_from_chunk_info(
     tenant_id: str | None,
     large_chunk_id: int | None = None,
 ) -> UUID:
+    """NOTE: be VERY carefuly about changing this function. If changed without a migration,
+    this can cause deletion/update/insertion to function incorrectly."""
     doc_str = document_id
 
     # Web parsing URL duplicate catching

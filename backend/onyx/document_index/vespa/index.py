@@ -346,6 +346,14 @@ class VespaIndex(DocumentIndex):
         # IMPORTANT: This must be done one index at a time, do not use secondary index here
         cleaned_chunks = [clean_chunk_id_copy(chunk) for chunk in chunks]
 
+        # needed so the final DocumentInsertionRecord returned can have the original document ID
+        new_document_id_to_original_document_id: dict[str, str] = {}
+        for ind, chunk in enumerate(cleaned_chunks):
+            old_chunk = chunks[ind]
+            new_document_id_to_original_document_id[
+                chunk.source_document.id
+            ] = old_chunk.source_document.id
+
         existing_docs: set[str] = set()
 
         # NOTE: using `httpx` here since `requests` doesn't support HTTP2. This is beneficial for
@@ -401,14 +409,14 @@ class VespaIndex(DocumentIndex):
                     executor=executor,
                 )
 
-        all_doc_ids = {chunk.source_document.id for chunk in cleaned_chunks}
+        all_cleaned_doc_ids = {chunk.source_document.id for chunk in cleaned_chunks}
 
         return {
             DocumentInsertionRecord(
-                document_id=doc_id,
-                already_existed=doc_id in existing_docs,
+                document_id=new_document_id_to_original_document_id[cleaned_doc_id],
+                already_existed=cleaned_doc_id in existing_docs,
             )
-            for doc_id in all_doc_ids
+            for cleaned_doc_id in all_cleaned_doc_ids
         }
 
     @classmethod
@@ -541,7 +549,7 @@ class VespaIndex(DocumentIndex):
             time.monotonic() - update_start,
         )
 
-    def update_single_chunk(
+    def _update_single_chunk(
         self,
         doc_chunk_id: UUID,
         index_name: str,
@@ -605,6 +613,8 @@ class VespaIndex(DocumentIndex):
         """
         doc_chunk_count = 0
 
+        doc_id = replace_invalid_doc_id_characters(doc_id)
+
         with self.httpx_client_context as httpx_client:
             for (
                 index_name,
@@ -627,7 +637,7 @@ class VespaIndex(DocumentIndex):
                 doc_chunk_count += len(doc_chunk_ids)
 
                 for doc_chunk_id in doc_chunk_ids:
-                    self.update_single_chunk(
+                    self._update_single_chunk(
                         doc_chunk_id, index_name, fields, doc_id, httpx_client
                     )
 
@@ -689,6 +699,18 @@ class VespaIndex(DocumentIndex):
         batch_retrieval: bool = False,
         get_large_chunks: bool = False,
     ) -> list[InferenceChunkUncleaned]:
+        # make sure to use the vespa-afied document IDs
+        chunk_requests = [
+            VespaChunkRequest(
+                document_id=replace_invalid_doc_id_characters(
+                    chunk_request.document_id
+                ),
+                min_chunk_ind=chunk_request.min_chunk_ind,
+                max_chunk_ind=chunk_request.max_chunk_ind,
+            )
+            for chunk_request in chunk_requests
+        ]
+
         if batch_retrieval:
             return batch_search_api_retrieval(
                 index_name=self.index_name,

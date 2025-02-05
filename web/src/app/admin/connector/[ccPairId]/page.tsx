@@ -33,11 +33,6 @@ import EditPropertyModal from "@/components/modals/EditPropertyModal";
 
 import * as Yup from "yup";
 
-// since the uploaded files are cleaned up after some period of time
-// re-indexing will not work for the file connector. Also, it would not
-// make sense to re-index, since the files will not have changed.
-const CONNECTOR_TYPES_THAT_CANT_REINDEX: ValidSources[] = [ValidSources.File];
-
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -268,21 +263,18 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
         {ccPair.is_editable_for_current_user && (
           <div className="ml-auto flex gap-x-2">
-            {!CONNECTOR_TYPES_THAT_CANT_REINDEX.includes(
-              ccPair.connector.source
-            ) && (
-              <ReIndexButton
-                ccPairId={ccPair.id}
-                connectorId={ccPair.connector.id}
-                credentialId={ccPair.credential.id}
-                isDisabled={
-                  ccPair.indexing ||
-                  ccPair.status === ConnectorCredentialPairStatus.PAUSED
-                }
-                isIndexing={ccPair.indexing}
-                isDeleting={isDeleting}
-              />
-            )}
+            <ReIndexButton
+              ccPairId={ccPair.id}
+              connectorId={ccPair.connector.id}
+              credentialId={ccPair.credential.id}
+              isDisabled={
+                ccPair.indexing ||
+                ccPair.status === ConnectorCredentialPairStatus.PAUSED
+              }
+              isIndexing={ccPair.indexing}
+              isDeleting={isDeleting}
+            />
+
             {!isDeleting && <ModifyStatusButtonCluster ccPair={ccPair} />}
           </div>
         )}
