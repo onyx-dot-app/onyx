@@ -59,9 +59,6 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-persistent:
-  storageClassName: ""
-
 inferenceCapability:
   service:
     portName: modelserver
@@ -315,14 +312,9 @@ background:
   podSecurityContext:
     {}
     # fsGroup: 2000
-
   securityContext:
-    # capabilities:
-    #   drop:
-    #   - ALL
-    # readOnlyRootFilesystem: true
-    # runAsNonRoot: true
-    runAsUser: 1000
+    privileged: true
+    runAsUser: 0
   enableMiniChunk: "true"
   resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -355,17 +347,6 @@ background:
   # - name: foo
   #   mountPath: "/etc/foo"
   #   readOnly: true
-
-  nodeSelector: {}
-  tolerations: []
-
-  podSecurityContext:
-    {}
-    # fsGroup: 2000
-
-  securityContext:
-    privileged: true
-    runAsUser: 0
 
   nodeSelector: {}
   tolerations: []
