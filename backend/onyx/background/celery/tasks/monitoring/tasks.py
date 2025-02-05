@@ -754,7 +754,7 @@ def cloud_check_alembic() -> bool | None:
     tenant_ids: list[str] | list[None] = []
 
     try:
-        # map each tenant_id to its revision (or None if the query exceptions)
+        # map tenant_id to revision (or ALEMBIC_NULL_REVISION if the query fails)
         tenant_ids = get_all_tenant_ids()
         for tenant_id in tenant_ids:
             current_time = time.monotonic()
