@@ -183,6 +183,7 @@ class Answer:
         citations_by_subquestion: dict[
             SubQuestionKey, list[CitationInfo]
         ] = defaultdict(list)
+        basic_subq_key = SubQuestionKey(level=BASIC_KEY[0], question_num=BASIC_KEY[1])
         for packet in self.processed_streamed_output:
             if isinstance(packet, CitationInfo):
                 if packet.level_question_num is not None and packet.level is not None:
@@ -192,7 +193,7 @@ class Answer:
                         )
                     ].append(packet)
                 elif packet.level is None:
-                    citations_by_subquestion[BASIC_SQ_KEY].append(packet)
+                    citations_by_subquestion[basic_subq_key].append(packet)
         return citations_by_subquestion
 
     def is_cancelled(self) -> bool:
