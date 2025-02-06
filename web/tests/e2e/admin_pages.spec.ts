@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import chromaticSnpashots from "./chromaticSnpashots.json";
+import chromaticSnapshots from "./chromaticSnapshots.json";
 import type { Page } from "@playwright/test";
 
 test.use({ storageState: "admin_auth.json" });
@@ -39,7 +39,7 @@ async function verifyAdminPageNavigation(
   }
 }
 
-for (const chromaticSnapshot of chromaticSnpashots) {
+for (const chromaticSnapshot of chromaticSnapshots) {
   test(`Admin - ${chromaticSnapshot.name}`, async ({ page }) => {
     await verifyAdminPageNavigation(
       page,
