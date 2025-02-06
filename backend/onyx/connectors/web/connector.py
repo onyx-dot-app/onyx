@@ -171,7 +171,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
-    response = requests.get(sitemap_url)
+    response = requests.get(sitemap_url, verify=False)
     response.raise_for_status()
 
     soup = BeautifulSoup(response.content, "html.parser")
