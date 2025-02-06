@@ -11,8 +11,8 @@ spec:
     {{- toYaml .Values.indexCapability.deploymentLabels | nindent 4 }}
     {{- end }}
   ports:
-    - name: {{ .Values.indexCapability.service.name }}
+    - name: {{ .Values.indexCapability.service.portName }}
       protocol: TCP
-      port: {{ .Values.indexCapability.service.port }}
-      targetPort: {{ .Values.indexCapability.service.port }}
+      port: {{ .Values.indexCapability.service.servicePort  }}
+      targetPort: {{ .Values.indexCapability.service.targetPort }}
   type: {{ .Values.indexCapability.service.type }}

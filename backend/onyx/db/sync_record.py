@@ -8,20 +8,64 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import SyncRecord
+from onyx.setup import setup_logger
+
+logger = setup_logger()
 
 
 def insert_sync_record(
     db_session: Session,
-    entity_id: int | None,
+    entity_id: int,
     sync_type: SyncType,
 ) -> SyncRecord:
-    """Insert a new sync record into the database.
+    """Insert a new sync record into the database, cancelling any existing in-progress records.
 
     Args:
         db_session: The database session to use
         entity_id: The ID of the entity being synced (document set ID, user group ID, etc.)
         sync_type: The type of sync operation
     """
+    # If an existing in-progress sync record exists, mark as cancelled
+    existing_in_progress_sync_record = fetch_latest_sync_record(
+        db_session, entity_id, sync_type, sync_status=SyncStatus.IN_PROGRESS
+    )
+
+    if existing_in_progress_sync_record is not None:
+        logger.info(
+            f"Cancelling existing in-progress sync record {existing_in_progress_sync_record.id} "
+            f"for entity_id={entity_id} sync_type={sync_type}"
+        )
+        mark_sync_records_as_cancelled(db_session, entity_id, sync_type)
+
+    return _create_sync_record(db_session, entity_id, sync_type)
+
+
+def mark_sync_records_as_cancelled(
+    db_session: Session,
+    entity_id: int | None,
+    sync_type: SyncType,
+) -> None:
+    stmt = (
+        update(SyncRecord)
+        .where(
+            and_(
+                SyncRecord.entity_id == entity_id,
+                SyncRecord.sync_type == sync_type,
+                SyncRecord.sync_status == SyncStatus.IN_PROGRESS,
+            )
+        )
+        .values(sync_status=SyncStatus.CANCELED)
+    )
+    db_session.execute(stmt)
+    db_session.commit()
+
+
+def _create_sync_record(
+    db_session: Session,
+    entity_id: int | None,
+    sync_type: SyncType,
+) -> SyncRecord:
+    """Create and insert a new sync record into the database."""
     sync_record = SyncRecord(
         entity_id=entity_id,
         sync_type=sync_type,
@@ -39,6 +83,7 @@ def fetch_latest_sync_record(
     db_session: Session,
     entity_id: int,
     sync_type: SyncType,
+    sync_status: SyncStatus | None = None,
 ) -> SyncRecord | None:
     """Fetch the most recent sync record for a given entity ID and status.
 
@@ -58,6 +103,9 @@ def fetch_latest_sync_record(
         .order_by(desc(SyncRecord.sync_start_time))
         .limit(1)
     )
+
+    if sync_status is not None:
+        stmt = stmt.where(SyncRecord.sync_status == sync_status)
 
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()

@@ -6,6 +6,7 @@ import {
 } from "@/app/admin/settings/interfaces";
 import {
   CUSTOM_ANALYTICS_ENABLED,
+  HOST_URL,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
 } from "@/lib/constants";
 import { fetchSS } from "@/lib/utilsSS";
@@ -50,6 +51,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
           notifications: [],
           needs_reindexing: false,
           anonymous_user_enabled: false,
+          pro_search_disabled: false,
         };
       } else {
         throw new Error(
@@ -92,6 +94,10 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       }
     }
 
+    if (enterpriseSettings && settings.pro_search_disabled == null) {
+      settings.pro_search_disabled = true;
+    }
+
     const webVersion = getWebVersion();
 
     const combinedSettings: CombinedSettings = {
@@ -99,6 +105,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       enterpriseSettings,
       customAnalyticsScript,
       webVersion,
+      webDomain: HOST_URL,
     };
 
     return combinedSettings;

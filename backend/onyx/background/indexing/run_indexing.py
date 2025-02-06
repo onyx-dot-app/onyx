@@ -11,6 +11,7 @@ from onyx.background.indexing.checkpointing import get_time_windows_for_index_at
 from onyx.background.indexing.tracer import OnyxTracer
 from onyx.configs.app_configs import INDEXING_SIZE_WARNING_THRESHOLD
 from onyx.configs.app_configs import INDEXING_TRACER_INTERVAL
+from onyx.configs.app_configs import LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE
 from onyx.configs.app_configs import POLL_CONNECTOR_OFFSET
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MilestoneRecordType
@@ -35,6 +36,7 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import IndexModelStatus
 from onyx.document_index.factory import get_default_document_index
+from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import build_indexing_pipeline
@@ -54,6 +56,7 @@ def _get_connector_runner(
     start_time: datetime,
     end_time: datetime,
     tenant_id: str | None,
+    leave_connector_active: bool = LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE,
 ) -> ConnectorRunner:
     """
     NOTE: `start_time` and `end_time` are only used for poll connectors
@@ -75,20 +78,25 @@ def _get_connector_runner(
         )
     except Exception as e:
         logger.exception(f"Unable to instantiate connector due to {e}")
-        # since we failed to even instantiate the connector, we pause the CCPair since
-        # it will never succeed
 
-        cc_pair = get_connector_credential_pair_from_id(
-            db_session=db_session,
-            cc_pair_id=attempt.connector_credential_pair.id,
-        )
-        if cc_pair and cc_pair.status == ConnectorCredentialPairStatus.ACTIVE:
-            update_connector_credential_pair(
+        # since we failed to even instantiate the connector, we pause the CCPair since
+        # it will never succeed. Sometimes there are cases where the connector will
+        # intermittently fail to initialize in which case we should pass in
+        # leave_connector_active=True to allow it to continue.
+        # For example, if there is nightly maintenance on a Confluence Server instance,
+        # the connector will fail to initialize every night.
+        if not leave_connector_active:
+            cc_pair = get_connector_credential_pair_from_id(
                 db_session=db_session,
-                connector_id=attempt.connector_credential_pair.connector.id,
-                credential_id=attempt.connector_credential_pair.credential.id,
-                status=ConnectorCredentialPairStatus.PAUSED,
+                cc_pair_id=attempt.connector_credential_pair.id,
             )
+            if cc_pair and cc_pair.status == ConnectorCredentialPairStatus.ACTIVE:
+                update_connector_credential_pair(
+                    db_session=db_session,
+                    connector_id=attempt.connector_credential_pair.connector.id,
+                    credential_id=attempt.connector_credential_pair.credential.id,
+                    status=ConnectorCredentialPairStatus.PAUSED,
+                )
         raise e
 
     return ConnectorRunner(
@@ -219,9 +227,10 @@ def _run_indexing(
             callback=callback,
         )
 
-    # Indexing is only done into one index at a time
     document_index = get_default_document_index(
-        primary_index_name=ctx.index_name, secondary_index_name=None
+        index_attempt_start.search_settings,
+        None,
+        httpx_client=HttpxPool.get("vespa"),
     )
 
     indexing_pipeline = build_indexing_pipeline(
@@ -237,6 +246,7 @@ def _run_indexing(
         callback=callback,
     )
 
+    tracer: OnyxTracer
     if INDEXING_TRACER_INTERVAL > 0:
         logger.debug(f"Memory tracer starting: interval={INDEXING_TRACER_INTERVAL}")
         tracer = OnyxTracer()
@@ -253,6 +263,8 @@ def _run_indexing(
     document_count = 0
     chunk_count = 0
     run_end_dt = None
+    tracer_counter: int
+
     for ind, (window_start, window_end) in enumerate(
         get_time_windows_for_index_attempt(
             last_successful_run=datetime.fromtimestamp(
@@ -263,6 +275,7 @@ def _run_indexing(
     ):
         cc_pair_loop: ConnectorCredentialPair | None = None
         index_attempt_loop: IndexAttempt | None = None
+        tracer_counter = 0
 
         try:
             window_start = max(
@@ -287,7 +300,6 @@ def _run_indexing(
                     tenant_id=tenant_id,
                 )
 
-            tracer_counter = 0
             if INDEXING_TRACER_INTERVAL > 0:
                 tracer.snap()
             for doc_batch in connector_runner.run():

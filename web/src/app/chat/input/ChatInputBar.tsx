@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { FiPlusCircle, FiPlus, FiInfo, FiX, FiFilter } from "react-icons/fi";
+import { FiLoader } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "./LLMPopover";
@@ -24,7 +25,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Hoverable } from "@/components/Hoverable";
 import { ChatState } from "../types";
-import UnconfiguredProviderText from "@/components/chat_search/UnconfiguredProviderText";
+import UnconfiguredProviderText from "@/components/chat/UnconfiguredProviderText";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon } from "lucide-react";
 import { FilterPopup } from "@/components/search/filtering/FilterPopup";
@@ -34,8 +35,93 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
+import { AgenticToggle } from "./AgenticToggle";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";
+import { FidgetSpinner } from "react-loader-spinner";
+import { LoadingAnimation } from "@/components/Loading";
 
 const MAX_INPUT_HEIGHT = 200;
+export const SourceChip2 = ({
+  icon,
+  title,
+  onRemove,
+  onClick,
+  includeTooltip,
+  includeAnimation,
+  truncateTitle = true,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  onRemove?: () => void;
+  onClick?: () => void;
+  truncateTitle?: boolean;
+  includeTooltip?: boolean;
+  includeAnimation?: boolean;
+}) => {
+  const [isNew, setIsNew] = useState(true);
+  const [isTooltipOpen, setIsTooltipOpen] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsNew(false), 300);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <TooltipProvider>
+      <Tooltip
+        delayDuration={0}
+        open={isTooltipOpen}
+        onOpenChange={setIsTooltipOpen}
+      >
+        <TooltipTrigger
+          onMouseEnter={() => setIsTooltipOpen(true)}
+          onMouseLeave={() => setIsTooltipOpen(false)}
+        >
+          <div
+            onClick={onClick ? onClick : undefined}
+            className={`
+            h-6
+            px-2
+            bg-[#f1eee8]
+            rounded-2xl
+            justify-center
+            items-center
+            inline-flex
+            ${includeAnimation && isNew ? "animate-fade-in-scale" : ""}
+            ${onClick ? "cursor-pointer" : ""}
+          `}
+          >
+            <div className="w-[17px] h-4 p-[3px] flex-col justify-center items-center gap-2.5 inline-flex">
+              <div className="h-2.5 relative">{icon}</div>
+            </div>
+            <div className="text-[#4a4a4a] text-xs font-medium leading-normal">
+              {truncateTitle ? truncateString(title, 50) : title}
+            </div>
+            {onRemove && (
+              <XIcon
+                size={12}
+                className="text-[#4a4a4a] ml-2 cursor-pointer"
+                onClick={(e: React.MouseEvent<SVGSVGElement>) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+              />
+            )}
+          </div>
+        </TooltipTrigger>
+        {includeTooltip && title.length > 50 && (
+          <TooltipContent
+            className="!pointer-events-none z-[2000000]"
+            onMouseEnter={() => setIsTooltipOpen(false)}
+          >
+            <p>{title}</p>
+          </TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
 
 export const SourceChip = ({
   icon,
@@ -53,7 +139,7 @@ export const SourceChip = ({
   <div
     onClick={onClick ? onClick : undefined}
     className={`
-      flex-none
+        flex-none
         flex
         items-center
         px-1
@@ -68,6 +154,7 @@ export const SourceChip = ({
         gap-x-1
         h-6
         ${onClick ? "cursor-pointer" : ""}
+        animate-fade-in-scale
       `}
   >
     {icon}
@@ -109,6 +196,8 @@ interface ChatInputBarProps {
   availableDocumentSets: DocumentSet[];
   availableTags: Tag[];
   retrievalEnabled: boolean;
+  proSearchEnabled: boolean;
+  setProSearchEnabled: (proSearchEnabled: boolean) => void;
 }
 
 export function ChatInputBar({
@@ -137,8 +226,11 @@ export function ChatInputBar({
   availableDocumentSets,
   availableTags,
   llmOverrideManager,
+  proSearchEnabled,
+  setProSearchEnabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
+  const settings = useContext(SettingsContext);
   useEffect(() => {
     const textarea = textAreaRef.current;
     if (textarea) {
@@ -478,6 +570,7 @@ export function ChatInputBar({
               onKeyDownCapture={handleKeyDown}
               onChange={handleInputChange}
               ref={textAreaRef}
+              id="onyx-chat-input-textarea"
               className={`
                 m-0
                 w-full
@@ -534,7 +627,7 @@ export function ChatInputBar({
               filterManager.selectedDocumentSets.length > 0 ||
               filterManager.selectedTags.length > 0 ||
               filterManager.selectedSources.length > 0) && (
-              <div className="flex gap-x-.5 px-2">
+              <div className="flex bg-background gap-x-.5 px-2">
                 <div className="flex gap-x-1 px-2 overflow-visible overflow-x-scroll items-end miniscroll">
                   {filterManager.selectedTags &&
                     filterManager.selectedTags.map((tag, index) => (
@@ -620,12 +713,16 @@ export function ChatInputBar({
                       <SourceChip
                         key={`file-${index}`}
                         icon={
-                          <img
-                            className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
-                            src={buildImgUrl(file.id)}
-                          />
+                          file.isUploading ? (
+                            <FiLoader className="animate-spin" />
+                          ) : (
+                            <img
+                              className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
+                              src={buildImgUrl(file.id)}
+                            />
+                          )
                         }
-                        title={file.name || "File"}
+                        title={file.name || "File" + file.id}
                         onRemove={() => {
                           setFiles(
                             files.filter(
@@ -653,8 +750,8 @@ export function ChatInputBar({
               </div>
             )}
 
-            <div className="flex justify-between items-center overflow-hidden px-4 mb-2">
-              <div className="flex gap-x-1">
+            <div className="flex pr-4 pb-2 justify-between items-center w-full ">
+              <div className="space-x-1 flex  px-4 ">
                 <ChatInputOption
                   flexPriority="stiff"
                   name="File"
@@ -694,14 +791,23 @@ export function ChatInputBar({
                         flexPriority="stiff"
                         name="Filters"
                         Icon={FiFilter}
+                        toggle
                         tooltipContent="Filter your search"
                       />
                     }
                   />
                 )}
               </div>
-              <div className="flex my-auto">
+              <div className="flex items-center my-auto">
+                {retrievalEnabled &&
+                  !settings?.settings.pro_search_disabled && (
+                    <AgenticToggle
+                      proSearchEnabled={proSearchEnabled}
+                      setProSearchEnabled={setProSearchEnabled}
+                    />
+                  )}
                 <button
+                  id="onyx-chat-input-send-button"
                   className={`cursor-pointer ${
                     chatState == "streaming" ||
                     chatState == "toolBuilding" ||
@@ -710,7 +816,7 @@ export function ChatInputBar({
                         ? "bg-background-400"
                         : "bg-background-800"
                       : ""
-                  } h-[28px] w-[28px] rounded-full`}
+                  } h-[22px] w-[22px] rounded-full`}
                   onClick={() => {
                     if (
                       chatState == "streaming" ||
@@ -733,12 +839,12 @@ export function ChatInputBar({
                   chatState == "toolBuilding" ||
                   chatState == "loading" ? (
                     <StopGeneratingIcon
-                      size={10}
+                      size={8}
                       className="text-emphasis m-auto text-white flex-none"
                     />
                   ) : (
                     <SendIcon
-                      size={26}
+                      size={22}
                       className={`text-emphasis text-white p-1 my-auto rounded-full ${
                         chatState == "input" && message
                           ? "bg-submit-background"

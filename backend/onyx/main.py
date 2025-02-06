@@ -109,7 +109,9 @@ from onyx.utils.variable_functionality import global_version
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
 from shared_configs.configs import CORS_ALLOWED_ORIGIN
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import SENTRY_DSN
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -212,7 +214,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     if not MULTI_TENANT:
         # We cache this at the beginning so there is no delay in the first telemetry
-        get_or_generate_uuid(tenant_id=None)
+        CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
+        get_or_generate_uuid()
 
         # If we are multi-tenant, we need to only set up initial public tables
         with Session(engine) as db_session:

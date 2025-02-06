@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useContext } from "react";
 import { useUser } from "@/components/user/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
@@ -31,11 +31,12 @@ import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import { SettingsPanel } from "../../components/nrf/SettingsPanel";
 import { ShortcutsDisplay } from "../../components/nrf/ShortcutsDisplay";
 import LoginPage from "../../auth/login/LoginPage";
-import { AuthType, NEXT_PUBLIC_WEB_DOMAIN } from "@/lib/constants";
+import { AuthType } from "@/lib/constants";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 export default function NRFPage({
   requestCookies,
@@ -56,6 +57,7 @@ export default function NRFPage({
   const { isNight } = useNightTime();
   const { user } = useUser();
   const { ccPairs, documentSets, tags, llmProviders } = useChatContext();
+  const settings = useContext(SettingsContext);
 
   const { popup, setPopup } = usePopup();
 
@@ -196,7 +198,7 @@ export default function NRFPage({
     }
 
     const newHref =
-      `${NEXT_PUBLIC_WEB_DOMAIN}/chat?send-on-load=true&user-prompt=` +
+      `${settings?.webDomain}/chat?send-on-load=true&user-prompt=` +
       encodeURIComponent(userMessage) +
       filterString;
 

@@ -150,6 +150,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # if specified, controls the assistants that are shown to the user + their order
     # if not specified, all assistants are shown
+    temperature_override_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_scroll: Mapped[bool] = mapped_column(Boolean, default=True)
     shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
@@ -161,9 +162,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     hidden_assistants: Mapped[list[int]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=[]
     )
-    recent_assistants: Mapped[list[dict]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=list, server_default="[]"
-    )
+
     pinned_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
     )
@@ -320,6 +319,17 @@ class ChatMessage__SearchDoc(Base):
 
     chat_message_id: Mapped[int] = mapped_column(
         ForeignKey("chat_message.id"), primary_key=True
+    )
+    search_doc_id: Mapped[int] = mapped_column(
+        ForeignKey("search_doc.id"), primary_key=True
+    )
+
+
+class AgentSubQuery__SearchDoc(Base):
+    __tablename__ = "agent__sub_query__search_doc"
+
+    sub_query_id: Mapped[int] = mapped_column(
+        ForeignKey("agent__sub_query.id"), primary_key=True
     )
     search_doc_id: Mapped[int] = mapped_column(
         ForeignKey("search_doc.id"), primary_key=True
@@ -747,6 +757,34 @@ class SearchSettings(Base):
     def api_key(self) -> str | None:
         return self.cloud_provider.api_key if self.cloud_provider is not None else None
 
+    @property
+    def large_chunks_enabled(self) -> bool:
+        """
+        Given multipass usage and an embedder, decides whether large chunks are allowed
+        based on model/provider constraints.
+        """
+        # Only local models that support a larger context are from Nomic
+        # Cohere does not support larger contexts (they recommend not going above ~512 tokens)
+        return SearchSettings.can_use_large_chunks(
+            self.multipass_indexing, self.model_name, self.provider_type
+        )
+
+    @staticmethod
+    def can_use_large_chunks(
+        multipass: bool, model_name: str, provider_type: EmbeddingProvider | None
+    ) -> bool:
+        """
+        Given multipass usage and an embedder, decides whether large chunks are allowed
+        based on model/provider constraints.
+        """
+        # Only local models that support a larger context are from Nomic
+        # Cohere does not support larger contexts (they recommend not going above ~512 tokens)
+        return (
+            multipass
+            and model_name.startswith("nomic-ai")
+            and provider_type != EmbeddingProvider.COHERE
+        )
+
 
 class IndexAttempt(Base):
     """
@@ -1021,6 +1059,11 @@ class SearchDoc(Base):
         secondary=ChatMessage__SearchDoc.__table__,
         back_populates="search_docs",
     )
+    sub_queries = relationship(
+        "AgentSubQuery",
+        secondary=AgentSubQuery__SearchDoc.__table__,
+        back_populates="search_docs",
+    )
 
 
 class ToolCall(Base):
@@ -1089,6 +1132,10 @@ class ChatSession(Base):
     llm_override: Mapped[LLMOverride | None] = mapped_column(
         PydanticType(LLMOverride), nullable=True
     )
+
+    # The latest temperature override specified by the user
+    temperature_override: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
     )
@@ -1157,6 +1204,8 @@ class ChatMessage(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+    refined_answer_improvement: Mapped[bool] = mapped_column(Boolean, nullable=True)
+
     chat_session: Mapped[ChatSession] = relationship("ChatSession")
     prompt: Mapped[Optional["Prompt"]] = relationship("Prompt")
 
@@ -1181,6 +1230,11 @@ class ChatMessage(Base):
         "ToolCall",
         back_populates="message",
         uselist=False,
+    )
+
+    sub_questions: Mapped[list["AgentSubQuestion"]] = relationship(
+        "AgentSubQuestion",
+        back_populates="primary_message",
     )
 
     standard_answers: Mapped[list["StandardAnswer"]] = relationship(
@@ -1215,6 +1269,71 @@ class ChatFolder(Base):
             # Bigger ID (created later) show earlier
             return self.id > other.id
         return self.display_priority < other.display_priority
+
+
+class AgentSubQuestion(Base):
+    """
+    A sub-question is a question that is asked of the LLM to gather supporting
+    information to answer a primary question.
+    """
+
+    __tablename__ = "agent__sub_question"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    primary_question_id: Mapped[int] = mapped_column(ForeignKey("chat_message.id"))
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id")
+    )
+    sub_question: Mapped[str] = mapped_column(Text)
+    level: Mapped[int] = mapped_column(Integer)
+    level_question_num: Mapped[int] = mapped_column(Integer)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    sub_answer: Mapped[str] = mapped_column(Text)
+    sub_question_doc_results: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
+
+    # Relationships
+    primary_message: Mapped["ChatMessage"] = relationship(
+        "ChatMessage",
+        foreign_keys=[primary_question_id],
+        back_populates="sub_questions",
+    )
+    chat_session: Mapped["ChatSession"] = relationship("ChatSession")
+    sub_queries: Mapped[list["AgentSubQuery"]] = relationship(
+        "AgentSubQuery", back_populates="parent_question"
+    )
+
+
+class AgentSubQuery(Base):
+    """
+    A sub-query is a vector DB query that gathers supporting information to answer a sub-question.
+    """
+
+    __tablename__ = "agent__sub_query"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    parent_question_id: Mapped[int] = mapped_column(
+        ForeignKey("agent__sub_question.id")
+    )
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id")
+    )
+    sub_query: Mapped[str] = mapped_column(Text)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships
+    parent_question: Mapped["AgentSubQuestion"] = relationship(
+        "AgentSubQuestion", back_populates="sub_queries"
+    )
+    chat_session: Mapped["ChatSession"] = relationship("ChatSession")
+    search_docs: Mapped[list["SearchDoc"]] = relationship(
+        "SearchDoc",
+        secondary=AgentSubQuery__SearchDoc.__table__,
+        back_populates="sub_queries",
+    )
 
 
 """
@@ -1597,7 +1716,7 @@ class ChannelConfig(TypedDict):
     """NOTE: is a `TypedDict` so it can be used as a type hint for a JSONB column
     in Postgres"""
 
-    channel_name: str
+    channel_name: str | None  # None for default channel config
     respond_tag_only: NotRequired[bool]  # defaults to False
     respond_to_bots: NotRequired[bool]  # defaults to False
     respond_member_group_list: NotRequired[list[str]]
@@ -1618,7 +1737,6 @@ class SlackChannelConfig(Base):
     persona_id: Mapped[int | None] = mapped_column(
         ForeignKey("persona.id"), nullable=True
     )
-    # JSON for flexibility. Contains things like: channel name, team members, etc.
     channel_config: Mapped[ChannelConfig] = mapped_column(
         postgresql.JSONB(), nullable=False
     )
@@ -1626,6 +1744,8 @@ class SlackChannelConfig(Base):
     enable_auto_filters: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     persona: Mapped[Persona | None] = relationship("Persona")
     slack_bot: Mapped["SlackBot"] = relationship(
@@ -1636,6 +1756,21 @@ class SlackChannelConfig(Base):
         "StandardAnswerCategory",
         secondary=SlackChannelConfig__StandardAnswerCategory.__table__,
         back_populates="slack_channel_configs",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "slack_bot_id",
+            "is_default",
+            name="uq_slack_channel_config_slack_bot_id_default",
+        ),
+        Index(
+            "ix_slack_channel_config_slack_bot_id_default",
+            "slack_bot_id",
+            "is_default",
+            unique=True,
+            postgresql_where=(is_default is True),  #   type: ignore
+        ),
     )
 
 
@@ -1718,6 +1853,25 @@ class PGFileStore(Base):
     file_type: Mapped[str] = mapped_column(String, default="text/plain")
     file_metadata: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
     lobj_oid: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class AgentSearchMetrics(Base):
+    __tablename__ = "agent__search_metrics"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
+    persona_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
+    agent_type: Mapped[str] = mapped_column(String)
+    start_time: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
+    base_duration_s: Mapped[float] = mapped_column(Float)
+    full_duration_s: Mapped[float] = mapped_column(Float)
+    base_metrics: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    refined_metrics: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    all_metrics: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
 
 
 """

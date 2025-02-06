@@ -112,7 +112,7 @@ class PersonaSnapshot(BaseModel):
     uploaded_image_id: str | None = None
     is_default_persona: bool
     search_start_date: datetime | None = None
-    labels: list["PersonaLabelSnapshot"]
+    labels: list["PersonaLabelSnapshot"] = []
 
     @classmethod
     def from_model(

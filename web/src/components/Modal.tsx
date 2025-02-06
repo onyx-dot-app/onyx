@@ -63,7 +63,7 @@ export function Modal({
     <div
       onMouseDown={handleMouseDown}
       className={cn(
-        `fixed inset-0 bg-black bg-opacity-25 backdrop-blur-sm h-full
+        `fixed inset-0 bg-black border boder-border bg-opacity-10 backdrop-blur-sm h-full
         flex items-center justify-center z-[9999] transition-opacity duration-300 ease-in-out`
       )}
     >
@@ -103,7 +103,7 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="flex-shrink-0">
+        <div className="items-start flex-shrink-0">
           {title && (
             <>
               <div className="flex">
@@ -120,9 +120,7 @@ export function Modal({
             </>
           )}
         </div>
-        <div className="flex-grow overflow-y-auto overflow-x-hidden">
-          {children}
-        </div>
+        {children}
       </div>
     </div>
   );

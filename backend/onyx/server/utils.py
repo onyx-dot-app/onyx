@@ -1,4 +1,6 @@
+import base64
 import json
+import os
 from datetime import datetime
 from typing import Any
 
@@ -66,3 +68,10 @@ def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, str]:
         )
 
     return masked_creds
+
+
+def make_short_id() -> str:
+    """Fast way to generate a random 8 character id ... useful for tagging data
+    to trace it through a flow. This is definitely not guaranteed to be unique and is
+    targeted at the stated use case."""
+    return base64.b32encode(os.urandom(5)).decode("utf-8")[:8]  # 5 bytes → 8 chars

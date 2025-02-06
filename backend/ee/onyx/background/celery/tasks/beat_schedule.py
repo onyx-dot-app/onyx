@@ -40,6 +40,8 @@ ee_cloud_tasks_to_schedule = [
     },
 ]
 
+ee_tasks_to_schedule: list[dict] = []
+
 if not MULTI_TENANT:
     ee_tasks_to_schedule = [
         {

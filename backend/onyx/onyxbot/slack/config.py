@@ -3,8 +3,10 @@ import os
 from sqlalchemy.orm import Session
 
 from onyx.db.models import SlackChannelConfig
+from onyx.db.slack_channel_config import (
+    fetch_slack_channel_config_for_channel_or_default,
+)
 from onyx.db.slack_channel_config import fetch_slack_channel_configs
-
 
 VALID_SLACK_FILTERS = [
     "answerable_prefilter",
@@ -17,18 +19,16 @@ def get_slack_channel_config_for_bot_and_channel(
     db_session: Session,
     slack_bot_id: int,
     channel_name: str | None,
-) -> SlackChannelConfig | None:
-    if not channel_name:
-        return None
-
-    slack_bot_configs = fetch_slack_channel_configs(
-        db_session=db_session, slack_bot_id=slack_bot_id
+) -> SlackChannelConfig:
+    slack_bot_config = fetch_slack_channel_config_for_channel_or_default(
+        db_session=db_session, slack_bot_id=slack_bot_id, channel_name=channel_name
     )
-    for config in slack_bot_configs:
-        if channel_name in config.channel_config["channel_name"]:
-            return config
+    if not slack_bot_config:
+        raise ValueError(
+            "No default configuration has been set for this Slack bot. This should not be possible."
+        )
 
-    return None
+    return slack_bot_config
 
 
 def validate_channel_name(

@@ -228,6 +228,15 @@ export function SettingsForm() {
         }
       />
 
+      <Checkbox
+        label="Pro Search Disabled"
+        sublabel="If set, users will not be able to use Pro Search."
+        checked={settings.pro_search_disabled ?? false}
+        onChange={(e) =>
+          handleToggleSettingsField("pro_search_disabled", e.target.checked)
+        }
+      />
+
       {NEXT_PUBLIC_CLOUD_ENABLED && settings.anonymous_user_enabled && (
         <AnonymousUserPath setPopup={setPopup} />
       )}

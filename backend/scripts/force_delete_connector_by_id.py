@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.document import delete_documents_complete__no_commit
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.search_settings import get_active_search_settings
 
 # Modify sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,7 +39,6 @@ from onyx.db.connector_credential_pair import (
 from onyx.db.engine import get_session_context_manager
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.file_store import get_default_file_store
-from onyx.document_index.document_index_utils import get_both_index_names
 
 # pylint: enable=E402
 # flake8: noqa: E402
@@ -191,9 +191,10 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
     )
     try:
         logger.notice("Deleting information from Vespa and Postgres")
-        curr_ind_name, sec_ind_name = get_both_index_names(db_session)
+        active_search_settings = get_active_search_settings(db_session)
         document_index = get_default_document_index(
-            primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
+            active_search_settings.primary,
+            active_search_settings.secondary,
         )
 
         files_deleted_count = _unsafe_deletion(

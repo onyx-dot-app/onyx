@@ -4,7 +4,7 @@ import { OnyxIcon } from "@/components/icons/icons";
 
 export function ChatIntro({ selectedPersona }: { selectedPersona: Persona }) {
   return (
-    <div className="flex flex-col items-center gap-6">
+    <div data-testid="chat-intro" className="flex flex-col items-center gap-6">
       <div className="relative flex flex-col gap-y-4 w-fit mx-auto justify-center">
         <div className="absolute z-10 items-center flex -left-12 top-1/2 -translate-y-1/2">
           <AssistantIcon size={36} assistant={selectedPersona} />

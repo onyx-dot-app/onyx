@@ -34,6 +34,7 @@ from onyx.auth.users import get_redis_strategy
 from onyx.auth.users import optional_user
 from onyx.auth.users import User
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.auth import get_user_count
 from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
@@ -111,6 +112,7 @@ async def login_as_anonymous_user(
     token = generate_anonymous_user_jwt_token(tenant_id)
 
     response = Response()
+    response.delete_cookie(FASTAPI_USERS_AUTH_COOKIE_NAME)
     response.set_cookie(
         key=ANONYMOUS_USER_COOKIE_NAME,
         value=token,

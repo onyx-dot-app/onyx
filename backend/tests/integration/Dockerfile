@@ -71,6 +71,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY ./onyx /app/onyx
 COPY ./shared_configs /app/shared_configs
 COPY ./alembic /app/alembic
+COPY ./alembic_tenants /app/alembic_tenants
 COPY ./alembic.ini /app/alembic.ini
 COPY ./pytest.ini /app/pytest.ini
 COPY supervisord.conf /usr/etc/supervisord.conf

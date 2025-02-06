@@ -14,6 +14,8 @@ def _build_group_member_email_map(
 ) -> dict[str, set[str]]:
     group_member_emails: dict[str, set[str]] = {}
     for user_result in confluence_client.paginated_cql_user_retrieval():
+        logger.debug(f"Processing groups for user: {user_result}")
+
         user = user_result.get("user", {})
         if not user:
             logger.warning(f"user result missing user field: {user_result}")
@@ -33,10 +35,17 @@ def _build_group_member_email_map(
             logger.warning(f"user result missing email field: {user_result}")
             continue
 
+        all_users_groups: set[str] = set()
         for group in confluence_client.paginated_groups_by_user_retrieval(user):
             # group name uniqueness is enforced by Confluence, so we can use it as a group ID
             group_id = group["name"]
             group_member_emails.setdefault(group_id, set()).add(email)
+            all_users_groups.add(group_id)
+
+        if not group_member_emails:
+            logger.warning(f"No groups found for user with email: {email}")
+        else:
+            logger.debug(f"Found groups {all_users_groups} for user with email {email}")
 
     return group_member_emails
 

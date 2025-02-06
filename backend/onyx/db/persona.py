@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
@@ -19,6 +20,7 @@ from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.chat_configs import BING_API_KEY
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
+from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.models import DocumentSet
@@ -32,6 +34,8 @@ from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
+from onyx.db.notification import create_notification
+from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.utils.logger import setup_logger
@@ -169,6 +173,15 @@ def make_persona_private(
         for user_uuid in user_ids:
             db_session.add(Persona__User(persona_id=persona_id, user_id=user_uuid))
 
+            create_notification(
+                user_id=user_uuid,
+                notif_type=NotificationType.PERSONA_SHARED,
+                db_session=db_session,
+                additional_data=PersonaSharedNotificationData(
+                    persona_id=persona_id,
+                ).model_dump(),
+            )
+
         db_session.commit()
 
     # May cause error if someone switches down to MIT from EE
@@ -291,8 +304,9 @@ def get_personas_for_user(
     include_deleted: bool = False,
     joinedload_all: bool = False,
 ) -> Sequence[Persona]:
-    stmt = select(Persona).distinct()
-    stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
+    stmt = select(Persona)
+    stmt = _add_user_filters(stmt, user, get_editable)
+
     if not include_default:
         stmt = stmt.where(Persona.builtin_persona.is_(False))
     if not include_slack_bot_personas:
@@ -302,14 +316,16 @@ def get_personas_for_user(
 
     if joinedload_all:
         stmt = stmt.options(
-            joinedload(Persona.prompts),
-            joinedload(Persona.tools),
-            joinedload(Persona.document_sets),
-            joinedload(Persona.groups),
-            joinedload(Persona.users),
+            selectinload(Persona.prompts),
+            selectinload(Persona.tools),
+            selectinload(Persona.document_sets),
+            selectinload(Persona.groups),
+            selectinload(Persona.users),
+            selectinload(Persona.labels),
         )
 
-    return db_session.execute(stmt).unique().scalars().all()
+    results = db_session.execute(stmt).scalars().all()
+    return results
 
 
 def get_personas(db_session: Session) -> Sequence[Persona]:
@@ -705,3 +721,15 @@ def update_persona_label(
 def delete_persona_label(label_id: int, db_session: Session) -> None:
     db_session.query(PersonaLabel).filter(PersonaLabel.id == label_id).delete()
     db_session.commit()
+
+
+def persona_has_search_tool(persona_id: int, db_session: Session) -> bool:
+    persona = (
+        db_session.query(Persona)
+        .options(joinedload(Persona.tools))
+        .filter(Persona.id == persona_id)
+        .one_or_none()
+    )
+    if persona is None:
+        raise ValueError(f"Persona with ID {persona_id} does not exist")
+    return any(tool.in_code_tool_id == "run_search" for tool in persona.tools)

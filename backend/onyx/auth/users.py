@@ -33,6 +33,8 @@ from fastapi_users.authentication import AuthenticationBackend
 from fastapi_users.authentication import CookieTransport
 from fastapi_users.authentication import RedisStrategy
 from fastapi_users.authentication import Strategy
+from fastapi_users.authentication.strategy.db import AccessTokenDatabase
+from fastapi_users.authentication.strategy.db import DatabaseStrategy
 from fastapi_users.exceptions import UserAlreadyExists
 from fastapi_users.jwt import decode_jwt
 from fastapi_users.jwt import generate_jwt
@@ -52,14 +54,15 @@ from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
 from onyx.auth.invited_users import get_invited_users
+from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
-from onyx.auth.schemas import UserUpdate
+from onyx.auth.schemas import UserUpdateWithRole
+from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.app_configs import EMAIL_CONFIGURED
-from onyx.configs.app_configs import REDIS_AUTH_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
@@ -70,11 +73,13 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import PASSWORD_SPECIAL_CHARS
 from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
 from onyx.db.api_key import fetch_user_for_api_key
+from onyx.db.auth import get_access_token_db
 from onyx.db.auth import get_default_admin_user_emails
 from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
@@ -83,6 +88,7 @@ from onyx.db.engine import get_async_session
 from onyx.db.engine import get_async_session_with_tenant
 from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session_with_tenant
+from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User
 from onyx.db.users import get_user_by_email
@@ -211,8 +217,25 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
     verification_token_lifetime_seconds = AUTH_COOKIE_EXPIRE_TIME_SECONDS
-
     user_db: SQLAlchemyUserDatabase[User, uuid.UUID]
+
+    async def get_by_email(self, user_email: str) -> User:
+        tenant_id = fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+        )(user_email)
+        async with get_async_session_with_tenant(tenant_id) as db_session:
+            if MULTI_TENANT:
+                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                    db_session, User, OAuthAccount
+                )
+                user = await tenant_user_db.get_by_email(user_email)
+            else:
+                user = await self.user_db.get_by_email(user_email)
+
+        if not user:
+            raise exceptions.UserNotExists()
+
+        return user
 
     async def create(
         self,
@@ -241,10 +264,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             referral_source=referral_source,
             request=request,
         )
+        user: User
 
         async with get_async_session_with_tenant(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-
             verify_email_is_invited(user_create.email)
             verify_email_domain(user_create.email)
             if MULTI_TENANT:
@@ -263,16 +286,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user_create.role = UserRole.ADMIN
                 else:
                     user_create.role = UserRole.BASIC
-
             try:
                 user = await super().create(user_create, safe=safe, request=request)  # type: ignore
             except exceptions.UserAlreadyExists:
                 user = await self.get_by_email(user_create.email)
                 # Handle case where user has used product outside of web and is now creating an account through web
                 if not user.role.is_web_login() and user_create.role.is_web_login():
-                    user_update = UserUpdate(
+                    user_update = UserUpdateWithRole(
                         password=user_create.password,
                         is_verified=user_create.is_verified,
+                        role=user_create.role,
                     )
                     user = await self.update(user_update, user)
                 else:
@@ -280,7 +303,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             finally:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
         return user
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
@@ -366,6 +388,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 "expires_at": expires_at,
                 "refresh_token": refresh_token,
             }
+
+            user: User
 
             try:
                 # Attempt to get user by OAuth account
@@ -499,9 +523,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
             raise HTTPException(
                 status.HTTP_500_INTERNAL_SERVER_ERROR,
-                "Your admin has not enbaled this feature.",
+                "Your admin has not enabled this feature.",
             )
-        send_forgot_password_email(user.email, token)
+        tenant_id = await fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.provisioning",
+            "get_or_provision_tenant",
+            async_return_default_schema,
+        )(email=user.email)
+
+        send_forgot_password_email(user.email, token, tenant_id=tenant_id)
 
     async def on_after_request_verify(
         self, user: User, token: str, request: Optional[Request] = None
@@ -575,11 +605,20 @@ async def get_user_manager(
 cookie_transport = CookieTransport(
     cookie_max_age=SESSION_EXPIRE_TIME_SECONDS,
     cookie_secure=WEB_DOMAIN.startswith("https"),
+    cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
 )
 
 
 def get_redis_strategy() -> RedisStrategy:
     return TenantAwareRedisStrategy()
+
+
+def get_database_strategy(
+    access_token_db: AccessTokenDatabase[AccessToken] = Depends(get_access_token_db),
+) -> DatabaseStrategy:
+    return DatabaseStrategy(
+        access_token_db, lifetime_seconds=SESSION_EXPIRE_TIME_SECONDS
+    )
 
 
 class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
@@ -590,7 +629,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
 
     def __init__(
         self,
-        lifetime_seconds: Optional[int] = REDIS_AUTH_EXPIRE_TIME_SECONDS,
+        lifetime_seconds: Optional[int] = SESSION_EXPIRE_TIME_SECONDS,
         key_prefix: str = REDIS_AUTH_KEY_PREFIX,
     ):
         self.lifetime_seconds = lifetime_seconds
@@ -639,9 +678,16 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         await redis.delete(f"{self.key_prefix}{token}")
 
 
-auth_backend = AuthenticationBackend(
-    name="redis", transport=cookie_transport, get_strategy=get_redis_strategy
-)
+if AUTH_BACKEND == AuthBackend.REDIS:
+    auth_backend = AuthenticationBackend(
+        name="redis", transport=cookie_transport, get_strategy=get_redis_strategy
+    )
+elif AUTH_BACKEND == AuthBackend.POSTGRES:
+    auth_backend = AuthenticationBackend(
+        name="postgres", transport=cookie_transport, get_strategy=get_database_strategy
+    )
+else:
+    raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
 
 
 class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
@@ -1026,6 +1072,8 @@ async def api_key_dep(
 ) -> User | None:
     if AUTH_TYPE == AuthType.DISABLED:
         return None
+
+    user: User | None = None
 
     hashed_api_key = get_hashed_api_key_from_request(request)
     if not hashed_api_key:

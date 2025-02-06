@@ -518,7 +518,7 @@ def read_slack_thread(
             message_type = MessageType.USER
         else:
             self_slack_bot_id = get_onyx_bot_slack_bot_id(client)
-
+            blocks: Any
             if reply.get("user") == self_slack_bot_id:
                 # OnyxBot response
                 message_type = MessageType.ASSISTANT

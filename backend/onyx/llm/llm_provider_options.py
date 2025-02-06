@@ -27,6 +27,7 @@ class WellKnownLLMProviderDescriptor(BaseModel):
 
 OPENAI_PROVIDER_NAME = "openai"
 OPEN_AI_MODEL_NAMES = [
+    "o3-mini",
     "o1-mini",
     "o1-preview",
     "o1-2024-12-17",
@@ -91,7 +92,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_version_required=False,
             custom_config_keys=[],
             llm_names=fetch_models_for_provider(OPENAI_PROVIDER_NAME),
-            default_model="gpt-4",
+            default_model="gpt-4o",
             default_fast_model="gpt-4o-mini",
         ),
         WellKnownLLMProviderDescriptor(

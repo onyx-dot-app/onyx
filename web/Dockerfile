@@ -18,6 +18,9 @@ FROM base AS builder
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
+# Add NODE_OPTIONS argument
+ARG NODE_OPTIONS
+
 # pull in source code / package.json / package-lock.json
 COPY . .
 
@@ -78,7 +81,8 @@ ENV NEXT_PUBLIC_GTM_ENABLED=${NEXT_PUBLIC_GTM_ENABLED}
 ARG NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED
 ENV NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED}
 
-RUN npx next build
+# Use NODE_OPTIONS in the build command
+RUN NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
 # Step 2. Production image, copy all the files and run next
 FROM base AS runner

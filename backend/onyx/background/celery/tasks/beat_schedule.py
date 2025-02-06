@@ -16,6 +16,10 @@ from shared_configs.configs import MULTI_TENANT
 # it's only important that they run relatively regularly
 BEAT_EXPIRES_DEFAULT = 15 * 60  # 15 minutes (in seconds)
 
+# hack to slow down task dispatch in the cloud until
+# we have a better implementation (backpressure, etc)
+CLOUD_BEAT_SCHEDULE_MULTIPLIER = 4
+
 # tasks that run in either self-hosted on cloud
 beat_task_templates: list[dict] = []
 
@@ -24,7 +28,7 @@ beat_task_templates.extend(
         {
             "name": "check-for-indexing",
             "task": OnyxCeleryTask.CHECK_FOR_INDEXING,
-            "schedule": timedelta(seconds=15),
+            "schedule": timedelta(seconds=15 * CLOUD_BEAT_SCHEDULE_MULTIPLIER),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -33,7 +37,7 @@ beat_task_templates.extend(
         {
             "name": "check-for-connector-deletion",
             "task": OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
-            "schedule": timedelta(seconds=20),
+            "schedule": timedelta(seconds=20 * CLOUD_BEAT_SCHEDULE_MULTIPLIER),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -42,7 +46,7 @@ beat_task_templates.extend(
         {
             "name": "check-for-vespa-sync",
             "task": OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
-            "schedule": timedelta(seconds=20),
+            "schedule": timedelta(seconds=20 * CLOUD_BEAT_SCHEDULE_MULTIPLIER),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -51,7 +55,7 @@ beat_task_templates.extend(
         {
             "name": "check-for-pruning",
             "task": OnyxCeleryTask.CHECK_FOR_PRUNING,
-            "schedule": timedelta(hours=1),
+            "schedule": timedelta(hours=1 * CLOUD_BEAT_SCHEDULE_MULTIPLIER),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -60,7 +64,7 @@ beat_task_templates.extend(
         {
             "name": "monitor-vespa-sync",
             "task": OnyxCeleryTask.MONITOR_VESPA_SYNC,
-            "schedule": timedelta(seconds=5),
+            "schedule": timedelta(seconds=5 * CLOUD_BEAT_SCHEDULE_MULTIPLIER),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -69,7 +73,7 @@ beat_task_templates.extend(
         {
             "name": "check-for-doc-permissions-sync",
             "task": OnyxCeleryTask.CHECK_FOR_DOC_PERMISSIONS_SYNC,
-            "schedule": timedelta(seconds=30),
+            "schedule": timedelta(seconds=30 * CLOUD_BEAT_SCHEDULE_MULTIPLIER),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -78,7 +82,7 @@ beat_task_templates.extend(
         {
             "name": "check-for-external-group-sync",
             "task": OnyxCeleryTask.CHECK_FOR_EXTERNAL_GROUP_SYNC,
-            "schedule": timedelta(seconds=20),
+            "schedule": timedelta(seconds=20 * CLOUD_BEAT_SCHEDULE_MULTIPLIER),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -87,7 +91,7 @@ beat_task_templates.extend(
         {
             "name": "monitor-background-processes",
             "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
-            "schedule": timedelta(minutes=5),
+            "schedule": timedelta(minutes=5 * CLOUD_BEAT_SCHEDULE_MULTIPLIER),
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -103,7 +107,9 @@ if LLM_MODEL_UPDATE_API_URL:
         {
             "name": "check-for-llm-model-update",
             "task": OnyxCeleryTask.CHECK_FOR_LLM_MODEL_UPDATE,
-            "schedule": timedelta(hours=1),  # Check every hour
+            "schedule": timedelta(
+                hours=1 * CLOUD_BEAT_SCHEDULE_MULTIPLIER
+            ),  # Check every hour
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -152,6 +158,7 @@ cloud_tasks_to_schedule: list[dict] = [
     },
 ]
 
+# generate our cloud and self-hosted beat tasks from the templates
 for beat_task_template in beat_task_templates:
     cloud_task = make_cloud_generator_task(beat_task_template)
     cloud_tasks_to_schedule.append(cloud_task)

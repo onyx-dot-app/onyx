@@ -27,12 +27,14 @@ from onyx.db.document import mark_document_as_synced
 from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.engine import get_all_tenant_ids
 from onyx.db.engine import get_session_with_tenant
-from onyx.document_index.document_index_utils import get_both_index_names
+from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaDocumentFields
+from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
+from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
 
 DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES = 3
 
@@ -73,14 +75,18 @@ def document_by_cc_pair_cleanup_task(
     """
     task_logger.debug(f"Task start: doc={document_id}")
 
+    start = time.monotonic()
+
     try:
         with get_session_with_tenant(tenant_id) as db_session:
             action = "skip"
             chunks_affected = 0
 
-            curr_ind_name, sec_ind_name = get_both_index_names(db_session)
+            active_search_settings = get_active_search_settings(db_session)
             doc_index = get_default_document_index(
-                primary_index_name=curr_ind_name, secondary_index_name=sec_ind_name
+                active_search_settings.primary,
+                active_search_settings.secondary,
+                httpx_client=HttpxPool.get("vespa"),
             )
 
             retry_index = RetryDocumentIndex(doc_index)
@@ -150,16 +156,19 @@ def document_by_cc_pair_cleanup_task(
 
             db_session.commit()
 
+            elapsed = time.monotonic() - start
             task_logger.info(
                 f"doc={document_id} "
                 f"action={action} "
                 f"refcount={count} "
-                f"chunks={chunks_affected}"
+                f"chunks={chunks_affected} "
+                f"elapsed={elapsed:.2f}"
             )
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
         return False
     except Exception as ex:
+        e: Exception | None = None
         if isinstance(ex, RetryError):
             task_logger.warning(
                 f"Tenacity retry failed: num_attempts={ex.last_attempt.attempt_number}"
@@ -213,6 +222,7 @@ def document_by_cc_pair_cleanup_task(
 
 @shared_task(
     name=OnyxCeleryTask.CLOUD_BEAT_TASK_GENERATOR,
+    ignore_result=True,
     trail=False,
     bind=True,
 )
@@ -238,6 +248,7 @@ def cloud_beat_task_generator(
         return None
 
     last_lock_time = time.monotonic()
+    tenant_ids: list[str] | list[None] = []
 
     try:
         tenant_ids = get_all_tenant_ids()
@@ -246,6 +257,10 @@ def cloud_beat_task_generator(
             if current_time - last_lock_time >= (CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4):
                 lock_beat.reacquire()
                 last_lock_time = current_time
+
+            # needed in the cloud
+            if IGNORED_SYNCING_TENANT_LIST and tenant_id in IGNORED_SYNCING_TENANT_LIST:
+                continue
 
             self.app.send_task(
                 task_name,

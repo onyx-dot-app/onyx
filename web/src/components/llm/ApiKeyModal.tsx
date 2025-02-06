@@ -3,7 +3,7 @@
 import { ApiKeyForm } from "./ApiKeyForm";
 import { Modal } from "../Modal";
 import { useRouter } from "next/navigation";
-import { useProviderStatus } from "../chat_search/ProviderContext";
+import { useProviderStatus } from "../chat/ProviderContext";
 import { PopupSpec } from "../admin/connectors/Popup";
 
 export const ApiKeyModal = ({

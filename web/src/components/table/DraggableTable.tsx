@@ -27,7 +27,6 @@ import {
 } from "@dnd-kit/sortable";
 import { DraggableRow } from "./DraggableRow";
 import { Row } from "./interfaces";
-import { StaticRow } from "./StaticRow";
 
 export function DraggableTable({
   headers,
@@ -43,8 +42,17 @@ export function DraggableTable({
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>();
   const items = useMemo(() => rows?.map(({ id }) => id), [rows]);
   const sensors = useSensors(
-    useSensor(MouseSensor, {}),
-    useSensor(TouchSensor, {}),
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
+      },
+    }),
     useSensor(KeyboardSensor, {})
   );
 
@@ -87,7 +95,7 @@ export function DraggableTable({
       collisionDetection={closestCenter}
       modifiers={[restrictToVerticalAxis]}
     >
-      <Table className="overflow-y-visible">
+      <Table>
         <TableHeader>
           <TableRow>
             <TableHead></TableHead>
@@ -99,24 +107,28 @@ export function DraggableTable({
 
         <TableBody>
           <SortableContext items={items} strategy={verticalListSortingStrategy}>
-            {rows.map((row) => {
-              return <DraggableRow key={row.id} row={row} isAdmin={isAdmin} />;
-            })}
+            {rows.map((row) => (
+              <DraggableRow key={row.id} row={row} isAdmin={isAdmin} />
+            ))}
           </SortableContext>
-
-          {isAdmin && (
-            <DragOverlay>
-              {selectedRow && (
-                <Table className="overflow-y-visible">
-                  <TableBody>
-                    <StaticRow key={selectedRow.id} row={selectedRow} />
-                  </TableBody>
-                </Table>
-              )}
-            </DragOverlay>
-          )}
         </TableBody>
       </Table>
+
+      {isAdmin && (
+        <DragOverlay>
+          {selectedRow && (
+            <Table>
+              <TableBody>
+                <DraggableRow
+                  row={selectedRow}
+                  isAdmin={isAdmin}
+                  isDragOverlay
+                />
+              </TableBody>
+            </Table>
+          )}
+        </DragOverlay>
+      )}
     </DndContext>
   );
 }

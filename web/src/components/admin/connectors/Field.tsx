@@ -25,11 +25,12 @@ import {
 } from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback } from "react";
 import remarkGfm from "remark-gfm";
-import { EditIcon } from "@/components/icons/icons";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { CheckboxField } from "@/components/ui/checkbox";
+import { CheckedState } from "@radix-ui/react-checkbox";
 
 export function SectionHeader({
   children,
@@ -50,8 +51,8 @@ export function Label({
 }) {
   return (
     <div
-      className={`block font-medium base ${className} ${
-        small ? "text-sm" : "text-base"
+      className={`block text-text-darker font-medium base ${className} ${
+        small ? "text-xs" : "text-sm"
       }`}
     >
       {children}
@@ -75,7 +76,7 @@ export function LabelWithTooltip({
 }
 
 export function SubLabel({ children }: { children: string | JSX.Element }) {
-  return <div className="text-sm text-subtle mb-2">{children}</div>;
+  return <div className="text-sm text-text-dark/80 mb-2">{children}</div>;
 }
 
 export function ManualErrorMessage({ children }: { children: string }) {
@@ -224,11 +225,7 @@ export function TextFormField({
         } gap-x-2 items-start`}
       >
         <div className="flex gap-x-2 items-center">
-          {!removeLabel && (
-            <Label className={sizeClass.label} small={small}>
-              {label}
-            </Label>
-          )}
+          {!removeLabel && <Label small={false}>{label}</Label>}
           {optional ? <span>(optional) </span> : ""}
           {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
         </div>
@@ -439,53 +436,67 @@ interface BooleanFormFieldProps {
   name: string;
   label: string;
   subtext?: string | JSX.Element;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   removeIndent?: boolean;
   small?: boolean;
-  alignTop?: boolean;
   noLabel?: boolean;
   disabled?: boolean;
-  checked?: boolean;
   optional?: boolean;
   tooltip?: string;
+  disabledTooltip?: string;
+  onChange?: (checked: boolean) => void;
 }
 
 export const BooleanFormField = ({
   name,
   label,
   subtext,
-  onChange,
   removeIndent,
   noLabel,
   optional,
   small,
   disabled,
-  alignTop,
-  checked,
   tooltip,
+  disabledTooltip,
+  onChange,
 }: BooleanFormFieldProps) => {
-  const [field, meta, helpers] = useField<boolean>(name);
-  const { setValue } = helpers;
+  const { setFieldValue } = useFormikContext<any>();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setValue(e.target.checked);
-    if (onChange) {
-      onChange(e);
-    }
-  };
+  const handleChange = useCallback(
+    (checked: CheckedState) => {
+      if (!disabled) {
+        setFieldValue(name, checked);
+      }
+      if (onChange) {
+        onChange(checked === true);
+      }
+    },
+    [disabled, name, setFieldValue, onChange]
+  );
 
   return (
     <div>
-      <label className="flex text-sm">
-        <Field
-          type="checkbox"
-          {...field}
-          checked={checked !== undefined ? checked : field.value}
-          disabled={disabled}
-          onChange={handleChange}
-          className={`${removeIndent ? "mr-2" : "mx-3"}     
-              px-5 w-3.5 h-3.5 ${alignTop ? "mt-1" : "my-auto"}`}
-        />
+      <label className="flex items-center text-sm cursor-pointer">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <CheckboxField
+                name={name}
+                size="sm"
+                className={`
+                  ${disabled ? "opacity-50" : ""}
+                  ${removeIndent ? "mr-2" : "mx-3"}`}
+                onCheckedChange={handleChange}
+              />
+            </TooltipTrigger>
+            {disabled && disabledTooltip && (
+              <TooltipContent side="top" align="center">
+                <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
+                  {disabledTooltip}
+                </p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
         {!noLabel && (
           <div>
             <div className="flex items-center gap-x-2">
@@ -721,6 +732,7 @@ export function SelectorFormField({
               ) : (
                 options.map((option) => (
                   <SelectItem
+                    hideCheck
                     icon={option.icon}
                     key={option.value}
                     value={String(option.value)}

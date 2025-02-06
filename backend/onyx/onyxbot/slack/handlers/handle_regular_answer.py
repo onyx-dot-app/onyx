@@ -27,6 +27,7 @@ from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.persona import persona_has_search_tool
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.handlers.utils import send_team_member_message
@@ -64,7 +65,7 @@ def rate_limits(
 
 def handle_regular_answer(
     message_info: SlackMessageInfo,
-    slack_channel_config: SlackChannelConfig | None,
+    slack_channel_config: SlackChannelConfig,
     receiver_ids: list[str] | None,
     client: WebClient,
     channel: str,
@@ -76,7 +77,7 @@ def handle_regular_answer(
     should_respond_with_error_msgs: bool = DANSWER_BOT_DISPLAY_ERROR_MSGS,
     disable_docs_only_answer: bool = DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER,
 ) -> bool:
-    channel_conf = slack_channel_config.channel_config if slack_channel_config else None
+    channel_conf = slack_channel_config.channel_config
 
     messages = message_info.thread_messages
 
@@ -92,7 +93,7 @@ def handle_regular_answer(
     prompt = None
     # If no persona is specified, use the default search based persona
     # This way slack flow always has a persona
-    persona = slack_channel_config.persona if slack_channel_config else None
+    persona = slack_channel_config.persona
     if not persona:
         with get_session_with_tenant(tenant_id) as db_session:
             persona = get_persona_by_id(DEFAULT_PERSONA_ID, user, db_session)
@@ -106,7 +107,8 @@ def handle_regular_answer(
         ]
         prompt = persona.prompts[0] if persona.prompts else None
 
-    should_respond_even_with_no_docs = persona.num_chunks == 0 if persona else False
+    with get_session_with_tenant(tenant_id) as db_session:
+        expecting_search_result = persona_has_search_tool(persona.id, db_session)
 
     # TODO: Add in support for Slack to truncate messages based on max LLM context
     # llm, _ = get_llms_for_persona(persona)
@@ -134,11 +136,7 @@ def handle_regular_answer(
     single_message_history = slackify_message_thread(history_messages) or None
 
     bypass_acl = False
-    if (
-        slack_channel_config
-        and slack_channel_config.persona
-        and slack_channel_config.persona.document_sets
-    ):
+    if slack_channel_config.persona and slack_channel_config.persona.document_sets:
         # For Slack channels, use the full document set, admin will be warned when configuring it
         # with non-public document sets
         bypass_acl = True
@@ -190,11 +188,7 @@ def handle_regular_answer(
         # auto_detect_filters = (
         #     persona.llm_filter_extraction if persona is not None else True
         # )
-        auto_detect_filters = (
-            slack_channel_config.enable_auto_filters
-            if slack_channel_config is not None
-            else False
-        )
+        auto_detect_filters = slack_channel_config.enable_auto_filters
         retrieval_details = RetrievalDetails(
             run_search=OptionalSearchSetting.ALWAYS,
             real_time=False,
@@ -311,12 +305,12 @@ def handle_regular_answer(
         return True
 
     retrieval_info = answer.docs
-    if not retrieval_info:
+    if not retrieval_info and expecting_search_result:
         # This should not happen, even with no docs retrieved, there is still info returned
         raise RuntimeError("Failed to retrieve docs, cannot answer question.")
 
-    top_docs = retrieval_info.top_documents
-    if not top_docs and not should_respond_even_with_no_docs:
+    top_docs = retrieval_info.top_documents if retrieval_info else []
+    if not top_docs and expecting_search_result:
         logger.error(
             f"Unable to answer question: '{user_message}' - no documents found"
         )
@@ -345,7 +339,8 @@ def handle_regular_answer(
     )
 
     if (
-        only_respond_if_citations
+        expecting_search_result
+        and only_respond_if_citations
         and not answer.citations
         and not message_info.bypass_filters
     ):
@@ -371,6 +366,7 @@ def handle_regular_answer(
         channel_conf=channel_conf,
         use_citations=True,  # No longer supporting quotes
         feedback_reminder_id=feedback_reminder_id,
+        expecting_search_result=expecting_search_result,
     )
 
     try:

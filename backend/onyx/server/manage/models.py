@@ -44,11 +44,11 @@ class UserPreferences(BaseModel):
     chosen_assistants: list[int] | None = None
     hidden_assistants: list[int] = []
     visible_assistants: list[int] = []
-    recent_assistants: list[int] | None = None
     default_model: str | None = None
     auto_scroll: bool | None = None
     pinned_assistants: list[int] | None = None
     shortcut_enabled: bool | None = None
+    temperature_override_enabled: bool | None = None
 
 
 class UserInfo(BaseModel):
@@ -92,6 +92,7 @@ class UserInfo(BaseModel):
                     hidden_assistants=user.hidden_assistants,
                     pinned_assistants=user.pinned_assistants,
                     visible_assistants=user.visible_assistants,
+                    temperature_override_enabled=user.temperature_override_enabled,
                 )
             ),
             organization_name=organization_name,
@@ -214,6 +215,7 @@ class SlackChannelConfig(BaseModel):
     # XXX this is going away soon
     standard_answer_categories: list[StandardAnswerCategory]
     enable_auto_filters: bool
+    is_default: bool
 
     @classmethod
     def from_model(
@@ -236,6 +238,7 @@ class SlackChannelConfig(BaseModel):
                 for standard_answer_category_model in slack_channel_config_model.standard_answer_categories
             ],
             enable_auto_filters=slack_channel_config_model.enable_auto_filters,
+            is_default=slack_channel_config_model.is_default,
         )
 
 
@@ -278,3 +281,8 @@ class AllUsersResponse(BaseModel):
     accepted_pages: int
     invited_pages: int
     slack_users_pages: int
+
+
+class SlackChannel(BaseModel):
+    id: str
+    name: str

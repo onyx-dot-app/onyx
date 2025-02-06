@@ -286,6 +286,7 @@ def prepare_authorization_request(
     oauth_state = (
         base64.urlsafe_b64encode(oauth_uuid.bytes).rstrip(b"=").decode("utf-8")
     )
+    session: str
 
     if connector == DocumentSource.SLACK:
         oauth_url = SlackOAuth.generate_oauth_url(oauth_state)
@@ -554,6 +555,7 @@ def handle_google_drive_oauth_callback(
         )
 
     session_json = session_json_bytes.decode("utf-8")
+    session: GoogleDriveOAuth.OAuthSession
     try:
         session = GoogleDriveOAuth.parse_session(session_json)
 

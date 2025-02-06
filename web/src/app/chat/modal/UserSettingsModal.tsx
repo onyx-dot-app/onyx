@@ -1,13 +1,5 @@
-import {
-  Dispatch,
-  SetStateAction,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useContext, useEffect, useRef } from "react";
 import { Modal } from "@/components/Modal";
-import Text from "@/components/ui/text";
 import { getDisplayNameForModel, LlmOverride } from "@/lib/hooks";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 
@@ -33,13 +25,18 @@ export function UserSettingsModal({
 }: {
   setPopup: (popupSpec: PopupSpec | null) => void;
   llmProviders: LLMProviderDescriptor[];
-  setLlmOverride?: Dispatch<SetStateAction<LlmOverride>>;
+  setLlmOverride?: (newOverride: LlmOverride) => void;
   onClose: () => void;
   defaultModel: string | null;
 }) {
   const { inputPrompts, refreshInputPrompts } = useChatContext();
-  const { refreshUser, user, updateUserAutoScroll, updateUserShortcuts } =
-    useUser();
+  const {
+    refreshUser,
+    user,
+    updateUserAutoScroll,
+    updateUserShortcuts,
+    updateUserTemperatureOverrideEnabled,
+  } = useUser();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
 
@@ -186,6 +183,16 @@ export function UserSettingsModal({
               }}
             />
             <Label className="text-sm">Enable Prompt Shortcuts</Label>
+          </div>
+          <div className="flex items-center gap-x-2">
+            <Switch
+              size="sm"
+              checked={user?.preferences?.temperature_override_enabled}
+              onCheckedChange={(checked) => {
+                updateUserTemperatureOverrideEnabled(checked);
+              }}
+            />
+            <Label className="text-sm">Enable Temperature Override</Label>
           </div>
         </div>
 

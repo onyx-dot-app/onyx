@@ -198,6 +198,7 @@ def process_all_chat_feedback(onyx_url: str, api_key: str | None) -> None:
         r_sessions = get_chat_sessions(onyx_url, headers, user_id)
         logger.info(f"user={user_id} num_sessions={len(r_sessions.sessions)}")
         for session in r_sessions.sessions:
+            s: ChatSessionSnapshot
             try:
                 s = get_session_history(onyx_url, headers, session.id)
             except requests.exceptions.HTTPError:

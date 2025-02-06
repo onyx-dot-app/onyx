@@ -11,6 +11,7 @@ from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxRedisConstants
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 
@@ -79,10 +80,12 @@ class RedisConnectorPrune:
 
     def set_fence(self, value: bool) -> None:
         if not value:
+            self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
             self.redis.delete(self.fence_key)
             return
 
         self.redis.set(self.fence_key, 0)
+        self.redis.sadd(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
 
     @property
     def generator_complete(self) -> int | None:
@@ -92,7 +95,7 @@ class RedisConnectorPrune:
         if fence_bytes is None:
             return None
 
-        fence_int = cast(int, fence_bytes)
+        fence_int = int(cast(bytes, fence_bytes))
         return fence_int
 
     @generator_complete.setter
@@ -158,6 +161,7 @@ class RedisConnectorPrune:
         return len(async_results)
 
     def reset(self) -> None:
+        self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
         self.redis.delete(self.generator_progress_key)
         self.redis.delete(self.generator_complete_key)
         self.redis.delete(self.taskset_key)

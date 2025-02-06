@@ -29,7 +29,19 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import PRESERVED_SEARCH_FIELDS
 from shared_configs.enums import EmbeddingProvider
 
+
 logger = setup_logger()
+
+
+class ActiveSearchSettings:
+    primary: SearchSettings
+    secondary: SearchSettings | None
+
+    def __init__(
+        self, primary: SearchSettings, secondary: SearchSettings | None
+    ) -> None:
+        self.primary = primary
+        self.secondary = secondary
 
 
 def create_search_settings(
@@ -143,21 +155,27 @@ def get_secondary_search_settings(db_session: Session) -> SearchSettings | None:
     return latest_settings
 
 
-def get_active_search_settings(db_session: Session) -> list[SearchSettings]:
-    """Returns active search settings. The first entry will always be the current search
-    settings. If there are new search settings that are being migrated to, those will be
-    the second entry."""
+def get_active_search_settings(db_session: Session) -> ActiveSearchSettings:
+    """Returns active search settings. Secondary search settings may be None."""
+
+    # Get the primary and secondary search settings
+    primary_search_settings = get_current_search_settings(db_session)
+    secondary_search_settings = get_secondary_search_settings(db_session)
+    return ActiveSearchSettings(
+        primary=primary_search_settings, secondary=secondary_search_settings
+    )
+
+
+def get_active_search_settings_list(db_session: Session) -> list[SearchSettings]:
+    """Returns active search settings as a list. Primary settings are the first element,
+    and if secondary search settings exist, they will be the second element."""
+
     search_settings_list: list[SearchSettings] = []
 
-    # Get the primary search settings
-    primary_search_settings = get_current_search_settings(db_session)
-    search_settings_list.append(primary_search_settings)
-
-    # Check for secondary search settings
-    secondary_search_settings = get_secondary_search_settings(db_session)
-    if secondary_search_settings is not None:
-        # If secondary settings exist, add them to the list
-        search_settings_list.append(secondary_search_settings)
+    active_search_settings = get_active_search_settings(db_session)
+    search_settings_list.append(active_search_settings.primary)
+    if active_search_settings.secondary:
+        search_settings_list.append(active_search_settings.secondary)
 
     return search_settings_list
 

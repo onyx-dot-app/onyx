@@ -64,9 +64,8 @@ def admin_search(
         tenant_id=tenant_id,
     )
     search_settings = get_current_search_settings(db_session)
-    document_index = get_default_document_index(
-        primary_index_name=search_settings.index_name, secondary_index_name=None
-    )
+    document_index = get_default_document_index(search_settings, None)
+
     if not isinstance(document_index, VespaIndex):
         raise HTTPException(
             status_code=400,

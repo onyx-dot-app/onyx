@@ -2,7 +2,6 @@
 import { useContext } from "react";
 import { FiSidebar } from "react-icons/fi";
 import { SettingsContext } from "../settings/SettingsProvider";
-import { NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA } from "@/lib/constants";
 import { LeftToLineIcon, NewChatIcon, RightToLineIcon } from "../icons/icons";
 import {
   Tooltip,
@@ -13,7 +12,7 @@ import {
 import { pageType } from "@/app/chat/sessionSidebar/types";
 import { Logo } from "../logo/Logo";
 import Link from "next/link";
-import { LogoComponent } from "@/app/chat/shared_chat_search/FixedLogo";
+import { LogoComponent } from "@/components/logo/FixedLogo";
 
 export default function LogoWithText({
   toggleSidebar,
@@ -90,9 +89,7 @@ export default function LogoWithText({
                 className="my-auto mobile:hidden"
                 href={
                   `/${page}` +
-                  (NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA && assistantId
-                    ? `?assistantId=${assistantId}`
-                    : "")
+                  (assistantId ? `?assistantId=${assistantId}` : "")
                 }
                 onClick={(e) => {
                   if (e.metaKey || e.ctrlKey) {

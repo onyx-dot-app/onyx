@@ -6,6 +6,7 @@ from onyx.access.models import ExternalAccess
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.db.models import ConnectorCredentialPair
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -28,7 +29,7 @@ def _get_slim_doc_generator(
 
 
 def gmail_doc_sync(
-    cc_pair: ConnectorCredentialPair,
+    cc_pair: ConnectorCredentialPair, callback: IndexingHeartbeatInterface | None
 ) -> list[DocExternalAccess]:
     """
     Adds the external permissions to the documents in postgres
@@ -44,6 +45,12 @@ def gmail_doc_sync(
     document_external_access: list[DocExternalAccess] = []
     for slim_doc_batch in slim_doc_generator:
         for slim_doc in slim_doc_batch:
+            if callback:
+                if callback.should_stop():
+                    raise RuntimeError("gmail_doc_sync: Stop signal detected")
+
+                callback.progress("gmail_doc_sync", 1)
+
             if slim_doc.perm_sync_data is None:
                 logger.warning(f"No permissions found for document {slim_doc.id}")
                 continue

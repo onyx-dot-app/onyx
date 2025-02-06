@@ -357,6 +357,7 @@ class ConnectorCredentialPairDescriptor(BaseModel):
     name: str | None = None
     connector: ConnectorSnapshot
     credential: CredentialSnapshot
+    access_type: AccessType
 
 
 class RunConnectorRequest(BaseModel):

@@ -1,12 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ChatInputOption } from "./ChatInputOption";
-import { AnthropicSVG } from "@/components/icons/icons";
-import { getDisplayNameForModel } from "@/lib/hooks";
+import { defaultModelsByProvider, getDisplayNameForModel } from "@/lib/hooks";
 import {
   checkLLMSupportsImageInput,
   destructureValue,
@@ -18,6 +17,17 @@ import {
 } from "@/app/admin/configuration/llm/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { LlmOverrideManager } from "@/lib/hooks";
+
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { FiAlertTriangle } from "react-icons/fi";
+
+import { Slider } from "@/components/ui/slider";
+import { useUser } from "@/components/user/UserProvider";
 
 interface LLMPopoverProps {
   llmProviders: LLMProviderDescriptor[];
@@ -33,8 +43,9 @@ export default function LLMPopover({
   currentAssistant,
 }: LLMPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { llmOverride, updateLLMOverride, globalDefault } = llmOverrideManager;
-  const currentLlm = llmOverride.modelName || globalDefault.modelName;
+  const { user } = useUser();
+  const { llmOverride, updateLLMOverride } = llmOverrideManager;
+  const currentLlm = llmOverride.modelName;
 
   const llmOptionsByProvider: {
     [provider: string]: {
@@ -50,22 +61,23 @@ export default function LLMPopover({
       llmOptionsByProvider[llmProvider.provider] = [];
     }
 
-    (llmProvider.display_model_names || llmProvider.model_names).forEach(
-      (modelName) => {
-        if (!uniqueModelNames.has(modelName)) {
-          uniqueModelNames.add(modelName);
-          llmOptionsByProvider[llmProvider.provider].push({
-            name: modelName,
-            value: structureValue(
-              llmProvider.name,
-              llmProvider.provider,
-              modelName
-            ),
-            icon: getProviderIcon(llmProvider.provider, modelName),
-          });
-        }
+    (
+      llmProvider.display_model_names ||
+      defaultModelsByProvider[llmProvider.provider]
+    ).forEach((modelName) => {
+      if (!uniqueModelNames.has(modelName)) {
+        uniqueModelNames.add(modelName);
+        llmOptionsByProvider[llmProvider.provider].push({
+          name: modelName,
+          value: structureValue(
+            llmProvider.name,
+            llmProvider.provider,
+            modelName
+          ),
+          icon: getProviderIcon(llmProvider.provider, modelName),
+        });
       }
-    );
+    });
   });
 
   const llmOptions = Object.entries(llmOptionsByProvider).flatMap(
@@ -81,10 +93,29 @@ export default function LLMPopover({
     ? getDisplayNameForModel(defaultModelName)
     : null;
 
+  const [localTemperature, setLocalTemperature] = useState(
+    llmOverrideManager.temperature ?? 0.5
+  );
+
+  useEffect(() => {
+    setLocalTemperature(llmOverrideManager.temperature ?? 0.5);
+  }, [llmOverrideManager.temperature]);
+
+  const handleTemperatureChange = (value: number[]) => {
+    setLocalTemperature(value[0]);
+  };
+
+  const handleTemperatureChangeComplete = (value: number[]) => {
+    llmOverrideManager.updateTemperature(value[0]);
+  };
+
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <button className="focus:outline-none">
+        <button
+          className="focus:outline-none"
+          data-testid="llm-popover-trigger"
+        >
           <ChatInputOption
             minimize
             toggle
@@ -108,9 +139,9 @@ export default function LLMPopover({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-64 p-1 bg-background border border-gray-200 rounded-md shadow-lg"
+        className="w-64 p-1 bg-background border border-gray-200 rounded-md shadow-lg flex flex-col"
       >
-        <div className="max-h-[300px] overflow-y-auto">
+        <div className="flex-grow max-h-[300px] default-scrollbar overflow-y-auto">
           {llmOptions.map(({ name, icon, value }, index) => {
             if (!requiresImageGeneration || checkLLMSupportsImageInput(name)) {
               return (
@@ -139,12 +170,47 @@ export default function LLMPopover({
                       );
                     }
                   })()}
+                  {llmOverrideManager.imageFilesPresent &&
+                    !checkLLMSupportsImageInput(name) && (
+                      <TooltipProvider>
+                        <Tooltip delayDuration={0}>
+                          <TooltipTrigger className="my-auto flex items-center ml-auto">
+                            <FiAlertTriangle className="text-alert" size={16} />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">
+                              This LLM is not vision-capable and cannot process
+                              image files present in your chat session.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                 </button>
               );
             }
             return null;
           })}
         </div>
+        {user?.preferences?.temperature_override_enabled && (
+          <div className="mt-2 pt-2 border-t border-gray-200">
+            <div className="w-full px-3 py-2">
+              <Slider
+                value={[localTemperature]}
+                max={llmOverrideManager.maxTemperature}
+                min={0}
+                step={0.01}
+                onValueChange={handleTemperatureChange}
+                onValueCommit={handleTemperatureChangeComplete}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-2">
+                <span>Temperature (creativity)</span>
+                <span>{localTemperature.toFixed(1)}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

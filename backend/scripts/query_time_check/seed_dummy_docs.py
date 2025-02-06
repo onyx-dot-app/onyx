@@ -16,6 +16,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.db.engine import get_session_context_manager
 from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.indexing.indexing_pipeline import IndexBatchParams
 from onyx.indexing.models import ChunkEmbedding
@@ -133,10 +134,16 @@ def seed_dummy_docs(
 ) -> None:
     with get_session_context_manager() as db_session:
         search_settings = get_current_search_settings(db_session)
+        multipass_config = get_multipass_config(search_settings)
         index_name = search_settings.index_name
         embedding_dim = search_settings.model_dim
 
-    vespa_index = VespaIndex(index_name=index_name, secondary_index_name=None)
+    vespa_index = VespaIndex(
+        index_name=index_name,
+        secondary_index_name=None,
+        large_chunks_enabled=multipass_config.enable_large_chunks,
+        secondary_large_chunks_enabled=None,
+    )
     print(index_name)
 
     all_chunks = []

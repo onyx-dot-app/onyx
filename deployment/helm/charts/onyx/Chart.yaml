@@ -6,7 +6,7 @@ sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
 version: 0.2.1
-appVersion: "latest"
+appVersion: latest
 annotations:
   category: Productivity
   licenses: MIT
@@ -23,7 +23,7 @@ dependencies:
     repository: https://charts.bitnami.com/bitnami
     condition: postgresql.enabled
   - name: vespa
-    version: 0.2.18
+    version: 0.2.20
     repository: https://onyx-dot-app.github.io/vespa-helm-charts
     condition: vespa.enabled
   - name: nginx

@@ -74,8 +74,8 @@ export const AddConnectorForm: React.FC<AddConnectorFormProps> = ({
                     .map((userGroupCCPair) => userGroupCCPair.id)
                     .includes(ccPair.cc_pair_id)
               )
-              // remove public docs, since they don't make sense as part of a group
-              .filter((ccPair) => !(ccPair.access_type === "public"))
+              // remove public and synced docs, since they don't make sense as part of a group
+              .filter((ccPair) => ccPair.access_type === "private")
               .map((ccPair) => {
                 return {
                   name: ccPair.name?.toString() || "",

@@ -20,7 +20,7 @@ prompts:
       The documents may not all be relevant, ignore any documents that are not directly relevant
       to the most recent user query.
 
-      I have not read or seen any of the documents and do not want to read them.
+      I have not read or seen any of the documents and do not want to read them. Do not refer to them by Document number.
 
       If there are no relevant documents, refer to the chat history and your internal knowledge.
     # Inject a statement at the end of system prompt to inform the LLM of the current date/time

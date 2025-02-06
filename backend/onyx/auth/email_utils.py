@@ -10,6 +10,7 @@ from onyx.configs.app_configs import SMTP_PORT
 from onyx.configs.app_configs import SMTP_SERVER
 from onyx.configs.app_configs import SMTP_USER
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.models import User
 
 
@@ -65,9 +66,13 @@ def send_forgot_password_email(
     user_email: str,
     token: str,
     mail_from: str = EMAIL_FROM,
+    tenant_id: str | None = None,
 ) -> None:
     subject = "Onyx Forgot Password"
     link = f"{WEB_DOMAIN}/auth/reset-password?token={token}"
+    if tenant_id:
+        link += f"&{TENANT_ID_COOKIE_NAME}={tenant_id}"
+        # Keep search param same name as cookie for simplicity
     body = f"Click the following link to reset your password: {link}"
     send_email(user_email, subject, body, mail_from)
 

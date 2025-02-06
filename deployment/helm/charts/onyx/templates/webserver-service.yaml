@@ -10,8 +10,8 @@ metadata:
 spec:
   type: {{ .Values.webserver.service.type }}
   ports:
-    - port: {{ .Values.webserver.service.port }}
-      targetPort: http
+    - port: {{ .Values.webserver.service.servicePort }}
+      targetPort: {{ .Values.webserver.service.targetPort }}
       protocol: TCP
       name: http
   selector:

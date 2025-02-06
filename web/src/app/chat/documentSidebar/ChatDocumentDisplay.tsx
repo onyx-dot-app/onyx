@@ -10,6 +10,7 @@ import { Dispatch, SetStateAction } from "react";
 import { openDocument } from "@/lib/search/utils";
 
 interface DocumentDisplayProps {
+  agenticMessage: boolean;
   closeSidebar: () => void;
   document: OnyxDocument;
   modal?: boolean;
@@ -38,7 +39,6 @@ export function DocumentMetadataBlock({
 
       {metadataEntries.length > 0 && (
         <>
-          <div className="mx-1 h-4 border-l border-border" />
           <div className="flex items-center overflow-hidden">
             {metadataEntries
               .slice(0, MAX_METADATA_ITEMS)
@@ -60,6 +60,7 @@ export function DocumentMetadataBlock({
 }
 
 export function ChatDocumentDisplay({
+  agenticMessage,
   closeSidebar,
   document,
   modal,
@@ -112,10 +113,12 @@ export function ChatDocumentDisplay({
               hasMetadata ? "mt-2" : ""
             }`}
           >
-            {buildDocumentSummaryDisplay(
-              document.match_highlights,
-              document.blurb
-            )}
+            {!agenticMessage
+              ? buildDocumentSummaryDisplay(
+                  document.match_highlights,
+                  document.blurb
+                )
+              : document.blurb}
           </div>
           <div className="absolute top-2 right-2">
             {!isInternet && !hideSelection && (
