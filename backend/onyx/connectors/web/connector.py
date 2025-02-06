@@ -36,6 +36,8 @@ from onyx.utils.sitemap import list_pages_for_site
 from onyx.utils.sitemap_eea import list_pages_for_site_eea
 from shared_configs.configs import MULTI_TENANT
 
+from onyx.utils.playwright import wait_for_page
+
 logger = setup_logger()
 
 
@@ -333,6 +335,10 @@ class WebConnector(LoadConnector):
 
                 page = context.new_page()
                 page_response = page.goto(current_url)
+
+                page = wait_for_page(current_url, page)
+
+
                 last_modified = (
                     page_response.header_value("Last-Modified")
                     if page_response
