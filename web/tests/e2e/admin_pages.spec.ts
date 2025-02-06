@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@chromatic-com/playwright";
 import chromaticSnapshots from "./chromaticSnapshots.json";
 import type { Page } from "@playwright/test";
 

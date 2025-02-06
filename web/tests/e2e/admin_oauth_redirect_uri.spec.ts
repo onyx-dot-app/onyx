@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@chromatic-com/playwright";
 
 test.use({ storageState: "admin_auth.json" });
 
