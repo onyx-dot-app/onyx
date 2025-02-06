@@ -87,11 +87,11 @@
     "yup": "^1.4.0"
   },
   "devDependencies": {
-    "@chromatic-com/playwright": "^0.10.0",
+    "@chromatic-com/playwright": "^0.10.2",
     "@tailwindcss/typography": "^0.5.10",
     "@types/chrome": "^0.0.287",
     "@types/jest": "^29.5.14",
-    "chromatic": "^11.18.1",
+    "chromatic": "^11.25.2",
     "eslint": "^8.48.0",
     "eslint-config-next": "^14.1.0",
     "jest": "^29.7.0",
