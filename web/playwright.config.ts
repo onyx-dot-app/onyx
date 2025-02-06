@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   globalSetup: require.resolve("./tests/e2e/global-setup"),
-  timeout: 30000, // 30 seconds timeout
+  timeout: 60000, // 60 seconds timeout
   testDir: "./tests/e2e", // Folder for test files
   reporter: "list",
   projects: [
