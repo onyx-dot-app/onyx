@@ -410,12 +410,26 @@ class SlackbotHandler:
     def start_socket_client(
         self, slack_bot_id: int, tenant_id: str | None, slack_bot_tokens: SlackBotTokens
     ) -> None:
-        logger.info(
-            f"Starting socket client for tenant: {tenant_id}, app: {slack_bot_id}"
-        )
         socket_client: TenantSocketModeClient = _get_socket_client(
             slack_bot_tokens, tenant_id, slack_bot_id
         )
+
+        try:
+            bot_info = socket_client.web_client.auth_test()
+            if bot_info["ok"]:
+                bot_user_id = bot_info["user_id"]
+                user_info = socket_client.web_client.users_info(user=bot_user_id)
+                if user_info["ok"]:
+                    bot_name = (
+                        user_info["user"]["real_name"] or user_info["user"]["name"]
+                    )
+                    logger.info(
+                        f"Started socket client for Slackbot with name '{bot_name}' (tenant: {tenant_id}, app: {slack_bot_id})"
+                    )
+        except Exception as e:
+            logger.warning(
+                f"Could not fetch bot name: {e} for tenant: {tenant_id}, app: {slack_bot_id}"
+            )
 
         # Append the event handler
         process_slack_event = create_process_slack_event()
