@@ -60,8 +60,8 @@ def time_str_to_utc(datetime_str: str) -> datetime:
         ):
             # Where a string contains both an offset AND a timezone name BUT the name is invalid: remove the name
             # e.g.
-            # Thu, 23 Jan 2025 10:58:32 +0300 (+03) -> Thu, 23 Jan 2025 10:58:32 +0300
-            # Sat, 25 Jan 2025 05:15:30 +1100 (AUSNSW) -> Sat, 25 Jan 2025 05:15:30 +1100
+            # +0300 (+03) -> +0300
+            # +1100 (AUSNSW) -> +1100
             fixed_dt_str = datetime_str.replace(f" ({matches[0]})", "")
             dt = parse(fixed_dt_str)
         else:

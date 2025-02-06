@@ -42,6 +42,7 @@ def test_build_time_range_query() -> None:
 
 def test_time_str_to_utc() -> None:
     str_to_dt = {
+        # well-formed strings:
         "Tue, 5 Oct 2021 09:38:25 GMT": datetime.datetime(
             2021, 10, 5, 9, 38, 25, tzinfo=datetime.timezone.utc
         ),
@@ -56,6 +57,19 @@ def test_time_str_to_utc() -> None:
         ),
         "22 Mar 2020 20:12:18 +0000 (GMT)": datetime.datetime(
             2020, 3, 22, 20, 12, 18, tzinfo=datetime.timezone.utc
+        ),
+        # malformed strings, which should be fixed automatically:
+        # 0000 corrected to +0000
+        "22 Mar 2020 20:12:18 0000": datetime.datetime(
+            2020, 3, 22, 20, 12, 18, tzinfo=datetime.timezone.utc
+        ),
+        # invalid (+03) removed
+        "Thu, 23 Jan 2025 11:04:48 +0300 (+03)": datetime.datetime(
+            2025, 1, 23, 8, 4, 48, tzinfo=datetime.timezone.utc
+        ),
+        # invalid (AUSNSW) removed
+        "Sat, 25 Jan 2025 05:15:30 +1100 (AUSNSW)": datetime.datetime(
+            2025, 1, 24, 18, 15, 30, tzinfo=datetime.timezone.utc
         ),
     }
     for strptime, expected_datetime in str_to_dt.items():
