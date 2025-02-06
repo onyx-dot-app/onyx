@@ -33,6 +33,7 @@ from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
+from onyx.utils.sitemap_eea import list_pages_for_site_eea
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -182,6 +183,9 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
         # the given url doesn't look like a sitemap, let's try to find one
         urls = list_pages_for_site(sitemap_url)
+
+    if len(urls) == 0:
+        urls = list_pages_for_site_eea(sitemap_url)
 
     if len(urls) == 0:
         raise ValueError(
