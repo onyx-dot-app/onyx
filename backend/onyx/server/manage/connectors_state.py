@@ -42,8 +42,8 @@ def get_connectors_state(
     # to avoid the complexity of trying to error check throughout the function
     cc_pairs = get_connector_credential_pairs(
         db_session=db_session,
-        user=user,
-        get_editable=False,
+#        user=user,
+#        get_editable=False,
     )
 
     cc_pair_identifiers = [
