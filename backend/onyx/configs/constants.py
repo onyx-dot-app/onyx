@@ -263,6 +263,11 @@ class PostgresAdvisoryLocks(Enum):
 
 
 class OnyxCeleryQueues:
+    # "celery" is the default queue defined by celery and also the queue
+    # we are running in the primary worker to run system tasks
+    # Tasks running in this queue should be designed specifically to run quickly
+    PRIMARY = "celery"
+
     # Light queue
     VESPA_METADATA_SYNC = "vespa_metadata_sync"
     DOC_PERMISSIONS_UPSERT = "doc_permissions_upsert"
