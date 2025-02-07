@@ -580,6 +580,11 @@ def associate_credential_to_connector(
             kwargs={"tenant_id": tenant_id},
         )
 
+        logger.info(
+            f"associate_credential_to_connector - running check_for_indexing: "
+            f"cc_pair={response.data}"
+        )
+
         return response
     except IntegrityError as e:
         logger.error(f"IntegrityError: {e}")
