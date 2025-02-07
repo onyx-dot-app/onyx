@@ -804,7 +804,13 @@ def create_connector_with_mock_credential(
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse:
-    """What is this?"""
+    """NOTE(rkuo): internally discussed and the consensus is this endpoint
+    and associate_credential_to_connector should be combined.
+
+    The intent of this endpoint is to handle connectors that don't need credentials,
+    AKA web, file, etc ... but there isn't any reason a single endpoint couldn't
+    server this purpose.
+    """
 
     fetch_ee_implementation_or_noop(
         "onyx.db.user_group", "validate_object_creation_for_user", None

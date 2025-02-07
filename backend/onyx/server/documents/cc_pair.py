@@ -551,6 +551,12 @@ def associate_credential_to_connector(
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse[int]:
+    """NOTE(rkuo): internally discussed and the consensus is this endpoint
+    and create_connector_with_mock_credential should be combined.
+
+    The intent of this endpoint is to handle connectors that actually need credentials.
+    """
+
     fetch_ee_implementation_or_noop(
         "onyx.db.user_group", "validate_object_creation_for_user", None
     )(
