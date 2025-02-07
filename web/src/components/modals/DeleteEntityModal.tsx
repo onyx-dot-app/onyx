@@ -1,6 +1,7 @@
 import { FiTrash, FiX } from "react-icons/fi";
 import { BasicClickable } from "@/components/BasicClickable";
 import { Modal } from "../Modal";
+import { Button } from "../ui/button";
 
 export const DeleteEntityModal = ({
   onClose,
@@ -20,7 +21,7 @@ export const DeleteEntityModal = ({
   includeCancelButton?: boolean;
 }) => {
   return (
-    <Modal width="max-w-4xl" onOutsideClick={onClose}>
+    <Modal width="rounded max-w-sm w-full" onOutsideClick={onClose}>
       <>
         <div className="flex mb-4">
           <h2 className="my-auto text-2xl font-bold">
@@ -28,26 +29,20 @@ export const DeleteEntityModal = ({
           </h2>
         </div>
         <p className="mb-4">
-          Click below to confirm that you want to {deleteButtonText || "delete"}{" "}
-          <b>{entityName}</b>
+          Are you sure you want to {deleteButtonText || "delete"}{" "}
+          <b>{entityName}</b>?
         </p>
         {additionalDetails && <p className="mb-4">{additionalDetails}</p>}
-        <div className="flex">
-          <div className="mx-auto flex gap-x-2">
+        <div className="flex items-end justify-end">
+          <div className="flex gap-x-2">
             {includeCancelButton && (
-              <BasicClickable onClick={onClose}>
-                <div className="flex mx-2">
-                  <FiX className="my-auto mr-2" />
-                  Cancel
-                </div>
-              </BasicClickable>
+              <Button variant="outline" onClick={onClose}>
+                <div className="flex mx-2">Cancel</div>
+              </Button>
             )}
-            <BasicClickable onClick={onSubmit}>
-              <div className="flex mx-2">
-                <FiTrash className="my-auto mr-2" />
-                {deleteButtonText || "Delete"}
-              </div>
-            </BasicClickable>
+            <Button size="sm" variant="destructive" onClick={onSubmit}>
+              <div className="flex mx-2">{deleteButtonText || "Delete"}</div>
+            </Button>
           </div>
         </div>
       </>

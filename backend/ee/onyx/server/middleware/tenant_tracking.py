@@ -64,6 +64,7 @@ async def _get_tenant_id_from_request(
 
     try:
         # Look up token data in Redis
+
         token_data = await retrieve_auth_token_data_from_redis(request)
 
         if not token_data:

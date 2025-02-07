@@ -255,6 +255,24 @@ def get_documents_for_tenant_connector(
     print_documents(documents)
 
 
+def search_for_document(
+    index_name: str, document_id: str, max_hits: int | None = 10
+) -> List[Dict[str, Any]]:
+    yql_query = (
+        f'select * from sources {index_name} where document_id contains "{document_id}"'
+    )
+    params: dict[str, Any] = {"yql": yql_query}
+    if max_hits is not None:
+        params["hits"] = max_hits
+    with get_vespa_http_client() as client:
+        response = client.get(f"{SEARCH_ENDPOINT}/search/", params=params)
+        response.raise_for_status()
+        result = response.json()
+        documents = result.get("root", {}).get("children", [])
+        logger.info(f"Found {len(documents)} documents from query.")
+        return documents
+
+
 def search_documents(
     tenant_id: str, connector_id: int, query: str, n: int = 10
 ) -> None:
@@ -440,10 +458,98 @@ def get_document_acls(
             print("-" * 80)
 
 
+def get_current_chunk_count(
+    document_id: str, index_name: str, tenant_id: str
+) -> int | None:
+    with get_session_with_tenant(tenant_id=tenant_id) as session:
+        return (
+            session.query(Document.chunk_count)
+            .filter(Document.id == document_id)
+            .scalar()
+        )
+
+
+def get_number_of_chunks_we_think_exist(
+    document_id: str, index_name: str, tenant_id: str
+) -> int:
+    current_chunk_count = get_current_chunk_count(document_id, index_name, tenant_id)
+    print(f"Current chunk count: {current_chunk_count}")
+
+    doc_info = VespaIndex.enrich_basic_chunk_info(
+        index_name=index_name,
+        http_client=get_vespa_http_client(),
+        document_id=document_id,
+        previous_chunk_count=current_chunk_count,
+        new_chunk_count=0,
+    )
+
+    chunk_ids = get_document_chunk_ids(
+        enriched_document_info_list=[doc_info],
+        tenant_id=tenant_id,
+        large_chunks_enabled=False,
+    )
+    return len(chunk_ids)
+
+
 class VespaDebugging:
     # Class for managing Vespa debugging actions.
     def __init__(self, tenant_id: str | None = None):
         self.tenant_id = POSTGRES_DEFAULT_SCHEMA if not tenant_id else tenant_id
+        self.index_name = get_index_name(self.tenant_id)
+
+    def sample_document_counts(self) -> None:
+        # Sample random documents and compare chunk counts
+        mismatches = []
+        no_chunks = []
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            # Get a sample of random documents
+            from sqlalchemy import func
+
+            sample_docs = (
+                session.query(Document.id, Document.link, Document.semantic_id)
+                .order_by(func.random())
+                .limit(1000)
+                .all()
+            )
+
+            for doc in sample_docs:
+                document_id, link, semantic_id = doc
+                (
+                    number_of_chunks_in_vespa,
+                    number_of_chunks_we_think_exist,
+                ) = self.compare_chunk_count(document_id)
+                if number_of_chunks_in_vespa != number_of_chunks_we_think_exist:
+                    mismatches.append(
+                        (
+                            document_id,
+                            link,
+                            semantic_id,
+                            number_of_chunks_in_vespa,
+                            number_of_chunks_we_think_exist,
+                        )
+                    )
+                elif number_of_chunks_in_vespa == 0:
+                    no_chunks.append((document_id, link, semantic_id))
+
+        # Print results
+        print("\nDocuments with mismatched chunk counts:")
+        for doc_id, link, semantic_id, vespa_count, expected_count in mismatches:
+            print(f"Document ID: {doc_id}")
+            print(f"Link: {link}")
+            print(f"Semantic ID: {semantic_id}")
+            print(f"Chunks in Vespa: {vespa_count}")
+            print(f"Expected chunks: {expected_count}")
+            print("-" * 80)
+
+        print("\nDocuments with no chunks in Vespa:")
+        for doc_id, link, semantic_id in no_chunks:
+            print(f"Document ID: {doc_id}")
+            print(f"Link: {link}")
+            print(f"Semantic ID: {semantic_id}")
+            print("-" * 80)
+
+        print(f"\nTotal mismatches: {len(mismatches)}")
+        print(f"Total documents with no chunks: {len(no_chunks)}")
 
     def print_config(self) -> None:
         # Print Vespa config.
@@ -457,6 +563,16 @@ class VespaDebugging:
         # List documents for a tenant.
         list_documents(n, self.tenant_id)
 
+    def compare_chunk_count(self, document_id: str) -> tuple[int, int]:
+        docs = search_for_document(self.index_name, document_id, max_hits=None)
+        number_of_chunks_we_think_exist = get_number_of_chunks_we_think_exist(
+            document_id, self.index_name, self.tenant_id
+        )
+        print(
+            f"Number of chunks in Vespa: {len(docs)}, Number of chunks we think exist: {number_of_chunks_we_think_exist}"
+        )
+        return len(docs), number_of_chunks_we_think_exist
+
     def search_documents(self, connector_id: int, query: str, n: int = 10) -> None:
         # Search documents for a tenant and connector.
         search_documents(self.tenant_id, connector_id, query, n)
@@ -464,8 +580,10 @@ class VespaDebugging:
     def update_document(
         self, connector_id: int, doc_id: str, fields: Dict[str, Any]
     ) -> None:
-        # Update a document.
         update_document(self.tenant_id, connector_id, doc_id, fields)
+
+    def search_for_document(self, document_id: str) -> List[Dict[str, Any]]:
+        return search_for_document(self.index_name, document_id)
 
     def delete_document(self, connector_id: int, doc_id: str) -> None:
         # Delete a document.
@@ -483,7 +601,6 @@ class VespaDebugging:
 
 
 def main() -> None:
-    # Main CLI entry point.
     parser = argparse.ArgumentParser(description="Vespa debugging tool")
     parser.add_argument(
         "--action",

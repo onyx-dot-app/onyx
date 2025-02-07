@@ -1,5 +1,5 @@
-import { test, expect } from "@playwright/test";
-import chromaticSnpashots from "./chromaticSnpashots.json";
+import { test, expect } from "@chromatic-com/playwright";
+import chromaticSnapshots from "./chromaticSnapshots.json";
 import type { Page } from "@playwright/test";
 
 test.use({ storageState: "admin_auth.json" });
@@ -17,7 +17,7 @@ async function verifyAdminPageNavigation(
   await page.goto(`http://localhost:3000/admin/${path}`);
 
   await expect(page.locator("h1.text-3xl")).toHaveText(pageTitle, {
-    timeout: 2000,
+    timeout: 3000,
   });
 
   if (options?.paragraphText) {
@@ -39,7 +39,7 @@ async function verifyAdminPageNavigation(
   }
 }
 
-for (const chromaticSnapshot of chromaticSnpashots) {
+for (const chromaticSnapshot of chromaticSnapshots) {
   test(`Admin - ${chromaticSnapshot.name}`, async ({ page }) => {
     await verifyAdminPageNavigation(
       page,

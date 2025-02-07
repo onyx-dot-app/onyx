@@ -10,6 +10,8 @@ from uuid import UUID
 from redis import Redis
 
 from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
+from onyx.auth.invited_users import get_invited_users
+from onyx.auth.invited_users import write_invited_users
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REDIS_DB_NUMBER
 from onyx.configs.app_configs import REDIS_HOST
@@ -21,6 +23,7 @@ from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import RedisPool
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 # Tool to run helpful operations on Redis in production
 # This is targeted for internal usage and may not have all the necessary parameters
@@ -311,6 +314,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--tenant-id",
+        type=str,
+        help="Tenant ID for get, delete user token, or add to invited users",
+        required=False,
+    )
+
+    parser.add_argument(
         "--batch",
         type=int,
         default=BATCH_DEFAULT,
@@ -328,11 +338,32 @@ if __name__ == "__main__":
     parser.add_argument(
         "--user-email",
         type=str,
-        help="User email for get or delete user token",
+        help="User email for get, delete user token, or add to invited users",
         required=False,
     )
 
     args = parser.parse_args()
+
+    if args.tenant_id:
+        CURRENT_TENANT_ID_CONTEXTVAR.set(args.tenant_id)
+
+    if args.command == "add_invited_user":
+        if not args.user_email:
+            print("Error: --user-email is required for add_invited_user command")
+            sys.exit(1)
+
+        current_invited_users = get_invited_users()
+        if args.user_email not in current_invited_users:
+            current_invited_users.append(args.user_email)
+            if args.dry_run:
+                print(f"(DRY-RUN) Would add {args.user_email} to invited users")
+            else:
+                write_invited_users(current_invited_users)
+                print(f"Added {args.user_email} to invited users")
+        else:
+            print(f"{args.user_email} is already in the invited users list")
+        sys.exit(0)
+
     exitcode = onyx_redis(
         command=args.command,
         batch=args.batch,

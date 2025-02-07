@@ -40,7 +40,12 @@ import * as Yup from "yup";
 import CollapsibleSection from "./CollapsibleSection";
 import { SuccessfulPersonaUpdateRedirectType } from "./enums";
 import { Persona, PersonaLabel, StarterMessage } from "./interfaces";
-import { PersonaUpsertParameters, createPersona, updatePersona } from "./lib";
+import {
+  PersonaUpsertParameters,
+  createPersona,
+  updatePersona,
+  deletePersona,
+} from "./lib";
 import {
   CameraIcon,
   GroupsIconSkeleton,
@@ -71,7 +76,6 @@ import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
-import { DeletePersonaButton } from "./[id]/DeletePersonaButton";
 import Title from "@/components/ui/title";
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 
@@ -322,9 +326,38 @@ export function AssistantEditor({
     }));
   };
 
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
   if (!labels) {
     return <></>;
   }
+
+  const openDeleteModal = () => {
+    setDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteModalOpen(false);
+  };
+
+  const handleDeletePersona = async () => {
+    if (existingPersona) {
+      const response = await deletePersona(existingPersona.id);
+      if (response.ok) {
+        await refreshAssistants();
+        router.push(
+          redirectType === SuccessfulPersonaUpdateRedirectType.ADMIN
+            ? `/admin/assistants?u=${Date.now()}`
+            : `/chat`
+        );
+      } else {
+        setPopup({
+          type: "error",
+          message: `Failed to delete persona - ${await response.text()}`,
+        });
+      }
+    }
+  };
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -362,6 +395,14 @@ export function AssistantEditor({
             }
             setLabelToDelete(null);
           }}
+        />
+      )}
+      {deleteModalOpen && existingPersona && (
+        <DeleteEntityModal
+          entityType="Persona"
+          entityName={existingPersona.name}
+          onClose={closeDeleteModal}
+          onSubmit={handleDeletePersona}
         />
       )}
       {popup}
@@ -1312,14 +1353,6 @@ export function AssistantEditor({
                     explanationLink="https://docs.onyx.app/guides/assistants"
                     className="[&_textarea]:placeholder:text-text-muted/50"
                   />
-                  <div className="flex justify-end">
-                    {existingPersona && (
-                      <DeletePersonaButton
-                        personaId={existingPersona!.id}
-                        redirectType={SuccessfulPersonaUpdateRedirectType.ADMIN}
-                      />
-                    )}
-                  </div>
                 </>
               )}
 
@@ -1337,6 +1370,18 @@ export function AssistantEditor({
                 >
                   Cancel
                 </Button>
+              </div>
+
+              <div className="flex justify-end">
+                {existingPersona && (
+                  <Button
+                    variant="destructive"
+                    onClick={openDeleteModal}
+                    type="button"
+                  >
+                    Delete
+                  </Button>
+                )}
               </div>
             </Form>
           );

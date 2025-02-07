@@ -18,7 +18,11 @@ import AdvancedFormPage from "./pages/Advanced";
 import DynamicConnectionForm from "./pages/DynamicConnectorCreationForm";
 import CreateCredential from "@/components/credentials/actions/CreateCredential";
 import ModifyCredential from "@/components/credentials/actions/ModifyCredential";
-import { ConfigurableSources, oauthSupportedSources } from "@/lib/types";
+import {
+  ConfigurableSources,
+  oauthSupportedSources,
+  ValidSources,
+} from "@/lib/types";
 import {
   Credential,
   credentialTemplates,
@@ -444,7 +448,7 @@ export default function AddConnector({
               <CardSection>
                 <Title className="mb-2 text-lg">Select a credential</Title>
 
-                {connector == "gmail" ? (
+                {connector == ValidSources.Gmail ? (
                   <GmailMain />
                 ) : (
                   <>

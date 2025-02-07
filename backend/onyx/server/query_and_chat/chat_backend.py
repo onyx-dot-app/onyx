@@ -746,6 +746,7 @@ def upload_files_for_chat(
                 file_name=file.filename or "",
             )
             text_file_id = str(uuid.uuid4())
+
             file_store.save_file(
                 file_name=text_file_id,
                 content=io.BytesIO(extracted_text.encode()),
