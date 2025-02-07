@@ -92,6 +92,7 @@ class UserManager:
 
         # Set cookies in the headers
         test_user.headers["Cookie"] = f"fastapiusersauth={session_cookie}; "
+        test_user.cookies = {"fastapiusersauth": session_cookie}
         return test_user
 
     @staticmethod
@@ -102,6 +103,7 @@ class UserManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_to_verify.headers,
+            cookies=user_to_verify.cookies,
         )
 
         if user_to_verify.is_active is False:

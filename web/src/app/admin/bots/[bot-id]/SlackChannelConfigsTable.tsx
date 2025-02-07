@@ -49,7 +49,7 @@ export function SlackChannelConfigsTable({
           }}
         >
           <FiSettings />
-          Edit Default Config
+          Edit Default Configuration
         </Button>
         <Link href={`/admin/bots/${slackBotId}/channels/new`}>
           <Button variant="outline">

@@ -9,6 +9,9 @@ from onyx.agents.agent_search.shared_graph_utils.models import (
     SubQuestionAnswerResults,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.chat.models import StreamStopInfo
+from onyx.chat.models import StreamStopReason
+from onyx.chat.models import StreamType
 from onyx.chat.models import SubQuestionPiece
 from onyx.context.search.models import IndexFilters
 from onyx.tools.models import SearchQueryInfo
@@ -25,6 +28,22 @@ def dispatch_subquestion(
             "decomp_qs",
             SubQuestionPiece(
                 sub_question=sub_question_part,
+                level=level,
+                level_question_num=sep_num,
+            ),
+            writer,
+        )
+
+    return _helper
+
+
+def dispatch_subquestion_sep(level: int, writer: StreamWriter) -> Callable[[int], None]:
+    def _helper(sep_num: int) -> None:
+        write_custom_event(
+            "stream_finished",
+            StreamStopInfo(
+                stop_reason=StreamStopReason.FINISHED,
+                stream_type=StreamType.SUB_QUESTIONS,
                 level=level,
                 level_question_num=sep_num,
             ),

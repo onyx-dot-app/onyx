@@ -63,7 +63,6 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
     } else {
       settings = await results[0].json();
     }
-    console.log(JSON.stringify(settings));
 
     let enterpriseSettings: EnterpriseSettings | null = null;
     if (tasks.length > 1) {
@@ -93,6 +92,10 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       } else {
         customAnalyticsScript = await results[2].json();
       }
+    }
+
+    if (enterpriseSettings && settings.pro_search_disabled == null) {
+      settings.pro_search_disabled = true;
     }
 
     const webVersion = getWebVersion();

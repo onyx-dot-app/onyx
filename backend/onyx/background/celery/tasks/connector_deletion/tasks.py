@@ -179,11 +179,14 @@ def try_generate_document_cc_pair_cleanup_tasks(
         if tasks_generated is None:
             raise ValueError("RedisConnectorDeletion.generate_tasks returned None")
 
-        insert_sync_record(
-            db_session=db_session,
-            entity_id=cc_pair_id,
-            sync_type=SyncType.CONNECTOR_DELETION,
-        )
+        try:
+            insert_sync_record(
+                db_session=db_session,
+                entity_id=cc_pair_id,
+                sync_type=SyncType.CONNECTOR_DELETION,
+            )
+        except Exception:
+            pass
 
     except TaskDependencyError:
         redis_connector.delete.set_fence(None)

@@ -4,6 +4,8 @@ import { OnyxDocument } from "@/lib/search/interfaces";
 import { truncateString } from "@/lib/utils";
 import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
+import React from "react";
+import { SearchResultIcon } from "@/components/SearchResultIcon";
 
 export const ResultIcon = ({
   doc,
@@ -55,70 +57,107 @@ export default function SourceCard({
 
 interface SeeMoreBlockProps {
   toggleDocumentSelection: () => void;
-  uniqueSources: ValidSources[];
+  docs: OnyxDocument[];
   webSourceDomains: string[];
   toggled: boolean;
+  fullWidth?: boolean;
+}
+
+const getDomainFromUrl = (url: string) => {
+  try {
+    const parsedUrl = new URL(url);
+    return parsedUrl.hostname;
+  } catch (error) {
+    return null;
+  }
+};
+export function getUniqueIcons(docs: OnyxDocument[]): JSX.Element[] {
+  const uniqueIcons: JSX.Element[] = [];
+  const seenDomains = new Set<string>();
+  const seenSourceTypes = new Set<ValidSources>();
+
+  for (const doc of docs) {
+    // If it's a web source, we check domain uniqueness
+    if (doc.source_type === ValidSources.Web && doc.link) {
+      const domain = getDomainFromUrl(doc.link);
+      if (domain && !seenDomains.has(domain)) {
+        seenDomains.add(domain);
+        // Use your SearchResultIcon with the doc.url
+        uniqueIcons.push(
+          <SearchResultIcon url={doc.link} key={`web-${doc.document_id}`} />
+        );
+      }
+    } else {
+      // Otherwise, use sourceType uniqueness
+      if (!seenSourceTypes.has(doc.source_type)) {
+        seenSourceTypes.add(doc.source_type);
+        // Use your SourceIcon with the doc.sourceType
+        uniqueIcons.push(
+          <SourceIcon
+            sourceType={doc.source_type}
+            iconSize={18}
+            key={doc.document_id}
+          />
+        );
+      }
+    }
+  }
+
+  // If we have zero icons, we might want a fallback (optional):
+  if (uniqueIcons.length === 0) {
+    // Fallback: just use a single SourceIcon, repeated 3 times
+    return [
+      <SourceIcon
+        sourceType={ValidSources.Web}
+        iconSize={18}
+        key="fallback-1"
+      />,
+      <SourceIcon
+        sourceType={ValidSources.Web}
+        iconSize={18}
+        key="fallback-2"
+      />,
+      <SourceIcon
+        sourceType={ValidSources.Web}
+        iconSize={18}
+        key="fallback-3"
+      />,
+    ];
+  }
+
+  // Duplicate last icon if fewer than 3 icons
+  while (uniqueIcons.length < 3) {
+    // The last icon in the array
+    const lastIcon = uniqueIcons[uniqueIcons.length - 1];
+    // Clone it with a new key
+    uniqueIcons.push(
+      React.cloneElement(lastIcon, {
+        key: `${lastIcon.key}-dup-${uniqueIcons.length}`,
+      })
+    );
+  }
+
+  // Slice to just the first 3 if there are more than 3
+  return uniqueIcons.slice(0, 3);
 }
 
 export function SeeMoreBlock({
   toggleDocumentSelection,
   webSourceDomains,
-  uniqueSources,
+  docs,
   toggled,
+  fullWidth = false,
 }: SeeMoreBlockProps) {
-  // Gather total sources (unique + web).
-  const totalSources = uniqueSources.length + webSourceDomains.length;
-
-  // Filter out "web" from unique sources if we have any webSourceDomains
-  // (preserves the original logic).
-  const filteredUniqueSources = uniqueSources.filter(
-    (source) => source !== "web" && webSourceDomains.length > 0
-  );
-
-  // Build a list of up to three icons from the filtered unique sources and web sources.
-  // If we don't reach three icons but have at least one, we'll duplicate the last one.
-  const iconsToRender: Array<{ type: "source" | "web"; data: string }> = [];
-
-  // Push from filtered unique sources (max 3).
-  for (
-    let i = 0;
-    i < filteredUniqueSources.length && iconsToRender.length < 3;
-    i++
-  ) {
-    iconsToRender.push({ type: "source", data: filteredUniqueSources[i] });
-  }
-
-  // Then push from web source domains (until total of 3).
-  for (
-    let i = 0;
-    i < webSourceDomains.length && iconsToRender.length < 3;
-    i++
-  ) {
-    iconsToRender.push({ type: "web", data: webSourceDomains[i] });
-  }
-
-  // If we have fewer than 3 but at least one icon, duplicate the last until we reach 3.
-  while (iconsToRender.length < 3 && iconsToRender.length > 0) {
-    iconsToRender.push(iconsToRender[iconsToRender.length - 1]);
-  }
+  const iconsToRender = getUniqueIcons(docs);
 
   return (
     <button
       onClick={toggleDocumentSelection}
-      className="w-full max-w-[260px] h-[80px] p-3 bg-[#f1eee8] text-left hover:bg-[#ebe7de] cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden"
+      className={`w-full ${fullWidth ? "w-full" : "max-w-[200px]"}
+        h-[80px] p-3 border border-[1.5px] border-[#D9D1c0] bg-[#f1eee8] text-left hover:bg-[#ebe7de] cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
     >
       <div className="flex items-center gap-1">
-        {iconsToRender.map((icon, index) =>
-          icon.type === "source" ? (
-            <SourceIcon
-              key={index}
-              sourceType={icon.data as ValidSources}
-              iconSize={14}
-            />
-          ) : (
-            <WebResultIcon key={index} url={icon.data} size={14} />
-          )
-        )}
+        {iconsToRender.map((icon, index) => icon)}
       </div>
       <div className="text-text-darker text-xs font-semibold">
         {toggled ? "Hide Results" : "Show All"}

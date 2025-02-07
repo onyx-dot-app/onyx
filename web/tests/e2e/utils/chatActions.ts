@@ -1,5 +1,5 @@
 import { Page } from "@playwright/test";
-import { expect } from "@playwright/test";
+import { expect } from "@chromatic-com/playwright";
 
 export async function navigateToAssistantInHistorySidebar(
   page: Page,

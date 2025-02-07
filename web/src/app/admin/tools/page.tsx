@@ -9,6 +9,7 @@ import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ToolIcon } from "@/components/icons/icons";
+import CreateButton from "@/components/ui/createButton";
 
 export default async function Page() {
   const toolResponse = await fetchSS("/tool");
@@ -39,27 +40,7 @@ export default async function Page() {
         <Separator />
 
         <Title>Create a Tool</Title>
-        <Link
-          href="/admin/tools/new"
-          className="
-            flex
-            py-2
-            px-4
-            mt-2
-            border
-            border-border
-            h-fit
-            cursor-pointer
-            hover:bg-hover
-            text-sm
-            w-40
-          "
-        >
-          <div className="mx-auto flex">
-            <FiPlusSquare className="my-auto mr-2" />
-            New Tool
-          </div>
-        </Link>
+        <CreateButton href="/admin/tools/new" text="New Tool" />
 
         <Separator />
 

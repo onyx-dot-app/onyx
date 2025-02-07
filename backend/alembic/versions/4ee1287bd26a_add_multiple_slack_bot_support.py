@@ -5,7 +5,6 @@ Revises: 47e5bef3a1d7
 Create Date: 2024-11-06 13:15:53.302644
 
 """
-import logging
 from typing import cast
 from alembic import op
 import sqlalchemy as sa
@@ -20,13 +19,8 @@ down_revision = "47e5bef3a1d7"
 branch_labels: None = None
 depends_on: None = None
 
-# Configure logging
-logger = logging.getLogger("alembic.runtime.migration")
-logger.setLevel(logging.INFO)
-
 
 def upgrade() -> None:
-    logger.info(f"{revision}: create_table: slack_bot")
     # Create new slack_bot table
     op.create_table(
         "slack_bot",
@@ -63,7 +57,6 @@ def upgrade() -> None:
     )
 
     # Handle existing Slack bot tokens first
-    logger.info(f"{revision}: Checking for existing Slack bot.")
     bot_token = None
     app_token = None
     first_row_id = None
@@ -71,15 +64,12 @@ def upgrade() -> None:
     try:
         tokens = cast(dict, get_kv_store().load("slack_bot_tokens_config_key"))
     except Exception:
-        logger.warning("No existing Slack bot tokens found.")
         tokens = {}
 
     bot_token = tokens.get("bot_token")
     app_token = tokens.get("app_token")
 
     if bot_token and app_token:
-        logger.info(f"{revision}: Found bot and app tokens.")
-
         session = Session(bind=op.get_bind())
         new_slack_bot = SlackBot(
             name="Slack Bot (Migrated)",
@@ -170,10 +160,9 @@ def upgrade() -> None:
     # Clean up old tokens if they existed
     try:
         if bot_token and app_token:
-            logger.info(f"{revision}: Removing old bot and app tokens.")
             get_kv_store().delete("slack_bot_tokens_config_key")
     except Exception:
-        logger.warning("tried to delete tokens in dynamic config but failed")
+        pass
     # Rename the table
     op.rename_table(
         "slack_bot_config__standard_answer_category",
@@ -189,8 +178,6 @@ def upgrade() -> None:
 
     # Drop the table with CASCADE to handle dependent objects
     op.execute("DROP TABLE slack_bot_config CASCADE")
-
-    logger.info(f"{revision}: Migration complete.")
 
 
 def downgrade() -> None:
@@ -273,7 +260,7 @@ def downgrade() -> None:
             }
             get_kv_store().store("slack_bot_tokens_config_key", tokens)
     except Exception:
-        logger.warning("Failed to save tokens back to KV store")
+        pass
 
     # Drop the new tables in reverse order
     op.drop_table("slack_channel_config")

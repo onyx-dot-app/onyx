@@ -169,7 +169,7 @@ export function UserDropdown({
           <div
             className={`
                 p-2
-                w-[175px]
+                ${page != "admin" && showNotifications ? "w-72" : "w-[175px]"}
                 text-strong 
                 text-sm
                 border 

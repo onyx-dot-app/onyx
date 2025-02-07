@@ -322,10 +322,6 @@ export const AIMessage = ({
     ? otherMessagesCanSwitchTo?.indexOf(messageId)
     : undefined;
 
-  const uniqueSources: ValidSources[] = Array.from(
-    new Set((docs || []).map((doc) => doc.source_type))
-  ).slice(0, 3);
-
   const webSourceDomains: string[] = Array.from(
     new Set(
       docs
@@ -506,7 +502,7 @@ export const AIMessage = ({
                             <SeeMoreBlock
                               toggled={toggledDocumentSidebar!}
                               toggleDocumentSelection={toggleDocumentSelection!}
-                              uniqueSources={uniqueSources}
+                              docs={docs}
                               webSourceDomains={webSourceDomains}
                             />
                           </div>

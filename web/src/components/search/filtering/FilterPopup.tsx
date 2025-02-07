@@ -334,7 +334,7 @@ export function FilterPopup({
                     />
                   </div>
                 </div>
-                <ul className="space-y-1">
+                <ul className="space-y-1 default-scrollbar overflow-y-auto max-h-64">
                   {availableSources.map((source) => (
                     <SelectableDropdown
                       icon={

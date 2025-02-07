@@ -3,6 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 import { Check, CheckCircle, XCircle } from "lucide-react";
 import { Warning } from "@phosphor-icons/react";
+import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
 const popupVariants = cva(
   "fixed bottom-4 left-4 p-4 rounded-lg shadow-xl text-white z-[10000] flex items-center space-x-3 transition-all duration-300 ease-in-out",
   {
@@ -59,7 +60,23 @@ export const Popup: React.FC<PopupSpec> = ({ message, type }) => (
         />
       </svg>
     )}
-    <span className="font-medium">{message}</span>
+    <div className="flex flex-col justify-center items-start">
+      <p className="font-medium">{message}</p>
+      {type === "error" && NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK && (
+        <p className="text-xs">
+          Need help?{" "}
+          <a
+            href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-red-100"
+          >
+            Join our community
+          </a>{" "}
+          for support!
+        </p>
+      )}
+    </div>
   </div>
 );
 

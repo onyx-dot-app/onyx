@@ -12,6 +12,7 @@ import { useAssistants } from "../context/AssistantsContext";
 import { useUser } from "../user/UserProvider";
 import { XIcon } from "../icons/icons";
 import { Spinner } from "@phosphor-icons/react";
+import { useRouter } from "next/navigation";
 
 export const Notifications = ({
   notifications,
@@ -23,7 +24,7 @@ export const Notifications = ({
   navigateToDropdown: () => void;
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
-
+  const router = useRouter();
   const { refreshAssistants } = useAssistants();
 
   const { refreshUser } = useUser();
@@ -90,10 +91,10 @@ export const Notifications = ({
     notification: Notification,
     persona: Persona
   ) => {
-    addAssistantToList(persona.id);
     await dismissNotification(notification.id);
     await refreshUser();
     await refreshAssistants();
+    router.push(`/chat?assistantId=${persona.id}`);
   };
 
   const sortedNotifications = notifications
@@ -204,7 +205,7 @@ export const Notifications = ({
                       }
                       className="px-3 py-1 text-sm font-medium text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out"
                     >
-                      Accept
+                      Chat
                     </button>
                     <button
                       onClick={() => dismissNotification(notification.id)}

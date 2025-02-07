@@ -45,13 +45,26 @@ export const SlackChannelConfigCreationForm = ({
   const existingSlackBotUsesPersona = existingSlackChannelConfig?.persona
     ? !isPersonaASlackBotPersona(existingSlackChannelConfig.persona)
     : false;
+  const existingPersonaHasSearchTool = existingSlackChannelConfig?.persona
+    ? existingSlackChannelConfig.persona.tools.some(
+        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
+      )
+    : false;
 
-  const searchEnabledAssistants = useMemo(() => {
-    return personas.filter((persona) => {
-      return persona.tools.some(
-        (tool) => tool.in_code_tool_id == SEARCH_TOOL_ID
-      );
-    });
+  const [searchEnabledAssistants, nonSearchAssistants] = useMemo(() => {
+    return personas.reduce(
+      (acc, persona) => {
+        if (
+          persona.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
+        ) {
+          acc[0].push(persona);
+        } else {
+          acc[1].push(persona);
+        }
+        return acc;
+      },
+      [[], []] as [Persona[], Persona[]]
+    );
   }, [personas]);
 
   return (
@@ -105,7 +118,9 @@ export const SlackChannelConfigCreationForm = ({
           standard_answer_categories:
             existingSlackChannelConfig?.standard_answer_categories || [],
           knowledge_source: existingSlackBotUsesPersona
-            ? "assistant"
+            ? existingPersonaHasSearchTool
+              ? "assistant"
+              : "non_search_assistant"
             : existingSlackChannelConfig?.persona
               ? "document_sets"
               : "all_public",
@@ -148,7 +163,12 @@ export const SlackChannelConfigCreationForm = ({
             }),
           standard_answer_categories: Yup.array(),
           knowledge_source: Yup.string()
-            .oneOf(["all_public", "document_sets", "assistant"])
+            .oneOf([
+              "all_public",
+              "document_sets",
+              "assistant",
+              "non_search_assistant",
+            ])
             .required(),
         })}
         onSubmit={async (values, formikHelpers) => {
@@ -159,13 +179,16 @@ export const SlackChannelConfigCreationForm = ({
             slack_bot_id,
             channel_name: values.channel_name,
             respond_member_group_list: values.respond_member_group_list,
-            usePersona: values.knowledge_source === "assistant",
+            usePersona:
+              values.knowledge_source === "assistant" ||
+              values.knowledge_source === "non_search_assistant",
             document_sets:
               values.knowledge_source === "document_sets"
                 ? values.document_sets
                 : [],
             persona_id:
-              values.knowledge_source === "assistant"
+              values.knowledge_source === "assistant" ||
+              values.knowledge_source === "non_search_assistant"
                 ? values.persona_id
                 : null,
             standard_answer_categories: values.standard_answer_categories.map(
@@ -204,7 +227,7 @@ export const SlackChannelConfigCreationForm = ({
           }
         }}
       >
-        {({ isSubmitting, values, setFieldValue }) => (
+        {({ isSubmitting, values, setFieldValue, ...formikProps }) => (
           <Form>
             <div className="pb-6 w-full">
               <SlackChannelConfigFormFields
@@ -213,9 +236,11 @@ export const SlackChannelConfigCreationForm = ({
                 isDefault={isDefault}
                 documentSets={documentSets}
                 searchEnabledAssistants={searchEnabledAssistants}
+                nonSearchAssistants={nonSearchAssistants}
                 standardAnswerCategoryResponse={standardAnswerCategoryResponse}
                 setPopup={setPopup}
                 slack_bot_id={slack_bot_id}
+                formikProps={formikProps}
               />
             </div>
           </Form>

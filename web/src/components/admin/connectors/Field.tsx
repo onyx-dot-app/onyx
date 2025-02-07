@@ -51,7 +51,7 @@ export function Label({
 }) {
   return (
     <div
-      className={`block font-medium base ${className} ${
+      className={`block text-text-darker font-medium base ${className} ${
         small ? "text-xs" : "text-sm"
       }`}
     >

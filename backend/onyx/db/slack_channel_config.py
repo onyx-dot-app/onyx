@@ -256,7 +256,7 @@ def fetch_slack_channel_config_for_channel_or_default(
     db_session: Session, slack_bot_id: int, channel_name: str | None
 ) -> SlackChannelConfig | None:
     # attempt to find channel-specific config first
-    if channel_name:
+    if channel_name is not None:
         sc_config = db_session.scalar(
             select(SlackChannelConfig).where(
                 SlackChannelConfig.slack_bot_id == slack_bot_id,

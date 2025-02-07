@@ -247,6 +247,7 @@ def create_bot(
         respond_member_group_list=[],
         answer_filters=[],
         follow_up_tags=[],
+        respond_tag_only=True,
     )
     insert_slack_channel_config(
         db_session=db_session,

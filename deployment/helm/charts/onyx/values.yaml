@@ -5,6 +5,7 @@
 postgresql:
   primary:
     persistence:
+      storageClass: ""
       size: 5Gi
   enabled: true
   auth:
@@ -12,12 +13,51 @@ postgresql:
     secretKeys:
       # overwriting as postgres typically expects 'postgres-password'
       adminPasswordKey: postgres_password
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
+
+vespa:
+  name: da-vespa-0
+  service:
+    name: vespa-service
+  volumeClaimTemplates:
+    - metadata:
+        name: vespa-storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+        storageClassName: ""
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: vespa
+    pullPolicy: IfNotPresent
+    tag: "8.277.17"
+  podAnnotations: {}
+  podLabels:
+    app: vespa
+    app.kubernetes.io/instance: onyx
+    app.kubernetes.io/name: vespa
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  resources:
+    # The Vespa Helm chart specifies default resources, which are quite modest. We override
+    # them here to increase chances of the chart running successfully.
+    requests:
+      cpu: 1500m
+      memory: 4000Mi
+    limits:
+      cpu: 1500m
+      memory: 4000Mi
 
 persistent:
   storageClassName: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
 
 inferenceCapability:
   service:
@@ -272,15 +312,9 @@ background:
   podSecurityContext:
     {}
     # fsGroup: 2000
-
   securityContext:
-    {}
-    # capabilities:
-    #   drop:
-    #   - ALL
-    # readOnlyRootFilesystem: true
-    # runAsNonRoot: true
-    # runAsUser: 1000
+    privileged: true
+    runAsUser: 0
   enableMiniChunk: "true"
   resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -313,50 +347,6 @@ background:
   # - name: foo
   #   mountPath: "/etc/foo"
   #   readOnly: true
-
-  nodeSelector: {}
-  tolerations: []
-
-vespa:
-  volumeClaimTemplates:
-    - metadata:
-        name: vespa-storage
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        storageClassName: ""
-        resources:
-          requests:
-            storage: 1Gi
-  enabled: true
-  replicaCount: 1
-  image:
-    repository: vespa
-    pullPolicy: IfNotPresent
-    tag: "8.277.17"
-  podAnnotations: {}
-  podLabels:
-    app: vespa
-    app.kubernetes.io/instance: onyx
-    app.kubernetes.io/name: vespa
-
-  podSecurityContext:
-    {}
-    # fsGroup: 2000
-
-  securityContext:
-    privileged: true
-    runAsUser: 0
-
-  resources:
-    # The Vespa Helm chart specifies default resources, which are quite modest. We override
-    # them here to increase chances of the chart running successfully.
-    requests:
-      cpu: 1500m
-      memory: 4000Mi
-    limits:
-      cpu: 1500m
-      memory: 4000Mi
 
   nodeSelector: {}
   tolerations: []

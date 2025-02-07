@@ -44,6 +44,7 @@ class DATestUser(BaseModel):
     headers: dict
     role: UserRole
     is_active: bool
+    cookies: dict = {}
 
 
 class DATestPersonaLabel(BaseModel):

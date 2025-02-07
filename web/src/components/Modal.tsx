@@ -85,7 +85,7 @@ export function Modal({
           ease-in-out
           relative
           ${width ?? "w-11/12 max-w-4xl"}
-          ${noPadding ? "" : removeBottomPadding ? "pt-10 px-10" : "p-10"}
+          ${noPadding ? "" : removeBottomPadding ? "pt-8 px-8" : "p-8"}
           ${className || ""}
           flex
           flex-col

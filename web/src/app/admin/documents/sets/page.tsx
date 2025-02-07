@@ -40,6 +40,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import CreateButton from "@/components/ui/createButton";
 
 const numToDisplay = 50;
 
@@ -305,9 +306,13 @@ const Main = () => {
       <div className="mb-3"></div>
 
       <div className="flex mb-6">
-        <Link href="/admin/documents/sets/new">
+        <CreateButton
+          href="/admin/documents/sets/new"
+          text="New Document Set"
+        />
+        {/* <Link href="/admin/documents/sets/new">
           <Button variant="navigate">New Document Set</Button>
-        </Link>
+        </Link> */}
       </div>
 
       {documentSets.length > 0 && (

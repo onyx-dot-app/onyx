@@ -52,7 +52,11 @@ def upgrade() -> None:
                         slack_bot_id, persona_id, channel_config, enable_auto_filters, is_default
                     ) VALUES (
                         :bot_id, NULL,
-                        '{"channel_name": null, "respond_member_group_list": [], "answer_filters": [], "follow_up_tags": []}',
+                        '{"channel_name": null, '
+                        '"respond_member_group_list": [], '
+                        '"answer_filters": [], '
+                        '"follow_up_tags": [], '
+                        '"respond_tag_only": true}',
                         FALSE, TRUE
                     )
                 """
