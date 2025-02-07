@@ -94,7 +94,6 @@ jobs:
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
           MULTI_TENANT=true \
-          LOG_LEVEL=DEBUG \
           AUTH_TYPE=cloud \
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
@@ -116,7 +115,6 @@ jobs:
             -e POSTGRES_PASSWORD=password \
             -e POSTGRES_DB=postgres \
             -e VESPA_HOST=index \
-            -e LOG_LEVEL=DEBUG \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
@@ -155,7 +153,6 @@ jobs:
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
-          LOG_LEVEL=DEBUG \
           docker compose -f docker-compose.dev.yml -p danswer-stack up -d
         id: start_docker
 
@@ -204,7 +201,6 @@ jobs:
             -e POSTGRES_DB=postgres \
             -e VESPA_HOST=index \
             -e REDIS_HOST=cache \
-            -e LOG_LEVEL=DEBUG \
             -e API_SERVER_HOST=api_server \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \

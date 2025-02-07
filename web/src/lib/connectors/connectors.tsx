@@ -772,7 +772,7 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     advanced_values: [],
   },
   linear: {
-    description: "Configure Dropbox connector",
+    description: "Configure Linear connector",
     values: [],
     advanced_values: [],
   },
