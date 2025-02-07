@@ -11,6 +11,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
 import { ValidSources } from "@/lib/types";
+import CreateButton from "@/components/ui/createButton";
 
 const Main = () => {
   const {
@@ -71,27 +72,7 @@ const Main = () => {
         found in the Onyx documentation to get started!
       </p>
 
-      <Link
-        className="
-            flex
-            py-2
-            px-4
-            mt-2
-            border
-            border-border
-            h-fit
-            cursor-pointer
-            hover:bg-hover
-            text-sm
-            w-40
-          "
-        href="/admin/bots/new"
-      >
-        <div className="mx-auto flex">
-          <FiPlusSquare className="my-auto mr-2" />
-          New Slack Bot
-        </div>
-      </Link>
+      <CreateButton href="/admin/bots/new" text="New Slack Bot" />
 
       <SlackBotTable slackBots={slackBots} />
     </div>

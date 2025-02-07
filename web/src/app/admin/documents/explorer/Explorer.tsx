@@ -17,7 +17,7 @@ import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBad
 import { DocumentSet } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
-import { HorizontalFilters } from "@/app/chat/shared_chat_search/Filters";
+import { HorizontalFilters } from "@/components/filters/SourceSelector";
 
 const DocumentDisplay = ({
   document,

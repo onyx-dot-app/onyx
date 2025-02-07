@@ -242,6 +242,18 @@ def reset_postgres_multitenant() -> None:
         schema_name = schema[0]
         cur.execute(f'DROP SCHEMA "{schema_name}" CASCADE')
 
+    # Drop tables in the public schema
+    cur.execute(
+        """
+        SELECT tablename FROM pg_tables
+        WHERE schemaname = 'public'
+        """
+    )
+    public_tables = cur.fetchall()
+    for table in public_tables:
+        table_name = table[0]
+        cur.execute(f'DROP TABLE IF EXISTS public."{table_name}" CASCADE')
+
     cur.close()
     conn.close()
 

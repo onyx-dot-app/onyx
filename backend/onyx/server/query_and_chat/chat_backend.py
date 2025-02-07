@@ -717,15 +717,14 @@ def upload_files_for_chat(
             else ChatFileType.PLAIN_TEXT
         )
 
-        if file_type == ChatFileType.IMAGE:
-            file_content_io = file.file
-            # NOTE: Image conversion to JPEG used to be enforced here.
-            # This was removed to:
-            # 1. Preserve original file content for downloads
-            # 2. Maintain transparency in formats like PNG
-            # 3. Ameliorate issue with file conversion
-        else:
-            file_content_io = io.BytesIO(file.file.read())
+        file_content = file.file.read()  # Read the file content
+
+        # NOTE: Image conversion to JPEG used to be enforced here.
+        # This was removed to:
+        # 1. Preserve original file content for downloads
+        # 2. Maintain transparency in formats like PNG
+        # 3. Ameliorate issue with file conversion
+        file_content_io = io.BytesIO(file_content)
 
         new_content_type = file.content_type
 
@@ -743,10 +742,11 @@ def upload_files_for_chat(
         # to re-extract it every time we send a message
         if file_type == ChatFileType.DOC:
             extracted_text = extract_file_text(
-                file=file_content_io, # use the bytes we already read
+                file=file_content_io,  # use the bytes we already read
                 file_name=file.filename or "",
             )
             text_file_id = str(uuid.uuid4())
+
             file_store.save_file(
                 file_name=text_file_id,
                 content=io.BytesIO(extracted_text.encode()),

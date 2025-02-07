@@ -215,6 +215,7 @@ class SlackChannelConfig(BaseModel):
     # XXX this is going away soon
     standard_answer_categories: list[StandardAnswerCategory]
     enable_auto_filters: bool
+    is_default: bool
 
     @classmethod
     def from_model(
@@ -237,6 +238,7 @@ class SlackChannelConfig(BaseModel):
                 for standard_answer_category_model in slack_channel_config_model.standard_answer_categories
             ],
             enable_auto_filters=slack_channel_config_model.enable_auto_filters,
+            is_default=slack_channel_config_model.is_default,
         )
 
 
@@ -279,3 +281,8 @@ class AllUsersResponse(BaseModel):
     accepted_pages: int
     invited_pages: int
     slack_users_pages: int
+
+
+class SlackChannel(BaseModel):
+    id: str
+    name: str

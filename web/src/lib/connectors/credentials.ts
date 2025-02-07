@@ -114,7 +114,7 @@ export interface LoopioCredentialJson {
 }
 
 export interface LinearCredentialJson {
-  linear_api_key: string;
+  linear_access_token: string;
 }
 
 export interface HubSpotCredentialJson {
@@ -250,7 +250,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     gong_access_key_secret: "",
   } as GongCredentialJson,
   zulip: { zuliprc_content: "" } as ZulipCredentialJson,
-  linear: { linear_api_key: "" } as LinearCredentialJson,
+  linear: { linear_access_token: "" } as LinearCredentialJson,
   hubspot: { hubspot_access_token: "" } as HubSpotCredentialJson,
   document360: {
     portal_id: "",
@@ -404,7 +404,7 @@ export const credentialDisplayNames: Record<string, string> = {
   loopio_client_token: "Loopio Client Token",
 
   // Linear
-  linear_api_key: "Linear API Key",
+  linear_access_token: "Linear Access Token",
 
   // HubSpot
   hubspot_access_token: "HubSpot Access Token",

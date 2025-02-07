@@ -18,7 +18,7 @@ import { FiTag } from "react-icons/fi";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { CustomTooltip, TooltipGroup } from "../tooltip/CustomTooltip";
 import { WarningCircle } from "@phosphor-icons/react";
-import TextView from "../chat_search/TextView";
+import TextView from "../chat/TextView";
 import { openDocument } from "@/lib/search/utils";
 import { SubQuestionDetail } from "@/app/chat/interfaces";
 

@@ -12,7 +12,7 @@ import {
 import { pageType } from "@/app/chat/sessionSidebar/types";
 import { Logo } from "../logo/Logo";
 import Link from "next/link";
-import { LogoComponent } from "@/app/chat/shared_chat_search/FixedLogo";
+import { LogoComponent } from "@/components/logo/FixedLogo";
 
 export default function LogoWithText({
   toggleSidebar,

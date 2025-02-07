@@ -64,9 +64,7 @@ import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
 import ToolResult from "../../../components/tools/ToolResult";
 import CsvContent from "../../../components/tools/CSVContent";
-import SourceCard, {
-  SeeMoreBlock,
-} from "@/components/chat_search/sources/SourceCard";
+import SourceCard, { SeeMoreBlock } from "@/components/chat/sources/SourceCard";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
@@ -324,10 +322,6 @@ export const AIMessage = ({
     ? otherMessagesCanSwitchTo?.indexOf(messageId)
     : undefined;
 
-  const uniqueSources: ValidSources[] = Array.from(
-    new Set((docs || []).map((doc) => doc.source_type))
-  ).slice(0, 3);
-
   const webSourceDomains: string[] = Array.from(
     new Set(
       docs
@@ -508,7 +502,7 @@ export const AIMessage = ({
                             <SeeMoreBlock
                               toggled={toggledDocumentSidebar!}
                               toggleDocumentSelection={toggleDocumentSelection!}
-                              uniqueSources={uniqueSources}
+                              docs={docs}
                               webSourceDomains={webSourceDomains}
                             />
                           </div>

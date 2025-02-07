@@ -74,3 +74,15 @@ def remove_slack_bot(
 
 def fetch_slack_bots(db_session: Session) -> Sequence[SlackBot]:
     return db_session.scalars(select(SlackBot)).all()
+
+
+def fetch_slack_bot_tokens(
+    db_session: Session, slack_bot_id: int
+) -> dict[str, str] | None:
+    slack_bot = db_session.scalar(select(SlackBot).where(SlackBot.id == slack_bot_id))
+    if not slack_bot:
+        return None
+    return {
+        "app_token": slack_bot.app_token,
+        "bot_token": slack_bot.bot_token,
+    }

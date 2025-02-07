@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { FiPlusCircle, FiPlus, FiInfo, FiX, FiFilter } from "react-icons/fi";
+import { FiLoader } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "./LLMPopover";
@@ -24,7 +25,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Hoverable } from "@/components/Hoverable";
 import { ChatState } from "../types";
-import UnconfiguredProviderText from "@/components/chat_search/UnconfiguredProviderText";
+import UnconfiguredProviderText from "@/components/chat/UnconfiguredProviderText";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon } from "lucide-react";
 import { FilterPopup } from "@/components/search/filtering/FilterPopup";
@@ -36,6 +37,9 @@ import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";
+import { FidgetSpinner } from "react-loader-spinner";
+import { LoadingAnimation } from "@/components/Loading";
 
 const MAX_INPUT_HEIGHT = 200;
 export const SourceChip2 = ({
@@ -709,12 +713,16 @@ export function ChatInputBar({
                       <SourceChip
                         key={`file-${index}`}
                         icon={
-                          <img
-                            className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
-                            src={buildImgUrl(file.id)}
-                          />
+                          file.isUploading ? (
+                            <FiLoader className="animate-spin" />
+                          ) : (
+                            <img
+                              className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
+                              src={buildImgUrl(file.id)}
+                            />
+                          )
                         }
-                        title={file.name || "File"}
+                        title={file.name || "File" + file.id}
                         onRemove={() => {
                           setFiles(
                             files.filter(

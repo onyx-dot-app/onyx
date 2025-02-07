@@ -5,7 +5,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ChatInputOption } from "./ChatInputOption";
-import { getDisplayNameForModel } from "@/lib/hooks";
+import { defaultModelsByProvider, getDisplayNameForModel } from "@/lib/hooks";
 import {
   checkLLMSupportsImageInput,
   destructureValue,
@@ -61,22 +61,23 @@ export default function LLMPopover({
       llmOptionsByProvider[llmProvider.provider] = [];
     }
 
-    (llmProvider.display_model_names || llmProvider.model_names).forEach(
-      (modelName) => {
-        if (!uniqueModelNames.has(modelName)) {
-          uniqueModelNames.add(modelName);
-          llmOptionsByProvider[llmProvider.provider].push({
-            name: modelName,
-            value: structureValue(
-              llmProvider.name,
-              llmProvider.provider,
-              modelName
-            ),
-            icon: getProviderIcon(llmProvider.provider, modelName),
-          });
-        }
+    (
+      llmProvider.display_model_names ||
+      defaultModelsByProvider[llmProvider.provider]
+    ).forEach((modelName) => {
+      if (!uniqueModelNames.has(modelName)) {
+        uniqueModelNames.add(modelName);
+        llmOptionsByProvider[llmProvider.provider].push({
+          name: modelName,
+          value: structureValue(
+            llmProvider.name,
+            llmProvider.provider,
+            modelName
+          ),
+          icon: getProviderIcon(llmProvider.provider, modelName),
+        });
       }
-    );
+    });
   });
 
   const llmOptions = Object.entries(llmOptionsByProvider).flatMap(

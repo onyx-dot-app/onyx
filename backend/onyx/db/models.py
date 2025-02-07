@@ -1716,7 +1716,7 @@ class ChannelConfig(TypedDict):
     """NOTE: is a `TypedDict` so it can be used as a type hint for a JSONB column
     in Postgres"""
 
-    channel_name: str
+    channel_name: str | None  # None for default channel config
     respond_tag_only: NotRequired[bool]  # defaults to False
     respond_to_bots: NotRequired[bool]  # defaults to False
     respond_member_group_list: NotRequired[list[str]]
@@ -1737,7 +1737,6 @@ class SlackChannelConfig(Base):
     persona_id: Mapped[int | None] = mapped_column(
         ForeignKey("persona.id"), nullable=True
     )
-    # JSON for flexibility. Contains things like: channel name, team members, etc.
     channel_config: Mapped[ChannelConfig] = mapped_column(
         postgresql.JSONB(), nullable=False
     )
@@ -1745,6 +1744,8 @@ class SlackChannelConfig(Base):
     enable_auto_filters: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     persona: Mapped[Persona | None] = relationship("Persona")
     slack_bot: Mapped["SlackBot"] = relationship(
@@ -1755,6 +1756,21 @@ class SlackChannelConfig(Base):
         "StandardAnswerCategory",
         secondary=SlackChannelConfig__StandardAnswerCategory.__table__,
         back_populates="slack_channel_configs",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "slack_bot_id",
+            "is_default",
+            name="uq_slack_channel_config_slack_bot_id_default",
+        ),
+        Index(
+            "ix_slack_channel_config_slack_bot_id_default",
+            "slack_bot_id",
+            "is_default",
+            unique=True,
+            postgresql_where=(is_default is True),  #   type: ignore
+        ),
     )
 
 

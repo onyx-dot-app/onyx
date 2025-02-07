@@ -105,6 +105,32 @@ def construct_document_select_for_connector_credential_pair_by_needs_sync(
     return stmt
 
 
+def construct_document_id_select_for_connector_credential_pair_by_needs_sync(
+    connector_id: int, credential_id: int
+) -> Select:
+    initial_doc_ids_stmt = select(DocumentByConnectorCredentialPair.id).where(
+        and_(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+        )
+    )
+
+    stmt = (
+        select(DbDocument.id)
+        .where(
+            DbDocument.id.in_(initial_doc_ids_stmt),
+            or_(
+                DbDocument.last_modified
+                > DbDocument.last_synced,  # last_modified is newer than last_synced
+                DbDocument.last_synced.is_(None),  # never synced
+            ),
+        )
+        .distinct()
+    )
+
+    return stmt
+
+
 def get_all_documents_needing_vespa_sync_for_cc_pair(
     db_session: Session, cc_pair_id: int
 ) -> list[DbDocument]:

@@ -55,7 +55,8 @@ const DOC_DELAY_MS = 100;
 
 export const useStreamingMessages = (
   subQuestions: SubQuestionDetail[],
-  allowStreaming: () => void
+  allowStreaming: () => void,
+  onComplete: () => void
 ) => {
   const [dynamicSubQuestions, setDynamicSubQuestions] = useState<
     SubQuestionDetail[]
@@ -117,24 +118,39 @@ export const useStreamingMessages = (
         return;
       }
 
-      // 1) Stream high-level questions in parallel
+      // Stream high-level questions sequentially
       let didStreamQuestion = false;
+      let allQuestionsComplete = true;
       for (let i = 0; i < actualSubQs.length; i++) {
         const sq = actualSubQs[i];
         const p = progressRef.current[i];
         const dynSQ = dynamicSubQuestionsRef.current[i];
 
-        if (sq.question) {
-          const nextIndex = p.questionCharIndex + 1;
-          if (nextIndex <= sq.question.length) {
-            dynSQ.question = sq.question.slice(0, nextIndex);
-            p.questionCharIndex = nextIndex;
-            if (nextIndex >= sq.question.length) {
-              p.questionDone = true;
+        // Always stream the first subquestion (index 0)
+        // For others, only stream if the previous question is complete
+        if (i === 0 || (i > 0 && progressRef.current[i - 1].questionDone)) {
+          if (sq.question) {
+            const nextIndex = p.questionCharIndex + 1;
+            if (nextIndex <= sq.question.length) {
+              dynSQ.question = sq.question.slice(0, nextIndex);
+              p.questionCharIndex = nextIndex;
+              if (nextIndex >= sq.question.length && sq.is_stopped) {
+                p.questionDone = true;
+              }
+              didStreamQuestion = true;
+              // Break after streaming one question to ensure sequential behavior
+              break;
             }
-            didStreamQuestion = true;
           }
         }
+
+        if (!p.questionDone) {
+          allQuestionsComplete = false;
+        }
+      }
+
+      if (allQuestionsComplete && !didStreamQuestion) {
+        onComplete();
       }
 
       if (didStreamQuestion) {

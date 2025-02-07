@@ -89,16 +89,16 @@ import { useChatContext } from "@/components/context/ChatContext";
 import { v4 as uuidv4 } from "uuid";
 import { ChatPopup } from "./ChatPopup";
 
-import FunctionalHeader from "@/components/chat_search/Header";
-import { useSidebarVisibility } from "@/components/chat_search/hooks";
+import FunctionalHeader from "@/components/chat/Header";
+import { useSidebarVisibility } from "@/components/chat/hooks";
 import {
   PRO_SEARCH_TOGGLED_COOKIE_NAME,
   SIDEBAR_TOGGLED_COOKIE_NAME,
 } from "@/components/resizable/constants";
-import FixedLogo from "./shared_chat_search/FixedLogo";
+import FixedLogo from "../../components/logo/FixedLogo";
 
 import { DeleteEntityModal } from "../../components/modals/DeleteEntityModal";
-import { MinimalMarkdown } from "@/components/chat_search/MinimalMarkdown";
+import { MinimalMarkdown } from "@/components/chat/MinimalMarkdown";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 
 import {
@@ -108,10 +108,10 @@ import {
 } from "./tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
-import BlurBackground from "./shared_chat_search/BlurBackground";
+import BlurBackground from "../../components/chat/BlurBackground";
 import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
 import { useAssistants } from "@/components/context/AssistantsContext";
-import TextView from "@/components/chat_search/TextView";
+import TextView from "@/components/chat/TextView";
 import { Modal } from "@/components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import {
@@ -124,6 +124,11 @@ import { UserSettingsModal } from "./modal/UserSettingsModal";
 import { AlignStartVertical } from "lucide-react";
 import { AgenticMessage } from "./message/AgenticMessage";
 import AssistantModal from "../assistants/mine/AssistantModal";
+import {
+  OperatingSystem,
+  useOperatingSystem,
+  useSidebarShortcut,
+} from "@/lib/browserUtilities";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -466,9 +471,6 @@ export function ChatPage({
         }
         return;
       }
-      const shouldScrollToBottom =
-        visibleRange.get(existingChatSessionId) === undefined ||
-        visibleRange.get(existingChatSessionId)?.end == 0;
 
       clearSelectedDocuments();
       setIsFetchingChatMessages(true);
@@ -506,16 +508,13 @@ export function ChatPage({
 
       // go to bottom. If initial load, then do a scroll,
       // otherwise just appear at the bottom
-      if (shouldScrollToBottom) {
-        scrollInitialized.current = false;
-      }
 
-      if (shouldScrollToBottom) {
-        if (!hasPerformedInitialScroll && autoScrollEnabled) {
-          clientScrollToBottom();
-        } else if (isChatSessionSwitch && autoScrollEnabled) {
-          clientScrollToBottom(true);
-        }
+      scrollInitialized.current = false;
+
+      if (!hasPerformedInitialScroll) {
+        clientScrollToBottom();
+      } else if (isChatSessionSwitch) {
+        clientScrollToBottom(true);
       }
 
       setIsFetchingChatMessages(false);
@@ -1029,6 +1028,7 @@ export function ChatPage({
     ) {
       setDocumentSidebarToggled(false);
     }
+    clientScrollToBottom();
   }, [chatSessionIdRef.current]);
 
   const loadNewPageLogic = (event: MessageEvent) => {
@@ -1063,7 +1063,6 @@ export function ChatPage({
   if (!documentSidebarInitialWidth && maxDocumentSidebarWidth) {
     documentSidebarInitialWidth = Math.min(700, maxDocumentSidebarWidth);
   }
-
   class CurrentMessageFIFO {
     private stack: PacketType[] = [];
     isComplete: boolean = false;
@@ -1327,7 +1326,9 @@ export function ChatPage({
           searchParams.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
         useExistingUserMessage: isSeededChat,
         useLanggraph:
-          !settings?.settings.pro_search_disabled && proSearchEnabled,
+          !settings?.settings.pro_search_disabled &&
+          proSearchEnabled &&
+          retrievalEnabled,
       });
 
       const delay = (ms: number) => {
@@ -1435,21 +1436,22 @@ export function ChatPage({
               }
             }
 
-            // Continuously refine the sub_questions based on the packets that we receive
+            // // Continuously refine the sub_questions based on the packets that we receive
             if (
               Object.hasOwn(packet, "stop_reason") &&
               Object.hasOwn(packet, "level_question_num")
             ) {
-              // sub_questions = constructSubQuestions(
-              //   sub_questions,
-              //   packet as StreamStopInfo
-              // );
+              sub_questions = constructSubQuestions(
+                sub_questions,
+                packet as StreamStopInfo
+              );
             } else if (Object.hasOwn(packet, "sub_question")) {
               is_generating = true;
               sub_questions = constructSubQuestions(
                 sub_questions,
                 packet as SubQuestionPiece
               );
+              setAgenticGenerating(true);
             } else if (Object.hasOwn(packet, "sub_query")) {
               sub_questions = constructSubQuestions(
                 sub_questions,
@@ -1658,6 +1660,7 @@ export function ChatPage({
         completeMessageMapOverride: currentMessageMap(completeMessageDetail),
       });
     }
+    setAgenticGenerating(false);
     resetRegenerationState(currentSessionId());
 
     updateChatState("input");
@@ -1785,6 +1788,7 @@ export function ChatPage({
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
   const [untoggled, setUntoggled] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
+  const [agenticGenerating, setAgenticGenerating] = useState(false);
 
   const explicitlyUntoggle = () => {
     setShowHistorySidebar(false);
@@ -1829,17 +1833,17 @@ export function ChatPage({
   const autoScrollEnabled =
     user?.preferences?.auto_scroll == null
       ? settings?.enterpriseSettings?.auto_scroll || false
-      : user?.preferences?.auto_scroll!;
+      : user?.preferences?.auto_scroll! && !agenticGenerating;
 
-  // useScrollonStream({
-  //   chatState: currentSessionChatState,
-  //   scrollableDivRef,
-  //   scrollDist,
-  //   endDivRef,
-  //   debounceNumber,
-  //   mobile: settings?.isMobile,
-  //   enableAutoScroll: autoScrollEnabled,
-  // });
+  useScrollonStream({
+    chatState: currentSessionChatState,
+    scrollableDivRef,
+    scrollDist,
+    endDivRef,
+    debounceNumber,
+    mobile: settings?.isMobile,
+    enableAutoScroll: autoScrollEnabled,
+  });
 
   // Virtualization + Scrolling related effects and functions
   const scrollInitialized = useRef(false);
@@ -2052,24 +2056,7 @@ export function ChatPage({
     llmOverrideManager.updateImageFilesPresent(imageFileInMessageHistory);
   }, [imageFileInMessageHistory]);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey) {
-        switch (event.key.toLowerCase()) {
-          case "e":
-            event.preventDefault();
-            toggleSidebar();
-            break;
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+  useSidebarShortcut(router, toggleSidebar);
 
   const [sharedChatSession, setSharedChatSession] =
     useState<ChatSession | null>();
@@ -3070,20 +3057,19 @@ export function ChatPage({
                         </div>
                         <div
                           ref={inputRef}
-                          className="absolute bottom-0 z-10 w-full"
+                          className="absolute pointer-events-none bottom-0 z-10 w-full"
                         >
-                          <div className="w-[95%] mx-auto relative mb-8">
-                            {aboveHorizon && (
-                              <div className="pointer-events-none w-full bg-transparent flex sticky justify-center">
-                                <button
-                                  onClick={() => clientScrollToBottom()}
-                                  className="p-1 pointer-events-auto rounded-2xl bg-background-strong border border-border mb-2 mx-auto "
-                                >
-                                  <FiArrowDown size={18} />
-                                </button>
-                              </div>
-                            )}
-
+                          {aboveHorizon && (
+                            <div className="mx-auto w-fit !pointer-events-none flex sticky justify-center">
+                              <button
+                                onClick={() => clientScrollToBottom()}
+                                className="p-1 pointer-events-auto rounded-2xl bg-background-strong border border-border  mx-auto "
+                              >
+                                <FiArrowDown size={18} />
+                              </button>
+                            </div>
+                          )}
+                          <div className="pointer-events-auto w-[95%] mx-auto relative mb-8">
                             <ChatInputBar
                               proSearchEnabled={proSearchEnabled}
                               setProSearchEnabled={() => toggleProSearch()}

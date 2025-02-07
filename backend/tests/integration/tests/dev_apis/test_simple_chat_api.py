@@ -1,6 +1,5 @@
 import json
 
-import pytest
 import requests
 
 from onyx.configs.constants import MessageType
@@ -66,9 +65,6 @@ def test_send_message_simple_with_history(reset: None) -> None:
         assert found_doc["metadata"]["document_id"] == doc.id
 
 
-@pytest.mark.xfail(
-    reason="agent search broke this",
-)
 def test_using_reference_docs_with_simple_with_history_api_flow(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")

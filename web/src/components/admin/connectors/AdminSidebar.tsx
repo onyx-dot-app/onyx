@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
 import LogoWithText from "@/components/header/LogoWithText";
-import { LogoComponent } from "@/app/chat/shared_chat_search/FixedLogo";
+import { LogoComponent } from "@/components/logo/FixedLogo";
 
 interface Item {
   name: string | JSX.Element;

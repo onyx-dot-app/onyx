@@ -106,7 +106,7 @@ def remove_scheduled_feedback_reminder(
 
 def handle_message(
     message_info: SlackMessageInfo,
-    slack_channel_config: SlackChannelConfig | None,
+    slack_channel_config: SlackChannelConfig,
     client: WebClient,
     feedback_reminder_id: str | None,
     tenant_id: str | None,

@@ -198,7 +198,7 @@ def _check_if_cc_pairs_are_owned_by_groups(
             ids=missing_cc_pair_ids,
         )
         for cc_pair in cc_pairs:
-            if cc_pair.access_type != AccessType.PUBLIC:
+            if cc_pair.access_type == AccessType.PRIVATE:
                 raise ValueError(
                     f"Connector Credential Pair with ID: '{cc_pair.id}'"
                     " is not owned by the specified groups"
@@ -545,7 +545,7 @@ def fetch_documents_for_document_set_paginated(
     return documents, documents[-1].id if documents else None
 
 
-def construct_document_select_by_docset(
+def construct_document_id_select_by_docset(
     document_set_id: int,
     current_only: bool = True,
 ) -> Select:
@@ -554,7 +554,7 @@ def construct_document_select_by_docset(
     are background processing task generators."""
 
     stmt = (
-        select(Document)
+        select(Document.id)
         .join(
             DocumentByConnectorCredentialPair,
             DocumentByConnectorCredentialPair.id == Document.id,

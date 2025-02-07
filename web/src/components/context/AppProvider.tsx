@@ -1,6 +1,6 @@
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { UserProvider } from "../user/UserProvider";
-import { ProviderContextProvider } from "../chat_search/ProviderContext";
+import { ProviderContextProvider } from "../chat/ProviderContext";
 import { SettingsProvider } from "../settings/SettingsProvider";
 import { AssistantsProvider } from "./AssistantsContext";
 import { Persona } from "@/app/admin/assistants/interfaces";

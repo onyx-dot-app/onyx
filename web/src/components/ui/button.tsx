@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 dark:ring-offset-neutral-950 dark:focus-visible:ring-neutral-300",
+  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 dark:ring-offset-neutral-950 dark:focus-visible:ring-neutral-300",
   {
     variants: {
       variant: {
@@ -13,7 +13,6 @@ const buttonVariants = cva(
           "bg-green-100 text-green-600 hover:bg-green-500/90 dark:bg-blue-500 dark:text-neutral-50 dark:hover:bg-green-900/90",
         "success-reverse":
           "bg-[#2BAD30] text-white hover:bg-[#45a049] dark:bg-[#2E7D32] dark:text-white dark:hover:bg-[#1B5E20]",
-
         default:
           "bg-neutral-900 border-border text-neutral-50 hover:bg-neutral-900/90 dark:bg-neutral-50 dark:text-neutral-900 dark:hover:bg-neutral-50/90",
         "default-reverse":
@@ -24,6 +23,8 @@ const buttonVariants = cva(
           "bg-neutral-50 text-red-500 hover:bg-neutral-50/90 dark:bg-neutral-50 dark:text-red-900 dark:hover:bg-neutral-50/90",
         outline:
           "border border-neutral-300 bg-white hover:bg-neutral-50 hover:text-neutral-900 dark:border-neutral-800 dark:bg-neutral-950 dark:hover:bg-neutral-800 dark:hover:text-neutral-50",
+        create:
+          "border border-neutral-300 bg-background-50 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 transition-colors duration-200 ease-in-out shadow-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:hover:text-neutral-100",
         "outline-reverse":
           "border border-neutral-300 bg-neutral-900 hover:bg-neutral-800 hover:text-neutral-50 dark:border-neutral-800 dark:bg-white dark:hover:bg-neutral-50 dark:hover:text-neutral-900",
         secondary:
@@ -39,8 +40,6 @@ const buttonVariants = cva(
           "text-neutral-50 underline-offset-4 hover:underline dark:text-neutral-900",
         submit:
           "bg-green-500 text-inverted hover:bg-green-600/90 dark:bg-neutral-50 dark:text-blue-500 dark:hover:bg-green-100/90",
-
-        // "bg-blue-600 text-neutral-50 hover:bg-blue-600/80 dark:bg-blue-600 dark:text-neutral-50 dark:hover:bg-blue-600/90",
         "submit-reverse":
           "bg-neutral-50 text-blue-600 hover:bg-neutral-50/80 dark:bg-neutral-50 dark:text-blue-600 dark:hover:bg-neutral-50/90",
         navigate:
@@ -58,8 +57,8 @@ const buttonVariants = cva(
       size: {
         default: "h-10 px-4 py-2",
         xs: "h-8 px-3 py-1",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
+        sm: "h-9 px-3",
+        lg: "h-11 px-8",
         icon: "h-10 w-10",
       },
       reverse: {

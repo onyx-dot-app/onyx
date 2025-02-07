@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import {
-  ResultIcon,
-  SeeMoreBlock,
-} from "@/components/chat_search/sources/SourceCard";
+import { ResultIcon, SeeMoreBlock } from "@/components/chat/sources/SourceCard";
 import { openDocument } from "@/lib/search/utils";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { ValidSources } from "@/lib/types";
@@ -56,7 +53,7 @@ const SourceCard: React.FC<{
       </div>
 
       <div className="flex items-center gap-1 mt-1">
-        <ResultIcon doc={document} size={14} />
+        <ResultIcon doc={document} size={18} />
         <div className="text-[#4a4a4a] text-xs leading-tight truncate flex-1 min-w-0">
           {truncatedIdentifier}
         </div>
@@ -108,13 +105,10 @@ export const SourcesDisplay: React.FC<SourcesDisplayProps> = ({
 
         {hasMoreDocuments && (
           <SeeMoreBlock
+            fullWidth
             toggled={docSidebarToggled}
             toggleDocumentSelection={toggleDocumentSelection}
-            uniqueSources={
-              Array.from(
-                new Set(documents.map((doc) => doc.source_type))
-              ) as ValidSources[]
-            }
+            docs={documents}
             webSourceDomains={documents.map((doc) => doc.link)}
           />
         )}

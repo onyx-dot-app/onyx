@@ -1,10 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { FieldArray, Form, useFormikContext, ErrorMessage } from "formik";
+import {
+  FieldArray,
+  Form,
+  useFormikContext,
+  ErrorMessage,
+  Field,
+} from "formik";
 import { CCPairDescriptor, DocumentSet } from "@/lib/types";
 import {
-  BooleanFormField,
   Label,
   SelectorFormField,
   SubLabel,
@@ -31,28 +36,49 @@ import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import { SearchMultiSelectDropdown } from "@/components/Dropdown";
+import { fetchSlackChannels } from "../lib";
+import { Badge } from "@/components/ui/badge";
+import useSWR from "swr";
+import { ThreeDotsLoader } from "@/components/Loading";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Separator } from "@/components/ui/separator";
 
-interface SlackChannelConfigFormFieldsProps {
+import { CheckFormField } from "@/components/ui/CheckField";
+
+export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
+  isDefault: boolean;
   documentSets: DocumentSet[];
   searchEnabledAssistants: Persona[];
+  nonSearchAssistants: Persona[];
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
   setPopup: (popup: {
     message: string;
     type: "error" | "success" | "warning";
   }) => void;
+  slack_bot_id: number;
+  formikProps: any;
 }
 
 export function SlackChannelConfigFormFields({
   isUpdate,
+  isDefault,
   documentSets,
   searchEnabledAssistants,
+  nonSearchAssistants,
   standardAnswerCategoryResponse,
   setPopup,
+  slack_bot_id,
+  formikProps,
 }: SlackChannelConfigFormFieldsProps) {
   const router = useRouter();
   const { values, setFieldValue } = useFormikContext<any>();
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [viewUnselectableSets, setViewUnselectableSets] = useState(false);
   const [viewSyncEnabledAssistants, setViewSyncEnabledAssistants] =
     useState(false);
@@ -152,11 +178,53 @@ export function SlackChannelConfigFormFields({
     );
   }, [documentSets]);
 
-  return (
-    <Form className="px-6 max-w-4xl">
-      <div className="pt-4 w-full">
-        <TextFormField name="channel_name" label="Slack Channel Name:" />
+  const { data: channelOptions, isLoading } = useSWR(
+    `/api/manage/admin/slack-app/bots/${slack_bot_id}/channels`,
+    async (url: string) => {
+      const channels = await fetchSlackChannels(slack_bot_id);
+      return channels.map((channel: any) => ({
+        name: channel.name,
+        value: channel.id,
+      }));
+    }
+  );
 
+  if (isLoading) {
+    return <ThreeDotsLoader />;
+  }
+
+  return (
+    <>
+      <div className="w-full">
+        {isDefault && (
+          <Badge variant="agent" className="bg-blue-100 text-blue-800">
+            Default Configuration
+          </Badge>
+        )}
+        {!isDefault && (
+          <>
+            <label
+              htmlFor="channel_name"
+              className="block  text-text font-medium text-base mb-2"
+            >
+              Select A Slack Channel:
+            </label>{" "}
+            <Field name="channel_name">
+              {({ field, form }: { field: any; form: any }) => (
+                <SearchMultiSelectDropdown
+                  options={channelOptions || []}
+                  onSelect={(selected) => {
+                    form.setFieldValue("channel_name", selected.name);
+                  }}
+                  initialSearchTerm={field.value}
+                  onSearchTermChange={(term) => {
+                    form.setFieldValue("channel_name", term);
+                  }}
+                />
+              )}
+            </Field>
+          </>
+        )}
         <div className="space-y-2 mt-4">
           <Label>Knowledge Source</Label>
           <RadioGroup
@@ -170,7 +238,7 @@ export function SlackChannelConfigFormFields({
               value="all_public"
               id="all_public"
               label="All Public Knowledge"
-              sublabel="Let OnyxBot respond based on information from all public connectors "
+              sublabel="Let OnyxBot respond based on information from all public connectors"
             />
             {selectableSets.length + unselectableSets.length > 0 && (
               <RadioGroupItemField
@@ -183,12 +251,17 @@ export function SlackChannelConfigFormFields({
             <RadioGroupItemField
               value="assistant"
               id="assistant"
-              label="Specific Assistant"
+              label="Search Assistant"
               sublabel="Control both the documents and the prompt to use for answering questions"
+            />
+            <RadioGroupItemField
+              value="non_search_assistant"
+              id="non_search_assistant"
+              label="Non-Search Assistant"
+              sublabel="Chat with an assistant that does not use documents"
             />
           </RadioGroup>
         </div>
-
         {values.knowledge_source === "document_sets" &&
           documentSets.length > 0 && (
             <div className="mt-4">
@@ -281,7 +354,6 @@ export function SlackChannelConfigFormFields({
               />
             </div>
           )}
-
         {values.knowledge_source === "assistant" && (
           <div className="mt-4">
             <SubLabel>
@@ -351,100 +423,143 @@ export function SlackChannelConfigFormFields({
             )}
           </div>
         )}
-      </div>
+        {values.knowledge_source === "non_search_assistant" && (
+          <div className="mt-4">
+            <SubLabel>
+              <>
+                Select the non-search assistant OnyxBot will use while answering
+                questions in Slack.
+                {syncEnabledAssistants.length > 0 && (
+                  <>
+                    <br />
+                    <span className="text-sm text-text-dark/80">
+                      Note: Some of your assistants have auto-synced connectors
+                      in their document sets. You cannot select these assistants
+                      as they will not be able to answer questions in Slack.{" "}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setViewSyncEnabledAssistants(
+                            (viewSyncEnabledAssistants) =>
+                              !viewSyncEnabledAssistants
+                          )
+                        }
+                        className="text-sm text-link"
+                      >
+                        {viewSyncEnabledAssistants
+                          ? "Hide un-selectable "
+                          : "View all "}
+                        assistants
+                      </button>
+                    </span>
+                  </>
+                )}
+              </>
+            </SubLabel>
 
-      <div className="mt-2">
-        <AdvancedOptionsToggle
-          showAdvancedOptions={showAdvancedOptions}
-          setShowAdvancedOptions={setShowAdvancedOptions}
-        />
-      </div>
-      {showAdvancedOptions && (
-        <div className="mt-4">
-          <div className="w-64 mb-4">
             <SelectorFormField
-              name="response_type"
-              label="Answer Type"
-              tooltip="Controls the format of OnyxBot's responses."
-              options={[
-                { name: "Standard", value: "citations" },
-                { name: "Detailed", value: "quotes" },
-              ]}
+              name="persona_id"
+              options={nonSearchAssistants.map((persona) => ({
+                name: persona.name,
+                value: persona.id,
+              }))}
             />
           </div>
-
-          <BooleanFormField
-            name="show_continue_in_web_ui"
-            removeIndent
-            label="Show Continue in Web UI button"
-            tooltip="If set, will show a button at the bottom of the response that allows the user to continue the conversation in the Onyx Web UI"
-          />
-
-          <div className="flex flex-col space-y-3 mt-2">
-            <BooleanFormField
-              name="still_need_help_enabled"
-              removeIndent
-              onChange={(checked: boolean) => {
-                setFieldValue("still_need_help_enabled", checked);
-                if (!checked) {
-                  setFieldValue("follow_up_tags", []);
-                }
-              }}
-              label={'Give a "Still need help?" button'}
-              tooltip={`OnyxBot's response will include a button at the bottom 
-                  of the response that asks the user if they still need help.`}
-            />
-            {values.still_need_help_enabled && (
-              <CollapsibleSection prompt="Configure Still Need Help Button">
-                <TextArrayField
-                  name="follow_up_tags"
-                  label="(Optional) Users / Groups to Tag"
-                  values={values}
-                  subtext={
-                    <div>
-                      The Slack users / groups we should tag if the user clicks
-                      the &quot;Still need help?&quot; button. If no emails are
-                      provided, we will not tag anyone and will just react with
-                      a 🆘 emoji to the original message.
-                    </div>
-                  }
-                  placeholder="User email or user group name..."
+        )}
+      </div>
+      <Separator className="my-4" />
+      <Accordion type="multiple" className=" gap-y-2 w-full">
+        {values.knowledge_source !== "non_search_assistant" && (
+          <AccordionItem value="search-options">
+            <AccordionTrigger className="text-text">
+              Search Configuration
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-4">
+                <div className="w-64">
+                  <SelectorFormField
+                    name="response_type"
+                    label="Answer Type"
+                    tooltip="Controls the format of OnyxBot's responses."
+                    options={[
+                      { name: "Standard", value: "citations" },
+                      { name: "Detailed", value: "quotes" },
+                    ]}
+                  />
+                </div>
+                <CheckFormField
+                  name="enable_auto_filters"
+                  label="Enable LLM Autofiltering"
+                  tooltip="If set, the LLM will generate source and time filters based on the user's query"
                 />
-              </CollapsibleSection>
-            )}
 
-            <BooleanFormField
-              name="answer_validity_check_enabled"
-              removeIndent
-              label="Only respond if citations found"
-              tooltip="If set, will only answer questions where the model successfully produces citations"
-            />
-            <BooleanFormField
-              name="questionmark_prefilter_enabled"
-              removeIndent
-              label="Only respond to questions"
-              tooltip="If set, OnyxBot will only respond to messages that contain a question mark"
-            />
-            <BooleanFormField
-              name="respond_tag_only"
-              removeIndent
-              label="Respond to @OnyxBot Only"
-              tooltip="If set, OnyxBot will only respond when directly tagged"
-            />
-            <BooleanFormField
-              name="respond_to_bots"
-              removeIndent
-              label="Respond to Bot messages"
-              tooltip="If not set, OnyxBot will always ignore messages from Bots"
-            />
-            <BooleanFormField
-              name="enable_auto_filters"
-              removeIndent
-              label="Enable LLM Autofiltering"
-              tooltip="If set, the LLM will generate source and time filters based on the user's query"
-            />
+                <CheckFormField
+                  name="answer_validity_check_enabled"
+                  label="Only respond if citations found"
+                  tooltip="If set, will only answer questions where the model successfully produces citations"
+                />
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        )}
 
-            <div className="mt-12">
+        <AccordionItem className="mt-4" value="general-options">
+          <AccordionTrigger>General Configuration</AccordionTrigger>
+          <AccordionContent>
+            <div className="space-y-4">
+              <CheckFormField
+                name="show_continue_in_web_ui"
+                label="Show Continue in Web UI button"
+                tooltip="If set, will show a button at the bottom of the response that allows the user to continue the conversation in the Onyx Web UI"
+              />
+
+              <CheckFormField
+                name="still_need_help_enabled"
+                onChange={(checked: boolean) => {
+                  setFieldValue("still_need_help_enabled", checked);
+                  if (!checked) {
+                    setFieldValue("follow_up_tags", []);
+                  }
+                }}
+                label={'Give a "Still need help?" button'}
+                tooltip={`OnyxBot's response will include a button at the bottom 
+                      of the response that asks the user if they still need help.`}
+              />
+              {values.still_need_help_enabled && (
+                <CollapsibleSection prompt="Configure Still Need Help Button">
+                  <TextArrayField
+                    name="follow_up_tags"
+                    label="(Optional) Users / Groups to Tag"
+                    values={values}
+                    subtext={
+                      <div>
+                        The Slack users / groups we should tag if the user
+                        clicks the &quot;Still need help?&quot; button. If no
+                        emails are provided, we will not tag anyone and will
+                        just react with a 🆘 emoji to the original message.
+                      </div>
+                    }
+                    placeholder="User email or user group name..."
+                  />
+                </CollapsibleSection>
+              )}
+
+              <CheckFormField
+                name="questionmark_prefilter_enabled"
+                label="Only respond to questions"
+                tooltip="If set, OnyxBot will only respond to messages that contain a question mark"
+              />
+              <CheckFormField
+                name="respond_tag_only"
+                label="Respond to @OnyxBot Only"
+                tooltip="If set, OnyxBot will only respond when directly tagged"
+              />
+              <CheckFormField
+                name="respond_to_bots"
+                label="Respond to Bot messages"
+                tooltip="If not set, OnyxBot will always ignore messages from Bots"
+              />
+
               <TextArrayField
                 name="respond_member_group_list"
                 label="(Optional) Respond to Certain Users / Groups"
@@ -455,20 +570,20 @@ export function SlackChannelConfigFormFields({
                 values={values}
                 placeholder="User email or user group name..."
               />
+
+              <StandardAnswerCategoryDropdownField
+                standardAnswerCategoryResponse={standardAnswerCategoryResponse}
+                categories={values.standard_answer_categories}
+                setCategories={(categories: any) =>
+                  setFieldValue("standard_answer_categories", categories)
+                }
+              />
             </div>
-          </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
 
-          <StandardAnswerCategoryDropdownField
-            standardAnswerCategoryResponse={standardAnswerCategoryResponse}
-            categories={values.standard_answer_categories}
-            setCategories={(categories: any) =>
-              setFieldValue("standard_answer_categories", categories)
-            }
-          />
-        </div>
-      )}
-
-      <div className="flex mt-2 gap-x-2 w-full justify-end flex">
+      <div className="flex mt-8 gap-x-2 w-full justify-end">
         {shouldShowPrivacyAlert && (
           <TooltipProvider>
             <Tooltip>
@@ -518,13 +633,11 @@ export function SlackChannelConfigFormFields({
             </Tooltip>
           </TooltipProvider>
         )}
-        <Button onClick={() => {}} type="submit">
-          {isUpdate ? "Update" : "Create"}
-        </Button>
+        <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
         <Button type="button" variant="outline" onClick={() => router.back()}>
           Cancel
         </Button>
       </div>
-    </Form>
+    </>
   );
 }

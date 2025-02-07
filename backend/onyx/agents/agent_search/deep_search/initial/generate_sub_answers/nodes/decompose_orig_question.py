@@ -12,8 +12,9 @@ from onyx.agents.agent_search.deep_search.initial.generate_initial_answer.states
 from onyx.agents.agent_search.deep_search.main.models import (
     AgentRefinedMetrics,
 )
+from onyx.agents.agent_search.deep_search.main.operations import dispatch_subquestion
 from onyx.agents.agent_search.deep_search.main.operations import (
-    dispatch_subquestion,
+    dispatch_subquestion_sep,
 )
 from onyx.agents.agent_search.deep_search.main.states import (
     InitialQuestionDecompositionUpdate,
@@ -109,9 +110,12 @@ def decompose_orig_question(
         ),
         writer,
     )
+
     # dispatches custom events for subquestion tokens, adding in subquestion ids.
     streamed_tokens = dispatch_separated(
-        model.stream(msg), dispatch_subquestion(0, writer)
+        model.stream(msg),
+        dispatch_subquestion(0, writer),
+        sep_callback=dispatch_subquestion_sep(0, writer),
     )
 
     stop_event = StreamStopInfo(

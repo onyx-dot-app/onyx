@@ -7,7 +7,6 @@ from typing import cast
 from sqlalchemy.orm import Session
 
 from onyx.chat.chat_utils import llm_doc_from_inference_section
-from onyx.chat.llm_response_handler import LLMCall
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ContextualPruningConfig
 from onyx.chat.models import DocumentPruningConfig
@@ -370,41 +369,6 @@ class SearchTool(Tool):
             answer_style_config=self.answer_style_config,
             prompt_config=self.prompt_config,
         )
-
-    """Other utility functions"""
-
-    @classmethod
-    def get_search_result(
-        cls, llm_call: LLMCall
-    ) -> tuple[list[LlmDoc], list[LlmDoc]] | None:
-        """
-        Returns the final search results and a map of docs to their original search rank (which is what is displayed to user)
-        """
-        if not llm_call.tool_call_info:
-            return None
-
-        final_search_results = []
-        initial_search_results = []
-
-        for yield_item in llm_call.tool_call_info:
-            if (
-                isinstance(yield_item, ToolResponse)
-                and yield_item.id == FINAL_CONTEXT_DOCUMENTS_ID
-            ):
-                final_search_results = cast(list[LlmDoc], yield_item.response)
-            elif (
-                isinstance(yield_item, ToolResponse)
-                and yield_item.id == SEARCH_DOC_CONTENT_ID
-            ):
-                search_contexts = yield_item.response.contexts
-                # original_doc_search_rank = 1
-                for doc in search_contexts:
-                    if doc.document_id not in initial_search_results:
-                        initial_search_results.append(doc)
-
-                initial_search_results = cast(list[LlmDoc], initial_search_results)
-
-        return final_search_results, initial_search_results
 
 
 # Allows yielding the same responses as a SearchTool without being a SearchTool.

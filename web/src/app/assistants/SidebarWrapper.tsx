@@ -10,16 +10,17 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSidebarVisibility } from "@/components/chat_search/hooks";
-import FunctionalHeader from "@/components/chat_search/Header";
+import { useSidebarVisibility } from "@/components/chat/hooks";
+import FunctionalHeader from "@/components/chat/Header";
 import { useRouter } from "next/navigation";
 import { pageType } from "../chat/sessionSidebar/types";
-import FixedLogo from "../chat/shared_chat_search/FixedLogo";
+import FixedLogo from "../../components/logo/FixedLogo";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useChatContext } from "@/components/context/ChatContext";
 import { HistorySidebar } from "../chat/sessionSidebar/HistorySidebar";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import AssistantModal from "./mine/AssistantModal";
+import { useSidebarShortcut } from "@/lib/browserUtilities";
 
 interface SidebarWrapperProps<T extends object> {
   initiallyToggled: boolean;
@@ -71,23 +72,8 @@ export default function SidebarWrapper<T extends object>({
 
   const [showAssistantsModal, setShowAssistantsModal] = useState(false);
   const router = useRouter();
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey) {
-        switch (event.key.toLowerCase()) {
-          case "e":
-            event.preventDefault();
-            toggleSidebar();
-            break;
-        }
-      }
-    };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [router]);
+  useSidebarShortcut(router, toggleSidebar);
 
   return (
     <div className="flex relative overflow-x-hidden overscroll-contain flex-col w-full h-screen">

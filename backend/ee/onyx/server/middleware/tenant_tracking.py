@@ -64,6 +64,7 @@ async def _get_tenant_id_from_request(
 
     try:
         # Look up token data in Redis
+
         token_data = await retrieve_auth_token_data_from_redis(request)
 
         if not token_data:
@@ -87,13 +88,14 @@ async def _get_tenant_id_from_request(
         if not is_valid_schema_name(tenant_id):
             raise HTTPException(status_code=400, detail="Invalid tenant ID format")
 
-        return tenant_id
-
     except Exception as e:
         logger.error(f"Unexpected error in _get_tenant_id_from_request: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
     finally:
+        if tenant_id:
+            return tenant_id
+
         # As a final step, check for explicit tenant_id cookie
         tenant_id_cookie = request.cookies.get(TENANT_ID_COOKIE_NAME)
         if tenant_id_cookie and is_valid_schema_name(tenant_id_cookie):

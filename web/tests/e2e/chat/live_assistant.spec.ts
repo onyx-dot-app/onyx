@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@chromatic-com/playwright";
 import { loginAsRandomUser } from "../utils/auth";
 import {
   navigateToAssistantInHistorySidebar,
@@ -8,8 +8,6 @@ import {
 } from "../utils/chatActions";
 
 test("Chat workflow", async ({ page }) => {
-  test.fail();
-
   // Clear cookies and log in as a random user
   await page.context().clearCookies();
   await loginAsRandomUser(page);

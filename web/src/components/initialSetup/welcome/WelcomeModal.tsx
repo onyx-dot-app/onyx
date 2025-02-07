@@ -11,7 +11,7 @@ import { ApiKeyForm } from "@/components/llm/ApiKeyForm";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { checkLlmProvider } from "./lib";
 import { User } from "@/lib/types";
-import { useProviderStatus } from "@/components/chat_search/ProviderContext";
+import { useProviderStatus } from "@/components/chat/ProviderContext";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 

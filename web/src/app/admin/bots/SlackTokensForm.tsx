@@ -7,6 +7,7 @@ import { createSlackBot, updateSlackBot } from "./new/lib";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useEffect } from "react";
+import { Switch } from "@/components/ui/switch";
 
 export const SlackTokensForm = ({
   isUpdate,
@@ -33,7 +34,9 @@ export const SlackTokensForm = ({
 
   return (
     <Formik
-      initialValues={initialValues}
+      initialValues={{
+        ...initialValues,
+      }}
       validationSchema={Yup.object().shape({
         bot_token: Yup.string().required(),
         app_token: Yup.string().required(),

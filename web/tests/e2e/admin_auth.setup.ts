@@ -1,5 +1,5 @@
 // dependency for all admin user tests
-import { test as setup } from "@playwright/test";
+import { test as setup } from "@chromatic-com/playwright";
 
 setup("authenticate as admin", async ({ browser }) => {
   const context = await browser.newContext({ storageState: "admin_auth.json" });
