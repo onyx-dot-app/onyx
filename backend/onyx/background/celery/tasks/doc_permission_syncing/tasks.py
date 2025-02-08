@@ -263,7 +263,7 @@ def try_creating_permissions_sync_task(
         payload.celery_task_id = result.id
         redis_connector.permissions.set_fence(payload)
 
-        payload_id = payload.celery_task_id
+        payload_id = payload.id
     except Exception:
         task_logger.exception(f"Unexpected exception: cc_pair={cc_pair_id}")
         return None
