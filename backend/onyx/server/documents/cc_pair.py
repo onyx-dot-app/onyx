@@ -22,6 +22,8 @@ from onyx.background.celery.tasks.pruning.tasks import (
     try_creating_prune_generator_task,
 )
 from onyx.background.celery.versioned_apps.primary import app as primary_app
+from onyx.configs.constants import OnyxCeleryPriority
+from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
@@ -227,6 +229,13 @@ def update_cc_pair_status(
     )
 
     db_session.commit()
+
+    # this speeds up the start of indexing by firing the check immediately
+    primary_app.send_task(
+        OnyxCeleryTask.CHECK_FOR_INDEXING,
+        kwargs=dict(tenant_id=tenant_id),
+        priority=OnyxCeleryPriority.HIGH,
+    )
 
     return JSONResponse(
         status_code=HTTPStatus.OK, content={"message": str(HTTPStatus.OK)}
@@ -540,7 +549,14 @@ def associate_credential_to_connector(
     metadata: ConnectorCredentialPairMetadata,
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse[int]:
+    """NOTE(rkuo): internally discussed and the consensus is this endpoint
+    and create_connector_with_mock_credential should be combined.
+
+    The intent of this endpoint is to handle connectors that actually need credentials.
+    """
+
     fetch_ee_implementation_or_noop(
         "onyx.db.user_group", "validate_object_creation_for_user", None
     )(
@@ -561,6 +577,18 @@ def associate_credential_to_connector(
             access_type=metadata.access_type,
             auto_sync_options=metadata.auto_sync_options,
             groups=metadata.groups,
+        )
+
+        # trigger indexing immediately
+        primary_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_INDEXING,
+            priority=OnyxCeleryPriority.HIGH,
+            kwargs={"tenant_id": tenant_id},
+        )
+
+        logger.info(
+            f"associate_credential_to_connector - running check_for_indexing: "
+            f"cc_pair={response.data}"
         )
 
         return response

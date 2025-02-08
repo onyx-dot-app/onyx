@@ -197,6 +197,11 @@ def create_deletion_attempt_for_connector_id(
         kwargs={"tenant_id": tenant_id},
     )
 
+    logger.info(
+        f"create_deletion_attempt_for_connector_id - running check_for_connector_deletion: "
+        f"cc_pair={cc_pair.id}"
+    )
+
     if cc_pair.connector.source == DocumentSource.FILE:
         connector = cc_pair.connector
         file_store = get_default_file_store(db_session)
