@@ -14,9 +14,6 @@ from fastapi import Query
 from fastapi import Request
 from psycopg2.errors import UniqueViolation
 from pydantic import BaseModel
-from sqlalchemy import Column
-from sqlalchemy import desc
-from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -45,7 +42,6 @@ from onyx.db.auth import get_total_users_count
 from onyx.db.engine import CURRENT_TENANT_ID_CONTEXTVAR
 from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
-from onyx.db.models import AccessToken
 from onyx.db.models import User
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_users
@@ -54,6 +50,7 @@ from onyx.db.users import get_total_filtered_users_count
 from onyx.db.users import get_user_by_email
 from onyx.db.users import validate_user_role_update
 from onyx.key_value_store.factory import get_kv_store
+from onyx.redis.redis_pool import retrieve_auth_expiration_from_redis
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
@@ -502,33 +499,9 @@ def get_current_token_expiration_jwt(
         return None
 
 
-def get_current_token_creation(
-    user: User | None, db_session: Session
-) -> datetime | None:
-    if user is None:
-        return None
-    try:
-        result = db_session.execute(
-            select(AccessToken)
-            .where(AccessToken.user_id == user.id)  # type: ignore
-            .order_by(desc(Column("created_at")))
-            .limit(1)
-        )
-        access_token = result.scalar_one_or_none()
-
-        if access_token:
-            return access_token.created_at
-        else:
-            logger.error("No AccessToken found for user")
-            return None
-
-    except Exception as e:
-        logger.error(f"Error fetching AccessToken: {e}")
-        return None
-
-
 @router.get("/me")
 def verify_user_logged_in(
+    request: Request,
     user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
@@ -553,7 +526,7 @@ def verify_user_logged_in(
         )
 
     token_created_at = (
-        None if MULTI_TENANT else get_current_token_creation(user, db_session)
+        None if MULTI_TENANT else retrieve_auth_expiration_from_redis(request)
     )
     organization_name = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None

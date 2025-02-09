@@ -32,7 +32,7 @@ export const HealthCheckBanner = () => {
 
   useEffect(() => {
     updateExpirationTime();
-  }, [user, updateExpirationTime]);
+  }, [updateExpirationTime]);
 
   useEffect(() => {
     if (NEXT_PUBLIC_CUSTOM_REFRESH_URL) {

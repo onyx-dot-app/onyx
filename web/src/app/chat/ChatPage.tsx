@@ -129,6 +129,7 @@ import {
   useOperatingSystem,
   useSidebarShortcut,
 } from "@/lib/browserUtilities";
+import { ThumbsUpIconSkeleton } from "@/components/icons/icons";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;

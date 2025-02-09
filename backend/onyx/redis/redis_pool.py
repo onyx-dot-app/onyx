@@ -4,6 +4,8 @@ import json
 import ssl
 import threading
 from collections.abc import Callable
+from datetime import datetime
+from datetime import timedelta
 from typing import Any
 from typing import cast
 from typing import Optional
@@ -86,6 +88,7 @@ class TenantRedis(redis.Redis):
             iterator = method(*args, **kwargs)
 
             # Remove prefix from returned keys
+
             prefix = f"{self.tenant_id}:".encode()
             prefix_len = len(prefix)
 
@@ -151,6 +154,10 @@ class RedisPool:
         self._replica_pool = RedisPool.create_pool(
             host=REDIS_REPLICA_HOST, ssl=REDIS_SSL
         )
+
+    # Returns a Redis client that is not tenant-specific (used for auth operations)
+    def get_auth_client(self) -> Redis:
+        return Redis(connection_pool=self._pool)
 
     def get_client(self, tenant_id: str | None) -> Redis:
         if tenant_id is None:
@@ -271,6 +278,7 @@ async def get_async_redis_connection() -> aioredis.Redis:
 
                     if REDIS_SSL_CA_CERTS:
                         ssl_context.load_verify_locations(REDIS_SSL_CA_CERTS)
+
                     ssl_context.check_hostname = False
 
                     # Map your string to the proper ssl.CERT_* constant
@@ -285,6 +293,26 @@ async def get_async_redis_connection() -> aioredis.Redis:
 
     # Return the established connection (or pool) for all future operations
     return _async_redis_connection
+
+
+def retrieve_auth_expiration_from_redis(request: Request) -> datetime | None:
+    token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    if not token:
+        return None
+
+    redis = redis_pool.get_auth_client()
+    redis_key = REDIS_AUTH_KEY_PREFIX + token
+
+    # Get the TTL of the key
+    ttl = redis.ttl(redis_key)
+
+    # Check if ttl is a valid number
+    if not isinstance(ttl, (int, float)) or ttl <= 0:
+        return None  # Key doesn't exist, has no expiration, or invalid TTL
+
+    # Calculate the expiration datetime
+    expiration = datetime.now() + timedelta(seconds=float(ttl))
+    return expiration
 
 
 async def retrieve_auth_token_data_from_redis(request: Request) -> dict | None:
