@@ -8,16 +8,18 @@ sites = ["https://water.europa.eu/freshwater",
         "https://biodiversity.europa.eu",
         "https://forest.eea.europa.eu/"]
 
-threshold = 5
+THRESHOLD = 5
+TIMEOUT = 30000
 
 def wait_for_page(url, page):
-    logger.info(f"playwright attempt: {url}")
+    logger.info(f"================playwright attempt: {url}=========")
+
     found = False
     for site in sites:
         found = found or url.startswith(site)
     if not found:
         return page
-    page.wait_for_load_state("networkidle", timeout=300000)
+    page.wait_for_load_state("networkidle", timeout=TIMEOUT)
     page.wait_for_timeout(1000)
 
     heights = []
@@ -25,9 +27,27 @@ def wait_for_page(url, page):
         page.keyboard.press("PageDown");
 
         time.sleep(1)  # Give time for new content to load
-        page.wait_for_load_state("networkidle", timeout=300000)
+        page.wait_for_load_state("networkidle", timeout=TIMEOUT)
 
         heights.append(page.evaluate("document.body.scrollHeight"))
-        if len(heights) > threshold and heights[-1] == heights[-(1+threshold)]:
+        if len(heights) > THRESHOLD and heights[-1] == heights[-(1+THRESHOLD)]:
             break
     return page
+
+
+def stop_playwright(browser, playwright):
+    try:
+        if browser.is_connected():
+            for context in browser.contexts:
+                for page in context.pages:
+                    page.close()
+                context.close()
+
+            browser.close()
+            playwright.stop()
+            logger.info("playwright stopped")
+    except Exception as e:
+        logger.info("================failed to stop playwright=========")
+        pw_error = f"Failed to stop playwright: {e}"
+        logger.info(pw_error)
+        pass

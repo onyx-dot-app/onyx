@@ -36,7 +36,7 @@ from onyx.utils.sitemap import list_pages_for_site
 from onyx.utils.sitemap_eea import list_pages_for_site_eea
 from shared_configs.configs import MULTI_TENANT
 
-from onyx.utils.playwright import wait_for_page
+from onyx.utils.playwright import wait_for_page, stop_playwright
 
 logger = setup_logger()
 
@@ -169,7 +169,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
             {"Authorization": "Bearer {}".format(token["access_token"])}
         )
 
-    return playwright, context
+    return playwright, context, browser
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
@@ -286,7 +286,7 @@ class WebConnector(LoadConnector):
         at_least_one_doc = False
         last_error = None
 
-        playwright, context = start_playwright()
+        playwright, context, pw_browser = start_playwright()
         restart_playwright = False
         while to_visit:
             current_url = to_visit.pop()
@@ -306,7 +306,7 @@ class WebConnector(LoadConnector):
             try:
                 check_internet_connection(current_url)
                 if restart_playwright:
-                    playwright, context = start_playwright()
+                    playwright, context, pw_browser = start_playwright()
                     restart_playwright = False
 
                 if current_url.split(".")[-1] == "pdf":
@@ -391,7 +391,7 @@ class WebConnector(LoadConnector):
             except Exception as e:
                 last_error = f"Failed to fetch '{current_url}': {e}"
                 logger.exception(last_error)
-                playwright.stop()
+                stop_playwright(pw_browser, playwright)
                 restart_playwright = True
                 continue
 
