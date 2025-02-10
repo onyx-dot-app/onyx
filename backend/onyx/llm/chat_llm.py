@@ -27,6 +27,7 @@ from langchain_core.prompt_values import PromptValue
 
 from onyx.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.configs.chat_configs import QA_TIMEOUT
 from onyx.configs.model_configs import (
     DISABLE_LITELLM_STREAMING,
 )
@@ -35,6 +36,7 @@ from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
@@ -229,15 +231,15 @@ class DefaultMultiLLM(LLM):
     def __init__(
         self,
         api_key: str | None,
-        timeout: int,
         model_provider: str,
         model_name: str,
+        timeout: int | None = None,
         api_base: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
         max_output_tokens: int | None = None,
         custom_llm_provider: str | None = None,
-        temperature: float = GEN_AI_TEMPERATURE,
+        temperature: float | None = None,
         custom_config: dict[str, str] | None = None,
         extra_headers: dict[str, str] | None = None,
         extra_body: dict | None = LITELLM_EXTRA_BODY,
@@ -245,9 +247,16 @@ class DefaultMultiLLM(LLM):
         long_term_logger: LongTermLogger | None = None,
     ):
         self._timeout = timeout
+        if timeout is None:
+            if model_is_reasoning_model(model_name):
+                self._timeout = QA_TIMEOUT * 10  # Reasoning models are slow
+            else:
+                self._timeout = QA_TIMEOUT
+
+        self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
+
         self._model_provider = model_provider
         self._model_version = model_name
-        self._temperature = temperature
         self._api_key = api_key
         self._deployment_name = deployment_name
         self._api_base = api_base

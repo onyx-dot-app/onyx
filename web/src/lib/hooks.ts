@@ -647,11 +647,11 @@ export const useUserGroups = (): {
 
 const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   // OpenAI models
-  "o1-2025-12-17": "O1 (December 2025)",
-  "o3-mini": "O3 Mini",
-  "o1-mini": "O1 Mini",
-  "o1-preview": "O1 Preview",
-  o1: "O1",
+  "o1-2025-12-17": "o1 (December 2025)",
+  "o3-mini": "o3 Mini",
+  "o1-mini": "o1 Mini",
+  "o1-preview": "o1 Preview",
+  o1: "o1",
   "gpt-4": "GPT 4",
   "gpt-4o": "GPT 4o",
   "gpt-4o-2024-08-06": "GPT 4o (Structured Outputs)",
@@ -753,14 +753,7 @@ export function getDisplayNameForModel(modelName: string): string {
 }
 
 export const defaultModelsByProvider: { [name: string]: string[] } = {
-  openai: [
-    "gpt-4",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "o3-mini",
-    "o1-mini",
-    "o1-preview",
-  ],
+  openai: ["gpt-4", "gpt-4o", "gpt-4o-mini", "o3-mini", "o1-mini", "o1"],
   bedrock: [
     "meta.llama3-1-70b-instruct-v1:0",
     "meta.llama3-1-8b-instruct-v1:0",

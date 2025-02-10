@@ -29,11 +29,11 @@ OPENAI_PROVIDER_NAME = "openai"
 OPEN_AI_MODEL_NAMES = [
     "o3-mini",
     "o1-mini",
-    "o1-preview",
-    "o1-2024-12-17",
+    "o1",
     "gpt-4",
     "gpt-4o",
     "gpt-4o-mini",
+    "o1-preview",
     "gpt-4-turbo",
     "gpt-4-turbo-preview",
     "gpt-4-1106-preview",

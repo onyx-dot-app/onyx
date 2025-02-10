@@ -543,3 +543,14 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
             f"Failed to get model object for {model_provider}/{model_name}"
         )
         return False
+
+
+def model_is_reasoning_model(model_name: str) -> bool:
+    _REASONING_MODEL_NAMES = [
+        "o1",
+        "o1-mini",
+        "o3-mini",
+        "deepseek-reasoner",
+        "deepseek-r1",
+    ]
+    return model_name.lower() in _REASONING_MODEL_NAMES
