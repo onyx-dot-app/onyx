@@ -273,6 +273,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             border-r 
             dark:border-none
             dark:text-[#D4D4D4]
+            dark:bg-[#000]
             border-sidebar-border 
             flex 
             flex-col relative
