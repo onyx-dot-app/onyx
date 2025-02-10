@@ -15,6 +15,9 @@ def make_persona_private(
     group_ids: list[int] | None,
     db_session: Session,
 ) -> None:
+    """NOTE(rkuo): This function batches all updates into a single commit. If we don't
+    dedupe the inputs, the commit will exception."""
+
     db_session.query(Persona__User).filter(
         Persona__User.persona_id == persona_id
     ).delete(synchronize_session="fetch")
