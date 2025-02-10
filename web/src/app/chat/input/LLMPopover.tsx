@@ -161,7 +161,6 @@ export default function LLMPopover({
                     size: 16,
                     className: "flex-none my-auto text-black",
                   })}
-                  asdfasdf
                   <span className="line-clamp-1 ">
                     {getDisplayNameForModel(name)}
                   </span>

@@ -647,6 +647,7 @@ export const useUserGroups = (): {
 
 const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   // OpenAI models
+  "o1-2025-12-17": "O1 (December 2025)",
   "o3-mini": "O3 Mini",
   "o1-mini": "O1 Mini",
   "o1-preview": "O1 Preview",
