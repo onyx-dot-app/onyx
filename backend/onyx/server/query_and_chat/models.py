@@ -119,7 +119,7 @@ class CreateChatMessageRequest(ChunkContext):
     # this does persist in the chat thread details
     temperature_override: float | None = None
 
-    # allow user to specify an alternate assistnat
+    # allow user to specify an alternate assistant
     alternate_assistant_id: int | None = None
 
     # This takes the priority over the prompt_override

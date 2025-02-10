@@ -11,6 +11,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.models import UserFile
+from onyx.db.models import UserFolder
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
@@ -173,3 +174,39 @@ def save_files(urls: list[str], base64_files: list[str], tenant_id: str) -> list
     ]
 
     return run_functions_tuples_in_parallel(funcs)
+
+
+def load_all_persona_files_for_chat(
+    persona_id: int, db_session: Session
+) -> tuple[list[InMemoryChatFile], list[int]]:
+    from onyx.db.models import Persona
+    from sqlalchemy.orm import joinedload
+
+    persona = (
+        db_session.query(Persona)
+        .filter(Persona.id == persona_id)
+        .options(
+            joinedload(Persona.user_files),
+            joinedload(Persona.user_folders).joinedload(UserFolder.files),
+        )
+        .one()
+    )
+
+    persona_file_calls = [
+        (load_user_file, (user_file.id, db_session)) for user_file in persona.user_files
+    ]
+    persona_loaded_files = run_functions_tuples_in_parallel(persona_file_calls)
+
+    persona_folder_files = []
+    persona_folder_file_ids = []
+    for user_folder in persona.user_folders:
+        folder_files = load_user_folder(user_folder.id, db_session)
+        persona_folder_files.extend(folder_files)
+        persona_folder_file_ids.extend([file.id for file in user_folder.files])
+
+    persona_files = list(persona_loaded_files) + persona_folder_files
+    persona_file_ids = [
+        file.id for file in persona.user_files
+    ] + persona_folder_file_ids
+
+    return persona_files, persona_file_ids
