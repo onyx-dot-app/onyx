@@ -15,8 +15,6 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { AssistantVisibilityPopover } from "./AssistantVisibilityPopover";
-import { DeleteAssistantPopover } from "./DeleteAssistantPopover";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { useUser } from "@/components/user/UserProvider";
 import { useAssistants } from "@/components/context/AssistantsContext";
@@ -171,6 +169,7 @@ const AssistantCard: React.FC<{
                             ? "hover:bg-neutral-200 dark:hover:bg-neutral-700"
                             : "opacity-50 cursor-not-allowed"
                         }`}
+                        disabled={!isOwnedByUser}
                       >
                         <FiEdit size={12} className="inline mr-2" />
                         Edit
