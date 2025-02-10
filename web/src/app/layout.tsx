@@ -8,6 +8,7 @@ import {
   CUSTOM_ANALYTICS_ENABLED,
   GTM_ENABLED,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
+  NEXT_PUBLIC_CLOUD_ENABLED,
 } from "@/lib/constants";
 import { Metadata } from "next";
 import { buildClientUrl } from "@/lib/utilsSS";
@@ -25,6 +26,8 @@ import { LogoType } from "@/components/logo/Logo";
 import { Hanken_Grotesk } from "next/font/google";
 import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
+import CloudError from "@/components/errorPages/CloudErrorPage";
+import Error from "@/components/errorPages/ErrorPage";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -129,47 +132,7 @@ export default async function RootLayout({
 
   if (!combinedSettings) {
     return getPageContent(
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <div className="mb-2 flex items-center max-w-[175px]">
-          <LogoType />
-        </div>
-
-        <CardSection className="max-w-md">
-          <h1 className="text-2xl font-bold mb-4 text-error">Error</h1>
-          <p className="text-text-500">
-            Your Onyx instance was not configured properly and your settings
-            could not be loaded. This could be due to an admin configuration
-            issue, an incomplete setup, or backend services that may not be up
-            and running yet.
-          </p>
-          <p className="mt-4">
-            If you&apos;re an admin, please check{" "}
-            <a
-              className="text-link"
-              href="https://docs.onyx.app/introduction?utm_source=app&utm_medium=error_page&utm_campaign=config_error"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              our docs
-            </a>{" "}
-            to see how to configure Onyx properly. If you&apos;re a user, please
-            contact your admin to fix this error.
-          </p>
-          <p className="mt-4">
-            For additional support and guidance, you can reach out to our
-            community on{" "}
-            <a
-              className="text-link"
-              href="https://join.slack.com/t/danswer/shared_invite/zt-1w76msxmd-HJHLe3KNFIAIzk_0dSOKaQ"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Slack
-            </a>
-            .
-          </p>
-        </CardSection>
-      </div>
+      NEXT_PUBLIC_CLOUD_ENABLED ? <CloudError /> : <Error />
     );
   }
 

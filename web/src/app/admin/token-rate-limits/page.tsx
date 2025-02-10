@@ -140,7 +140,7 @@ function Main() {
       </ul>
 
       <CreateButton
-        href="/admin/token-rate-limits/new"
+        onClick={() => setModalIsOpen(true)}
         text="Create a Token Rate Limit"
       />
       {isPaidEnterpriseFeaturesEnabled && (

@@ -162,12 +162,12 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
         onDrop={handleDrop}
       >
         <div
-          className="sticky top-0 bg-background-sidebar z-10"
+          className="sticky top-0 bg-background-sidebar dark:bg-transparent z-10"
           style={{ zIndex: 1000 - index }}
         >
           <div
             ref={ref}
-            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 relative bg-background-sidebar sticky top-0"
+            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 relative sticky top-0"
             style={{ zIndex: 10 - index }}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}

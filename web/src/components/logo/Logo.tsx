@@ -9,15 +9,24 @@ export function Logo({
   height,
   width,
   className,
+  size = "default",
 }: {
   height?: number;
   width?: number;
   className?: string;
+  size?: "small" | "default" | "large";
 }) {
   const settings = useContext(SettingsContext);
 
-  height = height || 32;
-  width = width || 30;
+  const sizeMap = {
+    small: { height: 24, width: 22 },
+    default: { height: 32, width: 30 },
+    large: { height: 48, width: 45 },
+  };
+
+  const { height: defaultHeight, width: defaultWidth } = sizeMap[size];
+  height = height || defaultHeight;
+  width = width || defaultWidth;
 
   if (
     !settings ||
@@ -49,7 +58,11 @@ export function Logo({
   );
 }
 
-export function LogoType() {
+export function LogoType({
+  size = "default",
+}: {
+  size?: "small" | "default" | "large";
+}) {
   return (
     <OnyxLogoTypeIcon
       size={115}

@@ -112,7 +112,10 @@ function Main() {
   }
 
   const newApiKeyButton = (
-    <CreateButton href="/admin/api-key/new" text="Create API Key" />
+    <CreateButton
+      onClick={() => setShowCreateUpdateForm(true)}
+      text="Create API Key"
+    />
   );
 
   if (apiKeys.length === 0) {

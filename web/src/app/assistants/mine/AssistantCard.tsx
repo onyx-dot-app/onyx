@@ -15,8 +15,6 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { AssistantVisibilityPopover } from "./AssistantVisibilityPopover";
-import { DeleteAssistantPopover } from "./DeleteAssistantPopover";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { useUser } from "@/components/user/UserProvider";
 import { useAssistants } from "@/components/context/AssistantsContext";
@@ -149,14 +147,9 @@ const AssistantCard: React.FC<{
               )}
             </div>
             {isOwnedByUser && (
-              <div className="flex ml-2 items-center gap-x-2">
-                <Popover
-                  open={activePopover !== undefined}
-                  onOpenChange={(open) =>
-                    open ? setActivePopover(null) : setActivePopover(undefined)
-                  }
-                >
-                  <PopoverTrigger asChild>
+              <div className="flex ml-2 relative  items-center gap-x-2">
+                <Popover modal>
+                  <PopoverTrigger>
                     <button
                       type="button"
                       className="hover:bg-neutral-200 dark:hover:bg-neutral-700 p-1 -my-1 rounded-full"
@@ -165,86 +158,56 @@ const AssistantCard: React.FC<{
                     </button>
                   </PopoverTrigger>
                   <PopoverContent
-                    className={`z-[1000000] ${
-                      activePopover === null ? "w-32" : "w-80"
-                    } p-2`}
+                    className={`w-32 z-[10000] p-2 hover:bg-red-400`}
                   >
-                    {activePopover === null && (
-                      <div className="flex flex-col text-sm space-y-1">
+                    <div className="flex flex-col text-sm space-y-1">
+                      <button
+                        onClick={isOwnedByUser ? handleEdit : undefined}
+                        className={`w-full flex items-center text-left px-2 py-1 rounded ${
+                          isOwnedByUser
+                            ? "hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                            : "opacity-50 cursor-not-allowed"
+                        }`}
+                        disabled={!isOwnedByUser}
+                      >
+                        <FiEdit size={12} className="inline mr-2" />
+                        Edit
+                      </button>
+                      {isPaidEnterpriseFeaturesEnabled && isOwnedByUser && (
                         <button
-                          onClick={isOwnedByUser ? handleEdit : undefined}
-                          className={`w-full flex items-center text-left px-2 py-1 rounded ${
+                          onClick={
                             isOwnedByUser
-                              ? "hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                              ? () => {
+                                  router.push(
+                                    `/assistants/stats/${persona.id}`
+                                  );
+                                  closePopover();
+                                }
+                              : undefined
+                          }
+                          className={`w-full text-left items-center px-2 py-1 rounded ${
+                            isOwnedByUser
+                              ? "hover:bg-neutral-200 dark:hover:bg-neutral-800"
                               : "opacity-50 cursor-not-allowed"
                           }`}
-                          disabled={!isOwnedByUser}
                         >
-                          <FiEdit size={12} className="inline mr-2" />
-                          Edit
+                          <FiBarChart size={12} className="inline mr-2" />
+                          Stats
                         </button>
-                        {isPaidEnterpriseFeaturesEnabled && isOwnedByUser && (
-                          <button
-                            onClick={
-                              isOwnedByUser
-                                ? () => {
-                                    router.push(
-                                      `/assistants/stats/${persona.id}`
-                                    );
-                                    closePopover();
-                                  }
-                                : undefined
-                            }
-                            className={`w-full text-left items-center px-2 py-1 rounded ${
-                              isOwnedByUser
-                                ? "hover:bg-neutral-200 dark:hover:bg-neutral-800"
-                                : "opacity-50 cursor-not-allowed"
-                            }`}
-                            disabled={!isOwnedByUser}
-                          >
-                            <FiBarChart size={12} className="inline mr-2" />
-                            Stats
-                          </button>
-                        )}
-                        <button
-                          onClick={isOwnedByUser ? handleDelete : undefined}
-                          className={`w-full text-left  items-center  px-2 py-1 rounded ${
-                            isOwnedByUser
-                              ? "hover:bg-neutral-200 dark:hover:bg-neutral- text-red-600 dark:text-red-400"
-                              : "opacity-50 cursor-not-allowed text-red-300 dark:text-red-500"
-                          }`}
-                          disabled={!isOwnedByUser}
-                        >
-                          <FiTrash size={12} className="inline mr-2" />
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                    {activePopover === "visibility" && (
-                      <AssistantVisibilityPopover
-                        assistant={persona}
-                        user={user}
-                        allUsers={[]}
-                        onClose={closePopover}
-                        onTogglePublic={async (isPublic: boolean) => {
-                          await togglePersonaPublicStatus(persona.id, isPublic);
-                          await refreshAssistants();
-                        }}
-                      />
-                    )}
-                    {activePopover === "delete" && (
-                      <DeleteAssistantPopover
-                        entityName={persona.name}
-                        onClose={closePopover}
-                        onSubmit={async () => {
-                          const success = await deletePersona(persona.id);
-                          if (success) {
-                            await refreshAssistants();
-                          }
-                          closePopover();
-                        }}
-                      />
-                    )}
+                      )}
+                      <button
+                        onClick={isOwnedByUser ? handleDelete : undefined}
+                        className={`w-full text-left  items-center  px-2 py-1 rounded ${
+                          isOwnedByUser
+                            ? "hover:bg-neutral-200 dark:hover:bg-neutral- text-red-600 dark:text-red-400"
+                            : "opacity-50 cursor-not-allowed text-red-300 dark:text-red-500"
+                        }`}
+                        disabled={!isOwnedByUser}
+                      >
+                        <FiTrash size={12} className="inline mr-2" />
+                        Delete
+                      </button>
+                    </div>
                   </PopoverContent>
                 </Popover>
               </div>
