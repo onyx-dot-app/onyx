@@ -54,6 +54,7 @@ export default function LLMPopover({
       icon: React.FC<{ size?: number; className?: string }>;
     }[];
   } = {};
+
   const uniqueModelNames = new Set<string>();
 
   llmProviders.forEach((llmProvider) => {

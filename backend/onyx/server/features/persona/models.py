@@ -85,6 +85,8 @@ class PersonaUpsertRequest(BaseModel):
     label_ids: list[int] | None = None
     is_default_persona: bool = False
     display_priority: int | None = None
+    user_file_ids: list[int] | None = None
+    user_folder_ids: list[int] | None = None
 
 
 class PersonaSnapshot(BaseModel):

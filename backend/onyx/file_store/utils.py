@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import ChatMessage
+from onyx.db.models import UserFile
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.utils.b64 import get_image_type
@@ -51,6 +53,47 @@ def load_all_chat_files(
         ),
     )
     return files
+
+
+def load_all_user_files(
+    user_file_ids: list[int],
+    user_folder_ids: list[int],
+    db_session: Session,
+) -> list[InMemoryChatFile]:
+    return cast(
+        list[InMemoryChatFile],
+        run_functions_tuples_in_parallel(
+            [(load_user_file, (file_id, db_session)) for file_id in user_file_ids]
+        )
+        + [
+            file
+            for folder_id in user_folder_ids
+            for file in load_user_folder(folder_id, db_session)
+        ],
+    )
+
+
+def load_user_folder(folder_id: int, db_session: Session) -> list[InMemoryChatFile]:
+    user_files = (
+        db_session.query(UserFile).filter(UserFile.folder_id == folder_id).all()
+    )
+    return [load_user_file(file.id, db_session) for file in user_files]
+
+
+def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
+    user_file = db_session.query(UserFile).filter(UserFile.id == file_id).first()
+    if not user_file:
+        raise ValueError(f"User file with id {file_id} not found")
+
+    file_io = get_default_file_store(db_session).read_file(
+        user_file.document_id, mode="b"
+    )
+    return InMemoryChatFile(
+        file_id=str(user_file.id),
+        content=file_io.read(),
+        file_type=ChatFileType.PLAIN_TEXT,
+        filename=user_file.name,
+    )
 
 
 def save_file_from_url(url: str, tenant_id: str) -> str:

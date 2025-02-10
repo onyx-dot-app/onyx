@@ -1,3 +1,4 @@
+import { DocumentsProvider } from "./my-documents/DocumentsContext";
 import WrappedChat from "./WrappedChat";
 
 export default async function Page(props: {
@@ -6,5 +7,9 @@ export default async function Page(props: {
   const searchParams = await props.searchParams;
   const firstMessage = searchParams.firstMessage;
 
-  return <WrappedChat firstMessage={firstMessage} />;
+  return (
+    <DocumentsProvider>
+      <WrappedChat firstMessage={firstMessage} />
+    </DocumentsProvider>
+  );
 }

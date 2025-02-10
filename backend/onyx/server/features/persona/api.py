@@ -56,9 +56,7 @@ from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 
-
 logger = setup_logger()
-
 
 admin_router = APIRouter(prefix="/admin/persona")
 basic_router = APIRouter(prefix="/persona")
@@ -186,6 +184,7 @@ def create_persona(
         and len(persona_upsert_request.prompt_ids) > 0
         else None
     )
+
     prompt = upsert_prompt(
         db_session=db_session,
         user=user,

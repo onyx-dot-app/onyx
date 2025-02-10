@@ -98,6 +98,7 @@ def get_connector_credential_pairs_for_user(
     get_editable: bool = True,
     ids: list[int] | None = None,
     eager_load_connector: bool = False,
+    include_user_files: bool = False,
 ) -> list[ConnectorCredentialPair]:
     stmt = select(ConnectorCredentialPair).distinct()
 
@@ -108,17 +109,22 @@ def get_connector_credential_pairs_for_user(
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
 
+    if not include_user_files:
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
+
     return list(db_session.scalars(stmt).all())
 
 
 def get_connector_credential_pairs(
-    db_session: Session,
-    ids: list[int] | None = None,
+    db_session: Session, ids: list[int] | None = None, include_user_files: bool = False
 ) -> list[ConnectorCredentialPair]:
     stmt = select(ConnectorCredentialPair).distinct()
 
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
+
+    if not include_user_files:
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
 
     return list(db_session.scalars(stmt).all())
 
@@ -390,6 +396,7 @@ def add_credential_to_connector(
     initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
     last_successful_index_time: datetime | None = None,
     seeding_flow: bool = False,
+    is_user_file: bool = False,
 ) -> StatusResponse:
     connector = fetch_connector_by_id(connector_id, db_session)
 
@@ -455,6 +462,7 @@ def add_credential_to_connector(
         access_type=access_type,
         auto_sync_options=auto_sync_options,
         last_successful_index_time=last_successful_index_time,
+        is_user_file=is_user_file,
     )
     db_session.add(association)
     db_session.flush()  # make sure the association has an id
