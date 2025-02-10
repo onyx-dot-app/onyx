@@ -30,7 +30,6 @@ from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
-from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -72,18 +71,26 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if external group sync is due."""
 
     if cc_pair.access_type != AccessType.SYNC:
-        return False
-
-    # skip external group sync if not active
-    if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
+        task_logger.error(
+            f"Recieved non-sync CC Pair {cc_pair.id} for external "
+            f"group sync. Actual access type: {cc_pair.access_type}"
+        )
         return False
 
     if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+        task_logger.debug(
+            f"Skipping group sync for CC Pair {cc_pair.id} - "
+            f"CC Pair is being deleted"
+        )
         return False
 
     # If there is not group sync function for the connector, we don't run the sync
     # This is fine because all sources dont necessarily have a concept of groups
     if not GROUP_PERMISSIONS_FUNC_MAP.get(cc_pair.connector.source):
+        task_logger.debug(
+            f"Skipping group sync for CC Pair {cc_pair.id} - "
+            f"no group sync function for {cc_pair.connector.source}"
+        )
         return False
 
     # If the last sync is None, it has never been run so we run the sync
@@ -125,6 +132,9 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> bool 
 
     # these tasks should never overlap
     if not lock_beat.acquire(blocking=False):
+        task_logger.warning(
+            f"Failed to acquire beat lock for external group sync: {tenant_id}"
+        )
         return None
 
     try:
@@ -205,20 +215,12 @@ def try_creating_external_group_sync_task(
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
 
-    LOCK_TIMEOUT = 30
-
-    lock: RedisLock = r.lock(
-        DANSWER_REDIS_FUNCTION_LOCK_PREFIX + "try_generate_external_group_sync_tasks",
-        timeout=LOCK_TIMEOUT,
-    )
-
-    acquired = lock.acquire(blocking_timeout=LOCK_TIMEOUT / 2)
-    if not acquired:
-        return None
-
     try:
         # Dont kick off a new sync if the previous one is still running
         if redis_connector.external_group_sync.fenced:
+            logger.warning(
+                f"Skipping external group sync for CC Pair {cc_pair_id} - already running."
+            )
             return None
 
         redis_connector.external_group_sync.generator_clear()
@@ -269,9 +271,6 @@ def try_creating_external_group_sync_task(
             f"Unexpected exception while trying to create external group sync task: cc_pair={cc_pair_id}"
         )
         return None
-    finally:
-        if lock.owned():
-            lock.release()
 
     return payload_id
 
