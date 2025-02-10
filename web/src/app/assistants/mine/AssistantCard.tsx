@@ -171,7 +171,6 @@ const AssistantCard: React.FC<{
                             ? "hover:bg-neutral-200 dark:hover:bg-neutral-700"
                             : "opacity-50 cursor-not-allowed"
                         }`}
-                        // disabled={!isOwnedByUser}
                       >
                         <FiEdit size={12} className="inline mr-2" />
                         Edit
