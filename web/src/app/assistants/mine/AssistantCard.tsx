@@ -147,8 +147,8 @@ const AssistantCard: React.FC<{
               )}
             </div>
             {isOwnedByUser && (
-              <div className="flex ml-2 items-center gap-x-2">
-                <Popover>
+              <div className="flex ml-2 relative  items-center gap-x-2">
+                <Popover modal>
                   <PopoverTrigger>
                     <button
                       type="button"
@@ -158,8 +158,7 @@ const AssistantCard: React.FC<{
                     </button>
                   </PopoverTrigger>
                   <PopoverContent
-                    className={`w-32
-                    } p-2 hover:bg-red-400`}
+                    className={`w-32 z-[10000] p-2 hover:bg-red-400`}
                   >
                     <div className="flex flex-col text-sm space-y-1">
                       <button

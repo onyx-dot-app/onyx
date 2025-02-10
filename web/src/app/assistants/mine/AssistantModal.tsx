@@ -118,7 +118,7 @@ export function AssistantModal({
   return (
     <Dialog open={true} onOpenChange={(open) => !open && hideModal()}>
       <DialogContent
-        className="p-0 overflow-hidden max-h-[80vh] max-w-none w-[95%] bg-background rounded-sm shadow-2xl transform transition-all duration-300 ease-in-out relative w-11/12 max-w-4xl pt-10 pb-10  px-10  overflow-hidden flex flex-col   max-w-4xl"
+        className="p-0 max-h-[80vh] max-w-none w-[95%] bg-background rounded-sm shadow-2xl transform transition-all duration-300 ease-in-out relative w-11/12 max-w-4xl pt-10 pb-10  px-10   flex flex-col   max-w-4xl"
         style={{
           position: "fixed",
           top: "10vh",
