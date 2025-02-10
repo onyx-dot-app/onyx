@@ -120,6 +120,7 @@ class CredentialBase(BaseModel):
     name: str | None = None
     curator_public: bool = False
     groups: list[int] = Field(default_factory=list)
+    is_user_file: bool = False
 
 
 class CredentialSnapshot(CredentialBase):
@@ -412,7 +413,7 @@ class FileUploadResponse(BaseModel):
 
 
 class ObjectCreationIdResponse(BaseModel):
-    id: int | str
+    id: int
     credential: CredentialSnapshot | None = None
 
 

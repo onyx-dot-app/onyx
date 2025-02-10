@@ -33,6 +33,8 @@ from onyx.db.models import StarterMessage
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.models import UserFile
+from onyx.db.models import UserFolder
 from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -228,6 +230,8 @@ def create_update_persona(
             num_chunks=create_persona_request.num_chunks,
             llm_relevance_filter=create_persona_request.llm_relevance_filter,
             llm_filter_extraction=create_persona_request.llm_filter_extraction,
+            user_file_ids=create_persona_request.user_file_ids,
+            user_folder_ids=create_persona_request.user_folder_ids,
         )
 
         versioned_make_persona_private = fetch_versioned_implementation(
@@ -322,6 +326,8 @@ def get_personas_for_user(
             selectinload(Persona.groups),
             selectinload(Persona.users),
             selectinload(Persona.labels),
+            selectinload(Persona.user_files),
+            selectinload(Persona.user_folders),
         )
 
     results = db_session.execute(stmt).scalars().all()
@@ -416,6 +422,8 @@ def upsert_persona(
     builtin_persona: bool = False,
     is_default_persona: bool = False,
     label_ids: list[int] | None = None,
+    user_file_ids: list[int] | None = None,
+    user_folder_ids: list[int] | None = None,
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
 ) -> Persona:
@@ -441,6 +449,7 @@ def upsert_persona(
             user=user,
             get_editable=True,
         )
+
     # Fetch and attach tools by IDs
     tools = None
     if tool_ids is not None:
@@ -458,6 +467,26 @@ def upsert_persona(
         )
         if not document_sets and document_set_ids:
             raise ValueError("document_sets not found")
+
+    # Fetch and attach user_files by IDs
+    user_files = None
+    if user_file_ids is not None:
+        user_files = (
+            db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
+        )
+        if not user_files and user_file_ids:
+            raise ValueError("user_files not found")
+
+    # Fetch and attach user_folders by IDs
+    user_folders = None
+    if user_folder_ids is not None:
+        user_folders = (
+            db_session.query(UserFolder)
+            .filter(UserFolder.id.in_(user_folder_ids))
+            .all()
+        )
+        if not user_folders and user_folder_ids:
+            raise ValueError("user_folders not found")
 
     # Fetch and attach prompts by IDs
     prompts = None
@@ -521,6 +550,14 @@ def upsert_persona(
 
         if tools is not None:
             existing_persona.tools = tools or []
+
+        if user_file_ids is not None:
+            existing_persona.user_files.clear()
+            existing_persona.user_files = user_files or []
+
+        if user_folder_ids is not None:
+            existing_persona.user_folders.clear()
+            existing_persona.user_folders = user_folders or []
 
         # We should only update display priority if it is not already set
         if existing_persona.display_priority is None:

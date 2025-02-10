@@ -91,6 +91,8 @@ class CreateChatMessageRequest(ChunkContext):
     message: str
     # Files that we should attach to this message
     file_descriptors: list[FileDescriptor]
+    user_file_ids: list[int] = []
+    user_folder_ids: list[int] = []
 
     # If no prompt provided, uses the largest prompt of the chat session
     # but really this should be explicitly specified, only in the simplified APIs is this inferred
@@ -133,6 +135,8 @@ class CreateChatMessageRequest(ChunkContext):
     # forces the LLM to return a structured response, see
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
+
+    force_user_file_search: bool = False
 
     # If true, ignores most of the search options and uses pro search instead.
     # TODO: decide how many of the above options we want to pass through to pro search

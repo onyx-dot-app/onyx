@@ -84,6 +84,7 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import load_all_chat_files
+from onyx.file_store.utils import load_all_user_files
 from onyx.file_store.utils import save_files
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
@@ -259,8 +260,11 @@ def _get_force_search_settings(
     search_tool_available = any(isinstance(tool, SearchTool) for tool in tools)
 
     if not internet_search_available and not search_tool_available:
-        # Does not matter much which tool is set here as force is false and neither tool is available
-        return ForceUseTool(force_use=False, tool_name=SearchTool._NAME)
+        if new_msg_req.force_user_file_search:
+            return ForceUseTool(force_use=True, tool_name=SearchTool._NAME)
+        else:
+            # Does not matter much which tool is set here as force is false and neither tool is available
+            return ForceUseTool(force_use=False, tool_name=SearchTool._NAME)
 
     tool_name = SearchTool._NAME if search_tool_available else InternetSearchTool._NAME
     # Currently, the internet search tool does not support query override
@@ -276,6 +280,7 @@ def _get_force_search_settings(
 
     should_force_search = any(
         [
+            new_msg_req.force_user_file_search,
             new_msg_req.retrieval_options
             and new_msg_req.retrieval_options.run_search
             == OptionalSearchSetting.ALWAYS,
@@ -534,6 +539,15 @@ def stream_chat_message_objects(
         req_file_ids = [f["id"] for f in new_msg_req.file_descriptors]
         latest_query_files = [file for file in files if file.file_id in req_file_ids]
 
+        if not new_msg_req.force_user_file_search:
+            user_files = load_all_user_files(
+                new_msg_req.user_file_ids,
+                new_msg_req.user_folder_ids,
+                db_session,
+            )
+
+            latest_query_files += user_files
+
         if user_message:
             attach_files_to_chat_message(
                 chat_message=user_message,
@@ -676,6 +690,7 @@ def stream_chat_message_objects(
             user=user,
             llm=llm,
             fast_llm=fast_llm,
+            use_file_search=new_msg_req.force_user_file_search,
             search_tool_config=SearchToolConfig(
                 answer_style_config=answer_style_config,
                 document_pruning_config=document_pruning_config,

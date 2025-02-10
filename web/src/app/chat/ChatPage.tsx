@@ -58,7 +58,6 @@ import {
 } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES, shouldSubmitOnLoad } from "./searchParams";
-import { useDocumentSelection } from "./useDocumentSelection";
 import { LlmOverride, useFilters, useLlmOverride } from "@/lib/hooks";
 import { ChatState, FeedbackType, RegenerationState } from "./types";
 import { DocumentResults } from "./documentSidebar/DocumentResults";
@@ -88,16 +87,15 @@ import { ChatInputBar } from "./input/ChatInputBar";
 import { useChatContext } from "@/components/context/ChatContext";
 import { v4 as uuidv4 } from "uuid";
 import { ChatPopup } from "./ChatPopup";
-
 import FunctionalHeader from "@/components/chat/Header";
 import { useSidebarVisibility } from "@/components/chat/hooks";
 import {
   PRO_SEARCH_TOGGLED_COOKIE_NAME,
   SIDEBAR_TOGGLED_COOKIE_NAME,
 } from "@/components/resizable/constants";
-import FixedLogo from "../../components/logo/FixedLogo";
+import FixedLogo from "@/components/logo/FixedLogo";
 
-import { DeleteEntityModal } from "../../components/modals/DeleteEntityModal";
+import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
 import { MinimalMarkdown } from "@/components/chat/MinimalMarkdown";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 
@@ -124,12 +122,16 @@ import { UserSettingsModal } from "./modal/UserSettingsModal";
 import { AlignStartVertical } from "lucide-react";
 import { AgenticMessage } from "./message/AgenticMessage";
 import AssistantModal from "../assistants/mine/AssistantModal";
+import { useSidebarShortcut } from "@/lib/browserUtilities";
+import { FilePickerModal } from "./my-documents/components/FilePicker";
+
+import { SourceMetadata } from "@/lib/search/interfaces";
+import { ValidSources } from "@/lib/types";
 import {
-  OperatingSystem,
-  useOperatingSystem,
-  useSidebarShortcut,
-} from "@/lib/browserUtilities";
-import { Button } from "@/components/ui/button";
+  FileUploadResponse,
+  FileResponse,
+  useDocumentsContext,
+} from "./my-documents/DocumentsContext";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -161,10 +163,22 @@ export function ChatPage({
     proSearchToggled,
   } = useChatContext();
 
+  const {
+    selectedFiles,
+    selectedFolders,
+    addSelectedFile,
+    addSelectedFolder,
+    removeSelectedFolder,
+    clearSelectedItems,
+    folders: userFolders,
+    uploadFile,
+  } = useDocumentsContext();
+
   const defaultAssistantIdRaw = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
   const defaultAssistantId = defaultAssistantIdRaw
     ? parseInt(defaultAssistantIdRaw)
     : undefined;
+  const [forceUserFileSearch, setForceUserFileSearch] = useState(true);
 
   function useScreenSize() {
     const [screenSize, setScreenSize] = useState({
@@ -204,6 +218,8 @@ export function ChatPage({
   const settings = useContext(SettingsContext);
   const enterpriseSettings = settings?.enterpriseSettings;
 
+  const [viewingFilePicker, setViewingFilePicker] = useState(false);
+  const [toggleDocSelection, setToggleDocSelection] = useState(false);
   const [documentSidebarToggled, setDocumentSidebarToggled] = useState(false);
   const [proSearchEnabled, setProSearchEnabled] = useState(proSearchToggled);
   const [streamingAllowed, setStreamingAllowed] = useState(false);
@@ -357,9 +373,14 @@ export function ChatPage({
 
   const noAssistants = liveAssistant == null || liveAssistant == undefined;
 
-  const availableSources = ccPairs.map((ccPair) => ccPair.source);
-  const uniqueSources = Array.from(new Set(availableSources));
-  const sources = uniqueSources.map((source) => getSourceMetadata(source));
+  const availableSources: ValidSources[] = useMemo(() => {
+    return ccPairs.map((ccPair) => ccPair.source);
+  }, [ccPairs]);
+
+  const sources: SourceMetadata[] = useMemo(() => {
+    const uniqueSources = Array.from(new Set(availableSources));
+    return uniqueSources.map((source) => getSourceMetadata(source));
+  }, [availableSources]);
 
   const stopGenerating = () => {
     const currentSession = currentSessionId();
@@ -546,6 +567,18 @@ export function ChatPage({
     initialSessionFetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingChatSessionId, searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID)]);
+
+  useEffect(() => {
+    const userFolderId = searchParams.get(SEARCH_PARAM_NAMES.USER_FOLDER_ID);
+    if (userFolderId) {
+      const userFolder = userFolders.find(
+        (folder) => folder.id === parseInt(userFolderId)
+      );
+      if (userFolder) {
+        addSelectedFolder(userFolder);
+      }
+    }
+  }, [userFolders, searchParams.get(SEARCH_PARAM_NAMES.USER_FOLDER_ID)]);
 
   const [message, setMessage] = useState(
     searchParams.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
@@ -832,13 +865,6 @@ export function ChatPage({
       );
     }
   }, [submittedMessage, currentSessionChatState]);
-
-  const [
-    selectedDocuments,
-    toggleDocumentSelection,
-    clearSelectedDocuments,
-    selectedDocumentTokens,
-  ] = useDocumentSelection();
   // just choose a conservative default, this will be updated in the
   // background on initial load / on persona change
   const [maxTokens, setMaxTokens] = useState<number>(4096);
@@ -1302,7 +1328,9 @@ export function ChatPage({
           filterManager.selectedSources,
           filterManager.selectedDocumentSets,
           filterManager.timeRange,
-          filterManager.selectedTags
+          filterManager.selectedTags,
+          selectedFiles.map((file) => file.id),
+          selectedFolders.map((folder) => folder.id)
         ),
         selectedDocumentIds: selectedDocuments
           .filter(
@@ -1312,6 +1340,8 @@ export function ChatPage({
           .map((document) => document.db_doc_id as number),
         queryOverride,
         forceSearch,
+        userFolderIds: selectedFolders.map((folder) => folder.id),
+        userFileIds: selectedFiles.map((file) => file.id),
         regenerate: regenerationRequest !== undefined,
         modelProvider:
           modelOverRide?.name ||
@@ -1330,6 +1360,7 @@ export function ChatPage({
           !settings?.settings.pro_search_disabled &&
           proSearchEnabled &&
           retrievalEnabled,
+        forceUserFileSearch: forceUserFileSearch,
       });
 
       const delay = (ms: number) => {
@@ -1772,17 +1803,61 @@ export function ChatPage({
     };
     updateChatState("uploading", currentSessionId());
 
-    await uploadFilesForChat(acceptedFiles).then(([files, error]) => {
-      if (error) {
-        setCurrentMessageFiles((prev) => removeTempFiles(prev));
-        setPopup({
-          type: "error",
-          message: error,
-        });
-      } else {
-        setCurrentMessageFiles((prev) => [...removeTempFiles(prev), ...files]);
+    // const files = await uploadFilesForChat(acceptedFiles).then(
+    //   ([files, error]) => {
+    //     if (error) {
+    //       setCurrentMessageFiles((prev) => removeTempFiles(prev));
+    //       setPopup({
+    //         type: "error",
+    //         message: error,
+    //       });
+    //     } else {
+    //       setCurrentMessageFiles((prev) => [
+    //         ...removeTempFiles(prev),
+    //         ...files,
+    //       ]);
+    //     }
+    //     return files;
+    //   }
+    // );
+
+    for (let i = 0; i < acceptedFiles.length; i++) {
+      const file = acceptedFiles[i];
+      const formData = new FormData();
+      formData.append("files", file);
+      const response: FileUploadResponse = await uploadFile(formData, null);
+
+      if (response.file_paths && response.file_paths.length > 0) {
+        const uploadedFile: FileResponse = {
+          id: Date.now(),
+          name: file.name,
+          document_id: response.file_paths[0],
+          folder_id: null,
+          size: file.size,
+          type: file.type,
+          lastModified: new Date().toISOString(),
+          token_count: 0,
+        };
+        addSelectedFile(uploadedFile);
       }
-    });
+    }
+
+    // const fileToAdd: FileResponse[] = files.map((file: FileDescriptor) => {
+    //   return {
+    //     document_id: file.id,
+    //     type: file.type.startsWith("image/")
+    //       ? ChatFileType.IMAGE
+    //       : ChatFileType.DOCUMENT,
+    //     name: file.name || "Name not available",
+    //     size: 10,
+    //     folder_id: -1,
+    //     id: 10,
+    //   };
+    // });
+    // setSelectedFiles((prevFiles: FileResponse[]) => [
+    //   ...prevFiles,
+    //   ...fileToAdd,
+    // ]);
     updateChatState("input", currentSessionId());
   };
 
@@ -2015,6 +2090,11 @@ export function ChatPage({
   const [settingsToggled, setSettingsToggled] = useState(false);
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
 
+  const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
+    []
+  );
+  const [selectedDocumentTokens, setSelectedDocumentTokens] = useState(0);
+
   const currentPersona = alternativeAssistant || liveAssistant;
 
   useEffect(() => {
@@ -2104,6 +2184,28 @@ export function ChatPage({
       </>
     );
 
+  const clearSelectedDocuments = () => {
+    setSelectedDocuments([]);
+    setSelectedDocumentTokens(0);
+    clearSelectedItems();
+  };
+
+  const toggleDocumentSelection = (document: OnyxDocument) => {
+    setSelectedDocuments((prev) =>
+      prev.some((d) => d.document_id === document.document_id)
+        ? prev.filter((d) => d.document_id !== document.document_id)
+        : [...prev, document]
+    );
+  };
+
+  const handleFileUpload = async (files: File[]) => {
+    // Implement file upload logic here
+    // After successful upload, you might want to add the file to selected files
+    // For example:
+    // const uploadedFile = await uploadFile(files[0]);
+    // addSelectedFile(uploadedFile);
+  };
+
   return (
     <>
       <HealthCheckBanner />
@@ -2175,6 +2277,23 @@ export function ChatPage({
             setUserSettingsToggled(false);
             setSettingsToggled(false);
           }}
+        />
+      )}
+
+      {toggleDocSelection && (
+        <FilePickerModal
+          buttonContent="Set as Context"
+          title="User Documents"
+          isOpen={true}
+          onClose={() => setToggleDocSelection(false)}
+          onSave={() => {
+            setToggleDocSelection(false);
+          }}
+          selectedFiles={selectedFiles}
+          selectedFolders={selectedFolders}
+          addSelectedFile={addSelectedFile}
+          addSelectedFolder={addSelectedFolder}
+          removeSelectedFile={() => {}}
         />
       )}
 
@@ -3085,28 +3204,29 @@ export function ChatPage({
                               availableDocumentSets={documentSets}
                               availableTags={tags}
                               filterManager={filterManager}
-                              llmOverrideManager={llmOverrideManager}
-                              removeDocs={() => {
-                                clearSelectedDocuments();
-                              }}
                               retrievalEnabled={retrievalEnabled}
+                              toggleDocSelection={() =>
+                                setToggleDocSelection(true)
+                              }
+                              removeDocs={clearSelectedItems}
                               showConfigureAPIKey={() =>
                                 setShowApiKeyModal(true)
                               }
-                              chatState={currentSessionChatState}
-                              stopGenerating={stopGenerating}
                               selectedDocuments={selectedDocuments}
-                              // assistant stuff
-                              selectedAssistant={liveAssistant}
-                              setAlternativeAssistant={setAlternativeAssistant}
-                              alternativeAssistant={alternativeAssistant}
-                              // end assistant stuff
                               message={message}
                               setMessage={setMessage}
+                              stopGenerating={stopGenerating}
                               onSubmit={onSubmit}
+                              llmOverrideManager={llmOverrideManager}
+                              chatState={currentSessionChatState}
+                              alternativeAssistant={alternativeAssistant}
+                              selectedAssistant={
+                                selectedAssistant || finalAssistants[0]
+                              }
+                              setAlternativeAssistant={setAlternativeAssistant}
                               files={currentMessageFiles}
                               setFiles={setCurrentMessageFiles}
-                              handleFileUpload={handleImageUpload}
+                              handleFileUpload={handleFileUpload}
                               textAreaRef={textAreaRef}
                             />
                             {enterpriseSettings &&
@@ -3177,6 +3297,24 @@ export function ChatPage({
           <FixedLogo backgroundToggled={toggledSidebar || showHistorySidebar} />
         </div>
         {/* Right Sidebar - DocumentSidebar */}
+      </div>
+
+      {/* Add the fixed toggle button */}
+      <div className="fixed right-4 top-1/2 transform -translate-y-1/2 z-50">
+        <button
+          onClick={() => {
+            setPopup({
+              message: "This feature is not available yet.",
+              type: "error",
+            });
+            setForceUserFileSearch(!forceUserFileSearch);
+          }}
+          className={`p-2 rounded-full ${
+            forceUserFileSearch ? "bg-blue-500" : "bg-gray-300"
+          } transition-colors duration-200`}
+        >
+          {forceUserFileSearch ? "On" : "Off"}
+        </button>
       </div>
     </>
   );

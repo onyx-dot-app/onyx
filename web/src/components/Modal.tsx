@@ -116,7 +116,7 @@ export function Modal({
                   {icon && icon({ size: 30 })}
                 </h2>
               </div>
-              {!hideDividerForTitle && <Separator />}
+              {!hideDividerForTitle ? <Separator /> : <div className="my-4" />}
             </>
           )}
         </div>

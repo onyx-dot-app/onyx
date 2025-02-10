@@ -9,11 +9,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Download, XIcon, ZoomIn, ZoomOut } from "lucide-react";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { MinimalMarkdown } from "./MinimalMarkdown";
 
 interface TextViewProps {
-  presentingDocument: OnyxDocument;
+  presentingDocument: MinimalOnyxDocument;
   onClose: () => void;
 }
 
@@ -55,7 +55,9 @@ export default function TextView({
 
   const fetchFile = useCallback(async () => {
     setIsLoading(true);
-    const fileId = presentingDocument.document_id.split("__")[1];
+    const fileId =
+      presentingDocument.document_id.split("__")[1] ||
+      presentingDocument.document_id;
 
     try {
       const response = await fetch(
@@ -107,7 +109,7 @@ export default function TextView({
   const handleDownload = () => {
     const link = document.createElement("a");
     link.href = fileUrl;
-    link.download = fileName;
+    link.download = presentingDocument.document_id || fileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -120,7 +122,7 @@ export default function TextView({
     <Dialog open onOpenChange={onClose}>
       <DialogContent
         hideCloseIcon
-        className="max-w-5xl w-[90vw] flex flex-col justify-between gap-y-0 h-full max-h-[80vh] p-0"
+        className="max-w-4xl w-[90vw] flex flex-col justify-between gap-y-0 h-full max-h-[80vh] p-0"
       >
         <DialogHeader className="px-4 mb-0 pt-2 pb-3 flex flex-row items-center justify-between border-b">
           <DialogTitle className="text-lg font-medium truncate">
@@ -146,7 +148,6 @@ export default function TextView({
             </Button>
           </div>
         </DialogHeader>
-
         <div className="mt-0 rounded-b-lg flex-1 overflow-hidden">
           <div className="flex items-center justify-center w-full h-full">
             {isLoading ? (
