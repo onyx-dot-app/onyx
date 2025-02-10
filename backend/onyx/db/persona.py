@@ -228,6 +228,7 @@ def create_update_persona(
             num_chunks=create_persona_request.num_chunks,
             llm_relevance_filter=create_persona_request.llm_relevance_filter,
             llm_filter_extraction=create_persona_request.llm_filter_extraction,
+            is_default_persona=create_persona_request.is_default_persona,
         )
 
         versioned_make_persona_private = fetch_versioned_implementation(
