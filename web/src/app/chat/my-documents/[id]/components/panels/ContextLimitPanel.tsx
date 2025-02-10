@@ -26,26 +26,29 @@ export function ContextLimitPanel({
   onSelectModel,
 }: ContextLimitPanelProps) {
   return (
-    <div className="p-4 border-b border-[#d9d9d0]">
-      <div className="flex items-center justify-between" onClick={onToggle}>
+    <div className="p-4 border-b border-neutral-200 dark:border-neutral-700">
+      <div
+        className="flex items-center justify-between text-[#13343a] dark:text-neutral-300"
+        onClick={onToggle}
+      >
         <div className="flex items-center">
-          <Info className="w-5 h-4 mr-3 text-[#13343a]" />
-          <span className="text-[#13343a] text-sm font-medium leading-tight">
+          <Info className="w-5 h-4 mr-3" />
+          <span className="text-sm font-medium leading-tight">
             Context Limit
           </span>
         </div>
 
         <Button variant="ghost" size="sm" className="w-6 h-6 p-0 rounded-full">
           {isOpen ? (
-            <ChevronDown className="w-[15px] h-3 text-[#13343a]" />
+            <ChevronDown className="w-[15px] h-3" />
           ) : (
-            <ChevronRight className="w-[15px] h-3 text-[#13343a]" />
+            <ChevronRight className="w-[15px] h-3" />
           )}
         </Button>
       </div>
 
       {isOpen && (
-        <div className="mt-2 text-[#64645e] text-sm font-normal leading-tight">
+        <div className="mt-2 text-neutral-600 dark:text-neutral-400 text-sm font-normal leading-tight">
           <div className="mb-2">
             <ModelSelector
               models={modelDescriptors}
@@ -56,7 +59,7 @@ export function ContextLimitPanel({
           <div className="mb-1">
             Tokens: {totalTokens} / {maxTokens}
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div className="w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-2.5">
             <div
               className={`h-2.5 rounded-full ${
                 tokenPercentage > 100 ? "bg-green-600" : "bg-blue-600"
@@ -65,7 +68,7 @@ export function ContextLimitPanel({
             ></div>
           </div>
           {tokenPercentage > 100 && (
-            <div className="mt-1 text-xs text-text-500">
+            <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
               Capacity exceeded. Search will be performed over content.
             </div>
           )}

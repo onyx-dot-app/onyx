@@ -30,8 +30,8 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       <Tooltip delayDuration={0}>
         <TooltipTrigger className="mt-6 w-full">
           <div
-            className={` border border-neutral-200 bg-transparent rounded-lg p-4 shadow-sm ${
-              !disabled && "hover:bg-neutral-50"
+            className={`border border-neutral-200 dark:border-neutral-700 bg-transparent rounded-lg p-4 shadow-sm ${
+              !disabled && "hover:bg-neutral-50 dark:hover:bg-neutral-800"
             } transition-colors duration-200 ${
               disabled ? "cursor-not-allowed" : "cursor-pointer"
             }`}
@@ -43,10 +43,10 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               }`}
             >
               <div className="flex flex-col gap-y-2 items-center justify-between">
-                <p className="flex flex-col text-center text-sm text-gray-500">
+                <p className="flex flex-col text-center text-sm text-neutral-500 dark:text-neutral-400">
                   Add files to this project
                 </p>
-                <Upload className="w-5 h-5 text-gray-400" />
+                <Upload className="w-5 h-5 text-neutral-400 dark:text-neutral-500" />
               </div>
               <input
                 disabled={disabled}

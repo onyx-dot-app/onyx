@@ -74,7 +74,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
       className={`p-2 group ${
         view === "grid"
           ? "flex flex-col items-center"
-          : "flex items-center justify-between hover:bg-neutral-100 rounded cursor-pointer"
+          : "flex items-center justify-between hover:bg-neutral-100  dark:hover:bg-neutral-900  dark:hover:text-neutral-100 rounded cursor-pointer"
       }`}
     >
       <div

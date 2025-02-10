@@ -66,7 +66,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
       )}
 
       <div className="flex justify-between items-center">
-        <h2 className="text-sm font-semibold">Documents in this Project</h2>
+        <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
+          Documents in this Project
+        </h2>
         <Button onClick={toggleView} variant="outline" size="sm">
           {view === "grid" ? <List size={16} /> : <Grid size={16} />}
         </Button>

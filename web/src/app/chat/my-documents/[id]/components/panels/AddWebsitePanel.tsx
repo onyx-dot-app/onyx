@@ -29,22 +29,22 @@ export function AddWebsitePanel({
   };
 
   return (
-    <div className="p-4 border-b border-[#d9d9d0]">
+    <div className="p-4 border-b border-neutral-200 dark:border-neutral-700">
       <div
-        className="flex items-center justify-between w-full cursor-pointer"
+        className="flex items-center justify-between w-full cursor-pointer text-[#13343a] dark:text-neutral-300"
         onClick={() => setIsOpen(!isOpen)}
       >
         <div className="flex items-center">
-          <Link className="w-5 h-4 mr-3 text-[#13343a]" />
-          <span className="text-[#13343a] text-sm font-medium leading-tight">
+          <Link className="w-5 h-4 mr-3" />
+          <span className="text-sm font-medium leading-tight">
             Add a website
           </span>
         </div>
         <Button variant="ghost" size="icon" className="w-6 h-6 p-0">
           {isOpen ? (
-            <ChevronDown className="w-4 h-4 text-[#13343a]" />
+            <ChevronDown className="w-4 h-4" />
           ) : (
-            <ChevronRight className="w-4 h-4 text-[#13343a]" />
+            <ChevronRight className="w-4 h-4" />
           )}
         </Button>
       </div>
@@ -56,7 +56,7 @@ export function AddWebsitePanel({
             value={linkUrl}
             onChange={(e) => setLinkUrl(e.target.value)}
             placeholder="Enter URL"
-            className="flex-grow !text-sm mr-2 px-2 py-1 border border-gray-300 rounded"
+            className="flex-grow !text-sm mr-2 px-2 py-1 border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
           />
           <Button
             variant="default"

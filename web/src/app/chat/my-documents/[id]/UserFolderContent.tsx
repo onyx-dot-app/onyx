@@ -247,7 +247,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
       <div className="flex justify-between items-start mb-6">
         <div className="flex-1 mr-4">
           <div
-            className="flex text-sm mb-4 items-center cursor-pointer"
+            className="flex text-sm mb-4 items-center cursor-pointer text-neutral-700 dark:text-neutral-300"
             onClick={handleBack}
           >
             <ArrowLeft className="h-4 w-4 mr-2" /> Back to My Knowledge Groups
@@ -272,7 +272,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           ) : (
             <div className="flex items-center">
               <h1
-                className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden cursor-pointer mr-4"
+                className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden cursor-pointer mr-4 text-neutral-900 dark:text-neutral-100"
                 onClick={() =>
                   handleRenameItem(folderDetails.id, folderDetails.name, true)
                 }
@@ -281,7 +281,9 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
               </h1>
             </div>
           )}
-          <p className="text-gray-600 mb-4">{folderDetails.description}</p>
+          <p className="text-neutral-600 dark:text-neutral-200 mb-4">
+            {folderDetails.description}
+          </p>
 
           <DocumentList
             isLoading={false}
@@ -301,7 +303,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           />
         </div>
 
-        <div className="w-[313.33px] bg-white mt-20 relative rounded-md border border-[#d9d9d0]/50 overflow-hidden">
+        <div className="w-[313.33px] bg-[#fff] dark:bg-neutral-800 mt-20 relative rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden">
           <ContextLimitPanel
             isOpen={isCapacityOpen}
             onToggle={() => setIsCapacityOpen(!isCapacityOpen)}

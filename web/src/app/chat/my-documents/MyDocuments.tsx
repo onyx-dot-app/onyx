@@ -274,7 +274,7 @@ export default function MyDocuments() {
 
   return (
     <div className="min-h-full w-full min-w-0 flex-1 mx-auto mt-4 w-full max-w-5xl flex-1 px-4 pb-20 md:pl-8 lg:mt-6 md:pr-8 2xl:pr-14">
-      <header className="flex bg-background w-full items-center justify-between gap-4  pt-2  -translate-y-px">
+      <header className="flex  w-full items-center justify-between gap-4  pt-2  -translate-y-px">
         <h1 className=" flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden">
           Knowledge Groups
         </h1>
@@ -297,16 +297,16 @@ export default function MyDocuments() {
       <main className="w-full mt-4">
         <div className=" top-3 w-full z-[5] flex gap-4 bg-gradient-to-b via-50% max-lg:flex-col lg:sticky lg:items-center">
           <div className="flex justify-between  w-full ">
-            <div className="bg-background-000 border md:max-w-96 border-border-200 hover:border-border-100 transition-colors placeholder:text-text-500 focus:border-accent-secondary-100 focus-within:!border-accent-secondary-100 focus:ring-0 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 h-11 px-3 rounded-[0.6rem] w-full inline-flex cursor-text items-stretch gap-2">
+            <div className="bg-background-000 dark:bg-neutral-800 border md:max-w-96 border-border-200 dark:border-neutral-700 hover:border-border-100 dark:hover:border-neutral-600 transition-colors placeholder:text-text-500 dark:placeholder:text-neutral-400 focus:border-accent-secondary-100 focus-within:!border-accent-secondary-100 focus:ring-0 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 h-11 px-3 rounded-[0.6rem] w-full inline-flex cursor-text items-stretch gap-2">
               <div className="flex items-center">
-                <Search className="h-4 w-4 text-text-400" />
+                <Search className="h-4 w-4 text-text-400 dark:text-neutral-400" />
               </div>
               <input
                 type="text"
                 placeholder="Search groups..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full placeholder:text-text-500 m-0 bg-transparent p-0 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full placeholder:text-text-500 dark:placeholder:text-neutral-400 m-0 bg-transparent p-0 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
             <SortSelector onSortChange={handleSortChange} />
@@ -314,7 +314,7 @@ export default function MyDocuments() {
         </div>
         {isPending && (
           <div className="flex fixed left-20 top-1/3 justify-center items-center mt-4">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <Loader2 className="h-6 w-6 animate-spin text-primary dark:text-neutral-300" />
           </div>
         )}
         {presentingDocument && (
@@ -349,10 +349,10 @@ export default function MyDocuments() {
           ) : (
             <div className="flex flex-col items-center justify-center h-64">
               <FolderOpen
-                className="w-20 h-20 text-orange-400 mb-4 "
+                className="w-20 h-20 text-orange-400 dark:text-orange-300 mb-4 "
                 strokeWidth={1.5}
               />
-              <p className="text-text-500 text-lg font-normal">
+              <p className="text-text-500 dark:text-neutral-400 text-lg font-normal">
                 No items found
               </p>
             </div>
