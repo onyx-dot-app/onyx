@@ -62,7 +62,7 @@ export function Popover({
       <RadixPopover.Portal>
         <RadixPopover.Content
           className={`
-            PopoverContent z-[100] 
+            PopoverContent z-50 
             ${contentClassName}
             ${matchWidth ? " PopoverContentMatchWidth" : ""}
           `}

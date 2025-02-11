@@ -132,8 +132,13 @@ def fetch_chat_sessions_eagerly_by_time(
     end: datetime,
     db_session: Session,
     limit: int | None = 500,
+    offset: int | None = 0,
     initial_time: datetime | None = None,
 ) -> list[ChatSession]:
+    """
+    Fetch chunks of ChatSession objects eagerly by time, supporting pagination
+    with limit/offset.
+    """
     time_order: UnaryExpression = desc(ChatSession.time_created)
     message_order: UnaryExpression = asc(ChatMessage.id)
 
@@ -150,6 +155,7 @@ def fetch_chat_sessions_eagerly_by_time(
         .order_by(ChatSession.id, time_order)
         .distinct(ChatSession.id)
         .limit(limit)
+        .offset(offset)
         .subquery()
     )
 
@@ -167,6 +173,4 @@ def fetch_chat_sessions_eagerly_by_time(
         .order_by(time_order, message_order)
     )
 
-    chat_sessions = query.all()
-
-    return chat_sessions
+    return query.all()

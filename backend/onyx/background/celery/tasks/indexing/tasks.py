@@ -68,6 +68,8 @@ logger = setup_logger()
 def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
     """a lightweight task used to kick off indexing tasks.
     Occcasionally does some validation of existing state to clear up error conditions"""
+
+    task = f"check_for_indexing start: tenant_id={tenant_id}"
     time_start = time.monotonic()
 
     tasks_created = 0
@@ -86,7 +88,10 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
 
     # these tasks should never overlap
     if not lock_beat.acquire(blocking=False):
+        task_logger.info(f"{task} - Lock not acquired")
         return None
+
+    task_logger.info(f"{task} - Lock acquired")
 
     try:
         locked = True

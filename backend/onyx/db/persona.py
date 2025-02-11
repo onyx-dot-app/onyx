@@ -163,6 +163,7 @@ def make_persona_private(
     persona_id: int,
     user_ids: list[UUID] | None,
     group_ids: list[int] | None,
+    creator_id: UUID | None,
     db_session: Session,
 ) -> None:
     if user_ids is not None:
@@ -173,14 +174,15 @@ def make_persona_private(
         for user_uuid in user_ids:
             db_session.add(Persona__User(persona_id=persona_id, user_id=user_uuid))
 
-            create_notification(
-                user_id=user_uuid,
-                notif_type=NotificationType.PERSONA_SHARED,
-                db_session=db_session,
-                additional_data=PersonaSharedNotificationData(
-                    persona_id=persona_id,
-                ).model_dump(),
-            )
+            if creator_id and creator_id != user_uuid:
+                create_notification(
+                    user_id=user_uuid,
+                    notif_type=NotificationType.PERSONA_SHARED,
+                    db_session=db_session,
+                    additional_data=PersonaSharedNotificationData(
+                        persona_id=persona_id,
+                    ).model_dump(),
+                )
 
         db_session.commit()
 
@@ -240,6 +242,7 @@ def create_update_persona(
             persona_id=persona.id,
             user_ids=create_persona_request.users,
             group_ids=create_persona_request.groups,
+            creator_id=user.id if user else None,
             db_session=db_session,
         )
 
@@ -275,6 +278,7 @@ def update_persona_shared_users(
         persona_id=persona_id,
         user_ids=user_ids,
         group_ids=None,
+        creator_id=user.id if user else None,
         db_session=db_session,
     )
 

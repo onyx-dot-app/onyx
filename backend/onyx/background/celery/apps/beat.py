@@ -156,6 +156,8 @@ class DynamicTenantScheduler(PersistentScheduler):
             logger.info(
                 "_try_updating_schedule: Current schedule is up to date, no changes needed"
             )
+            logger.info("Current schedule is the following:")
+            logger.info(current_schedule)
             return
 
         logger.info(

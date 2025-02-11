@@ -195,7 +195,7 @@ export function UserDropdown({
             ) : hideUserDropdown ? (
               <DropdownOption
                 onClick={() => router.push("/auth/login")}
-                icon={<UserIcon className="h-5w-5 my-auto " />}
+                icon={<UserIcon className="h-5 w-5 my-auto " />}
                 label="Log In"
               />
             ) : (
@@ -208,14 +208,14 @@ export function UserDropdown({
                       item.svg_logo ? (
                         <div
                           className="
-                        h-4
-                        w-4
-                        my-auto
-                        overflow-hidden
-                        flex
-                        items-center
-                        justify-center
-                      "
+                            h-4
+                            w-4
+                            my-auto
+                            overflow-hidden
+                            flex
+                            items-center
+                            justify-center
+                          "
                           aria-label={item.title}
                         >
                           <svg

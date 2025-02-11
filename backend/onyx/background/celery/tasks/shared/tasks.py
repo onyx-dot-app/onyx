@@ -234,6 +234,8 @@ def cloud_beat_task_generator(
     expires: int = BEAT_EXPIRES_DEFAULT,
 ) -> bool | None:
     """a lightweight task used to kick off individual beat tasks per tenant."""
+    task = f"cloud_beat_task_generator start: task_name={task_name}, queue={queue}, priority={priority}"
+
     time_start = time.monotonic()
 
     redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
@@ -245,8 +247,10 @@ def cloud_beat_task_generator(
 
     # these tasks should never overlap
     if not lock_beat.acquire(blocking=False):
+        task_logger.info(f"{task} - Lock not acquired")
         return None
 
+    task_logger.info(f"{task} - Lock acquired")
     last_lock_time = time.monotonic()
     tenant_ids: list[str] | list[None] = []
 
@@ -262,6 +266,9 @@ def cloud_beat_task_generator(
             if IGNORED_SYNCING_TENANT_LIST and tenant_id in IGNORED_SYNCING_TENANT_LIST:
                 continue
 
+            task_logger.info(
+                f"{task} - sending task: task_name={task_name}, tenant_id={tenant_id}"
+            )
             self.app.send_task(
                 task_name,
                 kwargs=dict(
