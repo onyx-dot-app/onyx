@@ -884,7 +884,7 @@ export function ChatPage({
       endDivRef?.current?.getBoundingClientRect()?.top! -
       inputRef?.current?.getBoundingClientRect()?.top!;
     scrollDist.current = scrollDistance;
-    setAboveHorizon(scrollDist.current > 500);
+    setAboveHorizon(scrollDist.current > 900);
   };
 
   useEffect(() => {

@@ -58,6 +58,14 @@ export const useStreamingMessages = (
   allowStreaming: () => void,
   onComplete: () => void
 ) => {
+  const [finishedStreaming, setFinishedStreaming] = useState(false);
+  const finishedStreamingRef = useRef(false);
+
+  const finishStreaming = () => {
+    console.log("FINISH STREAMING");
+    setFinishedStreaming(true);
+    finishedStreamingRef.current = true;
+  };
   const [dynamicSubQuestions, setDynamicSubQuestions] = useState<
     SubQuestionDetail[]
   >([]);
@@ -105,6 +113,9 @@ export const useStreamingMessages = (
 
     setDynamicSubQuestions([...dynamicSubQuestionsRef.current]);
   }, [subQuestions]);
+  const isFinishedStreaming = () => {
+    return finishedStreaming;
+  };
 
   useEffect(() => {
     let stop = false;
@@ -155,6 +166,10 @@ export const useStreamingMessages = (
 
       if (didStreamQuestion) {
         setDynamicSubQuestions([...dynamicSubQuestionsRef.current]);
+        setTimeout(loadNextPiece, 2);
+        return;
+      }
+      if (!finishedStreamingRef.current) {
         setTimeout(loadNextPiece, 2);
         return;
       }
@@ -281,7 +296,6 @@ export const useStreamingMessages = (
                   dynSQ.is_complete = true;
                   p.currentPhase = StreamingPhase.COMPLETE;
                   p.phaseStartTime = Date.now();
-                  console.log("ANSWER COMPLETE");
 
                   // Check if this is the last subquestion at level 0
                   if (
@@ -293,10 +307,8 @@ export const useStreamingMessages = (
                           .map((q) => q.level_question_num)
                       )
                   ) {
-                    console.log("ALLOW STREAMING");
                     allowStreaming();
                   } else {
-                    console.log("DO NOT ALLOW STREAMING");
                   }
                 }
               }
@@ -322,5 +334,5 @@ export const useStreamingMessages = (
     };
   }, []);
 
-  return { dynamicSubQuestions };
+  return { dynamicSubQuestions, finishedStreaming, finishStreaming };
 };

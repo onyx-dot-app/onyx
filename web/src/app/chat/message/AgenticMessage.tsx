@@ -239,7 +239,7 @@ export const AgenticMessage = ({
       });
       setTimeout(() => {
         setCurrentlyOpenQuestion(null);
-      }, 1000);
+      }, 1);
     },
     [currentlyOpenQuestion]
   );
