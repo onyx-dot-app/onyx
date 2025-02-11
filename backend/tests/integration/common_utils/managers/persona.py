@@ -1,3 +1,4 @@
+from uuid import UUID
 from uuid import uuid4
 
 import requests
@@ -58,14 +59,14 @@ class PersonaManager:
             tool_ids=tool_ids or [],
             llm_model_provider_override=llm_model_provider_override,
             llm_model_version_override=llm_model_version_override,
-            users=[user for user in (users or [])],
+            users=[UUID(user) for user in (users or [])],
             groups=groups or [],
             label_ids=label_ids or [],
         )
 
         response = requests.post(
             f"{API_SERVER_URL}/persona",
-            json=persona_creation_request.model_dump(),
+            json=persona_creation_request.model_dump(mode="json"),
             headers=user_performing_action.headers
             if user_performing_action
             else GENERAL_HEADERS,
@@ -139,14 +140,14 @@ class PersonaManager:
             or persona.llm_model_provider_override,
             llm_model_version_override=llm_model_version_override
             or persona.llm_model_version_override,
-            users=[user for user in (users or persona.users)],
+            users=[UUID(user) for user in (users or persona.users)],
             groups=groups or persona.groups,
             label_ids=label_ids or persona.label_ids,
         )
 
         response = requests.patch(
             f"{API_SERVER_URL}/persona/{persona.id}",
-            json=persona_update_request.model_dump(),
+            json=persona_update_request.model_dump(mode="json"),
             headers=user_performing_action.headers
             if user_performing_action
             else GENERAL_HEADERS,
