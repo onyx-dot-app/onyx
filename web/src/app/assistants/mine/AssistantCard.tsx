@@ -147,7 +147,7 @@ const AssistantCard: React.FC<{
               )}
             </div>
             {isOwnedByUser && (
-              <div className="flex ml-2 relative  items-center gap-x-2">
+              <div className="flex ml-2 relative items-center gap-x-2">
                 <Popover modal>
                   <PopoverTrigger>
                     <button
@@ -157,9 +157,7 @@ const AssistantCard: React.FC<{
                       <FiMoreHorizontal size={16} />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent
-                    className={`w-32 z-[10000] p-2 hover:bg-red-400`}
-                  >
+                  <PopoverContent className={`w-32 z-[10000] p-2`}>
                     <div className="flex flex-col text-sm space-y-1">
                       <button
                         onClick={isOwnedByUser ? handleEdit : undefined}
