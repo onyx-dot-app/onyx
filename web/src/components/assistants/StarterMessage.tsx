@@ -48,7 +48,6 @@ export function StarterMessages({
                       flex-col gap-2 rounded-md
                       text-input-text hover:text-text
                       border
-
                       dark:bg-transparent
                       dark:border-neutral-700
                       dark:hover:bg-background-150
@@ -58,11 +57,16 @@ export function StarterMessages({
                       text-[15px] shadow-xs transition
                       enabled:hover:bg-background-dark/75
                       disabled:cursor-not-allowed
-                      line-clamp-3
+                      overflow-hidden
+                      break-all
+                      truncate
+                      text-ellipsis
                     `}
-                    style={{ height: "5.4rem" }}
+                    style={{ height: "5.6rem" }}
                   >
-                    {starterMessage.name}
+                    <div className="overflow-hidden text-ellipsis line-clamp-3 pr-1 pb-1">
+                      {starterMessage.name}
+                    </div>
                   </button>
                 </div>
               ))}
