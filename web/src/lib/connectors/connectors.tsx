@@ -1115,7 +1115,24 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         optional: false,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "text",
+        label: "View ID",
+        name: "view_id",
+        optional: true,
+        description:
+          "If you need to link to a specific View, put that ID here e.g. viwVUEJjWPd8XYjh8.",
+      },
+      {
+        type: "text",
+        label: "Share ID",
+        name: "share_id",
+        optional: true,
+        description:
+          "If you need to link to a specific Share, put that ID here e.g. shrkfjEzDmLaDtK83.",
+      },
+    ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
 };
