@@ -48,7 +48,6 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import SubQuestionsDisplay from "./SubQuestionsDisplay";
 import { StatusRefinement } from "../Refinement";
-import SubQuestionProgress from "./SubQuestionProgress";
 
 export const AgenticMessage = ({
   docSidebarToggled,
@@ -445,6 +444,7 @@ export const AgenticMessage = ({
                         <div className="flex items-center gap-x-2 px-4">
                           <div className="text-black text-lg font-medium">
                             Answer
+                            {isViewingInitialAnswer ? "Original" : "Refined"}
                           </div>
 
                           <StatusRefinement

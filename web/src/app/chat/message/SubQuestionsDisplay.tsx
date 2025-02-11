@@ -525,9 +525,12 @@ const SubQuestionsDisplay: React.FC<SubQuestionsDisplayProps> = ({
 
   useEffect(() => {
     if (documents && documents.length > 0) {
-      setTimeout(() => {
-        setShownDocuments(documents);
-      }, 800);
+      setTimeout(
+        () => {
+          setShownDocuments(documents);
+        },
+        finishedGenerating ? 0 : 800
+      );
     }
   }, [documents]);
 

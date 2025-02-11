@@ -656,6 +656,11 @@ ul > li > p {
   color: white;
 }
 
-.dark li {
+.dark li,
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5 {
   color: #e5e5e5;
 }
