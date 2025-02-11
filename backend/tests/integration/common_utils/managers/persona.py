@@ -1,4 +1,3 @@
-import copy
 from uuid import uuid4
 
 import requests
@@ -120,10 +119,6 @@ class PersonaManager:
         system_prompt = system_prompt or f"System prompt for {persona.name}"
         task_prompt = task_prompt or f"Task prompt for {persona.name}"
 
-        upsert_users = copy.deepcopy(persona.users)
-        if users:
-            upsert_users.extend(users)
-
         persona_update_request = PersonaUpsertRequest(
             name=name or persona.name,
             description=description or persona.description,
@@ -144,7 +139,7 @@ class PersonaManager:
             or persona.llm_model_provider_override,
             llm_model_version_override=llm_model_version_override
             or persona.llm_model_version_override,
-            users=upsert_users,
+            users=[user for user in (users or persona.users)],
             groups=groups or persona.groups,
             label_ids=label_ids or persona.label_ids,
         )
