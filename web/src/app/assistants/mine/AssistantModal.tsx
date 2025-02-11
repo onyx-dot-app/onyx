@@ -116,9 +116,9 @@ export function AssistantModal({
   );
 
   return (
-    <Dialog open={true} onOpenChange={(open) => !open && hideModal()}>
-      <DialogContent
-        className="p-0 max-h-[80vh] max-w-none w-[95%] bg-background rounded-sm shadow-2xl transform transition-all duration-300 ease-in-out relative w-11/12 max-w-4xl pt-10 pb-10  px-10   flex flex-col   max-w-4xl"
+    <div className="fixed inset-0 bg-neutral-950/80 bg-opacity-50 flex items-center justify-center z-50">
+      <div
+        className="p-0 max-w-4xl  overflow-hidden max-h-[80vh]  w-[95%] bg-background rounded-md shadow-2xl transform transition-all duration-300 ease-in-out relative w-11/12 max-w-4xl pt-10 pb-10 px-10 overflow-hidden flex flex-col"
         style={{
           position: "fixed",
           top: "10vh",
@@ -128,132 +128,136 @@ export function AssistantModal({
         }}
       >
         <div className="flex overflow-hidden flex-col h-full">
-          <div className="flex flex-col sticky top-0 z-10">
-            <div className="flex px-2 justify-between items-center gap-x-2 mb-0">
-              <div className="h-12 w-full rounded-lg flex-col justify-center items-start gap-2.5 inline-flex">
-                <div className="h-12 rounded-md w-full shadow-[0px_0px_2px_0px_rgba(0,0,0,0.25)] border border-background-300 flex items-center px-3">
-                  {!isSearchFocused && (
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5 text-text-400"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                      />
-                    </svg>
-                  )}
-                  <input
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onFocus={() => setIsSearchFocused(true)}
-                    onBlur={() => setIsSearchFocused(false)}
-                    type="text"
-                    className="w-full h-full bg-transparent outline-none text-black"
-                  />
-                </div>
-              </div>
-              <button
-                onClick={() => router.push("/assistants/new")}
-                className="h-10 cursor-pointer px-6 py-3 bg-background-800 hover:bg-black rounded-md border border-black justify-center items-center gap-2.5 inline-flex"
-              >
-                <div className="text-text-50 text-lg font-normal leading-normal">
-                  Create
-                </div>
-              </button>
-            </div>
-            <div className="px-2 flex py-4 items-center gap-x-2 flex-wrap">
-              <FilterIcon className="text-text-800" size={16} />
-              <AssistantBadgeSelector
-                text="Pinned"
-                selected={assistantFilters[AssistantFilter.Pinned]}
-                toggleFilter={() =>
-                  toggleAssistantFilter(AssistantFilter.Pinned)
-                }
-              />
-
-              <AssistantBadgeSelector
-                text="Mine"
-                selected={assistantFilters[AssistantFilter.Mine]}
-                toggleFilter={() => toggleAssistantFilter(AssistantFilter.Mine)}
-              />
-              <AssistantBadgeSelector
-                text="Private"
-                selected={assistantFilters[AssistantFilter.Private]}
-                toggleFilter={() =>
-                  toggleAssistantFilter(AssistantFilter.Private)
-                }
-              />
-              <AssistantBadgeSelector
-                text="Public"
-                selected={assistantFilters[AssistantFilter.Public]}
-                toggleFilter={() =>
-                  toggleAssistantFilter(AssistantFilter.Public)
-                }
-              />
-            </div>
-            <div className="w-full border-t border-background-200" />
-          </div>
-
-          <div className="flex-grow overflow-y-auto">
-            <h2 className="text-2xl font-semibold text-text-800 mb-2 px-4 py-2">
-              Featured Assistants
-            </h2>
-
-            <div className="w-full px-2 pb-10 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
-              {featuredAssistants.length > 0 ? (
-                featuredAssistants.map((assistant, index) => (
-                  <div key={index}>
-                    <AssistantCard
-                      pinned={pinnedAssistants
-                        .map((a) => a.id)
-                        .includes(assistant.id)}
-                      persona={assistant}
-                      closeModal={hideModal}
+          <div className="flex overflow-hidden flex-col h-full">
+            <div className="flex flex-col sticky top-0 z-10">
+              <div className="flex px-2 justify-between items-center gap-x-2 mb-0">
+                <div className="h-12 w-full rounded-lg flex-col justify-center items-start gap-2.5 inline-flex">
+                  <div className="h-12 rounded-md w-full shadow-[0px_0px_2px_0px_rgba(0,0,0,0.25)] border border-background-300 flex items-center px-3">
+                    {!isSearchFocused && (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5 text-text-400"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                        />
+                      </svg>
+                    )}
+                    <input
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onFocus={() => setIsSearchFocused(true)}
+                      onBlur={() => setIsSearchFocused(false)}
+                      type="text"
+                      className="w-full h-full bg-transparent outline-none text-black"
                     />
                   </div>
-                ))
-              ) : (
-                <div className="col-span-2 text-center text-text-500">
-                  No featured assistants match filters
                 </div>
-              )}
+                <button
+                  onClick={() => router.push("/assistants/new")}
+                  className="h-10 cursor-pointer px-6 py-3 bg-background-800 hover:bg-black rounded-md border border-black justify-center items-center gap-2.5 inline-flex"
+                >
+                  <div className="text-text-50 text-lg font-normal leading-normal">
+                    Create
+                  </div>
+                </button>
+              </div>
+              <div className="px-2 flex py-4 items-center gap-x-2 flex-wrap">
+                <FilterIcon className="text-text-800" size={16} />
+                <AssistantBadgeSelector
+                  text="Pinned"
+                  selected={assistantFilters[AssistantFilter.Pinned]}
+                  toggleFilter={() =>
+                    toggleAssistantFilter(AssistantFilter.Pinned)
+                  }
+                />
+
+                <AssistantBadgeSelector
+                  text="Mine"
+                  selected={assistantFilters[AssistantFilter.Mine]}
+                  toggleFilter={() =>
+                    toggleAssistantFilter(AssistantFilter.Mine)
+                  }
+                />
+                <AssistantBadgeSelector
+                  text="Private"
+                  selected={assistantFilters[AssistantFilter.Private]}
+                  toggleFilter={() =>
+                    toggleAssistantFilter(AssistantFilter.Private)
+                  }
+                />
+                <AssistantBadgeSelector
+                  text="Public"
+                  selected={assistantFilters[AssistantFilter.Public]}
+                  toggleFilter={() =>
+                    toggleAssistantFilter(AssistantFilter.Public)
+                  }
+                />
+              </div>
+              <div className="w-full border-t border-background-200" />
             </div>
 
-            {allAssistants && allAssistants.length > 0 && (
-              <>
-                <h2 className="text-2xl font-semibold text-text-800 mt-4 mb-2 px-4 py-2">
-                  All Assistants
-                </h2>
+            <div className="flex-grow overflow-y-auto">
+              <h2 className="text-2xl font-semibold text-text-800 mb-2 px-4 py-2">
+                Featured Assistants
+              </h2>
 
-                <div className="w-full mt-2 px-2 pb-2 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
-                  {allAssistants
-                    .sort((a, b) => b.id - a.id)
-                    .map((assistant, index) => (
-                      <div key={index}>
-                        <AssistantCard
-                          pinned={
-                            user?.preferences?.pinned_assistants?.includes(
-                              assistant.id
-                            ) ?? false
-                          }
-                          persona={assistant}
-                          closeModal={hideModal}
-                        />
-                      </div>
-                    ))}
-                </div>
-              </>
-            )}
+              <div className="w-full px-2 pb-10 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
+                {featuredAssistants.length > 0 ? (
+                  featuredAssistants.map((assistant, index) => (
+                    <div key={index}>
+                      <AssistantCard
+                        pinned={pinnedAssistants
+                          .map((a) => a.id)
+                          .includes(assistant.id)}
+                        persona={assistant}
+                        closeModal={hideModal}
+                      />
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-span-2 text-center text-text-500">
+                    No featured assistants match filters
+                  </div>
+                )}
+              </div>
+
+              {allAssistants && allAssistants.length > 0 && (
+                <>
+                  <h2 className="text-2xl font-semibold text-text-800 mt-4 mb-2 px-4 py-2">
+                    All Assistants
+                  </h2>
+
+                  <div className="w-full mt-2 px-2 pb-2 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
+                    {allAssistants
+                      .sort((a, b) => b.id - a.id)
+                      .map((assistant, index) => (
+                        <div key={index}>
+                          <AssistantCard
+                            pinned={
+                              user?.preferences?.pinned_assistants?.includes(
+                                assistant.id
+                              ) ?? false
+                            }
+                            persona={assistant}
+                            closeModal={hideModal}
+                          />
+                        </div>
+                      ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
 export default AssistantModal;
