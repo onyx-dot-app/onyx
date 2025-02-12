@@ -143,8 +143,6 @@ class IndexingCallback(IndexingHeartbeatInterface):
         #         self.last_parent_check = now
 
         try:
-            self.redis_connector.prune.set_active()
-
             current_time = time.monotonic()
             if current_time - self.last_lock_monotonic >= (
                 CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4

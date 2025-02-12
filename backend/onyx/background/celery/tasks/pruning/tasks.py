@@ -62,6 +62,12 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+class PruneCallback(IndexingCallback):
+    def progress(self, tag: str, amount: int) -> None:
+        self.redis_connector.prune.set_active()
+        super().progress(tag, amount)
+
+
 """Jobs / utils for kicking off pruning tasks."""
 
 
@@ -415,7 +421,7 @@ def connector_pruning_generator_task(
             search_settings = get_current_search_settings(db_session)
             redis_connector_index = redis_connector.new_index(search_settings.id)
 
-            callback = IndexingCallback(
+            callback = PruneCallback(
                 0,
                 redis_connector,
                 redis_connector_index,

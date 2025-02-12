@@ -558,7 +558,7 @@ def connector_indexing_proxy_task(
         pure=False,
     )
 
-    if not job:
+    if not job or not job.process:
         task_logger.info(
             f"Indexing watchdog - spawn failed: attempt={index_attempt_id} "
             f"cc_pair={cc_pair_id} "
@@ -566,10 +566,32 @@ def connector_indexing_proxy_task(
         )
         return
 
+    # Ensure the process has moved out of the starting state
+    num_waits = 0
+    while True:
+        if num_waits > 15:
+            task_logger.warning(
+                f"Indexing watchdog - wait for spawn timed out: "
+                f"attempt={index_attempt_id} "
+                f"tenant={tenant_id} "
+                f"cc_pair={cc_pair_id} "
+                f"search_settings={search_settings_id}"
+            )
+            job.release()
+            raise RuntimeError("Indexing watchdog - wait for spawn timed out")
+
+        if job.process.is_alive() or job.process.exitcode is not None:
+            break
+
+        sleep(1)
+        num_waits += 1
+
     task_logger.info(
-        f"Indexing watchdog - spawn succeeded: attempt={index_attempt_id} "
+        f"Indexing watchdog - spawn succeeded: "
+        f"attempt={index_attempt_id} "
         f"cc_pair={cc_pair_id} "
-        f"search_settings={search_settings_id}"
+        f"search_settings={search_settings_id} "
+        f"pid={job.process.pid}"
     )
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
