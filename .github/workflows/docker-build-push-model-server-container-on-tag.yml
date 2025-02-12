@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - "*"
+    paths:
+      - 'backend/model_server/**'
+      - 'backend/Dockerfile.model_server'
 
 env:
   REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
