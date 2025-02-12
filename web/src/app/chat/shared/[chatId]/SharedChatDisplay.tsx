@@ -263,6 +263,8 @@ export function SharedChatDisplay({
                         ) {
                           return (
                             <AgenticMessage
+                              isStreamingQuestions={false}
+                              isGenerating={false}
                               shared
                               key={message.messageId}
                               isImprovement={message.isImprovement}
@@ -373,6 +375,8 @@ export function SharedChatDisplay({
                           <div key={message.messageId}>
                             <AgenticMessage
                               shared
+                              isStreamingQuestions={false}
+                              isGenerating={false}
                               subQuestions={message.sub_questions || []}
                               currentPersona={persona}
                               messageId={message.messageId}
