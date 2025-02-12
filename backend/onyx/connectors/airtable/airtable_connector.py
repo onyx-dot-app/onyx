@@ -100,10 +100,14 @@ class AirtableConnector(LoadConnector):
             raise AirtableClientNotSetUpError()
         return self._airtable_client
 
+    @classmethod
     def _get_record_url(
-        self,
+        cls,
+        base_id: str,
         table_id: str,
         record_id: str,
+        share_id: str | None,
+        view_id: str | None,
         field_id: str | None = None,
         attachment_id: str | None = None,
     ) -> str:
@@ -114,13 +118,13 @@ class AirtableConnector(LoadConnector):
         https://airtable.com/BASE_ID/SHARE_ID/TABLE_ID/VIEW_ID/RECORD_ID/FIELD_ID/ATTACHMENT_ID
         """
         # If we have a shared link, use that view for better UX
-        if self.share_id:
-            base_url = f"https://airtable.com/{self.base_id}/{self.share_id}/{table_id}"
+        if share_id:
+            base_url = f"https://airtable.com/{base_id}/{share_id}/{table_id}"
         else:
-            base_url = f"https://airtable.com/{self.base_id}/{table_id}"
+            base_url = f"https://airtable.com/{base_id}/{table_id}"
 
-        if self.view_id:
-            base_url = f"{base_url}/{self.view_id}"
+        if view_id:
+            base_url = f"{base_url}/{view_id}"
 
         base_url = f"{base_url}/{record_id}"
 
@@ -155,7 +159,9 @@ class AirtableConnector(LoadConnector):
             return []
 
         # Get the base URL for this record
-        default_link = self._get_record_url(table_id, record_id)
+        default_link = self._get_record_url(
+            base_id, table_id, record_id, self.share_id, self.view_id or view_id
+        )
 
         if field_type == "multipleAttachments":
             attachment_texts: list[tuple[str, str]] = []
@@ -211,8 +217,11 @@ class AirtableConnector(LoadConnector):
                         if attachment_text:
                             # Use the helper method to construct attachment URLs
                             attachment_link = self._get_record_url(
+                                base_id,
                                 table_id,
                                 record_id,
+                                self.share_id,
+                                self.view_id or view_id,
                                 field_id,
                                 attachment_id,
                             )

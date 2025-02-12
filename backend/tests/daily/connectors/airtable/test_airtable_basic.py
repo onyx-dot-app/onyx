@@ -9,6 +9,8 @@ from onyx.connectors.airtable.airtable_connector import AirtableConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 
+BASE_VIEW_ID = "viwVUEJjWPd8XYjh8"
+
 
 class AirtableConfig(BaseModel):
     base_id: str
@@ -222,6 +224,7 @@ def test_airtable_connector_basic(
             assignee="Chris Weaver (chris@onyx.app)",
             submitted_by="Chris Weaver (chris@onyx.app)",
             all_fields_as_metadata=False,
+            view_id=BASE_VIEW_ID,
         ),
         create_test_document(
             id="reccSlIA4pZEFxPBg",
@@ -242,6 +245,7 @@ def test_airtable_connector_basic(
                 )
             ],
             all_fields_as_metadata=False,
+            view_id=BASE_VIEW_ID,
         ),
     ]
 
@@ -293,6 +297,7 @@ def test_airtable_connector_all_metadata(
                 )
             ],
             all_fields_as_metadata=True,
+            view_id=BASE_VIEW_ID,
         ),
     ]
 
@@ -305,14 +310,13 @@ def test_airtable_connector_with_share_and_view(
 ) -> None:
     """Test behavior when using share_id and view_id for URL generation."""
     SHARE_ID = "shrkfjEzDmLaDtK83"
-    VIEW_ID = "viwVUEJjWPd8XYjh8"
 
     connector = AirtableConnector(
         base_id=airtable_config.base_id,
         table_name_or_id=airtable_config.table_identifier,
         treat_all_non_attachment_fields_as_metadata=False,
         share_id=SHARE_ID,
-        view_id=VIEW_ID,
+        view_id=BASE_VIEW_ID,
     )
     connector.load_credentials(
         {
@@ -341,7 +345,7 @@ def test_airtable_connector_with_share_and_view(
             submitted_by="Chris Weaver (chris@onyx.app)",
             all_fields_as_metadata=False,
             share_id=SHARE_ID,
-            view_id=VIEW_ID,
+            view_id=BASE_VIEW_ID,
         ),
         create_test_document(
             id="reccSlIA4pZEFxPBg",
@@ -358,12 +362,16 @@ def test_airtable_connector_with_share_and_view(
             attachments=[
                 (
                     "Test.pdf:\ntesting!!!",
-                    f"https://airtable.com/{airtable_config.base_id}/{SHARE_ID}/{os.environ['AIRTABLE_TEST_TABLE_ID']}/{VIEW_ID}/reccSlIA4pZEFxPBg/fld1u21zkJACIvAEF/attlj2UBWNEDZngCc?blocks=hide",
+                    (
+                        f"https://airtable.com/{airtable_config.base_id}/{SHARE_ID}/"
+                        f"{os.environ['AIRTABLE_TEST_TABLE_ID']}/{BASE_VIEW_ID}/reccSlIA4pZEFxPBg/"
+                        "fld1u21zkJACIvAEF/attlj2UBWNEDZngCc?blocks=hide"
+                    ),
                 )
             ],
             all_fields_as_metadata=False,
             share_id=SHARE_ID,
-            view_id=VIEW_ID,
+            view_id=BASE_VIEW_ID,
         ),
     ]
 
