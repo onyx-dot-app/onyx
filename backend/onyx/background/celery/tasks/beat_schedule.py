@@ -151,7 +151,7 @@ beat_cloud_tasks: list[dict] = [
     {
         "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-celery-queues",
         "task": OnyxCeleryTask.CLOUD_MONITOR_CELERY_QUEUES,
-        "schedule": timedelta(seconds=60),
+        "schedule": timedelta(seconds=30),
         "options": {
             "queue": OnyxCeleryQueues.MONITORING,
             "priority": OnyxCeleryPriority.HIGH,
