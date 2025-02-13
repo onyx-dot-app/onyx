@@ -197,11 +197,11 @@ class RedisConnectorPrune:
                     connector_id=cc_pair.connector_id,
                     credential_id=cc_pair.credential_id,
                     tenant_id=self.tenant_id,
-                    ignore_result=True,
                 ),
                 queue=OnyxCeleryQueues.CONNECTOR_DELETION,
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.MEDIUM,
+                ignore_result=True,
             )
 
             async_results.append(result)
