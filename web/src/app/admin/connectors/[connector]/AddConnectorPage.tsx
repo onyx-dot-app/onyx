@@ -502,9 +502,10 @@ export default function AddConnector({
                         {oauthSupportedSources.includes(connector) &&
                           (NEXT_PUBLIC_CLOUD_ENABLED ||
                             NEXT_PUBLIC_TEST_ENV) && (
-                            <button
+                            <Button
+                              variant="navigate"
                               onClick={handleAuthorize}
-                              className="mt-6 text-sm bg-blue-500 px-2 py-1.5 flex text-text-200 flex-none rounded"
+                              className="mt-6 "
                               disabled={isAuthorizing}
                               hidden={!isAuthorizeVisible}
                             >
@@ -513,7 +514,7 @@ export default function AddConnector({
                                 : `Authorize with ${getSourceDisplayName(
                                     connector
                                   )}`}
-                            </button>
+                            </Button>
                           )}
                       </div>
                     )}

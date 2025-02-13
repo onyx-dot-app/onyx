@@ -67,7 +67,7 @@ const PageLink = ({
     first:ml-0 
     first:rounded-l-md 
     last:rounded-r-md
-    ${active ? "bg-background-strong" : ""}
+    ${active ? "bg-background-200" : ""}
   `}
     onClick={() => {
       if (pageChangeHandler) {

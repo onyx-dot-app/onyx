@@ -322,7 +322,7 @@ export default function CloudEmbeddingPage({
                     OpenAI for embeddings.
                   </Text>
                   <div className="flex items-center text-sm text-text-700">
-                    <FiInfo className="text-text-400 mr-2" size={16} />
+                    <FiInfo className="text-neutral-400 mr-2" size={16} />
                     <Text>
                       You&apos;ll need: API version, base URL, API key, model
                       name, and deployment name.

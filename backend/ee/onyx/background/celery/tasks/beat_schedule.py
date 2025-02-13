@@ -1,10 +1,10 @@
 from datetime import timedelta
 from typing import Any
 
-from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.tasks.beat_schedule import (
-    beat_system_tasks as base_beat_system_tasks,
+    beat_cloud_tasks as base_beat_system_tasks,
 )
+from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.tasks.beat_schedule import (
     beat_task_templates as base_beat_task_templates,
 )

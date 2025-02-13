@@ -396,9 +396,14 @@ class DefaultMultiLLM(LLM):
         self._record_call(processed_prompt)
 
         try:
+            print(
+                "model is",
+                f"{self.config.model_provider}/{self.config.deployment_name or self.config.model_name}",
+            )
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice
+                # model="openai/gpt-4",
                 model=f"{self.config.model_provider}/{self.config.deployment_name or self.config.model_name}",
                 # NOTE: have to pass in None instead of empty string for these
                 # otherwise litellm can have some issues with bedrock

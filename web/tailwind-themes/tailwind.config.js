@@ -214,7 +214,7 @@ module.exports = {
 
         input: "var(--white-card-popover)",
 
-        text: "var(--neutral-900)",
+        text: "var(--neutral-950)",
         "text-darker": "var(--text-darker)",
         "text-dark": "var(--text-dark)",
         "sidebar-border": "var(--neutral-200-border)",

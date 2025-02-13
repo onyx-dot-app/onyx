@@ -86,7 +86,10 @@ def run_functions_in_parallel(
     Executes a list of FunctionCalls in parallel and stores the results in a dictionary where the keys
     are the result_id of the FunctionCall and the values are the results of the call.
     """
-    results = {}
+    results: dict[str, Any] = {}
+
+    if len(function_calls) == 0:
+        return results
 
     with ThreadPoolExecutor(max_workers=len(function_calls)) as executor:
         future_to_id = {

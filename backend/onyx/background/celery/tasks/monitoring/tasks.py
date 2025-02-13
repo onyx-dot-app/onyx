@@ -17,7 +17,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.tasks.vespa.tasks import celery_get_queue_length
+from onyx.background.celery.celery_redis import celery_get_queue_length
+from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import OnyxCeleryQueues
@@ -717,7 +718,7 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
 
 
 @shared_task(
-    name=OnyxCeleryTask.CLOUD_CHECK_ALEMBIC,
+    name=OnyxCeleryTask.CLOUD_MONITOR_ALEMBIC,
 )
 def cloud_check_alembic() -> bool | None:
     """A task to verify that all tenants are on the same alembic revision.
@@ -847,3 +848,55 @@ def cloud_check_alembic() -> bool | None:
         f"cloud_check_alembic finished: num_tenants={len(tenant_ids)} elapsed={time_elapsed:.2f}"
     )
     return True
+
+
+@shared_task(
+    name=OnyxCeleryTask.CLOUD_MONITOR_CELERY_QUEUES, ignore_result=True, bind=True
+)
+def cloud_monitor_celery_queues(
+    self: Task,
+) -> None:
+    return monitor_celery_queues_helper(self)
+
+
+@shared_task(name=OnyxCeleryTask.MONITOR_CELERY_QUEUES, ignore_result=True, bind=True)
+def monitor_celery_queues(self: Task, *, tenant_id: str | None) -> None:
+    return monitor_celery_queues_helper(self)
+
+
+def monitor_celery_queues_helper(
+    task: Task,
+) -> None:
+    """A task to monitor all celery queue lengths."""
+
+    r_celery = task.app.broker_connection().channel().client  # type: ignore
+    n_celery = celery_get_queue_length("celery", r_celery)
+    n_indexing = celery_get_queue_length(OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery)
+    n_sync = celery_get_queue_length(OnyxCeleryQueues.VESPA_METADATA_SYNC, r_celery)
+    n_deletion = celery_get_queue_length(OnyxCeleryQueues.CONNECTOR_DELETION, r_celery)
+    n_pruning = celery_get_queue_length(OnyxCeleryQueues.CONNECTOR_PRUNING, r_celery)
+    n_permissions_sync = celery_get_queue_length(
+        OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC, r_celery
+    )
+    n_external_group_sync = celery_get_queue_length(
+        OnyxCeleryQueues.CONNECTOR_EXTERNAL_GROUP_SYNC, r_celery
+    )
+    n_permissions_upsert = celery_get_queue_length(
+        OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT, r_celery
+    )
+
+    n_indexing_prefetched = celery_get_unacked_task_ids(
+        OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
+    )
+
+    task_logger.info(
+        f"Queue lengths: celery={n_celery} "
+        f"indexing={n_indexing} "
+        f"indexing_prefetched={len(n_indexing_prefetched)} "
+        f"sync={n_sync} "
+        f"deletion={n_deletion} "
+        f"pruning={n_pruning} "
+        f"permissions_sync={n_permissions_sync} "
+        f"external_group_sync={n_external_group_sync} "
+        f"permissions_upsert={n_permissions_upsert} "
+    )

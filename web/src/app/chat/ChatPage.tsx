@@ -1627,7 +1627,7 @@ export function ChatPage({
                 second_level_message: second_level_answer,
                 type: error ? "error" : "assistant",
                 retrievalType,
-                query: finalMessage?.rephrased_query,
+                query: finalMessage?.rephrased_query || query,
                 documents: documents,
                 citations: finalMessage?.citations || {},
                 files: finalMessage?.files || aiMessageImages || [],
@@ -3099,6 +3099,7 @@ export function ChatPage({
                               </button>
                             </div>
                           )}
+
                           <div className="pointer-events-auto w-[95%] mx-auto relative mb-8">
                             <ChatInputBar
                               proSearchEnabled={proSearchEnabled}

@@ -160,7 +160,7 @@ export default function CreateCredential({
   }
 
   if (sourceType == "google_drive") {
-    return <GDriveMain />;
+    return <GDriveMain setPopup={setPopup} />;
   }
 
   const credentialTemplate: dictionaryType = credentialTemplates[sourceType];
@@ -194,7 +194,7 @@ export default function CreateCredential({
               for information on setting up this connector.
             </p>
           )}
-          <CardSection className="w-full  !border-0 mt-4 flex flex-col gap-y-6">
+          <CardSection className="w-full items-start bg-blue-200 !border-0 mt-4 flex flex-col gap-y-6">
             <TextFormField
               name="name"
               placeholder="(Optional) credential name.."

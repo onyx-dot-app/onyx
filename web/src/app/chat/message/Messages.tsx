@@ -974,7 +974,7 @@ export const HumanMessage = ({
                           py-2 
                           px-3 
                           w-fit 
-                          bg-background-strong 
+                          bg-background-200 
                           text-sm
                           rounded-lg
                           hover:bg-accent-background-hovered-emphasis

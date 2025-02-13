@@ -151,7 +151,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
                         cursor-pointer 
                         ${
                           isSelected
-                            ? "bg-background-strong"
+                            ? "bg-background-200"
                             : "hover:bg-accent-background-hovered"
                         }
                       `}

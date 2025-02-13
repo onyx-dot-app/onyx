@@ -50,7 +50,7 @@ export function ModelOption({
     <div
       className={`p-4 w-96 border rounded-lg transition-all duration-200 ${
         selected
-          ? "border-blue-500 bg-blue-50 dark:bg-blue-900 dark:border-blue-700 shadow-md"
+          ? "border-blue-800 bg-blue-50 dark:bg-blue-950 dark:border-blue-700 shadow-md"
           : "border-background-200 hover:border-blue-300 hover:shadow-sm"
       }`}
     >

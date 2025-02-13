@@ -19,6 +19,7 @@ BEAT_EXPIRES_DEFAULT = 15 * 60  # 15 minutes (in seconds)
 
 # hack to slow down task dispatch in the cloud until
 # we have a better implementation (backpressure, etc)
+# Note that DynamicTenantScheduler can adjust the runtime value for this via Redis
 CLOUD_BEAT_MULTIPLIER_DEFAULT = 8.0
 
 # tasks that run in either self-hosted on cloud
@@ -56,16 +57,7 @@ beat_task_templates.extend(
         {
             "name": "check-for-pruning",
             "task": OnyxCeleryTask.CHECK_FOR_PRUNING,
-            "schedule": timedelta(hours=1),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
-        },
-        {
-            "name": "monitor-vespa-sync",
-            "task": OnyxCeleryTask.MONITOR_VESPA_SYNC,
-            "schedule": timedelta(seconds=5),
+            "schedule": timedelta(seconds=20),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -141,15 +133,25 @@ def make_cloud_generator_task(task: dict[str, Any]) -> dict[str, Any]:
     return cloud_task
 
 
-# tasks that only run in the cloud
+# tasks that only run in the cloud and are system wide
 # the name attribute must start with ONYX_CLOUD_CELERY_TASK_PREFIX = "cloud" to be seen
 # by the DynamicTenantScheduler as system wide task and not a per tenant task
-beat_system_tasks: list[dict] = [
+beat_cloud_tasks: list[dict] = [
     # cloud specific tasks
     {
-        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check-alembic",
-        "task": OnyxCeleryTask.CLOUD_CHECK_ALEMBIC,
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-alembic",
+        "task": OnyxCeleryTask.CLOUD_MONITOR_ALEMBIC,
         "schedule": timedelta(hours=1),
+        "options": {
+            "queue": OnyxCeleryQueues.MONITORING,
+            "priority": OnyxCeleryPriority.HIGH,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-celery-queues",
+        "task": OnyxCeleryTask.CLOUD_MONITOR_CELERY_QUEUES,
+        "schedule": timedelta(seconds=30),
         "options": {
             "queue": OnyxCeleryQueues.MONITORING,
             "priority": OnyxCeleryPriority.HIGH,
@@ -158,9 +160,25 @@ beat_system_tasks: list[dict] = [
     },
 ]
 
+# tasks that only run self hosted
 tasks_to_schedule: list[dict] = []
 if not MULTI_TENANT:
-    tasks_to_schedule = beat_task_templates
+    tasks_to_schedule.extend(
+        [
+            {
+                "name": "monitor-celery-queues",
+                "task": OnyxCeleryTask.MONITOR_CELERY_QUEUES,
+                "schedule": timedelta(seconds=10),
+                "options": {
+                    "priority": OnyxCeleryPriority.MEDIUM,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                    "queue": OnyxCeleryQueues.MONITORING,
+                },
+            },
+        ]
+    )
+
+    tasks_to_schedule.extend(beat_task_templates)
 
 
 def generate_cloud_tasks(
@@ -180,23 +198,24 @@ def generate_cloud_tasks(
     if beat_multiplier <= 0:
         raise ValueError("beat_multiplier must be positive!")
 
-    # start with the incoming beat tasks
-    cloud_tasks: list[dict] = copy.deepcopy(beat_tasks)
+    cloud_tasks: list[dict] = []
 
-    # generate our cloud tasks from the templates
+    # generate our tenant aware cloud tasks from the templates
     for beat_template in beat_templates:
         cloud_task = make_cloud_generator_task(beat_template)
         cloud_tasks.append(cloud_task)
 
-    # factor in the cloud multiplier
+    # factor in the cloud multiplier for the above
     for cloud_task in cloud_tasks:
         cloud_task["schedule"] = cloud_task["schedule"] * beat_multiplier
 
+    # add the fixed cloud/system beat tasks. No multiplier for these.
+    cloud_tasks.extend(copy.deepcopy(beat_tasks))
     return cloud_tasks
 
 
 def get_cloud_tasks_to_schedule(beat_multiplier: float) -> list[dict[str, Any]]:
-    return generate_cloud_tasks(beat_system_tasks, beat_task_templates, beat_multiplier)
+    return generate_cloud_tasks(beat_cloud_tasks, beat_task_templates, beat_multiplier)
 
 
 def get_tasks_to_schedule() -> list[dict[str, Any]]:
