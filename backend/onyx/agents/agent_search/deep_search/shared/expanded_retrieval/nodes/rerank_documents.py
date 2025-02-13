@@ -24,6 +24,8 @@ from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.postprocessing.postprocessing import rerank_sections
 from onyx.context.search.postprocessing.postprocessing import reranking_is_runnable
+from onyx.db.engine import get_session_context_manager
+from onyx.db.search_settings import get_current_search_settings
 
 
 def rerank_documents(
@@ -50,6 +52,12 @@ def rerank_documents(
     ), "search_tool must be provided for agentic search"
 
     rerank_settings = graph_config.inputs.search_request.rerank_settings
+
+    with get_session_context_manager() as db_session:
+        if rerank_settings is None:
+            search_settings = get_current_search_settings(db_session)
+            if not search_settings.disable_rerank_for_streaming:
+                rerank_settings = RerankingDetails.from_db_model(search_settings)
 
     if reranking_is_runnable(rerank_settings) and len(verified_documents) > 0:
         if len(verified_documents) > 1:
