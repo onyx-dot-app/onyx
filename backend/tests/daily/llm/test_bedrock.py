@@ -23,6 +23,9 @@ def bedrock_provider() -> WellKnownLLMProviderDescriptor:
     return provider
 
 
+@pytest.mark.xfail(
+    reason="Credentials not yet available due to compliance work needed",
+)
 def test_bedrock_llm_configuration(
     client: TestClient, bedrock_provider: WellKnownLLMProviderDescriptor
 ) -> None:
