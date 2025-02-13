@@ -151,9 +151,8 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
         # endregion
 
         # check if any user groups are not synced
+        lock_beat.reacquire()
         if global_version.is_ee_version():
-            lock_beat.reacquire()
-
             try:
                 fetch_user_groups = fetch_versioned_implementation(
                     "onyx.db.user_group", "fetch_user_groups"
