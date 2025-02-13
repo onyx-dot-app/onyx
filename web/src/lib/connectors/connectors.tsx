@@ -227,6 +227,20 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  gitbook: {
+    description: "Configure GitBook connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the space ID:",
+        label: "Space ID",
+        name: "space_id",
+        optional: false,
+        description: "The ID of the GitBook space to index.",
+      },
+    ],
+    advanced_values: [],
+  },
   google_drive: {
     description: "Configure Google Drive connector",
     values: [
