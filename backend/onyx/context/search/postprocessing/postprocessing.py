@@ -165,7 +165,7 @@ def semantic_reranking(
     return list(ranked_chunks), list(ranked_indices)
 
 
-def reranking_is_runnable(rerank_settings: RerankingDetails | None) -> bool:
+def should_rerank(rerank_settings: RerankingDetails | None) -> bool:
     """Based on the RerankingDetails model, only run rerank if the following conditions are met:
     - rerank_model_name is not None
     - num_rerank is greater than 0
@@ -269,7 +269,7 @@ def search_postprocessing(
 
     rerank_task_id = None
     sections_yielded = False
-    if reranking_is_runnable(search_query.rerank_settings):
+    if should_rerank(search_query.rerank_settings):
         post_processing_tasks.append(
             FunctionCall(
                 rerank_sections,
