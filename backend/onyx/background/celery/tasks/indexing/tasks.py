@@ -425,9 +425,9 @@ def connector_indexing_task(
         callback = IndexingCallback(
             os.getppid(),
             redis_connector,
-            redis_connector_index,
             lock,
             r,
+            redis_connector_index,
         )
 
         logger.info(
@@ -658,7 +658,7 @@ def connector_indexing_proxy_task(
 
         if not redis_connector_index.connector_active():
             task_logger.warning(
-                "Indexing watchdog - timeout exceeded: "
+                "Indexing watchdog - activity timeout exceeded: "
                 f"attempt={index_attempt_id} "
                 f"cc_pair={cc_pair_id} "
                 f"search_settings={search_settings_id} "
@@ -670,7 +670,7 @@ def connector_indexing_proxy_task(
                     mark_attempt_failed(
                         index_attempt_id,
                         db_session,
-                        "Indexing watchdog - timeout exceeded"
+                        "Indexing watchdog - activity timeout exceeded: "
                         f"attempt={index_attempt_id} "
                         f"timeout={CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
                     )

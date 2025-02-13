@@ -21,7 +21,7 @@ from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_queued_task_ids
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
-from onyx.background.celery.tasks.indexing.utils import IndexingCallback
+from onyx.background.celery.tasks.indexing.utils import IndexingCallbackBase
 from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
@@ -62,7 +62,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-class PruneCallback(IndexingCallback):
+class PruneCallback(IndexingCallbackBase):
     def progress(self, tag: str, amount: int) -> None:
         self.redis_connector.prune.set_active()
         super().progress(tag, amount)
@@ -419,12 +419,11 @@ def connector_pruning_generator_task(
             )
 
             search_settings = get_current_search_settings(db_session)
-            redis_connector_index = redis_connector.new_index(search_settings.id)
+            redis_connector.new_index(search_settings.id)
 
             callback = PruneCallback(
                 0,
                 redis_connector,
-                redis_connector_index,
                 lock,
                 r,
             )

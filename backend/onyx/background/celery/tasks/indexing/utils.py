@@ -93,21 +93,19 @@ def get_unfenced_index_attempt_ids(db_session: Session, r: redis.Redis) -> list[
     return unfenced_attempts
 
 
-class IndexingCallback(IndexingHeartbeatInterface):
+class IndexingCallbackBase(IndexingHeartbeatInterface):
     PARENT_CHECK_INTERVAL = 60
 
     def __init__(
         self,
         parent_pid: int,
         redis_connector: RedisConnector,
-        redis_connector_index: RedisConnectorIndex,
         redis_lock: RedisLock,
         redis_client: Redis,
     ):
         super().__init__()
         self.parent_pid = parent_pid
         self.redis_connector: RedisConnector = redis_connector
-        self.redis_connector_index: RedisConnectorIndex = redis_connector_index
         self.redis_lock: RedisLock = redis_lock
         self.redis_client = redis_client
         self.started: datetime = datetime.now(timezone.utc)
@@ -165,6 +163,24 @@ class IndexingCallback(IndexingHeartbeatInterface):
             redis_lock_dump(self.redis_lock, self.redis_client)
             raise
 
+
+class IndexingCallback(IndexingCallbackBase):
+    def __init__(
+        self,
+        parent_pid: int,
+        redis_connector: RedisConnector,
+        redis_lock: RedisLock,
+        redis_client: Redis,
+        redis_connector_index: RedisConnectorIndex,
+    ):
+        super().__init__(parent_pid, redis_connector, redis_lock, redis_client)
+
+        self.redis_connector_index: RedisConnectorIndex = redis_connector_index
+
+    def progress(self, tag: str, amount: int) -> None:
+        self.redis_connector_index.set_active()
+        # self.redis_connector_index.set_connector_active()
+        super().progress(tag, amount)
         self.redis_client.incrby(
             self.redis_connector_index.generator_progress_key, amount
         )
