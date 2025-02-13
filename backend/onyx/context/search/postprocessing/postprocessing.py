@@ -15,6 +15,7 @@ from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import MAX_METRICS_CONTENT
+from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RerankMetricsContainer
 from onyx.context.search.models import SearchQuery
 from onyx.document_index.document_index_utils import (
@@ -77,7 +78,8 @@ def cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk
 
 @log_function_time(print_only=True)
 def semantic_reranking(
-    query: SearchQuery,
+    query_str: str,
+    rerank_settings: RerankingDetails | None,
     chunks: list[InferenceChunk],
     model_min: int = CROSS_ENCODER_RANGE_MIN,
     model_max: int = CROSS_ENCODER_RANGE_MAX,
@@ -88,8 +90,6 @@ def semantic_reranking(
 
     Note: this updates the chunks in place, it updates the chunk scores which came from retrieval
     """
-    rerank_settings = query.rerank_settings
-
     if not rerank_settings or not rerank_settings.rerank_model_name:
         # Should never reach this part of the flow without reranking settings
         raise RuntimeError("Reranking flow should not be running")
@@ -107,7 +107,7 @@ def semantic_reranking(
         f"{chunk.semantic_identifier or chunk.title or ''}\n{chunk.content}"
         for chunk in chunks_to_rerank
     ]
-    sim_scores_floats = cross_encoder.predict(query=query.query, passages=passages)
+    sim_scores_floats = cross_encoder.predict(query=query_str, passages=passages)
 
     # Old logic to handle multiple cross-encoders preserved but not used
     sim_scores = [numpy.array(sim_scores_floats)]
@@ -166,7 +166,8 @@ def semantic_reranking(
 
 
 def rerank_sections(
-    query: SearchQuery,
+    query_str: str,
+    rerank_settings: RerankingDetails | None,
     sections_to_rerank: list[InferenceSection],
     rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
 ) -> list[InferenceSection]:
@@ -181,16 +182,17 @@ def rerank_sections(
     """
     chunks_to_rerank = [section.center_chunk for section in sections_to_rerank]
 
-    if not query.rerank_settings:
+    if not rerank_settings:
         # Should never reach this part of the flow without reranking settings
         raise RuntimeError("Reranking settings not found")
 
     ranked_chunks, _ = semantic_reranking(
-        query=query,
+        query_str=query_str,
+        rerank_settings=rerank_settings,
         chunks=chunks_to_rerank,
         rerank_metrics_callback=rerank_metrics_callback,
     )
-    lower_chunks = chunks_to_rerank[query.rerank_settings.num_rerank :]
+    lower_chunks = chunks_to_rerank[rerank_settings.num_rerank :]
 
     # Scores from rerank cannot be meaningfully combined with scores without rerank
     # However the ordering is still important
@@ -269,7 +271,8 @@ def search_postprocessing(
             FunctionCall(
                 rerank_sections,
                 (
-                    search_query,
+                    search_query.query,
+                    search_query.rerank_settings,
                     retrieved_sections,
                     rerank_metrics_callback,
                 ),

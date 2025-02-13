@@ -22,9 +22,7 @@ from onyx.configs.agent_configs import AGENT_RERANKING_MAX_QUERY_RETRIEVAL_RESUL
 from onyx.configs.agent_configs import AGENT_RERANKING_STATS
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SearchRequest
-from onyx.context.search.pipeline import retrieval_preprocessing
 from onyx.context.search.postprocessing.postprocessing import rerank_sections
-from onyx.db.engine import get_session_context_manager
 
 
 def rerank_documents(
@@ -39,6 +37,8 @@ def rerank_documents(
 
     # Rerank post retrieval and verification. First, create a search query
     # then create the list of reranked sections
+    # If no question defined/question is None in the state, use the original
+    # question from the search request as query
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = (
@@ -47,35 +47,24 @@ def rerank_documents(
     assert (
         graph_config.tooling.search_tool
     ), "search_tool must be provided for agentic search"
-    with get_session_context_manager() as db_session:
-        # we ignore some of the user specified fields since this search is
-        # internal to agentic search, but we still want to pass through
-        # persona (for stuff like document sets) and rerank settings
-        # (to not make an unnecessary db call).
-        search_request = SearchRequest(
-            query=question,
-            persona=graph_config.inputs.search_request.persona,
-            rerank_settings=graph_config.inputs.search_request.rerank_settings,
-        )
-        _search_query = retrieval_preprocessing(
-            search_request=search_request,
-            user=graph_config.tooling.search_tool.user,  # bit of a hack
-            llm=graph_config.tooling.fast_llm,
-            db_session=db_session,
-        )
 
-    # skip section filtering
+    search_request = SearchRequest(
+        query=question,
+        persona=graph_config.inputs.search_request.persona,
+        rerank_settings=graph_config.inputs.search_request.rerank_settings,
+    )
 
     if (
-        _search_query.rerank_settings
-        and _search_query.rerank_settings.rerank_model_name
-        and _search_query.rerank_settings.num_rerank > 0
+        search_request.rerank_settings
+        and search_request.rerank_settings.rerank_model_name
+        and search_request.rerank_settings.num_rerank > 0
         and len(verified_documents) > 0
     ):
         if len(verified_documents) > 1:
             reranked_documents = rerank_sections(
-                _search_query,
-                verified_documents,
+                query_str=question,
+                rerank_settings=search_request.rerank_settings,
+                sections_to_rerank=verified_documents,
             )
         else:
             num = "No" if len(verified_documents) == 0 else "One"
