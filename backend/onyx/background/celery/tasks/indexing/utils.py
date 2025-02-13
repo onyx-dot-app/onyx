@@ -113,7 +113,7 @@ class IndexingCallback(IndexingHeartbeatInterface):
         self.started: datetime = datetime.now(timezone.utc)
         self.redis_lock.reacquire()
 
-        self.last_tag: str = "IndexingCallback.__init__"
+        self.last_tag: str = f"{self.__class__.__name__}.__init__"
         self.last_lock_reacquire: datetime = datetime.now(timezone.utc)
         self.last_lock_monotonic = time.monotonic()
 
@@ -127,8 +127,8 @@ class IndexingCallback(IndexingHeartbeatInterface):
 
     def progress(self, tag: str, amount: int) -> None:
         # rkuo: this shouldn't be necessary yet because we spawn the process this runs inside
-        # with daemon = True. It seems likely some indexing tasks will need to spawn other processes eventually
-        # so leave this code in until we're ready to test it.
+        # with daemon=True. It seems likely some indexing tasks will need to spawn other processes
+        # eventually, which daemon=True prevents, so leave this code in until we're ready to test it.
 
         # if self.parent_pid:
         #     # check if the parent pid is alive so we aren't running as a zombie
@@ -154,7 +154,7 @@ class IndexingCallback(IndexingHeartbeatInterface):
             self.last_tag = tag
         except LockError:
             logger.exception(
-                f"IndexingCallback - lock.reacquire exceptioned: "
+                f"{self.__class__.__name__} - lock.reacquire exceptioned: "
                 f"lock_timeout={self.redis_lock.timeout} "
                 f"start={self.started} "
                 f"last_tag={self.last_tag} "

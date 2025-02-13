@@ -6,6 +6,7 @@ from uuid import uuid4
 import redis
 from pydantic import BaseModel
 
+from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
 
 
@@ -45,6 +46,10 @@ class RedisConnectorIndex:
     WATCHDOG_PREFIX = PREFIX + "_watchdog"
     WATCHDOG_TTL = 300
 
+    # used to signal that the connector itself is still running
+    CONNECTOR_ACTIVE_PREFIX = PREFIX + "_connector_active"
+    CONNECTOR_ACTIVE_TTL = CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
+
     def __init__(
         self,
         tenant_id: str | None,
@@ -68,8 +73,12 @@ class RedisConnectorIndex:
             f"{self.GENERATOR_LOCK_PREFIX}_{id}/{search_settings_id}"
         )
         self.terminate_key = f"{self.TERMINATE_PREFIX}_{id}/{search_settings_id}"
-        self.active_key = f"{self.ACTIVE_PREFIX}_{id}/{search_settings_id}"
         self.watchdog_key = f"{self.WATCHDOG_PREFIX}_{id}/{search_settings_id}"
+
+        self.active_key = f"{self.ACTIVE_PREFIX}_{id}/{search_settings_id}"
+        self.connector_active_key = (
+            f"{self.CONNECTOR_ACTIVE_PREFIX}_{id}/{search_settings_id}"
+        )
 
     @classmethod
     def fence_key_with_ids(cls, cc_pair_id: int, search_settings_id: int) -> str:
@@ -156,6 +165,20 @@ class RedisConnectorIndex:
 
         return False
 
+    def set_connector_active(self) -> None:
+        """This sets a signal to keep the indexing flow from getting cleaned up within
+        the expiration time.
+
+        The slack in timing is needed to avoid race conditions where simply checking
+        the celery queue and task status could result in race conditions."""
+        self.redis.set(self.connector_active_key, 0, ex=self.CONNECTOR_ACTIVE_TTL)
+
+    def connector_active(self) -> bool:
+        if self.redis.exists(self.connector_active_key):
+            return True
+
+        return False
+
     def generator_locked(self) -> bool:
         if self.redis.exists(self.generator_lock_key):
             return True
@@ -194,6 +217,7 @@ class RedisConnectorIndex:
 
     def reset(self) -> None:
         self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
+        self.redis.delete(self.connector_active_key)
         self.redis.delete(self.active_key)
         self.redis.delete(self.generator_lock_key)
         self.redis.delete(self.generator_progress_key)
@@ -203,6 +227,9 @@ class RedisConnectorIndex:
     @staticmethod
     def reset_all(r: redis.Redis) -> None:
         """Deletes all redis values for all connectors"""
+        for key in r.scan_iter(RedisConnectorIndex.CONNECTOR_ACTIVE_PREFIX + "*"):
+            r.delete(key)
+
         for key in r.scan_iter(RedisConnectorIndex.ACTIVE_PREFIX + "*"):
             r.delete(key)
 

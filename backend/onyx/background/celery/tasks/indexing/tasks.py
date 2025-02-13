@@ -28,6 +28,7 @@ from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
 from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
@@ -597,14 +598,14 @@ def connector_indexing_proxy_task(
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     redis_connector_index = redis_connector.new_index(search_settings_id)
 
+    redis_connector_index.set_active()  # renew active signal
+    redis_connector_index.set_connector_active()  # prime the connective active signal
+
     while True:
         sleep(5)
 
         # renew watchdog signal (this has a shorter timeout than set_active)
         redis_connector_index.set_watchdog(True)
-
-        # renew active signal
-        redis_connector_index.set_active()
 
         # if the job is done, clean up and break
         if job.done():
@@ -653,6 +654,38 @@ def connector_indexing_proxy_task(
             finally:
                 job.release()
 
+            break
+
+        if not redis_connector_index.connector_active():
+            task_logger.warning(
+                "Indexing watchdog - timeout exceeded: "
+                f"attempt={index_attempt_id} "
+                f"cc_pair={cc_pair_id} "
+                f"search_settings={search_settings_id} "
+                f"timeout={CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s"
+            )
+
+            try:
+                with get_session_with_tenant(tenant_id) as db_session:
+                    mark_attempt_failed(
+                        index_attempt_id,
+                        db_session,
+                        "Indexing watchdog - timeout exceeded"
+                        f"attempt={index_attempt_id} "
+                        f"timeout={CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
+                    )
+            except Exception:
+                # if the DB exceptions, we'll just get an unfriendly failure message
+                # in the UI instead of the cancellation message
+                logger.exception(
+                    "Indexing watchdog - transient exception marking index attempt as failed: "
+                    f"attempt={index_attempt_id} "
+                    f"tenant={tenant_id} "
+                    f"cc_pair={cc_pair_id} "
+                    f"search_settings={search_settings_id}"
+                )
+
+            job.cancel()
             break
 
         # if a termination signal is detected, clean up and break
