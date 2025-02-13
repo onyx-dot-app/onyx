@@ -43,10 +43,136 @@ class GitbookApiClient:
 
 
 def _extract_text_from_document(document: dict[str, Any]) -> str:
-    """Extract text content from GitBook document structure"""
-    # This is a placeholder - we'll need to implement proper parsing
-    # of the document nodes structure later
-    return document.get("title", "") + "\n" + str(document.get("document", ""))
+    """Extract text content from GitBook document structure by parsing the document nodes
+    into markdown format."""
+
+    def parse_leaf(leaf):
+        text = leaf.get("text", "")
+        leaf.get("marks", [])
+        return text
+
+    def parse_text_node(node):
+        text = ""
+        for leaf in node.get("leaves", []):
+            text += parse_leaf(leaf)
+        return text
+
+    def parse_block_node(node):
+        block_type = node.get("type", "")
+        result = ""
+
+        if block_type == "heading-1":
+            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
+            result = f"# {text}\n\n"
+
+        elif block_type == "heading-2":
+            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
+            result = f"## {text}\n\n"
+
+        elif block_type == "heading-3":
+            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
+            result = f"### {text}\n\n"
+
+        elif block_type == "heading-4":
+            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
+            result = f"#### {text}\n\n"
+
+        elif block_type == "heading-5":
+            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
+            result = f"##### {text}\n\n"
+
+        elif block_type == "heading-6":
+            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
+            result = f"###### {text}\n\n"
+
+        elif block_type == "list-unordered":
+            for list_item in node.get("nodes", []):
+                paragraph = list_item.get("nodes", [])[0]
+                text = "".join(parse_text_node(n) for n in paragraph.get("nodes", []))
+                result += f"* {text}\n"
+            result += "\n"
+
+        elif block_type == "paragraph":
+            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
+            result = f"{text}\n\n"
+
+        elif block_type == "list-tasks":
+            for task_item in node.get("nodes", []):
+                checked = task_item.get("data", {}).get("checked", False)
+                paragraph = task_item.get("nodes", [])[0]
+                text = "".join(parse_text_node(n) for n in paragraph.get("nodes", []))
+                checkbox = "[x]" if checked else "[ ]"
+                result += f"- {checkbox} {text}\n"
+            result += "\n"
+
+        elif block_type == "code":
+            for code_line in node.get("nodes", []):
+                if code_line.get("type") == "code-line":
+                    text = "".join(
+                        parse_text_node(n) for n in code_line.get("nodes", [])
+                    )
+                    result += f"{text}\n"
+            result += "\n"
+
+        elif block_type == "blockquote":
+            for quote_node in node.get("nodes", []):
+                if quote_node.get("type") == "paragraph":
+                    text = "".join(
+                        parse_text_node(n) for n in quote_node.get("nodes", [])
+                    )
+                    result += f"> {text}\n"
+            result += "\n"
+
+        elif block_type == "table":
+            records = node.get("data", {}).get("records", {})
+            definition = node.get("data", {}).get("definition", {})
+            view = node.get("data", {}).get("view", {})
+
+            columns = view.get("columns", [])
+
+            header_cells = []
+            for col_id in columns:
+                col_def = definition.get(col_id, {})
+                header_cells.append(col_def.get("title", ""))
+
+            result = "| " + " | ".join(header_cells) + " |\n"
+            result += "|" + "---|" * len(header_cells) + "\n"
+
+            sorted_records = sorted(
+                records.items(), key=lambda x: x[1].get("orderIndex", "")
+            )
+
+            for record_id, record_data in sorted_records:
+                values = record_data.get("values", {})
+                row_cells = []
+                for col_id in columns:
+                    fragment_id = values.get(col_id, "")
+                    fragment_text = ""
+                    for fragment in node.get("fragments", []):
+                        if fragment.get("fragment") == fragment_id:
+                            for frag_node in fragment.get("nodes", []):
+                                if frag_node.get("type") == "paragraph":
+                                    fragment_text = "".join(
+                                        parse_text_node(n)
+                                        for n in frag_node.get("nodes", [])
+                                    )
+                                    break
+                    row_cells.append(fragment_text)
+                result += "| " + " | ".join(row_cells) + " |\n"
+
+            result += "\n"
+        return result
+
+    if not document or "document" not in document:
+        return ""
+
+    markdown = ""
+    nodes = document["document"].get("nodes", [])
+
+    for node in nodes:
+        markdown += parse_block_node(node)
+
+    return markdown
 
 
 def _convert_page_to_document(
