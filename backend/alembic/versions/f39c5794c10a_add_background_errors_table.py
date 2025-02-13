@@ -17,7 +17,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "background_errors",
+        "background_error",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("message", sa.String(), nullable=False),
         sa.Column(
@@ -26,9 +26,15 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
+        sa.Column("cc_pair_id", sa.Integer(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(
+            ["cc_pair_id"],
+            ["connector_credential_pair.id"],
+            ondelete="CASCADE",
+        ),
     )
 
 
 def downgrade() -> None:
-    op.drop_table("background_errors")
+    op.drop_table("background_error")

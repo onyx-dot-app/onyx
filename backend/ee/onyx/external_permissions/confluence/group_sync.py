@@ -19,10 +19,11 @@ def _build_group_member_email_map(
 
         user = user_result.get("user", {})
         if not user:
-            emit_background_error(
-                f"user result missing user field: {user_result}", cc_pair_id=cc_pair_id
-            )
+            msg = f"user result missing user field: {user_result}"
+            emit_background_error(msg, cc_pair_id=cc_pair_id)
+            logger.error(msg)
             continue
+
         email = user.get("email")
         if not email:
             # This field is only present in Confluence Server
@@ -35,9 +36,12 @@ def _build_group_member_email_map(
                 )
         if not email:
             # If we still don't have an email, skip this user
-            emit_background_error(
-                f"user result missing email field: {user_result}", cc_pair_id=cc_pair_id
-            )
+            msg = f"user result missing email field: {user_result}"
+            if user.get("type") == "app":
+                logger.warning(msg)
+            else:
+                emit_background_error(msg, cc_pair_id=cc_pair_id)
+                logger.error(msg)
             continue
 
         all_users_groups: set[str] = set()
@@ -48,14 +52,16 @@ def _build_group_member_email_map(
             all_users_groups.add(group_id)
 
         if not all_users_groups:
-            emit_background_error(
-                f"No groups found for user with email: {email}", cc_pair_id=cc_pair_id
-            )
+            msg = f"No groups found for user with email: {email}"
+            emit_background_error(msg, cc_pair_id=cc_pair_id)
+            logger.error(msg)
         else:
             logger.debug(f"Found groups {all_users_groups} for user with email {email}")
 
     if not group_member_emails:
-        emit_background_error("No groups found for any users.", cc_pair_id=cc_pair_id)
+        msg = "No groups found for any users."
+        emit_background_error(msg, cc_pair_id=cc_pair_id)
+        logger.error(msg)
 
     return group_member_emails
 

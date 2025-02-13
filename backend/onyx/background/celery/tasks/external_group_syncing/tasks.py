@@ -350,6 +350,7 @@ def connector_external_group_sync_generator_task(
     if not acquired:
         msg = f"External group sync task already running, exiting...: cc_pair={cc_pair_id}"
         emit_background_error(msg, cc_pair_id=cc_pair_id)
+        task_logger.error(msg)
         return None
 
     try:
@@ -405,7 +406,7 @@ def connector_external_group_sync_generator_task(
     except Exception as e:
         msg = f"External group sync exceptioned: cc_pair={cc_pair_id} payload_id={payload.id}"
         task_logger.exception(msg)
-        emit_background_error(msg + f"\n\n{e}", cc_pair_id=cc_pair_id, skip_log=True)
+        emit_background_error(msg + f"\n\n{e}", cc_pair_id=cc_pair_id)
 
         with get_session_with_tenant(tenant_id) as db_session:
             update_sync_record_status(
@@ -495,9 +496,11 @@ def validate_external_group_sync_fence(
     fence_key = key_bytes.decode("utf-8")
     cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)
     if cc_pair_id_str is None:
-        emit_background_error(
+        msg = (
             f"validate_external_group_sync_fence - could not parse id from {fence_key}"
         )
+        emit_background_error(msg)
+        task_logger.error(msg)
         return
 
     cc_pair_id = int(cc_pair_id_str)
@@ -519,7 +522,7 @@ def validate_external_group_sync_fence(
             f"fence={fence_key}"
         )
         task_logger.exception(msg)
-        emit_background_error(msg, cc_pair_id=cc_pair_id, skip_log=True)
+        emit_background_error(msg, cc_pair_id=cc_pair_id)
 
         redis_connector.external_group_sync.reset()
         return
