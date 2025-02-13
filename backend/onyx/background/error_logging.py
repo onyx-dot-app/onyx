@@ -4,7 +4,9 @@ from onyx.db.engine import get_session_with_tenant
 
 
 def emit_background_error(
-    message: str, cc_pair_id: int | None = None, skip_log: bool = False
+    message: str,
+    cc_pair_id: int | None = None,
+    skip_log: bool = False,
 ) -> None:
     """Currently just saves a row in the background_errors table + logs error.
 

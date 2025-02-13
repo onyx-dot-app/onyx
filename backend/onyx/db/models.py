@@ -483,6 +483,10 @@ class ConnectorCredentialPair(Base):
         primaryjoin="foreign(ConnectorCredentialPair.creator_id) == remote(User.id)",
     )
 
+    background_errors: Mapped[list["BackgroundError"]] = relationship(
+        "BackgroundError", back_populates="cc_pair", cascade="all, delete-orphan"
+    )
+
 
 class Document(Base):
     __tablename__ = "document"
@@ -2132,7 +2136,11 @@ class BackgroundError(Base):
 
     # option to link the error to a specific CC Pair
     cc_pair_id: Mapped[int | None] = mapped_column(
-        ForeignKey("connector_credential_pair.id"), nullable=True
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"), nullable=True
+    )
+
+    cc_pair: Mapped["ConnectorCredentialPair | None"] = relationship(
+        "ConnectorCredentialPair", back_populates="background_errors"
     )
 
 

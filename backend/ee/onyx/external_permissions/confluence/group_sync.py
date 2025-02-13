@@ -11,7 +11,7 @@ logger = setup_logger()
 
 
 def _build_group_member_email_map(
-    confluence_client: OnyxConfluence,
+    confluence_client: OnyxConfluence, cc_pair_id: int
 ) -> dict[str, set[str]]:
     group_member_emails: dict[str, set[str]] = {}
     for user_result in confluence_client.paginated_cql_user_retrieval():
@@ -19,7 +19,9 @@ def _build_group_member_email_map(
 
         user = user_result.get("user", {})
         if not user:
-            emit_background_error(f"user result missing user field: {user_result}")
+            emit_background_error(
+                f"user result missing user field: {user_result}", cc_pair_id=cc_pair_id
+            )
             continue
         email = user.get("email")
         if not email:
@@ -33,7 +35,9 @@ def _build_group_member_email_map(
                 )
         if not email:
             # If we still don't have an email, skip this user
-            emit_background_error(f"user result missing email field: {user_result}")
+            emit_background_error(
+                f"user result missing email field: {user_result}", cc_pair_id=cc_pair_id
+            )
             continue
 
         all_users_groups: set[str] = set()
@@ -44,12 +48,14 @@ def _build_group_member_email_map(
             all_users_groups.add(group_id)
 
         if not all_users_groups:
-            emit_background_error(f"No groups found for user with email: {email}")
+            emit_background_error(
+                f"No groups found for user with email: {email}", cc_pair_id=cc_pair_id
+            )
         else:
             logger.debug(f"Found groups {all_users_groups} for user with email {email}")
 
     if not group_member_emails:
-        emit_background_error("No groups found for any users.")
+        emit_background_error("No groups found for any users.", cc_pair_id=cc_pair_id)
 
     return group_member_emails
 
@@ -65,6 +71,7 @@ def confluence_group_sync(
 
     group_member_email_map = _build_group_member_email_map(
         confluence_client=confluence_client,
+        cc_pair_id=cc_pair.id,
     )
     onyx_groups: list[ExternalUserGroup] = []
     all_found_emails = set()
