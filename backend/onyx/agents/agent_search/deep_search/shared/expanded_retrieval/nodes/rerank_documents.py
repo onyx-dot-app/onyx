@@ -21,8 +21,9 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.configs.agent_configs import AGENT_RERANKING_MAX_QUERY_RETRIEVAL_RESULTS
 from onyx.configs.agent_configs import AGENT_RERANKING_STATS
 from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SearchRequest
+from onyx.context.search.models import RerankingDetails
 from onyx.context.search.postprocessing.postprocessing import rerank_sections
+from onyx.context.search.postprocessing.postprocessing import reranking_is_runnable
 
 
 def rerank_documents(
@@ -48,27 +49,20 @@ def rerank_documents(
         graph_config.tooling.search_tool
     ), "search_tool must be provided for agentic search"
 
-    search_request = SearchRequest(
-        query=question,
-        persona=graph_config.inputs.search_request.persona,
-        rerank_settings=graph_config.inputs.search_request.rerank_settings,
-    )
+    rerank_settings = graph_config.inputs.search_request.rerank_settings
 
-    if (
-        search_request.rerank_settings
-        and search_request.rerank_settings.rerank_model_name
-        and search_request.rerank_settings.num_rerank > 0
-        and len(verified_documents) > 0
-    ):
+    if reranking_is_runnable(rerank_settings) and len(verified_documents) > 0:
         if len(verified_documents) > 1:
             reranked_documents = rerank_sections(
                 query_str=question,
-                rerank_settings=search_request.rerank_settings,
+                # if runnable, then rerank_settings is not None
+                rerank_settings=cast(RerankingDetails, rerank_settings),
                 sections_to_rerank=verified_documents,
             )
         else:
-            num = "No" if len(verified_documents) == 0 else "One"
-            logger.warning(f"{num} verified document(s) found, skipping reranking")
+            logger.warning(
+                f"{len(verified_documents)} verified document(s) found, skipping reranking"
+            )
             reranked_documents = verified_documents
     else:
         logger.warning("No reranking settings found, using unranked documents")

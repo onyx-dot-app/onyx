@@ -79,7 +79,7 @@ def cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk
 @log_function_time(print_only=True)
 def semantic_reranking(
     query_str: str,
-    rerank_settings: RerankingDetails | None,
+    rerank_settings: RerankingDetails,
     chunks: list[InferenceChunk],
     model_min: int = CROSS_ENCODER_RANGE_MIN,
     model_max: int = CROSS_ENCODER_RANGE_MAX,
@@ -90,9 +90,9 @@ def semantic_reranking(
 
     Note: this updates the chunks in place, it updates the chunk scores which came from retrieval
     """
-    if not rerank_settings or not rerank_settings.rerank_model_name:
-        # Should never reach this part of the flow without reranking settings
-        raise RuntimeError("Reranking flow should not be running")
+    assert (
+        rerank_settings.rerank_model_name
+    ), "Reranking flow cannot run without a specific model"
 
     chunks_to_rerank = chunks[: rerank_settings.num_rerank]
 
@@ -165,9 +165,20 @@ def semantic_reranking(
     return list(ranked_chunks), list(ranked_indices)
 
 
+def reranking_is_runnable(rerank_settings: RerankingDetails | None) -> bool:
+    """Based on the RerankingDetails model, only run rerank if the following conditions are met:
+    - rerank_model_name is not None
+    - num_rerank is greater than 0
+    """
+    if not rerank_settings:
+        return False
+
+    return bool(rerank_settings.rerank_model_name and rerank_settings.num_rerank > 0)
+
+
 def rerank_sections(
     query_str: str,
-    rerank_settings: RerankingDetails | None,
+    rerank_settings: RerankingDetails,
     sections_to_rerank: list[InferenceSection],
     rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
 ) -> list[InferenceSection]:
@@ -181,10 +192,6 @@ def rerank_sections(
     also be high.
     """
     chunks_to_rerank = [section.center_chunk for section in sections_to_rerank]
-
-    if not rerank_settings:
-        # Should never reach this part of the flow without reranking settings
-        raise RuntimeError("Reranking settings not found")
 
     ranked_chunks, _ = semantic_reranking(
         query_str=query_str,
@@ -262,17 +269,13 @@ def search_postprocessing(
 
     rerank_task_id = None
     sections_yielded = False
-    if (
-        search_query.rerank_settings
-        and search_query.rerank_settings.rerank_model_name
-        and search_query.rerank_settings.num_rerank > 0
-    ):
+    if reranking_is_runnable(search_query.rerank_settings):
         post_processing_tasks.append(
             FunctionCall(
                 rerank_sections,
                 (
                     search_query.query,
-                    search_query.rerank_settings,
+                    search_query.rerank_settings,  # Cannot be None here
                     retrieved_sections,
                     rerank_metrics_callback,
                 ),
