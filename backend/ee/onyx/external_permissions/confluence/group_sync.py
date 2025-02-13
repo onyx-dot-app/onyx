@@ -1,5 +1,6 @@
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
+from onyx.background.error_logging import emit_background_error
 from onyx.connectors.confluence.onyx_confluence import build_confluence_client
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.confluence.utils import get_user_email_from_username__server
@@ -18,7 +19,7 @@ def _build_group_member_email_map(
 
         user = user_result.get("user", {})
         if not user:
-            logger.warning(f"user result missing user field: {user_result}")
+            emit_background_error(f"user result missing user field: {user_result}")
             continue
         email = user.get("email")
         if not email:
@@ -32,7 +33,7 @@ def _build_group_member_email_map(
                 )
         if not email:
             # If we still don't have an email, skip this user
-            logger.warning(f"user result missing email field: {user_result}")
+            emit_background_error(f"user result missing email field: {user_result}")
             continue
 
         all_users_groups: set[str] = set()
@@ -42,10 +43,13 @@ def _build_group_member_email_map(
             group_member_emails.setdefault(group_id, set()).add(email)
             all_users_groups.add(group_id)
 
-        if not group_member_emails:
-            logger.warning(f"No groups found for user with email: {email}")
+        if not all_users_groups:
+            emit_background_error(f"No groups found for user with email: {email}")
         else:
             logger.debug(f"Found groups {all_users_groups} for user with email {email}")
+
+    if not group_member_emails:
+        emit_background_error("No groups found for any users.")
 
     return group_member_emails
 
