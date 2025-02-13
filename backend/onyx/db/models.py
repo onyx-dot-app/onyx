@@ -2115,19 +2115,24 @@ class StandardAnswer(Base):
     )
 
 
-class BackgroundErrors(Base):
+class BackgroundError(Base):
     """Important background errors. Serves to:
     1. Ensure that important logs are kept around and not lost on rotation/container restarts
     2. A trail for high-signal events so that the debugger doesn't need to remember/know every
        possible relevant log line.
     """
 
-    __tablename__ = "background_errors"
+    __tablename__ = "background_error"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     message: Mapped[str] = mapped_column(String)
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+    # option to link the error to a specific CC Pair
+    cc_pair_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector_credential_pair.id"), nullable=True
     )
 
 
