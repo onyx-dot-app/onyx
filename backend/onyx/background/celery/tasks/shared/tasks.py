@@ -270,6 +270,7 @@ def cloud_beat_task_generator(
                 queue=queue,
                 priority=priority,
                 expires=expires,
+                ignore_result=True,
             )
     except SoftTimeLimitExceeded:
         task_logger.info(

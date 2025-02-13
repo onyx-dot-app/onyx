@@ -120,6 +120,7 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
                 queue=OnyxCeleryQueues.VESPA_METADATA_SYNC,
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.MEDIUM,
+                ignore_result=True,
             )
 
             num_tasks_sent += 1
