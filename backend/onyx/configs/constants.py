@@ -104,7 +104,7 @@ CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 CELERY_INDEXING_LOCK_TIMEOUT = 3 * 60 * 60  # 3 hours (in seconds)
 
 # hard timeout applied by the watchdog to the indexing connector run
-CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 60  # 4 hours (in seconds)
+CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 4 * 60 * 60  # 4 hours (in seconds)
 
 # how long a task should wait for associated fence to be ready
 CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
