@@ -1017,13 +1017,19 @@ def connector_indexing_proxy_task(
                 )
             )
 
+        normalized_exception_str = "None"
+        if result.exception_str:
+            normalized_exception_str = result.exception_str.replace(
+                "\n", "\\n"
+            ).replace('"', '\\"')
+
         task_logger.warning(
             log_builder.build(
                 "Indexing watchdog - finished",
                 source=result.connector_source,
                 status=result.status.value,
                 exit_code=str(result.exit_code),
-                exception=str(result.exception_str),
+                exception=f'"{normalized_exception_str}"',
                 elapsed=f"{elapsed:.2f}s",
             )
         )
