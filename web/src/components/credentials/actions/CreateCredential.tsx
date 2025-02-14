@@ -194,7 +194,7 @@ export default function CreateCredential({
               for information on setting up this connector.
             </p>
           )}
-          <CardSection className="w-full items-start bg-blue-200 !border-0 mt-4 flex flex-col gap-y-6">
+          <CardSection className="w-full items-start  dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
             <TextFormField
               name="name"
               placeholder="(Optional) credential name.."
@@ -215,7 +215,7 @@ export default function CreateCredential({
               />
             ))}
             {!swapConnector && (
-              <div className="mt-4 flex flex-col sm:flex-row justify-between items-end">
+              <div className="mt-4 flex w-full flex-col sm:flex-row justify-between items-end">
                 <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
                   {isPaidEnterpriseFeaturesEnabled && (
                     <div className="flex flex-col items-start">
