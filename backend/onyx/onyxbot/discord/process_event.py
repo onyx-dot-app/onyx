@@ -18,11 +18,14 @@ from onyx.context.search.models import OptionalSearchSetting
 from onyx.context.search.models import RetrievalDetails
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import ChatMessage
+from onyx.db.models import DiscordChannelConfig
+from onyx.onyxbot.discord.config import get_discord_channel_config_for_bot_and_channel
 from onyx.onyxbot.discord.models import DiscordMessageInfo
 from onyx.onyxbot.discord.utils import update_emote_react
 from onyx.onyxbot.discord.views import ContinueOnOnyxView
 from onyx.onyxbot.discord.views import DocumentFeedbackView
 from onyx.onyxbot.discord.views import FeedbackView
+from onyx.onyxbot.discord.views import StillNeedHelpView
 from onyx.onyxbot.slack.utils import rephrase_slack_message
 from onyx.utils.logger import setup_logger
 
@@ -46,26 +49,18 @@ def prefilter_message(message: discord.Message) -> bool:
     if not message.content:
         logger.warning("Cannot respond to empty message - skipping")
         return False
-
     if message.author.bot:
         logger.info("Ignoring message from bot")
         return False
-
     if message.content in _DISCORD_GREETINGS_TO_IGNORE:
         logger.error(f"Ignoring greeting message: '{message.content}'")
         return False
-
     return True
 
 
 def get_thread_messages(message: discord.Message) -> list[ThreadMessage]:
-    """Get all messages in the thread if message is in one"""
     messages = []
-
-    # If message is in a thread, get previous messages
     if isinstance(message.channel, discord.Thread):
-        # TODO: Implement proper thread history fetching
-        # For now, just add the current message
         messages.append(
             ThreadMessage(
                 message=message.content,
@@ -81,7 +76,6 @@ def get_thread_messages(message: discord.Message) -> list[ThreadMessage]:
                 role=MessageType.USER,
             )
         )
-
     return messages
 
 
@@ -112,6 +106,7 @@ def build_message_info(
     ]
 
     return DiscordMessageInfo(
+        tenant_id=bot.tenant_id,
         thread_messages=thread_messages,
         channel_to_respond=str(message.channel.id),
         msg_to_respond=str(message.id),
@@ -130,12 +125,10 @@ async def handle_regular_answer(
     message_info: DiscordMessageInfo,
     bot: commands.Bot,
 ) -> None:
-    try:
-        channel = bot.get_channel(int(message_info.channel_to_respond))
-        if not channel:
-            logger.error(f"Could not find channel {message_info.channel_to_respond}")
-            return
+    channel = message.channel
+    thread = None
 
+    try:
         await update_emote_react(
             channel,
             message,
@@ -145,6 +138,14 @@ async def handle_regular_answer(
         if message_info.thread_messages[-1].message in _DISCORD_GREETINGS_TO_IGNORE:
             return
 
+        # Create thread title from the question
+        thread_name = message.content
+        # Remove bot mention if present
+        if bot.user in message.mentions:
+            thread_name = thread_name.replace(f"<@{bot.user.id}>", "").strip()
+        # Truncate and provide fallback
+        thread_name = thread_name[:100] if thread_name else "New conversation"
+
         content = message_info.thread_messages[-1].message
         if DANSWER_BOT_REPHRASE_MESSAGE:
             try:
@@ -152,7 +153,7 @@ async def handle_regular_answer(
             except Exception as e:
                 logger.error(f"Error rephrasing message: {e}")
 
-        with get_session_with_tenant(None) as db_session:
+        with get_session_with_tenant(message_info.tenant_id) as db_session:
             answer_request = prepare_chat_message_request(
                 message_text=content,
                 user=None,
@@ -205,6 +206,36 @@ async def handle_regular_answer(
 
                 if not answer.strip():
                     raise Exception("No response content generated")
+
+                # Truncate answer if it's too long
+                if len(answer) > 2000:
+                    logger.warning(
+                        f"Answer exceeded 2000 chars, truncating. Original length: {len(answer)}"
+                    )
+                    answer = answer[:1997] + "..."
+
+                # Get channel config to check for citations requirement
+                channel_config = get_discord_channel_config_for_bot_and_channel(
+                    db_session=db_session,
+                    discord_bot_id=bot.discord_bot_id,
+                    channel_name=channel.name,
+                )
+
+                config = channel_config.channel_config if channel_config else {}
+                answer_filters = config.get("answer_filters", [])
+                require_citations = "well_answered_postfilter" in answer_filters
+
+                # Check citations requirement after getting the answer
+                if (
+                    require_citations
+                    and not message_info.bypass_filters
+                    and not documents
+                ):
+                    await message.reply(
+                        "I couldn't find any relevant citations to support an answer. Please try rephrasing your question.",
+                        ephemeral=True,
+                    )
+                    return
 
                 embeds = []
                 if documents:
@@ -272,51 +303,113 @@ async def handle_regular_answer(
 
                     embeds.append(doc_embed)
 
-                view = FeedbackView(str(message_info.msg_to_respond))
+                # Get channel config for follow-up tags
+                channel_config = get_discord_channel_config_for_bot_and_channel(
+                    db_session=db_session,
+                    discord_bot_id=bot.discord_bot_id,
+                    channel_name=channel.name,
+                )
 
-                try:
-                    await channel.send(content=answer, reference=message, view=view)
+                # Get the follow-up tags from channel config
+                follow_up_tags = (
+                    channel_config.channel_config.get("follow_up_tags")
+                    if channel_config
+                    else None
+                )
 
-                    with get_session_with_tenant(None) as db_session:
-                        stmt = (
-                            select(ChatMessage)
-                            .where(
-                                ChatMessage.message == answer,
-                                ChatMessage.message_type == MessageType.ASSISTANT,
-                            )
-                            .order_by(ChatMessage.time_sent.desc())
+                # First get the chat message ID from the database
+                with get_session_with_tenant(message_info.tenant_id) as db_session:
+                    stmt = (
+                        select(ChatMessage)
+                        .where(
+                            ChatMessage.message == answer,
+                            ChatMessage.message_type == MessageType.ASSISTANT,
+                        )
+                        .order_by(ChatMessage.time_sent.desc())
+                    )
+
+                    chat_message = db_session.execute(stmt).first()
+
+                # Create views with the database message ID
+                feedback_view = FeedbackView(
+                    message_id=chat_message[0].id
+                    if chat_message
+                    else 0,  # Use database ID
+                    tenant_id=message_info.tenant_id,
+                    users_to_tag=follow_up_tags,
+                )
+                still_need_help_view = StillNeedHelpView(users_to_tag=follow_up_tags)
+
+                # Combine views
+                combined_view = discord.ui.View()
+                for item in feedback_view.children:
+                    combined_view.add_item(item)
+                for item in still_need_help_view.children:
+                    combined_view.add_item(item)
+
+                # Determine where to send messages
+                target_channel = channel
+                if not isinstance(channel, discord.Thread):
+                    thread = await message.create_thread(
+                        name=thread_name, auto_archive_duration=1440
+                    )
+                    target_channel = thread
+
+                # Send the main response
+                await target_channel.send(content=answer, view=combined_view)
+
+                with get_session_with_tenant(message_info.tenant_id) as db_session:
+                    stmt = (
+                        select(ChatMessage)
+                        .where(
+                            ChatMessage.message == answer,
+                            ChatMessage.message_type == MessageType.ASSISTANT,
+                        )
+                        .order_by(ChatMessage.time_sent.desc())
+                    )
+
+                    chat_message = db_session.execute(stmt).first()
+                    if chat_message:
+                        # Get channel config and check if we should show the continue button
+                        channel_config = get_discord_channel_config_for_bot_and_channel(
+                            db_session=db_session,
+                            discord_bot_id=bot.discord_bot_id,
+                            channel_name=channel.name,
                         )
 
-                        chat_message = db_session.execute(stmt).first()
-                        if chat_message:
-                            continue_view = ContinueOnOnyxView(
-                                str(chat_message[0].chat_session_id)
+                        if isinstance(channel, discord.DMChannel) or (
+                            channel_config
+                            and channel_config.channel_config.get(
+                                "show_continue_in_web_ui", False
                             )
-                            await channel.send(view=continue_view)
+                        ):
+                            continue_view = ContinueOnOnyxView(
+                                chat_session_id=str(chat_message[0].chat_session_id),
+                                tenant_id=message_info.tenant_id,
+                            )
+                            await target_channel.send(view=continue_view)
 
-                    if embeds:
-                        doc_view = DocumentFeedbackView(str(documents[0].document_id))
-                        await channel.send(embeds=embeds, view=doc_view)
-                except Exception as e:
-                    logger.error(f"Failed to send message: {e}")
+                # Send reference documents in the same thread/channel
+                if embeds:
+                    doc_view = DocumentFeedbackView(
+                        document_id=str(documents[0].document_id),
+                        tenant_id=message_info.tenant_id,
+                    )
+                    await target_channel.send(embeds=embeds, view=doc_view)
+            except Exception as e:
+                logger.error(f"Failed to send message: {e}")
 
-                    await update_emote_react(
-                        channel,
-                        message,
-                        ":thinking:",
-                        remove=True,
-                    )
-                    await update_emote_react(
-                        channel,
-                        message,
-                        ":white_check_mark:",
-                    )
-
-                except Exception:
-                    await message.reply(
-                        "I apologize, but I encountered an error while processing your request. Please try again later."
-                    )
-                    return
+                await update_emote_react(
+                    channel,
+                    message,
+                    ":thinking:",
+                    remove=True,
+                )
+                await update_emote_react(
+                    channel,
+                    message,
+                    ":white_check_mark:",
+                )
 
             except Exception:
                 await message.reply(
@@ -330,15 +423,78 @@ async def handle_regular_answer(
         )
 
 
-async def process_message(message: discord.Message, bot: commands.Bot) -> None:
-    # Don't respond to our own messages
+async def should_process_message(
+    message: discord.Message,
+    channel_config: DiscordChannelConfig | None,
+    bot: commands.Bot,
+) -> bool:
+    # Basic message filtering
+    if not prefilter_message(message):
+        return False
+
+    # Always respond to DMs
+    if isinstance(message.channel, discord.DMChannel):
+        return True
+
+    # No config - don't respond at all
+    if not channel_config:
+        return False
+
+    config = channel_config.channel_config
+
+    # Check question mark filter
+    if (
+        "answer_filters" in config
+        and "questionmark_prefilter" in config["answer_filters"]
+        and "?" not in message.content
+    ):
+        return False
+
+    # Bot response handling
+    if message.author.bot and not config.get("respond_to_bots", False):
+        return False
+
+    # Mention-only mode
+    if config.get("respond_mention_only", False):
+        return bot.user in message.mentions
+
+    # Check member/group permissions
+    allowed_members = config.get("respond_member_group_list", [])
+    if allowed_members:
+        user_id = message.author.name
+        if user_id not in allowed_members:
+            return False
+
+    return True
+
+
+async def process_message(
+    message: discord.Message, message_info: DiscordMessageInfo, bot: commands.Bot
+) -> None:
     if message.author == bot.user:
         return
 
-    # Only respond to mentions or DMs
-    if bot.user in message.mentions or isinstance(message.channel, discord.DMChannel):
-        message_info = build_message_info(message, bot)
-        await handle_regular_answer(message, message_info, bot)
+    try:
+        logger.info(f"Getting session with tenant: {message_info.tenant_id}")
+        with get_session_with_tenant(message_info.tenant_id) as db_session:
+            # Skip channel config check for DMs
+            if isinstance(message.channel, discord.DMChannel):
+                await handle_regular_answer(message, message_info, bot)
+                return
+            channel_config = get_discord_channel_config_for_bot_and_channel(
+                db_session=db_session,
+                discord_bot_id=bot.discord_bot_id,
+                channel_name=message.channel.name,
+            )
+            should_process = await should_process_message(message, channel_config, bot)
+            if not should_process:
+                return
+
+            await handle_regular_answer(message, message_info, bot)
+    except Exception:
+        await message.reply(
+            "I encountered an error processing your message. Please try again later."
+        )
 
 
 def create_process_discord_event():

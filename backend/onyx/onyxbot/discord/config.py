@@ -13,6 +13,10 @@ VALID_DISCORD_FILTERS = [
 ]
 
 
+def clean_channel_name(channel_name: str) -> str:
+    return channel_name.lstrip("#").lower()
+
+
 def get_discord_channel_config_for_bot_and_channel(
     db_session: Session,
     discord_bot_id: int,
@@ -21,11 +25,14 @@ def get_discord_channel_config_for_bot_and_channel(
     if not channel_name:
         return None
 
+    cleaned_channel_name = clean_channel_name(channel_name)
+
     discord_bot_configs = fetch_discord_channel_configs(
         db_session=db_session, discord_bot_id=discord_bot_id
     )
     for config in discord_bot_configs:
-        if channel_name in config.channel_config["channel_name"]:
+        stored_name = config.channel_config["channel_name"].lower()
+        if cleaned_channel_name == stored_name:
             return config
 
     return None
@@ -43,18 +50,16 @@ def validate_channel_name(
         db_session=db_session,
         discord_bot_id=current_discord_bot_id,
     )
-    cleaned_channel_name = channel_name.lstrip("#").lower()
+    cleaned_channel_name = clean_channel_name(channel_name)
     for discord_channel_config in discord_bot_configs:
         if discord_channel_config.id == current_discord_channel_config_id:
             continue
 
-        if (
-            cleaned_channel_name
-            == discord_channel_config.channel_config["channel_name"]
-        ):
+        stored_name = discord_channel_config.channel_config["channel_name"].lower()
+        if cleaned_channel_name == stored_name:
             raise ValueError(
                 f"Channel name '{channel_name}' already exists in "
-                "another Discord channel config with in Discord Bot with name: "
+                "another Discord channel config within Discord Bot with name: "
                 f"{discord_channel_config.discord_bot.name}"
             )
 

@@ -10,6 +10,7 @@ class DiscordMessageInfo(BaseModel):
     thread_to_respond: str | None
     sender_id: str | None
     email: str | None
+    tenant_id: str | None
     bypass_filters: bool
     is_bot_msg: bool
     is_bot_dm: bool

@@ -15,7 +15,6 @@ from prometheus_client import Gauge
 from prometheus_client import start_http_server
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import POD_NAME
 from onyx.configs.app_configs import POD_NAMESPACE
 from onyx.configs.constants import OnyxRedisLocks
@@ -23,7 +22,6 @@ from onyx.db.engine import get_all_tenant_ids
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import DiscordBot
 from onyx.db.models import DiscordChannelConfig
-from onyx.onyxbot.discord.config import get_discord_channel_config_for_bot_and_channel
 from onyx.onyxbot.discord.config import MAX_TENANTS_PER_POD
 from onyx.onyxbot.discord.config import TENANT_ACQUISITION_INTERVAL
 from onyx.onyxbot.discord.config import TENANT_HEARTBEAT_EXPIRATION
@@ -33,8 +31,8 @@ from onyx.onyxbot.discord.process_event import build_message_info
 from onyx.onyxbot.discord.process_event import process_message
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-
 
 logger = setup_logger()
 
@@ -50,7 +48,7 @@ class OnyxDiscordBot(commands.Bot):
         self,
         discord_bot_id: int,
         tenant_id: str | None,
-        command_prefix: str = "!",  # Default prefix, can be customized
+        command_prefix: str = "!",
     ):
         intents = discord.Intents.default()
         intents.message_content = True
@@ -64,8 +62,6 @@ class OnyxDiscordBot(commands.Bot):
         self.discord_bot_id = discord_bot_id
         self.tenant_id = tenant_id
         self.ready = False
-
-        # Register event handlers
         self.setup_events()
 
     def setup_events(self) -> None:
@@ -82,64 +78,32 @@ class OnyxDiscordBot(commands.Bot):
 
         @self.event
         async def on_message(message: discord.Message) -> None:
-            # Don't respond to our own messages
             if message.author == self.user:
                 return
 
             try:
-                # Set tenant context for this request
+                logger.info(f"Processing message with tenant: {self.tenant_id}")
                 CURRENT_TENANT_ID_CONTEXTVAR.set(self.tenant_id)
-
-                with get_session_with_tenant(self.tenant_id) as db_session:
-                    # Get channel config
-                    channel_config = get_discord_channel_config_for_bot_and_channel(
-                        db_session=db_session,
-                        discord_bot_id=self.discord_bot_id,
-                        channel_name=message.channel.name
-                        if not isinstance(message.channel, discord.DMChannel)
-                        else None,
-                    )
-
-                    # Check if we should respond
-                    if not self.should_respond(message, channel_config):
-                        return
-
-                    # Build message info
-                    message_info = build_message_info(
-                        message=message,
-                        bot=self,
-                        channel_config=channel_config,
-                    )
-
-                    # Process the message
-                    await process_message(message, message_info)
-
+                message_info = build_message_info(message=message, bot=self)
+                logger.info(f"Built message info: {message_info}")
+                await process_message(message, message_info, self)
             except Exception as e:
-                logger.exception(f"Error processing message: {e}")
-                await message.channel.send(
-                    "I encountered an error processing your message. Please try again later."
-                )
+                logger.exception(f"Error in on_message: {e}")
             finally:
-                # Clear tenant context
                 CURRENT_TENANT_ID_CONTEXTVAR.set(None)
 
     def should_respond(
         self, message: discord.Message, channel_config: DiscordChannelConfig | None
     ) -> bool:
-        """Determine if the bot should respond to this message"""
-
-        # Always respond to DMs
         if isinstance(message.channel, discord.DMChannel):
             return True
 
         if not channel_config:
-            # Only respond to mentions if no channel config
             return self.user in message.mentions
 
-        # Check channel-specific settings
         config = channel_config.channel_config
 
-        # Don't respond to bots unless configured to
+        # Check if we should respond to bots
         if message.author.bot and not config.get("respond_to_bots", False):
             return False
 
@@ -147,17 +111,15 @@ class OnyxDiscordBot(commands.Bot):
         if config.get("respond_mention_only", False):
             return self.user in message.mentions
 
-        # Check role permissions if configured
+        # Check role permissions
         allowed_roles = config.get("allowed_role_ids", [])
         if allowed_roles:
             user_roles = [str(role.id) for role in message.author.roles]
             return any(role_id in allowed_roles for role_id in user_roles)
 
-        # By default, respond to all messages in configured channels
         return True
 
     async def close(self) -> None:
-        """Cleanly close the bot connection"""
         try:
             if not self.is_closed():
                 await super().close()
@@ -182,11 +144,8 @@ class DiscordbotHandler:
         if self._instance is not None:
             raise RuntimeError("Use get_instance() instead")
 
-        logger.info("Initializing DiscordbotHandler")
         self.tenant_ids: Set[str | None] = set()
-        # Changed to use (tenant_id, bot_id) as key
         self.discord_clients: Dict[tuple[str | None, int], OnyxDiscordBot] = {}
-
         self.running = True
         self.pod_id = self.get_pod_id()
         self._shutdown_event = Event()
@@ -224,34 +183,77 @@ class DiscordbotHandler:
         tenant_ids = get_all_tenant_ids()
 
         for tenant_id in tenant_ids:
-            if tenant_id in self.tenant_ids:
+            current_tenant = tenant_id or POSTGRES_DEFAULT_SCHEMA
+            logger.info(f"Processing tenant: {current_tenant}")
+
+            if current_tenant in self.tenant_ids:
+                logger.info(f"Tenant {current_tenant} already acquired")
                 continue
 
             if len(self.tenant_ids) >= MAX_TENANTS_PER_POD:
                 logger.info("Max tenants per pod reached")
                 break
 
-            redis_client = get_redis_client(tenant_id=tenant_id)
-            acquired = redis_client.set(
-                OnyxRedisLocks.DISCORD_BOT_LOCK,
-                self.pod_id,
-                nx=True,
-                ex=TENANT_LOCK_EXPIRATION,
-            )
-            if not acquired and not DEV_MODE:
+            try:
+                redis_client = get_redis_client(tenant_id=current_tenant)
+                logger.info(f"Got Redis client for tenant {current_tenant}")
+
+                try:
+                    acquired = redis_client.set(
+                        OnyxRedisLocks.DISCORD_BOT_LOCK,
+                        self.pod_id,
+                        nx=True,
+                        ex=TENANT_LOCK_EXPIRATION,
+                    )
+
+                    if acquired is None:
+                        logger.warning(
+                            f"Redis lock operation failed for {current_tenant}, but continuing"
+                        )
+                        acquired = True
+                    elif acquired is False:
+                        logger.info(
+                            f"Another pod holds the lock for tenant {current_tenant}"
+                        )
+                        continue
+
+                except Exception as e:
+                    logger.warning(
+                        f"Redis error for {current_tenant}, but continuing: {e}"
+                    )
+                    acquired = True
+
+                self.tenant_ids.add(current_tenant)
+
+            except Exception as e:
+                logger.exception(
+                    f"Error in tenant acquisition process for {current_tenant}: {e}"
+                )
                 continue
 
-            self.tenant_ids.add(tenant_id)
-
-            # Initialize bots for this tenant
-            with get_session_with_tenant(tenant_id) as db_session:
-                bots = db_session.query(DiscordBot).all()
-                for bot in bots:
-                    self._manage_discord_clients(
-                        db_session=db_session,
-                        tenant_id=tenant_id,
-                        bot=bot,
-                    )
+        for tenant_id in self.tenant_ids:
+            current_tenant = tenant_id or POSTGRES_DEFAULT_SCHEMA
+            token = CURRENT_TENANT_ID_CONTEXTVAR.set(current_tenant)
+            try:
+                with get_session_with_tenant(current_tenant) as db_session:
+                    try:
+                        bots = (
+                            db_session.query(DiscordBot)
+                            .filter(DiscordBot.enabled.is_(True))
+                            .all()
+                        )
+                        for bot in bots:
+                            self._manage_discord_clients(
+                                db_session=db_session,
+                                tenant_id=current_tenant,
+                                bot=bot,
+                            )
+                    except Exception as e:
+                        logger.exception(
+                            f"Error initializing bots for tenant {current_tenant}: {e}"
+                        )
+            finally:
+                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     def _manage_discord_clients(
         self, db_session: Session, tenant_id: str | None, bot: DiscordBot
@@ -274,7 +276,6 @@ class DiscordbotHandler:
                 asyncio.run(existing_bot.close())
                 asyncio.run(self.start_bot(bot.id, tenant_id, bot.discord_bot_token))
         else:
-            # New bot, start it
             asyncio.run(self.start_bot(bot.id, tenant_id, bot.discord_bot_token))
 
     async def start_bot(self, bot_id: int, tenant_id: str | None, token: str) -> None:
@@ -312,7 +313,6 @@ class DiscordbotHandler:
             )
 
     def release_tenant(self, tenant_id: str | None) -> None:
-        """Release a tenant and clean up its resources"""
         if tenant_id not in self.tenant_ids:
             return
 
@@ -333,16 +333,13 @@ class DiscordbotHandler:
         redis_client.delete(OnyxRedisLocks.DISCORD_BOT_LOCK)
 
         self.tenant_ids.remove(tenant_id)
-        logger.info(f"Released tenant {tenant_id}")
 
     async def shutdown(
         self, signum: int | None = None, frame: FrameType | None = None
     ) -> None:
-        """Gracefully shutdown all bots and release tenants"""
         if not self.running:
             return
 
-        logger.info("Shutting down gracefully")
         self.running = False
         self._shutdown_event.set()
 
@@ -356,46 +353,19 @@ class DiscordbotHandler:
             except Exception as e:
                 logger.error(f"Error closing Discord client: {e}")
 
-        # Release all tenants
         for tenant_id in list(self.tenant_ids):
             try:
                 self.release_tenant(tenant_id)
             except Exception as e:
                 logger.error(f"Error releasing tenant {tenant_id}: {e}")
 
-        logger.info("Shutdown complete")
         sys.exit(0)
 
     def run(self) -> None:
-        """Main method to run the handler"""
         try:
-            # Keep the main thread alive
             while self.running:
                 time.sleep(1)
         except Exception as e:
             logger.exception(f"Error in main loop: {e}")
         finally:
             asyncio.run(self.shutdown())
-
-
-def create_discord_bot_if_not_exists(
-    db_session: Session,
-    token: str,
-) -> DiscordBot:
-    """Create or get Discord bot entry in database"""
-    discord_bot = (
-        db_session.query(DiscordBot).filter(DiscordBot.enabled.is_(True)).first()
-    )
-
-    if not discord_bot:
-        logger.info("Creating new Discord bot entry in database")
-        discord_bot = DiscordBot(
-            name="Onyx Discord Bot",
-            discord_bot_token=token,
-            enabled=True,
-        )
-        db_session.add(discord_bot)
-        db_session.commit()
-        logger.info("Created Discord bot entry successfully")
-
-    return discord_bot
