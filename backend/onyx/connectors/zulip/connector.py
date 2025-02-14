@@ -1,5 +1,6 @@
 import os
 import tempfile
+import urllib.parse
 from collections.abc import Generator
 from typing import Any
 from typing import List
@@ -36,7 +37,15 @@ class ZulipConnector(LoadConnector, PollConnector):
     ) -> None:
         self.batch_size = batch_size
         self.realm_name = realm_name
-        self.realm_url = realm_url if realm_url.endswith("/") else realm_url + "/"
+
+        if "work.solutioncenter.ai" in realm_url.lower():
+            self.base_url = "https://work.solutioncenter.ai"
+        elif "aic.zulipchat.com" in realm_url.lower():
+            self.base_url = "https://aic.zulipchat.com"
+        else:
+            parsed = urllib.parse.urlparse(realm_url)
+            self.base_url = f"{parsed.scheme}://{parsed.netloc.split(':')[0]}"
+
         self.client: Client | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -59,7 +68,7 @@ class ZulipConnector(LoadConnector, PollConnector):
         stream_operand = encode_zulip_narrow_operand(f"{m.stream_id}-{stream_name}")
         topic_operand = encode_zulip_narrow_operand(m.subject)
 
-        narrow_link = f"{self.realm_url}#narrow/stream/{stream_operand}/topic/{topic_operand}/near/{m.id}"
+        narrow_link = f"{self.base_url}#narrow/stream/{stream_operand}/topic/{topic_operand}/near/{m.id}"
         return narrow_link
 
     def _get_message_batch(self, anchor: str) -> Tuple[bool, List[Message]]:
