@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation";
 import AssistantCard from "./AssistantCard";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { useUser } from "@/components/user/UserProvider";
-import { FilterIcon } from "lucide-react";
+import { FilterIcon, XIcon } from "lucide-react";
 import { checkUserOwnsAssistant } from "@/lib/assistants/checkOwnership";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 export const AssistantBadgeSelector = ({
   text,
@@ -108,16 +107,20 @@ export function AssistantModal({
 
   const featuredAssistants = [
     ...memoizedCurrentlyVisibleAssistants.filter(
-      (assistant) => assistant.builtin_persona || assistant.is_default_persona
+      (assistant) => assistant.is_default_persona
     ),
   ];
   const allAssistants = memoizedCurrentlyVisibleAssistants.filter(
-    (assistant) => !assistant.builtin_persona && !assistant.is_default_persona
+    (assistant) => !assistant.is_default_persona
   );
 
   return (
-    <div className="fixed inset-0 bg-neutral-950/80 bg-opacity-50 flex items-center justify-center z-50">
+    <div
+      onClick={hideModal}
+      className="fixed inset-0 bg-neutral-950/80 bg-opacity-50 flex items-center justify-center z-50"
+    >
       <div
+        onClick={(e) => e.stopPropagation()}
         className="p-0 max-w-4xl  overflow-hidden max-h-[80vh]  w-[95%] bg-background rounded-md shadow-2xl transform transition-all duration-300 ease-in-out relative w-11/12 max-w-4xl pt-10 pb-10 px-10 overflow-hidden flex flex-col"
         style={{
           position: "fixed",
@@ -127,6 +130,15 @@ export function AssistantModal({
           margin: 0,
         }}
       >
+        <div className="absolute top-2 right-2">
+          <button
+            onClick={hideModal}
+            className="cursor-pointer text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-300 transition-colors duration-200 p-2"
+            aria-label="Close modal"
+          >
+            <XIcon className="w-5 h-5" />
+          </button>
+        </div>
         <div className="flex overflow-hidden flex-col h-full">
           <div className="flex overflow-hidden flex-col h-full">
             <div className="flex flex-col sticky top-0 z-10">

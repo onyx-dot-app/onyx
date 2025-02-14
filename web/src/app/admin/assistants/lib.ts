@@ -261,6 +261,22 @@ export function personaComparator(a: Persona, b: Persona) {
   return closerToZeroNegativesFirstComparator(a.id, b.id);
 }
 
+export const togglePersonaDefault = async (
+  personaId: number,
+  isDefault: boolean
+) => {
+  const response = await fetch(`/api/admin/persona/${personaId}/default`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      is_default_persona: !isDefault,
+    }),
+  });
+  return response;
+};
+
 export const togglePersonaVisibility = async (
   personaId: number,
   isVisible: boolean

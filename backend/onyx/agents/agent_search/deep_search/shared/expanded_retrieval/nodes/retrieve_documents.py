@@ -23,6 +23,7 @@ from onyx.configs.agent_configs import AGENT_RETRIEVAL_STATS
 from onyx.context.search.models import InferenceSection
 from onyx.db.engine import get_session_context_manager
 from onyx.tools.models import SearchQueryInfo
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -67,9 +68,12 @@ def retrieve_documents(
     with get_session_context_manager() as db_session:
         for tool_response in search_tool.run(
             query=query_to_retrieve,
-            force_no_rerank=True,
-            alternate_db_session=db_session,
-            retrieved_sections_callback=callback_container.append,
+            override_kwargs=SearchToolOverrideKwargs(
+                force_no_rerank=True,
+                alternate_db_session=db_session,
+                retrieved_sections_callback=callback_container.append,
+                skip_query_analysis=not state.base_search,
+            ),
         ):
             # get retrieved docs to send to the rest of the graph
             if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:

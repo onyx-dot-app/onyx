@@ -56,11 +56,18 @@ const DOC_DELAY_MS = 100;
 export const useStreamingMessages = (
   subQuestions: SubQuestionDetail[],
   allowStreaming: () => void,
-  onComplete: () => void
+  onComplete: () => void,
+  isStreamingQuestions: boolean
 ) => {
   const [dynamicSubQuestions, setDynamicSubQuestions] = useState<
     SubQuestionDetail[]
   >([]);
+
+  const isStreamingQuestionsRef = useRef(isStreamingQuestions);
+
+  useEffect(() => {
+    isStreamingQuestionsRef.current = isStreamingQuestions;
+  }, [isStreamingQuestions]);
 
   const subQuestionsRef = useRef<SubQuestionDetail[]>(subQuestions);
   useEffect(() => {
@@ -121,6 +128,7 @@ export const useStreamingMessages = (
       // Stream high-level questions sequentially
       let didStreamQuestion = false;
       let allQuestionsComplete = true;
+
       for (let i = 0; i < actualSubQs.length; i++) {
         const sq = actualSubQs[i];
         const p = progressRef.current[i];
@@ -138,6 +146,8 @@ export const useStreamingMessages = (
                 p.questionDone = true;
               }
               didStreamQuestion = true;
+              allQuestionsComplete = false;
+
               // Break after streaming one question to ensure sequential behavior
               break;
             }
@@ -149,7 +159,11 @@ export const useStreamingMessages = (
         }
       }
 
-      if (allQuestionsComplete && !didStreamQuestion) {
+      if (
+        allQuestionsComplete &&
+        !didStreamQuestion &&
+        !isStreamingQuestionsRef.current
+      ) {
         onComplete();
       }
 
@@ -163,6 +177,8 @@ export const useStreamingMessages = (
       for (let i = 0; i < actualSubQs.length; i++) {
         const sq = actualSubQs[i];
         const dynSQ = dynamicSubQuestionsRef.current[i];
+        dynSQ.answer_streaming = sq.answer_streaming;
+
         const p = progressRef.current[i];
 
         // Wait for subquestion #0 or the previous subquestion's progress

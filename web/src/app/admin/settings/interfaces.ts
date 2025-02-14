@@ -1,7 +1,7 @@
-export enum GatingType {
-  FULL = "full",
-  PARTIAL = "partial",
-  NONE = "none",
+export enum ApplicationStatus {
+  PAYMENT_REMINDER = "payment_reminder",
+  GATED_ACCESS = "gated_access",
+  ACTIVE = "active",
 }
 
 export interface Settings {
@@ -11,7 +11,7 @@ export interface Settings {
   needs_reindexing: boolean;
   gpu_enabled: boolean;
   pro_search_disabled: boolean | null;
-  product_gating: GatingType;
+  application_status: ApplicationStatus;
   auto_scroll: boolean;
 }
 

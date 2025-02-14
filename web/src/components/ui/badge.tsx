@@ -37,7 +37,7 @@ const badgeVariants = cva(
         destructive:
           "border-red-200 bg-red-50 text-red-600 dark:border-red-700 dark:bg-red-900 dark:text-neutral-50",
         not_started:
-          "border-neutral-200 bg-neutral-50 text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100",
+          "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-700 dark:bg-purple-900 dark:text-purple-100",
       },
     },
     defaultVariants: {

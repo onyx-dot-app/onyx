@@ -74,6 +74,7 @@ class CustomToolCallSummary(BaseModel):
     tool_result: Any  # The response data
 
 
+# override_kwargs is not supported for custom tools
 class CustomTool(BaseTool):
     def __init__(
         self,
@@ -235,7 +236,9 @@ class CustomTool(BaseTool):
 
     """Actual execution of the tool"""
 
-    def run(self, **kwargs: Any) -> Generator[ToolResponse, None, None]:
+    def run(
+        self, override_kwargs: dict[str, Any] | None = None, **kwargs: Any
+    ) -> Generator[ToolResponse, None, None]:
         request_body = kwargs.get(REQUEST_BODY)
 
         path_params = {}

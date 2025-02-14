@@ -33,6 +33,9 @@ import { MdOutlineCreditCard } from "react-icons/md";
 import { UserSettingsModal } from "@/app/chat/modal/UserSettingsModal";
 import { usePopup } from "./connectors/Popup";
 import { useChatContext } from "../context/ChatContext";
+import { ApplicationStatus } from "@/app/admin/settings/interfaces";
+import Link from "next/link";
+import { Button } from "../ui/button";
 
 export function ClientLayout({
   user,
@@ -73,6 +76,23 @@ export function ClientLayout({
             onClose={() => setUserSettingsOpen(false)}
             defaultModel={user?.preferences?.default_model!}
           />
+        )}
+        {settings?.settings.application_status ===
+          ApplicationStatus.PAYMENT_REMINDER && (
+          <div className="fixed top-2 left-1/2 transform -translate-x-1/2 bg-amber-400 dark:bg-amber-500 text-gray-900 dark:text-gray-100 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
+            <strong className="font-bold">Warning:</strong> Your trial ends in
+            less than 2 days and no payment method has been added.
+            <div className="mt-2">
+              <Link href="/admin/billing">
+                <Button
+                  variant="default"
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  Update Billing Information
+                </Button>
+              </Link>
+            </div>
+          </div>
         )}
 
         <div className="default-scrollbar flex-none text-text-settings-sidebar bg-background-sidebar dark:bg-[#000] w-[250px] overflow-x-hidden z-20 pt-2 pb-8 h-full border-r border-border dark:border-none miniscroll overflow-auto">

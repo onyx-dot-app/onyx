@@ -23,11 +23,11 @@ _Note:_ if you are having problems accessing the ^, try setting the `WEB_DOMAIN`
 `http://127.0.0.1:3000` and accessing it there.
 
 ## Testing
-This testing process will reset your application into a clean state. 
+
+This testing process will reset your application into a clean state.
 Don't run these tests if you don't want to do this!
 
 Bring up the entire application.
-
 
 1. Reset the instance
 

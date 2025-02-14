@@ -5,18 +5,22 @@ import FunctionalWrapper from "../../components/chat/FunctionalWrapper";
 
 export default function WrappedChat({
   firstMessage,
+  defaultSidebarOff,
 }: {
   firstMessage?: string;
+  // This is required for the chrome extension side panel
+  // we don't want to show the sidebar by default when the user opens the side panel
+  defaultSidebarOff?: boolean;
 }) {
-  const { toggledSidebar } = useChatContext();
+  const { sidebarInitiallyVisible } = useChatContext();
 
   return (
     <FunctionalWrapper
-      initiallyToggled={toggledSidebar}
-      content={(toggledSidebar, toggle) => (
+      initiallyVisible={sidebarInitiallyVisible && !defaultSidebarOff}
+      content={(sidebarVisible, toggle) => (
         <ChatPage
           toggle={toggle}
-          toggledSidebar={toggledSidebar}
+          sidebarVisible={sidebarVisible}
           firstMessage={firstMessage}
         />
       )}

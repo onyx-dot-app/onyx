@@ -41,6 +41,7 @@ personas:
     icon_color: "#6FB1FF"
     display_priority: 0
     is_visible: true
+    is_default_persona: true
     starter_messages:
       - name: "Give me an overview of what's here"
         message: "Sample some documents and tell me what you find."
@@ -66,6 +67,7 @@ personas:
     icon_color: "#FF6F6F"
     display_priority: 1
     is_visible: true
+    is_default_persona: true
     starter_messages:
       - name: "Summarize a document"
         message: "If I have provided a document please summarize it for me. If not, please ask me to upload a document either by dragging it into the input bar or clicking the +file icon."
@@ -91,6 +93,7 @@ personas:
     icon_color: "#6FFF8D"
     display_priority: 2
     is_visible: false
+    is_default_persona: true
     starter_messages:
       - name: "Document Search"
         message: "Hi! Could you help me find information about our team structure and reporting lines from our internal documents?"
@@ -117,6 +120,7 @@ personas:
     image_generation: true
     display_priority: 3
     is_visible: true
+    is_default_persona: true
     starter_messages:
       - name: "Create visuals for a presentation"
         message: "Generate someone presenting a graph which clearly demonstrates an upwards trajectory."

@@ -60,7 +60,7 @@ export const AssistantsProvider: React.FC<{
         .map((id) => assistants.find((assistant) => assistant.id === id))
         .filter((assistant): assistant is Persona => assistant !== undefined);
     } else {
-      return assistants.filter((a) => a.builtin_persona);
+      return assistants.filter((a) => a.is_default_persona);
     }
   });
 
@@ -71,7 +71,7 @@ export const AssistantsProvider: React.FC<{
           .map((id) => assistants.find((assistant) => assistant.id === id))
           .filter((assistant): assistant is Persona => assistant !== undefined);
       } else {
-        return assistants.filter((a) => a.builtin_persona);
+        return assistants.filter((a) => a.is_default_persona);
       }
     });
   }, [user?.preferences?.pinned_assistants, assistants]);

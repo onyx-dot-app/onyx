@@ -70,6 +70,7 @@
     --accent-foreground: 0 0% 9%;
     --accent-background: #f0eee8;
     --accent-background-hovered: #e5e3dd;
+    --accent-background-selected: #eae8e2;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --ring: 0 0% 3.9%;
@@ -120,6 +121,7 @@
 
     /* agent references */
     --agent-sidebar: #be5d0e;
+    --agent-hovered: #d16b10;
     --agent: #e47011;
     --lighter-agent: #f59e0b;
 
@@ -247,6 +249,7 @@
     --accent-background: #333333;
 
     --accent-background-hovered: #2f2f2f;
+    --accent-background-selected: #222222;
 
     --text-darker: #f0f0f0;
 
@@ -339,6 +342,7 @@
 
     /* Agent references */
     --agent-sidebar: #be5d0e; /* You can keep or lighten/darken if desired */
+    --agent-hovered: #f07c13;
     --agent: #e47011;
     --lighter-agent: #f59e0b;
   }
@@ -656,6 +660,11 @@ ul > li > p {
   color: white;
 }
 
-.dark li {
+.prose.dark li,
+.prose.dark h1,
+.prose.dark h2,
+.prose.dark h3,
+.prose.dark h4,
+.prose.dark h5 {
   color: #e5e5e5;
 }

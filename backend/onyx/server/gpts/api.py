@@ -76,6 +76,7 @@ def gpt_search(
         user=None,
         llm=llm,
         fast_llm=fast_llm,
+        skip_query_analysis=True,
         db_session=db_session,
     ).reranked_sections
 

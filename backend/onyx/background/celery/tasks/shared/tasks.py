@@ -8,6 +8,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 from redis.lock import Lock as RedisLock
 from tenacity import RetryError
 
+from ee.onyx.server.tenants.product_gating import get_gated_tenants
 from onyx.access.access import get_access_for_document
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
@@ -252,7 +253,11 @@ def cloud_beat_task_generator(
 
     try:
         tenant_ids = get_all_tenant_ids()
+        gated_tenants = get_gated_tenants()
         for tenant_id in tenant_ids:
+            if tenant_id in gated_tenants:
+                continue
+
             current_time = time.monotonic()
             if current_time - last_lock_time >= (CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4):
                 lock_beat.reacquire()
@@ -270,6 +275,7 @@ def cloud_beat_task_generator(
                 queue=queue,
                 priority=priority,
                 expires=expires,
+                ignore_result=True,
             )
     except SoftTimeLimitExceeded:
         task_logger.info(

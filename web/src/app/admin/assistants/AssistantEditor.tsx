@@ -3,7 +3,13 @@
 import React from "react";
 import { Option } from "@/components/Dropdown";
 import { generateRandomIconShape } from "@/lib/assistantIconUtils";
-import { CCPairBasicInfo, DocumentSet, User, UserGroup } from "@/lib/types";
+import {
+  CCPairBasicInfo,
+  DocumentSet,
+  User,
+  UserGroup,
+  UserRole,
+} from "@/lib/types";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { ArrayHelpers, FieldArray, Form, Formik, FormikProps } from "formik";
@@ -33,9 +39,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { FiInfo } from "react-icons/fi";
 import * as Yup from "yup";
 import CollapsibleSection from "./CollapsibleSection";
 import { SuccessfulPersonaUpdateRedirectType } from "./enums";
@@ -71,11 +76,11 @@ import {
   Option as DropdownOption,
 } from "@/components/Dropdown";
 import { SourceChip } from "@/app/chat/input/ChatInputBar";
-import { TagIcon, UserIcon, XIcon } from "lucide-react";
+import { TagIcon, UserIcon, XIcon, InfoIcon } from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import Title from "@/components/ui/title";
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 
@@ -127,6 +132,8 @@ export function AssistantEditor({
 }) {
   const { refreshAssistants, isImageGenerationAvailable } = useAssistants();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isAdminPage = searchParams.get("admin") === "true";
 
   const { popup, setPopup } = usePopup();
   const { labels, refreshLabels, createLabel, updateLabel, deleteLabel } =
@@ -216,6 +223,8 @@ export function AssistantEditor({
     enabledToolsMap[tool.id] = personaCurrentToolIds.includes(tool.id);
   });
 
+  const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
+
   const initialValues = {
     name: existingPersona?.name ?? "",
     description: existingPersona?.description ?? "",
@@ -252,6 +261,7 @@ export function AssistantEditor({
         (u) => u.id !== existingPersona.owner?.id
       ) ?? [],
     selectedGroups: existingPersona?.groups ?? [],
+    is_default_persona: existingPersona?.is_default_persona ?? false,
   };
 
   interface AssistantPrompt {
@@ -308,23 +318,11 @@ export function AssistantEditor({
   const [isRequestSuccessful, setIsRequestSuccessful] = useState(false);
 
   const { data: userGroups } = useUserGroups();
-  // const { data: allUsers } = useUsers({ includeApiKeys: false }) as {
-  //   data: MinimalUserSnapshot[] | undefined;
-  // };
 
   const { data: users } = useSWR<MinimalUserSnapshot[]>(
     "/api/users",
     errorHandlingFetcher
   );
-
-  const mapUsersToMinimalSnapshot = (users: any): MinimalUserSnapshot[] => {
-    if (!users || !Array.isArray(users.users)) return [];
-    return users.users.map((user: any) => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-    }));
-  };
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -346,9 +344,7 @@ export function AssistantEditor({
       if (response.ok) {
         await refreshAssistants();
         router.push(
-          redirectType === SuccessfulPersonaUpdateRedirectType.ADMIN
-            ? `/admin/assistants?u=${Date.now()}`
-            : `/chat`
+          isAdminPage ? `/admin/assistants?u=${Date.now()}` : `/chat`
         );
       } else {
         setPopup({
@@ -374,8 +370,9 @@ export function AssistantEditor({
           <BackButton />
         </div>
       )}
+
       {labelToDelete && (
-        <DeleteEntityModal
+        <ConfirmEntityModal
           entityType="label"
           entityName={labelToDelete.name}
           onClose={() => setLabelToDelete(null)}
@@ -398,7 +395,7 @@ export function AssistantEditor({
         />
       )}
       {deleteModalOpen && existingPersona && (
-        <DeleteEntityModal
+        <ConfirmEntityModal
           entityType="Persona"
           entityName={existingPersona.name}
           onClose={closeDeleteModal}
@@ -439,6 +436,7 @@ export function AssistantEditor({
             label_ids: Yup.array().of(Yup.number()),
             selectedUsers: Yup.array().of(Yup.object()),
             selectedGroups: Yup.array().of(Yup.number()),
+            is_default_persona: Yup.boolean().required(),
           })
           .test(
             "system-prompt-or-task-prompt",
@@ -458,6 +456,19 @@ export function AssistantEditor({
                 message:
                   "Must provide either Instructions or Reminders (Advanced)",
               });
+            }
+          )
+          .test(
+            "default-persona-public",
+            "Default persona must be public",
+            function (values) {
+              if (values.is_default_persona && !values.is_public) {
+                return this.createError({
+                  path: "is_public",
+                  message: "Default persona must be public",
+                });
+              }
+              return true;
             }
           )}
         onSubmit={async (values, formikHelpers) => {
@@ -499,7 +510,6 @@ export function AssistantEditor({
           const submissionData: PersonaUpsertParameters = {
             ...values,
             existing_prompt_id: existingPrompt?.id ?? null,
-            is_default_persona: admin!,
             starter_messages: starterMessages,
             groups: groups,
             users: values.is_public
@@ -563,8 +573,9 @@ export function AssistantEditor({
             }
 
             await refreshAssistants();
+
             router.push(
-              redirectType === SuccessfulPersonaUpdateRedirectType.ADMIN
+              isAdminPage
                 ? `/admin/assistants?u=${Date.now()}`
                 : `/chat?assistantId=${assistantId}`
             );
@@ -1005,6 +1016,22 @@ export function AssistantEditor({
               {showAdvancedOptions && (
                 <>
                   <div className="max-w-4xl w-full">
+                    {user?.role == UserRole.ADMIN && (
+                      <BooleanFormField
+                        onChange={(checked) => {
+                          if (checked) {
+                            setFieldValue("is_public", true);
+                            setFieldValue("is_default_persona", true);
+                          }
+                        }}
+                        name="is_default_persona"
+                        label="Featured Assistant"
+                        subtext="If set, this assistant will be pinned for all new users and appear in the Featured list in the assistant explorer. This also makes the assistant public."
+                      />
+                    )}
+
+                    <Separator />
+
                     <div className="flex gap-x-2 items-center ">
                       <div className="block font-medium text-sm">Access</div>
                     </div>
@@ -1014,21 +1041,59 @@ export function AssistantEditor({
 
                     <div className="min-h-[100px]">
                       <div className="flex items-center mb-2">
-                        <SwitchField
-                          name="is_public"
-                          size="md"
-                          onCheckedChange={(checked) => {
-                            setFieldValue("is_public", checked);
-                            if (checked) {
-                              setFieldValue("selectedUsers", []);
-                              setFieldValue("selectedGroups", []);
-                            }
-                          }}
-                        />
+                        <TooltipProvider delayDuration={0}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div>
+                                <SwitchField
+                                  name="is_public"
+                                  size="md"
+                                  onCheckedChange={(checked) => {
+                                    if (values.is_default_persona && !checked) {
+                                      setShowVisibilityWarning(true);
+                                    } else {
+                                      setFieldValue("is_public", checked);
+                                      if (!checked) {
+                                        // Even though this code path should not be possible,
+                                        // we set the default persona to false to be safe
+                                        setFieldValue(
+                                          "is_default_persona",
+                                          false
+                                        );
+                                      }
+                                      if (checked) {
+                                        setFieldValue("selectedUsers", []);
+                                        setFieldValue("selectedGroups", []);
+                                      }
+                                    }
+                                  }}
+                                  disabled={values.is_default_persona}
+                                />
+                              </div>
+                            </TooltipTrigger>
+                            {values.is_default_persona && (
+                              <TooltipContent side="top" align="center">
+                                Default persona must be public. Set
+                                &quot;Default Persona&quot; to false to change
+                                visibility.
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
                         <span className="text-sm ml-2">
                           {values.is_public ? "Public" : "Private"}
                         </span>
                       </div>
+
+                      {showVisibilityWarning && (
+                        <div className="flex items-center text-warning mt-2">
+                          <InfoIcon size={16} className="mr-2" />
+                          <span className="text-sm">
+                            Default persona must be public. Visibility has been
+                            automatically set to public.
+                          </span>
+                        </div>
+                      )}
 
                       {values.is_public ? (
                         <p className="text-sm text-text-dark">

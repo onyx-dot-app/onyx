@@ -39,7 +39,6 @@ export function UserSettingsModal({
   onClose: () => void;
   defaultModel: string | null;
 }) {
-  const { inputPrompts, refreshInputPrompts } = useChatContext();
   const {
     refreshUser,
     user,

@@ -6,13 +6,18 @@ from datetime import datetime
 from datetime import timezone
 from http import HTTPStatus
 from time import sleep
+from typing import Any
+from typing import cast
 
 import sentry_sdk
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
+from celery.result import AsyncResult
+from celery.states import READY_STATES
 from redis import Redis
 from redis.lock import Lock as RedisLock
+from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
@@ -30,6 +35,7 @@ from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
@@ -37,6 +43,7 @@ from onyx.db.connector_credential_pair import fetch_connector_credential_pairs
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import IndexingMode
+from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_last_attempt_for_cc_pair
 from onyx.db.index_attempt import mark_attempt_canceled
@@ -47,9 +54,12 @@ from onyx.db.swap_index import check_index_swap
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.redis.redis_connector import RedisConnector
+from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
+from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
+from onyx.redis.redis_utils import is_fence
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
@@ -58,6 +68,150 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import SENTRY_DSN
 
 logger = setup_logger()
+
+
+def monitor_ccpair_indexing_taskset(
+    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
+) -> None:
+    # if the fence doesn't exist, there's nothing to do
+    fence_key = key_bytes.decode("utf-8")
+    composite_id = RedisConnector.get_id_from_fence_key(fence_key)
+    if composite_id is None:
+        task_logger.warning(
+            f"Connector indexing: could not parse composite_id from {fence_key}"
+        )
+        return
+
+    # parse out metadata and initialize the helper class with it
+    parts = composite_id.split("/")
+    if len(parts) != 2:
+        return
+
+    cc_pair_id = int(parts[0])
+    search_settings_id = int(parts[1])
+
+    redis_connector = RedisConnector(tenant_id, cc_pair_id)
+    redis_connector_index = redis_connector.new_index(search_settings_id)
+    if not redis_connector_index.fenced:
+        return
+
+    payload = redis_connector_index.payload
+    if not payload:
+        return
+
+    elapsed_started_str = None
+    if payload.started:
+        elapsed_started = datetime.now(timezone.utc) - payload.started
+        elapsed_started_str = f"{elapsed_started.total_seconds():.2f}"
+
+    elapsed_submitted = datetime.now(timezone.utc) - payload.submitted
+
+    progress = redis_connector_index.get_progress()
+    if progress is not None:
+        task_logger.info(
+            f"Connector indexing progress: "
+            f"attempt={payload.index_attempt_id} "
+            f"cc_pair={cc_pair_id} "
+            f"search_settings={search_settings_id} "
+            f"progress={progress} "
+            f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
+            f"elapsed_started={elapsed_started_str}"
+        )
+
+    if payload.index_attempt_id is None or payload.celery_task_id is None:
+        # the task is still setting up
+        return
+
+    # never use any blocking methods on the result from inside a task!
+    result: AsyncResult = AsyncResult(payload.celery_task_id)
+
+    # inner/outer/inner double check pattern to avoid race conditions when checking for
+    # bad state
+
+    # Verify: if the generator isn't complete, the task must not be in READY state
+    # inner = get_completion / generator_complete not signaled
+    # outer = result.state in READY state
+    status_int = redis_connector_index.get_completion()
+    if status_int is None:  # inner signal not set ... possible error
+        task_state = result.state
+        if (
+            task_state in READY_STATES
+        ):  # outer signal in terminal state ... possible error
+            # Now double check!
+            if redis_connector_index.get_completion() is None:
+                # inner signal still not set (and cannot change when outer result_state is READY)
+                # Task is finished but generator complete isn't set.
+                # We have a problem! Worker may have crashed.
+                task_result = str(result.result)
+                task_traceback = str(result.traceback)
+
+                msg = (
+                    f"Connector indexing aborted or exceptioned: "
+                    f"attempt={payload.index_attempt_id} "
+                    f"celery_task={payload.celery_task_id} "
+                    f"cc_pair={cc_pair_id} "
+                    f"search_settings={search_settings_id} "
+                    f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
+                    f"result.state={task_state} "
+                    f"result.result={task_result} "
+                    f"result.traceback={task_traceback}"
+                )
+                task_logger.warning(msg)
+
+                try:
+                    index_attempt = get_index_attempt(
+                        db_session, payload.index_attempt_id
+                    )
+                    if index_attempt:
+                        if (
+                            index_attempt.status != IndexingStatus.CANCELED
+                            and index_attempt.status != IndexingStatus.FAILED
+                        ):
+                            mark_attempt_failed(
+                                index_attempt_id=payload.index_attempt_id,
+                                db_session=db_session,
+                                failure_reason=msg,
+                            )
+                except Exception:
+                    task_logger.exception(
+                        "Connector indexing - Transient exception marking index attempt as failed: "
+                        f"attempt={payload.index_attempt_id} "
+                        f"tenant={tenant_id} "
+                        f"cc_pair={cc_pair_id} "
+                        f"search_settings={search_settings_id}"
+                    )
+
+                redis_connector_index.reset()
+        return
+
+    if redis_connector_index.watchdog_signaled():
+        # if the generator is complete, don't clean up until the watchdog has exited
+        task_logger.info(
+            f"Connector indexing - Delaying finalization until watchdog has exited: "
+            f"attempt={payload.index_attempt_id} "
+            f"cc_pair={cc_pair_id} "
+            f"search_settings={search_settings_id} "
+            f"progress={progress} "
+            f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
+            f"elapsed_started={elapsed_started_str}"
+        )
+
+        return
+
+    status_enum = HTTPStatus(status_int)
+
+    task_logger.info(
+        f"Connector indexing finished: "
+        f"attempt={payload.index_attempt_id} "
+        f"cc_pair={cc_pair_id} "
+        f"search_settings={search_settings_id} "
+        f"progress={progress} "
+        f"status={status_enum.name} "
+        f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
+        f"elapsed_started={elapsed_started_str}"
+    )
+
+    redis_connector_index.reset()
 
 
 @shared_task(
@@ -90,6 +244,25 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
 
     try:
         locked = True
+
+        # SPECIAL 0/3: sync lookup table for active fences
+        # we want to run this less frequently than the overall task
+        if not redis_client.exists(OnyxRedisSignals.BLOCK_BUILD_FENCE_LOOKUP_TABLE):
+            # build a lookup table of existing fences
+            # this is just a migration concern and should be unnecessary once
+            # lookup tables are rolled out
+            for key_bytes in redis_client_replica.scan_iter(
+                count=SCAN_ITER_COUNT_DEFAULT
+            ):
+                if is_fence(key_bytes) and not redis_client.sismember(
+                    OnyxRedisConstants.ACTIVE_FENCES, key_bytes
+                ):
+                    logger.warning(f"Adding {key_bytes} to the lookup table.")
+                    redis_client.sadd(OnyxRedisConstants.ACTIVE_FENCES, key_bytes)
+
+            redis_client.set(OnyxRedisSignals.BLOCK_BUILD_FENCE_LOOKUP_TABLE, 1, ex=300)
+
+        # 1/3: KICKOFF
 
         # check for search settings swap
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
@@ -197,6 +370,8 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
 
         lock_beat.reacquire()
 
+        # 2/3: VALIDATE
+
         # Fail any index attempts in the DB that don't have fences
         # This shouldn't ever happen!
         with get_session_with_tenant(tenant_id) as db_session:
@@ -236,6 +411,26 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
                 task_logger.exception("Exception while validating indexing fences")
 
             redis_client.set(OnyxRedisSignals.BLOCK_VALIDATE_INDEXING_FENCES, 1, ex=60)
+
+        # 3/3: FINALIZE
+        lock_beat.reacquire()
+        keys = cast(
+            set[Any], redis_client_replica.smembers(OnyxRedisConstants.ACTIVE_FENCES)
+        )
+        for key in keys:
+            key_bytes = cast(bytes, key)
+
+            if not redis_client.exists(key_bytes):
+                redis_client.srem(OnyxRedisConstants.ACTIVE_FENCES, key_bytes)
+                continue
+
+            key_str = key_bytes.decode("utf-8")
+            if key_str.startswith(RedisConnectorIndex.FENCE_PREFIX):
+                with get_session_with_tenant(tenant_id) as db_session:
+                    monitor_ccpair_indexing_taskset(
+                        tenant_id, key_bytes, redis_client_replica, db_session
+                    )
+
     except SoftTimeLimitExceeded:
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."

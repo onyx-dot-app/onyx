@@ -4,7 +4,7 @@ import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { useRouter } from "next/navigation";
 
 export const LeaveOrganizationButton = ({
@@ -46,8 +46,9 @@ export const LeaveOrganizationButton = ({
   return (
     <>
       {showLeaveModal && (
-        <DeleteEntityModal
-          deleteButtonText="Leave"
+        <ConfirmEntityModal
+          variant="action"
+          actionButtonText="Leave"
           entityType="organization"
           entityName="your organization"
           onClose={() => setShowLeaveModal(false)}

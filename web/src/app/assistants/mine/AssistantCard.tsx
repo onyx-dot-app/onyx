@@ -1,4 +1,4 @@
-import React, { useContext, useState, useRef, useLayoutEffect } from "react";
+import React, { useState, useRef, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   FiMoreHorizontal,
@@ -8,7 +8,7 @@ import {
   FiLock,
   FiUnlock,
 } from "react-icons/fi";
-import { FaHashtag } from "react-icons/fa";
+
 import {
   Popover,
   PopoverTrigger,
@@ -26,14 +26,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { PinnedIcon } from "@/components/icons/icons";
-import {
-  deletePersona,
-  togglePersonaPublicStatus,
-} from "@/app/admin/assistants/lib";
+import { deletePersona } from "@/app/admin/assistants/lib";
 import { PencilIcon } from "lucide-react";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { truncateString } from "@/lib/utils";
+import { usePopup } from "@/components/admin/connectors/Popup";
+import { Button } from "@/components/ui/button";
 
 export const AssistantBadge = ({
   text,
@@ -63,6 +61,7 @@ const AssistantCard: React.FC<{
   const { user, toggleAssistantPinnedStatus } = useUser();
   const router = useRouter();
   const { refreshAssistants, pinnedAssistants } = useAssistants();
+  const { popup, setPopup } = usePopup();
 
   const isOwnedByUser = checkUserOwnsAssistant(user, persona);
 
@@ -72,7 +71,34 @@ const AssistantCard: React.FC<{
 
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
-  const handleDelete = () => setActivePopover("delete");
+  const [isDeleteConfirmation, setIsDeleteConfirmation] = useState(false);
+
+  const handleDelete = () => {
+    setIsDeleteConfirmation(true);
+  };
+
+  const confirmDelete = async () => {
+    const response = await deletePersona(persona.id);
+    if (response.ok) {
+      await refreshAssistants();
+      setActivePopover(null);
+      setIsDeleteConfirmation(false);
+      setPopup({
+        message: `${persona.name} has been successfully deleted.`,
+        type: "success",
+      });
+    } else {
+      setPopup({
+        message: `Failed to delete assistant - ${await response.text()}`,
+        type: "error",
+      });
+    }
+  };
+
+  const cancelDelete = () => {
+    setIsDeleteConfirmation(false);
+  };
+
   const handleEdit = () => {
     router.push(`/assistants/edit/${persona.id}`);
     setActivePopover(null);
@@ -100,6 +126,7 @@ const AssistantCard: React.FC<{
 
   return (
     <div className="w-full text-text-800 p-2 overflow-visible pb-4 pt-3 bg-transparent dark:bg-neutral-800/80 rounded shadow-[0px_0px_4px_0px_rgba(0,0,0,0.25)] flex flex-col">
+      {popup}
       <div className="w-full flex">
         <div className="ml-2 flex-none mr-2 mt-1 w-10 h-10">
           <AssistantIcon assistant={persona} size="large" />
@@ -148,7 +175,7 @@ const AssistantCard: React.FC<{
             </div>
             {isOwnedByUser && (
               <div className="flex ml-2 relative items-center gap-x-2">
-                <Popover modal>
+                <Popover>
                   <PopoverTrigger>
                     <button
                       type="button"
@@ -157,55 +184,84 @@ const AssistantCard: React.FC<{
                       <FiMoreHorizontal size={16} />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent className={`w-32 z-[10000] p-2`}>
-                    <div className="flex flex-col text-sm space-y-1">
-                      <button
-                        onClick={isOwnedByUser ? handleEdit : undefined}
-                        className={`w-full flex items-center text-left px-2 py-1 rounded ${
-                          isOwnedByUser
-                            ? "hover:bg-neutral-200 dark:hover:bg-neutral-700"
-                            : "opacity-50 cursor-not-allowed"
-                        }`}
-                        disabled={!isOwnedByUser}
-                      >
-                        <FiEdit size={12} className="inline mr-2" />
-                        Edit
-                      </button>
-                      {isPaidEnterpriseFeaturesEnabled && isOwnedByUser && (
+                  <PopoverContent
+                    className={`${
+                      isDeleteConfirmation ? "w-64" : "w-32"
+                    } z-[10000] p-2`}
+                  >
+                    {!isDeleteConfirmation ? (
+                      <div className="flex flex-col text-sm space-y-1">
                         <button
-                          onClick={
+                          onClick={isOwnedByUser ? handleEdit : undefined}
+                          className={`w-full flex items-center text-left px-2 py-1 rounded ${
                             isOwnedByUser
-                              ? () => {
-                                  router.push(
-                                    `/assistants/stats/${persona.id}`
-                                  );
-                                  closePopover();
-                                }
-                              : undefined
-                          }
-                          className={`w-full text-left items-center px-2 py-1 rounded ${
-                            isOwnedByUser
-                              ? "hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                              ? "hover:bg-neutral-200 dark:hover:bg-neutral-700"
                               : "opacity-50 cursor-not-allowed"
                           }`}
+                          disabled={!isOwnedByUser}
                         >
-                          <FiBarChart size={12} className="inline mr-2" />
-                          Stats
+                          <FiEdit size={12} className="inline mr-2" />
+                          Edit
                         </button>
-                      )}
-                      <button
-                        onClick={isOwnedByUser ? handleDelete : undefined}
-                        className={`w-full text-left  items-center  px-2 py-1 rounded ${
-                          isOwnedByUser
-                            ? "hover:bg-neutral-200 dark:hover:bg-neutral- text-red-600 dark:text-red-400"
-                            : "opacity-50 cursor-not-allowed text-red-300 dark:text-red-500"
-                        }`}
-                        disabled={!isOwnedByUser}
-                      >
-                        <FiTrash size={12} className="inline mr-2" />
-                        Delete
-                      </button>
-                    </div>
+                        {isPaidEnterpriseFeaturesEnabled && isOwnedByUser && (
+                          <button
+                            onClick={
+                              isOwnedByUser
+                                ? () => {
+                                    router.push(
+                                      `/assistants/stats/${persona.id}`
+                                    );
+                                    closePopover();
+                                  }
+                                : undefined
+                            }
+                            className={`w-full text-left items-center px-2 py-1 rounded ${
+                              isOwnedByUser
+                                ? "hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                                : "opacity-50 cursor-not-allowed"
+                            }`}
+                          >
+                            <FiBarChart size={12} className="inline mr-2" />
+                            Stats
+                          </button>
+                        )}
+                        <button
+                          onClick={isOwnedByUser ? handleDelete : undefined}
+                          className={`w-full text-left items-center px-2 py-1 rounded ${
+                            isOwnedByUser
+                              ? "hover:bg-neutral-200 dark:hover:bg-neutral- text-red-600 dark:text-red-400"
+                              : "opacity-50 cursor-not-allowed text-red-300 dark:text-red-500"
+                          }`}
+                          disabled={!isOwnedByUser}
+                        >
+                          <FiTrash size={12} className="inline mr-2" />
+                          Delete
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-full">
+                        <p className="text-sm mb-3">
+                          Are you sure you want to delete assistant{" "}
+                          <b>{persona.name}</b>?
+                        </p>
+                        <div className="flex justify-center gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={cancelDelete}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={confirmDelete}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </PopoverContent>
                 </Popover>
               </div>

@@ -1,3 +1,4 @@
+import { SEARCH_PARAMS } from "@/lib/extension/constants";
 import WrappedChat from "./WrappedChat";
 
 export default async function Page(props: {
@@ -5,6 +6,13 @@ export default async function Page(props: {
 }) {
   const searchParams = await props.searchParams;
   const firstMessage = searchParams.firstMessage;
+  const defaultSidebarOff =
+    searchParams[SEARCH_PARAMS.DEFAULT_SIDEBAR_OFF] === "true";
 
-  return <WrappedChat firstMessage={firstMessage} />;
+  return (
+    <WrappedChat
+      firstMessage={firstMessage}
+      defaultSidebarOff={defaultSidebarOff}
+    />
+  );
 }

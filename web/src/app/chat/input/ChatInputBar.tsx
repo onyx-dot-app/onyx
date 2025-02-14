@@ -819,27 +819,17 @@ export function ChatInputBar({
                     chatState == "toolBuilding" ||
                     chatState == "loading"
                       ? chatState != "streaming"
-                        ? "bg-neutral-900 dark:bg-neutral-400 "
-                        : "bg-neutral-500 dark:bg-neutral-50"
-                      : ""
+                        ? "bg-neutral-500 dark:bg-neutral-400 "
+                        : "bg-neutral-900 dark:bg-neutral-50"
+                      : "bg-red-200"
                   } h-[22px] w-[22px] rounded-full`}
                   onClick={() => {
-                    if (
-                      chatState == "streaming" ||
-                      chatState == "toolBuilding" ||
-                      chatState == "loading"
-                    ) {
+                    if (chatState == "streaming") {
                       stopGenerating();
                     } else if (message) {
                       onSubmit();
                     }
                   }}
-                  disabled={
-                    (chatState == "streaming" ||
-                      chatState == "toolBuilding" ||
-                      chatState == "loading") &&
-                    chatState != "streaming"
-                  }
                 >
                   {chatState == "streaming" ||
                   chatState == "toolBuilding" ||

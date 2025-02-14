@@ -58,6 +58,7 @@ from onyx.prompts.agent_search import (
 )
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.tools.force import ForceUseTool
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
@@ -218,7 +219,10 @@ def get_test_config(
         using_tool_calling_llm=using_tool_calling_llm,
     )
 
-    chat_session_id = os.environ.get("ONYX_AS_CHAT_SESSION_ID")
+    chat_session_id = (
+        os.environ.get("ONYX_AS_CHAT_SESSION_ID")
+        or "00000000-0000-0000-0000-000000000000"
+    )
     assert (
         chat_session_id is not None
     ), "ONYX_AS_CHAT_SESSION_ID must be set for backend tests"
@@ -341,8 +345,12 @@ def retrieve_search_docs(
     with get_session_context_manager() as db_session:
         for tool_response in search_tool.run(
             query=question,
-            force_no_rerank=True,
-            alternate_db_session=db_session,
+            override_kwargs=SearchToolOverrideKwargs(
+                force_no_rerank=True,
+                alternate_db_session=db_session,
+                retrieved_sections_callback=None,
+                skip_query_analysis=False,
+            ),
         ):
             # get retrieved docs to send to the rest of the graph
             if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:

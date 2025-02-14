@@ -1,7 +1,7 @@
 import { Dispatch, SetStateAction, useEffect, useRef } from "react";
 
 interface UseSidebarVisibilityProps {
-  toggledSidebar: boolean;
+  sidebarVisible: boolean;
   sidebarElementRef: React.RefObject<HTMLElement>;
   showDocSidebar: boolean;
   setShowDocSidebar: Dispatch<SetStateAction<boolean>>;
@@ -11,7 +11,7 @@ interface UseSidebarVisibilityProps {
 }
 
 export const useSidebarVisibility = ({
-  toggledSidebar,
+  sidebarVisible,
   sidebarElementRef,
   setShowDocSidebar,
   setToggled,
@@ -55,7 +55,7 @@ export const useSidebarVisibility = ({
           currentXPosition > 100 &&
           showDocSidebar &&
           !isWithinSidebar &&
-          !toggledSidebar
+          !sidebarVisible
         ) {
           setTimeout(() => {
             setShowDocSidebar((showDocSidebar) => {
@@ -88,7 +88,7 @@ export const useSidebarVisibility = ({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showDocSidebar, toggledSidebar, sidebarElementRef, mobile]);
+  }, [showDocSidebar, sidebarVisible, sidebarElementRef, mobile]);
 
   return { showDocSidebar };
 };

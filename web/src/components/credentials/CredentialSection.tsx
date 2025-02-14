@@ -4,9 +4,7 @@ import { ValidSources } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { FaSwatchbook } from "react-icons/fa";
-import { NewChatIcon } from "@/components/icons/icons";
 import { useState } from "react";
-import { useUserGroups } from "@/lib/hooks";
 import {
   deleteCredential,
   swapCredential,
@@ -207,7 +205,7 @@ export default function CredentialSection({
       {showCreateCredential && (
         <Modal
           onOutsideClick={closeCreateCredential}
-          className="max-w-3xl rounded-lg"
+          className="max-w-3xl flex flex-col items-start rounded-lg"
           title={`Create ${getSourceDisplayName(sourceType)} Credential`}
         >
           {oauthDetailsLoading ? (

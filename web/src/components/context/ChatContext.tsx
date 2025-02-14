@@ -16,7 +16,7 @@ import { useRouter } from "next/navigation";
 
 interface ChatContextProps {
   chatSessions: ChatSession[];
-  toggledSidebar: boolean;
+  sidebarInitiallyVisible: boolean;
   availableSources: ValidSources[];
   ccPairs: CCPairBasicInfo[];
   tags: Tag[];

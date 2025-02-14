@@ -3,27 +3,29 @@
 import React, { ReactNode, useState } from "react";
 
 export default function FunctionalWrapper({
-  initiallyToggled,
+  initiallyVisible,
   content,
 }: {
   content: (
-    toggledSidebar: boolean,
-    toggle: (toggled?: boolean) => void
+    sidebarVisible: boolean,
+    toggle: (visible?: boolean) => void
   ) => ReactNode;
-  initiallyToggled: boolean;
+  initiallyVisible?: boolean;
 }) {
-  const [toggledSidebar, setToggledSidebar] = useState(initiallyToggled);
+  const [sidebarVisible, setSidebarVisible] = useState(
+    initiallyVisible || false
+  );
 
   const toggle = (value?: boolean) => {
-    setToggledSidebar((toggledSidebar) =>
-      value !== undefined ? value : !toggledSidebar
+    setSidebarVisible((sidebarVisible) =>
+      value !== undefined ? value : !sidebarVisible
     );
   };
 
   return (
     <>
       <div className="overscroll-y-contain overflow-y-scroll overscroll-contain left-0 top-0 w-full h-svh">
-        {content(toggledSidebar, toggle)}
+        {content(sidebarVisible, toggle)}
       </div>
     </>
   );

@@ -48,9 +48,10 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import SubQuestionsDisplay from "./SubQuestionsDisplay";
 import { StatusRefinement } from "../Refinement";
-import SubQuestionProgress from "./SubQuestionProgress";
 
 export const AgenticMessage = ({
+  isStreamingQuestions,
+  isGenerating,
   docSidebarToggled,
   isImprovement,
   secondLevelAssistantMessage,
@@ -81,6 +82,8 @@ export const AgenticMessage = ({
   secondLevelSubquestions,
   toggleDocDisplay,
 }: {
+  isStreamingQuestions: boolean;
+  isGenerating: boolean;
   docSidebarToggled?: boolean;
   isImprovement?: boolean | null;
   secondLevelSubquestions?: SubQuestionDetail[] | null;
@@ -230,6 +233,13 @@ export const AgenticMessage = ({
   );
   const [currentlyOpenQuestion, setCurrentlyOpenQuestion] =
     useState<BaseQuestionIdentifier | null>(null);
+  const [finishedGenerating, setFinishedGenerating] = useState(!isGenerating);
+
+  useEffect(() => {
+    if (streamedContent.length == finalContent.length && !isGenerating) {
+      setFinishedGenerating(true);
+    }
+  }, [streamedContent, finalContent, isGenerating]);
 
   const openQuestion = useCallback(
     (question: SubQuestionDetail) => {
@@ -400,12 +410,10 @@ export const AgenticMessage = ({
                 <div className="w-full desktop:ml-4">
                   {subQuestions && subQuestions.length > 0 && (
                     <SubQuestionsDisplay
+                      isStreamingQuestions={isStreamingQuestions}
                       allowDocuments={() => setAllowDocuments(true)}
                       docSidebarToggled={docSidebarToggled || false}
-                      finishedGenerating={
-                        finalContent.length > 2 &&
-                        streamedContent.length == finalContent.length
-                      }
+                      finishedGenerating={finishedGenerating}
                       overallAnswerGenerating={
                         !!(
                           secondLevelSubquestions &&

@@ -29,7 +29,7 @@ export default async function Page() {
         <Separator />
 
         <Title>Create an Assistant</Title>
-        <CreateButton href="/admin/assistants/new" text="New Assistant" />
+        <CreateButton href="/assistants/new?admin=true" text="New Assistant" />
 
         <Separator />
 

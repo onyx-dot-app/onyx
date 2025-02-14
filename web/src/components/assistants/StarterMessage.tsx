@@ -58,7 +58,7 @@ export function StarterMessages({
                       enabled:hover:bg-background-dark/75
                       disabled:cursor-not-allowed
                       overflow-hidden
-                      break-all
+                      break-words
                       truncate
                       text-ellipsis
                     `}

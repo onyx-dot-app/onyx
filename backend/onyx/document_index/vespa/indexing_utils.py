@@ -146,6 +146,23 @@ def _index_vespa_chunk(
 
     title = document.get_title_for_document_index()
 
+    metadata_json = document.metadata
+    cleaned_metadata_json: dict[str, str | list[str]] = {}
+    for key, value in metadata_json.items():
+        cleaned_key = remove_invalid_unicode_chars(key)
+        if isinstance(value, list):
+            cleaned_metadata_json[cleaned_key] = [
+                remove_invalid_unicode_chars(item) for item in value
+            ]
+        else:
+            cleaned_metadata_json[cleaned_key] = remove_invalid_unicode_chars(value)
+
+    metadata_list = document.get_metadata_str_attributes()
+    if metadata_list:
+        metadata_list = [
+            remove_invalid_unicode_chars(metadata) for metadata in metadata_list
+        ]
+
     vespa_document_fields = {
         DOCUMENT_ID: document.id,
         CHUNK_ID: chunk.chunk_id,
@@ -166,10 +183,10 @@ def _index_vespa_chunk(
         SEMANTIC_IDENTIFIER: remove_invalid_unicode_chars(document.semantic_identifier),
         SECTION_CONTINUATION: chunk.section_continuation,
         LARGE_CHUNK_REFERENCE_IDS: chunk.large_chunk_reference_ids,
-        METADATA: json.dumps(document.metadata),
+        METADATA: json.dumps(cleaned_metadata_json),
         # Save as a list for efficient extraction as an Attribute
-        METADATA_LIST: chunk.source_document.get_metadata_str_attributes(),
-        METADATA_SUFFIX: chunk.metadata_suffix_keyword,
+        METADATA_LIST: metadata_list,
+        METADATA_SUFFIX: remove_invalid_unicode_chars(chunk.metadata_suffix_keyword),
         EMBEDDINGS: embeddings_name_vector_map,
         TITLE_EMBEDDING: chunk.title_embedding,
         DOC_UPDATED_AT: _vespa_get_updated_at_attribute(document.doc_updated_at),

@@ -65,10 +65,25 @@ class AirtableConnector(LoadConnector):
         base_id: str,
         table_name_or_id: str,
         treat_all_non_attachment_fields_as_metadata: bool = False,
+        view_id: str | None = None,
+        share_id: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
+        """Initialize an AirtableConnector.
+
+        Args:
+            base_id: The ID of the Airtable base to connect to
+            table_name_or_id: The name or ID of the table to index
+            treat_all_non_attachment_fields_as_metadata: If True, all fields except attachments will be treated as metadata.
+                If False, only fields with types in DEFAULT_METADATA_FIELD_TYPES will be treated as metadata.
+            view_id: Optional ID of a specific view to use
+            share_id: Optional ID of a "share" to use for generating record URLs (https://airtable.com/developers/web/api/list-shares)
+            batch_size: Number of records to process in each batch
+        """
         self.base_id = base_id
         self.table_name_or_id = table_name_or_id
+        self.view_id = view_id
+        self.share_id = share_id
         self.batch_size = batch_size
         self._airtable_client: AirtableApi | None = None
         self.treat_all_non_attachment_fields_as_metadata = (
@@ -84,6 +99,39 @@ class AirtableConnector(LoadConnector):
         if not self._airtable_client:
             raise AirtableClientNotSetUpError()
         return self._airtable_client
+
+    @classmethod
+    def _get_record_url(
+        cls,
+        base_id: str,
+        table_id: str,
+        record_id: str,
+        share_id: str | None,
+        view_id: str | None,
+        field_id: str | None = None,
+        attachment_id: str | None = None,
+    ) -> str:
+        """Constructs the URL for a record, optionally including field and attachment IDs
+
+        Full possible structure is:
+
+        https://airtable.com/BASE_ID/SHARE_ID/TABLE_ID/VIEW_ID/RECORD_ID/FIELD_ID/ATTACHMENT_ID
+        """
+        # If we have a shared link, use that view for better UX
+        if share_id:
+            base_url = f"https://airtable.com/{base_id}/{share_id}/{table_id}"
+        else:
+            base_url = f"https://airtable.com/{base_id}/{table_id}"
+
+        if view_id:
+            base_url = f"{base_url}/{view_id}"
+
+        base_url = f"{base_url}/{record_id}"
+
+        if field_id and attachment_id:
+            return f"{base_url}/{field_id}/{attachment_id}?blocks=hide"
+
+        return base_url
 
     def _extract_field_values(
         self,
@@ -110,8 +158,10 @@ class AirtableConnector(LoadConnector):
         if field_type == "multipleRecordLinks":
             return []
 
-        # default link to use for non-attachment fields
-        default_link = f"https://airtable.com/{base_id}/{table_id}/{record_id}"
+        # Get the base URL for this record
+        default_link = self._get_record_url(
+            base_id, table_id, record_id, self.share_id, self.view_id or view_id
+        )
 
         if field_type == "multipleAttachments":
             attachment_texts: list[tuple[str, str]] = []
@@ -165,17 +215,16 @@ class AirtableConnector(LoadConnector):
                             extension=file_ext,
                         )
                         if attachment_text:
-                            # slightly nicer loading experience if we can specify the view ID
-                            if view_id:
-                                attachment_link = (
-                                    f"https://airtable.com/{base_id}/{table_id}/{view_id}/{record_id}"
-                                    f"/{field_id}/{attachment_id}?blocks=hide"
-                                )
-                            else:
-                                attachment_link = (
-                                    f"https://airtable.com/{base_id}/{table_id}/{record_id}"
-                                    f"/{field_id}/{attachment_id}?blocks=hide"
-                                )
+                            # Use the helper method to construct attachment URLs
+                            attachment_link = self._get_record_url(
+                                base_id,
+                                table_id,
+                                record_id,
+                                self.share_id,
+                                self.view_id or view_id,
+                                field_id,
+                                attachment_id,
+                            )
                             attachment_texts.append(
                                 (f"{filename}:\n{attachment_text}", attachment_link)
                             )

@@ -10,6 +10,7 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_PRUNING_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -49,7 +50,7 @@ class RedisConnectorPrune:
     # it's impossible to get the exact state of the system at a single point in time
     # so we need a signal with a TTL to bridge gaps in our checks
     ACTIVE_PREFIX = PREFIX + "_active"
-    ACTIVE_TTL = 3600
+    ACTIVE_TTL = CELERY_PRUNING_LOCK_TIMEOUT * 2
 
     def __init__(self, tenant_id: str | None, id: int, redis: redis.Redis) -> None:
         self.tenant_id: str | None = tenant_id
@@ -201,6 +202,7 @@ class RedisConnectorPrune:
                 queue=OnyxCeleryQueues.CONNECTOR_DELETION,
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.MEDIUM,
+                ignore_result=True,
             )
 
             async_results.append(result)

@@ -175,6 +175,24 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str | None) -> bool
                 )
 
             r.set(OnyxRedisSignals.BLOCK_VALIDATE_PERMISSION_SYNC_FENCES, 1, ex=300)
+
+        # use a lookup table to find active fences. We still have to verify the fence
+        # exists since it is an optimization and not the source of truth.
+        lock_beat.reacquire()
+        keys = cast(set[Any], r_replica.smembers(OnyxRedisConstants.ACTIVE_FENCES))
+        for key in keys:
+            key_bytes = cast(bytes, key)
+
+            if not r.exists(key_bytes):
+                r.srem(OnyxRedisConstants.ACTIVE_FENCES, key_bytes)
+                continue
+
+            key_str = key_bytes.decode("utf-8")
+            if key_str.startswith(RedisConnectorPermissionSync.FENCE_PREFIX):
+                with get_session_with_tenant(tenant_id) as db_session:
+                    monitor_ccpair_permissions_taskset(
+                        tenant_id, key_bytes, r, db_session
+                    )
     except SoftTimeLimitExceeded:
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
@@ -349,6 +367,7 @@ def connector_permission_sync_generator_task(
         OnyxRedisLocks.CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX
         + f"_{redis_connector.id}",
         timeout=CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT,
+        thread_local=False,
     )
 
     acquired = lock.acquire(blocking=False)
@@ -459,14 +478,15 @@ def update_external_document_permissions_task(
     )
     doc_id = document_external_access.doc_id
     external_access = document_external_access.external_access
+
     try:
         with get_session_with_tenant(tenant_id) as db_session:
-            # Add the users to the DB if they don't exist
             batch_add_ext_perm_user_if_not_exists(
                 db_session=db_session,
                 emails=list(external_access.external_user_emails),
+                continue_on_error=True,
             )
-            # Then we upsert the document's external permissions in postgres
+            # Then upsert the document's external permissions
             created_new_doc = upsert_document_external_perms(
                 db_session=db_session,
                 doc_id=doc_id,
@@ -490,11 +510,11 @@ def update_external_document_permissions_task(
                 f"action=update_permissions "
                 f"elapsed={elapsed:.2f}"
             )
+
     except Exception:
         task_logger.exception(
             f"Exception in update_external_document_permissions_task: "
-            f"connector_id={connector_id} "
-            f"doc_id={doc_id}"
+            f"connector_id={connector_id} doc_id={doc_id}"
         )
         return False
 
@@ -755,7 +775,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
             raise
 
 
-"""Monitoring CCPair permissions utils, called in monitor_vespa_sync"""
+"""Monitoring CCPair permissions utils"""
 
 
 def monitor_ccpair_permissions_taskset(

@@ -108,6 +108,7 @@ module.exports = {
         "input-option-hover": "var(--input-option-hover)",
         "accent-background": "var(--accent-background)",
         "accent-background-hovered": "var(--accent-background-hovered)",
+        "accent-background-selected": "var(--accent-background-selected)",
         "background-dark": "var(--off-white)",
         "background-100": "var(--neutral-100-border-light)",
         "background-125": "var(--neutral-125)",
@@ -213,7 +214,7 @@ module.exports = {
 
         input: "var(--white-card-popover)",
 
-        text: "var(--neutral-900)",
+        text: "var(--neutral-950)",
         "text-darker": "var(--text-darker)",
         "text-dark": "var(--text-dark)",
         "sidebar-border": "var(--neutral-200-border)",
@@ -262,7 +263,7 @@ module.exports = {
         "agent-sidebar": "var(--agent-sidebar)",
         agent: "var(--agent)",
         "lighter-agent": "var(--lighter-agent)",
-
+        "agent-hovered": "var(--agent-hovered)",
         // hover
         "hover-light": "var(--hover-light)",
         "hover-lightish": "var(--neutral-125)",

@@ -32,6 +32,7 @@ from onyx.db.persona import get_personas_for_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
 from onyx.db.persona import update_all_personas_display_priority
+from onyx.db.persona import update_persona_is_default
 from onyx.db.persona import update_persona_label
 from onyx.db.persona import update_persona_public_status
 from onyx.db.persona import update_persona_shared_users
@@ -56,7 +57,6 @@ from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 
-
 logger = setup_logger()
 
 
@@ -70,6 +70,10 @@ class IsVisibleRequest(BaseModel):
 
 class IsPublicRequest(BaseModel):
     is_public: bool
+
+
+class IsDefaultRequest(BaseModel):
+    is_default_persona: bool
 
 
 @admin_router.patch("/{persona_id}/visible")
@@ -103,6 +107,25 @@ def patch_user_presona_public_status(
         )
     except ValueError as e:
         logger.exception("Failed to update persona public status")
+        raise HTTPException(status_code=403, detail=str(e))
+
+
+@admin_router.patch("/{persona_id}/default")
+def patch_persona_default_status(
+    persona_id: int,
+    is_default_request: IsDefaultRequest,
+    user: User | None = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    try:
+        update_persona_is_default(
+            persona_id=persona_id,
+            is_default=is_default_request.is_default_persona,
+            db_session=db_session,
+            user=user,
+        )
+    except ValueError as e:
+        logger.exception("Failed to update persona default status")
         raise HTTPException(status_code=403, detail=str(e))
 
 

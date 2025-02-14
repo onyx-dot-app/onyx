@@ -74,7 +74,7 @@ export function IndexAttemptStatus({
     );
   } else if (status === "not_started") {
     badge = (
-      <Badge variant="purple" icon={FiClock}>
+      <Badge variant="not_started" icon={FiClock}>
         Scheduled
       </Badge>
     );

@@ -144,7 +144,6 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     # As currently designed, when this worker starts as "primary", we reinitialize redis
     # to a clean state (for our purposes, anyway)
     r.delete(OnyxRedisLocks.CHECK_VESPA_SYNC_BEAT_LOCK)
-    r.delete(OnyxRedisLocks.MONITOR_VESPA_SYNC_BEAT_LOCK)
 
     r.delete(OnyxRedisConstants.ACTIVE_FENCES)
 

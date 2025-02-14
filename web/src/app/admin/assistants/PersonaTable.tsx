@@ -11,13 +11,14 @@ import { DraggableTable } from "@/components/table/DraggableTable";
 import {
   deletePersona,
   personaComparator,
+  togglePersonaDefault,
   togglePersonaVisibility,
 } from "./lib";
 import { FiEdit2 } from "react-icons/fi";
 import { TrashIcon } from "@/components/icons/icons";
 import { useUser } from "@/components/user/UserProvider";
 import { useAssistants } from "@/components/context/AssistantsContext";
-import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.builtin_persona) {
@@ -56,6 +57,9 @@ export function PersonasTable() {
   const [finalPersonas, setFinalPersonas] = useState<Persona[]>([]);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [personaToDelete, setPersonaToDelete] = useState<Persona | null>(null);
+  const [defaultModalOpen, setDefaultModalOpen] = useState(false);
+  const [personaToToggleDefault, setPersonaToToggleDefault] =
+    useState<Persona | null>(null);
 
   useEffect(() => {
     const editable = editablePersonas.sort(personaComparator);
@@ -126,11 +130,39 @@ export function PersonasTable() {
     }
   };
 
+  const openDefaultModal = (persona: Persona) => {
+    setPersonaToToggleDefault(persona);
+    setDefaultModalOpen(true);
+  };
+
+  const closeDefaultModal = () => {
+    setDefaultModalOpen(false);
+    setPersonaToToggleDefault(null);
+  };
+
+  const handleToggleDefault = async () => {
+    if (personaToToggleDefault) {
+      const response = await togglePersonaDefault(
+        personaToToggleDefault.id,
+        personaToToggleDefault.is_default_persona
+      );
+      if (response.ok) {
+        await refreshAssistants();
+        closeDefaultModal();
+      } else {
+        setPopup({
+          type: "error",
+          message: `Failed to update persona - ${await response.text()}`,
+        });
+      }
+    }
+  };
+
   return (
     <div>
       {popup}
       {deleteModalOpen && personaToDelete && (
-        <DeleteEntityModal
+        <ConfirmEntityModal
           entityType="Persona"
           entityName={personaToDelete.name}
           onClose={closeDeleteModal}
@@ -138,8 +170,35 @@ export function PersonasTable() {
         />
       )}
 
+      {defaultModalOpen && personaToToggleDefault && (
+        <ConfirmEntityModal
+          variant="action"
+          entityType="Assistant"
+          entityName={personaToToggleDefault.name}
+          onClose={closeDefaultModal}
+          onSubmit={handleToggleDefault}
+          actionButtonText={
+            personaToToggleDefault.is_default_persona
+              ? "Remove Featured"
+              : "Set as Featured"
+          }
+          additionalDetails={
+            personaToToggleDefault.is_default_persona
+              ? `Removing "${personaToToggleDefault.name}" as a featured assistant will not affect its visibility or accessibility.`
+              : `Setting "${personaToToggleDefault.name}" as a featured assistant will make it public and visible to all users. This action cannot be undone.`
+          }
+        />
+      )}
+
       <DraggableTable
-        headers={["Name", "Description", "Type", "Is Visible", "Delete"]}
+        headers={[
+          "Name",
+          "Description",
+          "Type",
+          "Featured Assistant",
+          "Is Visible",
+          "Delete",
+        ]}
         isAdmin={isAdmin}
         rows={finalPersonas.map((persona) => {
           const isEditable = editablePersonas.includes(persona);
@@ -152,7 +211,9 @@ export function PersonasTable() {
                     className="mr-1 my-auto cursor-pointer"
                     onClick={() =>
                       router.push(
-                        `/admin/assistants/${persona.id}?u=${Date.now()}`
+                        `/assistants/edit/${
+                          persona.id
+                        }?u=${Date.now()}&admin=true`
                       )
                     }
                   />
@@ -168,6 +229,30 @@ export function PersonasTable() {
                 {persona.description}
               </p>,
               <PersonaTypeDisplay key={persona.id} persona={persona} />,
+              <div
+                key="is_default_persona"
+                onClick={() => {
+                  if (isEditable) {
+                    openDefaultModal(persona);
+                  }
+                }}
+                className={`px-1 py-0.5 rounded flex ${
+                  isEditable
+                    ? "hover:bg-accent-background-hovered cursor-pointer"
+                    : ""
+                } select-none w-fit`}
+              >
+                <div className="my-auto flex-none w-22">
+                  {!persona.is_default_persona ? (
+                    <div className="text-error">Not Featured</div>
+                  ) : (
+                    "Featured"
+                  )}
+                </div>
+                <div className="ml-1 my-auto">
+                  <CustomCheckbox checked={persona.is_default_persona} />
+                </div>
+              </div>,
               <div
                 key="is_visible"
                 onClick={async () => {

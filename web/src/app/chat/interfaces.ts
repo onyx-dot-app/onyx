@@ -110,6 +110,7 @@ export interface Message {
   second_level_message?: string;
   second_level_subquestions?: SubQuestionDetail[] | null;
   isImprovement?: boolean | null;
+  isStreamingQuestions?: boolean;
 }
 
 export interface BackendChatSession {
@@ -219,6 +220,7 @@ export interface SubQuestionDetail extends BaseQuestionIdentifier {
   context_docs?: { top_documents: OnyxDocument[] } | null;
   is_complete?: boolean;
   is_stopped?: boolean;
+  answer_streaming?: boolean;
 }
 
 export interface SubQueryDetail {
@@ -245,9 +247,6 @@ export const constructSubQuestions = (
   }
 
   const updatedSubQuestions = [...subQuestions];
-  // .filter(
-  //   (sq) => sq.level_question_num !== 0
-  // );
 
   if ("stop_reason" in newDetail) {
     const { level, level_question_num } = newDetail;
@@ -255,8 +254,12 @@ export const constructSubQuestions = (
       (sq) => sq.level === level && sq.level_question_num === level_question_num
     );
     if (subQuestion) {
-      subQuestion.is_complete = true;
-      subQuestion.is_stopped = true;
+      if (newDetail.stream_type == "sub_answer") {
+        subQuestion.answer_streaming = false;
+      } else {
+        subQuestion.is_complete = true;
+        subQuestion.is_stopped = true;
+      }
     }
   } else if ("top_documents" in newDetail) {
     const { level, level_question_num, top_documents } = newDetail;

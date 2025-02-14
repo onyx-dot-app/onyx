@@ -100,7 +100,7 @@ export function SlackChannelConfigsTable({
                           slackChannelConfig.persona
                         ) ? (
                           <Link
-                            href={`/admin/assistants/${slackChannelConfig.persona.id}`}
+                            href={`/assistants/${slackChannelConfig.persona.id}`}
                             className="text-primary hover:underline"
                           >
                             {slackChannelConfig.persona.name}

@@ -19,7 +19,7 @@ import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { CustomEmbeddingModelForm } from "@/components/embedding/CustomEmbeddingModelForm";
 import { deleteSearchSettings } from "./utils";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { AdvancedSearchConfiguration } from "../interfaces";
 import CardSection from "@/components/admin/CardSection";
 
@@ -322,7 +322,7 @@ export default function CloudEmbeddingPage({
                     OpenAI for embeddings.
                   </Text>
                   <div className="flex items-center text-sm text-text-700">
-                    <FiInfo className="text-text-400 mr-2" size={16} />
+                    <FiInfo className="text-neutral-400 mr-2" size={16} />
                     <Text>
                       You&apos;ll need: API version, base URL, API key, model
                       name, and deployment name.
@@ -456,7 +456,7 @@ export function CloudModelCard({
     >
       {popup}
       {showDeleteModel && (
-        <DeleteEntityModal
+        <ConfirmEntityModal
           entityName={model.model_name}
           entityType="embedding model configuration"
           onSubmit={() => deleteModel()}

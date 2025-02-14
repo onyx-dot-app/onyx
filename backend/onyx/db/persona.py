@@ -204,6 +204,14 @@ def create_update_persona(
         if not all_prompt_ids:
             raise ValueError("No prompt IDs provided")
 
+        # Default persona validation
+        if create_persona_request.is_default_persona:
+            if not create_persona_request.is_public:
+                raise ValueError("Cannot make a default persona non public")
+
+            if user and user.role != UserRole.ADMIN:
+                raise ValueError("Only admins can make a default persona")
+
         persona = upsert_persona(
             persona_id=persona_id,
             user=user,
@@ -510,6 +518,7 @@ def upsert_persona(
         existing_persona.is_visible = is_visible
         existing_persona.search_start_date = search_start_date
         existing_persona.labels = labels or []
+        existing_persona.is_default_persona = is_default_persona
         # Do not delete any associations manually added unless
         # a new updated list is provided
         if document_sets is not None:
@@ -587,6 +596,23 @@ def delete_old_default_personas(
     )
 
     db_session.execute(stmt)
+    db_session.commit()
+
+
+def update_persona_is_default(
+    persona_id: int,
+    is_default: bool,
+    db_session: Session,
+    user: User | None = None,
+) -> None:
+    persona = fetch_persona_by_id_for_user(
+        db_session=db_session, persona_id=persona_id, user=user, get_editable=True
+    )
+
+    if not persona.is_public:
+        persona.is_public = True
+
+    persona.is_default_persona = is_default
     db_session.commit()
 
 

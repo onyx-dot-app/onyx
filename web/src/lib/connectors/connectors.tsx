@@ -227,6 +227,24 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  gitbook: {
+    description: "Configure GitBook connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the space ID:",
+        label: "Space ID",
+        name: "space_id",
+        optional: false,
+        description:
+          "The ID of the GitBook space to index. This can be found in the URL " +
+          "of a page in the space. For example, if your URL looks like " +
+          "`https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`, " +
+          "then your space ID is `8JkzVx8QCIGRrmxhGHU8`.",
+      },
+    ],
+    advanced_values: [],
+  },
   google_drive: {
     description: "Configure Google Drive connector",
     values: [
@@ -1115,7 +1133,24 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         optional: false,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "text",
+        label: "View ID",
+        name: "view_id",
+        optional: true,
+        description:
+          "If you need to link to a specific View, put that ID here e.g. viwVUEJjWPd8XYjh8.",
+      },
+      {
+        type: "text",
+        label: "Share ID",
+        name: "share_id",
+        optional: true,
+        description:
+          "If you need to link to a specific Share, put that ID here e.g. shrkfjEzDmLaDtK83.",
+      },
+    ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
 };

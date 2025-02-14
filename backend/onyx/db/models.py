@@ -483,6 +483,10 @@ class ConnectorCredentialPair(Base):
         primaryjoin="foreign(ConnectorCredentialPair.creator_id) == remote(User.id)",
     )
 
+    background_errors: Mapped[list["BackgroundError"]] = relationship(
+        "BackgroundError", back_populates="cc_pair", cascade="all, delete-orphan"
+    )
+
 
 class Document(Base):
     __tablename__ = "document"
@@ -2112,6 +2116,31 @@ class StandardAnswer(Base):
         "ChatMessage",
         secondary=ChatMessage__StandardAnswer.__table__,
         back_populates="standard_answers",
+    )
+
+
+class BackgroundError(Base):
+    """Important background errors. Serves to:
+    1. Ensure that important logs are kept around and not lost on rotation/container restarts
+    2. A trail for high-signal events so that the debugger doesn't need to remember/know every
+       possible relevant log line.
+    """
+
+    __tablename__ = "background_error"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message: Mapped[str] = mapped_column(String)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # option to link the error to a specific CC Pair
+    cc_pair_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"), nullable=True
+    )
+
+    cc_pair: Mapped["ConnectorCredentialPair | None"] = relationship(
+        "ConnectorCredentialPair", back_populates="background_errors"
     )
 
 
