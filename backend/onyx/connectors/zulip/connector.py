@@ -38,15 +38,38 @@ class ZulipConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.realm_name = realm_name
 
-        if "work.solutioncenter.ai" in realm_url.lower():
-            self.base_url = "https://work.solutioncenter.ai"
-        elif "aic.zulipchat.com" in realm_url.lower():
-            self.base_url = "https://aic.zulipchat.com"
-        else:
+        # Clean and normalize the URL
+        realm_url = realm_url.strip().lower()
+        
+        # Remove any trailing slashes
+        realm_url = realm_url.rstrip('/')
+        
+        # Ensure the URL has a scheme
+        if not realm_url.startswith(('http://', 'https://')):
+            realm_url = f'https://{realm_url}'
+        
+        try:
             parsed = urllib.parse.urlparse(realm_url)
-            self.base_url = f"{parsed.scheme}://{parsed.netloc.split(':')[0]}"
-
-        self.client: Client | None = None
+            
+            # Extract the base domain without any paths or ports
+            netloc = parsed.netloc.split(':')[0]  # Remove port if present
+            
+            if not netloc:
+                raise ValueError(
+                    f"Invalid realm URL format: {realm_url}. "
+                    f"URL must include a valid domain name."
+                )
+            
+            # Always use HTTPS for security
+            self.base_url = f"https://{netloc}"
+            self.client: Client | None = None
+            
+        except Exception as e:
+            raise ValueError(
+                f"Failed to parse Zulip realm URL: {realm_url}. "
+                f"Please provide a URL in the format: domain.com or https://domain.com. "
+                f"Error: {str(e)}"
+            )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         contents = credentials["zuliprc_content"]
@@ -64,12 +87,17 @@ class ZulipConnector(LoadConnector, PollConnector):
         return None
 
     def _message_to_narrow_link(self, m: Message) -> str:
-        stream_name = m.display_recipient  # assume str
-        stream_operand = encode_zulip_narrow_operand(f"{m.stream_id}-{stream_name}")
-        topic_operand = encode_zulip_narrow_operand(m.subject)
+        try:
+            stream_name = m.display_recipient  # assume str
+            stream_operand = encode_zulip_narrow_operand(f"{m.stream_id}-{stream_name}")
+            topic_operand = encode_zulip_narrow_operand(m.subject)
 
-        narrow_link = f"{self.base_url}#narrow/stream/{stream_operand}/topic/{topic_operand}/near/{m.id}"
-        return narrow_link
+            narrow_link = f"{self.base_url}#narrow/stream/{stream_operand}/topic/{topic_operand}/near/{m.id}"
+            return narrow_link
+        except Exception as e:
+            logger.error(f"Error generating Zulip message link: {e}")
+            # Fallback to a basic link that at least includes the base URL
+            return f"{self.base_url}#narrow/id/{m.id}"
 
     def _get_message_batch(self, anchor: str) -> Tuple[bool, List[Message]]:
         if self.client is None:
@@ -101,8 +129,19 @@ class ZulipConnector(LoadConnector, PollConnector):
                 )
             ],
             source=DocumentSource.ZULIP,
-            semantic_identifier=message.display_recipient or message.subject,
-            metadata={},
+            semantic_identifier=f"{message.display_recipient} > {message.subject}",
+            metadata={
+                "stream_name": message.display_recipient,
+                "topic": message.subject,
+                "sender_name": message.sender_full_name,
+                "sender_email": message.sender_email,
+                "timestamp": message.timestamp,
+                "message_id": message.id,
+                "stream_id": message.stream_id,
+                "last_edit_timestamp": message.last_edit_timestamp,
+                "has_reactions": len(message.reactions) > 0,
+                "content_type": message.content_type or "text",
+            },
         )
 
     def _get_docs(
