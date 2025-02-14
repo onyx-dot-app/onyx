@@ -289,7 +289,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             try:
                 user = await super().create(user_create, safe=safe, request=request)  # type: ignore
             except exceptions.UserAlreadyExists:
-                user = await self.get_by_email(user_create.email)
+                # user = await self.get_by_email(user_create.email)
+                user = await tenant_user_db.get_by_email(user_create.email)
+
                 # Handle case where user has used product outside of web and is now creating an account through web
                 if not user.role.is_web_login() and user_create.role.is_web_login():
                     user_update = UserUpdateWithRole(
