@@ -5,6 +5,7 @@ from collections.abc import Generator
 from typing import Any
 from typing import List
 from typing import Tuple
+from typing import Dict, Union
 from datetime import datetime, timezone
 
 from zulip import Client
@@ -139,7 +140,7 @@ class ZulipConnector(LoadConnector, PollConnector):
             edit_time = None
             doc_time = None
 
-        metadata = {
+        metadata: Dict[str, Union[str, List[str]]] = {
             "stream_name": str(message.display_recipient),
             "topic": str(message.subject),
             "sender_name": str(message.sender_full_name),
