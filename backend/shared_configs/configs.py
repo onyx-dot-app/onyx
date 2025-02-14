@@ -199,12 +199,12 @@ SUPPORTED_EMBEDDING_MODELS = [
         index_name="danswer_chunk_text_embedding_3_small",
     ),
     SupportedEmbeddingModel(
-        name="google/text-embedding-004",
+        name="google/text-embedding-005",
         dim=768,
         index_name="danswer_chunk_google_text_embedding_004",
     ),
     SupportedEmbeddingModel(
-        name="google/text-embedding-004",
+        name="google/text-embedding-005",
         dim=768,
         index_name="danswer_chunk_text_embedding_004",
     ),

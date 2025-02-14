@@ -172,17 +172,19 @@ class CloudEmbedding:
         vertexai.init(project=project_id, credentials=credentials)
         client = TextEmbeddingModel.from_pretrained(model)
 
-        embeddings = await client.get_embeddings_async(
-            [
-                TextEmbeddingInput(
-                    text,
-                    embedding_type,
-                )
-                for text in texts
-            ],
-            auto_truncate=True,  # This is the default
-        )
-        return [embedding.values for embedding in embeddings]
+        inputs = [TextEmbeddingInput(text, embedding_type) for text in texts]
+    
+        # Split into batches of 25 texts
+        max_texts_per_batch = 25  # 25 texts per batch
+        batches = [inputs[i:i + max_texts_per_batch] for i in range(0, len(inputs), max_texts_per_batch)]
+        
+        # Dispatch all embedding calls asynchronously at once
+        tasks = [client.get_embeddings_async(batch, auto_truncate=True) for batch in batches]
+
+        # Wait for all tasks to complete in parallel
+        results = await asyncio.gather(*tasks)
+
+        return [embedding.values for batch in results for embedding in batch]
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
