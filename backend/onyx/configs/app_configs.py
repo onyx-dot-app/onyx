@@ -106,7 +106,8 @@ SMTP_SERVER = os.environ.get("SMTP_SERVER") or "smtp.gmail.com"
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
 SMTP_USER = os.environ.get("SMTP_USER", None)
 SMTP_PASS = os.environ.get("SMTP_PASS", None)
-EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS])
+#EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS])
+EMAIL_CONFIGURED = all([SMTP_SERVER]) # we don't have smtp_user and password
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
 
 # If set, Onyx will listen to the `expires_at` returned by the identity
