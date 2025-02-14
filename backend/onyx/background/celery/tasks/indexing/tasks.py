@@ -109,9 +109,12 @@ class IndexingWatchdogTerminalStatus(str, Enum):
 
     OUT_OF_MEMORY = "out_of_memory"
 
+    PROCESS_SIGNAL_SIGKILL = "process_signal_sigkill"
+
     @property
     def code(self) -> int:
         _ENUM_TO_CODE: dict[IndexingWatchdogTerminalStatus, int] = {
+            IndexingWatchdogTerminalStatus.PROCESS_SIGNAL_SIGKILL: -9,
             IndexingWatchdogTerminalStatus.OUT_OF_MEMORY: 137,
             IndexingWatchdogTerminalStatus.BLOCKED_BY_DELETION: 248,
             IndexingWatchdogTerminalStatus.BLOCKED_BY_STOP_SIGNAL: 249,
@@ -128,7 +131,7 @@ class IndexingWatchdogTerminalStatus(str, Enum):
     @classmethod
     def from_code(cls, code: int) -> "IndexingWatchdogTerminalStatus":
         _CODE_TO_ENUM: dict[int, IndexingWatchdogTerminalStatus] = {
-            137: IndexingWatchdogTerminalStatus.OUT_OF_MEMORY,
+            -9: IndexingWatchdogTerminalStatus.PROCESS_SIGNAL_SIGKILL,
             248: IndexingWatchdogTerminalStatus.BLOCKED_BY_DELETION,
             249: IndexingWatchdogTerminalStatus.BLOCKED_BY_STOP_SIGNAL,
             250: IndexingWatchdogTerminalStatus.FENCE_NOT_FOUND,
@@ -728,7 +731,6 @@ def connector_indexing_task(
                     f"Index attempt not found: index_attempt={index_attempt_id}",
                     code=IndexingWatchdogTerminalStatus.INDEX_ATTEMPT_MISMATCH.code,
                 )
-            # attempt_found = True
 
             cc_pair = get_connector_credential_pair_from_id(
                 db_session=db_session,
