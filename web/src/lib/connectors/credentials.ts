@@ -31,7 +31,6 @@ export interface GithubCredentialJson {
 }
 
 export interface GitbookCredentialJson {
-  gitbook_space_id: string;
   gitbook_api_key: string;
 }
 
@@ -350,7 +349,6 @@ export const credentialTemplates: Record<ValidSources, any> = {
   google_drive: { google_tokens: "" } as GoogleDriveCredentialJson,
   gmail: { google_tokens: "" } as GmailCredentialJson,
   gitbook: {
-    gitbook_space_id: "",
     gitbook_api_key: "",
   } as GitbookCredentialJson,
 };

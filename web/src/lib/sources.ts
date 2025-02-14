@@ -325,7 +325,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   gitbook: {
     icon: GitbookIcon,
     displayName: "GitBook",
-    category: SourceCategory.CodeRepository,
+    category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/gitbook",
   },
   // currently used for the Internet Search tool docs, which is why

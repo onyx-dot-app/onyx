@@ -2,7 +2,6 @@
 
 import { useContext } from "react";
 import { SettingsContext } from "../settings/SettingsProvider";
-import { useTheme } from "next-themes";
 import { OnyxIcon, OnyxLogoTypeIcon } from "../icons/icons";
 
 export function Logo({
