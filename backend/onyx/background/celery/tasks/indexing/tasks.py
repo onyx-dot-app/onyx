@@ -993,38 +993,9 @@ def connector_indexing_proxy_task(
         result.status = IndexingWatchdogTerminalStatus.WATCHDOG_EXCEPTIONED
         result.exception_str = traceback.format_exc()
 
+    # handle exit and reporting
     elapsed = time.monotonic() - start
-    if result.exception_str is None:
-        # print without exception
-        if result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL:
-            try:
-                with get_session_with_tenant(tenant_id) as db_session:
-                    mark_attempt_canceled(
-                        index_attempt_id,
-                        db_session,
-                        "Connector termination signal detected",
-                    )
-            except Exception:
-                # if the DB exceptions, we'll just get an unfriendly failure message
-                # in the UI instead of the cancellation message
-                task_logger.exception(
-                    log_builder.build(
-                        "Indexing watchdog - transient exception marking index attempt as canceled"
-                    )
-                )
-
-            job.cancel()
-
-        task_logger.info(
-            log_builder.build(
-                "Indexing watchdog - finished",
-                source=result.connector_source,
-                status=str(result.status.value),
-                exit_code=str(result.exit_code),
-                elapsed=f"{elapsed:.2f}s",
-            )
-        )
-    else:
+    if result.exception_str is not None:
         # print with exception
         try:
             with get_session_with_tenant(tenant_id) as db_session:
@@ -1054,6 +1025,39 @@ def connector_indexing_proxy_task(
                 elapsed=f"{elapsed:.2f}s",
             )
         )
+
+        redis_connector_index.set_watchdog(False)
+        raise RuntimeError(f"Exception encountered: traceback={result.exception_str}")
+
+    # print without exception
+    if result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL:
+        try:
+            with get_session_with_tenant(tenant_id) as db_session:
+                mark_attempt_canceled(
+                    index_attempt_id,
+                    db_session,
+                    "Connector termination signal detected",
+                )
+        except Exception:
+            # if the DB exceptions, we'll just get an unfriendly failure message
+            # in the UI instead of the cancellation message
+            task_logger.exception(
+                log_builder.build(
+                    "Indexing watchdog - transient exception marking index attempt as canceled"
+                )
+            )
+
+        job.cancel()
+
+    task_logger.info(
+        log_builder.build(
+            "Indexing watchdog - finished",
+            source=result.connector_source,
+            status=str(result.status.value),
+            exit_code=str(result.exit_code),
+            elapsed=f"{elapsed:.2f}s",
+        )
+    )
 
     redis_connector_index.set_watchdog(False)
     return
