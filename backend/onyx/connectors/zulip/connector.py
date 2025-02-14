@@ -5,6 +5,7 @@ from collections.abc import Generator
 from typing import Any
 from typing import List
 from typing import Tuple
+from datetime import datetime, timezone
 
 from zulip import Client
 
@@ -120,21 +121,39 @@ class ZulipConnector(LoadConnector, PollConnector):
     def _message_to_doc(self, message: Message) -> Document:
         text = f"{message.sender_full_name}: {message.content}"
 
+        try:
+            # Convert timestamps to UTC datetime objects
+            post_time = datetime.fromtimestamp(message.timestamp, tz=timezone.utc)
+            edit_time = (
+                datetime.fromtimestamp(message.last_edit_timestamp, tz=timezone.utc)
+                if message.last_edit_timestamp is not None
+                else None
+            )
+
+            # Use the most recent edit time if available, otherwise use post time
+            doc_time = edit_time if edit_time is not None else post_time
+
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Failed to parse timestamp for message {message.id}: {e}")
+            post_time = None
+            edit_time = None
+            doc_time = None
+
         metadata = {
             "stream_name": str(message.display_recipient),
             "topic": str(message.subject),
             "sender_name": str(message.sender_full_name),
             "sender_email": str(message.sender_email),
-            "timestamp": str(message.timestamp),
+            "message_timestamp": str(message.timestamp),
             "message_id": str(message.id),
             "stream_id": str(message.stream_id),
             "has_reactions": str(len(message.reactions) > 0),
             "content_type": str(message.content_type or "text"),
         }
         
-        # Only add last_edit_timestamp if it exists
-        if message.last_edit_timestamp is not None:
-            metadata["last_edit_timestamp"] = str(message.last_edit_timestamp)
+        # Always include edit timestamp in metadata when available
+        if edit_time is not None:
+            metadata["edit_timestamp"] = str(message.last_edit_timestamp)
 
         return Document(
             id=f"{message.stream_id}__{message.id}",
@@ -147,6 +166,7 @@ class ZulipConnector(LoadConnector, PollConnector):
             source=DocumentSource.ZULIP,
             semantic_identifier=f"{message.display_recipient} > {message.subject}",
             metadata=metadata,
+            doc_updated_at=doc_time,  # Use most recent edit time or post time
         )
 
     def _get_docs(
