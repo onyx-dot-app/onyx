@@ -13,6 +13,7 @@ from onyx.chat.prompt_builder.citations_prompt import build_citations_user_messa
 from onyx.llm.utils import build_content_with_imgs
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
+from onyx.tools.utils import is_anthropic_tool_calling_model
 
 
 FINAL_CONTEXT_DOCUMENTS_ID = "final_context_documents"
@@ -27,7 +28,15 @@ def build_next_prompt_for_search_like_tool(
     prompt_config: PromptConfig,
     context_type: str = "context documents",
 ) -> AnswerPromptBuilder:
-    if not using_tool_calling_llm:
+    use_explicit_tool_message = (
+        using_tool_calling_llm
+        and not is_anthropic_tool_calling_model(
+            prompt_builder.llm_config.model_provider,
+            prompt_builder.llm_config.model_name,
+        )
+    )
+
+    if not use_explicit_tool_message:
         final_context_docs_response = next(
             response
             for response in tool_responses
@@ -63,7 +72,7 @@ def build_next_prompt_for_search_like_tool(
         )
     )
 
-    if using_tool_calling_llm:
+    if use_explicit_tool_message:
         prompt_builder.append_message(tool_call_summary.tool_call_request)
         prompt_builder.append_message(tool_call_summary.tool_call_result)
 

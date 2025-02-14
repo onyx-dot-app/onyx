@@ -1,21 +1,21 @@
 from typing import cast
 from uuid import uuid4
 
-from langchain_core.messages import ToolCall
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.basic.states import BasicState
 from onyx.agents.agent_search.basic.utils import process_llm_stream
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.orchestration.states import ToolChoice
-from onyx.agents.agent_search.orchestration.states import ToolChoiceState
 from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from onyx.agents.agent_search.orchestration.utils import get_tool_choice_update
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.tool_handling.tool_response_handler import get_tool_by_name
 from onyx.chat.tool_handling.tool_response_handler import (
     get_tool_call_for_non_tool_calling_llm_impl,
 )
-from onyx.tools.tool import Tool
+from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -26,7 +26,7 @@ logger = setup_logger()
 # from the state and config
 # TODO: fan-out to multiple tool call nodes? Make this configurable?
 def llm_tool_choice(
-    state: ToolChoiceState,
+    state: BasicState,
     config: RunnableConfig,
     writer: StreamWriter = lambda _: None,
 ) -> ToolChoiceUpdate:
@@ -72,11 +72,13 @@ def llm_tool_choice(
     # This only happens if the tool call was forced or we are using a non-tool calling LLM.
     if tool and tool_args:
         return ToolChoiceUpdate(
-            tool_choice=ToolChoice(
-                tool=tool,
-                tool_args=tool_args,
-                id=str(uuid4()),
-            ),
+            tool_choices=[
+                ToolChoice(
+                    tool=tool,
+                    tool_args=tool_args,
+                    id=str(uuid4()),
+                )
+            ],
         )
 
     # if we're skipping gen ai answer generation, we should only
@@ -84,7 +86,7 @@ def llm_tool_choice(
     # the tool calling llm in the stream() below)
     if skip_gen_ai_answer_generation and not force_use_tool.force_use:
         return ToolChoiceUpdate(
-            tool_choice=None,
+            tool_choices=[None],
         )
 
     built_prompt = (
@@ -99,7 +101,9 @@ def llm_tool_choice(
         # may choose to not call any tools and just generate the answer, in which case the task prompt is needed.
         prompt=built_prompt,
         tools=[tool.tool_definition() for tool in tools] or None,
-        tool_choice=("required" if tools and force_use_tool.force_use else None),
+        tool_choice=(
+            ToolChoiceOptions.REQUIRED if tools and force_use_tool.force_use else None
+        ),
         structured_response_format=structured_response_format,
     )
 
@@ -110,45 +114,4 @@ def llm_tool_choice(
         writer,
     )
 
-    # If no tool calls are emitted by the LLM, we should not choose a tool
-    if len(tool_message.tool_calls) == 0:
-        logger.debug("No tool calls emitted by LLM")
-        return ToolChoiceUpdate(
-            tool_choice=None,
-        )
-
-    # TODO: here we could handle parallel tool calls. Right now
-    # we just pick the first one that matches.
-    selected_tool: Tool | None = None
-    selected_tool_call_request: ToolCall | None = None
-    for tool_call_request in tool_message.tool_calls:
-        known_tools_by_name = [
-            tool for tool in tools if tool.name == tool_call_request["name"]
-        ]
-
-        if known_tools_by_name:
-            selected_tool = known_tools_by_name[0]
-            selected_tool_call_request = tool_call_request
-            break
-
-        logger.error(
-            "Tool call requested with unknown name field. \n"
-            f"tools: {tools}"
-            f"tool_call_request: {tool_call_request}"
-        )
-
-    if not selected_tool or not selected_tool_call_request:
-        raise ValueError(
-            f"Tool call attempted with tool {selected_tool}, request {selected_tool_call_request}"
-        )
-
-    logger.debug(f"Selected tool: {selected_tool.name}")
-    logger.debug(f"Selected tool call request: {selected_tool_call_request}")
-
-    return ToolChoiceUpdate(
-        tool_choice=ToolChoice(
-            tool=selected_tool,
-            tool_args=selected_tool_call_request["args"],
-            id=selected_tool_call_request["id"],
-        ),
-    )
+    return get_tool_choice_update(tool_message, tools)

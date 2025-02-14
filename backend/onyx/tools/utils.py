@@ -6,6 +6,8 @@ from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.db.connector import check_connectors_exist
 from onyx.db.document import check_docs_exist
 from onyx.db.models import LLMProvider
+from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
+from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.tools.tool import Tool
 
@@ -18,9 +20,20 @@ OPEN_AI_TOOL_CALLING_MODELS = {
     "gpt-4o-mini",
 }
 
+ANTHROPIC_TOOL_CALLING_PREFIX = "claude-3-5-sonnet"
+
+
+def is_anthropic_tool_calling_model(model_provider: str, model_name: str) -> bool:
+    return model_provider == ANTHROPIC_PROVIDER_NAME and model_name.startswith(
+        ANTHROPIC_TOOL_CALLING_PREFIX
+    )
+
 
 def explicit_tool_calling_supported(model_provider: str, model_name: str) -> bool:
-    return model_provider == "openai" and model_name in OPEN_AI_TOOL_CALLING_MODELS
+    return (
+        model_provider == OPENAI_PROVIDER_NAME
+        and model_name in OPEN_AI_TOOL_CALLING_MODELS
+    ) or is_anthropic_tool_calling_model(model_provider, model_name)
 
 
 def compute_tool_tokens(tool: Tool, llm_tokenizer: BaseTokenizer) -> int:

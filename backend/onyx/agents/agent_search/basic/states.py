@@ -1,6 +1,3 @@
-from typing import TypedDict
-
-from langchain_core.messages import AIMessageChunk
 from pydantic import BaseModel
 
 from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
@@ -18,11 +15,6 @@ class BasicInput(BaseModel):
     # Langgraph needs a nonempty input, but we pass in all static
     # data through a RunnableConfig.
     _unused: bool = True
-
-
-## Graph Output State
-class BasicOutput(TypedDict):
-    tool_call_chunk: AIMessageChunk
 
 
 ## Graph State

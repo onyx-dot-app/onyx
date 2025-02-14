@@ -4,10 +4,11 @@ from langchain_core.messages import AIMessageChunk
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.basic.states import BasicOutput
 from onyx.agents.agent_search.basic.states import BasicState
 from onyx.agents.agent_search.basic.utils import process_llm_stream
 from onyx.agents.agent_search.models import GraphConfig
+from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from onyx.agents.agent_search.orchestration.utils import get_tool_choice_update
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import OnyxContexts
 from onyx.tools.tool_implementations.search.search_tool import (
@@ -23,11 +24,15 @@ logger = setup_logger()
 
 def basic_use_tool_response(
     state: BasicState, config: RunnableConfig, writer: StreamWriter = lambda _: None
-) -> BasicOutput:
+) -> ToolChoiceUpdate:
     agent_config = cast(GraphConfig, config["metadata"]["config"])
     structured_response_format = agent_config.inputs.structured_response_format
     llm = agent_config.tooling.primary_llm
-    tool_choice = state.tool_choice
+
+    assert (
+        len(state.tool_choices) > 0
+    ), "Tool choice node must have at least one tool choice"
+    tool_choice = state.tool_choices[-1]
     if tool_choice is None:
         raise ValueError("Tool choice is None")
     tool = tool_choice.tool
@@ -74,4 +79,4 @@ def basic_use_tool_response(
             displayed_search_results=initial_search_results or final_search_results,
         )
 
-    return BasicOutput(tool_call_chunk=new_tool_call_chunk)
+    return get_tool_choice_update(new_tool_call_chunk, agent_config.tooling.tools)

@@ -37,7 +37,10 @@ def tool_call(
 
     cast(GraphConfig, config["metadata"]["config"])
 
-    tool_choice = state.tool_choice
+    assert (
+        len(state.tool_choices) > 0
+    ), "Tool call node must have at least one tool choice"
+    tool_choice = state.tool_choices[-1]
     if tool_choice is None:
         raise ValueError("Cannot invoke tool call node without a tool choice")
 

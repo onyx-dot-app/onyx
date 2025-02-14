@@ -41,6 +41,13 @@ CHAT_USER_CONTEXT_FREE_PROMPT = f"""
 {{user_query}}
 """.strip()
 
+# we tried telling anthropic to not make repeated tool calls, but it didn't work very well.
+# when anthropic models don't follow this convention, it leads to the user seeing "the model
+# decided not to search" for a second, which isn't great UX.
+NO_TOOL_CALL_PREAMBLE = (
+    "\nThe first time you call a tool, call it IMMEDIATELY without a textual preamble."
+)
+
 
 # Design considerations for the below:
 # - In case of uncertainty, favor yes search so place the "yes" sections near the start of the

@@ -1,3 +1,6 @@
+from operator import add
+from typing import Annotated
+
 from pydantic import BaseModel
 
 from onyx.chat.prompt_builder.answer_prompt_builder import PromptSnapshot
@@ -41,7 +44,7 @@ class ToolChoice(BaseModel):
 
 
 class ToolChoiceUpdate(BaseModel):
-    tool_choice: ToolChoice | None = None
+    tool_choices: Annotated[list[ToolChoice | None], add] = []
 
 
 class ToolChoiceState(ToolChoiceUpdate, ToolChoiceInput):

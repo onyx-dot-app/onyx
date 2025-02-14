@@ -30,11 +30,12 @@ def route_initial_tool_choice(
     LangGraph edge to route to agent search.
     """
     agent_config = cast(GraphConfig, config["metadata"]["config"])
-    if state.tool_choice is not None:
+    if state.tool_choices[-1] is not None:
         if (
             agent_config.behavior.use_agentic_search
             and agent_config.tooling.search_tool is not None
-            and state.tool_choice.tool.name == agent_config.tooling.search_tool.name
+            and state.tool_choices[-1].tool.name
+            == agent_config.tooling.search_tool.name
         ):
             return "start_agent_search"
         else:

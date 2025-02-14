@@ -19,6 +19,7 @@ from onyx.llm.utils import message_to_prompt_and_imgs
 from onyx.llm.utils import model_supports_image_input
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
+from onyx.prompts.chat_prompts import NO_TOOL_CALL_PREAMBLE
 from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
 from onyx.prompts.prompt_utils import drop_messages_history_overflow
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
@@ -27,6 +28,7 @@ from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
+from onyx.tools.utils import is_anthropic_tool_calling_model
 
 
 def default_build_system_message(
@@ -137,6 +139,14 @@ class AnswerPromptBuilder:
         if not system_message:
             self.system_message_and_token_cnt = None
             return
+
+        if is_anthropic_tool_calling_model(
+            self.llm_config.model_provider, self.llm_config.model_name
+        ):
+            if isinstance(system_message.content, str):
+                system_message.content += NO_TOOL_CALL_PREAMBLE
+            else:
+                system_message.content.append(NO_TOOL_CALL_PREAMBLE)
 
         self.system_message_and_token_cnt = (
             system_message,

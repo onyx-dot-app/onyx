@@ -1,6 +1,6 @@
 import abc
 from collections.abc import Iterator
-from typing import Literal
+from enum import Enum
 
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import AIMessageChunk
@@ -15,7 +15,11 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-ToolChoiceOptions = Literal["required"] | Literal["auto"] | Literal["none"]
+
+class ToolChoiceOptions(Enum):
+    REQUIRED = "required"
+    AUTO = "auto"
+    NONE = "none"
 
 
 class LLMConfig(BaseModel):
