@@ -1,4 +1,3 @@
-import time
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -46,18 +45,18 @@ def _extract_text_from_document(document: dict[str, Any]) -> str:
     """Extract text content from GitBook document structure by parsing the document nodes
     into markdown format."""
 
-    def parse_leaf(leaf):
+    def parse_leaf(leaf: dict[str, Any]) -> str:
         text = leaf.get("text", "")
         leaf.get("marks", [])
         return text
 
-    def parse_text_node(node):
+    def parse_text_node(node: dict[str, Any]) -> str:
         text = ""
         for leaf in node.get("leaves", []):
             text += parse_leaf(leaf)
         return text
 
-    def parse_block_node(node):
+    def parse_block_node(node: dict[str, Any]) -> str:
         block_type = node.get("type", "")
         result = ""
 
@@ -232,7 +231,7 @@ class GitbookConnector(LoadConnector, PollConnector):
             content = self.client.get(f"/spaces/{self.space_id}/content")
             pages = content.get("pages", [])
 
-            current_batch = []
+            current_batch: list[Document] = []
             for page in pages:
                 updated_at = datetime.fromisoformat(page["updatedAt"])
 
@@ -250,7 +249,6 @@ class GitbookConnector(LoadConnector, PollConnector):
                 if len(current_batch) >= self.batch_size:
                     yield current_batch
                     current_batch = []
-                    time.sleep(0.1)  # Rate limiting
 
             if current_batch:
                 yield current_batch
