@@ -120,6 +120,22 @@ class ZulipConnector(LoadConnector, PollConnector):
     def _message_to_doc(self, message: Message) -> Document:
         text = f"{message.sender_full_name}: {message.content}"
 
+        metadata = {
+            "stream_name": str(message.display_recipient),
+            "topic": str(message.subject),
+            "sender_name": str(message.sender_full_name),
+            "sender_email": str(message.sender_email),
+            "timestamp": str(message.timestamp),
+            "message_id": str(message.id),
+            "stream_id": str(message.stream_id),
+            "has_reactions": str(len(message.reactions) > 0),
+            "content_type": str(message.content_type or "text"),
+        }
+        
+        # Only add last_edit_timestamp if it exists
+        if message.last_edit_timestamp is not None:
+            metadata["last_edit_timestamp"] = str(message.last_edit_timestamp)
+
         return Document(
             id=f"{message.stream_id}__{message.id}",
             sections=[
@@ -130,18 +146,7 @@ class ZulipConnector(LoadConnector, PollConnector):
             ],
             source=DocumentSource.ZULIP,
             semantic_identifier=f"{message.display_recipient} > {message.subject}",
-            metadata={
-                "stream_name": str(message.display_recipient),
-                "topic": str(message.subject),
-                "sender_name": str(message.sender_full_name),
-                "sender_email": str(message.sender_email),
-                "timestamp": str(message.timestamp),
-                "message_id": str(message.id),
-                "stream_id": str(message.stream_id),
-                "last_edit_timestamp": str(message.last_edit_timestamp) if message.last_edit_timestamp is not None else None,
-                "has_reactions": str(len(message.reactions) > 0),
-                "content_type": str(message.content_type or "text"),
-            },
+            metadata=metadata,
         )
 
     def _get_docs(
