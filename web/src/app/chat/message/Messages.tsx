@@ -186,6 +186,7 @@ export const AIMessage = ({
   setPresentingDocument,
   index,
   documentSidebarVisible,
+  removePadding,
 }: {
   index?: number;
   shared?: boolean;
@@ -214,6 +215,7 @@ export const AIMessage = ({
   overriddenModel?: string;
   regenerate?: (modelOverRide: LlmOverride) => Promise<void>;
   setPresentingDocument: (document: OnyxDocument) => void;
+  removePadding?: boolean;
 }) => {
   const toolCallGenerating = toolCall && !toolCall.tool_result;
 
@@ -402,7 +404,9 @@ export const AIMessage = ({
     <div
       id={isComplete ? "onyx-ai-message" : undefined}
       ref={trackedElementRef}
-      className={`py-5 text-text ml-4 lg:px-5 relative flex `}
+      className={`py-5  ml-4 lg:px-5 relative flex
+        
+        ${removePadding && "!pl-24 -mt-12"}`}
     >
       <div
         className={`mx-auto ${
@@ -411,11 +415,13 @@ export const AIMessage = ({
       >
         <div className={`lg:mr-12 ${!shared && "mobile:ml-0 md:ml-8"}`}>
           <div className="flex items-start">
-            <AssistantIcon
-              className="mobile:hidden"
-              size={24}
-              assistant={alternativeAssistant || currentPersona}
-            />
+            {!removePadding && (
+              <AssistantIcon
+                className="mobile:hidden"
+                size={24}
+                assistant={alternativeAssistant || currentPersona}
+              />
+            )}
 
             <div className="w-full">
               <div className="max-w-message-max break-words">
@@ -596,7 +602,8 @@ export const AIMessage = ({
                     )}
                   </div>
 
-                  {handleFeedback &&
+                  {!removePadding &&
+                    handleFeedback &&
                     (isActive ? (
                       <div
                         className={`

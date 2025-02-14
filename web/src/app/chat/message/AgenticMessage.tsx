@@ -81,6 +81,7 @@ export const AgenticMessage = ({
   agenticDocs,
   secondLevelSubquestions,
   toggleDocDisplay,
+  error,
 }: {
   isStreamingQuestions: boolean;
   isGenerating: boolean;
@@ -113,6 +114,7 @@ export const AgenticMessage = ({
   regenerate?: (modelOverRide: LlmOverride) => Promise<void>;
   setPresentingDocument?: (document: OnyxDocument) => void;
   toggleDocDisplay?: (agentic: boolean) => void;
+  error?: string | null;
 }) => {
   const [noShowingMessage, setNoShowingMessage] = useState(isComplete);
 
@@ -491,11 +493,28 @@ export const AgenticMessage = ({
                           ) : (
                             content
                           )}
+                          {error && (
+                            <p className="mt-2 text-red-700 text-sm my-auto">
+                              {error}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </>
-                  ) : isComplete ? null : (
-                    <></>
+                  ) : isComplete ? (
+                    error && (
+                      <p className="mt-2 mx-4 text-red-700 text-sm my-auto">
+                        {error}
+                      </p>
+                    )
+                  ) : (
+                    <>
+                      {error && (
+                        <p className="mt-2 mx-4 text-red-700 text-sm my-auto">
+                          {error}
+                        </p>
+                      )}
+                    </>
                   )}
                   {handleFeedback &&
                     (isActive ? (

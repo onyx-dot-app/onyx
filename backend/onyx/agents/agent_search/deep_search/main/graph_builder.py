@@ -26,8 +26,8 @@ from onyx.agents.agent_search.deep_search.main.nodes.decide_refinement_need impo
 from onyx.agents.agent_search.deep_search.main.nodes.extract_entities_terms import (
     extract_entities_terms,
 )
-from onyx.agents.agent_search.deep_search.main.nodes.generate_refined_answer import (
-    generate_refined_answer,
+from onyx.agents.agent_search.deep_search.main.nodes.generate_validate_refined_answer import (
+    generate_validate_refined_answer,
 )
 from onyx.agents.agent_search.deep_search.main.nodes.ingest_refined_sub_answers import (
     ingest_refined_sub_answers,
@@ -126,8 +126,8 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
 
     # Node to generate the refined answer
     graph.add_node(
-        node="generate_refined_answer",
-        action=generate_refined_answer,
+        node="generate_validate_refined_answer",
+        action=generate_validate_refined_answer,
     )
 
     # Early node to extract the entities and terms from the initial answer,
@@ -215,11 +215,11 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
 
     graph.add_edge(
         start_key="ingest_refined_sub_answers",
-        end_key="generate_refined_answer",
+        end_key="generate_validate_refined_answer",
     )
 
     graph.add_edge(
-        start_key="generate_refined_answer",
+        start_key="generate_validate_refined_answer",
         end_key="compare_answers",
     )
     graph.add_edge(
@@ -252,9 +252,7 @@ if __name__ == "__main__":
             db_session, primary_llm, fast_llm, search_request
         )
 
-        inputs = MainInput(
-            base_question=graph_config.inputs.search_request.query, log_messages=[]
-        )
+        inputs = MainInput(log_messages=[])
 
         for thing in compiled_graph.stream(
             input=inputs,

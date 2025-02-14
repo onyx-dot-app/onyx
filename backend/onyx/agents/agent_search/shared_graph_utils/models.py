@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel
 
 from onyx.agents.agent_search.deep_search.main.models import (
@@ -56,6 +58,12 @@ class InitialAgentResultStats(BaseModel):
     agent_effectiveness: dict[str, float | int | None]
 
 
+class AgentErrorLog(BaseModel):
+    error_message: str
+    error_type: str
+    error_result: str
+
+
 class RefinedAgentStats(BaseModel):
     revision_doc_efficiency: float | None
     revision_question_efficiency: float | None
@@ -110,6 +118,11 @@ class SubQuestionAnswerResults(BaseModel):
     sub_question_retrieval_stats: AgentChunkRetrievalStats
 
 
+class StructuredSubquestionDocuments(BaseModel):
+    cited_documents: list[InferenceSection]
+    context_documents: list[InferenceSection]
+
+
 class CombinedAgentMetrics(BaseModel):
     timings: AgentTimings
     base_metrics: AgentBaseMetrics | None
@@ -126,3 +139,17 @@ class AgentPromptEnrichmentComponents(BaseModel):
     persona_prompts: PersonaPromptExpressions
     history: str
     date_str: str
+
+
+class LLMNodeErrorStrings(BaseModel):
+    timeout: str = "LLM Timeout Error"
+    rate_limit: str = "LLM Rate Limit Error"
+    general_error: str = "General LLM Error"
+
+
+class AnswerGenerationDocuments(BaseModel):
+    streaming_documents: list[InferenceSection]
+    context_documents: list[InferenceSection]
+
+
+BaseMessage_Content = str | list[str | dict[str, Any]]

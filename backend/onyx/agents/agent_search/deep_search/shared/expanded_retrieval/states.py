@@ -21,9 +21,13 @@ from onyx.context.search.models import InferenceSection
 
 
 class ExpandedRetrievalInput(SubgraphCoreState):
-    question: str = ""
-    base_search: bool = False
+    # exception from 'no default value'for LangGraph input states
+    # Here, sub_question_id default None implies usage for the
+    # original question. This is sometimes needed for nested sub-graphs
+
     sub_question_id: str | None = None
+    question: str
+    base_search: bool
 
 
 ## Update/Return States
@@ -34,7 +38,7 @@ class QueryExpansionUpdate(LoggerUpdate, BaseModel):
     log_messages: list[str] = []
 
 
-class DocVerificationUpdate(BaseModel):
+class DocVerificationUpdate(LoggerUpdate, BaseModel):
     verified_documents: Annotated[list[InferenceSection], dedup_inference_sections] = []
 
 
@@ -88,4 +92,4 @@ class DocVerificationInput(ExpandedRetrievalInput):
 
 
 class RetrievalInput(ExpandedRetrievalInput):
-    query_to_retrieve: str = ""
+    query_to_retrieve: str

@@ -16,16 +16,44 @@ from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states impor
     QueryExpansionUpdate,
 )
 from onyx.agents.agent_search.models import GraphConfig
+from onyx.agents.agent_search.shared_graph_utils.constants import (
+    AGENT_LLM_RATELIMIT_MESSAGE,
+)
+from onyx.agents.agent_search.shared_graph_utils.constants import (
+    AGENT_LLM_TIMEOUT_MESSAGE,
+)
+from onyx.agents.agent_search.shared_graph_utils.constants import (
+    AgentLLMErrorType,
+)
+from onyx.agents.agent_search.shared_graph_utils.models import AgentErrorLog
+from onyx.agents.agent_search.shared_graph_utils.models import BaseMessage_Content
+from onyx.agents.agent_search.shared_graph_utils.models import LLMNodeErrorStrings
 from onyx.agents.agent_search.shared_graph_utils.utils import dispatch_separated
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import parse_question_id
+from onyx.configs.agent_configs import (
+    AGENT_TIMEOUT_OVERRIDE_LLM_QUERY_REWRITING_GENERATION,
+)
+from onyx.llm.chat_llm import LLMRateLimitError
+from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.prompts.agent_search import (
     QUERY_REWRITING_PROMPT,
 )
+from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
+
+logger = setup_logger()
+
+_llm_node_error_strings = LLMNodeErrorStrings(
+    timeout="Query rewriting failed due to LLM timeout - the original question will be used.",
+    rate_limit="Query rewriting failed due to LLM rate limit - the original question will be used.",
+    general_error="Query rewriting failed due to LLM error - the original question will be used.",
+)
 
 
+@log_function_time(print_only=True)
 def expand_queries(
     state: ExpandedRetrievalInput,
     config: RunnableConfig,
@@ -54,13 +82,43 @@ def expand_queries(
         )
     ]
 
-    llm_response_list = dispatch_separated(
-        llm.stream(prompt=msg), dispatch_subquery(level, question_num, writer)
-    )
+    agent_error: AgentErrorLog | None = None
+    llm_response_list: list[BaseMessage_Content] = []
+    llm_response = ""
+    rewritten_queries = []
 
-    llm_response = merge_message_runs(llm_response_list, chunk_separator="")[0].content
+    try:
+        llm_response_list = dispatch_separated(
+            llm.stream(
+                prompt=msg,
+                timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_QUERY_REWRITING_GENERATION,
+            ),
+            dispatch_subquery(level, question_num, writer),
+        )
+        llm_response = merge_message_runs(llm_response_list, chunk_separator="")[
+            0
+        ].content
+        rewritten_queries = llm_response.split("\n")
+        log_result = f"Number of expanded queries: {len(rewritten_queries)}"
 
-    rewritten_queries = llm_response.split("\n")
+    except LLMTimeoutError:
+        agent_error = AgentErrorLog(
+            error_type=AgentLLMErrorType.TIMEOUT,
+            error_message=AGENT_LLM_TIMEOUT_MESSAGE,
+            error_result=_llm_node_error_strings.timeout,
+        )
+        logger.error("LLM Timeout Error - expand queries")
+        log_result = agent_error.error_result
+
+    except LLMRateLimitError:
+        agent_error = AgentErrorLog(
+            error_type=AgentLLMErrorType.RATE_LIMIT,
+            error_message=AGENT_LLM_RATELIMIT_MESSAGE,
+            error_result=_llm_node_error_strings.rate_limit,
+        )
+        logger.error("LLM Rate Limit Error - expand queries")
+        log_result = agent_error.error_result
+    # use subquestion as query if query generation fails
 
     return QueryExpansionUpdate(
         expanded_queries=rewritten_queries,
@@ -69,7 +127,7 @@ def expand_queries(
                 graph_component="shared - expanded retrieval",
                 node_name="expand queries",
                 node_start_time=node_start_time,
-                result=f"Number of expanded queries: {len(rewritten_queries)}",
+                result=log_result,
             )
         ],
     )

@@ -42,10 +42,8 @@ class SubQuestionRetrievalIngestionUpdate(LoggerUpdate, BaseModel):
 
 
 class SubQuestionAnsweringInput(SubgraphCoreState):
-    question: str = ""
-    question_id: str = (
-        ""  # 0_0 is original question, everything else is <level>_<question_num>.
-    )
+    question: str
+    question_id: str
     # level 0 is original question and first decomposition, level 1 is follow up, etc
     # question_num is a unique number per original question per level.
 

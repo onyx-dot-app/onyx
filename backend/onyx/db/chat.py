@@ -893,14 +893,18 @@ def translate_db_sub_questions_to_server_objects(
                 question=sub_question.sub_question,
                 answer=sub_question.sub_answer,
                 sub_queries=sub_queries,
-                context_docs=get_retrieval_docs_from_search_docs(verified_docs),
+                context_docs=get_retrieval_docs_from_search_docs(
+                    verified_docs, sort_by_score=False
+                ),
             )
         )
     return sub_questions
 
 
 def get_retrieval_docs_from_search_docs(
-    search_docs: list[SearchDoc], remove_doc_content: bool = False
+    search_docs: list[SearchDoc],
+    remove_doc_content: bool = False,
+    sort_by_score: bool = True,
 ) -> RetrievalDocs:
     top_documents = [
         translate_db_search_doc_to_server_search_doc(
@@ -908,7 +912,8 @@ def get_retrieval_docs_from_search_docs(
         )
         for db_doc in search_docs
     ]
-    top_documents = sorted(top_documents, key=lambda doc: doc.score, reverse=True)  # type: ignore
+    if sort_by_score:
+        top_documents = sorted(top_documents, key=lambda doc: doc.score, reverse=True)  # type: ignore
     return RetrievalDocs(top_documents=top_documents)
 
 
@@ -1018,7 +1023,7 @@ def log_agent_sub_question_results(
         sub_question = sub_question_answer_result.question
         sub_answer = sub_question_answer_result.answer
         sub_document_results = _create_citation_format_list(
-            sub_question_answer_result.verified_reranked_documents
+            sub_question_answer_result.context_documents
         )
 
         sub_question_object = AgentSubQuestion(

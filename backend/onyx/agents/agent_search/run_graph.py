@@ -12,7 +12,7 @@ from onyx.agents.agent_search.deep_search.main.graph_builder import (
     main_graph_builder as main_graph_builder_a,
 )
 from onyx.agents.agent_search.deep_search.main.states import (
-    MainInput as MainInput_a,
+    MainInput as MainInput,
 )
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
@@ -21,6 +21,7 @@ from onyx.chat.models import AnswerPacket
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import ExtendedToolResponse
 from onyx.chat.models import RefinedAnswerImprovement
+from onyx.chat.models import StreamingError
 from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import SubQueryPiece
 from onyx.chat.models import SubQuestionPiece
@@ -32,6 +33,7 @@ from onyx.db.engine import get_session_context_manager
 from onyx.llm.factory import get_default_llms
 from onyx.tools.tool_runner import ToolCallKickoff
 from onyx.utils.logger import setup_logger
+
 
 logger = setup_logger()
 
@@ -72,13 +74,15 @@ def _parse_agent_event(
             return cast(AnswerPacket, event["data"])
         elif event["name"] == "refined_answer_improvement":
             return cast(RefinedAnswerImprovement, event["data"])
+        elif event["name"] == "refined_sub_question_creation_error":
+            return cast(StreamingError, event["data"])
     return None
 
 
 def manage_sync_streaming(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    graph_input: BasicInput | MainInput_a,
+    graph_input: BasicInput | MainInput,
 ) -> Iterable[StreamEvent]:
     message_id = config.persistence.message_id if config.persistence else None
     for event in compiled_graph.stream(
@@ -92,7 +96,7 @@ def manage_sync_streaming(
 def run_graph(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    input: BasicInput | MainInput_a,
+    input: BasicInput | MainInput,
 ) -> AnswerStream:
     config.behavior.perform_initial_search_decomposition = (
         INITIAL_SEARCH_DECOMPOSITION_ENABLED
@@ -123,9 +127,7 @@ def run_main_graph(
 ) -> AnswerStream:
     compiled_graph = load_compiled_graph()
 
-    input = MainInput_a(
-        base_question=config.inputs.search_request.query, log_messages=[]
-    )
+    input = MainInput(log_messages=[])
 
     # Agent search is not a Tool per se, but this is helpful for the frontend
     yield ToolCallKickoff(
@@ -140,7 +142,7 @@ def run_basic_graph(
 ) -> AnswerStream:
     graph = basic_graph_builder()
     compiled_graph = graph.compile()
-    input = BasicInput()
+    input = BasicInput(unused=True)
     return run_graph(compiled_graph, config, input)
 
 
@@ -172,9 +174,7 @@ if __name__ == "__main__":
             # search_request.persona = get_persona_by_id(1, None, db_session)
             # config.perform_initial_search_path_decision = False
             config.behavior.perform_initial_search_decomposition = True
-            input = MainInput_a(
-                base_question=config.inputs.search_request.query, log_messages=[]
-            )
+            input = MainInput(log_messages=[])
 
             tool_responses: list = []
             for output in run_graph(compiled_graph, config, input):

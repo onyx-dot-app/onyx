@@ -20,10 +20,18 @@ from onyx.agents.agent_search.models import GraphInputs
 from onyx.agents.agent_search.models import GraphPersistence
 from onyx.agents.agent_search.models import GraphSearchConfig
 from onyx.agents.agent_search.models import GraphTooling
+from onyx.agents.agent_search.shared_graph_utils.models import BaseMessage_Content
 from onyx.agents.agent_search.shared_graph_utils.models import (
     EntityRelationshipTermExtraction,
 )
 from onyx.agents.agent_search.shared_graph_utils.models import PersonaPromptExpressions
+from onyx.agents.agent_search.shared_graph_utils.models import (
+    StructuredSubquestionDocuments,
+)
+from onyx.agents.agent_search.shared_graph_utils.models import SubQuestionAnswerResults
+from onyx.agents.agent_search.shared_graph_utils.operators import (
+    dedup_inference_section_list,
+)
 from onyx.chat.models import AnswerPacket
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationConfig
@@ -34,6 +42,9 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.configs.agent_configs import (
+    AGENT_TIMEOUT_OVERRIDE_LLM_HISTORY_SUMMARY_GENERATION,
+)
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.constants import DEFAULT_PERSONA_ID
@@ -46,6 +57,8 @@ from onyx.context.search.models import SearchRequest
 from onyx.db.engine import get_session_context_manager
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import Persona
+from onyx.llm.chat_llm import LLMRateLimitError
+from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.llm.interfaces import LLM
 from onyx.prompts.agent_search import (
     ASSISTANT_SYSTEM_PROMPT_DEFAULT,
@@ -66,8 +79,9 @@ from onyx.tools.tool_implementations.search.search_tool import (
 from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import explicit_tool_calling_supported
+from onyx.utils.logger import setup_logger
 
-BaseMessage_Content = str | list[str | dict[str, Any]]
+logger = setup_logger()
 
 
 # Post-processing
@@ -380,8 +394,24 @@ def summarize_history(
         )
     )
 
-    history_response = llm.invoke(history_context_prompt)
+    try:
+        history_response = llm.invoke(
+            history_context_prompt,
+            timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_HISTORY_SUMMARY_GENERATION,
+        )
+    except LLMTimeoutError:
+        logger.error("LLM Timeout Error - summarize history")
+        return (
+            history  # this is what is done at this point anyway, so we default to this
+        )
+    except LLMRateLimitError:
+        logger.error("LLM Rate Limit Error - summarize history")
+        return (
+            history  # this is what is done at this point anyway, so we default to this
+        )
+
     assert isinstance(history_response.content, str)
+
     return history_response.content
 
 
@@ -447,3 +477,27 @@ def remove_document_citations(text: str) -> str:
     #   \d+  - one or more digits
     #   \]   - literal ] character
     return re.sub(r"\[(?:D|Q)?\d+\]", "", text)
+
+
+def get_deduplicated_structured_subquestion_documents(
+    sub_question_results: list[SubQuestionAnswerResults],
+) -> StructuredSubquestionDocuments:
+    """
+    Extract and deduplicate all cited documents from sub-question results.
+
+    Args:
+        sub_question_results: List of sub-question results containing cited documents
+
+    Returns:
+        Deduplicated list of cited documents
+    """
+    cited_docs = [
+        doc for result in sub_question_results for doc in result.cited_documents
+    ]
+    context_docs = [
+        doc for result in sub_question_results for doc in result.context_documents
+    ]
+    return StructuredSubquestionDocuments(
+        cited_documents=dedup_inference_section_list(cited_docs),
+        context_documents=dedup_inference_section_list(context_docs),
+    )
