@@ -24,14 +24,12 @@ def test_inviting_users_flow(reset: None) -> None:
     # 2) Admin invites a new user
     invited_email = "invited_user@test.com"
     invite_response = UserManager.invite_users(admin_user, [invited_email])
-    # The endpoint might return the count of successfully invited users or something similar.
-    # Check that the invite was successful (this is just an example assertion).
+
     assert (
         invite_response == 1
     ), "Invite operation should return count=1 for a single invited user"
 
     # 3) The invited user successfully registers/logs in
-    #    (In some implementations, the user might need to sign up with the invited email.)
     invited_user: DATestUser = UserManager.create(
         name="invited_user", email=invited_email
     )
