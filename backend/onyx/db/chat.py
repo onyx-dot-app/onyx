@@ -350,13 +350,14 @@ def delete_chat_session(
     user_id: UUID | None,
     chat_session_id: UUID,
     db_session: Session,
+    include_deleted: bool = False,
     hard_delete: bool = HARD_DELETE_CHATS,
 ) -> None:
     chat_session = get_chat_session_by_id(
         chat_session_id=chat_session_id, user_id=user_id, db_session=db_session
     )
 
-    if chat_session.deleted:
+    if chat_session.deleted and not include_deleted:
         raise ValueError("Cannot delete an already deleted chat session")
 
     if hard_delete:
@@ -380,7 +381,15 @@ def delete_chat_sessions_older_than(days_old: int, db_session: Session) -> None:
     ).fetchall()
 
     for user_id, session_id in old_sessions:
-        delete_chat_session(user_id, session_id, db_session, hard_delete=True)
+        try:
+            delete_chat_session(
+                user_id, session_id, db_session, include_deleted=True, hard_delete=True
+            )
+        except Exception:
+            logger.exception(
+                "delete_chat_session exceptioned. "
+                f"user_id={user_id} session_id={session_id}"
+            )
 
 
 def get_chat_message(
