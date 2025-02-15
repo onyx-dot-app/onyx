@@ -70,7 +70,7 @@ def _initializer(
     try:
         return func(*args, **kwargs)
     except SimpleJobException as e:
-        logger.exception("SimpleJob raised an SimpleJobException")
+        logger.exception("SimpleJob raised a SimpleJobException")
         error_msg = traceback.format_exc()
         queue.put(error_msg)  # Send the exception to the parent process
 
