@@ -245,7 +245,7 @@ class AirtableConnector(LoadConnector):
             return [(" ".join(combined) if combined else str(field_info), default_link)]
 
         if isinstance(field_info, list):
-            return [(item, default_link) for item in field_info]
+            return [(str(item), default_link) for item in field_info]
 
         return [(str(field_info), default_link)]
 
@@ -268,7 +268,7 @@ class AirtableConnector(LoadConnector):
         table_id: str,
         view_id: str | None,
         record_id: str,
-    ) -> tuple[list[Section], dict[str, Any]]:
+    ) -> tuple[list[Section], dict[str, str | list[str]]]:
         """
         Process a single Airtable field and return sections or metadata.
 
@@ -342,7 +342,7 @@ class AirtableConnector(LoadConnector):
         record_id = record["id"]
         fields = record["fields"]
         sections: list[Section] = []
-        metadata: dict[str, Any] = {}
+        metadata: dict[str, str | list[str]] = {}
 
         # Get primary field value if it exists
         primary_field_value = (
