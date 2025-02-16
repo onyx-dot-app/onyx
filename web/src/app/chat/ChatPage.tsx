@@ -1,6 +1,11 @@
 "use client";
 
-import { redirect, useRouter, useSearchParams } from "next/navigation";
+import {
+  redirect,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import {
   BackendChatSession,
   BackendMessage,
@@ -1267,7 +1272,6 @@ export function ChatPage({
     let stackTrace: string | null = null;
 
     let sub_questions: SubQuestionDetail[] = [];
-    let second_level_sub_questions: SubQuestionDetail[] = [];
     let is_generating: boolean = false;
     let second_level_generating: boolean = false;
     let finalMessage: BackendMessage | null = null;
@@ -1291,7 +1295,7 @@ export function ChatPage({
 
       const stack = new CurrentMessageFIFO();
       updateCurrentMessageFIFO(stack, {
-        signal: controller.signal, // Add this line
+        signal: controller.signal,
         message: currMessage,
         alternateAssistantId: currentAssistantId,
         fileDescriptors: overrideFileDescriptors || currentMessageFiles,
@@ -2085,6 +2089,24 @@ export function ChatPage({
   useEffect(() => {
     llmOverrideManager.updateImageFilesPresent(imageFileInMessageHistory);
   }, [imageFileInMessageHistory]);
+
+  const pathname = usePathname();
+
+  useEffect(() => {
+    return () => {
+      // Cleanup which only runs when the component unmounts (i.e. when you navigate away).
+      const currentSession = currentSessionId();
+      const controller = abortControllers.get(currentSession);
+      if (controller) {
+        controller.abort();
+        setAbortControllers((prev) => {
+          const newControllers = new Map(prev);
+          newControllers.delete(currentSession);
+          return newControllers;
+        });
+      }
+    };
+  }, [pathname]);
 
   useSidebarShortcut(router, toggleSidebar);
 
