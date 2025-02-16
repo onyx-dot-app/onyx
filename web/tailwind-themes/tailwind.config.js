@@ -15,30 +15,11 @@ module.exports = {
   ],
 
   theme: {
-    // typography: {
-    //   DEFAULT: {
-    //     // this is for prose class
-    //     css: {
-    //       color: "white", // change global color scheme to white
-    //     },
-    //   },
-    // },
     transparent: "transparent",
     current: "currentColor",
     extend: {
       transitionProperty: {
         spacing: "margin, padding",
-      },
-
-      color: {
-        "tw-prose-bold": "white",
-        "tw-prose-heading": "white",
-        "tw-prose-link": "white",
-        "tw-prose-link-hover": "white",
-        "tw-prose-link-active": "white",
-        "tw-prose-link-visited": "white",
-        "tw-prose-link-hover": "white",
-        "tw-prose-link-active": "white",
       },
       keyframes: {
         "subtle-pulse": {
@@ -166,7 +147,6 @@ module.exports = {
         "text-mobile-sidebar": "var(--text-800)",
         "background-search-filter": "var(--neutral-100-border-light)",
         "background-search-filter-dropdown": "var(--neutral-100-border-light)",
-        // "tw-prose-bold": "var(--text-800)",
 
         "user-bubble": "var(--off-white)",
 
