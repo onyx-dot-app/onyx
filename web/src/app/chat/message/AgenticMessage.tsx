@@ -308,7 +308,7 @@ export const AgenticMessage = ({
   const renderedAlternativeMarkdown = useMemo(() => {
     return (
       <ReactMarkdown
-        className="prose max-w-full text-base"
+        className="prose dark:prose-invert max-w-full text-base"
         components={{
           ...markdownComponents,
           code: ({ node, className, children }: any) => {
@@ -335,7 +335,7 @@ export const AgenticMessage = ({
   const renderedMarkdown = useMemo(() => {
     return (
       <ReactMarkdown
-        className="prose max-w-full text-base"
+        className="prose dark:prose-invert max-w-full text-base"
         components={markdownComponents}
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}

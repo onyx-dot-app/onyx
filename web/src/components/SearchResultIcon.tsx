@@ -50,7 +50,7 @@ export function SearchResultIcon({ url }: { url: string }) {
     return <SourceIcon sourceType={ValidSources.Web} iconSize={18} />;
   }
   if (url.includes("docs.onyx.app")) {
-    return <OnyxIcon size={18} />;
+    return <OnyxIcon size={18} className="dark:text-[#fff] text-[#000]" />;
   }
 
   return (
