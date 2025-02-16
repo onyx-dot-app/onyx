@@ -2,11 +2,13 @@ import os
 import tempfile
 import urllib.parse
 from collections.abc import Generator
+from datetime import datetime
+from datetime import timezone
 from typing import Any
+from typing import Dict
 from typing import List
 from typing import Tuple
-from typing import Dict, Union
-from datetime import datetime, timezone
+from typing import Union
 
 from zulip import Client
 
@@ -42,30 +44,30 @@ class ZulipConnector(LoadConnector, PollConnector):
 
         # Clean and normalize the URL
         realm_url = realm_url.strip().lower()
-        
+
         # Remove any trailing slashes
-        realm_url = realm_url.rstrip('/')
-        
+        realm_url = realm_url.rstrip("/")
+
         # Ensure the URL has a scheme
-        if not realm_url.startswith(('http://', 'https://')):
-            realm_url = f'https://{realm_url}'
-        
+        if not realm_url.startswith(("http://", "https://")):
+            realm_url = f"https://{realm_url}"
+
         try:
             parsed = urllib.parse.urlparse(realm_url)
-            
+
             # Extract the base domain without any paths or ports
-            netloc = parsed.netloc.split(':')[0]  # Remove port if present
-            
+            netloc = parsed.netloc.split(":")[0]  # Remove port if present
+
             if not netloc:
                 raise ValueError(
                     f"Invalid realm URL format: {realm_url}. "
                     f"URL must include a valid domain name."
                 )
-            
+
             # Always use HTTPS for security
             self.base_url = f"https://{netloc}"
             self.client: Client | None = None
-            
+
         except Exception as e:
             raise ValueError(
                 f"Failed to parse Zulip realm URL: {realm_url}. "
@@ -151,7 +153,7 @@ class ZulipConnector(LoadConnector, PollConnector):
             "has_reactions": str(len(message.reactions) > 0),
             "content_type": str(message.content_type or "text"),
         }
-        
+
         # Always include edit timestamp in metadata when available
         if edit_time is not None:
             metadata["edit_timestamp"] = str(message.last_edit_timestamp)
