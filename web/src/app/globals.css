@@ -656,11 +656,3 @@ ul > li > p {
   display: inline;
   /* Make paragraphs inline to reduce vertical space */
 }
-
-.dark strong {
-  color: white;
-}
-
-.prose.dark h4 {
-  color: #e5e5e5;
-}
