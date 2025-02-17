@@ -128,7 +128,6 @@ class TimeoutThread(threading.Thread):
             self.result = self.func(*self.args, **self.kwargs)
         except Exception as e:
             self.exc = e
-            raise e
 
     def end(self) -> None:
         raise TimeoutError(
