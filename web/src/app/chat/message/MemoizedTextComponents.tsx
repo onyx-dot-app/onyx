@@ -95,7 +95,7 @@ export const MemoizedAnchor = memo(
     }
     return (
       <MemoizedLink updatePresentingDocument={updatePresentingDocument}>
-        {children}l
+        {children}
       </MemoizedLink>
     );
   }

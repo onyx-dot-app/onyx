@@ -350,13 +350,14 @@ def delete_chat_session(
     user_id: UUID | None,
     chat_session_id: UUID,
     db_session: Session,
+    include_deleted: bool = False,
     hard_delete: bool = HARD_DELETE_CHATS,
 ) -> None:
     chat_session = get_chat_session_by_id(
         chat_session_id=chat_session_id, user_id=user_id, db_session=db_session
     )
 
-    if chat_session.deleted:
+    if chat_session.deleted and not include_deleted:
         raise ValueError("Cannot delete an already deleted chat session")
 
     if hard_delete:
@@ -380,7 +381,15 @@ def delete_chat_sessions_older_than(days_old: int, db_session: Session) -> None:
     ).fetchall()
 
     for user_id, session_id in old_sessions:
-        delete_chat_session(user_id, session_id, db_session, hard_delete=True)
+        try:
+            delete_chat_session(
+                user_id, session_id, db_session, include_deleted=True, hard_delete=True
+            )
+        except Exception:
+            logger.exception(
+                "delete_chat_session exceptioned. "
+                f"user_id={user_id} session_id={session_id}"
+            )
 
 
 def get_chat_message(
@@ -893,14 +902,18 @@ def translate_db_sub_questions_to_server_objects(
                 question=sub_question.sub_question,
                 answer=sub_question.sub_answer,
                 sub_queries=sub_queries,
-                context_docs=get_retrieval_docs_from_search_docs(verified_docs),
+                context_docs=get_retrieval_docs_from_search_docs(
+                    verified_docs, sort_by_score=False
+                ),
             )
         )
     return sub_questions
 
 
 def get_retrieval_docs_from_search_docs(
-    search_docs: list[SearchDoc], remove_doc_content: bool = False
+    search_docs: list[SearchDoc],
+    remove_doc_content: bool = False,
+    sort_by_score: bool = True,
 ) -> RetrievalDocs:
     top_documents = [
         translate_db_search_doc_to_server_search_doc(
@@ -908,7 +921,8 @@ def get_retrieval_docs_from_search_docs(
         )
         for db_doc in search_docs
     ]
-    top_documents = sorted(top_documents, key=lambda doc: doc.score, reverse=True)  # type: ignore
+    if sort_by_score:
+        top_documents = sorted(top_documents, key=lambda doc: doc.score, reverse=True)  # type: ignore
     return RetrievalDocs(top_documents=top_documents)
 
 
@@ -1018,7 +1032,7 @@ def log_agent_sub_question_results(
         sub_question = sub_question_answer_result.question
         sub_answer = sub_question_answer_result.answer
         sub_document_results = _create_citation_format_list(
-            sub_question_answer_result.verified_reranked_documents
+            sub_question_answer_result.context_documents
         )
 
         sub_question_object = AgentSubQuestion(

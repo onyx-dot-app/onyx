@@ -79,7 +79,8 @@ class ImageShape(str, Enum):
     LANDSCAPE = "landscape"
 
 
-class ImageGenerationTool(Tool):
+# override_kwargs is not supported for image generation tools
+class ImageGenerationTool(Tool[None]):
     _NAME = "run_image_generation"
     _DESCRIPTION = "Generate an image from a prompt."
     _DISPLAY_NAME = "Image Generation"
@@ -255,7 +256,9 @@ class ImageGenerationTool(Tool):
                 "An error occurred during image generation. Please try again later."
             )
 
-    def run(self, **kwargs: str) -> Generator[ToolResponse, None, None]:
+    def run(
+        self, override_kwargs: None = None, **kwargs: str
+    ) -> Generator[ToolResponse, None, None]:
         prompt = cast(str, kwargs["prompt"])
         shape = ImageShape(kwargs.get("shape", ImageShape.SQUARE))
         format = self.output_format

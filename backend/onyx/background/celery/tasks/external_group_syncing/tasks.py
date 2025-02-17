@@ -26,11 +26,11 @@ from ee.onyx.external_permissions.sync_params import (
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.error_logging import emit_background_error
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
-from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -72,18 +72,26 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if external group sync is due."""
 
     if cc_pair.access_type != AccessType.SYNC:
-        return False
-
-    # skip external group sync if not active
-    if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
+        task_logger.error(
+            f"Recieved non-sync CC Pair {cc_pair.id} for external "
+            f"group sync. Actual access type: {cc_pair.access_type}"
+        )
         return False
 
     if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+        task_logger.debug(
+            f"Skipping group sync for CC Pair {cc_pair.id} - "
+            f"CC Pair is being deleted"
+        )
         return False
 
     # If there is not group sync function for the connector, we don't run the sync
     # This is fine because all sources dont necessarily have a concept of groups
     if not GROUP_PERMISSIONS_FUNC_MAP.get(cc_pair.connector.source):
+        task_logger.debug(
+            f"Skipping group sync for CC Pair {cc_pair.id} - "
+            f"no group sync function for {cc_pair.connector.source}"
+        )
         return False
 
     # If the last sync is None, it has never been run so we run the sync
@@ -125,6 +133,9 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> bool 
 
     # these tasks should never overlap
     if not lock_beat.acquire(blocking=False):
+        task_logger.warning(
+            f"Failed to acquire beat lock for external group sync: {tenant_id}"
+        )
         return None
 
     try:
@@ -205,20 +216,12 @@ def try_creating_external_group_sync_task(
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
 
-    LOCK_TIMEOUT = 30
-
-    lock: RedisLock = r.lock(
-        DANSWER_REDIS_FUNCTION_LOCK_PREFIX + "try_generate_external_group_sync_tasks",
-        timeout=LOCK_TIMEOUT,
-    )
-
-    acquired = lock.acquire(blocking_timeout=LOCK_TIMEOUT / 2)
-    if not acquired:
-        return None
-
     try:
         # Dont kick off a new sync if the previous one is still running
         if redis_connector.external_group_sync.fenced:
+            logger.warning(
+                f"Skipping external group sync for CC Pair {cc_pair_id} - already running."
+            )
             return None
 
         redis_connector.external_group_sync.generator_clear()
@@ -269,9 +272,6 @@ def try_creating_external_group_sync_task(
             f"Unexpected exception while trying to create external group sync task: cc_pair={cc_pair_id}"
         )
         return None
-    finally:
-        if lock.owned():
-            lock.release()
 
     return payload_id
 
@@ -304,22 +304,26 @@ def connector_external_group_sync_generator_task(
     start = time.monotonic()
     while True:
         if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
-            raise ValueError(
+            msg = (
                 f"connector_external_group_sync_generator_task - timed out waiting for fence to be ready: "
                 f"fence={redis_connector.external_group_sync.fence_key}"
             )
+            emit_background_error(msg, cc_pair_id=cc_pair_id)
+            raise ValueError(msg)
 
         if not redis_connector.external_group_sync.fenced:  # The fence must exist
-            raise ValueError(
+            msg = (
                 f"connector_external_group_sync_generator_task - fence not found: "
                 f"fence={redis_connector.external_group_sync.fence_key}"
             )
+            emit_background_error(msg, cc_pair_id=cc_pair_id)
+            raise ValueError(msg)
 
         payload = redis_connector.external_group_sync.payload  # The payload must exist
         if not payload:
-            raise ValueError(
-                "connector_external_group_sync_generator_task: payload invalid or not found"
-            )
+            msg = "connector_external_group_sync_generator_task: payload invalid or not found"
+            emit_background_error(msg, cc_pair_id=cc_pair_id)
+            raise ValueError(msg)
 
         if payload.celery_task_id is None:
             logger.info(
@@ -344,9 +348,9 @@ def connector_external_group_sync_generator_task(
 
     acquired = lock.acquire(blocking=False)
     if not acquired:
-        task_logger.warning(
-            f"External group sync task already running, exiting...: cc_pair={cc_pair_id}"
-        )
+        msg = f"External group sync task already running, exiting...: cc_pair={cc_pair_id}"
+        emit_background_error(msg, cc_pair_id=cc_pair_id)
+        task_logger.error(msg)
         return None
 
     try:
@@ -367,9 +371,9 @@ def connector_external_group_sync_generator_task(
 
             ext_group_sync_func = GROUP_PERMISSIONS_FUNC_MAP.get(source_type)
             if ext_group_sync_func is None:
-                raise ValueError(
-                    f"No external group sync func found for {source_type} for cc_pair: {cc_pair_id}"
-                )
+                msg = f"No external group sync func found for {source_type} for cc_pair: {cc_pair_id}"
+                emit_background_error(msg, cc_pair_id=cc_pair_id)
+                raise ValueError(msg)
 
             logger.info(
                 f"Syncing external groups for {source_type} for cc_pair: {cc_pair_id}"
@@ -400,9 +404,9 @@ def connector_external_group_sync_generator_task(
                 sync_status=SyncStatus.SUCCESS,
             )
     except Exception as e:
-        task_logger.exception(
-            f"External group sync exceptioned: cc_pair={cc_pair_id} payload_id={payload.id}"
-        )
+        msg = f"External group sync exceptioned: cc_pair={cc_pair_id} payload_id={payload.id}"
+        task_logger.exception(msg)
+        emit_background_error(msg + f"\n\n{e}", cc_pair_id=cc_pair_id)
 
         with get_session_with_tenant(tenant_id) as db_session:
             update_sync_record_status(
@@ -492,9 +496,11 @@ def validate_external_group_sync_fence(
     fence_key = key_bytes.decode("utf-8")
     cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)
     if cc_pair_id_str is None:
-        task_logger.warning(
+        msg = (
             f"validate_external_group_sync_fence - could not parse id from {fence_key}"
         )
+        emit_background_error(msg)
+        task_logger.error(msg)
         return
 
     cc_pair_id = int(cc_pair_id_str)
@@ -509,12 +515,14 @@ def validate_external_group_sync_fence(
     try:
         payload = redis_connector.external_group_sync.payload
     except ValidationError:
-        task_logger.exception(
+        msg = (
             "validate_external_group_sync_fence - "
             "Resetting fence because fence schema is out of date: "
             f"cc_pair={cc_pair_id} "
             f"fence={fence_key}"
         )
+        task_logger.exception(msg)
+        emit_background_error(msg, cc_pair_id=cc_pair_id)
 
         redis_connector.external_group_sync.reset()
         return
@@ -551,12 +559,15 @@ def validate_external_group_sync_fence(
     # return
 
     # celery tasks don't exist and the active signal has expired, possibly due to a crash. Clean it up.
-    logger.warning(
-        "validate_external_group_sync_fence - "
-        "Resetting fence because no associated celery tasks were found: "
-        f"cc_pair={cc_pair_id} "
-        f"fence={fence_key} "
-        f"payload_id={payload.id}"
+    emit_background_error(
+        message=(
+            "validate_external_group_sync_fence - "
+            "Resetting fence because no associated celery tasks were found: "
+            f"cc_pair={cc_pair_id} "
+            f"fence={fence_key} "
+            f"payload_id={payload.id}"
+        ),
+        cc_pair_id=cc_pair_id,
     )
 
     redis_connector.external_group_sync.reset()

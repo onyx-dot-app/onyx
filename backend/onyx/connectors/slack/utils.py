@@ -39,19 +39,6 @@ def get_message_link(
     return permalink
 
 
-def _make_slack_api_call_logged(
-    call: Callable[..., SlackResponse],
-) -> Callable[..., SlackResponse]:
-    @wraps(call)
-    def logged_call(**kwargs: Any) -> SlackResponse:
-        logger.debug(f"Making call to Slack API '{call.__name__}' with args '{kwargs}'")
-        result = call(**kwargs)
-        logger.debug(f"Call to Slack API '{call.__name__}' returned '{result}'")
-        return result
-
-    return logged_call
-
-
 def _make_slack_api_call_paginated(
     call: Callable[..., SlackResponse],
 ) -> Callable[..., Generator[dict[str, Any], None, None]]:
@@ -127,18 +114,14 @@ def make_slack_api_rate_limited(
 def make_slack_api_call_w_retries(
     call: Callable[..., SlackResponse], **kwargs: Any
 ) -> SlackResponse:
-    return basic_retry_wrapper(
-        make_slack_api_rate_limited(_make_slack_api_call_logged(call))
-    )(**kwargs)
+    return basic_retry_wrapper(make_slack_api_rate_limited(call))(**kwargs)
 
 
 def make_paginated_slack_api_call_w_retries(
     call: Callable[..., SlackResponse], **kwargs: Any
 ) -> Generator[dict[str, Any], None, None]:
     return _make_slack_api_call_paginated(
-        basic_retry_wrapper(
-            make_slack_api_rate_limited(_make_slack_api_call_logged(call))
-        )
+        basic_retry_wrapper(make_slack_api_rate_limited(call))
     )(**kwargs)
 
 

@@ -238,12 +238,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await close_auth_limiter()
 
 
-def log_http_error(_: Request, exc: Exception) -> JSONResponse:
+def log_http_error(request: Request, exc: Exception) -> JSONResponse:
     status_code = getattr(exc, "status_code", 500)
 
     if isinstance(exc, BasicAuthenticationError):
-        # For BasicAuthenticationError, just log a brief message without stack trace (almost always spam)
-        logger.warning(f"Authentication failed: {str(exc)}")
+        # For BasicAuthenticationError, just log a brief message without stack trace
+        # (almost always spammy)
+        logger.debug(f"Authentication failed: {str(exc)}")
+
+    elif status_code == 404 and request.url.path == "/metrics":
+        # Log 404 errors for the /metrics endpoint with debug level
+        logger.debug(f"404 error for /metrics endpoint: {str(exc)}")
 
     elif status_code >= 400:
         error_msg = f"{str(exc)}\n"

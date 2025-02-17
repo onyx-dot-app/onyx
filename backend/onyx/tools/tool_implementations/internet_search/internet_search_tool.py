@@ -106,7 +106,8 @@ def internet_search_response_to_search_docs(
     ]
 
 
-class InternetSearchTool(Tool):
+# override_kwargs is not supported for internet search tools
+class InternetSearchTool(Tool[None]):
     _NAME = "run_internet_search"
     _DISPLAY_NAME = "Internet Search"
     _DESCRIPTION = "Perform an internet search for up-to-date information."
@@ -242,7 +243,9 @@ class InternetSearchTool(Tool):
             ],
         )
 
-    def run(self, **kwargs: str) -> Generator[ToolResponse, None, None]:
+    def run(
+        self, override_kwargs: None = None, **kwargs: str
+    ) -> Generator[ToolResponse, None, None]:
         query = cast(str, kwargs["internet_search_query"])
 
         results = self._perform_search(query)

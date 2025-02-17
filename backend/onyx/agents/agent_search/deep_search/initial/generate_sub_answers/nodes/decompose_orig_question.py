@@ -23,6 +23,8 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     build_history_prompt,
 )
+from onyx.agents.agent_search.shared_graph_utils.models import BaseMessage_Content
+from onyx.agents.agent_search.shared_graph_utils.models import LLMNodeErrorStrings
 from onyx.agents.agent_search.shared_graph_utils.utils import dispatch_separated
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
@@ -33,17 +35,30 @@ from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.chat.models import SubQuestionPiece
 from onyx.configs.agent_configs import AGENT_NUM_DOCS_FOR_DECOMPOSITION
+from onyx.configs.agent_configs import (
+    AGENT_TIMEOUT_OVERRIDE_LLM_SUBQUESTION_GENERATION,
+)
+from onyx.llm.chat_llm import LLMRateLimitError
+from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.prompts.agent_search import (
-    INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH,
+    INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH_ASSUMING_REFINEMENT,
 )
 from onyx.prompts.agent_search import (
-    INITIAL_QUESTION_DECOMPOSITION_PROMPT,
+    INITIAL_QUESTION_DECOMPOSITION_PROMPT_ASSUMING_REFINEMENT,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
+_llm_node_error_strings = LLMNodeErrorStrings(
+    timeout="LLM Timeout Error. Sub-questions could not be generated.",
+    rate_limit="LLM Rate Limit Error. Sub-questions could not be generated.",
+    general_error="General LLM Error. Sub-questions could not be generated.",
+)
 
+
+@log_function_time(print_only=True)
 def decompose_orig_question(
     state: SubQuestionRetrievalState,
     config: RunnableConfig,
@@ -85,15 +100,15 @@ def decompose_orig_question(
             ]
         )
 
-        decomposition_prompt = (
-            INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH.format(
-                question=question, sample_doc_str=sample_doc_str, history=history
-            )
+        decomposition_prompt = INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH_ASSUMING_REFINEMENT.format(
+            question=question, sample_doc_str=sample_doc_str, history=history
         )
 
     else:
-        decomposition_prompt = INITIAL_QUESTION_DECOMPOSITION_PROMPT.format(
-            question=question, history=history
+        decomposition_prompt = (
+            INITIAL_QUESTION_DECOMPOSITION_PROMPT_ASSUMING_REFINEMENT.format(
+                question=question, history=history
+            )
         )
 
     # Start decomposition
@@ -112,32 +127,42 @@ def decompose_orig_question(
     )
 
     # dispatches custom events for subquestion tokens, adding in subquestion ids.
-    streamed_tokens = dispatch_separated(
-        model.stream(msg),
-        dispatch_subquestion(0, writer),
-        sep_callback=dispatch_subquestion_sep(0, writer),
-    )
 
-    stop_event = StreamStopInfo(
-        stop_reason=StreamStopReason.FINISHED,
-        stream_type=StreamType.SUB_QUESTIONS,
-        level=0,
-    )
-    write_custom_event("stream_finished", stop_event, writer)
+    streamed_tokens: list[BaseMessage_Content] = []
 
-    deomposition_response = merge_content(*streamed_tokens)
+    try:
+        streamed_tokens = dispatch_separated(
+            model.stream(
+                msg,
+                timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_SUBQUESTION_GENERATION,
+            ),
+            dispatch_subquestion(0, writer),
+            sep_callback=dispatch_subquestion_sep(0, writer),
+        )
 
-    # this call should only return strings. Commenting out for efficiency
-    # assert [type(tok) == str for tok in streamed_tokens]
+        decomposition_response = merge_content(*streamed_tokens)
 
-    # use no-op cast() instead of str() which runs code
-    # list_of_subquestions = clean_and_parse_list_string(cast(str, response))
-    list_of_subqs = cast(str, deomposition_response).split("\n")
+        list_of_subqs = cast(str, decomposition_response).split("\n")
 
-    decomp_list: list[str] = [sq.strip() for sq in list_of_subqs if sq.strip() != ""]
+        initial_sub_questions = [sq.strip() for sq in list_of_subqs if sq.strip() != ""]
+        log_result = f"decomposed original question into {len(initial_sub_questions)} subquestions"
+
+        stop_event = StreamStopInfo(
+            stop_reason=StreamStopReason.FINISHED,
+            stream_type=StreamType.SUB_QUESTIONS,
+            level=0,
+        )
+        write_custom_event("stream_finished", stop_event, writer)
+
+    except LLMTimeoutError as e:
+        logger.error("LLM Timeout Error - decompose orig question")
+        raise e  # fail loudly on this critical step
+    except LLMRateLimitError as e:
+        logger.error("LLM Rate Limit Error - decompose orig question")
+        raise e
 
     return InitialQuestionDecompositionUpdate(
-        initial_sub_questions=decomp_list,
+        initial_sub_questions=initial_sub_questions,
         agent_start_time=agent_start_time,
         agent_refined_start_time=None,
         agent_refined_end_time=None,
@@ -151,7 +176,7 @@ def decompose_orig_question(
                 graph_component="initial - generate sub answers",
                 node_name="decompose original question",
                 node_start_time=node_start_time,
-                result=f"decomposed original question into {len(decomp_list)} subquestions",
+                result=log_result,
             )
         ],
     )

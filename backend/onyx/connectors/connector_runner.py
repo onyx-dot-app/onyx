@@ -76,6 +76,6 @@ class ConnectorRunner:
             )
             logger.error(
                 f"Error in connector. type: {exc_type};\n"
-                f"local_vars below -> \n{local_vars_str}"
+                f"local_vars below -> \n{local_vars_str[:1024]}"
             )
             raise

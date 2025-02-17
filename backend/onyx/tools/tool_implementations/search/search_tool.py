@@ -39,6 +39,7 @@ from onyx.secondary_llm_flows.choose_search import check_if_need_search
 from onyx.secondary_llm_flows.query_expansion import history_based_query_rephrase
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import SearchQueryInfo
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_utils import llm_doc_to_dict
@@ -77,7 +78,7 @@ HINT: if you are unfamiliar with the user input OR think the user input is a typ
 """
 
 
-class SearchTool(Tool):
+class SearchTool(Tool[SearchToolOverrideKwargs]):
     _NAME = "run_search"
     _DISPLAY_NAME = "Search Tool"
     _DESCRIPTION = SEARCH_TOOL_DESCRIPTION
@@ -275,14 +276,19 @@ class SearchTool(Tool):
 
         yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
 
-    def run(self, **kwargs: Any) -> Generator[ToolResponse, None, None]:
-        query = cast(str, kwargs["query"])
-        force_no_rerank = cast(bool, kwargs.get("force_no_rerank", False))
-        alternate_db_session = cast(Session, kwargs.get("alternate_db_session", None))
-        retrieved_sections_callback = cast(
-            Callable[[list[InferenceSection]], None],
-            kwargs.get("retrieved_sections_callback"),
-        )
+    def run(
+        self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
+    ) -> Generator[ToolResponse, None, None]:
+        query = cast(str, llm_kwargs["query"])
+        force_no_rerank = False
+        alternate_db_session = None
+        retrieved_sections_callback = None
+        skip_query_analysis = False
+        if override_kwargs:
+            force_no_rerank = override_kwargs.force_no_rerank
+            alternate_db_session = override_kwargs.alternate_db_session
+            retrieved_sections_callback = override_kwargs.retrieved_sections_callback
+            skip_query_analysis = override_kwargs.skip_query_analysis
 
         if self.selected_sections:
             yield from self._build_response_for_specified_sections(query)
@@ -324,6 +330,7 @@ class SearchTool(Tool):
             user=self.user,
             llm=self.llm,
             fast_llm=self.fast_llm,
+            skip_query_analysis=skip_query_analysis,
             bypass_acl=self.bypass_acl,
             db_session=alternate_db_session or self.db_session,
             prompt_config=self.prompt_config,

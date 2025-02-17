@@ -227,6 +227,24 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  gitbook: {
+    description: "Configure GitBook connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the space ID:",
+        label: "Space ID",
+        name: "space_id",
+        optional: false,
+        description:
+          "The ID of the GitBook space to index. This can be found in the URL " +
+          "of a page in the space. For example, if your URL looks like " +
+          "`https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`, " +
+          "then your space ID is `8JkzVx8QCIGRrmxhGHU8`.",
+      },
+    ],
+    advanced_values: [],
+  },
   google_drive: {
     description: "Configure Google Drive connector",
     values: [

@@ -83,6 +83,7 @@ def handle_search_request(
         user=user,
         llm=llm,
         fast_llm=fast_llm,
+        skip_query_analysis=False,
         db_session=db_session,
         bypass_acl=False,
     )

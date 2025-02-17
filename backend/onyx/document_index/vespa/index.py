@@ -17,6 +17,7 @@ from uuid import UUID
 
 import httpx  # type: ignore
 import requests  # type: ignore
+from retry import retry
 
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
@@ -549,6 +550,11 @@ class VespaIndex(DocumentIndex):
             time.monotonic() - update_start,
         )
 
+    @retry(
+        tries=3,
+        delay=1,
+        backoff=2,
+    )
     def _update_single_chunk(
         self,
         doc_chunk_id: UUID,
@@ -559,6 +565,7 @@ class VespaIndex(DocumentIndex):
     ) -> None:
         """
         Update a single "chunk" (document) in Vespa using its chunk ID.
+        Retries if we encounter transient HTTPStatusError (e.g., overload).
         """
 
         update_dict: dict[str, dict] = {"fields": {}}
@@ -567,13 +574,11 @@ class VespaIndex(DocumentIndex):
             update_dict["fields"][BOOST] = {"assign": fields.boost}
 
         if fields.document_sets is not None:
-            # WeightedSet<string> needs a map { item: weight, ... }
             update_dict["fields"][DOCUMENT_SETS] = {
                 "assign": {document_set: 1 for document_set in fields.document_sets}
             }
 
         if fields.access is not None:
-            # Similar to above
             update_dict["fields"][ACCESS_CONTROL_LIST] = {
                 "assign": {acl_entry: 1 for acl_entry in fields.access.to_acl()}
             }
@@ -585,7 +590,10 @@ class VespaIndex(DocumentIndex):
             logger.error("Update request received but nothing to update.")
             return
 
-        vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}?create=true"
+        vespa_url = (
+            f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}"
+            "?create=true"
+        )
 
         try:
             resp = http_client.put(
@@ -595,8 +603,11 @@ class VespaIndex(DocumentIndex):
             )
             resp.raise_for_status()
         except httpx.HTTPStatusError as e:
-            error_message = f"Failed to update doc chunk {doc_chunk_id} (doc_id={doc_id}). Details: {e.response.text}"
-            logger.error(error_message)
+            logger.error(
+                f"Failed to update doc chunk {doc_chunk_id} (doc_id={doc_id}). "
+                f"Details: {e.response.text}"
+            )
+            # Re-raise so the @retry decorator will catch and retry
             raise
 
     def update_single(

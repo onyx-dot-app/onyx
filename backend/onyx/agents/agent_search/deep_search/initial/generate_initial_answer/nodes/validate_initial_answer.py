@@ -10,8 +10,10 @@ from onyx.agents.agent_search.deep_search.main.states import (
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.utils.timing import log_function_time
 
 
+@log_function_time(print_only=True)
 def validate_initial_answer(
     state: SubQuestionRetrievalState,
 ) -> InitialAnswerQualityUpdate:
@@ -25,7 +27,7 @@ def validate_initial_answer(
         f"--------{node_start_time}--------Checking for base answer validity - for not set True/False manually"
     )
 
-    verdict = True
+    verdict = True  # not actually required as already streamed out. Refinement will do similar
 
     return InitialAnswerQualityUpdate(
         initial_answer_quality_eval=verdict,

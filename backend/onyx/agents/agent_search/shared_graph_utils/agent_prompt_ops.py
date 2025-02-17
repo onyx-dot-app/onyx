@@ -7,6 +7,7 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.models import (
     AgentPromptEnrichmentComponents,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import format_docs
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_persona_agent_prompt_expressions,
 )
@@ -40,13 +41,7 @@ def build_sub_question_answer_prompt(
 
     date_str = build_date_time_string()
 
-    # TODO: This should include document metadata and title
-    docs_format_list = [
-        f"Document Number: [D{doc_num + 1}]\nContent: {doc.combined_content}\n\n"
-        for doc_num, doc in enumerate(docs)
-    ]
-
-    docs_str = "\n\n".join(docs_format_list)
+    docs_str = format_docs(docs)
 
     docs_str = trim_prompt_piece(
         config,
@@ -150,3 +145,38 @@ def get_prompt_enrichment_components(
         history=history,
         date_str=date_str,
     )
+
+
+def binary_string_test(text: str, positive_value: str = "yes") -> bool:
+    """
+    Tests if a string contains a positive value (case-insensitive).
+
+    Args:
+        text: The string to test
+        positive_value: The value to look for (defaults to "yes")
+
+    Returns:
+        True if the positive value is found in the text
+    """
+    return positive_value.lower() in text.lower()
+
+
+def binary_string_test_after_answer_separator(
+    text: str, positive_value: str = "yes", separator: str = "Answer:"
+) -> bool:
+    """
+    Tests if a string contains a positive value (case-insensitive).
+
+    Args:
+        text: The string to test
+        positive_value: The value to look for (defaults to "yes")
+
+    Returns:
+        True if the positive value is found in the text
+    """
+
+    if separator not in text:
+        return False
+    relevant_text = text.split(f"{separator}")[-1]
+
+    return binary_string_test(relevant_text, positive_value)

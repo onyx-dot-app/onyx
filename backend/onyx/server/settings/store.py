@@ -1,6 +1,7 @@
 from onyx.configs.constants import KV_SETTINGS_KEY
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.models import Settings
 from onyx.utils.logger import setup_logger
@@ -17,6 +18,9 @@ def load_settings() -> Settings:
         settings = (
             Settings.model_validate(stored_settings) if stored_settings else Settings()
         )
+    except KvKeyNotFoundError:
+        logger.error(f"No settings found in KV store for key: {KV_SETTINGS_KEY}")
+        settings = Settings()
     except Exception as e:
         logger.error(f"Error loading settings from KV store: {str(e)}")
         settings = Settings()

@@ -16,6 +16,23 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     build_sub_question_answer_prompt,
 )
+from onyx.agents.agent_search.shared_graph_utils.calculations import (
+    dedup_sort_inference_section_list,
+)
+from onyx.agents.agent_search.shared_graph_utils.constants import (
+    AGENT_LLM_RATELIMIT_MESSAGE,
+)
+from onyx.agents.agent_search.shared_graph_utils.constants import (
+    AGENT_LLM_TIMEOUT_MESSAGE,
+)
+from onyx.agents.agent_search.shared_graph_utils.constants import (
+    AgentLLMErrorType,
+)
+from onyx.agents.agent_search.shared_graph_utils.constants import (
+    LLM_ANSWER_ERROR_MESSAGE,
+)
+from onyx.agents.agent_search.shared_graph_utils.models import AgentErrorLog
+from onyx.agents.agent_search.shared_graph_utils.models import LLMNodeErrorStrings
 from onyx.agents.agent_search.shared_graph_utils.utils import get_answer_citation_ids
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
@@ -30,12 +47,23 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.configs.agent_configs import AGENT_MAX_ANSWER_CONTEXT_DOCS
+from onyx.configs.agent_configs import AGENT_TIMEOUT_OVERRIDE_LLM_SUBANSWER_GENERATION
+from onyx.llm.chat_llm import LLMRateLimitError
+from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.prompts.agent_search import NO_RECOVERED_DOCS
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
+_llm_node_error_strings = LLMNodeErrorStrings(
+    timeout="LLM Timeout Error. A sub-answer could not be constructed and the sub-question will be ignored.",
+    rate_limit="LLM Rate Limit Error. A sub-answer could not be constructed and the sub-question will be ignored.",
+    general_error="General LLM Error. A sub-answer could not be constructed and the sub-question will be ignored.",
+)
 
+
+@log_function_time(print_only=True)
 def generate_sub_answer(
     state: AnswerQuestionState,
     config: RunnableConfig,
@@ -51,12 +79,17 @@ def generate_sub_answer(
     state.verified_reranked_documents
     level, question_num = parse_question_id(state.question_id)
     context_docs = state.context_documents[:AGENT_MAX_ANSWER_CONTEXT_DOCS]
+
+    context_docs = dedup_sort_inference_section_list(context_docs)
+
     persona_contextualized_prompt = get_persona_agent_prompt_expressions(
         graph_config.inputs.search_request.persona
     ).contextualized_prompt
 
     if len(context_docs) == 0:
         answer_str = NO_RECOVERED_DOCS
+        cited_documents: list = []
+        log_results = "No documents retrieved"
         write_custom_event(
             "sub_answers",
             AgentAnswerPiece(
@@ -79,41 +112,67 @@ def generate_sub_answer(
 
         response: list[str | list[str | dict[str, Any]]] = []
         dispatch_timings: list[float] = []
-        for message in fast_llm.stream(
-            prompt=msg,
-        ):
-            # TODO: in principle, the answer here COULD contain images, but we don't support that yet
-            content = message.content
-            if not isinstance(content, str):
-                raise ValueError(
-                    f"Expected content to be a string, but got {type(content)}"
+
+        agent_error: AgentErrorLog | None = None
+
+        try:
+            for message in fast_llm.stream(
+                prompt=msg,
+                timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_SUBANSWER_GENERATION,
+            ):
+                # TODO: in principle, the answer here COULD contain images, but we don't support that yet
+                content = message.content
+                if not isinstance(content, str):
+                    raise ValueError(
+                        f"Expected content to be a string, but got {type(content)}"
+                    )
+                start_stream_token = datetime.now()
+                write_custom_event(
+                    "sub_answers",
+                    AgentAnswerPiece(
+                        answer_piece=content,
+                        level=level,
+                        level_question_num=question_num,
+                        answer_type="agent_sub_answer",
+                    ),
+                    writer,
                 )
-            start_stream_token = datetime.now()
-            write_custom_event(
-                "sub_answers",
-                AgentAnswerPiece(
-                    answer_piece=content,
-                    level=level,
-                    level_question_num=question_num,
-                    answer_type="agent_sub_answer",
-                ),
-                writer,
-            )
-            end_stream_token = datetime.now()
-            dispatch_timings.append(
-                (end_stream_token - start_stream_token).microseconds
-            )
-            response.append(content)
+                end_stream_token = datetime.now()
+                dispatch_timings.append(
+                    (end_stream_token - start_stream_token).microseconds
+                )
+                response.append(content)
 
-        answer_str = merge_message_runs(response, chunk_separator="")[0].content
-        logger.debug(
-            f"Average dispatch time: {sum(dispatch_timings) / len(dispatch_timings)}"
-        )
+        except LLMTimeoutError:
+            agent_error = AgentErrorLog(
+                error_type=AgentLLMErrorType.TIMEOUT,
+                error_message=AGENT_LLM_TIMEOUT_MESSAGE,
+                error_result=_llm_node_error_strings.timeout,
+            )
+            logger.error("LLM Timeout Error - generate sub answer")
+        except LLMRateLimitError:
+            agent_error = AgentErrorLog(
+                error_type=AgentLLMErrorType.RATE_LIMIT,
+                error_message=AGENT_LLM_RATELIMIT_MESSAGE,
+                error_result=_llm_node_error_strings.rate_limit,
+            )
+            logger.error("LLM Rate Limit Error - generate sub answer")
 
-    answer_citation_ids = get_answer_citation_ids(answer_str)
-    cited_documents = [
-        context_docs[id] for id in answer_citation_ids if id < len(context_docs)
-    ]
+        if agent_error:
+            answer_str = LLM_ANSWER_ERROR_MESSAGE
+            cited_documents = []
+            log_results = (
+                agent_error.error_result
+                or "Sub-answer generation failed due to LLM error"
+            )
+
+        else:
+            answer_str = merge_message_runs(response, chunk_separator="")[0].content
+            answer_citation_ids = get_answer_citation_ids(answer_str)
+            cited_documents = [
+                context_docs[id] for id in answer_citation_ids if id < len(context_docs)
+            ]
+            log_results = None
 
     stop_event = StreamStopInfo(
         stop_reason=StreamStopReason.FINISHED,
@@ -131,7 +190,7 @@ def generate_sub_answer(
                 graph_component="initial - generate individual sub answer",
                 node_name="generate sub answer",
                 node_start_time=node_start_time,
-                result="",
+                result=log_results or "",
             )
         ],
     )

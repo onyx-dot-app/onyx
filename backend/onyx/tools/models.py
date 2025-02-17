@@ -1,11 +1,14 @@
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import model_validator
+from sqlalchemy.orm import Session
 
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import IndexFilters
+from onyx.context.search.models import InferenceSection
 
 
 class ToolResponse(BaseModel):
@@ -55,6 +58,16 @@ class SearchQueryInfo(BaseModel):
     predicted_search: SearchType | None
     final_filters: IndexFilters
     recency_bias_multiplier: float
+
+
+class SearchToolOverrideKwargs(BaseModel):
+    force_no_rerank: bool
+    alternate_db_session: Session | None
+    retrieved_sections_callback: Callable[[list[InferenceSection]], None] | None
+    skip_query_analysis: bool
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

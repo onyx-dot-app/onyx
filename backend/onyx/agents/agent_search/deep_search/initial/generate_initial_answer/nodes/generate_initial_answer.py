@@ -26,14 +26,31 @@ from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     trim_prompt_piece,
 )
+from onyx.agents.agent_search.shared_graph_utils.calculations import (
+    get_answer_generation_documents,
+)
+from onyx.agents.agent_search.shared_graph_utils.constants import (
+    AGENT_LLM_RATELIMIT_MESSAGE,
+)
+from onyx.agents.agent_search.shared_graph_utils.constants import (
+    AGENT_LLM_TIMEOUT_MESSAGE,
+)
+from onyx.agents.agent_search.shared_graph_utils.constants import (
+    AgentLLMErrorType,
+)
+from onyx.agents.agent_search.shared_graph_utils.models import AgentErrorLog
 from onyx.agents.agent_search.shared_graph_utils.models import InitialAgentResultStats
+from onyx.agents.agent_search.shared_graph_utils.models import LLMNodeErrorStrings
 from onyx.agents.agent_search.shared_graph_utils.operators import (
-    dedup_inference_sections,
+    dedup_inference_section_list,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     dispatch_main_answer_stop_info,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import format_docs
+from onyx.agents.agent_search.shared_graph_utils.utils import (
+    get_deduplicated_structured_subquestion_documents,
+)
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -42,12 +59,16 @@ from onyx.agents.agent_search.shared_graph_utils.utils import remove_document_ci
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import ExtendedToolResponse
+from onyx.chat.models import StreamingError
 from onyx.configs.agent_configs import AGENT_MAX_ANSWER_CONTEXT_DOCS
+from onyx.configs.agent_configs import AGENT_MAX_STREAMED_DOCS_FOR_INITIAL_ANSWER
 from onyx.configs.agent_configs import AGENT_MIN_ORIG_QUESTION_DOCS
-from onyx.context.search.models import InferenceSection
-from onyx.prompts.agent_search import (
-    INITIAL_ANSWER_PROMPT_W_SUB_QUESTIONS,
+from onyx.configs.agent_configs import (
+    AGENT_TIMEOUT_OVERRIDE_LLM_INITIAL_ANSWER_GENERATION,
 )
+from onyx.llm.chat_llm import LLMRateLimitError
+from onyx.llm.chat_llm import LLMTimeoutError
+from onyx.prompts.agent_search import INITIAL_ANSWER_PROMPT_W_SUB_QUESTIONS
 from onyx.prompts.agent_search import (
     INITIAL_ANSWER_PROMPT_WO_SUB_QUESTIONS,
 )
@@ -56,8 +77,16 @@ from onyx.prompts.agent_search import (
 )
 from onyx.prompts.agent_search import UNKNOWN_ANSWER
 from onyx.tools.tool_implementations.search.search_tool import yield_search_responses
+from onyx.utils.timing import log_function_time
+
+_llm_node_error_strings = LLMNodeErrorStrings(
+    timeout="LLM Timeout Error. The initial answer could not be generated.",
+    rate_limit="LLM Rate Limit Error. The initial answer could not be generated.",
+    general_error="General LLM Error. The initial answer could not be generated.",
+)
 
 
+@log_function_time(print_only=True)
 def generate_initial_answer(
     state: SubQuestionRetrievalState,
     config: RunnableConfig,
@@ -73,15 +102,19 @@ def generate_initial_answer(
     question = graph_config.inputs.search_request.query
     prompt_enrichment_components = get_prompt_enrichment_components(graph_config)
 
-    sub_questions_cited_documents = state.cited_documents
+    # get all documents cited in sub-questions
+    structured_subquestion_docs = get_deduplicated_structured_subquestion_documents(
+        state.sub_question_results
+    )
+
     orig_question_retrieval_documents = state.orig_question_retrieved_documents
 
-    consolidated_context_docs: list[InferenceSection] = sub_questions_cited_documents
+    consolidated_context_docs = structured_subquestion_docs.cited_documents
     counter = 0
     for original_doc_number, original_doc in enumerate(
         orig_question_retrieval_documents
     ):
-        if original_doc_number not in sub_questions_cited_documents:
+        if original_doc_number not in structured_subquestion_docs.cited_documents:
             if (
                 counter <= AGENT_MIN_ORIG_QUESTION_DOCS
                 or len(consolidated_context_docs) < AGENT_MAX_ANSWER_CONTEXT_DOCS
@@ -90,15 +123,18 @@ def generate_initial_answer(
                 counter += 1
 
     # sort docs by their scores - though the scores refer to different questions
-    relevant_docs = dedup_inference_sections(
-        consolidated_context_docs, consolidated_context_docs
-    )
+    relevant_docs = dedup_inference_section_list(consolidated_context_docs)
 
     sub_questions: list[str] = []
-    streamed_documents = (
-        relevant_docs
-        if len(relevant_docs) > 0
-        else state.orig_question_retrieved_documents[:15]
+
+    # Create the list of documents to stream out. Start with the
+    # ones that wil be in the context (or, if len == 0, use docs
+    # that were retrieved for the original question)
+    answer_generation_documents = get_answer_generation_documents(
+        relevant_docs=relevant_docs,
+        context_documents=structured_subquestion_docs.context_documents,
+        original_question_docs=orig_question_retrieval_documents,
+        max_docs=AGENT_MAX_STREAMED_DOCS_FOR_INITIAL_ANSWER,
     )
 
     # Use the query info from the base document retrieval
@@ -108,11 +144,13 @@ def generate_initial_answer(
         graph_config.tooling.search_tool
     ), "search_tool must be provided for agentic search"
 
-    relevance_list = relevance_from_docs(relevant_docs)
+    relevance_list = relevance_from_docs(
+        answer_generation_documents.streaming_documents
+    )
     for tool_response in yield_search_responses(
         query=question,
-        reranked_sections=streamed_documents,
-        final_context_sections=streamed_documents,
+        reranked_sections=answer_generation_documents.streaming_documents,
+        final_context_sections=answer_generation_documents.context_documents,
         search_query_info=query_info,
         get_section_relevance=lambda: relevance_list,
         search_tool=graph_config.tooling.search_tool,
@@ -128,7 +166,7 @@ def generate_initial_answer(
             writer,
         )
 
-    if len(relevant_docs) == 0:
+    if len(answer_generation_documents.context_documents) == 0:
         write_custom_event(
             "initial_agent_answer",
             AgentAnswerPiece(
@@ -194,7 +232,7 @@ def generate_initial_answer(
 
         model = graph_config.tooling.fast_llm
 
-        doc_context = format_docs(relevant_docs)
+        doc_context = format_docs(answer_generation_documents.context_documents)
         doc_context = trim_prompt_piece(
             config=model.config,
             prompt_piece=doc_context,
@@ -224,30 +262,82 @@ def generate_initial_answer(
 
         streamed_tokens: list[str | list[str | dict[str, Any]]] = [""]
         dispatch_timings: list[float] = []
-        for message in model.stream(msg):
-            # TODO: in principle, the answer here COULD contain images, but we don't support that yet
-            content = message.content
-            if not isinstance(content, str):
-                raise ValueError(
-                    f"Expected content to be a string, but got {type(content)}"
-                )
-            start_stream_token = datetime.now()
 
+        agent_error: AgentErrorLog | None = None
+
+        try:
+            for message in model.stream(
+                msg,
+                timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_INITIAL_ANSWER_GENERATION,
+            ):
+                # TODO: in principle, the answer here COULD contain images, but we don't support that yet
+                content = message.content
+                if not isinstance(content, str):
+                    raise ValueError(
+                        f"Expected content to be a string, but got {type(content)}"
+                    )
+                start_stream_token = datetime.now()
+
+                write_custom_event(
+                    "initial_agent_answer",
+                    AgentAnswerPiece(
+                        answer_piece=content,
+                        level=0,
+                        level_question_num=0,
+                        answer_type="agent_level_answer",
+                    ),
+                    writer,
+                )
+                end_stream_token = datetime.now()
+                dispatch_timings.append(
+                    (end_stream_token - start_stream_token).microseconds
+                )
+                streamed_tokens.append(content)
+
+        except LLMTimeoutError:
+            agent_error = AgentErrorLog(
+                error_type=AgentLLMErrorType.TIMEOUT,
+                error_message=AGENT_LLM_TIMEOUT_MESSAGE,
+                error_result=_llm_node_error_strings.timeout,
+            )
+            logger.error("LLM Timeout Error - generate initial answer")
+
+        except LLMRateLimitError:
+            agent_error = AgentErrorLog(
+                error_type=AgentLLMErrorType.RATE_LIMIT,
+                error_message=AGENT_LLM_RATELIMIT_MESSAGE,
+                error_result=_llm_node_error_strings.rate_limit,
+            )
+            logger.error("LLM Rate Limit Error - generate initial answer")
+
+        if agent_error:
             write_custom_event(
                 "initial_agent_answer",
-                AgentAnswerPiece(
-                    answer_piece=content,
-                    level=0,
-                    level_question_num=0,
-                    answer_type="agent_level_answer",
+                StreamingError(
+                    error=AGENT_LLM_TIMEOUT_MESSAGE,
                 ),
                 writer,
             )
-            end_stream_token = datetime.now()
-            dispatch_timings.append(
-                (end_stream_token - start_stream_token).microseconds
+            return InitialAnswerUpdate(
+                initial_answer=None,
+                answer_error=AgentErrorLog(
+                    error_message=agent_error.error_message or "An LLM error occurred",
+                    error_type=agent_error.error_type,
+                    error_result=agent_error.error_result,
+                ),
+                initial_agent_stats=None,
+                generated_sub_questions=sub_questions,
+                agent_base_end_time=None,
+                agent_base_metrics=None,
+                log_messages=[
+                    get_langgraph_node_log_string(
+                        graph_component="initial - generate initial answer",
+                        node_name="generate initial answer",
+                        node_start_time=node_start_time,
+                        result=agent_error.error_result or "An LLM error occurred",
+                    )
+                ],
             )
-            streamed_tokens.append(content)
 
         logger.debug(
             f"Average dispatch time for initial answer: {sum(dispatch_timings) / len(dispatch_timings)}"

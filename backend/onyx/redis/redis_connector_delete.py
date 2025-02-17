@@ -132,6 +132,7 @@ class RedisConnectorDelete:
                 queue=OnyxCeleryQueues.CONNECTOR_DELETION,
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.MEDIUM,
+                ignore_result=True,
             )
 
             async_results.append(result)

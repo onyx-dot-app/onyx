@@ -12,6 +12,13 @@ def dedup_inference_sections(
     return deduped
 
 
+def dedup_inference_section_list(
+    list: list[InferenceSection],
+) -> list[InferenceSection]:
+    deduped = _merge_sections(list)
+    return deduped
+
+
 def dedup_question_answer_results(
     question_answer_results_1: list[SubQuestionAnswerResults],
     question_answer_results_2: list[SubQuestionAnswerResults],

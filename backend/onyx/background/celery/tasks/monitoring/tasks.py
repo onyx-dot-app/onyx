@@ -190,9 +190,9 @@ def _build_connector_start_latency_metric(
         desired_start_time = cc_pair.connector.time_created
     else:
         if not cc_pair.connector.refresh_freq:
-            task_logger.error(
-                "Found non-initial index attempt for connector "
-                "without refresh_freq. This should never happen."
+            task_logger.debug(
+                "Connector has no refresh_freq and this is a non-initial index attempt. "
+                "Assuming user manually triggered indexing, so we'll skip start latency metric."
             )
             return None
 
@@ -421,6 +421,7 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
       - Throughput (docs/min) (only if success)
       - Raw start/end times for each sync
     """
+
     one_hour_ago = get_db_current_time(db_session) - timedelta(hours=1)
 
     # Get all sync records that ended in the last hour
@@ -588,6 +589,10 @@ def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]
                 entity = db_session.scalar(
                     select(UserGroup).where(UserGroup.id == sync_record.entity_id)
                 )
+            else:
+                # Only user groups and document set sync records have
+                #  an associated entity we can use for latency metrics
+                continue
 
             if entity is None:
                 task_logger.error(
@@ -778,7 +783,7 @@ def cloud_check_alembic() -> bool | None:
 
                     tenant_to_revision[tenant_id] = result_scalar
                 except Exception:
-                    task_logger.warning(f"Tenant {tenant_id} has no revision!")
+                    task_logger.error(f"Tenant {tenant_id} has no revision!")
                     tenant_to_revision[tenant_id] = ALEMBIC_NULL_REVISION
 
         # get the total count of each revision
