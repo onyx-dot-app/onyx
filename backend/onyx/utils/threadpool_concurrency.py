@@ -1,3 +1,4 @@
+import concurrent.futures
 import uuid
 from collections.abc import Callable
 from concurrent.futures import as_completed
@@ -109,3 +110,37 @@ def run_functions_in_parallel(
                     raise
 
     return results
+
+
+def run_with_timeout(
+    timeout: float,
+    func: Callable[..., R],
+    *args: Any,
+    **kwargs: Any,
+) -> R:
+    """
+    Executes a function with a timeout. If the function doesn't complete within the specified
+    timeout, raises TimeoutError.
+
+    Args:
+        timeout: Maximum time in seconds to wait for the function to complete
+        func: The function to execute
+        *args: Positional arguments to pass to the function
+        **kwargs: Keyword arguments to pass to the function
+
+    Returns:
+        The result of the function call
+
+    Raises:
+        TimeoutError: If the function execution exceeds the timeout
+        Any other exceptions that the function might raise
+    """
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(func, *args, **kwargs)
+        try:
+            return future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            future.cancel()
+            raise TimeoutError(
+                f"Function {func.__name__} timed out after {timeout} seconds"
+            )

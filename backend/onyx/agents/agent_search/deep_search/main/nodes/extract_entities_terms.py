@@ -27,6 +27,7 @@ from onyx.configs.agent_configs import (
 from onyx.configs.constants import NUM_EXPLORATORY_DOCS
 from onyx.prompts.agent_search import ENTITY_TERM_EXTRACTION_PROMPT
 from onyx.prompts.agent_search import ENTITY_TERM_EXTRACTION_PROMPT_JSON_EXAMPLE
+from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.timing import log_function_time
 
 
@@ -84,7 +85,9 @@ def extract_entities_terms(
     ]
     fast_llm = graph_config.tooling.fast_llm
     # Grader
-    llm_response = fast_llm.invoke(
+    llm_response = run_with_timeout(
+        AGENT_TIMEOUT_OVERRIDE_LLM_ENTITY_TERM_EXTRACTION,
+        fast_llm.invoke,
         prompt=msg,
         timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_ENTITY_TERM_EXTRACTION,
     )

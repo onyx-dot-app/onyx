@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 from typing import cast
 
 from langchain_core.messages import merge_message_runs
@@ -52,6 +51,7 @@ from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.prompts.agent_search import NO_RECOVERED_DOCS
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
@@ -110,12 +110,11 @@ def generate_sub_answer(
             config=fast_llm.config,
         )
 
-        response: list[str | list[str | dict[str, Any]]] = []
         dispatch_timings: list[float] = []
-
         agent_error: AgentErrorLog | None = None
 
-        try:
+        def stream_sub_answer() -> list[str]:
+            response: list[str] = []
             for message in fast_llm.stream(
                 prompt=msg,
                 timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_SUBANSWER_GENERATION,
@@ -142,8 +141,15 @@ def generate_sub_answer(
                     (end_stream_token - start_stream_token).microseconds
                 )
                 response.append(content)
+            return response
 
-        except LLMTimeoutError:
+        try:
+            response = run_with_timeout(
+                AGENT_TIMEOUT_OVERRIDE_LLM_SUBANSWER_GENERATION,
+                stream_sub_answer,
+            )
+
+        except (LLMTimeoutError, TimeoutError):
             agent_error = AgentErrorLog(
                 error_type=AgentLLMErrorType.TIMEOUT,
                 error_message=AGENT_LLM_TIMEOUT_MESSAGE,

@@ -53,6 +53,7 @@ from onyx.prompts.agent_search import (
 )
 from onyx.tools.models import ToolCallKickoff
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
@@ -134,7 +135,9 @@ def create_refined_sub_questions(
     agent_error: AgentErrorLog | None = None
     streamed_tokens: list[BaseMessage_Content] = []
     try:
-        streamed_tokens = dispatch_separated(
+        streamed_tokens = run_with_timeout(
+            AGENT_TIMEOUT_OVERRIDE_LLM_REFINED_SUBQUESTION_GENERATION,
+            dispatch_separated,
             model.stream(
                 msg,
                 timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_REFINED_SUBQUESTION_GENERATION,
@@ -142,7 +145,7 @@ def create_refined_sub_questions(
             dispatch_subquestion(1, writer),
             sep_callback=dispatch_subquestion_sep(1, writer),
         )
-    except LLMTimeoutError:
+    except (LLMTimeoutError, TimeoutError):
         agent_error = AgentErrorLog(
             error_type=AgentLLMErrorType.TIMEOUT,
             error_message=AGENT_LLM_TIMEOUT_MESSAGE,

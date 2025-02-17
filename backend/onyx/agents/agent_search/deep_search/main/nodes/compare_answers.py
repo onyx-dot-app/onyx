@@ -40,6 +40,7 @@ from onyx.prompts.agent_search import (
     INITIAL_REFINED_ANSWER_COMPARISON_PROMPT,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
@@ -105,11 +106,14 @@ def compare_answers(
     refined_answer_improvement: bool | None = None
     # no need to stream this
     try:
-        resp = model.invoke(
-            msg, timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_COMPARE_ANSWERS
+        resp = run_with_timeout(
+            AGENT_TIMEOUT_OVERRIDE_LLM_COMPARE_ANSWERS,
+            model.invoke,
+            prompt=msg,
+            timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_COMPARE_ANSWERS,
         )
 
-    except LLMTimeoutError:
+    except (LLMTimeoutError, TimeoutError):
         agent_error = AgentErrorLog(
             error_type=AgentLLMErrorType.TIMEOUT,
             error_message=AGENT_LLM_TIMEOUT_MESSAGE,

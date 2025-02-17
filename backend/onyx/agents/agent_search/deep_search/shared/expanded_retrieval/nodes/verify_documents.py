@@ -32,6 +32,7 @@ from onyx.prompts.agent_search import (
     DOCUMENT_VERIFICATION_PROMPT,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
@@ -86,8 +87,11 @@ def verify_documents(
     ]  # default is to treat document as relevant
 
     try:
-        response = fast_llm.invoke(
-            msg, timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_DOCUMENT_VERIFICATION
+        response = run_with_timeout(
+            AGENT_TIMEOUT_OVERRIDE_LLM_DOCUMENT_VERIFICATION,
+            fast_llm.invoke,
+            prompt=msg,
+            timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_DOCUMENT_VERIFICATION,
         )
 
         assert isinstance(response.content, str)
@@ -96,7 +100,7 @@ def verify_documents(
         ):
             verified_documents = []
 
-    except LLMTimeoutError:
+    except (LLMTimeoutError, TimeoutError):
         # In this case, we decide to continue and don't raise an error, as
         # little harm in letting some docs through that are less relevant.
         logger.error("LLM Timeout Error - verify documents")

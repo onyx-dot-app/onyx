@@ -42,6 +42,7 @@ from onyx.prompts.agent_search import (
     QUERY_REWRITING_PROMPT,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
@@ -69,7 +70,7 @@ def expand_queries(
     node_start_time = datetime.now()
     question = state.question
 
-    llm = graph_config.tooling.fast_llm
+    model = graph_config.tooling.fast_llm
     sub_question_id = state.sub_question_id
     if sub_question_id is None:
         level, question_num = 0, 0
@@ -88,8 +89,10 @@ def expand_queries(
     rewritten_queries = []
 
     try:
-        llm_response_list = dispatch_separated(
-            llm.stream(
+        llm_response_list = run_with_timeout(
+            AGENT_TIMEOUT_OVERRIDE_LLM_QUERY_REWRITING_GENERATION,
+            dispatch_separated,
+            model.stream(
                 prompt=msg,
                 timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_QUERY_REWRITING_GENERATION,
             ),
@@ -101,7 +104,7 @@ def expand_queries(
         rewritten_queries = llm_response.split("\n")
         log_result = f"Number of expanded queries: {len(rewritten_queries)}"
 
-    except LLMTimeoutError:
+    except (LLMTimeoutError, TimeoutError):
         agent_error = AgentErrorLog(
             error_type=AgentLLMErrorType.TIMEOUT,
             error_message=AGENT_LLM_TIMEOUT_MESSAGE,
