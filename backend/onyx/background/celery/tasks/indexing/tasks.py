@@ -1009,7 +1009,7 @@ def connector_indexing_proxy_task(
                 task_logger.warning(
                     log_builder.build(
                         "Indexing watchdog - activity timeout exceeded",
-                        f"timeout={CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
+                        timeout=f"{CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
                     )
                 )
 
