@@ -14,6 +14,10 @@ logger = setup_logger()
 R = TypeVar("R")
 
 
+# WARNING: it is not currently well understood whether we lose access to contextvars when functions are
+# executed through this wrapper Do NOT try to acquire a db session in a function run through this unless
+# you have heavily tested that multi-tenancy is respected. If/when we know for sure that it is or
+# is not safe, update this comment.
 def run_functions_tuples_in_parallel(
     functions_with_args: list[tuple[Callable, tuple]],
     allow_failures: bool = False,
@@ -79,6 +83,10 @@ class FunctionCall(Generic[R]):
         return self.func(*self.args, **self.kwargs)
 
 
+# WARNING: it is not currently well understood whether we lose access to contextvars when functions are
+# executed through this wrapper Do NOT try to acquire a db session in a function run through this unless
+# you have heavily tested that multi-tenancy is respected. If/when we know for sure that it is or
+# is not safe, update this comment.
 def run_functions_in_parallel(
     function_calls: list[FunctionCall],
     allow_failures: bool = False,
@@ -121,13 +129,13 @@ class TimeoutThread(threading.Thread):
         self.func = func
         self.args = args
         self.kwargs = kwargs
-        self.exc: Exception | None = None
+        self.exception: Exception | None = None
 
     def run(self) -> None:
         try:
             self.result = self.func(*self.args, **self.kwargs)
         except Exception as e:
-            self.exc = e
+            self.exception = e
 
     def end(self) -> None:
         raise TimeoutError(
@@ -135,6 +143,10 @@ class TimeoutThread(threading.Thread):
         )
 
 
+# WARNING: it is not currently well understood whether we lose access to contextvars when functions are
+# executed through this wrapper Do NOT try to acquire a db session in a function run through this unless
+# you have heavily tested that multi-tenancy is respected. If/when we know for sure that it is or
+# is not safe, update this comment.
 def run_with_timeout(
     timeout: float, func: Callable[..., R], *args: Any, **kwargs: Any
 ) -> R:
@@ -142,13 +154,13 @@ def run_with_timeout(
     Executes a function with a timeout. If the function doesn't complete within the specified
     timeout, raises TimeoutError.
     """
-    t = TimeoutThread(timeout, func, *args, **kwargs)
-    t.start()
-    t.join(timeout)
+    task = TimeoutThread(timeout, func, *args, **kwargs)
+    task.start()
+    task.join(timeout)
 
-    if t.exc is not None:
-        raise t.exc
-    if t.is_alive():
-        t.end()
+    if task.exception is not None:
+        raise task.exception
+    if task.is_alive():
+        task.end()
 
-    return t.result
+    return task.result
