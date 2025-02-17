@@ -1,12 +1,15 @@
 import datetime
 import json
 import os
+import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.gmail.connector import _build_time_range_query
 from onyx.connectors.gmail.connector import thread_to_document
 from onyx.connectors.models import Document
+from onyx.connectors.github.connector import GithubConnector
+from onyx.connectors.models import ConnectorMissingCredentialError
 
 
 def test_thread_to_document() -> None:
@@ -60,3 +63,38 @@ def test_time_str_to_utc() -> None:
     }
     for strptime, expected_datetime in str_to_dt.items():
         assert time_str_to_utc(strptime) == expected_datetime
+
+
+def test_load_from_state_without_credentials():
+    """
+    Test that calling load_from_state without loaded credentials raises ConnectorMissingCredentialError.
+    This covers the scenario where the GitHub credentials were not set prior to fetching data.
+    """
+    connector = GithubConnector(repo_owner="dummy_owner", repo_name="dummy_repo")
+    # Since load_from_state returns a generator, we force evaluation with list().
+    with pytest.raises(ConnectorMissingCredentialError):
+        list(connector.load_from_state())
+
+
+def test_validate_connector_settings_success(monkeypatch):
+    """
+    Test that validate_connector_settings passes when proper credentials and a valid repository are provided.
+    This test mocks the github_client to simulate a valid repository without errors.
+    """
+    connector = GithubConnector(repo_owner="dummy_owner", repo_name="dummy_repo")
+    
+    class DummyRepo:
+        def get_contents(self, path):
+            # Simulate returning contents without error.
+            return ["dummy content"]
+    
+    class DummyGithub:
+        def get_repo(self, repo_full_name):
+            # Ensure that the connector is calling with the correct repository identifier.
+            assert repo_full_name == "dummy_owner/dummy_repo"
+            return DummyRepo()
+    
+    connector.github_client = DummyGithub()
+    
+    # validate_connector_settings should complete without raising any errors.
+    connector.validate_connector_settings()
