@@ -135,6 +135,7 @@ import {
 } from "@/lib/browserUtilities";
 import { Button } from "@/components/ui/button";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { MessageChannel } from "node:worker_threads";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -2333,7 +2334,7 @@ export function ChatPage({
                 fixed
                 left-0
                 z-40
-                bg-background-100
+                bg-neutral-200
                 h-screen
                 transition-all
                 bg-opacity-80
@@ -2590,12 +2591,21 @@ export function ChatPage({
                                 ) {
                                   return <></>;
                                 }
+                                const nextMessage =
+                                  messageHistory.length > i + 1
+                                    ? messageHistory[i + 1]
+                                    : null;
                                 return (
                                   <div
                                     id={`message-${message.messageId}`}
                                     key={messageReactComponentKey}
                                   >
                                     <HumanMessage
+                                      disableSwitchingForStreaming={
+                                        (nextMessage &&
+                                          nextMessage.is_generating) ||
+                                        false
+                                      }
                                       stopGenerating={stopGenerating}
                                       content={message.message}
                                       files={message.files}

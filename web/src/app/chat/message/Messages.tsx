@@ -795,27 +795,67 @@ function MessageSwitcher({
   totalPages,
   handlePrevious,
   handleNext,
+  disableForStreaming,
 }: {
   currentPage: number;
   totalPages: number;
   handlePrevious: () => void;
   handleNext: () => void;
+  disableForStreaming?: boolean;
 }) {
   return (
     <div className="flex items-center text-sm space-x-0.5">
-      <Hoverable
-        icon={FiChevronLeft}
-        onClick={currentPage === 1 ? undefined : handlePrevious}
-      />
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div>
+              <Hoverable
+                icon={FiChevronLeft}
+                onClick={
+                  disableForStreaming
+                    ? () => null
+                    : currentPage === 1
+                      ? undefined
+                      : handlePrevious
+                }
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            {disableForStreaming
+              ? "Wait for agent message to complete"
+              : "Previous"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       <span className="text-text-darker select-none">
         {currentPage} / {totalPages}
       </span>
 
-      <Hoverable
-        icon={FiChevronRight}
-        onClick={currentPage === totalPages ? undefined : handleNext}
-      />
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>
+            <div>
+              <Hoverable
+                icon={FiChevronRight}
+                onClick={
+                  disableForStreaming
+                    ? () => null
+                    : currentPage === totalPages
+                      ? undefined
+                      : handleNext
+                }
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            {disableForStreaming
+              ? "Wait for agent message to complete"
+              : "Next"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }
@@ -829,6 +869,7 @@ export const HumanMessage = ({
   onMessageSelection,
   shared,
   stopGenerating = () => null,
+  disableSwitchingForStreaming = false,
 }: {
   shared?: boolean;
   content: string;
@@ -838,6 +879,7 @@ export const HumanMessage = ({
   onEdit?: (editedContent: string) => void;
   onMessageSelection?: (messageId: number) => void;
   stopGenerating?: () => void;
+  disableSwitchingForStreaming?: boolean;
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1067,6 +1109,7 @@ export const HumanMessage = ({
               otherMessagesCanSwitchTo.length > 1 && (
                 <div className="ml-auto mr-3">
                   <MessageSwitcher
+                    disableForStreaming={disableSwitchingForStreaming}
                     currentPage={currentMessageInd + 1}
                     totalPages={otherMessagesCanSwitchTo.length}
                     handlePrevious={() => {

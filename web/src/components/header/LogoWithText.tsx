@@ -47,7 +47,7 @@ export default function LogoWithText({
           className="flex gap-x-2 items-center ml-0 cursor-pointer desktop:hidden "
         >
           {!toggled ? (
-            <Logo className="desktop:hidden -my-2" height={24} width={24} />
+            <Logo className="desktop:hidden" height={24} width={24} />
           ) : (
             <LogoComponent
               show={toggled}

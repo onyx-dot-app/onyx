@@ -113,7 +113,7 @@ export default function LLMPopover({
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
         <button
-          className="focus:outline-none"
+          className="dark:text-[#fff] text-[#000] focus:outline-none"
           data-testid="llm-popover-trigger"
         >
           <ChatInputOption
