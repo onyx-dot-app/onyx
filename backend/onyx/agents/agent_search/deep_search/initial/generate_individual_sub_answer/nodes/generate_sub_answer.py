@@ -113,9 +113,9 @@ def generate_sub_answer(
 
         dispatch_timings: list[float] = []
         agent_error: AgentErrorLog | None = None
+        response: list[str] = []
 
         def stream_sub_answer() -> list[str]:
-            response: list[str] = []
             for message in fast_llm.stream(
                 prompt=msg,
                 timeout_override=AGENT_TIMEOUT_CONNECT_LLM_SUBANSWER_GENERATION,
