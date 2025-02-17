@@ -628,7 +628,7 @@ def create_new_chat_message(
     commit: bool = True,
     reserved_message_id: int | None = None,
     overridden_model: str | None = None,
-    refined_answer_improvement: bool = True,
+    refined_answer_improvement: bool | None = None,
 ) -> ChatMessage:
     if reserved_message_id is not None:
         # Edit existing message
