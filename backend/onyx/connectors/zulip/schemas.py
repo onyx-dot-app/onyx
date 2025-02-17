@@ -1,6 +1,7 @@
 from typing import Any
 from typing import List
 from typing import Optional
+from typing import Union
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -19,7 +20,7 @@ class Message(BaseModel):
     sender_realm_str: str
     subject: str
     topic_links: Optional[List[Any]] = None
-    last_edit_timestamp: Optional[int]
+    last_edit_timestamp: Optional[int] = None
     edit_history: Any = None
     reactions: List[Any]
     submessages: List[Any]
@@ -39,5 +40,5 @@ class GetMessagesResponse(BaseModel):
     found_oldest: Optional[bool] = None
     found_newest: Optional[bool] = None
     history_limited: Optional[bool] = None
-    anchor: Optional[str] = None
+    anchor: Optional[Union[str, int]] = None
     messages: List[Message] = Field(default_factory=list)

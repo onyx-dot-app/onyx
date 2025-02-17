@@ -1,14 +1,15 @@
 import requests
-from sqlalchemy.orm import Session
 
+from onyx.db.engine import get_session_context_manager
 from onyx.db.models import User
 
 
-def test_create_chat_session_and_send_messages(db_session: Session) -> None:
+def test_create_chat_session_and_send_messages() -> None:
     # Create a test user
-    test_user = User(email="test@example.com", hashed_password="dummy_hash")
-    db_session.add(test_user)
-    db_session.commit()
+    with get_session_context_manager() as db_session:
+        test_user = User(email="test@example.com", hashed_password="dummy_hash")
+        db_session.add(test_user)
+        db_session.commit()
 
     base_url = "http://localhost:8080"  # Adjust this to your API's base URL
     headers = {"Authorization": f"Bearer {test_user.id}"}

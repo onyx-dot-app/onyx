@@ -190,9 +190,9 @@ def _build_connector_start_latency_metric(
         desired_start_time = cc_pair.connector.time_created
     else:
         if not cc_pair.connector.refresh_freq:
-            task_logger.error(
-                "Found non-initial index attempt for connector "
-                "without refresh_freq. This should never happen."
+            task_logger.debug(
+                "Connector has no refresh_freq and this is a non-initial index attempt. "
+                "Assuming user manually triggered indexing, so we'll skip start latency metric."
             )
             return None
 

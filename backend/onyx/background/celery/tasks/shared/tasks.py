@@ -105,6 +105,7 @@ def document_by_cc_pair_cleanup_task(
                     tenant_id=tenant_id,
                     chunk_count=chunk_count,
                 )
+
                 delete_documents_complete__no_commit(
                     db_session=db_session,
                     document_ids=[document_id],

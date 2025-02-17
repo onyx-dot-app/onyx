@@ -18,6 +18,7 @@ import boto3
 from fastapi import HTTPException
 from fastapi import Request
 from sqlalchemy import event
+from sqlalchemy import pool
 from sqlalchemy import text
 from sqlalchemy.engine import create_engine
 from sqlalchemy.engine import Engine
@@ -39,6 +40,7 @@ from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
 from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
 from onyx.configs.app_configs import POSTGRES_PORT
+from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
 from onyx.configs.constants import SSL_CERT_FILE
@@ -187,20 +189,38 @@ class SqlEngine:
     _engine: Engine | None = None
     _lock: threading.Lock = threading.Lock()
     _app_name: str = POSTGRES_UNKNOWN_APP_NAME
-    DEFAULT_ENGINE_KWARGS = {
-        "pool_size": 20,
-        "max_overflow": 5,
-        "pool_pre_ping": POSTGRES_POOL_PRE_PING,
-        "pool_recycle": POSTGRES_POOL_RECYCLE,
-    }
 
     @classmethod
     def _init_engine(cls, **engine_kwargs: Any) -> Engine:
         connection_string = build_connection_string(
             db_api=SYNC_DB_API, app_name=cls._app_name + "_sync", use_iam=USE_IAM_AUTH
         )
-        merged_kwargs = {**cls.DEFAULT_ENGINE_KWARGS, **engine_kwargs}
-        engine = create_engine(connection_string, **merged_kwargs)
+
+        # Start with base kwargs that are valid for all pool types
+        final_engine_kwargs: dict[str, Any] = {}
+
+        if POSTGRES_USE_NULL_POOL:
+            # if null pool is specified, then we need to make sure that
+            # we remove any passed in kwargs related to pool size that would
+            # cause the initialization to fail
+            final_engine_kwargs.update(engine_kwargs)
+
+            final_engine_kwargs["poolclass"] = pool.NullPool
+            if "pool_size" in final_engine_kwargs:
+                del final_engine_kwargs["pool_size"]
+            if "max_overflow" in final_engine_kwargs:
+                del final_engine_kwargs["max_overflow"]
+        else:
+            final_engine_kwargs["pool_size"] = 20
+            final_engine_kwargs["max_overflow"] = 5
+            final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
+            final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
+
+            # any passed in kwargs override the defaults
+            final_engine_kwargs.update(engine_kwargs)
+
+        logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
+        engine = create_engine(connection_string, **final_engine_kwargs)
 
         if USE_IAM_AUTH:
             event.listen(engine, "do_connect", provide_iam_token)
@@ -299,13 +319,21 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
 
         connect_args["ssl"] = ssl_context
 
+        engine_kwargs = {
+            "connect_args": connect_args,
+            "pool_pre_ping": POSTGRES_POOL_PRE_PING,
+            "pool_recycle": POSTGRES_POOL_RECYCLE,
+        }
+
+        if POSTGRES_USE_NULL_POOL:
+            engine_kwargs["poolclass"] = pool.NullPool
+        else:
+            engine_kwargs["pool_size"] = POSTGRES_API_SERVER_POOL_SIZE
+            engine_kwargs["max_overflow"] = POSTGRES_API_SERVER_POOL_OVERFLOW
+
         _ASYNC_ENGINE = create_async_engine(
             connection_string,
-            connect_args=connect_args,
-            pool_size=POSTGRES_API_SERVER_POOL_SIZE,
-            max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
-            pool_pre_ping=POSTGRES_POOL_PRE_PING,
-            pool_recycle=POSTGRES_POOL_RECYCLE,
+            **engine_kwargs,
         )
 
         if USE_IAM_AUTH:

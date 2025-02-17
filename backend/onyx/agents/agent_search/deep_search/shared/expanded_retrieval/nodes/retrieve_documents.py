@@ -28,8 +28,10 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
+from onyx.utils.timing import log_function_time
 
 
+@log_function_time(print_only=True)
 def retrieve_documents(
     state: RetrievalInput, config: RunnableConfig
 ) -> DocRetrievalUpdate:

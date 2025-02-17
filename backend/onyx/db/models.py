@@ -827,6 +827,19 @@ class IndexAttempt(Base):
         nullable=True,
     )
 
+    # for polling connectors, the start and end time of the poll window
+    # will be set when the index attempt starts
+    poll_range_start: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    poll_range_end: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    # Points to the last checkpoint that was saved for this run. The pointer here
+    # can be taken to the FileStore to grab the actual checkpoint value
+    checkpoint_pointer: Mapped[str | None] = mapped_column(String, nullable=True)
+
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -870,6 +883,13 @@ class IndexAttempt(Base):
             desc("time_updated"),
             unique=False,
         ),
+        Index(
+            "ix_index_attempt_cc_pair_settings_poll",
+            "connector_credential_pair_id",
+            "search_settings_id",
+            "status",
+            desc("time_updated"),
+        ),
     )
 
     def __repr__(self) -> str:
@@ -886,25 +906,33 @@ class IndexAttempt(Base):
 
 
 class IndexAttemptError(Base):
-    """
-    Represents an error that was encountered during an IndexAttempt.
-    """
-
     __tablename__ = "index_attempt_errors"
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
     index_attempt_id: Mapped[int] = mapped_column(
         ForeignKey("index_attempt.id"),
-        nullable=True,
+        nullable=False,
+    )
+    connector_credential_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id"),
+        nullable=False,
     )
 
-    # The index of the batch where the error occurred (if looping thru batches)
-    # Just informational.
-    batch: Mapped[int | None] = mapped_column(Integer, default=None)
-    doc_summaries: Mapped[list[Any]] = mapped_column(postgresql.JSONB())
-    error_msg: Mapped[str | None] = mapped_column(Text, default=None)
-    traceback: Mapped[str | None] = mapped_column(Text, default=None)
+    document_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    document_link: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    entity_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    failed_time_range_start: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    failed_time_range_end: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    failure_message: Mapped[str] = mapped_column(Text)
+    is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -912,21 +940,6 @@ class IndexAttemptError(Base):
 
     # This is the reverse side of the relationship
     index_attempt = relationship("IndexAttempt", back_populates="error_rows")
-
-    __table_args__ = (
-        Index(
-            "index_attempt_id",
-            "time_created",
-        ),
-    )
-
-    def __repr__(self) -> str:
-        return (
-            f"<IndexAttempt(id={self.id!r}, "
-            f"index_attempt_id={self.index_attempt_id!r}, "
-            f"error_msg={self.error_msg!r})>"
-            f"time_created={self.time_created!r}, "
-        )
 
 
 class SyncRecord(Base):

@@ -37,6 +37,15 @@ beat_task_templates.extend(
             },
         },
         {
+            "name": "check-for-checkpoint-cleanup",
+            "task": OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
+            "schedule": timedelta(hours=1),
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        },
+        {
             "name": "check-for-connector-deletion",
             "task": OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
             "schedule": timedelta(seconds=20),

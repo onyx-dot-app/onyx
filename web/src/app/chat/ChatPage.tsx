@@ -1122,7 +1122,7 @@ export function ChatPage({
         "Continue Generating (pick up exactly where you left off)",
     });
   };
-  const [gener, setFinishedStreaming] = useState(false);
+  const [uncaughtError, setUncaughtError] = useState<string | null>(null);
 
   const onSubmit = async ({
     messageIdToResend,
@@ -1445,7 +1445,6 @@ export function ChatPage({
               Object.hasOwn(packet, "level_question_num")
             ) {
               if ((packet as StreamStopInfo).stream_type == "main_answer") {
-                setFinishedStreaming(true);
                 updateChatState("streaming", frozenSessionId);
               }
               if (
@@ -1563,8 +1562,23 @@ export function ChatPage({
                 }
               );
             } else if (Object.hasOwn(packet, "error")) {
-              error = (packet as StreamingError).error;
-              stackTrace = (packet as StreamingError).stack_trace;
+              if (
+                sub_questions.length > 0 &&
+                sub_questions
+                  .filter((q) => q.level === 0)
+                  .every((q) => q.is_stopped === true)
+              ) {
+                setUncaughtError((packet as StreamingError).error);
+                updateChatState("input");
+                setAgenticGenerating(false);
+                setAlternativeGeneratingAssistant(null);
+                setSubmittedMessage("");
+                return;
+                // throw new Error((packet as StreamingError).error);
+              } else {
+                error = (packet as StreamingError).error;
+                stackTrace = (packet as StreamingError).stack_trace;
+              }
             } else if (Object.hasOwn(packet, "message_id")) {
               finalMessage = packet as BackendMessage;
             } else if (Object.hasOwn(packet, "stop_reason")) {
@@ -2054,6 +2068,7 @@ export function ChatPage({
         }
 
         const data = await response.json();
+
         router.push(data.redirect_url);
       } catch (error) {
         console.error("Error seeding chat from Slack:", error);
@@ -2649,6 +2664,7 @@ export function ChatPage({
                                     {message.sub_questions &&
                                     message.sub_questions.length > 0 ? (
                                       <AgenticMessage
+                                        error={uncaughtError}
                                         isStreamingQuestions={
                                           message.isStreamingQuestions ?? false
                                         }

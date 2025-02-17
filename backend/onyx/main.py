@@ -51,7 +51,6 @@ from onyx.server.documents.cc_pair import router as cc_pair_router
 from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
 from onyx.server.documents.document import router as document_router
-from onyx.server.documents.indexing import router as indexing_router
 from onyx.server.documents.standard_oauth import router as oauth_router
 from onyx.server.features.document_set.api import router as document_set_router
 from onyx.server.features.folder.api import router as folder_router
@@ -238,12 +237,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await close_auth_limiter()
 
 
-def log_http_error(_: Request, exc: Exception) -> JSONResponse:
+def log_http_error(request: Request, exc: Exception) -> JSONResponse:
     status_code = getattr(exc, "status_code", 500)
 
     if isinstance(exc, BasicAuthenticationError):
-        # For BasicAuthenticationError, just log a brief message without stack trace (almost always spam)
-        logger.warning(f"Authentication failed: {str(exc)}")
+        # For BasicAuthenticationError, just log a brief message without stack trace
+        # (almost always spammy)
+        logger.debug(f"Authentication failed: {str(exc)}")
+
+    elif status_code == 404 and request.url.path == "/metrics":
+        # Log 404 errors for the /metrics endpoint with debug level
+        logger.debug(f"404 error for /metrics endpoint: {str(exc)}")
 
     elif status_code >= 400:
         error_msg = f"{str(exc)}\n"
@@ -312,7 +316,6 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(
         application, token_rate_limit_settings_router
     )
-    include_router_with_global_prefix_prepended(application, indexing_router)
     include_router_with_global_prefix_prepended(
         application, get_full_openai_assistants_api_router()
     )

@@ -78,6 +78,10 @@ logger = setup_logger()
 def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | None:
     """Runs periodically to check if any document needs syncing.
     Generates sets of tasks for Celery if syncing is needed."""
+
+    # Useful for debugging timing issues with reacquisitions. TODO: remove once more generalized logging is in place
+    task_logger.info("check_for_vespa_sync_task started")
+
     time_start = time.monotonic()
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -492,13 +496,21 @@ def monitor_document_set_taskset(
             task_logger.info(
                 f"Successfully synced document set: document_set={document_set_id}"
             )
-        update_sync_record_status(
-            db_session=db_session,
-            entity_id=document_set_id,
-            sync_type=SyncType.DOCUMENT_SET,
-            sync_status=SyncStatus.SUCCESS,
-            num_docs_synced=initial_count,
-        )
+
+        try:
+            update_sync_record_status(
+                db_session=db_session,
+                entity_id=document_set_id,
+                sync_type=SyncType.DOCUMENT_SET,
+                sync_status=SyncStatus.SUCCESS,
+                num_docs_synced=initial_count,
+            )
+        except Exception:
+            task_logger.exception(
+                "update_sync_record_status exceptioned. "
+                f"document_set_id={document_set_id} "
+                "Resetting document set regardless."
+            )
 
     rds.reset()
 

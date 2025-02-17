@@ -34,9 +34,14 @@ def get_message_link(
 ) -> str:
     channel_id = channel_id or event["channel"]
     message_ts = event["ts"]
-    response = client.chat_getPermalink(channel=channel_id, message_ts=message_ts)
-    permalink = response["permalink"]
-    return permalink
+    message_ts_without_dot = message_ts.replace(".", "")
+    thread_ts = event.get("thread_ts")
+    base_url = get_base_url(client.token)
+
+    link = f"{base_url.rstrip('/')}/archives/{channel_id}/p{message_ts_without_dot}" + (
+        f"?thread_ts={thread_ts}" if thread_ts else ""
+    )
+    return link
 
 
 def _make_slack_api_call_paginated(

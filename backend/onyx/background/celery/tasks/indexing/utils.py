@@ -240,7 +240,8 @@ def validate_indexing_fence(
         # it would be odd to get here as there isn't that much that can go wrong during
         # initial fence setup, but it's still worth making sure we can recover
         logger.info(
-            f"validate_indexing_fence - Resetting fence in basic state without any activity: fence={fence_key}"
+            f"validate_indexing_fence - "
+            f"Resetting fence in basic state without any activity: fence={fence_key}"
         )
         redis_connector_index.reset()
         return

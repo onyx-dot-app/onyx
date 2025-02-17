@@ -223,12 +223,13 @@ class CCPairManager:
     @staticmethod
     def run_once(
         cc_pair: DATestCCPair,
+        from_beginning: bool,
         user_performing_action: DATestUser | None = None,
     ) -> None:
         body = {
             "connector_id": cc_pair.connector_id,
             "credential_ids": [cc_pair.credential_id],
-            "from_beginning": True,
+            "from_beginning": from_beginning,
         }
         result = requests.post(
             url=f"{API_SERVER_URL}/manage/admin/connector/run-once",

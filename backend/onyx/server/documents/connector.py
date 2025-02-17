@@ -22,6 +22,7 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.background.celery.versioned_apps.primary import app as primary_app
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
+from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
@@ -612,6 +613,16 @@ def get_connector_indexing_status(
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> list[ConnectorIndexingStatus]:
     indexing_statuses: list[ConnectorIndexingStatus] = []
+
+    if MOCK_CONNECTOR_FILE_PATH:
+        import json
+
+        with open(MOCK_CONNECTOR_FILE_PATH, "r") as f:
+            raw_data = json.load(f)
+            connector_indexing_statuses = [
+                ConnectorIndexingStatus(**status) for status in raw_data
+            ]
+        return connector_indexing_statuses
 
     # NOTE: If the connector is deleting behind the scenes,
     # accessing cc_pairs can be inconsistent and members like

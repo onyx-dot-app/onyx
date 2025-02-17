@@ -123,6 +123,7 @@ export interface FailedConnectorIndexingStatus {
 export interface IndexAttemptSnapshot {
   id: number;
   status: ValidStatuses | null;
+  from_beginning: boolean;
   new_docs_indexed: number;
   docs_removed_from_index: number;
   total_docs_indexed: number;
