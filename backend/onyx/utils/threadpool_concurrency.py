@@ -1,4 +1,4 @@
-import concurrent.futures
+import threading
 import uuid
 from collections.abc import Callable
 from concurrent.futures import as_completed
@@ -112,35 +112,44 @@ def run_functions_in_parallel(
     return results
 
 
+class TimeoutThread(threading.Thread):
+    def __init__(
+        self, timeout: float, func: Callable[..., R], *args: Any, **kwargs: Any
+    ):
+        super().__init__()
+        self.timeout = timeout
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+        self.exc: Exception | None = None
+
+    def run(self) -> None:
+        try:
+            self.result = self.func(*self.args, **self.kwargs)
+        except Exception as e:
+            self.exc = e
+            raise e
+
+    def end(self) -> None:
+        raise TimeoutError(
+            f"Function {self.func.__name__} timed out after {self.timeout} seconds"
+        )
+
+
 def run_with_timeout(
-    timeout: float,
-    func: Callable[..., R],
-    *args: Any,
-    **kwargs: Any,
+    timeout: float, func: Callable[..., R], *args: Any, **kwargs: Any
 ) -> R:
     """
     Executes a function with a timeout. If the function doesn't complete within the specified
     timeout, raises TimeoutError.
-
-    Args:
-        timeout: Maximum time in seconds to wait for the function to complete
-        func: The function to execute
-        *args: Positional arguments to pass to the function
-        **kwargs: Keyword arguments to pass to the function
-
-    Returns:
-        The result of the function call
-
-    Raises:
-        TimeoutError: If the function execution exceeds the timeout
-        Any other exceptions that the function might raise
     """
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(func, *args, **kwargs)
-        try:
-            return future.result(timeout=timeout)
-        except concurrent.futures.TimeoutError:
-            future.cancel()
-            raise TimeoutError(
-                f"Function {func.__name__} timed out after {timeout} seconds"
-            )
+    t = TimeoutThread(timeout, func, *args, **kwargs)
+    t.start()
+    t.join(timeout)
+
+    if t.exc is not None:
+        raise t.exc
+    if t.is_alive():
+        t.end()
+
+    return t.result
