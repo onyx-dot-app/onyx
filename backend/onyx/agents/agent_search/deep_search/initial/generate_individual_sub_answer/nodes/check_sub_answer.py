@@ -31,7 +31,8 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import parse_question_id
-from onyx.configs.agent_configs import AGENT_TIMEOUT_OVERRIDE_LLM_SUBANSWER_CHECK
+from onyx.configs.agent_configs import AGENT_TIMEOUT_CONNECT_LLM_SUBANSWER_CHECK
+from onyx.configs.agent_configs import AGENT_TIMEOUT_LLM_SUBANSWER_CHECK
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.prompts.agent_search import SUB_ANSWER_CHECK_PROMPT
@@ -87,10 +88,10 @@ def check_sub_answer(
     response: BaseMessage | None = None
     try:
         response = run_with_timeout(
-            AGENT_TIMEOUT_OVERRIDE_LLM_SUBANSWER_CHECK,
+            AGENT_TIMEOUT_LLM_SUBANSWER_CHECK,
             fast_llm.invoke,
             prompt=msg,
-            timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_SUBANSWER_CHECK,
+            timeout_override=AGENT_TIMEOUT_CONNECT_LLM_SUBANSWER_CHECK,
         )
 
         quality_str: str = cast(str, response.content)

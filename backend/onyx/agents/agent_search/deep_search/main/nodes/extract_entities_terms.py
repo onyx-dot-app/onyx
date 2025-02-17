@@ -22,7 +22,10 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.configs.agent_configs import (
-    AGENT_TIMEOUT_OVERRIDE_LLM_ENTITY_TERM_EXTRACTION,
+    AGENT_TIMEOUT_CONNECT_LLM_ENTITY_TERM_EXTRACTION,
+)
+from onyx.configs.agent_configs import (
+    AGENT_TIMEOUT_LLM_ENTITY_TERM_EXTRACTION,
 )
 from onyx.configs.constants import NUM_EXPLORATORY_DOCS
 from onyx.prompts.agent_search import ENTITY_TERM_EXTRACTION_PROMPT
@@ -86,10 +89,10 @@ def extract_entities_terms(
     fast_llm = graph_config.tooling.fast_llm
     # Grader
     llm_response = run_with_timeout(
-        AGENT_TIMEOUT_OVERRIDE_LLM_ENTITY_TERM_EXTRACTION,
+        AGENT_TIMEOUT_LLM_ENTITY_TERM_EXTRACTION,
         fast_llm.invoke,
         prompt=msg,
-        timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_ENTITY_TERM_EXTRACTION,
+        timeout_override=AGENT_TIMEOUT_CONNECT_LLM_ENTITY_TERM_EXTRACTION,
     )
 
     cleaned_response = (

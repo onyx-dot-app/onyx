@@ -64,7 +64,10 @@ from onyx.configs.agent_configs import AGENT_MAX_ANSWER_CONTEXT_DOCS
 from onyx.configs.agent_configs import AGENT_MAX_STREAMED_DOCS_FOR_INITIAL_ANSWER
 from onyx.configs.agent_configs import AGENT_MIN_ORIG_QUESTION_DOCS
 from onyx.configs.agent_configs import (
-    AGENT_TIMEOUT_OVERRIDE_LLM_INITIAL_ANSWER_GENERATION,
+    AGENT_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION,
+)
+from onyx.configs.agent_configs import (
+    AGENT_TIMEOUT_LLM_INITIAL_ANSWER_GENERATION,
 )
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
@@ -274,7 +277,7 @@ def generate_initial_answer(
             response: list[str] = []
             for message in model.stream(
                 msg,
-                timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_INITIAL_ANSWER_GENERATION,
+                timeout_override=AGENT_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION,
             ):
                 # TODO: in principle, the answer here COULD contain images, but we don't support that yet
                 content = message.content
@@ -303,7 +306,7 @@ def generate_initial_answer(
 
         try:
             streamed_tokens = run_with_timeout(
-                AGENT_TIMEOUT_OVERRIDE_LLM_INITIAL_ANSWER_GENERATION,
+                AGENT_TIMEOUT_LLM_INITIAL_ANSWER_GENERATION,
                 stream_initial_answer,
             )
 

@@ -44,7 +44,10 @@ from onyx.agents.agent_search.shared_graph_utils.utils import make_question_id
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import StreamingError
 from onyx.configs.agent_configs import (
-    AGENT_TIMEOUT_OVERRIDE_LLM_REFINED_SUBQUESTION_GENERATION,
+    AGENT_TIMEOUT_CONNECT_LLM_REFINED_SUBQUESTION_GENERATION,
+)
+from onyx.configs.agent_configs import (
+    AGENT_TIMEOUT_LLM_REFINED_SUBQUESTION_GENERATION,
 )
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
@@ -136,11 +139,11 @@ def create_refined_sub_questions(
     streamed_tokens: list[BaseMessage_Content] = []
     try:
         streamed_tokens = run_with_timeout(
-            AGENT_TIMEOUT_OVERRIDE_LLM_REFINED_SUBQUESTION_GENERATION,
+            AGENT_TIMEOUT_LLM_REFINED_SUBQUESTION_GENERATION,
             dispatch_separated,
             model.stream(
                 msg,
-                timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_REFINED_SUBQUESTION_GENERATION,
+                timeout_override=AGENT_TIMEOUT_CONNECT_LLM_REFINED_SUBQUESTION_GENERATION,
             ),
             dispatch_subquestion(1, writer),
             sep_callback=dispatch_subquestion_sep(1, writer),

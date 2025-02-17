@@ -25,7 +25,8 @@ from onyx.agents.agent_search.shared_graph_utils.models import LLMNodeErrorStrin
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.configs.agent_configs import AGENT_TIMEOUT_OVERRIDE_LLM_DOCUMENT_VERIFICATION
+from onyx.configs.agent_configs import AGENT_TIMEOUT_CONNECT_LLM_DOCUMENT_VERIFICATION
+from onyx.configs.agent_configs import AGENT_TIMEOUT_LLM_DOCUMENT_VERIFICATION
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.prompts.agent_search import (
@@ -88,10 +89,10 @@ def verify_documents(
 
     try:
         response = run_with_timeout(
-            AGENT_TIMEOUT_OVERRIDE_LLM_DOCUMENT_VERIFICATION,
+            AGENT_TIMEOUT_LLM_DOCUMENT_VERIFICATION,
             fast_llm.invoke,
             prompt=msg,
-            timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_DOCUMENT_VERIFICATION,
+            timeout_override=AGENT_TIMEOUT_CONNECT_LLM_DOCUMENT_VERIFICATION,
         )
 
         assert isinstance(response.content, str)
