@@ -962,6 +962,7 @@ def translate_db_message_to_chat_message_detail(
             chat_message.sub_questions
         ),
         refined_answer_improvement=chat_message.refined_answer_improvement,
+        error=chat_message.error,
     )
 
     return chat_msg_detail
