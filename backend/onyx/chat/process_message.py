@@ -146,6 +146,7 @@ from onyx.utils.timing import log_generator_function_time
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
+ERROR_TYPE_CANCELLED = "cancelled"
 
 
 def _translate_citations(
@@ -1016,7 +1017,7 @@ def stream_chat_message_objects(
                 if info.message_specific_citations
                 else None
             ),
-            error=None,
+            error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
             tool_call=(
                 ToolCall(
                     tool_id=tool_name_to_tool_id[info.tool_result.tool_name],
@@ -1054,6 +1055,7 @@ def stream_chat_message_objects(
                 citations=info.message_specific_citations.citation_map
                 if info.message_specific_citations
                 else None,
+                error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
                 refined_answer_improvement=refined_answer_improvement,
                 is_agentic=True,
             )
