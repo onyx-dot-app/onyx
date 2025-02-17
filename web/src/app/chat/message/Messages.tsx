@@ -495,7 +495,10 @@ export const AIMessage = ({
                     {docs && docs.length > 0 && (
                       <div
                         className={`mobile:hidden ${
-                          query && "mt-2"
+                          (query ||
+                            toolCall?.tool_name ===
+                              INTERNET_SEARCH_TOOL_NAME) &&
+                          "mt-2"
                         }  -mx-8 w-full mb-4 flex relative`}
                       >
                         <div className="w-full">
