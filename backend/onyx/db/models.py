@@ -1221,6 +1221,7 @@ class ChatMessage(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+    is_agentic: Mapped[bool] = mapped_column(Boolean, default=False)
     refined_answer_improvement: Mapped[bool] = mapped_column(Boolean, nullable=True)
 
     chat_session: Mapped[ChatSession] = relationship("ChatSession")

@@ -629,6 +629,7 @@ def create_new_chat_message(
     reserved_message_id: int | None = None,
     overridden_model: str | None = None,
     refined_answer_improvement: bool | None = None,
+    is_agentic: bool = False,
 ) -> ChatMessage:
     if reserved_message_id is not None:
         # Edit existing message
@@ -650,7 +651,7 @@ def create_new_chat_message(
         existing_message.alternate_assistant_id = alternate_assistant_id
         existing_message.overridden_model = overridden_model
         existing_message.refined_answer_improvement = refined_answer_improvement
-
+        existing_message.is_agentic = is_agentic
         new_chat_message = existing_message
     else:
         # Create new message
@@ -670,6 +671,7 @@ def create_new_chat_message(
             alternate_assistant_id=alternate_assistant_id,
             overridden_model=overridden_model,
             refined_answer_improvement=refined_answer_improvement,
+            is_agentic=is_agentic,
         )
         db_session.add(new_chat_message)
 

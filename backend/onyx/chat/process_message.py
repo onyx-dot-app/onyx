@@ -631,6 +631,7 @@ def stream_chat_message_objects(
             db_session=db_session,
             commit=False,
             reserved_message_id=reserved_message_id,
+            is_agentic=new_msg_req.use_agentic_search,
         )
 
         prompt_override = new_msg_req.prompt_override or chat_session.prompt_override
@@ -1054,6 +1055,7 @@ def stream_chat_message_objects(
                 if info.message_specific_citations
                 else None,
                 refined_answer_improvement=refined_answer_improvement,
+                is_agentic=True,
             )
             next_level += 1
             prev_message = next_answer_message
