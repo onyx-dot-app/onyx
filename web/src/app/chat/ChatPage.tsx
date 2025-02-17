@@ -1150,6 +1150,7 @@ export function ChatPage({
     regenerationRequest?: RegenerationRequest | null;
     overrideFileDescriptors?: FileDescriptor[];
   } = {}) => {
+    navigatingAway.current = false;
     let frozenSessionId = currentSessionId();
     updateCanContinue(false, frozenSessionId);
 
@@ -1716,7 +1717,10 @@ export function ChatPage({
         const newUrl = buildChatUrl(searchParams, currChatSessionId, null);
         // newUrl is like /chat?chatId=10
         // current page is like /chat
-        router.push(newUrl, { scroll: false });
+
+        if (pathname == "/chat" && !navigatingAway.current) {
+          router.push(newUrl, { scroll: false });
+        }
       }
     }
     if (
@@ -2091,14 +2095,14 @@ export function ChatPage({
   }, [imageFileInMessageHistory]);
 
   const pathname = usePathname();
-
   useEffect(() => {
     return () => {
       // Cleanup which only runs when the component unmounts (i.e. when you navigate away).
       const currentSession = currentSessionId();
-      const controller = abortControllers.get(currentSession);
+      const controller = abortControllersRef.current.get(currentSession);
       if (controller) {
         controller.abort();
+        navigatingAway.current = true;
         setAbortControllers((prev) => {
           const newControllers = new Map(prev);
           newControllers.delete(currentSession);
@@ -2107,6 +2111,13 @@ export function ChatPage({
       }
     };
   }, [pathname]);
+
+  const navigatingAway = useRef(false);
+  // Keep a ref to abortControllers to ensure we always have the latest value
+  const abortControllersRef = useRef(abortControllers);
+  useEffect(() => {
+    abortControllersRef.current = abortControllers;
+  }, [abortControllers]);
 
   useSidebarShortcut(router, toggleSidebar);
 
