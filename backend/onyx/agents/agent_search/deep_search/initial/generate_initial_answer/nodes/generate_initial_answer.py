@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 from typing import cast
 
 from langchain_core.messages import HumanMessage
@@ -60,11 +59,15 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import ExtendedToolResponse
 from onyx.chat.models import StreamingError
+from onyx.configs.agent_configs import AGENT_ANSWER_GENERATION_BY_FAST_LLM
 from onyx.configs.agent_configs import AGENT_MAX_ANSWER_CONTEXT_DOCS
 from onyx.configs.agent_configs import AGENT_MAX_STREAMED_DOCS_FOR_INITIAL_ANSWER
 from onyx.configs.agent_configs import AGENT_MIN_ORIG_QUESTION_DOCS
 from onyx.configs.agent_configs import (
-    AGENT_TIMEOUT_OVERRIDE_LLM_INITIAL_ANSWER_GENERATION,
+    AGENT_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION,
+)
+from onyx.configs.agent_configs import (
+    AGENT_TIMEOUT_LLM_INITIAL_ANSWER_GENERATION,
 )
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
@@ -77,6 +80,7 @@ from onyx.prompts.agent_search import (
 )
 from onyx.prompts.agent_search import UNKNOWN_ANSWER
 from onyx.tools.tool_implementations.search.search_tool import yield_search_responses
+from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.timing import log_function_time
 
 _llm_node_error_strings = LLMNodeErrorStrings(
@@ -230,7 +234,11 @@ def generate_initial_answer(
 
         sub_questions = all_sub_questions  # Replace the original assignment
 
-        model = graph_config.tooling.fast_llm
+        model = (
+            graph_config.tooling.fast_llm
+            if AGENT_ANSWER_GENERATION_BY_FAST_LLM
+            else graph_config.tooling.primary_llm
+        )
 
         doc_context = format_docs(answer_generation_documents.context_documents)
         doc_context = trim_prompt_piece(
@@ -260,15 +268,16 @@ def generate_initial_answer(
             )
         ]
 
-        streamed_tokens: list[str | list[str | dict[str, Any]]] = [""]
+        streamed_tokens: list[str] = [""]
         dispatch_timings: list[float] = []
 
         agent_error: AgentErrorLog | None = None
 
-        try:
+        def stream_initial_answer() -> list[str]:
+            response: list[str] = []
             for message in model.stream(
                 msg,
-                timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_INITIAL_ANSWER_GENERATION,
+                timeout_override=AGENT_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION,
             ):
                 # TODO: in principle, the answer here COULD contain images, but we don't support that yet
                 content = message.content
@@ -292,9 +301,16 @@ def generate_initial_answer(
                 dispatch_timings.append(
                     (end_stream_token - start_stream_token).microseconds
                 )
-                streamed_tokens.append(content)
+                response.append(content)
+            return response
 
-        except LLMTimeoutError:
+        try:
+            streamed_tokens = run_with_timeout(
+                AGENT_TIMEOUT_LLM_INITIAL_ANSWER_GENERATION,
+                stream_initial_answer,
+            )
+
+        except (LLMTimeoutError, TimeoutError):
             agent_error = AgentErrorLog(
                 error_type=AgentLLMErrorType.TIMEOUT,
                 error_message=AGENT_LLM_TIMEOUT_MESSAGE,

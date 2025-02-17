@@ -29,6 +29,7 @@ from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import explicit_tool_calling_supported
+from onyx.utils.gpu_utils import gpu_status_request
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -80,6 +81,14 @@ class Answer:
             and not skip_explicit_tool_calling
         )
 
+        rerank_settings = search_request.rerank_settings
+
+        using_cloud_reranking = (
+            rerank_settings is not None
+            and rerank_settings.rerank_provider_type is not None
+        )
+        allow_agent_reranking = gpu_status_request() or using_cloud_reranking
+
         self.graph_inputs = GraphInputs(
             search_request=search_request,
             prompt_builder=prompt_builder,
@@ -94,7 +103,6 @@ class Answer:
             force_use_tool=force_use_tool,
             using_tool_calling_llm=using_tool_calling_llm,
         )
-        assert db_session, "db_session must be provided for agentic persistence"
         self.graph_persistence = GraphPersistence(
             db_session=db_session,
             chat_session_id=chat_session_id,
@@ -104,6 +112,7 @@ class Answer:
             use_agentic_search=use_agentic_search,
             skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
             allow_refinement=True,
+            allow_agent_reranking=allow_agent_reranking,
         )
         self.graph_config = GraphConfig(
             inputs=self.graph_inputs,

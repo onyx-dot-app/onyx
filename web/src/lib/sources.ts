@@ -335,6 +335,13 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Not Applicable",
     category: SourceCategory.Other,
   },
+
+  // Just so integration tests don't crash the UI
+  mock_connector: {
+    icon: GlobeIcon,
+    displayName: "Mock Connector",
+    category: SourceCategory.Other,
+  },
 } as SourceMap;
 
 function fillSourceMetadata(

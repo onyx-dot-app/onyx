@@ -1,10 +1,13 @@
 import abc
+from collections.abc import Generator
 from collections.abc import Iterator
 from typing import Any
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import ConnectorCheckpoint
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -14,6 +17,7 @@ SecondsSinceUnixEpoch = float
 
 GenerateDocumentsOutput = Iterator[list[Document]]
 GenerateSlimDocumentOutput = Iterator[list[SlimDocument]]
+CheckpointOutput = Generator[Document | ConnectorFailure, None, ConnectorCheckpoint]
 
 
 class BaseConnector(abc.ABC):
@@ -104,4 +108,34 @@ class OAuthConnector(BaseConnector):
 class EventConnector(BaseConnector):
     @abc.abstractmethod
     def handle_event(self, event: Any) -> GenerateDocumentsOutput:
+        raise NotImplementedError
+
+
+class CheckpointConnector(BaseConnector):
+    @abc.abstractmethod
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: ConnectorCheckpoint,
+    ) -> CheckpointOutput:
+        """Yields back documents or failures. Final return is the new checkpoint.
+
+        Final return can be access via either:
+
+        ```
+        try:
+            for document_or_failure in connector.load_from_checkpoint(start, end, checkpoint):
+                print(document_or_failure)
+        except StopIteration as e:
+            checkpoint = e.value  # Extracting the return value
+            print(checkpoint)
+        ```
+
+        OR
+
+        ```
+        checkpoint = yield from connector.load_from_checkpoint(start, end, checkpoint)
+        ```
+        """
         raise NotImplementedError

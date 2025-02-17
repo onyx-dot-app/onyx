@@ -1,9 +1,14 @@
 from uuid import uuid4
 
 import requests
+from sqlalchemy import and_
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
+from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import DocumentByConnectorCredentialPair
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import NUM_DOCS
@@ -186,3 +191,39 @@ class DocumentManager:
                 group_names,
                 doc_creating_user,
             )
+
+    @staticmethod
+    def fetch_documents_for_cc_pair(
+        cc_pair_id: int,
+        db_session: Session,
+        vespa_client: vespa_fixture,
+    ) -> list[SimpleTestDocument]:
+        stmt = (
+            select(DocumentByConnectorCredentialPair)
+            .join(
+                ConnectorCredentialPair,
+                and_(
+                    DocumentByConnectorCredentialPair.connector_id
+                    == ConnectorCredentialPair.connector_id,
+                    DocumentByConnectorCredentialPair.credential_id
+                    == ConnectorCredentialPair.credential_id,
+                ),
+            )
+            .where(ConnectorCredentialPair.id == cc_pair_id)
+        )
+        documents = db_session.execute(stmt).scalars().all()
+        if not documents:
+            return []
+
+        doc_ids = [document.id for document in documents]
+        retrieved_docs_dict = vespa_client.get_documents_by_id(doc_ids)["documents"]
+
+        final_docs: list[SimpleTestDocument] = []
+        # NOTE: they are really chunks, but we're assuming that for these tests
+        # we only have one chunk per document for now
+        for doc_dict in retrieved_docs_dict:
+            doc_id = doc_dict["fields"]["document_id"]
+            doc_content = doc_dict["fields"]["content"]
+            final_docs.append(SimpleTestDocument(id=doc_id, content=doc_content))
+
+        return final_docs

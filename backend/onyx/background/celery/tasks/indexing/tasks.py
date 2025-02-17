@@ -28,6 +28,10 @@ from onyx.background.celery.tasks.indexing.utils import get_unfenced_index_attem
 from onyx.background.celery.tasks.indexing.utils import IndexingCallback
 from onyx.background.celery.tasks.indexing.utils import try_creating_indexing_task
 from onyx.background.celery.tasks.indexing.utils import validate_indexing_fences
+from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
+from onyx.background.indexing.checkpointing_utils import (
+    get_index_attempts_with_old_checkpoints,
+)
 from onyx.background.indexing.job_client import SimpleJob
 from onyx.background.indexing.job_client import SimpleJobClient
 from onyx.background.indexing.job_client import SimpleJobException
@@ -39,6 +43,7 @@ from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
 from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
+from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
@@ -1137,3 +1142,62 @@ def connector_indexing_proxy_task(
 
     redis_connector_index.set_watchdog(False)
     return
+
+
+@shared_task(
+    name=OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
+    soft_time_limit=300,
+)
+def check_for_checkpoint_cleanup(*, tenant_id: str | None) -> None:
+    """Clean up old checkpoints that are older than 7 days."""
+    locked = False
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    lock: RedisLock = redis_client.lock(
+        OnyxRedisLocks.CHECK_CHECKPOINT_CLEANUP_BEAT_LOCK,
+        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    )
+
+    # these tasks should never overlap
+    if not lock.acquire(blocking=False):
+        return None
+
+    try:
+        locked = True
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+            old_attempts = get_index_attempts_with_old_checkpoints(db_session)
+            for attempt in old_attempts:
+                task_logger.info(
+                    f"Cleaning up checkpoint for index attempt {attempt.id}"
+                )
+                cleanup_checkpoint_task.apply_async(
+                    kwargs={
+                        "index_attempt_id": attempt.id,
+                        "tenant_id": tenant_id,
+                    },
+                    queue=OnyxCeleryQueues.CHECKPOINT_CLEANUP,
+                )
+
+    except Exception:
+        task_logger.exception("Unexpected exception during checkpoint cleanup")
+        return None
+    finally:
+        if locked:
+            if lock.owned():
+                lock.release()
+            else:
+                task_logger.error(
+                    "check_for_checkpoint_cleanup - Lock not owned on completion: "
+                    f"tenant={tenant_id}"
+                )
+
+
+@shared_task(
+    name=OnyxCeleryTask.CLEANUP_CHECKPOINT,
+    bind=True,
+)
+def cleanup_checkpoint_task(
+    self: Task, *, index_attempt_id: int, tenant_id: str | None
+) -> None:
+    """Clean up a checkpoint for a given index attempt"""
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        cleanup_checkpoint(db_session, index_attempt_id)

@@ -354,7 +354,10 @@ def delete_chat_session(
     hard_delete: bool = HARD_DELETE_CHATS,
 ) -> None:
     chat_session = get_chat_session_by_id(
-        chat_session_id=chat_session_id, user_id=user_id, db_session=db_session
+        chat_session_id=chat_session_id,
+        user_id=user_id,
+        db_session=db_session,
+        include_deleted=include_deleted,
     )
 
     if chat_session.deleted and not include_deleted:

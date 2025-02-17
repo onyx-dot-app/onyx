@@ -1232,6 +1232,7 @@ export interface ConnectorBase<T> {
   indexing_start: Date | null;
   access_type: string;
   groups?: number[];
+  from_beginning?: boolean;
 }
 
 export interface Connector<T> extends ConnectorBase<T> {
@@ -1253,6 +1254,7 @@ export interface ConnectorSnapshot {
   indexing_start: number | null;
   time_created: string;
   time_updated: string;
+  from_beginning?: boolean;
 }
 
 export interface WebConfig {

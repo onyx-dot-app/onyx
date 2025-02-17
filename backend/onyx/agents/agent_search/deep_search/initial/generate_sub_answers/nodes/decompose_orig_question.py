@@ -36,7 +36,10 @@ from onyx.chat.models import StreamType
 from onyx.chat.models import SubQuestionPiece
 from onyx.configs.agent_configs import AGENT_NUM_DOCS_FOR_DECOMPOSITION
 from onyx.configs.agent_configs import (
-    AGENT_TIMEOUT_OVERRIDE_LLM_SUBQUESTION_GENERATION,
+    AGENT_TIMEOUT_CONNECT_LLM_SUBQUESTION_GENERATION,
+)
+from onyx.configs.agent_configs import (
+    AGENT_TIMEOUT_LLM_SUBQUESTION_GENERATION,
 )
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
@@ -47,6 +50,7 @@ from onyx.prompts.agent_search import (
     INITIAL_QUESTION_DECOMPOSITION_PROMPT_ASSUMING_REFINEMENT,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
@@ -131,10 +135,12 @@ def decompose_orig_question(
     streamed_tokens: list[BaseMessage_Content] = []
 
     try:
-        streamed_tokens = dispatch_separated(
+        streamed_tokens = run_with_timeout(
+            AGENT_TIMEOUT_LLM_SUBQUESTION_GENERATION,
+            dispatch_separated,
             model.stream(
                 msg,
-                timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_SUBQUESTION_GENERATION,
+                timeout_override=AGENT_TIMEOUT_CONNECT_LLM_SUBQUESTION_GENERATION,
             ),
             dispatch_subquestion(0, writer),
             sep_callback=dispatch_subquestion_sep(0, writer),
@@ -154,7 +160,7 @@ def decompose_orig_question(
         )
         write_custom_event("stream_finished", stop_event, writer)
 
-    except LLMTimeoutError as e:
+    except (LLMTimeoutError, TimeoutError) as e:
         logger.error("LLM Timeout Error - decompose orig question")
         raise e  # fail loudly on this critical step
     except LLMRateLimitError as e:

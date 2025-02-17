@@ -9,6 +9,8 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
+from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.models import DocumentFailure
 from onyx.db.engine import get_sqlalchemy_engine
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import create_index_attempt
@@ -101,10 +103,15 @@ def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
 
         create_index_attempt_error(
             index_attempt_id=new_attempt.id,
-            batch=1,
-            docs=[],
-            exception_msg="",
-            exception_traceback="",
+            connector_credential_pair_id=cc_pair_1.id,
+            failure=ConnectorFailure(
+                failure_message="Test error",
+                failed_document=DocumentFailure(
+                    document_id=cc_pair_1.documents[0].id,
+                    document_link=None,
+                ),
+                failed_entity=None,
+            ),
             db_session=db_session,
         )
 
@@ -127,10 +134,15 @@ def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
         )
         create_index_attempt_error(
             index_attempt_id=attempt_id,
-            batch=1,
-            docs=[],
-            exception_msg="",
-            exception_traceback="",
+            connector_credential_pair_id=cc_pair_1.id,
+            failure=ConnectorFailure(
+                failure_message="Test error",
+                failed_document=DocumentFailure(
+                    document_id=cc_pair_1.documents[0].id,
+                    document_link=None,
+                ),
+                failed_entity=None,
+            ),
             db_session=db_session,
         )
 

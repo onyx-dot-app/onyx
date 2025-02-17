@@ -43,8 +43,9 @@ from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.agent_configs import (
-    AGENT_TIMEOUT_OVERRIDE_LLM_HISTORY_SUMMARY_GENERATION,
+    AGENT_TIMEOUT_CONNECT_LLM_HISTORY_SUMMARY_GENERATION,
 )
+from onyx.configs.agent_configs import AGENT_TIMEOUT_LLM_HISTORY_SUMMARY_GENERATION
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.constants import DEFAULT_PERSONA_ID
@@ -80,6 +81,7 @@ from onyx.tools.tool_implementations.search.search_tool import SearchResponseSum
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
 
@@ -395,11 +397,13 @@ def summarize_history(
     )
 
     try:
-        history_response = llm.invoke(
+        history_response = run_with_timeout(
+            AGENT_TIMEOUT_LLM_HISTORY_SUMMARY_GENERATION,
+            llm.invoke,
             history_context_prompt,
-            timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_HISTORY_SUMMARY_GENERATION,
+            timeout_override=AGENT_TIMEOUT_CONNECT_LLM_HISTORY_SUMMARY_GENERATION,
         )
-    except LLMTimeoutError:
+    except (LLMTimeoutError, TimeoutError):
         logger.error("LLM Timeout Error - summarize history")
         return (
             history  # this is what is done at this point anyway, so we default to this

@@ -51,7 +51,6 @@ from onyx.server.documents.cc_pair import router as cc_pair_router
 from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
 from onyx.server.documents.document import router as document_router
-from onyx.server.documents.indexing import router as indexing_router
 from onyx.server.documents.standard_oauth import router as oauth_router
 from onyx.server.features.document_set.api import router as document_set_router
 from onyx.server.features.folder.api import router as folder_router
@@ -317,7 +316,6 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(
         application, token_rate_limit_settings_router
     )
-    include_router_with_global_prefix_prepended(application, indexing_router)
     include_router_with_global_prefix_prepended(
         application, get_full_openai_assistants_api_router()
     )

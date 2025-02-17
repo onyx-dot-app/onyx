@@ -41,24 +41,10 @@ export function IndexAttemptStatus({
       badge = icon;
     }
   } else if (status === "completed_with_errors") {
-    const icon = (
+    badge = (
       <Badge variant="secondary" icon={FiAlertTriangle}>
         Completed with errors
       </Badge>
-    );
-    badge = (
-      <HoverPopup
-        mainContent={<div className="cursor-pointer">{icon}</div>}
-        popupContent={
-          <div className="w-64 p-2 break-words overflow-hidden whitespace-normal">
-            The indexing attempt completed, but some errors were encountered
-            during the run.
-            <br />
-            <br />
-            Click View Errors for more details.
-          </div>
-        }
-      />
     );
   } else if (status === "success") {
     badge = (

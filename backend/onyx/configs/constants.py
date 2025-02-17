@@ -169,6 +169,9 @@ class DocumentSource(str, Enum):
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
 
+    # Special case just for integration tests
+    MOCK_CONNECTOR = "mock_connector"
+
 
 DocumentSourceRequiringTenantContext: list[DocumentSource] = [DocumentSource.FILE]
 
@@ -247,6 +250,7 @@ class FileOrigin(str, Enum):
     CHAT_IMAGE_GEN = "chat_image_gen"
     CONNECTOR = "connector"
     GENERATED_REPORT = "generated_report"
+    INDEXING_CHECKPOINT = "indexing_checkpoint"
     OTHER = "other"
 
 
@@ -278,6 +282,7 @@ class OnyxCeleryQueues:
     DOC_PERMISSIONS_UPSERT = "doc_permissions_upsert"
     CONNECTOR_DELETION = "connector_deletion"
     LLM_MODEL_UPDATE = "llm_model_update"
+    CHECKPOINT_CLEANUP = "checkpoint_cleanup"
 
     # Heavy queue
     CONNECTOR_PRUNING = "connector_pruning"
@@ -297,6 +302,7 @@ class OnyxRedisLocks:
     CHECK_CONNECTOR_DELETION_BEAT_LOCK = "da_lock:check_connector_deletion_beat"
     CHECK_PRUNE_BEAT_LOCK = "da_lock:check_prune_beat"
     CHECK_INDEXING_BEAT_LOCK = "da_lock:check_indexing_beat"
+    CHECK_CHECKPOINT_CLEANUP_BEAT_LOCK = "da_lock:check_checkpoint_cleanup_beat"
     CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_doc_permissions_sync_beat"
     )
@@ -371,6 +377,10 @@ class OnyxCeleryTask:
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
+
+    # Connector checkpoint cleanup
+    CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
+    CLEANUP_CHECKPOINT = "cleanup_checkpoint"
 
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"

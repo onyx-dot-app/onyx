@@ -138,7 +138,9 @@ def test_google_permission_sync(
     GoogleDriveManager.append_text_to_doc(drive_service, doc_id_1, doc_text_1)
 
     # run indexing
-    CCPairManager.run_once(cc_pair, admin_user)
+    CCPairManager.run_once(
+        cc_pair, from_beginning=True, user_performing_action=admin_user
+    )
     CCPairManager.wait_for_indexing_completion(
         cc_pair=cc_pair, after=before, user_performing_action=admin_user
     )
@@ -184,7 +186,9 @@ def test_google_permission_sync(
     GoogleDriveManager.append_text_to_doc(drive_service, doc_id_2, doc_text_2)
 
     # Run indexing
-    CCPairManager.run_once(cc_pair, admin_user)
+    CCPairManager.run_once(
+        cc_pair, from_beginning=True, user_performing_action=admin_user
+    )
     CCPairManager.wait_for_indexing_completion(
         cc_pair=cc_pair,
         after=before,

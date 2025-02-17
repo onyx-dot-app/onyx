@@ -213,8 +213,6 @@ def get_chat_session(
         # we need the tool call objs anyways, so just fetch them in a single call
         prefetch_tool_calls=True,
     )
-    for message in session_messages:
-        translate_db_message_to_chat_message_detail(message)
 
     return ChatSessionDetailResponse(
         chat_session_id=session_id,

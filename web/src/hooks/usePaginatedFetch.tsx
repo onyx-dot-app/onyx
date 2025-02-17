@@ -7,12 +7,13 @@ import {
 } from "@/lib/types";
 import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { PaginatedIndexAttemptErrors } from "@/app/admin/connector/[ccPairId]/types";
 
-type PaginatedType =
-  | IndexAttemptSnapshot
-  | AcceptedUserSnapshot
-  | InvitedUserSnapshot
-  | ChatSessionMinimal;
+// Any type that has an id property
+type PaginatedType = {
+  id: number | string;
+  [key: string]: any;
+};
 
 interface PaginatedApiResponse<T extends PaginatedType> {
   items: T[];

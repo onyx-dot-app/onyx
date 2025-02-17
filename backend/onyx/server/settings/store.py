@@ -19,7 +19,8 @@ def load_settings() -> Settings:
             Settings.model_validate(stored_settings) if stored_settings else Settings()
         )
     except KvKeyNotFoundError:
-        logger.error(f"No settings found in KV store for key: {KV_SETTINGS_KEY}")
+        # Default to empty settings if no settings have been set yet
+        logger.debug(f"No settings found in KV store for key: {KV_SETTINGS_KEY}")
         settings = Settings()
     except Exception as e:
         logger.error(f"Error loading settings from KV store: {str(e)}")

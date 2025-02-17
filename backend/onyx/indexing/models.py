@@ -57,6 +57,13 @@ class DocAwareChunk(BaseChunk):
         """Used when logging the identity of a chunk"""
         return f"{self.source_document.to_short_descriptor()} Chunk ID: {self.chunk_id}"
 
+    def get_link(self) -> str | None:
+        return (
+            self.source_document.sections[0].link
+            if self.source_document.sections
+            else None
+        )
+
 
 class IndexChunk(DocAwareChunk):
     embeddings: ChunkEmbedding

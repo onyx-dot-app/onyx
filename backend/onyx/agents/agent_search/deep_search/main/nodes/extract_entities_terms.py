@@ -22,11 +22,17 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.configs.agent_configs import (
-    AGENT_TIMEOUT_OVERRIDE_LLM_ENTITY_TERM_EXTRACTION,
+    AGENT_TIMEOUT_CONNECT_LLM_ENTITY_TERM_EXTRACTION,
+)
+from onyx.configs.agent_configs import (
+    AGENT_TIMEOUT_LLM_ENTITY_TERM_EXTRACTION,
 )
 from onyx.configs.constants import NUM_EXPLORATORY_DOCS
+from onyx.llm.chat_llm import LLMRateLimitError
+from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.prompts.agent_search import ENTITY_TERM_EXTRACTION_PROMPT
 from onyx.prompts.agent_search import ENTITY_TERM_EXTRACTION_PROMPT_JSON_EXAMPLE
+from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.timing import log_function_time
 
 
@@ -84,30 +90,42 @@ def extract_entities_terms(
     ]
     fast_llm = graph_config.tooling.fast_llm
     # Grader
-    llm_response = fast_llm.invoke(
-        prompt=msg,
-        timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_ENTITY_TERM_EXTRACTION,
-    )
-
-    cleaned_response = (
-        str(llm_response.content).replace("```json\n", "").replace("\n```", "")
-    )
-    first_bracket = cleaned_response.find("{")
-    last_bracket = cleaned_response.rfind("}")
-    cleaned_response = cleaned_response[first_bracket : last_bracket + 1]
-
     try:
-        entity_extraction_result = EntityExtractionResult.model_validate_json(
-            cleaned_response
+        llm_response = run_with_timeout(
+            AGENT_TIMEOUT_LLM_ENTITY_TERM_EXTRACTION,
+            fast_llm.invoke,
+            prompt=msg,
+            timeout_override=AGENT_TIMEOUT_CONNECT_LLM_ENTITY_TERM_EXTRACTION,
         )
-    except ValueError:
-        logger.error("Failed to parse LLM response as JSON in Entity-Term Extraction")
+
+        cleaned_response = (
+            str(llm_response.content).replace("```json\n", "").replace("\n```", "")
+        )
+        first_bracket = cleaned_response.find("{")
+        last_bracket = cleaned_response.rfind("}")
+        cleaned_response = cleaned_response[first_bracket : last_bracket + 1]
+
+        try:
+            entity_extraction_result = EntityExtractionResult.model_validate_json(
+                cleaned_response
+            )
+        except ValueError:
+            logger.error(
+                "Failed to parse LLM response as JSON in Entity-Term Extraction"
+            )
+            entity_extraction_result = EntityExtractionResult(
+                retrieved_entities_relationships=EntityRelationshipTermExtraction(),
+            )
+    except (LLMTimeoutError, TimeoutError):
+        logger.error("LLM Timeout Error - extract entities terms")
         entity_extraction_result = EntityExtractionResult(
-            retrieved_entities_relationships=EntityRelationshipTermExtraction(
-                entities=[],
-                relationships=[],
-                terms=[],
-            ),
+            retrieved_entities_relationships=EntityRelationshipTermExtraction(),
+        )
+
+    except LLMRateLimitError:
+        logger.error("LLM Rate Limit Error - extract entities terms")
+        entity_extraction_result = EntityExtractionResult(
+            retrieved_entities_relationships=EntityRelationshipTermExtraction(),
         )
 
     return EntityTermExtractionUpdate(

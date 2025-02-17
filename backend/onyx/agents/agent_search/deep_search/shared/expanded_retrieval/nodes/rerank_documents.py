@@ -55,6 +55,7 @@ def rerank_documents(
 
     # Note that these are passed in values from the API and are overrides which are typically None
     rerank_settings = graph_config.inputs.search_request.rerank_settings
+    allow_agent_reranking = graph_config.behavior.allow_agent_reranking
 
     if rerank_settings is None:
         with get_session_context_manager() as db_session:
@@ -62,23 +63,31 @@ def rerank_documents(
             if not search_settings.disable_rerank_for_streaming:
                 rerank_settings = RerankingDetails.from_db_model(search_settings)
 
+    # Initial default: no reranking. Will be overwritten below if reranking is warranted
+    reranked_documents = verified_documents
+
     if should_rerank(rerank_settings) and len(verified_documents) > 0:
         if len(verified_documents) > 1:
-            reranked_documents = rerank_sections(
-                query_str=question,
-                # if runnable, then rerank_settings is not None
-                rerank_settings=cast(RerankingDetails, rerank_settings),
-                sections_to_rerank=verified_documents,
-            )
+            if not allow_agent_reranking:
+                logger.info("Use of local rerank model without GPU, skipping reranking")
+            # No reranking, stay with verified_documents as default
+
+            else:
+                # Reranking is warranted, use the rerank_sections functon
+                reranked_documents = rerank_sections(
+                    query_str=question,
+                    # if runnable, then rerank_settings is not None
+                    rerank_settings=cast(RerankingDetails, rerank_settings),
+                    sections_to_rerank=verified_documents,
+                )
         else:
             logger.warning(
                 f"{len(verified_documents)} verified document(s) found, skipping reranking"
             )
-            reranked_documents = verified_documents
+            # No reranking, stay with verified_documents as default
     else:
         logger.warning("No reranking settings found, using unranked documents")
-        reranked_documents = verified_documents
-
+        # No reranking, stay with verified_documents as default
     if AGENT_RERANKING_STATS:
         fit_scores = get_fit_scores(verified_documents, reranked_documents)
     else:

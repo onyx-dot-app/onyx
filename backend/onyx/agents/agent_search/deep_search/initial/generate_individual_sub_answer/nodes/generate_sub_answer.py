@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 from typing import cast
 
 from langchain_core.messages import merge_message_runs
@@ -47,11 +46,13 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.configs.agent_configs import AGENT_MAX_ANSWER_CONTEXT_DOCS
-from onyx.configs.agent_configs import AGENT_TIMEOUT_OVERRIDE_LLM_SUBANSWER_GENERATION
+from onyx.configs.agent_configs import AGENT_TIMEOUT_CONNECT_LLM_SUBANSWER_GENERATION
+from onyx.configs.agent_configs import AGENT_TIMEOUT_LLM_SUBANSWER_GENERATION
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.prompts.agent_search import NO_RECOVERED_DOCS
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
@@ -110,15 +111,14 @@ def generate_sub_answer(
             config=fast_llm.config,
         )
 
-        response: list[str | list[str | dict[str, Any]]] = []
         dispatch_timings: list[float] = []
-
         agent_error: AgentErrorLog | None = None
+        response: list[str] = []
 
-        try:
+        def stream_sub_answer() -> list[str]:
             for message in fast_llm.stream(
                 prompt=msg,
-                timeout_override=AGENT_TIMEOUT_OVERRIDE_LLM_SUBANSWER_GENERATION,
+                timeout_override=AGENT_TIMEOUT_CONNECT_LLM_SUBANSWER_GENERATION,
             ):
                 # TODO: in principle, the answer here COULD contain images, but we don't support that yet
                 content = message.content
@@ -142,8 +142,15 @@ def generate_sub_answer(
                     (end_stream_token - start_stream_token).microseconds
                 )
                 response.append(content)
+            return response
 
-        except LLMTimeoutError:
+        try:
+            response = run_with_timeout(
+                AGENT_TIMEOUT_LLM_SUBANSWER_GENERATION,
+                stream_sub_answer,
+            )
+
+        except (LLMTimeoutError, TimeoutError):
             agent_error = AgentErrorLog(
                 error_type=AgentLLMErrorType.TIMEOUT,
                 error_message=AGENT_LLM_TIMEOUT_MESSAGE,

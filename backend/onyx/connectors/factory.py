@@ -30,12 +30,14 @@ from onyx.connectors.google_site.connector import GoogleSitesConnector
 from onyx.connectors.guru.connector import GuruConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.interfaces import CheckpointConnector
 from onyx.connectors.interfaces import EventConnector
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.loopio.connector import LoopioConnector
 from onyx.connectors.mediawiki.wiki import MediaWikiConnector
+from onyx.connectors.mock_connector.connector import MockConnector
 from onyx.connectors.models import InputType
 from onyx.connectors.notion.connector import NotionConnector
 from onyx.connectors.onyx_jira.connector import JiraConnector
@@ -43,7 +45,7 @@ from onyx.connectors.productboard.connector import ProductboardConnector
 from onyx.connectors.salesforce.connector import SalesforceConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.slab.connector import SlabConnector
-from onyx.connectors.slack.connector import SlackPollConnector
+from onyx.connectors.slack.connector import SlackConnector
 from onyx.connectors.teams.connector import TeamsConnector
 from onyx.connectors.web.connector import WebConnector
 from onyx.connectors.wikipedia.connector import WikipediaConnector
@@ -66,8 +68,8 @@ def identify_connector_class(
         DocumentSource.WEB: WebConnector,
         DocumentSource.FILE: LocalFileConnector,
         DocumentSource.SLACK: {
-            InputType.POLL: SlackPollConnector,
-            InputType.SLIM_RETRIEVAL: SlackPollConnector,
+            InputType.POLL: SlackConnector,
+            InputType.SLIM_RETRIEVAL: SlackConnector,
         },
         DocumentSource.GITHUB: GithubConnector,
         DocumentSource.GMAIL: GmailConnector,
@@ -109,6 +111,8 @@ def identify_connector_class(
         DocumentSource.FIREFLIES: FirefliesConnector,
         DocumentSource.EGNYTE: EgnyteConnector,
         DocumentSource.AIRTABLE: AirtableConnector,
+        # just for integration tests
+        DocumentSource.MOCK_CONNECTOR: MockConnector,
     }
     connector_by_source = connector_map.get(source, {})
 
@@ -125,10 +129,23 @@ def identify_connector_class(
 
     if any(
         [
-            input_type == InputType.LOAD_STATE
-            and not issubclass(connector, LoadConnector),
-            input_type == InputType.POLL and not issubclass(connector, PollConnector),
-            input_type == InputType.EVENT and not issubclass(connector, EventConnector),
+            (
+                input_type == InputType.LOAD_STATE
+                and not issubclass(connector, LoadConnector)
+            ),
+            (
+                input_type == InputType.POLL
+                # either poll or checkpoint works for this, in the future
+                # all connectors should be checkpoint connectors
+                and (
+                    not issubclass(connector, PollConnector)
+                    and not issubclass(connector, CheckpointConnector)
+                )
+            ),
+            (
+                input_type == InputType.EVENT
+                and not issubclass(connector, EventConnector)
+            ),
         ]
     ):
         raise ConnectorMissingException(

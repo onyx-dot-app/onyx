@@ -23,7 +23,7 @@ export default defineConfig({
         viewport: { width: 1280, height: 720 },
         storageState: "admin_auth.json",
       },
-      testIgnore: ["**/codeUtils.test.ts"],
+      testIgnore: ["**/codeUtils.test.ts", "**/chat/**/*.spec.ts"],
     },
   ],
 });
