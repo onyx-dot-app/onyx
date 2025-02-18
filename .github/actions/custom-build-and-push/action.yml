@@ -39,6 +39,10 @@ inputs:
     description: 'Time to wait before attempt 3 in seconds'
     required: false
     default: '120'
+  no-cache:
+    description: 'Whether to build with the cache'
+    required: false
+    default: false
 
 runs:
   using: "composite"
@@ -57,6 +61,7 @@ runs:
         tags: ${{ inputs.tags }}
         cache-from: ${{ inputs.cache-from }}
         cache-to: ${{ inputs.cache-to }}
+        no-cache: ${{ inputs.no-cache }}
 
     - name: Wait before attempt 2
       if: steps.buildx1.outcome != 'success'
@@ -79,6 +84,7 @@ runs:
         tags: ${{ inputs.tags }}
         cache-from: ${{ inputs.cache-from }}
         cache-to: ${{ inputs.cache-to }}
+        no-cache: ${{ inputs.no-cache }}
 
     - name: Wait before attempt 3
       if: steps.buildx1.outcome != 'success' && steps.buildx2.outcome != 'success'
@@ -101,6 +107,7 @@ runs:
         tags: ${{ inputs.tags }}
         cache-from: ${{ inputs.cache-from }}
         cache-to: ${{ inputs.cache-to }}
+        no-cache: ${{ inputs.no-cache }}
 
     - name: Report failure
       if: steps.buildx1.outcome != 'success' && steps.buildx2.outcome != 'success' && steps.buildx3.outcome != 'success'
