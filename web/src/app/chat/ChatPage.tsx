@@ -1870,9 +1870,7 @@ export function ChatPage({
   });
 
   const autoScrollEnabled =
-    user?.preferences?.auto_scroll == null
-      ? settings?.enterpriseSettings?.auto_scroll || false
-      : user?.preferences?.auto_scroll! && !agenticGenerating;
+    (user?.preferences?.auto_scroll && !agenticGenerating) ?? false;
 
   useScrollonStream({
     chatState: currentSessionChatState,

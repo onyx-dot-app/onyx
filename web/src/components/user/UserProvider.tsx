@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, UserRole } from "@/lib/types";
 import { getCurrentUser } from "@/lib/user";
 import { usePostHog } from "posthog-js/react";
+import { CombinedSettings } from "@/app/admin/settings/interfaces";
+import { SettingsContext } from "../settings/SettingsProvider";
 
 interface UserContextType {
   user: User | null;
@@ -26,12 +28,49 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export function UserProvider({
   children,
   user,
+  settings,
 }: {
   children: React.ReactNode;
   user: User | null;
+  settings: CombinedSettings;
 }) {
-  const [upToDateUser, setUpToDateUser] = useState<User | null>(user);
+  const [upToDateUser, setUpToDateUser] = useState<User | null>(
+    user
+      ? {
+          ...user,
+          preferences: {
+            ...user?.preferences,
+            auto_scroll:
+              user?.preferences?.auto_scroll ?? settings?.settings?.auto_scroll,
+            temperature_override_enabled:
+              user?.preferences?.temperature_override_enabled ??
+              settings?.settings?.temperature_override_enabled,
+          },
+        }
+      : null
+  );
 
+  const updatedSettings = useContext(SettingsContext);
+  useEffect(() => {
+    if (user) {
+      setUpToDateUser({
+        ...user,
+        preferences: {
+          ...user.preferences,
+          auto_scroll:
+            user.preferences?.auto_scroll ??
+            updatedSettings?.settings?.auto_scroll ??
+            false,
+          temperature_override_enabled:
+            user.preferences?.temperature_override_enabled ??
+            updatedSettings?.settings?.temperature_override_enabled ??
+            false,
+        },
+      });
+    } else {
+      setUpToDateUser(null);
+    }
+  }, [user, updatedSettings]);
   const posthog = usePostHog();
 
   useEffect(() => {

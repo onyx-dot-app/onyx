@@ -52,6 +52,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
           needs_reindexing: false,
           anonymous_user_enabled: false,
           pro_search_disabled: false,
+          override_default_temperature: false,
         };
       } else {
         throw new Error(
