@@ -21,5 +21,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Ensure no null values before making columns non-nullable
+    op.execute(
+        'UPDATE "user" SET temperature_override_enabled = false WHERE temperature_override_enabled IS NULL'
+    )
+    op.execute('UPDATE "user" SET auto_scroll = false WHERE auto_scroll IS NULL')
+
     op.alter_column("user", "temperature_override_enabled", nullable=False)
     op.alter_column("user", "auto_scroll", nullable=False)

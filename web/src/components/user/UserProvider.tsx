@@ -37,6 +37,9 @@ export function UserProvider({
   const updatedSettings = useContext(SettingsContext);
   const posthog = usePostHog();
 
+  // For auto_scroll and temperature_override_enabled:
+  // - If user has a preference set, use that
+  // - Otherwise, use the workspace setting if available
   function mergeUserPreferences(
     currentUser: User | null,
     currentSettings: CombinedSettings | null
