@@ -25,7 +25,7 @@ logger = setup_logger()
 
 def route_initial_tool_choice(
     state: MainState, config: RunnableConfig
-) -> Literal["tool_call", "start_agent_search", "logging_node"]:
+) -> Literal["call_tool", "start_agent_search", "logging_node"]:
     """
     LangGraph edge to route to agent search.
     """
@@ -38,7 +38,7 @@ def route_initial_tool_choice(
         ):
             return "start_agent_search"
         else:
-            return "tool_call"
+            return "call_tool"
     else:
         return "logging_node"
 

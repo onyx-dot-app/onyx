@@ -8,6 +8,7 @@ from typing import TypeVar
 from urllib.parse import quote
 
 from atlassian import Confluence  # type:ignore
+from pydantic import BaseModel
 from requests import HTTPError
 
 from onyx.utils.logger import setup_logger
@@ -27,6 +28,16 @@ _REPLACEMENT_EXPANSIONS = "body.view.value"
 
 class ConfluenceRateLimitError(Exception):
     pass
+
+
+class ConfluenceUser(BaseModel):
+    user_id: str  # accountId in Cloud, userKey in Server
+    username: str | None  # Confluence Cloud doesn't give usernames
+    display_name: str
+    # Confluence Data Center doesn't give email back by default,
+    # have to fetch it with a different endpoint
+    email: str | None
+    type: str
 
 
 def _handle_http_error(e: HTTPError, attempt: int) -> int:
@@ -275,21 +286,95 @@ class OnyxConfluence(Confluence):
         self,
         expand: str | None = None,
         limit: int | None = None,
-    ) -> Iterator[dict[str, Any]]:
+    ) -> Iterator[ConfluenceUser]:
         """
         The search/user endpoint can be used to fetch users.
         It's a seperate endpoint from the content/search endpoint used only for users.
         Otherwise it's very similar to the content/search endpoint.
         """
-        cql = "type=user"
-        url = "rest/api/search/user" if self.cloud else "rest/api/search"
-        expand_string = f"&expand={expand}" if expand else ""
-        url += f"?cql={cql}{expand_string}"
-        yield from self._paginate_url(url, limit)
+        if self.cloud:
+            cql = "type=user"
+            url = "rest/api/search/user"
+            expand_string = f"&expand={expand}" if expand else ""
+            url += f"?cql={cql}{expand_string}"
+            for user_result in self._paginate_url(url, limit):
+                # Example response:
+                # {
+                #     'user': {
+                #         'type': 'known',
+                #         'accountId': '712020:35e60fbb-d0f3-4c91-b8c1-f2dd1d69462d',
+                #         'accountType': 'atlassian',
+                #         'email': 'chris@danswer.ai',
+                #         'publicName': 'Chris Weaver',
+                #         'profilePicture': {
+                #             'path': '/wiki/aa-avatar/712020:35e60fbb-d0f3-4c91-b8c1-f2dd1d69462d',
+                #             'width': 48,
+                #             'height': 48,
+                #             'isDefault': False
+                #         },
+                #         'displayName': 'Chris Weaver',
+                #         'isExternalCollaborator': False,
+                #         '_expandable': {
+                #             'operations': '',
+                #             'personalSpace': ''
+                #         },
+                #         '_links': {
+                #             'self': 'https://danswerai.atlassian.net/wiki/rest/api/user?accountId=712020:35e60fbb-d0f3-4c91-b8c1-f2dd1d69462d'
+                #         }
+                #     },
+                #     'title': 'Chris Weaver',
+                #     'excerpt': '',
+                #     'url': '/people/712020:35e60fbb-d0f3-4c91-b8c1-f2dd1d69462d',
+                #     'breadcrumbs': [],
+                #     'entityType': 'user',
+                #     'iconCssClass': 'aui-icon content-type-profile',
+                #     'lastModified': '2025-02-18T04:08:03.579Z',
+                #     'score': 0.0
+                # }
+                user = user_result["user"]
+                yield ConfluenceUser(
+                    user_id=user["accountId"],
+                    username=None,
+                    display_name=user["displayName"],
+                    email=user.get("email"),
+                    type=user["accountType"],
+                )
+        else:
+            # https://developer.atlassian.com/server/confluence/rest/v900/api-group-user/#api-rest-api-user-list-get
+            # ^ is only available on data center deployments
+            # Example response:
+            # [
+            #     {
+            #         'type': 'known',
+            #         'username': 'admin',
+            #         'userKey': '40281082950c5fe901950c61c55d0000',
+            #         'profilePicture': {
+            #             'path': '/images/icons/profilepics/default.svg',
+            #             'width': 48,
+            #             'height': 48,
+            #             'isDefault': True
+            #         },
+            #         'displayName': 'Admin Test',
+            #         '_links': {
+            #             'self': 'http://localhost:8090/rest/api/user?key=40281082950c5fe901950c61c55d0000'
+            #         },
+            #         '_expandable': {
+            #             'status': ''
+            #         }
+            #     }
+            # ]
+            for user in self._paginate_url("rest/api/user/list", limit):
+                yield ConfluenceUser(
+                    user_id=user["userKey"],
+                    username=user["username"],
+                    display_name=user["displayName"],
+                    email=None,
+                    type=user.get("type", "user"),
+                )
 
     def paginated_groups_by_user_retrieval(
         self,
-        user: dict[str, Any],
+        user_id: str,  # accountId in Cloud, userKey in Server
         limit: int | None = None,
     ) -> Iterator[dict[str, Any]]:
         """
@@ -297,7 +382,7 @@ class OnyxConfluence(Confluence):
         It's a confluence specific endpoint that can be used to fetch groups.
         """
         user_field = "accountId" if self.cloud else "key"
-        user_value = user["accountId"] if self.cloud else user["userKey"]
+        user_value = user_id
         # Server uses userKey (but calls it key during the API call), Cloud uses accountId
         user_query = f"{user_field}={quote(user_value)}"
 

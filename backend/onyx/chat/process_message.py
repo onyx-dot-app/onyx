@@ -7,7 +7,7 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.orchestration.nodes.tool_call import ToolCallException
+from onyx.agents.agent_search.orchestration.nodes.call_tool import ToolCallException
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
@@ -146,6 +146,7 @@ from onyx.utils.timing import log_generator_function_time
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
+ERROR_TYPE_CANCELLED = "cancelled"
 
 
 def _translate_citations(
@@ -631,6 +632,7 @@ def stream_chat_message_objects(
             db_session=db_session,
             commit=False,
             reserved_message_id=reserved_message_id,
+            is_agentic=new_msg_req.use_agentic_search,
         )
 
         prompt_override = new_msg_req.prompt_override or chat_session.prompt_override
@@ -1015,7 +1017,7 @@ def stream_chat_message_objects(
                 if info.message_specific_citations
                 else None
             ),
-            error=None,
+            error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
             tool_call=(
                 ToolCall(
                     tool_id=tool_name_to_tool_id[info.tool_result.tool_name],
@@ -1053,7 +1055,9 @@ def stream_chat_message_objects(
                 citations=info.message_specific_citations.citation_map
                 if info.message_specific_citations
                 else None,
+                error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
                 refined_answer_improvement=refined_answer_improvement,
+                is_agentic=True,
             )
             next_level += 1
             prev_message = next_answer_message

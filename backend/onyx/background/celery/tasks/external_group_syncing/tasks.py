@@ -384,6 +384,7 @@ def connector_external_group_sync_generator_task(
             logger.info(
                 f"Syncing {len(external_user_groups)} external user groups for {source_type}"
             )
+            logger.debug(f"New external user groups: {external_user_groups}")
 
             replace_user__ext_group_for_cc_pair(
                 db_session=db_session,

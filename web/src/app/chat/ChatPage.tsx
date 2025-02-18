@@ -1,6 +1,11 @@
 "use client";
 
-import { redirect, useRouter, useSearchParams } from "next/navigation";
+import {
+  redirect,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import {
   BackendChatSession,
   BackendMessage,
@@ -130,6 +135,7 @@ import {
 } from "@/lib/browserUtilities";
 import { Button } from "@/components/ui/button";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { MessageChannel } from "node:worker_threads";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -1145,6 +1151,7 @@ export function ChatPage({
     regenerationRequest?: RegenerationRequest | null;
     overrideFileDescriptors?: FileDescriptor[];
   } = {}) => {
+    navigatingAway.current = false;
     let frozenSessionId = currentSessionId();
     updateCanContinue(false, frozenSessionId);
 
@@ -1267,7 +1274,6 @@ export function ChatPage({
     let stackTrace: string | null = null;
 
     let sub_questions: SubQuestionDetail[] = [];
-    let second_level_sub_questions: SubQuestionDetail[] = [];
     let is_generating: boolean = false;
     let second_level_generating: boolean = false;
     let finalMessage: BackendMessage | null = null;
@@ -1291,7 +1297,7 @@ export function ChatPage({
 
       const stack = new CurrentMessageFIFO();
       updateCurrentMessageFIFO(stack, {
-        signal: controller.signal, // Add this line
+        signal: controller.signal,
         message: currMessage,
         alternateAssistantId: currentAssistantId,
         fileDescriptors: overrideFileDescriptors || currentMessageFiles,
@@ -1712,7 +1718,10 @@ export function ChatPage({
         const newUrl = buildChatUrl(searchParams, currChatSessionId, null);
         // newUrl is like /chat?chatId=10
         // current page is like /chat
-        router.push(newUrl, { scroll: false });
+
+        if (pathname == "/chat" && !navigatingAway.current) {
+          router.push(newUrl, { scroll: false });
+        }
       }
     }
     if (
@@ -2086,6 +2095,31 @@ export function ChatPage({
     llmOverrideManager.updateImageFilesPresent(imageFileInMessageHistory);
   }, [imageFileInMessageHistory]);
 
+  const pathname = usePathname();
+  useEffect(() => {
+    return () => {
+      // Cleanup which only runs when the component unmounts (i.e. when you navigate away).
+      const currentSession = currentSessionId();
+      const controller = abortControllersRef.current.get(currentSession);
+      if (controller) {
+        controller.abort();
+        navigatingAway.current = true;
+        setAbortControllers((prev) => {
+          const newControllers = new Map(prev);
+          newControllers.delete(currentSession);
+          return newControllers;
+        });
+      }
+    };
+  }, [pathname]);
+
+  const navigatingAway = useRef(false);
+  // Keep a ref to abortControllers to ensure we always have the latest value
+  const abortControllersRef = useRef(abortControllers);
+  useEffect(() => {
+    abortControllersRef.current = abortControllers;
+  }, [abortControllers]);
+
   useSidebarShortcut(router, toggleSidebar);
 
   const [sharedChatSession, setSharedChatSession] =
@@ -2300,7 +2334,7 @@ export function ChatPage({
                 fixed
                 left-0
                 z-40
-                bg-background-100
+                bg-neutral-200
                 h-screen
                 transition-all
                 bg-opacity-80
@@ -2557,12 +2591,21 @@ export function ChatPage({
                                 ) {
                                   return <></>;
                                 }
+                                const nextMessage =
+                                  messageHistory.length > i + 1
+                                    ? messageHistory[i + 1]
+                                    : null;
                                 return (
                                   <div
                                     id={`message-${message.messageId}`}
                                     key={messageReactComponentKey}
                                   >
                                     <HumanMessage
+                                      disableSwitchingForStreaming={
+                                        (nextMessage &&
+                                          nextMessage.is_generating) ||
+                                        false
+                                      }
                                       stopGenerating={stopGenerating}
                                       content={message.message}
                                       files={message.files}

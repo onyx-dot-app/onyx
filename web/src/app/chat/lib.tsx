@@ -250,7 +250,7 @@ export async function* sendMessage({
     throw new Error(`HTTP error! status: ${response.status}`);
   }
 
-  yield* handleSSEStream<PacketType>(response);
+  yield* handleSSEStream<PacketType>(response, signal);
 }
 
 export async function nameChatSession(chatSessionId: string) {

@@ -187,6 +187,7 @@ class SlackChannelConfigCreationRequest(BaseModel):
     response_type: SlackBotResponseType
     # XXX this is going away soon
     standard_answer_categories: list[int] = Field(default_factory=list)
+    disabled: bool = False
 
     @field_validator("answer_filters", mode="before")
     @classmethod

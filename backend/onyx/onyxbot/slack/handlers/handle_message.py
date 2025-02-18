@@ -180,6 +180,13 @@ def handle_message(
         )
         return False
 
+    if slack_channel_config.channel_config.get("disabled") and not bypass_filters:
+        logger.info(
+            "Skipping message since the channel is configured such that "
+            "OnyxBot is disabled"
+        )
+        return False
+
     # List of user id to send message to, if None, send to everyone in channel
     send_to: list[str] | None = None
     missing_users: list[str] | None = None

@@ -93,6 +93,8 @@ def _form_channel_config(
         "respond_to_bots"
     ] = slack_channel_config_creation_request.respond_to_bots
 
+    channel_config["disabled"] = slack_channel_config_creation_request.disabled
+
     return channel_config
 
 
@@ -194,6 +196,7 @@ def patch_slack_channel_config(
         channel_config=channel_config,
         standard_answer_category_ids=slack_channel_config_creation_request.standard_answer_categories,
         enable_auto_filters=slack_channel_config_creation_request.enable_auto_filters,
+        disabled=slack_channel_config_creation_request.disabled,
     )
     return SlackChannelConfig.from_model(slack_channel_config_model)
 

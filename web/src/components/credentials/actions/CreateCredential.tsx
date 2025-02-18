@@ -111,9 +111,15 @@ export default function CreateCredential({
 
     const { name, is_public, groups, ...credentialValues } = values;
 
+    const filteredCredentialValues = Object.fromEntries(
+      Object.entries(credentialValues).filter(
+        ([_, value]) => value !== null && value !== ""
+      )
+    );
+
     try {
       const response = await submitCredential({
-        credential_json: credentialValues,
+        credential_json: filteredCredentialValues,
         admin_public: true,
         curator_public: is_public,
         groups: groups,
@@ -194,7 +200,7 @@ export default function CreateCredential({
               for information on setting up this connector.
             </p>
           )}
-          <CardSection className="w-full items-start  dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
+          <CardSection className="w-full items-start dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
             <TextFormField
               name="name"
               placeholder="(Optional) credential name.."

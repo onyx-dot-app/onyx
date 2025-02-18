@@ -21,7 +21,6 @@ module.exports = {
       transitionProperty: {
         spacing: "margin, padding",
       },
-
       keyframes: {
         "subtle-pulse": {
           "0%, 100%": { opacity: 0.9 },
@@ -148,7 +147,6 @@ module.exports = {
         "text-mobile-sidebar": "var(--text-800)",
         "background-search-filter": "var(--neutral-100-border-light)",
         "background-search-filter-dropdown": "var(--neutral-100-border-light)",
-        "tw-prose-bold": "var(--text-800)",
 
         "user-bubble": "var(--off-white)",
 

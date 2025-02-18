@@ -43,14 +43,14 @@ from onyx.agents.agent_search.deep_search.main.states import MainState
 from onyx.agents.agent_search.deep_search.refinement.consolidate_sub_answers.graph_builder import (
     answer_refined_query_graph_builder,
 )
-from onyx.agents.agent_search.orchestration.nodes.basic_use_tool_response import (
-    basic_use_tool_response,
-)
-from onyx.agents.agent_search.orchestration.nodes.llm_tool_choice import llm_tool_choice
+from onyx.agents.agent_search.orchestration.nodes.call_tool import call_tool
+from onyx.agents.agent_search.orchestration.nodes.choose_tool import choose_tool
 from onyx.agents.agent_search.orchestration.nodes.prepare_tool_input import (
     prepare_tool_input,
 )
-from onyx.agents.agent_search.orchestration.nodes.tool_call import tool_call
+from onyx.agents.agent_search.orchestration.nodes.use_tool_response import (
+    basic_use_tool_response,
+)
 from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
 from onyx.utils.logger import setup_logger
 
@@ -77,13 +77,13 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
     # Choose the initial tool
     graph.add_node(
         node="initial_tool_choice",
-        action=llm_tool_choice,
+        action=choose_tool,
     )
 
     # Call the tool, if required
     graph.add_node(
-        node="tool_call",
-        action=tool_call,
+        node="call_tool",
+        action=call_tool,
     )
 
     # Use the tool response
@@ -168,11 +168,11 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
     graph.add_conditional_edges(
         "initial_tool_choice",
         route_initial_tool_choice,
-        ["tool_call", "start_agent_search", "logging_node"],
+        ["call_tool", "start_agent_search", "logging_node"],
     )
 
     graph.add_edge(
-        start_key="tool_call",
+        start_key="call_tool",
         end_key="basic_use_tool_response",
     )
     graph.add_edge(

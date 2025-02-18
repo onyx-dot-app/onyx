@@ -383,7 +383,7 @@ export const AIMessage = ({
           dangerouslySetInnerHTML={{ __html: htmlContent }}
         />
         <ReactMarkdown
-          className="prose max-w-full text-base"
+          className="prose dark:prose-invert max-w-full text-base"
           components={markdownComponents}
           remarkPlugins={[remarkGfm, remarkMath]}
           rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
@@ -495,7 +495,10 @@ export const AIMessage = ({
                     {docs && docs.length > 0 && (
                       <div
                         className={`mobile:hidden ${
-                          query && "mt-2"
+                          (query ||
+                            toolCall?.tool_name ===
+                              INTERNET_SEARCH_TOOL_NAME) &&
+                          "mt-2"
                         }  -mx-8 w-full mb-4 flex relative`}
                       >
                         <div className="w-full">
@@ -795,27 +798,67 @@ function MessageSwitcher({
   totalPages,
   handlePrevious,
   handleNext,
+  disableForStreaming,
 }: {
   currentPage: number;
   totalPages: number;
   handlePrevious: () => void;
   handleNext: () => void;
+  disableForStreaming?: boolean;
 }) {
   return (
     <div className="flex items-center text-sm space-x-0.5">
-      <Hoverable
-        icon={FiChevronLeft}
-        onClick={currentPage === 1 ? undefined : handlePrevious}
-      />
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div>
+              <Hoverable
+                icon={FiChevronLeft}
+                onClick={
+                  disableForStreaming
+                    ? () => null
+                    : currentPage === 1
+                      ? undefined
+                      : handlePrevious
+                }
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            {disableForStreaming
+              ? "Wait for agent message to complete"
+              : "Previous"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       <span className="text-text-darker select-none">
         {currentPage} / {totalPages}
       </span>
 
-      <Hoverable
-        icon={FiChevronRight}
-        onClick={currentPage === totalPages ? undefined : handleNext}
-      />
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>
+            <div>
+              <Hoverable
+                icon={FiChevronRight}
+                onClick={
+                  disableForStreaming
+                    ? () => null
+                    : currentPage === totalPages
+                      ? undefined
+                      : handleNext
+                }
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            {disableForStreaming
+              ? "Wait for agent message to complete"
+              : "Next"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }
@@ -829,6 +872,7 @@ export const HumanMessage = ({
   onMessageSelection,
   shared,
   stopGenerating = () => null,
+  disableSwitchingForStreaming = false,
 }: {
   shared?: boolean;
   content: string;
@@ -838,6 +882,7 @@ export const HumanMessage = ({
   onEdit?: (editedContent: string) => void;
   onMessageSelection?: (messageId: number) => void;
   stopGenerating?: () => void;
+  disableSwitchingForStreaming?: boolean;
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1067,6 +1112,7 @@ export const HumanMessage = ({
               otherMessagesCanSwitchTo.length > 1 && (
                 <div className="ml-auto mr-3">
                   <MessageSwitcher
+                    disableForStreaming={disableSwitchingForStreaming}
                     currentPage={currentMessageInd + 1}
                     totalPages={otherMessagesCanSwitchTo.length}
                     handlePrevious={() => {

@@ -806,6 +806,7 @@ def process_message(
                 and slack_channel_config.channel_config.get("follow_up_tags")
                 is not None
             )
+
             feedback_reminder_id = schedule_feedback_reminder(
                 details=details, client=client.web_client, include_followup=follow_up
             )

@@ -9,6 +9,12 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
 import remarkGfm from "remark-gfm";
@@ -308,7 +314,7 @@ export const AgenticMessage = ({
   const renderedAlternativeMarkdown = useMemo(() => {
     return (
       <ReactMarkdown
-        className="prose max-w-full text-base"
+        className="prose dark:prose-invert max-w-full text-base"
         components={{
           ...markdownComponents,
           code: ({ node, className, children }: any) => {
@@ -335,7 +341,7 @@ export const AgenticMessage = ({
   const renderedMarkdown = useMemo(() => {
     return (
       <ReactMarkdown
-        className="prose max-w-full text-base"
+        className="prose dark:prose-invert max-w-full text-base"
         components={markdownComponents}
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
@@ -530,6 +536,7 @@ export const AgenticMessage = ({
                             {includeMessageSwitcher && (
                               <div className="-mx-1 mr-auto">
                                 <MessageSwitcher
+                                  disableForStreaming={!isComplete}
                                   currentPage={currentMessageInd + 1}
                                   totalPages={otherMessagesCanSwitchTo.length}
                                   handlePrevious={() => {
@@ -616,6 +623,7 @@ export const AgenticMessage = ({
                             {includeMessageSwitcher && (
                               <div className="-mx-1 mr-auto">
                                 <MessageSwitcher
+                                  disableForStreaming={!isComplete}
                                   currentPage={currentMessageInd + 1}
                                   totalPages={otherMessagesCanSwitchTo.length}
                                   handlePrevious={() => {
@@ -694,27 +702,52 @@ function MessageSwitcher({
   totalPages,
   handlePrevious,
   handleNext,
+  disableForStreaming,
 }: {
   currentPage: number;
   totalPages: number;
   handlePrevious: () => void;
   handleNext: () => void;
+  disableForStreaming?: boolean;
 }) {
   return (
     <div className="flex items-center text-sm space-x-0.5">
-      <Hoverable
-        icon={FiChevronLeft}
-        onClick={currentPage === 1 ? undefined : handlePrevious}
-      />
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div>
+              <Hoverable
+                icon={FiChevronLeft}
+                onClick={currentPage === 1 ? undefined : handlePrevious}
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            {disableForStreaming ? "Disabled" : "Previous"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       <span className="text-text-darker select-none">
         {currentPage} / {totalPages}
+        {disableForStreaming ? "Complete" : "Generating"}
       </span>
 
-      <Hoverable
-        icon={FiChevronRight}
-        onClick={currentPage === totalPages ? undefined : handleNext}
-      />
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div>
+              <Hoverable
+                icon={FiChevronRight}
+                onClick={currentPage === totalPages ? undefined : handleNext}
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            {disableForStreaming ? "Disabled" : "Next"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }
