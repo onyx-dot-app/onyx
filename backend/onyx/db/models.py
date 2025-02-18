@@ -342,7 +342,9 @@ class Document__Tag(Base):
     document_id: Mapped[str] = mapped_column(
         ForeignKey("document.id"), primary_key=True
     )
-    tag_id: Mapped[int] = mapped_column(ForeignKey("tag.id"), primary_key=True)
+    tag_id: Mapped[int] = mapped_column(
+        ForeignKey("tag.id"), primary_key=True, index=True
+    )
 
 
 class Persona__Tool(Base):
