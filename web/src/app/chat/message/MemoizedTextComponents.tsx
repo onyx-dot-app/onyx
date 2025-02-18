@@ -42,7 +42,7 @@ export const MemoizedAnchor = memo(
           const index = parseInt(match[2], 10) - 1;
           const associatedSubQuestion = subQuestions?.[index];
           if (!associatedSubQuestion) {
-            return <a href={children as string}> go{children}</a>;
+            return <a href={href || (children as string)}>{children}</a>;
           }
         }
       }
