@@ -1,7 +1,10 @@
 import io
+import os
 from datetime import datetime
 from datetime import timezone
+from tempfile import NamedTemporaryFile
 
+import pandas as pd
 from googleapiclient.discovery import build  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
@@ -43,12 +46,22 @@ def _extract_sections_basic(
 ) -> list[Section]:
     mime_type = file["mimeType"]
     link = file["webViewLink"]
+    supported_file_types = set(item.value for item in GDriveMimeType)
+    excel_file_types = set(
+        [
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-excel",
+        ]
+    )
+    supported_file_types.update(excel_file_types)
 
-    if mime_type not in set(item.value for item in GDriveMimeType):
+    if mime_type not in supported_file_types:
         # Unsupported file types can still have a title, finding this way is still useful
         return [Section(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]
 
     try:
+        # ---------------------------
+        # Google Sheets extraction
         if mime_type == GDriveMimeType.SPREADSHEET.value:
             try:
                 sheets_service = build(
@@ -109,7 +122,42 @@ def _extract_sections_basic(
                     f"Ran into exception '{e}' when pulling data from Google Sheet '{file['name']}'."
                     " Falling back to basic extraction."
                 )
+        # ---------------------------
+        # Microsoft Excel (.xlsx or .xls) extraction branch
+        elif mime_type in excel_file_types:
+            try:
+                response = service.files().get_media(fileId=file["id"]).execute()
+                with NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+                    tmp.write(response)
+                    tmp_path = tmp.name
 
+                xls = pd.ExcelFile(tmp_path)
+                sections = []
+                for sheet_name in xls.sheet_names:
+                    df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+                    df.dropna(how="all")
+                    values = [df.columns.tolist()] + df.fillna("").astype(
+                        str
+                    ).values.tolist()
+
+                    if values:
+                        text = f"Sheet: {sheet_name}\n"
+                        for row in values:
+                            text += "\t".join(str(cell) for cell in row) + "\n"
+                        sections.append(Section(link=link, text=text))
+                os.remove(tmp_path)
+                return sections
+
+            except Exception as e:
+                logger.warning(
+                    f"Error extracting data from Excel file '{file['name']}': {e}"
+                )
+                return [
+                    Section(link=link, text="Error extracting data from Excel file")
+                ]
+
+        # ---------------------------
+        # Export for Google Docs, PPT, and fallback for spreadsheets
         if mime_type in [
             GDriveMimeType.DOC.value,
             GDriveMimeType.PPT.value,
@@ -128,6 +176,8 @@ def _extract_sections_basic(
             )
             return [Section(link=link, text=text)]
 
+        # ---------------------------
+        # Plain text and Markdown files
         elif mime_type in [
             GDriveMimeType.PLAIN_TEXT.value,
             GDriveMimeType.MARKDOWN.value,
@@ -141,6 +191,8 @@ def _extract_sections_basic(
                     .decode("utf-8"),
                 )
             ]
+        # ---------------------------
+        # Word, PowerPoint, PDF files
         if mime_type in [
             GDriveMimeType.WORD_DOC.value,
             GDriveMimeType.POWERPOINT.value,
