@@ -37,6 +37,8 @@ from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
+WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS = 20
+
 
 class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
     # Given a base site, index everything under that path
@@ -225,10 +227,13 @@ class WebConnector(LoadConnector):
         web_connector_type: str = WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value,
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
+        scroll_before_scraping: bool = False,
+        **kwargs: Any,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
         self.batch_size = batch_size
         self.recursive = False
+        self.scroll_before_scraping = scroll_before_scraping
 
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
@@ -343,6 +348,18 @@ class WebConnector(LoadConnector):
                         logger.info("Redirected page already indexed")
                         continue
                     visited_links.add(current_url)
+
+                if self.scroll_before_scraping:
+                    scroll_attempts = 0
+                    previous_height = page.evaluate("document.body.scrollHeight")
+                    while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
+                        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                        page.wait_for_load_state("networkidle", timeout=30000)
+                        new_height = page.evaluate("document.body.scrollHeight")
+                        if new_height == previous_height:
+                            break  # Stop scrolling when no more content is loaded
+                        previous_height = new_height
+                        scroll_attempts += 1
 
                 content = page.content()
                 soup = BeautifulSoup(content, "html.parser")

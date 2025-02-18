@@ -152,7 +152,17 @@ export const connectorConfigs: Record<
         ],
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Scroll before scraping:",
+        label: "Scroll before scraping",
+        description:
+          "Enable if the website requires scrolling for the desired content to load",
+        name: "scroll_before_scraping",
+        optional: true,
+      },
+    ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
   github: {
