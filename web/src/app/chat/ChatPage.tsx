@@ -23,6 +23,7 @@ import {
   SubQuestionDetail,
   constructSubQuestions,
   DocumentsResponse,
+  AgenticMessageResponseIDInfo,
 } from "./interfaces";
 
 import Prism from "prismjs";
@@ -1419,11 +1420,8 @@ export function ChatPage({
           } else {
             const { user_message_id, frozenMessageMap } = initialFetchDetails;
             if (Object.hasOwn(packet, "agentic_message_ids")) {
-              const agenticMessageIds = (
-                packet as unknown as any as {
-                  agentic_message_ids: { level: number; message_id: number }[];
-                }
-              ).agentic_message_ids;
+              const agenticMessageIds = (packet as AgenticMessageResponseIDInfo)
+                .agentic_message_ids;
               const level1MessageId = agenticMessageIds.find(
                 (item) => item.level === 1
               )?.message_id;
