@@ -1280,6 +1280,8 @@ export function ChatPage({
     let toolCall: ToolCallMetadata | null = null;
     let isImprovement: boolean | undefined = undefined;
     let isStreamingQuestions = true;
+    let includeAgentic = false;
+    let secondLevelMessageId: number | null = null;
 
     let initialFetchDetails: null | {
       user_message_id: number;
@@ -1416,6 +1418,20 @@ export function ChatPage({
             resetRegenerationState();
           } else {
             const { user_message_id, frozenMessageMap } = initialFetchDetails;
+            if (Object.hasOwn(packet, "agentic_message_ids")) {
+              const agenticMessageIds = (
+                packet as unknown as any as {
+                  agentic_message_ids: { level: number; message_id: number }[];
+                }
+              ).agentic_message_ids;
+              const level1MessageId = agenticMessageIds.find(
+                (item) => item.level === 1
+              )?.message_id;
+              if (level1MessageId) {
+                secondLevelMessageId = level1MessageId;
+                includeAgentic = true;
+              }
+            }
 
             setChatState((prevState) => {
               if (prevState.get(chatSessionIdRef.current!) === "loading") {
@@ -1663,6 +1679,19 @@ export function ChatPage({
                 second_level_generating: second_level_generating,
                 agentic_docs: agenticDocs,
               },
+              ...(includeAgentic
+                ? [
+                    {
+                      messageId: secondLevelMessageId!,
+                      message: second_level_answer,
+                      type: "assistant" as const,
+                      files: [],
+                      toolCall: null,
+                      parentMessageId:
+                        initialFetchDetails.assistant_message_id!,
+                    },
+                  ]
+                : []),
             ]);
           }
         }
@@ -2849,7 +2878,11 @@ export function ChatPage({
                                           currentAlternativeAssistant
                                         }
                                         messageId={message.messageId}
-                                        content={message.message}
+                                        content={
+                                          message.message +
+                                          " " +
+                                          message.messageId
+                                        }
                                         files={message.files}
                                         query={
                                           messageHistory[i]?.query || undefined
