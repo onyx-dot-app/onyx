@@ -34,44 +34,37 @@ export function UserProvider({
   user: User | null;
   settings: CombinedSettings;
 }) {
+  const updatedSettings = useContext(SettingsContext);
+  const posthog = usePostHog();
+
+  function mergeUserPreferences(
+    currentUser: User | null,
+    currentSettings: CombinedSettings | null
+  ): User | null {
+    if (!currentUser) return null;
+    return {
+      ...currentUser,
+      preferences: {
+        ...currentUser.preferences,
+        auto_scroll:
+          currentUser.preferences?.auto_scroll ??
+          currentSettings?.settings?.auto_scroll ??
+          false,
+        temperature_override_enabled:
+          currentUser.preferences?.temperature_override_enabled ??
+          currentSettings?.settings?.temperature_override_enabled ??
+          false,
+      },
+    };
+  }
+
   const [upToDateUser, setUpToDateUser] = useState<User | null>(
-    user
-      ? {
-          ...user,
-          preferences: {
-            ...user?.preferences,
-            auto_scroll:
-              user?.preferences?.auto_scroll ?? settings?.settings?.auto_scroll,
-            temperature_override_enabled:
-              user?.preferences?.temperature_override_enabled ??
-              settings?.settings?.temperature_override_enabled,
-          },
-        }
-      : null
+    mergeUserPreferences(user, settings)
   );
 
-  const updatedSettings = useContext(SettingsContext);
   useEffect(() => {
-    if (user) {
-      setUpToDateUser({
-        ...user,
-        preferences: {
-          ...user.preferences,
-          auto_scroll:
-            user.preferences?.auto_scroll ??
-            updatedSettings?.settings?.auto_scroll ??
-            false,
-          temperature_override_enabled:
-            user.preferences?.temperature_override_enabled ??
-            updatedSettings?.settings?.temperature_override_enabled ??
-            false,
-        },
-      });
-    } else {
-      setUpToDateUser(null);
-    }
+    setUpToDateUser(mergeUserPreferences(user, updatedSettings));
   }, [user, updatedSettings]);
-  const posthog = usePostHog();
 
   useEffect(() => {
     if (!posthog) return;
