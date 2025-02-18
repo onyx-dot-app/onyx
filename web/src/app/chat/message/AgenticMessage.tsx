@@ -280,6 +280,7 @@ export const AgenticMessage = ({
           ...(secondLevelSubquestions || []),
         ]}
         openQuestion={openQuestion}
+        href={props.href}
       >
         {props.children}
       </MemoizedAnchor>

@@ -10,7 +10,6 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SubQuestionDetail } from "../interfaces";
 import { ValidSources } from "@/lib/types";
-import { AnyNaptrRecord } from "dns";
 
 export const MemoizedAnchor = memo(
   ({
