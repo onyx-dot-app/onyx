@@ -98,13 +98,18 @@ CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 
-# soft timeout for the lock taken by the indexing worker
-# needs to be long enough to cover the maximum time it takes to download an object
-# if we can get callbacks as object bytes download, we could lower this a lot.
-CELERY_INDEXING_LOCK_TIMEOUT = 3 * 60 * 60  # 3 hours (in seconds)
 
 # hard timeout applied by the watchdog to the indexing connector run
-CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 4 * 60 * 60  # 4 hours (in seconds)
+# to handle hung connectors
+CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 3 * 60 * 60  # 3 hours (in seconds)
+
+# soft timeout for the lock taken by the indexing connector run
+# allows the lock to eventually expire if the managing code around it dies
+# if we can get callbacks as object bytes download, we could lower this a lot.
+# CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT + 15 minutes
+# hard termination should always fire first if the connector is hung
+CELERY_INDEXING_LOCK_TIMEOUT = CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT + 900
+
 
 # how long a task should wait for associated fence to be ready
 CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min

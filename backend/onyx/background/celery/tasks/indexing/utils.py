@@ -179,7 +179,7 @@ class IndexingCallback(IndexingCallbackBase):
 
     def progress(self, tag: str, amount: int) -> None:
         self.redis_connector_index.set_active()
-        # self.redis_connector_index.set_connector_active()
+        self.redis_connector_index.set_connector_active()
         super().progress(tag, amount)
         self.redis_client.incrby(
             self.redis_connector_index.generator_progress_key, amount

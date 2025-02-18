@@ -953,7 +953,7 @@ def connector_indexing_proxy_task(
 
     task_logger.info(
         log_builder.build(
-            "Indexing watchdog - Indexing watchdog - spawn succeeded",
+            "Indexing watchdog - spawn succeeded",
             pid=str(job.process.pid),
         )
     )
