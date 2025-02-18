@@ -60,7 +60,7 @@ export function Citation({
               className="flex items-center justify-center  px-1 h-4 text-[10px] font-medium text-text-700 bg-background-100 rounded-full border border-background-300 hover:bg-background-200 hover:text-text-900 shadow-sm"
               style={{ transform: "translateY(-10%)", lineHeight: "1" }}
             >
-              {innerText}s
+              {innerText}
             </span>
           </span>
         </TooltipTrigger>
