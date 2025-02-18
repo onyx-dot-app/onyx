@@ -5,8 +5,10 @@ from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
 from onyx.connectors.web.connector import WebConnector
 
 
+# NOTE(rkuo): we will probably need to adjust this test to point at our own test site
+# to avoid depending on a third party site
 @pytest.fixture
-def web_connector(request) -> WebConnector:
+def web_connector(request: pytest.FixtureRequest) -> WebConnector:
     scroll_before_scraping = request.param
     connector = WebConnector(
         base_url="https://developer.onewelcome.com",
@@ -38,4 +40,5 @@ def test_web_connector_no_scroll(web_connector: WebConnector) -> None:
             all_docs.append(doc)
 
     assert len(all_docs) == 1
+    doc = all_docs[0]
     assert "Onegini Identity Cloud" not in doc.sections[0].text
