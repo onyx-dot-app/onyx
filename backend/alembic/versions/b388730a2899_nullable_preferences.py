@@ -1,7 +1,7 @@
 """nullable preferences
 
 Revision ID: b388730a2899
-Revises: b7a7eee5aa15
+Revises: 1a03d2c2856b
 Create Date: 2025-02-17 18:49:22.643902
 
 """
@@ -10,7 +10,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "b388730a2899"
-down_revision = "b7a7eee5aa15"
+down_revision = "1a03d2c2856b"
 branch_labels = None
 depends_on = None
 
