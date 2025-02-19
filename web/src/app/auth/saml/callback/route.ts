@@ -10,6 +10,7 @@ export const POST = async (request: NextRequest) => {
   // which adds back a redirect to the main app.
   const url = new URL(buildUrl("/auth/saml/callback"));
   url.search = request.nextUrl.search;
+  console.log("headers", request.headers);
 
   const response = await fetch(url.toString(), {
     method: "POST",

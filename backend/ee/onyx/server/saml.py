@@ -79,6 +79,8 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
     # Use X-Forwarded headers if available
     http_host = request.headers.get("X-Forwarded-Host") or request.client.host
     server_port = request.headers.get("X-Forwarded-Port") or request.url.port
+    logger.info(f"http_host: {http_host}")
+    logger.info(f"server_port: {server_port}")
 
     rv: dict[str, Any] = {
         "http_host": http_host,
