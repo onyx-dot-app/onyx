@@ -86,7 +86,6 @@ from onyx.db.auth import get_user_db
 from onyx.db.auth import SQLAlchemyUserAdminDB
 from onyx.db.engine import get_async_session
 from onyx.db.engine import get_async_session_with_tenant
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
@@ -103,6 +102,7 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import async_return_default_schema
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -193,7 +193,7 @@ def verify_email_is_invited(email: str) -> None:
 
 
 def verify_email_in_whitelist(email: str, tenant_id: str | None = None) -> None:
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         if not get_user_by_email(email, db_session):
             verify_email_is_invited(email)
 
@@ -819,8 +819,9 @@ async def current_limited_user(
 
 async def current_chat_accesssible_user(
     user: User | None = Depends(optional_user),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> User | None:
+    tenant_id = get_current_tenant_id()
+
     return await double_check_user(
         user, allow_anonymous_access=anonymous_user_enabled(tenant_id=tenant_id)
     )

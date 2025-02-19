@@ -42,8 +42,6 @@ from onyx.configs.constants import AuthType
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_total_users_count
-from onyx.db.engine import CURRENT_TENANT_ID_CONTEXTVAR
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.models import AccessToken
 from onyx.db.models import User
@@ -69,6 +67,7 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 router = APIRouter()
@@ -266,13 +265,13 @@ def bulk_invite_users(
 ) -> int:
     """emails are string validated. If any email fails validation, no emails are
     invited and an exception is raised."""
+    tenant_id = get_current_tenant_id()
 
     if current_user is None:
         raise HTTPException(
             status_code=400, detail="Auth is disabled, cannot invite users"
         )
 
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     new_invited_emails = []
     email: str
 
@@ -314,7 +313,7 @@ def bulk_invite_users(
         logger.info("Registering tenant users")
         fetch_ee_implementation_or_noop(
             "onyx.server.tenants.billing", "register_tenant_users", None
-        )(CURRENT_TENANT_ID_CONTEXTVAR.get(), get_total_users_count(db_session))
+        )(tenant_id, get_total_users_count(db_session))
         if ENABLE_EMAIL_INVITES:
             try:
                 for email in new_invited_emails:
@@ -341,10 +340,10 @@ def remove_invited_user(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> int:
+    tenant_id = get_current_tenant_id()
     user_emails = get_invited_users()
     remaining_users = [user for user in user_emails if user != user_email.user_email]
 
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     fetch_ee_implementation_or_noop(
         "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
     )([user_email.user_email], tenant_id)
@@ -354,7 +353,7 @@ def remove_invited_user(
         if MULTI_TENANT:
             fetch_ee_implementation_or_noop(
                 "onyx.server.tenants.billing", "register_tenant_users", None
-            )(CURRENT_TENANT_ID_CONTEXTVAR.get(), get_total_users_count(db_session))
+            )(tenant_id, get_total_users_count(db_session))
     except Exception:
         logger.error(
             "Request to update number of seats taken in control plane failed. "
@@ -531,8 +530,9 @@ def get_current_token_creation(
 def verify_user_logged_in(
     user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> UserInfo:
+    tenant_id = get_current_tenant_id()
+
     # NOTE: this does not use `current_user` / `current_admin_user` because we don't want
     # to enforce user verification here - the frontend always wants to get the info about
     # the current user regardless of if they are currently verified

@@ -26,7 +26,8 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine import get_all_tenant_ids
 from onyx.db.engine import get_db_current_time
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine import get_session_with_shared_schema
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
@@ -41,7 +42,6 @@ from onyx.redis.redis_pool import redis_lock_dump
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-
 
 _MONITORING_SOFT_TIME_LIMIT = 60 * 5  # 5 minutes
 _MONITORING_TIME_LIMIT = _MONITORING_SOFT_TIME_LIMIT + 60  # 6 minutes
@@ -668,7 +668,7 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
     task_logger.info("Starting background monitoring")
-    r = get_redis_client(tenant_id=tenant_id)
+    r = get_redis_client()
 
     lock_monitoring: RedisLock = r.lock(
         OnyxRedisLocks.MONITOR_BACKGROUND_PROCESSES_LOCK,
@@ -683,7 +683,7 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
     try:
         # Get Redis client for Celery broker
         redis_celery = self.app.broker_connection().channel().client  # type: ignore
-        redis_std = get_redis_client(tenant_id=tenant_id)
+        redis_std = get_redis_client()
 
         # Define metric collection functions and their dependencies
         metric_functions: list[Callable[[], list[Metric]]] = [
@@ -693,7 +693,7 @@ def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
         ]
 
         # Collect and log each metric
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             for metric_fn in metric_functions:
                 metrics = metric_fn()
                 for metric in metrics:
@@ -771,12 +771,11 @@ def cloud_check_alembic() -> bool | None:
             if tenant_id is None:
                 continue
 
-            with get_session_with_tenant(tenant_id=None) as session:
+            with get_session_with_shared_schema() as session:
                 try:
                     result = session.execute(
                         text(f'SELECT * FROM "{tenant_id}".alembic_version LIMIT 1')
                     )
-
                     result_scalar: str | None = result.scalar_one_or_none()
                     if result_scalar is None:
                         raise ValueError("Alembic version should not be None.")

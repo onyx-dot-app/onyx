@@ -280,6 +280,7 @@ export const AgenticMessage = ({
           ...(secondLevelSubquestions || []),
         ]}
         openQuestion={openQuestion}
+        href={props.href}
       >
         {props.children}
       </MemoizedAnchor>
@@ -536,7 +537,6 @@ export const AgenticMessage = ({
                             {includeMessageSwitcher && (
                               <div className="-mx-1 mr-auto">
                                 <MessageSwitcher
-                                  disableForStreaming={!isComplete}
                                   currentPage={currentMessageInd + 1}
                                   totalPages={otherMessagesCanSwitchTo.length}
                                   handlePrevious={() => {
@@ -623,7 +623,6 @@ export const AgenticMessage = ({
                             {includeMessageSwitcher && (
                               <div className="-mx-1 mr-auto">
                                 <MessageSwitcher
-                                  disableForStreaming={!isComplete}
                                   currentPage={currentMessageInd + 1}
                                   totalPages={otherMessagesCanSwitchTo.length}
                                   handlePrevious={() => {
@@ -702,52 +701,27 @@ function MessageSwitcher({
   totalPages,
   handlePrevious,
   handleNext,
-  disableForStreaming,
 }: {
   currentPage: number;
   totalPages: number;
   handlePrevious: () => void;
   handleNext: () => void;
-  disableForStreaming?: boolean;
 }) {
   return (
     <div className="flex items-center text-sm space-x-0.5">
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div>
-              <Hoverable
-                icon={FiChevronLeft}
-                onClick={currentPage === 1 ? undefined : handlePrevious}
-              />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            {disableForStreaming ? "Disabled" : "Previous"}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Hoverable
+        icon={FiChevronLeft}
+        onClick={currentPage === 1 ? undefined : handlePrevious}
+      />
 
       <span className="text-text-darker select-none">
         {currentPage} / {totalPages}
-        {disableForStreaming ? "Complete" : "Generating"}
       </span>
 
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div>
-              <Hoverable
-                icon={FiChevronRight}
-                onClick={currentPage === totalPages ? undefined : handleNext}
-              />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            {disableForStreaming ? "Disabled" : "Next"}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Hoverable
+        icon={FiChevronRight}
+        onClick={currentPage === totalPages ? undefined : handleNext}
+      />
     </div>
   );
 }

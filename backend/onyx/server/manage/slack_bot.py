@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_admin_user
 from onyx.configs.constants import MilestoneRecordType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.models import ChannelConfig
 from onyx.db.models import User
@@ -36,6 +35,7 @@ from onyx.server.manage.models import SlackChannelConfigCreationRequest
 from onyx.server.manage.validate_tokens import validate_app_token
 from onyx.server.manage.validate_tokens import validate_bot_token
 from onyx.utils.telemetry import create_milestone_and_report
+from shared_configs.contextvars import get_current_tenant_id
 
 
 router = APIRouter(prefix="/manage")
@@ -231,8 +231,9 @@ def create_bot(
     slack_bot_creation_request: SlackBotCreationRequest,
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_admin_user),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> SlackBot:
+    tenant_id = get_current_tenant_id()
+
     validate_app_token(slack_bot_creation_request.app_token)
     validate_bot_token(slack_bot_creation_request.bot_token)
 

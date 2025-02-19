@@ -23,7 +23,7 @@ from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.db.engine import get_db_current_time
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
@@ -332,7 +332,7 @@ def validate_indexing_fences(
         if not key_str.startswith(RedisConnectorIndex.FENCE_PREFIX):
             continue
 
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             validate_indexing_fence(
                 tenant_id,
                 key_bytes,

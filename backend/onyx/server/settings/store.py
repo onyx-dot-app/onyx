@@ -6,7 +6,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.models import Settings
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -26,7 +26,7 @@ def load_settings() -> Settings:
         logger.error(f"Error loading settings from KV store: {str(e)}")
         settings = Settings()
 
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get() if MULTI_TENANT else None
+    tenant_id = get_current_tenant_id() if MULTI_TENANT else None
     redis_client = get_redis_client(tenant_id=tenant_id)
 
     try:
@@ -49,7 +49,7 @@ def load_settings() -> Settings:
 
 
 def store_settings(settings: Settings) -> None:
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get() if MULTI_TENANT else None
+    tenant_id = get_current_tenant_id() if MULTI_TENANT else None
     redis_client = get_redis_client(tenant_id=tenant_id)
 
     if settings.anonymous_user_enabled is not None:

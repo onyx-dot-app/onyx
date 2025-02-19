@@ -175,6 +175,7 @@ const SubQuestionDisplay: React.FC<{
       <MemoizedAnchor
         updatePresentingDocument={setPresentingDocument!}
         docs={subQuestion?.context_docs?.top_documents || documents}
+        href={props.href}
       >
         {props.children}
       </MemoizedAnchor>

@@ -45,9 +45,11 @@ class UserPreferences(BaseModel):
     hidden_assistants: list[int] = []
     visible_assistants: list[int] = []
     default_model: str | None = None
-    auto_scroll: bool | None = None
     pinned_assistants: list[int] | None = None
     shortcut_enabled: bool | None = None
+
+    # These will default to workspace settings on the frontend if not set
+    auto_scroll: bool | None = None
     temperature_override_enabled: bool | None = None
 
 
@@ -86,12 +88,12 @@ class UserInfo(BaseModel):
             preferences=(
                 UserPreferences(
                     shortcut_enabled=user.shortcut_enabled,
-                    auto_scroll=user.auto_scroll,
                     chosen_assistants=user.chosen_assistants,
                     default_model=user.default_model,
                     hidden_assistants=user.hidden_assistants,
                     pinned_assistants=user.pinned_assistants,
                     visible_assistants=user.visible_assistants,
+                    auto_scroll=user.auto_scroll,
                     temperature_override_enabled=user.temperature_override_enabled,
                 )
             ),

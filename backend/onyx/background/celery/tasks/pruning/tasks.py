@@ -41,7 +41,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.document import get_documents_for_connector_credential_pair
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
@@ -114,8 +114,8 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
     bind=True,
 )
 def check_for_pruning(self: Task, *, tenant_id: str | None) -> bool | None:
-    r = get_redis_client(tenant_id=tenant_id)
-    r_replica = get_redis_replica_client(tenant_id=tenant_id)
+    r = get_redis_client()
+    r_replica = get_redis_replica_client()
     r_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
 
     lock_beat: RedisLock = r.lock(
@@ -133,14 +133,14 @@ def check_for_pruning(self: Task, *, tenant_id: str | None) -> bool | None:
         # but pruning only kicks off once per hour
         if not r.exists(OnyxRedisSignals.BLOCK_PRUNING):
             cc_pair_ids: list[int] = []
-            with get_session_with_tenant(tenant_id) as db_session:
+            with get_session_with_current_tenant() as db_session:
                 cc_pairs = get_connector_credential_pairs(db_session)
                 for cc_pair_entry in cc_pairs:
                     cc_pair_ids.append(cc_pair_entry.id)
 
             for cc_pair_id in cc_pair_ids:
                 lock_beat.reacquire()
-                with get_session_with_tenant(tenant_id) as db_session:
+                with get_session_with_current_tenant() as db_session:
                     cc_pair = get_connector_credential_pair_from_id(
                         db_session=db_session,
                         cc_pair_id=cc_pair_id,
@@ -188,7 +188,7 @@ def check_for_pruning(self: Task, *, tenant_id: str | None) -> bool | None:
 
             key_str = key_bytes.decode("utf-8")
             if key_str.startswith(RedisConnectorPrune.FENCE_PREFIX):
-                with get_session_with_tenant(tenant_id) as db_session:
+                with get_session_with_current_tenant() as db_session:
                     monitor_ccpair_pruning_taskset(tenant_id, key_bytes, r, db_session)
     except SoftTimeLimitExceeded:
         task_logger.info(
@@ -343,7 +343,7 @@ def connector_pruning_generator_task(
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
 
-    r = get_redis_client(tenant_id=tenant_id)
+    r = get_redis_client()
 
     # this wait is needed to avoid a race condition where
     # the primary worker sends the task and it is immediately executed
@@ -401,7 +401,7 @@ def connector_pruning_generator_task(
         return None
 
     try:
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair(
                 db_session=db_session,
                 connector_id=connector_id,

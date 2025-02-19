@@ -34,7 +34,7 @@ from onyx.db.document_set import fetch_document_sets
 from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.document_set import get_document_set_by_id
 from onyx.db.document_set import mark_document_set_as_synced
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import DocumentSet
@@ -84,8 +84,8 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
 
     time_start = time.monotonic()
 
-    r = get_redis_client(tenant_id=tenant_id)
-    r_replica = get_redis_replica_client(tenant_id=tenant_id)
+    r = get_redis_client()
+    r_replica = get_redis_replica_client()
 
     lock_beat: RedisLock = r.lock(
         OnyxRedisLocks.CHECK_VESPA_SYNC_BEAT_LOCK,
@@ -98,7 +98,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
 
     try:
         # 1/3: KICKOFF
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             try_generate_stale_document_sync_tasks(
                 self.app, VESPA_SYNC_MAX_TASKS, db_session, r, lock_beat, tenant_id
             )
@@ -106,7 +106,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
         # region document set scan
         lock_beat.reacquire()
         document_set_ids: list[int] = []
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             # check if any document sets are not synced
             document_set_info = fetch_document_sets(
                 user_id=None, db_session=db_session, include_outdated=True
@@ -117,7 +117,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
 
         for document_set_id in document_set_ids:
             lock_beat.reacquire()
-            with get_session_with_tenant(tenant_id) as db_session:
+            with get_session_with_current_tenant() as db_session:
                 try_generate_document_set_sync_tasks(
                     self.app, document_set_id, db_session, r, lock_beat, tenant_id
                 )
@@ -136,7 +136,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
                 pass
             else:
                 usergroup_ids: list[int] = []
-                with get_session_with_tenant(tenant_id) as db_session:
+                with get_session_with_current_tenant() as db_session:
                     user_groups = fetch_user_groups(
                         db_session=db_session, only_up_to_date=False
                     )
@@ -146,7 +146,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
 
                 for usergroup_id in usergroup_ids:
                     lock_beat.reacquire()
-                    with get_session_with_tenant(tenant_id) as db_session:
+                    with get_session_with_current_tenant() as db_session:
                         try_generate_user_group_sync_tasks(
                             self.app, usergroup_id, db_session, r, lock_beat, tenant_id
                         )
@@ -167,7 +167,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
             if key_str == RedisGlobalConnectorCredentialPair.FENCE_KEY:
                 monitor_connector_taskset(r)
             elif key_str.startswith(RedisDocumentSet.FENCE_PREFIX):
-                with get_session_with_tenant(tenant_id) as db_session:
+                with get_session_with_current_tenant() as db_session:
                     monitor_document_set_taskset(tenant_id, key_bytes, r, db_session)
             elif key_str.startswith(RedisUserGroup.FENCE_PREFIX):
                 monitor_usergroup_taskset = (
@@ -177,7 +177,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | No
                         noop_fallback,
                     )
                 )
-                with get_session_with_tenant(tenant_id) as db_session:
+                with get_session_with_current_tenant() as db_session:
                     monitor_usergroup_taskset(tenant_id, key_bytes, r, db_session)
 
     except SoftTimeLimitExceeded:
@@ -523,12 +523,12 @@ def monitor_document_set_taskset(
     max_retries=3,
 )
 def vespa_metadata_sync_task(
-    self: Task, document_id: str, tenant_id: str | None
+    self: Task, document_id: str, *, tenant_id: str | None
 ) -> bool:
     start = time.monotonic()
 
     try:
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
             doc_index = get_default_document_index(
                 search_settings=active_search_settings.primary,

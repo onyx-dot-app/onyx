@@ -154,11 +154,9 @@ export function UserSettingsModal({
       });
     }
   };
-  const defaultProvider = llmProviders.find(
-    (llmProvider) => llmProvider.is_default_provider
-  );
+
   const settings = useContext(SettingsContext);
-  const autoScroll = settings?.enterpriseSettings?.auto_scroll;
+  const autoScroll = settings?.settings?.auto_scroll;
 
   const checked =
     user?.preferences?.auto_scroll === null

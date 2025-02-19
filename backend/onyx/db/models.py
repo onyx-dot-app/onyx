@@ -148,11 +148,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     putting here for simpicity
     """
 
-    # if specified, controls the assistants that are shown to the user + their order
-    # if not specified, all assistants are shown
-    temperature_override_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    auto_scroll: Mapped[bool] = mapped_column(Boolean, default=True)
+    temperature_override_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, default=None
+    )
+    auto_scroll: Mapped[bool | None] = mapped_column(Boolean, default=None)
     shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
     )

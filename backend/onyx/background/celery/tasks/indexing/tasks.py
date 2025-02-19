@@ -51,7 +51,7 @@ from onyx.configs.constants import OnyxRedisSignals
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import fetch_connector_credential_pairs
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import get_index_attempt
@@ -355,12 +355,13 @@ def monitor_ccpair_indexing_taskset(
 def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
     """a lightweight task used to kick off indexing tasks.
     Occcasionally does some validation of existing state to clear up error conditions"""
+
     time_start = time.monotonic()
 
     tasks_created = 0
     locked = False
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    redis_client_replica = get_redis_replica_client(tenant_id=tenant_id)
+    redis_client = get_redis_client()
+    redis_client_replica = get_redis_replica_client()
 
     # we need to use celery's redis client to access its redis data
     # (which lives on a different db number)
@@ -398,7 +399,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
         # 1/3: KICKOFF
 
         # check for search settings swap
-        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             old_search_settings = check_index_swap(db_session=db_session)
             current_search_settings = get_current_search_settings(db_session)
             # So that the first time users aren't surprised by really slow speed of first
@@ -419,7 +420,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
         # gather cc_pair_ids
         lock_beat.reacquire()
         cc_pair_ids: list[int] = []
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             cc_pairs = fetch_connector_credential_pairs(db_session)
             for cc_pair_entry in cc_pairs:
                 cc_pair_ids.append(cc_pair_entry.id)
@@ -429,7 +430,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
             lock_beat.reacquire()
 
             redis_connector = RedisConnector(tenant_id, cc_pair_id)
-            with get_session_with_tenant(tenant_id) as db_session:
+            with get_session_with_current_tenant() as db_session:
                 search_settings_list = get_active_search_settings_list(db_session)
                 for search_settings_instance in search_settings_list:
                     redis_connector_index = redis_connector.new_index(
@@ -507,7 +508,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
 
         # Fail any index attempts in the DB that don't have fences
         # This shouldn't ever happen!
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             unfenced_attempt_ids = get_unfenced_index_attempt_ids(
                 db_session, redis_client
             )
@@ -559,7 +560,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
 
             key_str = key_bytes.decode("utf-8")
             if key_str.startswith(RedisConnectorIndex.FENCE_PREFIX):
-                with get_session_with_tenant(tenant_id) as db_session:
+                with get_session_with_current_tenant() as db_session:
                     monitor_ccpair_indexing_taskset(
                         tenant_id, key_bytes, redis_client_replica, db_session
                     )
@@ -590,8 +591,8 @@ def connector_indexing_task(
     index_attempt_id: int,
     cc_pair_id: int,
     search_settings_id: int,
-    tenant_id: str | None,
     is_ee: bool,
+    tenant_id: str | None,
 ) -> int | None:
     """Indexing task. For a cc pair, this task pulls all document IDs from the source
     and compares those IDs to locally stored documents and deletes all locally stored IDs missing
@@ -642,7 +643,7 @@ def connector_indexing_task(
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     redis_connector_index = redis_connector.new_index(search_settings_id)
 
-    r = get_redis_client(tenant_id=tenant_id)
+    r = get_redis_client()
 
     if redis_connector.delete.fenced:
         raise SimpleJobException(
@@ -736,7 +737,7 @@ def connector_indexing_task(
     redis_connector_index.set_fence(payload)
 
     try:
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             attempt = get_index_attempt(db_session, index_attempt_id)
             if not attempt:
                 raise SimpleJobException(
@@ -914,9 +915,8 @@ def connector_indexing_proxy_task(
         index_attempt_id,
         cc_pair_id,
         search_settings_id,
-        tenant_id,
         global_version.is_ee_version(),
-        pure=False,
+        tenant_id,
     )
 
     if not job or not job.process:
@@ -962,7 +962,7 @@ def connector_indexing_proxy_task(
     redis_connector_index = redis_connector.new_index(search_settings_id)
 
     try:
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             index_attempt = get_index_attempt(
                 db_session=db_session, index_attempt_id=index_attempt_id
             )
@@ -1019,7 +1019,7 @@ def connector_indexing_proxy_task(
                 )
 
                 try:
-                    with get_session_with_tenant(tenant_id) as db_session:
+                    with get_session_with_current_tenant() as db_session:
                         mark_attempt_failed(
                             index_attempt_id,
                             db_session,
@@ -1045,7 +1045,7 @@ def connector_indexing_proxy_task(
             # if the spawned task is still running, restart the check once again
             # if the index attempt is not in a finished status
             try:
-                with get_session_with_tenant(tenant_id) as db_session:
+                with get_session_with_current_tenant() as db_session:
                     index_attempt = get_index_attempt(
                         db_session=db_session, index_attempt_id=index_attempt_id
                     )
@@ -1073,7 +1073,7 @@ def connector_indexing_proxy_task(
     if result.exception_str is not None:
         # print with exception
         try:
-            with get_session_with_tenant(tenant_id) as db_session:
+            with get_session_with_current_tenant() as db_session:
                 failure_reason = (
                     f"Spawned task exceptioned: exit_code={result.exit_code}"
                 )
@@ -1113,7 +1113,7 @@ def connector_indexing_proxy_task(
     # print without exception
     if result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL:
         try:
-            with get_session_with_tenant(tenant_id) as db_session:
+            with get_session_with_current_tenant() as db_session:
                 mark_attempt_canceled(
                     index_attempt_id,
                     db_session,
@@ -1163,7 +1163,7 @@ def check_for_checkpoint_cleanup(*, tenant_id: str | None) -> None:
 
     try:
         locked = True
-        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             old_attempts = get_index_attempts_with_old_checkpoints(db_session)
             for attempt in old_attempts:
                 task_logger.info(
@@ -1199,5 +1199,5 @@ def cleanup_checkpoint_task(
     self: Task, *, index_attempt_id: int, tenant_id: str | None
 ) -> None:
     """Clean up a checkpoint for a given index attempt"""
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+    with get_session_with_current_tenant() as db_session:
         cleanup_checkpoint(db_session, index_attempt_id)

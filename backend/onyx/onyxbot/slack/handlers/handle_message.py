@@ -218,7 +218,7 @@ def handle_message(
     except SlackApiError as e:
         logger.error(f"Was not able to react to user message due to: {e}")
 
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         if message_info.email:
             add_slack_user_if_not_exists(db_session, message_info.email)
 

@@ -33,6 +33,7 @@ from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGrou
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import ColoredFormatter
 from onyx.utils.logger import PlainFormatter
@@ -58,13 +59,35 @@ else:
     logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 
 
+class TenantAwareTask(Task):
+    """A custom base Task that sets tenant_id in a contextvar before running."""
+
+    abstract = True  # So Celery knows not to register this as a real task.
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        # Grab tenant_id from the kwargs, or fallback to default if missing.
+        tenant_id = kwargs.get("tenant_id", None) or POSTGRES_DEFAULT_SCHEMA
+
+        # Set the context var
+        CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+
+        # Actually run the task now
+        try:
+            return super().__call__(*args, **kwargs)
+        finally:
+            # Clear or reset after the task runs
+            # so it does not leak into any subsequent tasks on the same worker process
+            CURRENT_TENANT_ID_CONTEXTVAR.set(None)
+
+
+@task_prerun.connect
 def on_task_prerun(
     sender: Any | None = None,
     task_id: str | None = None,
     task: Task | None = None,
     args: tuple[Any, ...] | None = None,
     kwargs: dict[str, Any] | None = None,
-    **kwds: Any,
+    **other_kwargs: Any,
 ) -> None:
     pass
 
@@ -117,7 +140,7 @@ def on_task_postrun(
         f"{f'for tenant_id={tenant_id}' if tenant_id else ''}"
     )
 
-    r = get_redis_client(tenant_id=tenant_id)
+    r = get_redis_client()
 
     if task_id.startswith(RedisConnectorCredentialPair.PREFIX):
         r.srem(RedisConnectorCredentialPair.get_taskset_key(), task_id)
@@ -201,7 +224,7 @@ def wait_for_redis(sender: Any, **kwargs: Any) -> None:
     Will raise WorkerShutdown to kill the celery worker if the timeout
     is reached."""
 
-    r = get_redis_client(tenant_id=None)
+    r = get_shared_redis_client()
 
     WAIT_INTERVAL = 5
     WAIT_LIMIT = 60
@@ -287,7 +310,7 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:
     # Set up variables for waiting on primary worker
     WAIT_INTERVAL = 5
     WAIT_LIMIT = 60
-    r = get_redis_client(tenant_id=None)
+    r = get_shared_redis_client()
     time_start = time.monotonic()
 
     logger.info("Waiting for primary worker to be ready...")
@@ -437,24 +460,6 @@ class TenantContextFilter(logging.Filter):
         else:
             record.name = ""
         return True
-
-
-@task_prerun.connect
-def set_tenant_id(
-    sender: Any | None = None,
-    task_id: str | None = None,
-    task: Task | None = None,
-    args: tuple[Any, ...] | None = None,
-    kwargs: dict[str, Any] | None = None,
-    **other_kwargs: Any,
-) -> None:
-    """Signal handler to set tenant ID in context var before task starts."""
-    tenant_id = (
-        kwargs.get("tenant_id", POSTGRES_DEFAULT_SCHEMA)
-        if kwargs
-        else POSTGRES_DEFAULT_SCHEMA
-    )
-    CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
 
 @task_postrun.connect

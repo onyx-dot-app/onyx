@@ -143,7 +143,7 @@ from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.timing import log_generator_function_time
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
@@ -343,7 +343,7 @@ def stream_chat_message_objects(
     3. [always] A set of streamed LLM tokens or an error anywhere along the line if something fails
     4. [always] Details on the final AI response message that is created
     """
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+    tenant_id = get_current_tenant_id()
     use_existing_user_message = new_msg_req.use_existing_user_message
     existing_assistant_message_id = new_msg_req.existing_assistant_message_id
 

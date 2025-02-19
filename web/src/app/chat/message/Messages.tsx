@@ -314,6 +314,7 @@ export const AIMessage = ({
       <MemoizedAnchor
         updatePresentingDocument={setPresentingDocument!}
         docs={docs}
+        href={props.href}
       >
         {props.children}
       </MemoizedAnchor>

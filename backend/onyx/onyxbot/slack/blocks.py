@@ -415,7 +415,7 @@ def _build_continue_in_web_ui_block(
 ) -> Block:
     if message_id is None:
         raise ValueError("No message id provided to build continue in web ui block")
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         chat_session = get_chat_session_by_message_id(
             db_session=db_session,
             message_id=message_id,

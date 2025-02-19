@@ -47,7 +47,7 @@ def get_user_id(user_email: str) -> tuple[UUID, str]:
         get_tenant_id_for_email(user_email) if MULTI_TENANT else POSTGRES_DEFAULT_SCHEMA
     )
 
-    with get_session_with_tenant(tenant_id) as session:
+    with get_session_with_tenant(tenant_id=tenant_id) as session:
         user = get_user_by_email(user_email, session)
         if user is None:
             raise ValueError(f"User not found for email: {user_email}")

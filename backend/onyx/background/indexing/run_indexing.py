@@ -28,7 +28,7 @@ from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_last_successful_attempt_time
 from onyx.db.connector_credential_pair import update_connector_credential_pair
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
@@ -244,7 +244,7 @@ def _run_indexing(
     """
     start_time = time.monotonic()  # jsut used for logging
 
-    with get_session_with_tenant(tenant_id) as db_session_temp:
+    with get_session_with_current_tenant() as db_session_temp:
         index_attempt_start = get_index_attempt(db_session_temp, index_attempt_id)
         if not index_attempt_start:
             raise ValueError(
@@ -370,7 +370,7 @@ def _run_indexing(
     document_count = 0
     chunk_count = 0
     try:
-        with get_session_with_tenant(tenant_id) as db_session_temp:
+        with get_session_with_current_tenant() as db_session_temp:
             index_attempt = get_index_attempt(db_session_temp, index_attempt_id)
             if not index_attempt:
                 raise RuntimeError(f"Index attempt {index_attempt_id} not found in DB.")
@@ -430,7 +430,7 @@ def _run_indexing(
                         raise ConnectorStopSignal("Connector stop signal detected")
 
                 # TODO: should we move this into the above callback instead?
-                with get_session_with_tenant(tenant_id) as db_session_temp:
+                with get_session_with_current_tenant() as db_session_temp:
                     # will exception if the connector/index attempt is marked as paused/failed
                     _check_connector_and_attempt_status(
                         db_session_temp, ctx, index_attempt_id
@@ -439,7 +439,7 @@ def _run_indexing(
                 # save record of any failures at the connector level
                 if failure is not None:
                     total_failures += 1
-                    with get_session_with_tenant(tenant_id) as db_session_temp:
+                    with get_session_with_current_tenant() as db_session_temp:
                         create_index_attempt_error(
                             index_attempt_id,
                             ctx.cc_pair_id,
@@ -503,7 +503,7 @@ def _run_indexing(
                     if document.id not in failed_document_ids
                 ]
                 for document_id in successful_document_ids:
-                    with get_session_with_tenant(tenant_id) as db_session_temp:
+                    with get_session_with_current_tenant() as db_session_temp:
                         if document_id in doc_id_to_unresolved_errors:
                             logger.info(
                                 f"Resolving IndexAttemptError for document '{document_id}'"
@@ -516,7 +516,7 @@ def _run_indexing(
                 # add brand new failures
                 if index_pipeline_result.failures:
                     total_failures += len(index_pipeline_result.failures)
-                    with get_session_with_tenant(tenant_id) as db_session_temp:
+                    with get_session_with_current_tenant() as db_session_temp:
                         for failure in index_pipeline_result.failures:
                             create_index_attempt_error(
                                 index_attempt_id,
@@ -533,7 +533,7 @@ def _run_indexing(
                     )
 
                 # This new value is updated every batch, so UI can refresh per batch update
-                with get_session_with_tenant(tenant_id) as db_session_temp:
+                with get_session_with_current_tenant() as db_session_temp:
                     # NOTE: Postgres uses the start of the transactions when computing `NOW()`
                     # so we need either to commit() or to use a new session
                     update_docs_indexed(
@@ -555,7 +555,7 @@ def _run_indexing(
                 check_checkpoint_size(checkpoint)
 
             # save latest checkpoint
-            with get_session_with_tenant(tenant_id) as db_session_temp:
+            with get_session_with_current_tenant() as db_session_temp:
                 save_checkpoint(
                     db_session=db_session_temp,
                     index_attempt_id=index_attempt_id,
@@ -569,7 +569,7 @@ def _run_indexing(
         )
 
         if isinstance(e, ConnectorStopSignal):
-            with get_session_with_tenant(tenant_id) as db_session_temp:
+            with get_session_with_current_tenant() as db_session_temp:
                 mark_attempt_canceled(
                     index_attempt_id,
                     db_session_temp,
@@ -587,7 +587,7 @@ def _run_indexing(
             memory_tracer.stop()
             raise e
         else:
-            with get_session_with_tenant(tenant_id) as db_session_temp:
+            with get_session_with_current_tenant() as db_session_temp:
                 mark_attempt_failed(
                     index_attempt_id,
                     db_session_temp,
@@ -609,7 +609,7 @@ def _run_indexing(
     memory_tracer.stop()
 
     elapsed_time = time.monotonic() - start_time
-    with get_session_with_tenant(tenant_id) as db_session_temp:
+    with get_session_with_current_tenant() as db_session_temp:
         # resolve entity-based errors
         for error in entity_based_unresolved_errors:
             logger.info(f"Resolving IndexAttemptError for entity '{error.entity_id}'")
@@ -669,7 +669,7 @@ def run_indexing_entrypoint(
     TaskAttemptSingleton.set_cc_and_index_id(
         index_attempt_id, connector_credential_pair_id
     )
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_current_tenant() as db_session:
         # TODO: remove long running session entirely
         attempt = transition_attempt_to_in_progress(index_attempt_id, db_session)
 
@@ -690,7 +690,7 @@ def run_indexing_entrypoint(
         f"credentials='{credential_id}'"
     )
 
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_current_tenant() as db_session:
         _run_indexing(db_session, index_attempt_id, tenant_id, callback)
 
     logger.info(

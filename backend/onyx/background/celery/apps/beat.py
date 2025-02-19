@@ -132,6 +132,7 @@ class DynamicTenantScheduler(PersistentScheduler):
                         f"Adding options to task {tenant_task_name}: {options}"
                     )
                     tenant_task["options"] = options
+
                 new_schedule[tenant_task_name] = tenant_task
 
         return new_schedule
@@ -256,3 +257,4 @@ def on_setup_logging(
 
 
 celery_app.conf.beat_scheduler = DynamicTenantScheduler
+celery_app.conf.task_default_base = app_base.TenantAwareTask

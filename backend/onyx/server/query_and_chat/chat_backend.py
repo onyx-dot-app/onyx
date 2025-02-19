@@ -44,7 +44,6 @@ from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import set_as_latest_chat_message
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.feedback import create_chat_message_feedback
@@ -83,6 +82,7 @@ from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
+from shared_configs.contextvars import get_current_tenant_id
 
 
 logger = setup_logger()
@@ -376,7 +376,6 @@ def handle_new_chat_message(
     user: User | None = Depends(current_chat_accesssible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     is_connected_func: Callable[[], bool] = Depends(is_connected),
-    tenant_id: str = Depends(get_current_tenant_id),
 ) -> StreamingResponse:
     """
     This endpoint is both used for all the following purposes:
@@ -398,6 +397,7 @@ def handle_new_chat_message(
     Returns:
         StreamingResponse: Streams the response to the new chat message.
     """
+    tenant_id = get_current_tenant_id()
     logger.debug(f"Received new chat message: {chat_message_req.message}")
 
     if (
@@ -407,7 +407,7 @@ def handle_new_chat_message(
     ):
         raise HTTPException(status_code=400, detail="Empty chat message is invalid")
 
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         create_milestone_and_report(
             user=user,
             distinct_id=user.email if user else tenant_id or "N/A",
