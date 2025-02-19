@@ -440,7 +440,10 @@ class WebConnector(LoadConnector):
                 "No URL configured. Please provide at least one valid URL."
             )
 
-        if self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value:
+        if (
+            self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value
+            or self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value
+        ):
             return None
 
         # We'll just test the first URL for connectivity and correctness
