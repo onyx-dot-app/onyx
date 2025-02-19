@@ -4,6 +4,24 @@ log_format custom_main '$remote_addr - $remote_user [$time_local] "$request" '
                 '"$http_user_agent" "$http_x_forwarded_for" '
                 'rt=$request_time';
 
+# Map X-Forwarded-Proto or fallback to $scheme
+map $http_x_forwarded_proto $forwarded_proto {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+
+# Map X-Forwarded-Host or fallback to $host
+map $http_x_forwarded_host $forwarded_host {
+    default $http_x_forwarded_host;
+    ""      $host;
+}
+
+# Map X-Forwarded-Port or fallback to server port
+map $http_x_forwarded_port $forwarded_port {
+    default $http_x_forwarded_port;
+    ""      $server_port;
+}
+
 upstream api_server {
     # fail_timeout=0 means we always retry an upstream even if it failed
     # to return a good HTTP response
@@ -21,8 +39,7 @@ upstream web_server {
 }
 
 server {
-    listen 80;
-    server_name ${DOMAIN};
+    listen 80 default_server;
 
     client_max_body_size 5G;    # Maximum upload size
 
@@ -36,8 +53,9 @@ server {
         # misc headers
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host; 
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Forwarded-Host $forwarded_host; 
+        proxy_set_header X-Forwarded-Port $forwarded_port;
         proxy_set_header Host $host;
 
         # need to use 1.1 to support chunked transfers
@@ -54,8 +72,9 @@ server {
         # misc headers
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host; 
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Forwarded-Host $forwarded_host; 
+        proxy_set_header X-Forwarded-Port $forwarded_port;
         proxy_set_header Host $host;
 
         proxy_http_version 1.1;
@@ -68,14 +87,25 @@ server {
 }
 
 server {
-    listen 443 ssl;
-    server_name ${DOMAIN};
+    listen 443 ssl default_server;
 
     client_max_body_size 5G;    # Maximum upload size
     
     location / {
+        # misc headers
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # don't use forwarded schema, host, or port here - this is the entry point
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host; 
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_set_header Host $host;
+
         proxy_http_version 1.1;
         proxy_buffering off;
+        # we don't want nginx trying to do something clever with
+        # redirects, we set the Host: header above already.
+        proxy_redirect off;
         proxy_pass http://localhost:80;
     }
 
