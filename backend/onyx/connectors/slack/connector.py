@@ -701,6 +701,14 @@ class SlackConnector(SlimConnector, CheckpointConnector):
                     "Slack bot token lacks the necessary scope to list channels. "
                     "Please ensure your Slack app has 'channels:read' (or 'groups:read' for private channels) enabled."
                 )
+            elif slack_error == "invalid_auth":
+                raise CredentialExpiredError(
+                    f"Invalid or expired Slack bot token ({slack_error})."
+                )
+            elif slack_error == "not_authed":
+                raise CredentialExpiredError(
+                    f"Invalid or expired Slack bot token ({slack_error})."
+                )
             else:
                 # Generic Slack error
                 raise UnexpectedError(
