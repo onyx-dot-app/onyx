@@ -7,15 +7,22 @@ from typing import Optional
 
 import boto3  # type: ignore
 from botocore.client import Config  # type: ignore
+from botocore.exceptions import ClientError
+from botocore.exceptions import NoCredentialsError
+from botocore.exceptions import PartialCredentialsError
 from mypy_boto3_s3 import S3Client  # type: ignore
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import BlobType
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.connectors.interfaces import CredentialExpiredError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import UnexpectedError
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
@@ -239,6 +246,73 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             yield batch
 
         return None
+
+    def validate_connector_settings(self) -> None:
+        if self.s3_client is None:
+            raise ConnectorMissingCredentialError(
+                "Blob storage credentials not loaded."
+            )
+
+        if not self.bucket_name:
+            raise ConnectorValidationError(
+                "No bucket name was provided in connector settings."
+            )
+
+        try:
+            # We only fetch one object/page as a light-weight validation step.
+            # This ensures we trigger typical S3 permission checks (ListObjectsV2, etc.).
+            self.s3_client.list_objects_v2(
+                Bucket=self.bucket_name, Prefix=self.prefix, MaxKeys=1
+            )
+
+        except NoCredentialsError:
+            raise ConnectorMissingCredentialError(
+                "No valid blob storage credentials found or provided to boto3."
+            )
+        except PartialCredentialsError:
+            raise ConnectorMissingCredentialError(
+                "Partial or incomplete blob storage credentials provided to boto3."
+            )
+        except ClientError as e:
+            error_code = e.response["Error"].get("Code", "")
+            status_code = e.response["ResponseMetadata"].get("HTTPStatusCode")
+
+            # Most common S3 error cases
+            if error_code in [
+                "AccessDenied",
+                "InvalidAccessKeyId",
+                "SignatureDoesNotMatch",
+            ]:
+                if status_code == 403 or error_code == "AccessDenied":
+                    raise InsufficientPermissionsError(
+                        f"Insufficient permissions to list objects in bucket '{self.bucket_name}'. "
+                        "Please check your bucket policy and/or IAM policy."
+                    )
+                if status_code == 401 or error_code == "SignatureDoesNotMatch":
+                    raise CredentialExpiredError(
+                        "Provided blob storage credentials appear invalid or expired."
+                    )
+
+                raise CredentialExpiredError(
+                    f"Credential issue encountered ({error_code})."
+                )
+
+            if error_code == "NoSuchBucket" or status_code == 404:
+                raise ConnectorValidationError(
+                    f"Bucket '{self.bucket_name}' does not exist or cannot be found."
+                )
+
+            raise ConnectorValidationError(
+                f"Unexpected S3 client error (code={error_code}, status={status_code}): {e}"
+            )
+
+        except Exception as e:
+            # Catch-all for anything not captured by the above
+            # Since we are unsure of the error and it may not disable the connector,
+            #  raise an unexpected error (does not disable connector)
+            raise UnexpectedError(
+                f"Unexpected error during blob storage settings validation: {e}"
+            )
 
 
 if __name__ == "__main__":
