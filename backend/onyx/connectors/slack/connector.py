@@ -671,14 +671,6 @@ class SlackConnector(SlimConnector, CheckpointConnector):
             return checkpoint
 
     def validate_connector_settings(self) -> None:
-        """
-        Validate that we can connect to Slack and have correct scopes to list conversations.
-        Raises:
-            ConnectorMissingCredentialError: If no Slack client is loaded (missing credentials).
-            CredentialExpiredError: If Slack reports "invalid_auth" or "not_authed".
-            InsufficientPermissionsError: If Slack reports "missing_scope" or any scope issue.
-            ConnectorValidationError: Any other type of Slack error or a config mismatch.
-        """
         if self.client is None:
             raise ConnectorMissingCredentialError("Slack credentials not loaded.")
 
@@ -701,13 +693,7 @@ class SlackConnector(SlimConnector, CheckpointConnector):
 
         except SlackApiError as e:
             slack_error = e.response.get("error", "")
-            # Slack typically returns codes like "invalid_auth", "not_authed", "missing_scope"
-            # Refer to Slack docs for all error codes: https://api.slack.com/methods/auth.test
-            if slack_error in ("invalid_auth", "not_authed"):
-                raise CredentialExpiredError(
-                    f"Invalid or expired Slack bot token ({slack_error})."
-                )
-            elif slack_error == "missing_scope":
+            if slack_error == "missing_scope":
                 # The needed scope is typically "channels:read" or "groups:read"
                 # for viewing channels. The error message might also contain the
                 # specific scope needed vs. provided.
