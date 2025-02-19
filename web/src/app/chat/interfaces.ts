@@ -103,6 +103,7 @@ export interface Message {
   overridden_model?: string;
   stopReason?: StreamStopReason | null;
   sub_questions?: SubQuestionDetail[] | null;
+  is_agentic?: boolean | null;
 
   // Streaming only
   second_level_generating?: boolean;
@@ -148,6 +149,7 @@ export interface BackendMessage {
   comments: any;
   parentMessageId: number | null;
   refined_answer_improvement: boolean | null;
+  is_agentic: boolean | null;
 }
 
 export interface MessageResponseIDInfo {

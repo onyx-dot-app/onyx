@@ -125,17 +125,11 @@ import {
 
 import { getSourceMetadata } from "@/lib/sources";
 import { UserSettingsModal } from "./modal/UserSettingsModal";
-import { AlignStartVertical } from "lucide-react";
 import { AgenticMessage } from "./message/AgenticMessage";
 import AssistantModal from "../assistants/mine/AssistantModal";
-import {
-  OperatingSystem,
-  useOperatingSystem,
-  useSidebarShortcut,
-} from "@/lib/browserUtilities";
-import { Button } from "@/components/ui/button";
+import { useSidebarShortcut } from "@/lib/browserUtilities";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import { MessageChannel } from "node:worker_threads";
+import { ErrorBanner } from "./message/Resubmit";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -1154,6 +1148,7 @@ export function ChatPage({
     navigatingAway.current = false;
     let frozenSessionId = currentSessionId();
     updateCanContinue(false, frozenSessionId);
+    setUncaughtError(null);
 
     if (currentChatState() != "input") {
       if (currentChatState() == "uploading") {
@@ -1280,6 +1275,7 @@ export function ChatPage({
     let toolCall: ToolCallMetadata | null = null;
     let isImprovement: boolean | undefined = undefined;
     let isStreamingQuestions = true;
+    let isAgentic: boolean = false;
 
     let initialFetchDetails: null | {
       user_message_id: number;
@@ -1433,6 +1429,9 @@ export function ChatPage({
                 second_level_generating = true;
               }
             }
+            if (Object.hasOwn(packet, "is_agentic")) {
+              isAgentic = (packet as any).is_agentic;
+            }
 
             if (Object.hasOwn(packet, "refined_answer_improvement")) {
               isImprovement = (packet as RefinedAnswerImprovement)
@@ -1466,6 +1465,7 @@ export function ChatPage({
               );
             } else if (Object.hasOwn(packet, "sub_question")) {
               updateChatState("toolBuilding", frozenSessionId);
+              isAgentic = true;
               is_generating = true;
               sub_questions = constructSubQuestions(
                 sub_questions,
@@ -1663,6 +1663,7 @@ export function ChatPage({
                 sub_questions: sub_questions,
                 second_level_generating: second_level_generating,
                 agentic_docs: agenticDocs,
+                is_agentic: isAgentic,
               },
             ]);
           }
@@ -2125,6 +2126,26 @@ export function ChatPage({
 
   const [sharedChatSession, setSharedChatSession] =
     useState<ChatSession | null>();
+
+  const handleResubmitLastMessage = () => {
+    // Grab the last user-type message
+    const lastUserMsg = messageHistory
+      .slice()
+      .reverse()
+      .find((m) => m.type === "user");
+    if (!lastUserMsg) {
+      setPopup({
+        message: "No previously-submitted user message found.",
+        type: "error",
+      });
+      return;
+    }
+    // We call onSubmit, passing a `messageOverride`
+    onSubmit({
+      messageIdToResend: lastUserMsg.messageId,
+      messageOverride: lastUserMsg.message,
+    });
+  };
 
   const showShareModal = (chatSession: ChatSession) => {
     setSharedChatSession(chatSession);
@@ -2705,9 +2726,9 @@ export function ChatPage({
                                         : null
                                     }
                                   >
-                                    {message.sub_questions &&
-                                    message.sub_questions.length > 0 ? (
+                                    {message.is_agentic ? (
                                       <AgenticMessage
+                                        resubmit={handleResubmitLastMessage}
                                         error={uncaughtError}
                                         isStreamingQuestions={
                                           message.isStreamingQuestions ?? false
@@ -3052,21 +3073,18 @@ export function ChatPage({
                                       currentPersona={liveAssistant}
                                       messageId={message.messageId}
                                       content={
-                                        <p className="text-red-700 text-sm my-auto">
-                                          {message.message}
-                                          {message.stackTrace && (
-                                            <span
-                                              onClick={() =>
-                                                setStackTraceModalContent(
-                                                  message.stackTrace!
-                                                )
-                                              }
-                                              className="ml-2 cursor-pointer underline"
-                                            >
-                                              Show stack trace.
-                                            </span>
-                                          )}
-                                        </p>
+                                        <ErrorBanner
+                                          resubmit={handleResubmitLastMessage}
+                                          error={message.message}
+                                          showStackTrace={
+                                            message.stackTrace
+                                              ? () =>
+                                                  setStackTraceModalContent(
+                                                    message.stackTrace!
+                                                  )
+                                              : undefined
+                                          }
+                                        />
                                       }
                                     />
                                   </div>
