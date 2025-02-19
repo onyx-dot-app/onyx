@@ -20,9 +20,13 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import CheckpointConnector
 from onyx.connectors.interfaces import CheckpointOutput
+from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.connectors.interfaces import CredentialExpiredError
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import UnexpectedError
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -665,6 +669,62 @@ class SlackConnector(SlimConnector, CheckpointConnector):
                 exception=e,
             )
             return checkpoint
+
+    def validate_connector_settings(self) -> None:
+        """
+        Validate that we can connect to Slack and have correct scopes to list conversations.
+        Raises:
+            ConnectorMissingCredentialError: If no Slack client is loaded (missing credentials).
+            CredentialExpiredError: If Slack reports "invalid_auth" or "not_authed".
+            InsufficientPermissionsError: If Slack reports "missing_scope" or any scope issue.
+            ConnectorValidationError: Any other type of Slack error or a config mismatch.
+        """
+        if self.client is None:
+            raise ConnectorMissingCredentialError("Slack credentials not loaded.")
+
+        try:
+            # Minimal API call to confirm we can list channels
+            # We set limit=1 for a lightweight check
+            response = self.client.conversations_list(limit=1, types=["public_channel"])
+            # Just ensure Slack responded "ok: True"
+            if not response.get("ok", False):
+                error_msg = response.get("error", "Unknown error from Slack")
+                if error_msg == "invalid_auth":
+                    raise ConnectorValidationError(
+                        f"Invalid or expired Slack bot token ({error_msg})."
+                    )
+                elif error_msg == "not_authed":
+                    raise CredentialExpiredError(
+                        f"Invalid or expired Slack bot token ({error_msg})."
+                    )
+                raise UnexpectedError(f"Slack API returned a failure: {error_msg}")
+
+        except SlackApiError as e:
+            slack_error = e.response.get("error", "")
+            # Slack typically returns codes like "invalid_auth", "not_authed", "missing_scope"
+            # Refer to Slack docs for all error codes: https://api.slack.com/methods/auth.test
+            if slack_error in ("invalid_auth", "not_authed"):
+                raise CredentialExpiredError(
+                    f"Invalid or expired Slack bot token ({slack_error})."
+                )
+            elif slack_error == "missing_scope":
+                # The needed scope is typically "channels:read" or "groups:read"
+                # for viewing channels. The error message might also contain the
+                # specific scope needed vs. provided.
+                raise InsufficientPermissionsError(
+                    "Slack bot token lacks the necessary scope to list channels. "
+                    "Please ensure your Slack app has 'channels:read' (or 'groups:read' for private channels) enabled."
+                )
+            else:
+                # Generic Slack error
+                raise UnexpectedError(
+                    f"Unexpected Slack error '{slack_error}' during settings validation."
+                )
+        except Exception as e:
+            # Catch-all for unexpected exceptions
+            raise UnexpectedError(
+                f"Unexpected error during Slack settings validation: {e}"
+            )
 
 
 if __name__ == "__main__":
