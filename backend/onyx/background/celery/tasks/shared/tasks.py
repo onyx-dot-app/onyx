@@ -192,6 +192,8 @@ def document_by_cc_pair_cleanup_task(
                 )
             return False
 
+        error_msg = str(e).replace("\n", " ")
+        task_logger.warning(f"Unexpected exception: doc={document_id} {error_msg}")
         task_logger.exception(f"Unexpected exception: doc={document_id}")
 
         if self.request.retries < DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES:
@@ -219,6 +221,7 @@ def document_by_cc_pair_cleanup_task(
                 mark_document_as_modified(document_id, db_session)
         return False
 
+    task_logger.info(f"document_by_cc_pair_cleanup_task finished: doc={document_id}")
     return True
 
 

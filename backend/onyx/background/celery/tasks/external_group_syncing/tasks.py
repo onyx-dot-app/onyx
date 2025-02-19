@@ -195,12 +195,17 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> bool 
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
         )
-    except Exception:
+    except Exception as e:
+        error_msg = str(e).replace("\n", " ")
+        task_logger.warning(
+            f"Unexpected check_for_external_group_sync exception: tenant={tenant_id} {error_msg}"
+        )
         task_logger.exception(f"Unexpected exception: tenant={tenant_id}")
     finally:
         if lock_beat.owned():
             lock_beat.release()
 
+    task_logger.info(f"check_for_external_group_sync finished: tenant={tenant_id}")
     return True
 
 
@@ -267,12 +272,19 @@ def try_creating_external_group_sync_task(
         redis_connector.external_group_sync.set_fence(payload)
 
         payload_id = payload.id
-    except Exception:
+    except Exception as e:
+        error_msg = str(e).replace("\n", " ")
+        task_logger.warning(
+            f"Unexpected try_creating_external_group_sync_task exception: cc_pair={cc_pair_id} {error_msg}"
+        )
         task_logger.exception(
             f"Unexpected exception while trying to create external group sync task: cc_pair={cc_pair_id}"
         )
         return None
 
+    task_logger.info(
+        f"try_creating_external_group_sync_task finished: cc_pair={cc_pair_id} payload_id={payload_id}"
+    )
     return payload_id
 
 
@@ -406,6 +418,14 @@ def connector_external_group_sync_generator_task(
                 sync_status=SyncStatus.SUCCESS,
             )
     except Exception as e:
+        error_msg = str(e).replace("\n", " ")
+        task_logger.warning(
+            f"External group sync exceptioned: cc_pair={cc_pair_id} payload_id={payload.id} {error_msg}"
+        )
+        task_logger.exception(
+            f"External group sync exceptioned: cc_pair={cc_pair_id} payload_id={payload.id}"
+        )
+
         msg = f"External group sync exceptioned: cc_pair={cc_pair_id} payload_id={payload.id}"
         task_logger.exception(msg)
         emit_background_error(msg + f"\n\n{e}", cc_pair_id=cc_pair_id)
