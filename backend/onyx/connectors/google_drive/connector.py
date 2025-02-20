@@ -36,12 +36,16 @@ from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTION
 from onyx.connectors.google_utils.shared_constants import SCOPE_DOC_URL
 from onyx.connectors.google_utils.shared_constants import SLIM_BATCH_SIZE
 from onyx.connectors.google_utils.shared_constants import USER_FIELDS
+from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.connectors.interfaces import CredentialExpiredError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
@@ -137,7 +141,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
                 "Please visit the docs for help with the new setup: "
                 f"{SCOPE_DOC_URL}"
             )
-            raise ValueError(
+            raise ConnectorValidationError(
                 "Google Drive connector received old input parameters. "
                 "Please visit the docs for help with the new setup: "
                 f"{SCOPE_DOC_URL}"
@@ -151,7 +155,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             and not my_drive_emails
             and not shared_drive_urls
         ):
-            raise ValueError(
+            raise ConnectorValidationError(
                 "Nothing to index. Please specify at least one of the following: "
                 "include_shared_drives, include_my_drives, include_files_shared_with_me, "
                 "shared_folder_urls, or my_drive_emails"
@@ -609,3 +613,65 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise e
+
+    def validate_connector_settings(self) -> None:
+        """
+        Validate that we can connect to Google Drive (and optionally Admin APIs) with the provided credentials.
+        Attempts a small listing of files to confirm scope and access.
+
+        Raises:
+            ConnectorMissingCredentialError: If no credentials are loaded.
+            CredentialExpiredError: If credentials are invalid/expired (HTTP 401).
+            InsufficientPermissionsError: If we lack the Drive scope or are otherwise denied (HTTP 403).
+            ConnectorValidationError: Any other unexpected errors (e.g. missing domain, no files).
+        """
+        if self._creds is None:
+            raise ConnectorMissingCredentialError(
+                "Google Drive credentials not loaded."
+            )
+
+        if self._primary_admin_email is None:
+            raise ConnectorValidationError(
+                "Primary admin email not found in credentials. "
+                "Ensure DB_CREDENTIALS_PRIMARY_ADMIN_KEY is set."
+            )
+
+        try:
+            # Try a minimal file listing to confirm we have scope and valid credentials
+            drive_service = get_drive_service(self._creds, self._primary_admin_email)
+            response = (
+                drive_service.files().list(pageSize=1, fields="files(id)").execute()
+            )
+
+            # If listing returns no files, that's OK for validation
+            # but we've at least confirmed we have the necessary scopes and can connect.
+            # If you *require* at least 1 file in Drive, you could handle that here.
+            _ = response.get("files", [])
+
+        except HttpError as e:
+            status_code = e.resp.status if e.resp else None
+            if status_code == 401:
+                raise CredentialExpiredError(
+                    "Invalid or expired Google Drive credentials (401)."
+                )
+            elif status_code == 403:
+                # Could mean missing scopes or the account lacks permission
+                raise InsufficientPermissionsError(
+                    "Google Drive app lacks required permissions (403). "
+                    "Please ensure the necessary scopes are granted."
+                )
+            else:
+                raise ConnectorValidationError(
+                    f"Unexpected Google Drive error (status={status_code}): {e}"
+                )
+
+        except Exception as e:
+            # Check for scope-related hints from the error message
+            if MISSING_SCOPES_ERROR_STR in str(e):
+                raise InsufficientPermissionsError(
+                    "Google Drive credentials are missing required scopes. "
+                    f"{ONYX_SCOPE_INSTRUCTIONS}"
+                )
+            raise ConnectorValidationError(
+                f"Unexpected error during Google Drive validation: {e}"
+            )
