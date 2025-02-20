@@ -408,7 +408,6 @@ def connector_permission_sync_generator_task(
                     cc_pair.connector.id,
                     cc_pair.credential.id,
                     db_session,
-                    None,
                     tenant_id,
                     enforce_creation=False,
                 )
