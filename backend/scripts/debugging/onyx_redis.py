@@ -58,6 +58,7 @@ def onyx_redis(
     command: str,
     batch: int,
     dry_run: bool,
+    ssl: bool,
     host: str,
     port: int,
     db: int,
@@ -69,18 +70,22 @@ def onyx_redis(
         port=port,
         db=db,
         password=password if password else "",
-        ssl=REDIS_SSL,
+        ssl=ssl,
         ssl_cert_reqs="optional",
         ssl_ca_certs=None,
     )
 
     r = Redis(connection_pool=pool)
 
+    logger.info("Redis ping starting. " "This may hang if your settings are incorrect.")
+
     try:
         r.ping()
     except:
         logger.exception("Redis ping exceptioned")
         raise
+
+    logger.info("Redis ping succeeded.")
 
     if command == "purge_connectorsync_taskset":
         """Purge connector tasksets. Used when the tasks represented in the tasksets
@@ -164,13 +169,15 @@ def purge_by_match_and_type(
         logger.info(f"Deleting item {count}: {key_str}")
 
         batch_keys.append(key)
+
+        # flush if batch size has been reached
         if len(batch_keys) >= batch_size:
             flush_batch_delete(batch_keys, r)
             batch_keys.clear()
 
-    if len(batch_keys) >= batch_size:
-        flush_batch_delete(batch_keys, r)
-        batch_keys.clear()
+    # final flush
+    flush_batch_delete(batch_keys, r)
+    batch_keys.clear()
 
     logger.info(f"Deleted {count} matches.")
 
@@ -282,6 +289,14 @@ if __name__ == "__main__":
     parser.add_argument("--command", type=str, help="Operation to run", required=True)
 
     parser.add_argument(
+        "--ssl",
+        type=bool,
+        default=REDIS_SSL,
+        help="Use SSL when connecting to Redis. Usually True for prod and False for local testing",
+        required=False,
+    )
+
+    parser.add_argument(
         "--host",
         type=str,
         default=REDIS_HOST,
@@ -368,6 +383,7 @@ if __name__ == "__main__":
         command=args.command,
         batch=args.batch,
         dry_run=args.dry_run,
+        ssl=args.ssl,
         host=args.host,
         port=args.port,
         db=args.db,
