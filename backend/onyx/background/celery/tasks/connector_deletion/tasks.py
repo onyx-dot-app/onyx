@@ -27,7 +27,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.document import get_document_ids_for_connector_credential_pair
 from onyx.db.document_set import delete_document_set_cc_pair_relationship__no_commit
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
@@ -62,8 +62,8 @@ class TaskDependencyError(RuntimeError):
 def check_for_connector_deletion_task(
     self: Task, *, tenant_id: str | None
 ) -> bool | None:
-    r = get_redis_client(tenant_id=tenant_id)
-    r_replica = get_redis_replica_client(tenant_id=tenant_id)
+    r = get_redis_client()
+    r_replica = get_redis_replica_client()
 
     lock_beat: RedisLock = r.lock(
         OnyxRedisLocks.CHECK_CONNECTOR_DELETION_BEAT_LOCK,
@@ -77,14 +77,14 @@ def check_for_connector_deletion_task(
     try:
         # collect cc_pair_ids
         cc_pair_ids: list[int] = []
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             cc_pairs = get_connector_credential_pairs(db_session)
             for cc_pair in cc_pairs:
                 cc_pair_ids.append(cc_pair.id)
 
         # try running cleanup on the cc_pair_ids
         for cc_pair_id in cc_pair_ids:
-            with get_session_with_tenant(tenant_id) as db_session:
+            with get_session_with_current_tenant() as db_session:
                 redis_connector = RedisConnector(tenant_id, cc_pair_id)
                 try:
                     try_generate_document_cc_pair_cleanup_tasks(
@@ -277,7 +277,7 @@ def monitor_connector_deletion_taskset(
         f"Connector deletion progress: cc_pair={cc_pair_id} remaining={remaining} initial={fence_data.num_tasks}"
     )
     if remaining > 0:
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             update_sync_record_status(
                 db_session=db_session,
                 entity_id=cc_pair_id,
@@ -287,7 +287,7 @@ def monitor_connector_deletion_taskset(
             )
         return
 
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_current_tenant() as db_session:
         cc_pair = get_connector_credential_pair_from_id(
             db_session=db_session,
             cc_pair_id=cc_pair_id,

@@ -40,3 +40,24 @@ export async function triggerIndexing(
   }
   mutate(buildCCPairInfoUrl(ccPairId));
 }
+
+export function getTooltipMessage(
+  isInvalid: boolean,
+  isDeleting: boolean,
+  isIndexing: boolean,
+  isDisabled: boolean
+): string | undefined {
+  if (isInvalid) {
+    return "Connector is in an invalid state. Please update the credentials or configuration before re-indexing.";
+  }
+  if (isDeleting) {
+    return "Cannot index while connector is deleting";
+  }
+  if (isIndexing) {
+    return "Indexing is already in progress";
+  }
+  if (isDisabled) {
+    return "Connector must be re-enabled before indexing";
+  }
+  return undefined;
+}

@@ -10,13 +10,13 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SubQuestionDetail } from "../interfaces";
 import { ValidSources } from "@/lib/types";
-import { AnyNaptrRecord } from "dns";
 
 export const MemoizedAnchor = memo(
   ({
     docs,
     subQuestions,
     openQuestion,
+    href,
     updatePresentingDocument,
     children,
   }: {
@@ -24,6 +24,7 @@ export const MemoizedAnchor = memo(
     openQuestion?: (question: SubQuestionDetail) => void;
     docs?: OnyxDocument[] | null;
     updatePresentingDocument: (doc: OnyxDocument) => void;
+    href?: string;
     children: React.ReactNode;
   }): JSX.Element => {
     const value = children?.toString();
@@ -41,7 +42,7 @@ export const MemoizedAnchor = memo(
           const index = parseInt(match[2], 10) - 1;
           const associatedSubQuestion = subQuestions?.[index];
           if (!associatedSubQuestion) {
-            return <a href={children as string}>{children}</a>;
+            return <a href={href || (children as string)}>{children}</a>;
           }
         }
       }
@@ -84,6 +85,7 @@ export const MemoizedAnchor = memo(
         return (
           <MemoizedLink
             updatePresentingDocument={updatePresentingDocument}
+            href={href}
             document={associatedDocInfo}
             question={associatedSubQuestion}
             openQuestion={openQuestion}
@@ -94,7 +96,10 @@ export const MemoizedAnchor = memo(
       }
     }
     return (
-      <MemoizedLink updatePresentingDocument={updatePresentingDocument}>
+      <MemoizedLink
+        updatePresentingDocument={updatePresentingDocument}
+        href={href}
+      >
         {children}
       </MemoizedLink>
     );
@@ -107,6 +112,7 @@ export const MemoizedLink = memo(
     document,
     updatePresentingDocument,
     question,
+    href,
     openQuestion,
     ...rest
   }: Partial<DocumentCardProps & QuestionCardProps> & {
@@ -153,7 +159,7 @@ export const MemoizedLink = memo(
     }
 
     const handleMouseDown = () => {
-      let url = rest.href || rest.children?.toString();
+      let url = href || rest.children?.toString();
       if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
         // Try to construct a valid URL
         const httpsUrl = `https://${url}`;

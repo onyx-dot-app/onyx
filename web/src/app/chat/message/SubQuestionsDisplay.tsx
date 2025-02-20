@@ -175,6 +175,7 @@ const SubQuestionDisplay: React.FC<{
       <MemoizedAnchor
         updatePresentingDocument={setPresentingDocument!}
         docs={subQuestion?.context_docs?.top_documents || documents}
+        href={props.href}
       >
         {props.children}
       </MemoizedAnchor>
@@ -294,7 +295,7 @@ const SubQuestionDisplay: React.FC<{
   const renderedMarkdown = useMemo(() => {
     return (
       <ReactMarkdown
-        className="prose max-w-full text-base"
+        className="prose dark:prose-invert max-w-full text-base"
         components={markdownComponents}
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
@@ -340,7 +341,7 @@ const SubQuestionDisplay: React.FC<{
               {subQuestion?.question || temporaryDisplay?.question}
             </div>
             <ChevronDown
-              className={`mt-0.5 text-text-darker transition-transform duration-500 ease-in-out ${
+              className={`mt-0.5 flex-none text-text-darker transition-transform duration-500 ease-in-out ${
                 toggled ? "" : "-rotate-90"
               }`}
               size={20}
@@ -632,9 +633,7 @@ const SubQuestionsDisplay: React.FC<SubQuestionsDisplayProps> = ({
         }
       `}</style>
       <div className="relative">
-        {/* {subQuestions.map((subQuestion, index) => ( */}
         {memoizedSubQuestions.map((subQuestion, index) => (
-          // {dynamicSubQuestions.map((subQuestion, index) => (
           <SubQuestionDisplay
             currentlyOpen={
               currentlyOpenQuestion?.level === subQuestion.level &&

@@ -11,7 +11,6 @@ from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document import get_documents_by_cc_pair
 from onyx.db.document import get_ingestion_documents
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.db.search_settings import get_active_search_settings
@@ -24,6 +23,7 @@ from onyx.server.onyx_api.models import DocMinimalInfo
 from onyx.server.onyx_api.models import IngestionDocument
 from onyx.server.onyx_api.models import IngestionResult
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -69,8 +69,9 @@ def upsert_ingestion_doc(
     doc_info: IngestionDocument,
     _: User | None = Depends(api_key_dep),
     db_session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_current_tenant_id),
 ) -> IngestionResult:
+    tenant_id = get_current_tenant_id()
+
     doc_info.document.from_ingestion_api = True
 
     document = Document.from_base(doc_info.document)

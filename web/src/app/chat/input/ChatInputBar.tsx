@@ -805,13 +805,12 @@ export function ChatInputBar({
                 )}
               </div>
               <div className="flex items-center my-auto">
-                {retrievalEnabled &&
-                  !settings?.settings.pro_search_disabled && (
-                    <AgenticToggle
-                      proSearchEnabled={proSearchEnabled}
-                      setProSearchEnabled={setProSearchEnabled}
-                    />
-                  )}
+                {retrievalEnabled && settings?.settings.pro_search_enabled && (
+                  <AgenticToggle
+                    proSearchEnabled={proSearchEnabled}
+                    setProSearchEnabled={setProSearchEnabled}
+                  />
+                )}
                 <button
                   id="onyx-chat-input-send-button"
                   className={`cursor-pointer ${

@@ -61,6 +61,7 @@ from onyx.server.features.input_prompt.api import (
     basic_router as input_prompt_router,
 )
 from onyx.server.features.notifications.api import router as notification_router
+from onyx.server.features.password.api import router as password_router
 from onyx.server.features.persona.api import admin_router as admin_persona_router
 from onyx.server.features.persona.api import basic_router as persona_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
@@ -281,6 +282,7 @@ def get_application() -> FastAPI:
         status.HTTP_500_INTERNAL_SERVER_ERROR, log_http_error
     )
 
+    include_router_with_global_prefix_prepended(application, password_router)
     include_router_with_global_prefix_prepended(application, chat_router)
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, document_router)

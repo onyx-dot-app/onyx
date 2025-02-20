@@ -27,6 +27,7 @@ from onyx.file_store.utils import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.search.search_tool import QUERY_FIELD
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.gpu_utils import gpu_status_request
@@ -88,6 +89,18 @@ class Answer:
             and rerank_settings.rerank_provider_type is not None
         )
         allow_agent_reranking = gpu_status_request() or using_cloud_reranking
+
+        # TODO: this is a hack to force the query to be used for the search tool
+        #       this should be removed once we fully unify graph inputs (i.e.
+        #       remove SearchQuery entirely)
+        if (
+            force_use_tool.force_use
+            and search_tool
+            and force_use_tool.args
+            and force_use_tool.tool_name == search_tool.name
+            and QUERY_FIELD in force_use_tool.args
+        ):
+            search_request.query = force_use_tool.args[QUERY_FIELD]
 
         self.graph_inputs = GraphInputs(
             search_request=search_request,

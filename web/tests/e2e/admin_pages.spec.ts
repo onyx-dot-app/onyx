@@ -16,9 +16,16 @@ async function verifyAdminPageNavigation(
 ) {
   await page.goto(`http://localhost:3000/admin/${path}`);
 
-  await expect(page.locator("h1.text-3xl")).toHaveText(pageTitle, {
-    timeout: 3000,
-  });
+  try {
+    await expect(page.locator("h1.text-3xl")).toHaveText(pageTitle, {
+      timeout: 3000,
+    });
+  } catch (error) {
+    console.error(
+      `Failed to find h1 with text "${pageTitle}" for path "${path}"`
+    );
+    throw error;
+  }
 
   if (options?.paragraphText) {
     await expect(page.locator("p.text-sm").nth(0)).toHaveText(

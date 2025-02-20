@@ -409,10 +409,6 @@ class DefaultMultiLLM(LLM):
         self._record_call(processed_prompt)
 
         try:
-            print(
-                "model is",
-                f"{self.config.model_provider}/{self.config.deployment_name or self.config.model_name}",
-            )
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice
@@ -438,7 +434,17 @@ class DefaultMultiLLM(LLM):
                 # or else OpenAI throws an error
                 **(
                     {"parallel_tool_calls": False}
-                    if tools and self.config.model_name != "o3-mini"
+                    if tools
+                    and self.config.model_name
+                    not in [
+                        "o3-mini",
+                        "o3-preview",
+                        "o1",
+                        "o1-preview",
+                        "o1-mini",
+                        "o1-mini-2024-09-12",
+                        "o3-mini-2025-01-31",
+                    ]
                     else {}
                 ),  # TODO: remove once LITELLM has patched
                 **(

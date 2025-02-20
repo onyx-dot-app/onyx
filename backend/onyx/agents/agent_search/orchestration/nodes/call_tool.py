@@ -28,7 +28,7 @@ def emit_packet(packet: AnswerPacket, writer: StreamWriter) -> None:
     write_custom_event("basic_response", packet, writer)
 
 
-def tool_call(
+def call_tool(
     state: ToolChoiceUpdate,
     config: RunnableConfig,
     writer: StreamWriter = lambda _: None,

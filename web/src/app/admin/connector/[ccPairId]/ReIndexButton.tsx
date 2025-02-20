@@ -4,9 +4,14 @@ import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { Button } from "@/components/ui/button";
 import Text from "@/components/ui/text";
 import { triggerIndexing } from "./lib";
+import { mutate } from "swr";
+import { buildCCPairInfoUrl, getTooltipMessage } from "./lib";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Separator } from "@/components/ui/separator";
+import { ConnectorCredentialPairStatus } from "./types";
+import { CCPairStatus } from "@/components/Status";
+import { getCCPairStatusMessage } from "@/lib/ccPair";
 
 function ReIndexPopup({
   connectorId,
@@ -83,16 +88,16 @@ export function ReIndexButton({
   ccPairId,
   connectorId,
   credentialId,
-  isDisabled,
   isIndexing,
-  isDeleting,
+  isDisabled,
+  ccPairStatus,
 }: {
   ccPairId: number;
   connectorId: number;
   credentialId: number;
-  isDisabled: boolean;
   isIndexing: boolean;
-  isDeleting: boolean;
+  isDisabled: boolean;
+  ccPairStatus: ConnectorCredentialPairStatus;
 }) {
   const { popup, setPopup } = usePopup();
   const [reIndexPopupVisible, setReIndexPopupVisible] = useState(false);
@@ -115,18 +120,14 @@ export function ReIndexButton({
         onClick={() => {
           setReIndexPopupVisible(true);
         }}
-        disabled={isDisabled || isDeleting}
-        tooltip={
-          isDeleting
-            ? "Cannot index while connector is deleting"
-            : isIndexing
-              ? "Indexing is already in progress"
-              : isDisabled
-                ? "Connector must be re-enabled before indexing"
-                : undefined
+        disabled={
+          isDisabled ||
+          ccPairStatus == ConnectorCredentialPairStatus.DELETING ||
+          ccPairStatus == ConnectorCredentialPairStatus.PAUSED
         }
+        tooltip={getCCPairStatusMessage(isDisabled, isIndexing, ccPairStatus)}
       >
-        Index
+        Re-Index
       </Button>
     </>
   );

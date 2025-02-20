@@ -562,6 +562,7 @@ body {
 .prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
   background-color: theme("colors.code-bg");
   font-size: theme("fontSize.code-sm");
+  color: #fff;
 }
 
 pre[class*="language-"],
@@ -654,17 +655,4 @@ ul > li > p {
   margin-bottom: 0;
   display: inline;
   /* Make paragraphs inline to reduce vertical space */
-}
-
-.dark strong {
-  color: white;
-}
-
-.prose.dark li,
-.prose.dark h1,
-.prose.dark h2,
-.prose.dark h3,
-.prose.dark h4,
-.prose.dark h5 {
-  color: #e5e5e5;
 }

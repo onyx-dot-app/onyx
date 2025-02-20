@@ -24,7 +24,7 @@ from onyx.configs.constants import CELERY_PRIMARY_WORKER_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME
-from onyx.db.engine import get_session_with_default_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.engine import SqlEngine
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import mark_attempt_canceled
@@ -38,7 +38,7 @@ from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_stop import RedisConnectorStop
 from onyx.redis.redis_document_set import RedisDocumentSet
-from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -47,6 +47,7 @@ logger = setup_logger()
 
 celery_app = Celery(__name__)
 celery_app.config_from_object("onyx.background.celery.configs.primary")
+celery_app.Task = app_base.TenantAwareTask  # type: ignore [misc]
 
 
 @signals.task_prerun.connect
@@ -101,7 +102,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
     # This is singleton work that should be done on startup exactly once
     # by the primary worker. This is unnecessary in the multi tenant scenario
-    r = get_redis_client(tenant_id=None)
+    r = get_shared_redis_client()
 
     # Log the role and slave count - being connected to a slave or slave count > 0 could be problematic
     info: dict[str, Any] = cast(dict, r.info("replication"))
@@ -158,7 +159,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     RedisConnectorExternalGroupSync.reset_all(r)
 
     # mark orphaned index attempts as failed
-    with get_session_with_default_tenant() as db_session:
+    with get_session_with_current_tenant() as db_session:
         unfenced_attempt_ids = get_unfenced_index_attempt_ids(db_session, r)
         for attempt_id in unfenced_attempt_ids:
             attempt = get_index_attempt(db_session, attempt_id)
@@ -234,7 +235,7 @@ class HubPeriodicTask(bootsteps.StartStopStep):
 
             lock: RedisLock = worker.primary_worker_lock
 
-            r = get_redis_client(tenant_id=None)
+            r = get_shared_redis_client()
 
             if lock.owned():
                 task_logger.debug("Reacquiring primary worker lock.")

@@ -7,3 +7,8 @@ export const TEST_ADMIN_CREDENTIALS = {
   email: "admin_user@test.com",
   password: "TestPassword123!",
 };
+
+export const TEST_ADMIN2_CREDENTIALS = {
+  email: "admin2_user@test.com",
+  password: "TestPassword123!",
+};

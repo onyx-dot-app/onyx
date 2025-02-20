@@ -320,7 +320,13 @@ def eml_to_text(file: IO[Any]) -> str:
     text_content = []
     for part in message.walk():
         if part.get_content_type().startswith("text/plain"):
-            text_content.append(part.get_payload())
+            payload = part.get_payload()
+            if isinstance(payload, str):
+                text_content.append(payload)
+            elif isinstance(payload, list):
+                text_content.extend(item for item in payload if isinstance(item, str))
+            else:
+                logger.warning(f"Unexpected payload type: {type(payload)}")
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 

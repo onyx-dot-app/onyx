@@ -21,6 +21,7 @@ interface SlackChannelConfigCreationRequest {
   usePersona: boolean;
   response_type: SlackBotResponseType;
   standard_answer_categories: number[];
+  disabled: boolean;
 }
 
 const buildFiltersFromCreationRequest = (
@@ -54,6 +55,7 @@ const buildRequestBodyFromCreationRequest = (
       : { document_sets: creationRequest.document_sets }),
     response_type: creationRequest.response_type,
     standard_answer_categories: creationRequest.standard_answer_categories,
+    disabled: creationRequest.disabled,
   });
 };
 

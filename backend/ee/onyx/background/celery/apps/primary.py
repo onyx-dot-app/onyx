@@ -21,7 +21,7 @@ logger = setup_logger()
 def perform_ttl_management_task(
     retention_limit_days: int, *, tenant_id: str | None
 ) -> None:
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         delete_chat_sessions_older_than(retention_limit_days, db_session)
 
 
@@ -44,7 +44,7 @@ def check_ttl_management_task(*, tenant_id: str | None) -> None:
 
     settings = load_settings()
     retention_limit_days = settings.maximum_chat_retention_days
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         if should_perform_chat_ttl_check(retention_limit_days, db_session):
             perform_ttl_management_task.apply_async(
                 kwargs=dict(
@@ -62,7 +62,7 @@ def check_ttl_management_task(*, tenant_id: str | None) -> None:
 )
 def autogenerate_usage_report_task(*, tenant_id: str | None) -> None:
     """This generates usage report under the /admin/generate-usage/report endpoint"""
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         create_new_usage_report(
             db_session=db_session,
             user_id=None,

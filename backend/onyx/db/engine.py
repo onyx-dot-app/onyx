@@ -1,5 +1,4 @@
 import contextlib
-import json
 import os
 import re
 import ssl
@@ -16,7 +15,6 @@ from typing import ContextManager
 import asyncpg  # type: ignore
 import boto3
 from fastapi import HTTPException
-from fastapi import Request
 from sqlalchemy import event
 from sqlalchemy import pool
 from sqlalchemy import text
@@ -44,13 +42,13 @@ from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
 from onyx.configs.constants import SSL_CERT_FILE
-from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -265,7 +263,7 @@ def get_all_tenant_ids() -> list[str] | list[None]:
     if not MULTI_TENANT:
         return [None]
 
-    with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as session:
+    with get_session_with_shared_schema() as session:
         result = session.execute(
             text(
                 f"""
@@ -353,38 +351,6 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
     return _ASYNC_ENGINE
 
 
-async def get_current_tenant_id(request: Request) -> str:
-    if not MULTI_TENANT:
-        tenant_id = POSTGRES_DEFAULT_SCHEMA
-        CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-        return tenant_id
-
-    try:
-        # Look up token data in Redis
-        token_data = await retrieve_auth_token_data_from_redis(request)
-
-        if not token_data:
-            current_value = CURRENT_TENANT_ID_CONTEXTVAR.get()
-            logger.debug(
-                f"Token data not found or expired in Redis, defaulting to {current_value}"
-            )
-            return current_value
-
-        tenant_id = token_data.get("tenant_id", POSTGRES_DEFAULT_SCHEMA)
-
-        if not is_valid_schema_name(tenant_id):
-            raise HTTPException(status_code=400, detail="Invalid tenant ID format")
-
-        CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-        return tenant_id
-    except json.JSONDecodeError:
-        logger.error("Error decoding token data from Redis")
-        return POSTGRES_DEFAULT_SCHEMA
-    except Exception as e:
-        logger.error(f"Unexpected error in get_current_tenant_id: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
 # Listen for events on the synchronous Session class
 @event.listens_for(Session, "after_begin")
 def _set_search_path(
@@ -410,7 +376,7 @@ async def get_async_session_with_tenant(
     tenant_id: str | None = None,
 ) -> AsyncGenerator[AsyncSession, None]:
     if tenant_id is None:
-        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+        tenant_id = get_current_tenant_id()
 
     if not is_valid_schema_name(tenant_id):
         logger.error(f"Invalid tenant ID: {tenant_id}")
@@ -433,82 +399,80 @@ async def get_async_session_with_tenant(
 
 
 @contextmanager
-def get_session_with_default_tenant() -> Generator[Session, None, None]:
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
-    with get_session_with_tenant(tenant_id) as session:
+def get_session_with_current_tenant() -> Generator[Session, None, None]:
+    tenant_id = get_current_tenant_id()
+
+    with get_session_with_tenant(tenant_id=tenant_id) as session:
         yield session
 
 
+# Used in multi tenant mode when need to refer to the shared `public` schema
 @contextmanager
-def get_session_with_tenant(
-    tenant_id: str | None = None,
-) -> Generator[Session, None, None]:
+def get_session_with_shared_schema() -> Generator[Session, None, None]:
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
+    with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as session:
+        yield session
+    CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+
+@contextmanager
+def get_session_with_tenant(*, tenant_id: str | None) -> Generator[Session, None, None]:
     """
     Generate a database session for a specific tenant.
-    This function:
-    1. Sets the database schema to the specified tenant's schema.
-    2. Preserves the tenant ID across the session.
-    3. Reverts to the previous tenant ID after the session is closed.
-    4. Uses the default schema if no tenant ID is provided.
     """
-    engine = get_sqlalchemy_engine()
-    previous_tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get() or POSTGRES_DEFAULT_SCHEMA
-
     if tenant_id is None:
         tenant_id = POSTGRES_DEFAULT_SCHEMA
 
-    CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    engine = get_sqlalchemy_engine()
+
     event.listen(engine, "checkout", set_search_path_on_checkout)
 
     if not is_valid_schema_name(tenant_id):
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
-    try:
-        with engine.connect() as connection:
-            dbapi_connection = connection.connection
-            cursor = dbapi_connection.cursor()
-            try:
-                cursor.execute(f'SET search_path = "{tenant_id}"')
-                if POSTGRES_IDLE_SESSIONS_TIMEOUT:
-                    cursor.execute(
-                        text(
-                            f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
-                        )
+    with engine.connect() as connection:
+        dbapi_connection = connection.connection
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute(f'SET search_path = "{tenant_id}"')
+            if POSTGRES_IDLE_SESSIONS_TIMEOUT:
+                cursor.execute(
+                    text(
+                        f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
                     )
-            finally:
-                cursor.close()
+                )
+        finally:
+            cursor.close()
 
-            with Session(bind=connection, expire_on_commit=False) as session:
-                try:
-                    yield session
-                finally:
-                    if MULTI_TENANT:
-                        cursor = dbapi_connection.cursor()
-                        try:
-                            cursor.execute('SET search_path TO "$user", public')
-                        finally:
-                            cursor.close()
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.set(previous_tenant_id)
+        with Session(bind=connection, expire_on_commit=False) as session:
+            try:
+                yield session
+            finally:
+                if MULTI_TENANT:
+                    cursor = dbapi_connection.cursor()
+                    try:
+                        cursor.execute('SET search_path TO "$user", public')
+                    finally:
+                        cursor.close()
 
 
 def set_search_path_on_checkout(
     dbapi_conn: Any, connection_record: Any, connection_proxy: Any
 ) -> None:
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+    tenant_id = get_current_tenant_id()
     if tenant_id and is_valid_schema_name(tenant_id):
         with dbapi_conn.cursor() as cursor:
             cursor.execute(f'SET search_path TO "{tenant_id}"')
 
 
 def get_session_generator_with_tenant() -> Generator[Session, None, None]:
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
-    with get_session_with_tenant(tenant_id) as session:
+    tenant_id = get_current_tenant_id()
+    with get_session_with_tenant(tenant_id=tenant_id) as session:
         yield session
 
 
 def get_session() -> Generator[Session, None, None]:
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+    tenant_id = get_current_tenant_id()
     if tenant_id == POSTGRES_DEFAULT_SCHEMA and MULTI_TENANT:
         raise BasicAuthenticationError(detail="User must authenticate")
 
@@ -523,7 +487,7 @@ def get_session() -> Generator[Session, None, None]:
 
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+    tenant_id = get_current_tenant_id()
     engine = get_sqlalchemy_async_engine()
     async with AsyncSession(engine, expire_on_commit=False) as async_session:
         if MULTI_TENANT:

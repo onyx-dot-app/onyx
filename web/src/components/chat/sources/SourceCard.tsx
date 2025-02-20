@@ -78,7 +78,7 @@ export function getUniqueIcons(docs: OnyxDocument[]): JSX.Element[] {
 
   for (const doc of docs) {
     // If it's a web source, we check domain uniqueness
-    if (doc.source_type === ValidSources.Web && doc.link) {
+    if ((doc.is_internet || doc.source_type === ValidSources.Web) && doc.link) {
       const domain = getDomainFromUrl(doc.link);
       if (domain && !seenDomains.has(domain)) {
         seenDomains.add(domain);

@@ -418,7 +418,7 @@ export default function AddConnector({
           } else {
             const errorData = await linkCredentialResponse.json();
             setPopup({
-              message: errorData.message,
+              message: errorData.message || errorData.detail,
               type: "error",
             });
           }

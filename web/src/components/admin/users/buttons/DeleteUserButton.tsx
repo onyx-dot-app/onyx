@@ -10,10 +10,14 @@ const DeleteUserButton = ({
   user,
   setPopup,
   mutate,
+  className,
+  children,
 }: {
   user: User;
   setPopup: (spec: PopupSpec) => void;
   mutate: () => void;
+  className?: string;
+  children?: React.ReactNode;
 }) => {
   const { trigger, isMutating } = useSWRMutation(
     "/api/manage/admin/delete-user",
@@ -28,7 +32,7 @@ const DeleteUserButton = ({
       },
       onError: (errorMsg) =>
         setPopup({
-          message: `Unable to delete user - ${errorMsg}`,
+          message: `Unable to delete user - ${errorMsg.message}`,
           type: "error",
         }),
     }
@@ -48,13 +52,13 @@ const DeleteUserButton = ({
       )}
 
       <Button
-        className="w-min"
+        className={className}
         onClick={() => setShowDeleteModal(true)}
         disabled={isMutating}
         size="sm"
         variant="destructive"
       >
-        Delete
+        {children}
       </Button>
     </>
   );

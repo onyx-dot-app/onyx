@@ -7,8 +7,12 @@ from typing import Any
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.bookstack.client import BookStackApiClient
+from onyx.connectors.bookstack.client import BookStackClientRequestFailedError
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.connectors.interfaces import CredentialExpiredError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -214,3 +218,39 @@ class BookstackConnector(LoadConnector, PollConnector):
                     break
                 else:
                     time.sleep(0.2)
+
+    def validate_connector_settings(self) -> None:
+        """
+        Validate that the BookStack credentials and connector settings are correct.
+        Specifically checks that we can make an authenticated request to BookStack.
+        """
+        if not self.bookstack_client:
+            raise ConnectorMissingCredentialError(
+                "BookStack credentials have not been loaded."
+            )
+
+        try:
+            # Attempt to fetch a small batch of books (arbitrary endpoint) to verify credentials
+            _ = self.bookstack_client.get(
+                "/books", params={"count": "1", "offset": "0"}
+            )
+
+        except BookStackClientRequestFailedError as e:
+            # Check for HTTP status codes
+            if e.status_code == 401:
+                raise CredentialExpiredError(
+                    "Your BookStack credentials appear to be invalid or expired (HTTP 401)."
+                ) from e
+            elif e.status_code == 403:
+                raise InsufficientPermissionsError(
+                    "The configured BookStack token does not have sufficient permissions (HTTP 403)."
+                ) from e
+            else:
+                raise ConnectorValidationError(
+                    f"Unexpected BookStack error (status={e.status_code}): {e}"
+                ) from e
+
+        except Exception as exc:
+            raise ConnectorValidationError(
+                f"Unexpected error while validating BookStack connector settings: {exc}"
+            ) from exc

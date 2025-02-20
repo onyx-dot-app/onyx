@@ -24,113 +24,94 @@
 </a>
 </p>
 
-<strong>[Onyx](https://www.onyx.app/)</strong> (formerly Danswer) is the AI Assistant connected to your company's docs, apps, and people.
-Onyx provides a Chat interface and plugs into any LLM of your choice. Onyx can be deployed anywhere and for any
-scale - on a laptop, on-premise, or to cloud. Since you own the deployment, your user data and chats are fully in your
-own control. Onyx is dual Licensed with most of it under MIT license and designed to be modular and easily extensible. The system also comes fully ready
-for production usage with user authentication, role management (admin/basic users), chat persistence, and a UI for
-configuring AI Assistants.
+<strong>[Onyx](https://www.onyx.app/)</strong> (formerly Danswer) is the AI platform connected to your company's docs, apps, and people.
+Onyx provides a feature rich Chat interface and plugs into any LLM of your choice.
+There are over 40 supported connectors such as Google Drive, Slack, Confluence, Salesforce, etc. which keep knowledge and permissions up to date.
+Create custom AI agents with unique prompts, knowledge, and actions the agents can take.
+Onyx can be deployed securely anywhere and for any scale - on a laptop, on-premise, or to cloud.
 
-Onyx also serves as a Enterprise Search across all common workplace tools such as Slack, Google Drive, Confluence, etc.
-By combining LLMs and team specific knowledge, Onyx becomes a subject matter expert for the team. Imagine ChatGPT if
-it had access to your team's unique knowledge! It enables questions such as "A customer wants feature X, is this already
-supported?" or "Where's the pull request for feature Y?"
 
-<h3>Usage</h3>
+<h3>Feature Showcase</h3>
 
-Onyx Web App:
+**Deep research over your team's knowledge:**
 
-https://github.com/onyx-dot-app/onyx/assets/32520769/563be14c-9304-47b5-bf0a-9049c2b6f410
+https://private-user-images.githubusercontent.com/32520769/414509312-48392e83-95d0-4fb5-8650-a396e05e0a32.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Mzk5Mjg2MzYsIm5iZiI6MTczOTkyODMzNiwicGF0aCI6Ii8zMjUyMDc2OS80MTQ1MDkzMTItNDgzOTJlODMtOTVkMC00ZmI1LTg2NTAtYTM5NmUwNWUwYTMyLm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTAyMTklMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwMjE5VDAxMjUzNlomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWFhMzk5Njg2Y2Y5YjFmNDNiYTQ2YzM5ZTg5YWJiYTU2NWMyY2YwNmUyODE2NWUxMDRiMWQxZWJmODI4YTA0MTUmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.a9D8A0sgKE9AoaoE-mfFbJ6_OKYeqaf7TZ4Han2JfW8
 
-Or, plug Onyx into your existing Slack workflows (more integrations to come 😁):
 
-https://github.com/onyx-dot-app/onyx/assets/25087905/3e19739b-d178-4371-9a38-011430bdec1b
+**Use Onyx as a secure AI Chat with any LLM:**
 
-For more details on the Admin UI to manage connectors and users, check out our
-<strong><a href="https://www.youtube.com/watch?v=geNzY1nbCnU">Full Video Demo</a></strong>!
+![Onyx Chat Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxChatSilentDemo.gif)
+
+
+**Easily set up connectors to your apps:**
+
+![Onyx Connector Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxConnectorSilentDemo.gif)
+
+
+**Access Onyx where your team already works:**
+
+![Onyx Bot Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxBot.png)
+
 
 ## Deployment
+**To try it out for free and get started in seconds, check out [Onyx Cloud](https://cloud.onyx.app/signup)**.
 
-Onyx can easily be run locally (even on a laptop) or deployed on a virtual machine with a single
+Onyx can also be run locally (even on a laptop) or deployed on a virtual machine with a single
 `docker compose` command. Checkout our [docs](https://docs.onyx.app/quickstart) to learn more.
 
-We also have built-in support for deployment on Kubernetes. Files for that can be found [here](https://github.com/onyx-dot-app/onyx/tree/main/deployment/kubernetes).
+We also have built-in support for high-availability/scalable deployment on Kubernetes.
+References [here](https://github.com/onyx-dot-app/onyx/tree/main/deployment).
 
-## 💃 Main Features
-
-- Chat UI with the ability to select documents to chat with.
-- Create custom AI Assistants with different prompts and backing knowledge sets.
-- Connect Onyx with LLM of your choice (self-host for a fully airgapped solution).
-- Document Search + AI Answers for natural language queries.
-- Connectors to all common workplace tools like Google Drive, Confluence, Slack, etc.
-- Slack integration to get answers and search results directly in Slack.
 
 ## 🚧 Roadmap
-
-- Chat/Prompt sharing with specific teammates and user groups.
-- Multimodal model support, chat with images, video etc.
-- Choosing between LLMs and parameters during chat session.
-- Tool calling and agent configurations options.
+- Extensions to the Chrome Plugin
+- Latest methods in information retrieval (StructRAG, LightGraphRAG, etc.)
+- Personalized Search
 - Organizational understanding and ability to locate and suggest experts from your team.
+- Code Search
+- SQL and Structured Query Language
 
-## Other Notable Benefits of Onyx
 
-- User Authentication with document level access management.
-- Best in class Hybrid Search across all sources (BM-25 + prefix aware embedding models).
-- Admin Dashboard to configure connectors, document-sets, access, etc.
-- Custom deep learning models + learn from user feedback.
-- Easy deployment and ability to host Onyx anywhere of your choosing.
+## 🔍 Other Notable Benefits of Onyx
+- Custom deep learning models only through Onyx + learn from user feedback.
+- Flexible security features like SSO (OIDC/SAML/OAuth2), RBAC, encryption of credentials, etc.
+- Knowledge curation features like document-sets, query history, usage analytics, etc.
+- Scalable deployment options tested up to many tens of thousands users and hundreds of millions of documents.
+
 
 ## 🔌 Connectors
+Keep knowledge and access up to sync across 40+ connectors:
 
-Efficiently pulls the latest changes from:
-
-- Slack
-- GitHub
 - Google Drive
 - Confluence
+- Slack
+- Gmail
+- Salesforce
+- Microsoft Sharepoint
+- Github
 - Jira
 - Zendesk
-- Gmail
-- Notion
 - Gong
-- Slab
-- Linear
-- Productboard
-- Guru
-- Bookstack
-- Document360
-- Sharepoint
-- Hubspot
+- Microsoft Teams
+- Dropbox
 - Local Files
 - Websites
 - And more ...
 
-## 📚 Editions
+See the full list [here](https://docs.onyx.app/connectors).
 
+
+## 📚 Licensing
 There are two editions of Onyx:
 
-- Onyx Community Edition (CE) is available freely under the MIT Expat license. This version has ALL the core features discussed above. This is the version of Onyx you will get if you follow the Deployment guide above.
-- Onyx Enterprise Edition (EE) includes extra features that are primarily useful for larger organizations. Specifically, this includes:
-  - Single Sign-On (SSO), with support for both SAML and OIDC
-  - Role-based access control
-  - Document permission inheritance from connected sources
-  - Usage analytics and query history accessible to admins
-  - Whitelabeling
-  - API key authentication
-  - Encryption of secrets
-  - And many more! Checkout [our website](https://www.onyx.app/) for the latest.
+- Onyx Community Edition (CE) is available freely under the MIT Expat license. Simply follow the Deployment guide above.
+- Onyx Enterprise Edition (EE) includes extra features that are primarily useful for larger organizations.
+For feature details, check out [our website](https://www.onyx.app/pricing).
 
 To try the Onyx Enterprise Edition:
+1. Checkout [Onyx Cloud](https://cloud.onyx.app/signup).
+2. For self-hosting the Enterprise Edition, contact us at [founders@onyx.app](mailto:founders@onyx.app) or book a call with us on our [Cal](https://cal.com/team/onyx/founders).
 
-1. Checkout our [Cloud product](https://cloud.onyx.app/signup).
-2. For self-hosting, contact us at [founders@onyx.app](mailto:founders@onyx.app) or book a call with us on our [Cal](https://cal.com/team/onyx/founders).
 
 ## 💡 Contributing
-
 Looking to contribute? Please check out the [Contribution Guide](CONTRIBUTING.md) for more details.
-
-## ⭐Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=onyx-dot-app/onyx&type=Date)](https://star-history.com/#onyx-dot-app/onyx&Date)
-

@@ -14,30 +14,24 @@ def _build_group_member_email_map(
     confluence_client: OnyxConfluence, cc_pair_id: int
 ) -> dict[str, set[str]]:
     group_member_emails: dict[str, set[str]] = {}
-    for user_result in confluence_client.paginated_cql_user_retrieval():
-        logger.debug(f"Processing groups for user: {user_result}")
+    for user in confluence_client.paginated_cql_user_retrieval():
+        logger.debug(f"Processing groups for user: {user}")
 
-        user = user_result.get("user", {})
-        if not user:
-            msg = f"user result missing user field: {user_result}"
-            emit_background_error(msg, cc_pair_id=cc_pair_id)
-            logger.error(msg)
-            continue
-
-        email = user.get("email")
+        email = user.email
         if not email:
             # This field is only present in Confluence Server
-            user_name = user.get("username")
+            user_name = user.username
             # If it is present, try to get the email using a Server-specific method
             if user_name:
                 email = get_user_email_from_username__server(
                     confluence_client=confluence_client,
                     user_name=user_name,
                 )
+
         if not email:
             # If we still don't have an email, skip this user
-            msg = f"user result missing email field: {user_result}"
-            if user.get("type") == "app":
+            msg = f"user result missing email field: {user}"
+            if user.type == "app":
                 logger.warning(msg)
             else:
                 emit_background_error(msg, cc_pair_id=cc_pair_id)
@@ -45,7 +39,7 @@ def _build_group_member_email_map(
             continue
 
         all_users_groups: set[str] = set()
-        for group in confluence_client.paginated_groups_by_user_retrieval(user):
+        for group in confluence_client.paginated_groups_by_user_retrieval(user.user_id):
             # group name uniqueness is enforced by Confluence, so we can use it as a group ID
             group_id = group["name"]
             group_member_emails.setdefault(group_id, set()).add(email)

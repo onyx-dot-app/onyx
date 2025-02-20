@@ -33,7 +33,7 @@ def add_tenant_id_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> Non
             return await call_next(request)
 
         except Exception as e:
-            logger.error(f"Error in tenant ID middleware: {str(e)}")
+            logger.exception(f"Error in tenant ID middleware: {str(e)}")
             raise
 
 
@@ -49,7 +49,7 @@ async def _get_tenant_id_from_request(
     """
     # Check for API key
     tenant_id = extract_tenant_from_api_key_header(request)
-    if tenant_id:
+    if tenant_id is not None:
         return tenant_id
 
     # Check for anonymous user cookie

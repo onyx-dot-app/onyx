@@ -25,6 +25,7 @@ import {
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
+  AgenticMessageResponseIDInfo,
 } from "./interfaces";
 import { Persona } from "../admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
@@ -154,7 +155,8 @@ export type PacketType =
   | AgentAnswerPiece
   | SubQuestionPiece
   | ExtendedToolResponse
-  | RefinedAnswerImprovement;
+  | RefinedAnswerImprovement
+  | AgenticMessageResponseIDInfo;
 
 export async function* sendMessage({
   regenerate,
@@ -250,7 +252,7 @@ export async function* sendMessage({
     throw new Error(`HTTP error! status: ${response.status}`);
   }
 
-  yield* handleSSEStream<PacketType>(response);
+  yield* handleSSEStream<PacketType>(response, signal);
 }
 
 export async function nameChatSession(chatSessionId: string) {

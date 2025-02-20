@@ -12,6 +12,7 @@ export enum ConnectorCredentialPairStatus {
   ACTIVE = "ACTIVE",
   PAUSED = "PAUSED",
   DELETING = "DELETING",
+  INVALID = "INVALID",
 }
 
 export interface CCPairFullInfo {

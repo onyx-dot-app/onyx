@@ -17,7 +17,7 @@ export const Hoverable: React.FC<{
       <div className="flex items-center">
         <Icon
           size={size}
-          className="hover:bg-background-chat-hover dark:text-[#B4B4B4] text-neutral-600  rounded h-fit cursor-pointer"
+          className="dark:text-[#B4B4B4] text-neutral-600  rounded h-fit cursor-pointer"
         />
         {hoverText && (
           <div className="max-w-0 leading-none whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out group-hover:max-w-xs group-hover:ml-2">

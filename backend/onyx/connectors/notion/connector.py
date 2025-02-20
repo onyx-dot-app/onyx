@@ -7,6 +7,7 @@ from datetime import timezone
 from typing import Any
 from typing import Optional
 
+import requests
 from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -15,10 +16,14 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rl_requests,
 )
+from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.connectors.interfaces import CredentialExpiredError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.utils.batching import batch_generator
@@ -615,6 +620,64 @@ class NotionConnector(LoadConnector, PollConnector):
                     break
             else:
                 break
+
+    def validate_connector_settings(self) -> None:
+        if not self.headers.get("Authorization"):
+            raise ConnectorMissingCredentialError("Notion credentials not loaded.")
+
+        try:
+            # We'll do a minimal search call (page_size=1) to confirm accessibility
+            if self.root_page_id:
+                # If root_page_id is set, fetch the specific page
+                res = rl_requests.get(
+                    f"https://api.notion.com/v1/pages/{self.root_page_id}",
+                    headers=self.headers,
+                    timeout=_NOTION_CALL_TIMEOUT,
+                )
+            else:
+                # If root_page_id is not set, perform a minimal search
+                test_query = {
+                    "filter": {"property": "object", "value": "page"},
+                    "page_size": 1,
+                }
+                res = rl_requests.post(
+                    "https://api.notion.com/v1/search",
+                    headers=self.headers,
+                    json=test_query,
+                    timeout=_NOTION_CALL_TIMEOUT,
+                )
+            res.raise_for_status()
+
+        except requests.exceptions.HTTPError as http_err:
+            status_code = http_err.response.status_code if http_err.response else None
+
+            if status_code == 401:
+                raise CredentialExpiredError(
+                    "Notion credential appears to be invalid or expired (HTTP 401)."
+                )
+            elif status_code == 403:
+                raise InsufficientPermissionsError(
+                    "Your Notion token does not have sufficient permissions (HTTP 403)."
+                )
+            elif status_code == 404:
+                # Typically means resource not found or not shared. Could be root_page_id is invalid.
+                raise ConnectorValidationError(
+                    "Notion resource not found or not shared with the integration (HTTP 404)."
+                )
+            elif status_code == 429:
+                raise ConnectorValidationError(
+                    "Validation failed due to Notion rate-limits being exceeded (HTTP 429). "
+                    "Please try again later."
+                )
+            else:
+                raise Exception(
+                    f"Unexpected Notion HTTP error (status={status_code}): {http_err}"
+                ) from http_err
+
+        except Exception as exc:
+            raise Exception(
+                f"Unexpected error during Notion settings validation: {exc}"
+            )
 
 
 if __name__ == "__main__":

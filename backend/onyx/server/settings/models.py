@@ -45,8 +45,10 @@ class Settings(BaseModel):
     gpu_enabled: bool | None = None
     application_status: ApplicationStatus = ApplicationStatus.ACTIVE
     anonymous_user_enabled: bool | None = None
-    pro_search_disabled: bool | None = None
-    auto_scroll: bool | None = None
+    pro_search_enabled: bool | None = None
+
+    temperature_override_enabled: bool = False
+    auto_scroll: bool = False
 
 
 class UserSettings(Settings):
