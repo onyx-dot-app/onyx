@@ -625,6 +625,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             InsufficientPermissionsError: If we lack the Drive scope or are otherwise denied (HTTP 403).
             ConnectorValidationError: Any other unexpected errors (e.g. missing domain, no files).
         """
+
         if self._creds is None:
             raise ConnectorMissingCredentialError(
                 "Google Drive credentials not loaded."
@@ -648,6 +649,9 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             # If you *require* at least 1 file in Drive, you could handle that here.
             _ = response.get("files", [])
 
+            if isinstance(self._creds, ServiceAccountCredentials):
+                retry_builder()(get_root_folder_id)(drive_service)
+
         except HttpError as e:
             status_code = e.resp.status if e.resp else None
             if status_code == 401:
@@ -658,7 +662,8 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
                 # Could mean missing scopes or the account lacks permission
                 raise InsufficientPermissionsError(
                     "Google Drive app lacks required permissions (403). "
-                    "Please ensure the necessary scopes are granted."
+                    "Please ensure the necessary scopes are granted and Drive "
+                    "apps are enabled."
                 )
             else:
                 raise ConnectorValidationError(

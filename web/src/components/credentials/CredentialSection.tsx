@@ -168,7 +168,7 @@ export default function CredentialSection({
           onClick={() => {
             setShowModifyCredential(true);
           }}
-          className="flex items-center gap-x-2 cursor-pointer bg-background-100 border-border border-2 hover:bg-border p-1.5 rounded-lg text-text-700"
+          className="flex items-center gap-x-2 cursor-pointer bg-neutral-800 border-neutral-600 border-2 hover:bg-neutral-700 p-1.5 rounded-lg text-neutral-300"
         >
           <FaSwatchbook />
           Update Credentials

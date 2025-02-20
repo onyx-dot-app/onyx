@@ -86,14 +86,14 @@ def get_channels(
     get_public: bool = True,
     get_private: bool = True,
 ) -> list[ChannelType]:
-    """Get all channels in the workspace"""
+    """Get all channels in the workspace."""
     channels: list[dict[str, Any]] = []
     channel_types = []
     if get_public:
         channel_types.append("public_channel")
     if get_private:
         channel_types.append("private_channel")
-    # try getting private channels as well at first
+    # Try fetching both public and private channels first:
     try:
         channels = _collect_paginated_channels(
             client=client,
@@ -101,19 +101,18 @@ def get_channels(
             channel_types=channel_types,
         )
     except SlackApiError as e:
-        logger.info(f"Unable to fetch private channels due to - {e}")
-        logger.info("trying again without private channels")
+        logger.info(f"Unable to fetch private channels due to: {e}")
+        logger.info("Trying again without private channels.")
         if get_public:
             channel_types = ["public_channel"]
         else:
-            logger.warning("No channels to fetch")
+            logger.warning("No channels to fetch.")
             return []
         channels = _collect_paginated_channels(
             client=client,
             exclude_archived=exclude_archived,
             channel_types=channel_types,
         )
-
     return channels
 
 
@@ -671,19 +670,32 @@ class SlackConnector(SlimConnector, CheckpointConnector):
             return checkpoint
 
     def validate_connector_settings(self) -> None:
+        """
+        1. Verifies the bot token is valid for the workspace (via auth_test).
+        2. Ensures the bot has enough scope to list channels.
+        3. Checks that every channel specified in self.channels exists.
+        """
         if self.client is None:
             raise ConnectorMissingCredentialError("Slack credentials not loaded.")
 
         try:
-            # Minimal API call to confirm we can list channels
-            # We set limit=1 for a lightweight check
-            response = self.client.conversations_list(limit=1, types=["public_channel"])
-            # Just ensure Slack responded "ok: True"
-            if not response.get("ok", False):
-                error_msg = response.get("error", "Unknown error from Slack")
+            # 1) Validate connection to workspace
+            auth_response = self.client.auth_test()
+            if not auth_response.get("ok", False):
+                error_msg = auth_response.get(
+                    "error", "Unknown error from Slack auth_test"
+                )
+                raise ConnectorValidationError(f"Failed Slack auth_test: {error_msg}")
+
+            # 2) Minimal test to confirm listing channels works
+            test_resp = self.client.conversations_list(
+                limit=1, types=["public_channel"]
+            )
+            if not test_resp.get("ok", False):
+                error_msg = test_resp.get("error", "Unknown error from Slack")
                 if error_msg == "invalid_auth":
                     raise ConnectorValidationError(
-                        f"Invalid or expired Slack bot token ({error_msg})."
+                        f"Invalid Slack bot token ({error_msg})."
                     )
                 elif error_msg == "not_authed":
                     raise CredentialExpiredError(
@@ -691,31 +703,54 @@ class SlackConnector(SlimConnector, CheckpointConnector):
                     )
                 raise UnexpectedError(f"Slack API returned a failure: {error_msg}")
 
+            # 3) If channels are specified, verify each is accessible
+            if self.channels:
+                accessible_channels = get_channels(
+                    client=self.client,
+                    exclude_archived=True,
+                    get_public=True,
+                    get_private=True,
+                )
+                # For quick lookups by name or ID, build a map:
+                accessible_channel_names = {ch["name"] for ch in accessible_channels}
+                accessible_channel_ids = {ch["id"] for ch in accessible_channels}
+
+                for user_channel in self.channels:
+                    # If your connector expects channel "names" (e.g., "general"),
+                    # verify user_channel is in channel names. Otherwise, if you
+                    # expect channel "ids" (e.g., "C12345"), check accessible_channel_ids.
+                    if (
+                        user_channel not in accessible_channel_names
+                        and user_channel not in accessible_channel_ids
+                    ):
+                        raise ConnectorValidationError(
+                            f"Channel '{user_channel}' not found or inaccessible in this workspace."
+                        )
+
         except SlackApiError as e:
             slack_error = e.response.get("error", "")
             if slack_error == "missing_scope":
                 # The needed scope is typically "channels:read" or "groups:read"
-                # for viewing channels. The error message might also contain the
-                # specific scope needed vs. provided.
+                # for reading channels. The error may contain more detail.
                 raise InsufficientPermissionsError(
-                    "Slack bot token lacks the necessary scope to list channels. "
-                    "Please ensure your Slack app has 'channels:read' (or 'groups:read' for private channels) enabled."
+                    "Slack bot token lacks the necessary scope to list/access channels. "
+                    "Please ensure your Slack app has 'channels:read' (and/or 'groups:read' for private channels)."
                 )
             elif slack_error == "invalid_auth":
                 raise CredentialExpiredError(
-                    f"Invalid or expired Slack bot token ({slack_error})."
+                    f"Invalid Slack bot token ({slack_error})."
                 )
             elif slack_error == "not_authed":
                 raise CredentialExpiredError(
                     f"Invalid or expired Slack bot token ({slack_error})."
                 )
             else:
-                # Generic Slack error
                 raise UnexpectedError(
                     f"Unexpected Slack error '{slack_error}' during settings validation."
                 )
+        except ConnectorValidationError as e:
+            raise e
         except Exception as e:
-            # Catch-all for unexpected exceptions
             raise UnexpectedError(
                 f"Unexpected error during Slack settings validation: {e}"
             )

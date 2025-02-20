@@ -37,8 +37,10 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
+from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_external_group_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -148,7 +150,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> bool 
             for source in GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC:
                 # These are ordered by cc_pair id so the first one is the one we want
                 cc_pairs_to_dedupe = get_cc_pairs_by_source(
-                    db_session, source, only_sync=True
+                    db_session, source, only_sync=True, only_valid=True
                 )
                 # We only want to sync one cc_pair per source type
                 # in GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC so we dedupe here
@@ -379,6 +381,30 @@ def connector_external_group_sync_generator_task(
                 raise ValueError(
                     f"No connector credential pair found for id: {cc_pair_id}"
                 )
+
+            try:
+                created = validate_ccpair_for_user(
+                    cc_pair.connector.id,
+                    cc_pair.credential.id,
+                    db_session,
+                    tenant_id,
+                    enforce_creation=False,
+                )
+                if not created:
+                    task_logger.warning(
+                        f"Unable to create connector credential pair for id: {cc_pair_id}"
+                    )
+            except Exception:
+                task_logger.exception(
+                    f"validate_ccpair_permissions_sync exceptioned: cc_pair={cc_pair_id}"
+                )
+                update_connector_credential_pair(
+                    db_session=db_session,
+                    connector_id=cc_pair.connector.id,
+                    credential_id=cc_pair.credential.id,
+                    status=ConnectorCredentialPairStatus.INVALID,
+                )
+                raise
 
             source_type = cc_pair.connector.source
 
