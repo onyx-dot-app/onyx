@@ -1070,6 +1070,7 @@ def connector_indexing_proxy_task(
 
                     if not index_attempt.is_finished():
                         continue
+
             except Exception:
                 # if the DB exceptioned, just restart the check.
                 # polling the index attempt status doesn't need to be strongly consistent
@@ -1079,6 +1080,7 @@ def connector_indexing_proxy_task(
                     )
                 )
                 continue
+
     except Exception as e:
         result.status = IndexingWatchdogTerminalStatus.WATCHDOG_EXCEPTIONED
         if isinstance(e, ConnectorValidationError):
