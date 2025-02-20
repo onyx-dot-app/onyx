@@ -431,6 +431,6 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
 
         if not spaces or not spaces.get("results"):
             raise ConnectorValidationError(
-                "No Confluence spaces found. Either your app lacks permissions, or "
+                "No Confluence spaces found. Either your credentials lack permissions, or "
                 "there truly are no spaces in this Confluence instance."
             )
