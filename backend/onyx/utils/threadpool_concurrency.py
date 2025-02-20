@@ -1,3 +1,4 @@
+import contextvars
 import threading
 import uuid
 from collections.abc import Callable
@@ -14,10 +15,6 @@ logger = setup_logger()
 R = TypeVar("R")
 
 
-# WARNING: it is not currently well understood whether we lose access to contextvars when functions are
-# executed through this wrapper Do NOT try to acquire a db session in a function run through this unless
-# you have heavily tested that multi-tenancy is respected. If/when we know for sure that it is or
-# is not safe, update this comment.
 def run_functions_tuples_in_parallel(
     functions_with_args: list[tuple[Callable, tuple]],
     allow_failures: bool = False,
@@ -46,7 +43,7 @@ def run_functions_tuples_in_parallel(
     results = []
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_index = {
-            executor.submit(func, *args): i
+            executor.submit(contextvars.copy_context().run, func, *args): i
             for i, (func, args) in enumerate(functions_with_args)
         }
 
@@ -83,10 +80,6 @@ class FunctionCall(Generic[R]):
         return self.func(*self.args, **self.kwargs)
 
 
-# WARNING: it is not currently well understood whether we lose access to contextvars when functions are
-# executed through this wrapper Do NOT try to acquire a db session in a function run through this unless
-# you have heavily tested that multi-tenancy is respected. If/when we know for sure that it is or
-# is not safe, update this comment.
 def run_functions_in_parallel(
     function_calls: list[FunctionCall],
     allow_failures: bool = False,
@@ -102,7 +95,9 @@ def run_functions_in_parallel(
 
     with ThreadPoolExecutor(max_workers=len(function_calls)) as executor:
         future_to_id = {
-            executor.submit(func_call.execute): func_call.result_id
+            executor.submit(
+                contextvars.copy_context().run, func_call.execute
+            ): func_call.result_id
             for func_call in function_calls
         }
 
@@ -143,10 +138,6 @@ class TimeoutThread(threading.Thread):
         )
 
 
-# WARNING: it is not currently well understood whether we lose access to contextvars when functions are
-# executed through this wrapper Do NOT try to acquire a db session in a function run through this unless
-# you have heavily tested that multi-tenancy is respected. If/when we know for sure that it is or
-# is not safe, update this comment.
 def run_with_timeout(
     timeout: float, func: Callable[..., R], *args: Any, **kwargs: Any
 ) -> R:
@@ -154,7 +145,8 @@ def run_with_timeout(
     Executes a function with a timeout. If the function doesn't complete within the specified
     timeout, raises TimeoutError.
     """
-    task = TimeoutThread(timeout, func, *args, **kwargs)
+    context = contextvars.copy_context()
+    task = TimeoutThread(timeout, context.run, func, *args, **kwargs)
     task.start()
     task.join(timeout)
 
