@@ -140,7 +140,7 @@ def on_task_postrun(
         f"{f'for tenant_id={tenant_id}' if tenant_id else ''}"
     )
 
-    r = get_redis_client()
+    r = get_redis_client(tenant_id=tenant_id)
 
     if task_id.startswith(RedisConnectorCredentialPair.PREFIX):
         r.srem(RedisConnectorCredentialPair.get_taskset_key(), task_id)
