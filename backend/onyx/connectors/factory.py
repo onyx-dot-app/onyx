@@ -187,10 +187,12 @@ def validate_ccpair_for_user(
     db_session: Session,
     user: User | None,
     tenant_id: str | None,
-) -> None:
+    enforce_creation: bool = True,
+) -> bool:
     if INTEGRATION_TESTS_MODE:
-        return
+        return True
 
+    
     # Validate the connector settings
     connector = fetch_connector_by_id(connector_id, db_session)
     credential = fetch_credential_by_id_for_user(
@@ -222,6 +224,10 @@ def validate_ccpair_for_user(
             tenant_id=tenant_id,
         )
     except Exception as e:
-        raise ConnectorValidationError(str(e))
+        if enforce_creation:
+            raise ConnectorValidationError(str(e))
+        else:
+            return False
 
     runnable_connector.validate_connector_settings()
+    return True

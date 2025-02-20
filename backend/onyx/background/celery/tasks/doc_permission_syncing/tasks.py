@@ -404,13 +404,18 @@ def connector_permission_sync_generator_task(
                 )
 
             try:
-                validate_ccpair_for_user(
+                created = validate_ccpair_for_user(
                     cc_pair.connector.id,
                     cc_pair.credential.id,
                     db_session,
                     None,
                     tenant_id,
+                    enforce_creation=False,
                 )
+                if not created:
+                    task_logger.warning(
+                        f"Unable to create connector credential pair for id: {cc_pair_id}"
+                    )
             except Exception:
                 task_logger.exception(
                     f"validate_ccpair_permissions_sync exceptioned: cc_pair={cc_pair_id}"
