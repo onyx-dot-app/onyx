@@ -41,6 +41,7 @@ def prepare_authorization_request(
         base64.urlsafe_b64encode(oauth_uuid.bytes).rstrip(b"=").decode("utf-8")
     )
 
+    session: str | None = None
     if connector == DocumentSource.SLACK:
         if not DEV_MODE:
             oauth_url = SlackOAuth.generate_oauth_url(oauth_state)
@@ -75,6 +76,12 @@ def prepare_authorization_request(
         raise HTTPException(
             status_code=404,
             detail=f"The document source type {connector} does not have OAuth implemented",
+        )
+
+    if not session:
+        raise HTTPException(
+            status_code=500,
+            detail=f"The document source type {connector} failed to generate an OAuth session.",
         )
 
     r = get_redis_client(tenant_id=tenant_id)

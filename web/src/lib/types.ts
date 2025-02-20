@@ -7,11 +7,12 @@ interface UserPreferences {
   chosen_assistants: number[] | null;
   visible_assistants: number[];
   hidden_assistants: number[];
-  pinned_assistants: number[];
+  pinned_assistants?: number[];
   default_model: string | null;
   recent_assistants: number[];
   auto_scroll: boolean | null;
   shortcut_enabled: boolean;
+  temperature_override_enabled: boolean;
 }
 
 export enum UserRole {
@@ -58,6 +59,12 @@ export interface User {
   is_cloud_superuser?: boolean;
   organization_name: string | null;
   is_anonymous_user?: boolean;
+  // If user does not have a configured password
+  // (i.e.) they are using an oauth flow
+  // or are in a no-auth situation
+  // we don't want to show them things like the reset password
+  // functionality
+  password_configured?: boolean;
 }
 
 export interface AllUsersResponse {
@@ -91,6 +98,7 @@ export type ValidInputTypes =
   | "event"
   | "slim_retrieval";
 export type ValidStatuses =
+  | "invalid"
   | "success"
   | "completed_with_errors"
   | "canceled"
@@ -98,7 +106,7 @@ export type ValidStatuses =
   | "in_progress"
   | "not_started";
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
-export type Feedback = "like" | "dislike";
+export type Feedback = "like" | "dislike" | "mixed";
 export type AccessType = "public" | "private" | "sync";
 export type SessionType = "Chat" | "Search" | "Slack";
 
@@ -122,6 +130,7 @@ export interface FailedConnectorIndexingStatus {
 export interface IndexAttemptSnapshot {
   id: number;
   status: ValidStatuses | null;
+  from_beginning: boolean;
   new_docs_indexed: number;
   docs_removed_from_index: number;
   total_docs_indexed: number;
@@ -219,6 +228,7 @@ export interface CCPairDescriptor<ConnectorType, CredentialType> {
   name: string | null;
   connector: Connector<ConnectorType>;
   credential: Credential<CredentialType>;
+  access_type: AccessType;
 }
 
 export interface DocumentSet {
@@ -267,6 +277,7 @@ export interface ChannelConfig {
   respond_member_group_list?: string[];
   answer_filters?: AnswerFilterOption[];
   follow_up_tags?: string[];
+  disabled?: boolean;
 }
 
 export type SlackBotResponseType = "quotes" | "citations";
@@ -274,23 +285,34 @@ export type SlackBotResponseType = "quotes" | "citations";
 export interface SlackChannelConfig {
   id: number;
   slack_bot_id: number;
+  persona_id: number | null;
   persona: Persona | null;
   channel_config: ChannelConfig;
-  response_type: SlackBotResponseType;
-  standard_answer_categories: StandardAnswerCategory[];
   enable_auto_filters: boolean;
+  standard_answer_categories: StandardAnswerCategory[];
+  is_default: boolean;
 }
 
-export interface SlackBot {
+export interface SlackChannelDescriptor {
+  id: string;
+  name: string;
+}
+
+export type SlackBot = {
   id: number;
   name: string;
   enabled: boolean;
   configs_count: number;
-
-  // tokens
+  slack_channel_configs: Array<{
+    id: number;
+    is_default: boolean;
+    channel_config: {
+      channel_name: string;
+    };
+  }>;
   bot_token: string;
   app_token: string;
-}
+};
 
 export interface SlackBotTokens {
   bot_token: string;
@@ -355,6 +377,7 @@ export enum ValidSources {
   Fireflies = "fireflies",
   Egnyte = "egnyte",
   Airtable = "airtable",
+  Gitbook = "gitbook",
 }
 
 export const validAutoSyncSources = [
@@ -375,7 +398,8 @@ export type ConfigurableSources = Exclude<
 
 export const oauthSupportedSources: ConfigurableSources[] = [
   ValidSources.Slack,
-  ValidSources.GoogleDrive,
+  // NOTE: temporarily disabled until our GDrive App is approved
+  // ValidSources.GoogleDrive,
   ValidSources.Confluence,
 ];
 

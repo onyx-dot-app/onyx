@@ -202,6 +202,8 @@ def confluence_oauth_callback(
             },
         )
 
+        token_response: ConfluenceCloudOAuth.TokenResponse | None = None
+
         try:
             token_response = ConfluenceCloudOAuth.TokenResponse.model_validate_json(
                 response.text

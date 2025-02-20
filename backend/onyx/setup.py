@@ -11,7 +11,9 @@ from onyx.configs.model_configs import FAST_GEN_AI_MODEL_VERSION
 from onyx.configs.model_configs import GEN_AI_API_KEY
 from onyx.configs.model_configs import GEN_AI_MODEL_VERSION
 from onyx.context.search.models import SavedSearchSettings
-from onyx.context.search.retrieval.search_runner import download_nltk_data
+from onyx.context.search.retrieval.search_runner import (
+    download_nltk_data,
+)
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import create_initial_default_connector
 from onyx.db.connector_credential_pair import associate_default_cc_pair
@@ -25,6 +27,7 @@ from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.persona import delete_old_default_personas
+from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_current_search_settings
@@ -36,6 +39,7 @@ from onyx.document_index.vespa.index import VespaIndex
 from onyx.indexing.models import IndexingSetting
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.llm.llm_provider_options import OPEN_AI_MODEL_NAMES
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.natural_language_processing.search_nlp_models import warm_up_cross_encoder
@@ -70,8 +74,19 @@ def setup_onyx(
     The Tenant Service calls the tenants/create endpoint which runs this.
     """
     check_index_swap(db_session=db_session)
-    search_settings = get_current_search_settings(db_session)
-    secondary_search_settings = get_secondary_search_settings(db_session)
+
+    active_search_settings = get_active_search_settings(db_session)
+    search_settings = active_search_settings.primary
+    secondary_search_settings = active_search_settings.secondary
+
+    # search_settings = get_current_search_settings(db_session)
+    # multipass_config_1 = get_multipass_config(search_settings)
+
+    # secondary_large_chunks_enabled: bool | None = None
+    # secondary_search_settings = get_secondary_search_settings(db_session)
+    # if secondary_search_settings:
+    #     multipass_config_2 = get_multipass_config(secondary_search_settings)
+    #     secondary_large_chunks_enabled = multipass_config_2.enable_large_chunks
 
     # Break bad state for thrashing indexes
     if secondary_search_settings and DISABLE_INDEX_UPDATE_ON_SWAP:
@@ -122,10 +137,8 @@ def setup_onyx(
     # takes a bit of time to start up
     logger.notice("Verifying Document Index(s) is/are available.")
     document_index = get_default_document_index(
-        primary_index_name=search_settings.index_name,
-        secondary_index_name=secondary_search_settings.index_name
-        if secondary_search_settings
-        else None,
+        search_settings,
+        secondary_search_settings,
     )
 
     success = setup_vespa(
@@ -239,7 +252,7 @@ def setup_vespa(
             logger.notice("Vespa setup complete.")
             return True
         except Exception:
-            logger.notice(
+            logger.exception(
                 f"Vespa setup did not succeed. The Vespa service may not be ready yet. Retrying in {WAIT_SECONDS} seconds."
             )
             time.sleep(WAIT_SECONDS)
@@ -269,6 +282,7 @@ def setup_postgres(db_session: Session) -> None:
     if GEN_AI_API_KEY and fetch_default_provider(db_session) is None:
         # Only for dev flows
         logger.notice("Setting up default OpenAI LLM for dev.")
+
         llm_model = GEN_AI_MODEL_VERSION or "gpt-4o-mini"
         fast_model = FAST_GEN_AI_MODEL_VERSION or "gpt-4o-mini"
         model_req = LLMProviderUpsertRequest(
@@ -282,8 +296,8 @@ def setup_postgres(db_session: Session) -> None:
             fast_default_model_name=fast_model,
             is_public=True,
             groups=[],
-            display_model_names=[llm_model, fast_model],
-            model_names=[llm_model, fast_model],
+            display_model_names=OPEN_AI_MODEL_NAMES,
+            model_names=OPEN_AI_MODEL_NAMES,
         )
         new_llm_provider = upsert_llm_provider(
             llm_provider=model_req, db_session=db_session

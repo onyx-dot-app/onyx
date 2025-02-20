@@ -4,12 +4,16 @@ from typing import Any
 
 from dropbox import Dropbox  # type: ignore
 from dropbox.exceptions import ApiError  # type:ignore
+from dropbox.exceptions import AuthError  # type:ignore
 from dropbox.files import FileMetadata  # type:ignore
 from dropbox.files import FolderMetadata  # type:ignore
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.connectors.interfaces import CredentialInvalidError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -140,6 +144,29 @@ class DropboxConnector(LoadConnector, PollConnector):
             yield batch
 
         return None
+
+    def validate_connector_settings(self) -> None:
+        if self.dropbox_client is None:
+            raise ConnectorMissingCredentialError("Dropbox credentials not loaded.")
+
+        try:
+            self.dropbox_client.files_list_folder(path="", limit=1)
+        except AuthError as e:
+            logger.exception("Failed to validate Dropbox credentials")
+            raise CredentialInvalidError(f"Dropbox credential is invalid: {e.error}")
+        except ApiError as e:
+            if (
+                e.error is not None
+                and "insufficient_permissions" in str(e.error).lower()
+            ):
+                raise InsufficientPermissionsError(
+                    "Your Dropbox token does not have sufficient permissions."
+                )
+            raise ConnectorValidationError(
+                f"Unexpected Dropbox error during validation: {e.user_message_text or e}"
+            )
+        except Exception as e:
+            raise Exception(f"Unexpected error during Dropbox settings validation: {e}")
 
 
 if __name__ == "__main__":

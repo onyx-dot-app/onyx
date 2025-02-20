@@ -11,5 +11,5 @@ spec:
     - name: wget
       image: busybox
       command: ['wget']
-      args: ['{{ include "onyx-stack.fullname" . }}-webserver:{{ .Values.webserver.service.port }}']
+      args: ['{{ include "onyx-stack.fullname" . }}-webserver:{{ .Values.webserver.service.servicePort }}']
   restartPolicy: Never

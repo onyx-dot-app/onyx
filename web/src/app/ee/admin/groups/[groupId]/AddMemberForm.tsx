@@ -21,8 +21,12 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   return (
-    <Modal title="Add New User" onOutsideClick={() => onClose()}>
-      <div className="px-6 pt-4 pb-12">
+    <Modal
+      className="max-w-xl"
+      title="Add New User"
+      onOutsideClick={() => onClose()}
+    >
+      <div className="flex flex-col">
         <UserEditor
           selectedUserIds={selectedUserIds}
           setSelectedUserIds={setSelectedUserIds}

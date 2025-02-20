@@ -58,6 +58,7 @@ def test_persona_permissions(reset: None) -> None:
         description="A persona created by basic user",
         is_public=False,
         groups=[],
+        users=[admin_user.id],
         user_performing_action=basic_user,
     )
     PersonaManager.verify(basic_user_persona, user_performing_action=basic_user)
@@ -139,9 +140,14 @@ def test_persona_permissions(reset: None) -> None:
 
     """Test admin permissions"""
     # Admin can edit any persona
+
+    # the persona was shared with the admin user on creation
+    # this edit call will simulate having the same user in the list twice.
+    # The server side should dedupe and handle this correctly (prior bug)
     PersonaManager.edit(
         persona=basic_user_persona,
-        description="Updated by admin",
+        description="Updated by admin 2",
+        users=[admin_user.id, admin_user.id],
         user_performing_action=admin_user,
     )
     PersonaManager.verify(basic_user_persona, user_performing_action=admin_user)

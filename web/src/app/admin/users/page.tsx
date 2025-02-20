@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import InvitedUserTable from "@/components/admin/users/InvitedUserTable";
 import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
-import { SearchBar } from "@/components/search/SearchBar";
+
 import { FiPlusSquare } from "react-icons/fi";
 import { Modal } from "@/components/Modal";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -18,6 +18,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import BulkAdd from "@/components/admin/users/BulkAdd";
 import Text from "@/components/ui/text";
 import { InvitedUserSnapshot } from "@/lib/types";
+import { SearchBar } from "@/components/search/SearchBar";
 
 const UsersTables = ({
   q,
@@ -77,7 +78,6 @@ const UsersTables = ({
           </CardContent>
         </Card>
       </TabsContent>
-
       <TabsContent value="invited">
         <Card>
           <CardHeader>

@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -6,9 +8,12 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
+from onyx.server.documents.models import IndexAttemptSnapshot
+from onyx.server.documents.models import IndexingStatus
 from onyx.server.documents.models import InputType
 
 """
@@ -39,6 +44,7 @@ class DATestUser(BaseModel):
     headers: dict
     role: UserRole
     is_active: bool
+    cookies: dict = {}
 
 
 class DATestPersonaLabel(BaseModel):
@@ -130,18 +136,21 @@ class DATestPersona(BaseModel):
     label_ids: list[int]
 
 
-#
+class DATestChatMessage(BaseModel):
+    id: int
+    chat_session_id: UUID
+    parent_message_id: int | None
+    message: str
+
+
 class DATestChatSession(BaseModel):
     id: UUID
     persona_id: int
     description: str
 
 
-class DATestChatMessage(BaseModel):
-    id: int
-    chat_session_id: UUID
-    parent_message_id: int | None
-    message: str
+class DAQueryHistoryEntry(DATestChatSession):
+    feedback_type: QAFeedbackType | None
 
 
 class StreamedResponse(BaseModel):
@@ -167,3 +176,32 @@ class DATestSettings(BaseModel):
     gpu_enabled: bool | None = None
     product_gating: DATestGatingType = DATestGatingType.NONE
     anonymous_user_enabled: bool | None = None
+
+
+@dataclass
+class DATestIndexAttempt:
+    id: int
+    status: IndexingStatus | None
+    new_docs_indexed: int | None
+    total_docs_indexed: int | None
+    docs_removed_from_index: int | None
+    error_msg: str | None
+    time_started: datetime | None
+    time_updated: datetime | None
+
+    @classmethod
+    def from_index_attempt_snapshot(
+        cls, index_attempt: IndexAttemptSnapshot
+    ) -> "DATestIndexAttempt":
+        return cls(
+            id=index_attempt.id,
+            status=index_attempt.status,
+            new_docs_indexed=index_attempt.new_docs_indexed,
+            total_docs_indexed=index_attempt.total_docs_indexed,
+            docs_removed_from_index=index_attempt.docs_removed_from_index,
+            error_msg=index_attempt.error_msg,
+            time_started=datetime.fromisoformat(index_attempt.time_started)
+            if index_attempt.time_started
+            else None,
+            time_updated=datetime.fromisoformat(index_attempt.time_updated),
+        )

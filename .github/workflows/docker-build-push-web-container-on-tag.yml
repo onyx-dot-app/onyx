@@ -60,6 +60,8 @@ jobs:
           push: true
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            NODE_OPTIONS=--max-old-space-size=8192
+
           # needed due to weird interactions with the builds for different platforms
           no-cache: true
           labels: ${{ steps.meta.outputs.labels }}

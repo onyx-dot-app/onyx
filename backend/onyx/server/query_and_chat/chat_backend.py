@@ -5,7 +5,6 @@ import os
 import uuid
 from collections.abc import Callable
 from collections.abc import Generator
-from typing import Tuple
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -15,12 +14,10 @@ from fastapi import Request
 from fastapi import Response
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
-from PIL import Image
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accesssible_user
-from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import extract_headers
@@ -47,7 +44,6 @@ from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import set_as_latest_chat_message
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.feedback import create_chat_message_feedback
@@ -80,11 +76,13 @@ from onyx.server.query_and_chat.models import LLMOverride
 from onyx.server.query_and_chat.models import PromptOverride
 from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SearchFeedbackRequest
+from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
+from shared_configs.contextvars import get_current_tenant_id
 
 
 logger = setup_logger()
@@ -117,10 +115,50 @@ def get_user_chat_sessions(
                 shared_status=chat.shared_status,
                 folder_id=chat.folder_id,
                 current_alternate_model=chat.current_alternate_model,
+                current_temperature_override=chat.temperature_override,
             )
             for chat in chat_sessions
         ]
     )
+
+
+@router.put("/update-chat-session-temperature")
+def update_chat_session_temperature(
+    update_thread_req: UpdateChatSessionTemperatureRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    chat_session = get_chat_session_by_id(
+        chat_session_id=update_thread_req.chat_session_id,
+        user_id=user.id if user is not None else None,
+        db_session=db_session,
+    )
+
+    # Validate temperature_override
+    if update_thread_req.temperature_override is not None:
+        if (
+            update_thread_req.temperature_override < 0
+            or update_thread_req.temperature_override > 2
+        ):
+            raise HTTPException(
+                status_code=400, detail="Temperature must be between 0 and 2"
+            )
+
+        # Additional check for Anthropic models
+        if (
+            chat_session.current_alternate_model
+            and "anthropic" in chat_session.current_alternate_model.lower()
+        ):
+            if update_thread_req.temperature_override > 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Temperature for Anthropic models must be between 0 and 1",
+                )
+
+    chat_session.temperature_override = update_thread_req.temperature_override
+
+    db_session.add(chat_session)
+    db_session.commit()
 
 
 @router.put("/update-chat-session-model")
@@ -193,6 +231,7 @@ def get_chat_session(
         ],
         time_created=chat_session.time_created,
         shared_status=chat_session.shared_status,
+        current_temperature_override=chat_session.temperature_override,
     )
 
 
@@ -313,10 +352,12 @@ async def is_connected(request: Request) -> Callable[[], bool]:
     def is_connected_sync() -> bool:
         future = asyncio.run_coroutine_threadsafe(request.is_disconnected(), main_loop)
         try:
-            is_connected = not future.result(timeout=0.01)
+            is_connected = not future.result(timeout=0.05)
             return is_connected
         except asyncio.TimeoutError:
-            logger.error("Asyncio timed out")
+            logger.warning(
+                "Asyncio timed out (potentially missed request to stop streaming)"
+            )
             return True
         except Exception as e:
             error_msg = str(e)
@@ -335,7 +376,6 @@ def handle_new_chat_message(
     user: User | None = Depends(current_chat_accesssible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     is_connected_func: Callable[[], bool] = Depends(is_connected),
-    tenant_id: str = Depends(get_current_tenant_id),
 ) -> StreamingResponse:
     """
     This endpoint is both used for all the following purposes:
@@ -357,6 +397,7 @@ def handle_new_chat_message(
     Returns:
         StreamingResponse: Streams the response to the new chat message.
     """
+    tenant_id = get_current_tenant_id()
     logger.debug(f"Received new chat message: {chat_message_req.message}")
 
     if (
@@ -366,7 +407,7 @@ def handle_new_chat_message(
     ):
         raise HTTPException(status_code=400, detail="Empty chat message is invalid")
 
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         create_milestone_and_report(
             user=user,
             distinct_id=user.email if user else tenant_id or "N/A",
@@ -424,7 +465,7 @@ def set_message_as_latest(
 @router.post("/create-chat-message-feedback")
 def create_chat_feedback(
     feedback: ChatFeedbackRequest,
-    user: User | None = Depends(current_limited_user),
+    user: User | None = Depends(current_chat_accesssible_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id if user else None
@@ -595,21 +636,6 @@ def seed_chat_from_slack(
 """File upload"""
 
 
-def convert_to_jpeg(file: UploadFile) -> Tuple[io.BytesIO, str]:
-    try:
-        with Image.open(file.file) as img:
-            if img.mode != "RGB":
-                img = img.convert("RGB")
-            jpeg_io = io.BytesIO()
-            img.save(jpeg_io, format="JPEG", quality=85)
-            jpeg_io.seek(0)
-        return jpeg_io, "image/jpeg"
-    except Exception as e:
-        raise HTTPException(
-            status_code=400, detail=f"Failed to convert image: {str(e)}"
-        )
-
-
 @router.post("/file")
 def upload_files_for_chat(
     files: list[UploadFile],
@@ -645,6 +671,9 @@ def upload_files_for_chat(
     )
 
     for file in files:
+        if not file.content_type:
+            raise HTTPException(status_code=400, detail="File content type is required")
+
         if file.content_type not in allowed_content_types:
             if file.content_type in image_content_types:
                 error_detail = "Unsupported image file type. Supported image types include .jpg, .jpeg, .png, .webp."
@@ -676,28 +705,32 @@ def upload_files_for_chat(
 
     file_info: list[tuple[str, str | None, ChatFileType]] = []
     for file in files:
-        if file.content_type in image_content_types:
-            file_type = ChatFileType.IMAGE
-            # Convert image to JPEG
-            file_content, new_content_type = convert_to_jpeg(file)
-        elif file.content_type in csv_content_types:
-            file_type = ChatFileType.CSV
-            file_content = io.BytesIO(file.file.read())
-            new_content_type = file.content_type or ""
-        elif file.content_type in document_content_types:
-            file_type = ChatFileType.DOC
-            file_content = io.BytesIO(file.file.read())
-            new_content_type = file.content_type or ""
-        else:
-            file_type = ChatFileType.PLAIN_TEXT
-            file_content = io.BytesIO(file.file.read())
-            new_content_type = file.content_type or ""
+        file_type = (
+            ChatFileType.IMAGE
+            if file.content_type in image_content_types
+            else ChatFileType.CSV
+            if file.content_type in csv_content_types
+            else ChatFileType.DOC
+            if file.content_type in document_content_types
+            else ChatFileType.PLAIN_TEXT
+        )
 
-        # store the file (now JPEG for images)
+        file_content = file.file.read()  # Read the file content
+
+        # NOTE: Image conversion to JPEG used to be enforced here.
+        # This was removed to:
+        # 1. Preserve original file content for downloads
+        # 2. Maintain transparency in formats like PNG
+        # 3. Ameliorate issue with file conversion
+        file_content_io = io.BytesIO(file_content)
+
+        new_content_type = file.content_type
+
+        # Store the file normally
         file_id = str(uuid.uuid4())
         file_store.save_file(
             file_name=file_id,
-            content=file_content,
+            content=file_content_io,
             display_name=file.filename,
             file_origin=FileOrigin.CHAT_UPLOAD,
             file_type=new_content_type or file_type.value,
@@ -707,10 +740,11 @@ def upload_files_for_chat(
         # to re-extract it every time we send a message
         if file_type == ChatFileType.DOC:
             extracted_text = extract_file_text(
-                file=file.file,
+                file=file_content_io,  # use the bytes we already read
                 file_name=file.filename or "",
             )
             text_file_id = str(uuid.uuid4())
+
             file_store.save_file(
                 file_name=text_file_id,
                 content=io.BytesIO(extracted_text.encode()),

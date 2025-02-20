@@ -78,30 +78,6 @@ function SlackBotEditPage({
       />
       <Separator />
 
-      <div className="my-8" />
-
-      <Link
-        className="
-          flex
-          py-2
-          px-4
-          mt-2
-          border
-          border-border
-          h-fit
-          cursor-pointer
-          hover:bg-hover
-          text-sm
-          w-80
-        "
-        href={`/admin/bots/${unwrappedParams["bot-id"]}/channels/new`}
-      >
-        <div className="mx-auto flex">
-          <FiPlusSquare className="my-auto mr-2" />
-          New Slack Channel Configuration
-        </div>
-      </Link>
-
       <div className="mt-8">
         <SlackChannelConfigsTable
           slackBotId={slackBot.id}

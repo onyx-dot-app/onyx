@@ -26,6 +26,13 @@ doc_permission_sync_ctx: contextvars.ContextVar[
 ] = contextvars.ContextVar("doc_permission_sync_ctx", default=dict())
 
 
+class LoggerContextVars:
+    @staticmethod
+    def reset() -> None:
+        pruning_ctx.set(dict())
+        doc_permission_sync_ctx.set(dict())
+
+
 class TaskAttemptSingleton:
     """Used to tell if this process is an indexing job, and if so what is the
     unique identifier for this indexing attempt. For things like the API server,
@@ -70,32 +77,37 @@ class OnyxLoggingAdapter(logging.LoggerAdapter):
     ) -> tuple[str, MutableMapping[str, Any]]:
         # If this is an indexing job, add the attempt ID to the log message
         # This helps filter the logs for this specific indexing
-        index_attempt_id = TaskAttemptSingleton.get_index_attempt_id()
-        cc_pair_id = TaskAttemptSingleton.get_connector_credential_pair_id()
+        while True:
+            pruning_ctx_dict = pruning_ctx.get()
+            if len(pruning_ctx_dict) > 0:
+                if "request_id" in pruning_ctx_dict:
+                    msg = f"[Prune: {pruning_ctx_dict['request_id']}] {msg}"
 
-        doc_permission_sync_ctx_dict = doc_permission_sync_ctx.get()
-        pruning_ctx_dict = pruning_ctx.get()
-        if len(pruning_ctx_dict) > 0:
-            if "request_id" in pruning_ctx_dict:
-                msg = f"[Prune: {pruning_ctx_dict['request_id']}] {msg}"
+                if "cc_pair_id" in pruning_ctx_dict:
+                    msg = f"[CC Pair: {pruning_ctx_dict['cc_pair_id']}] {msg}"
+                break
 
-            if "cc_pair_id" in pruning_ctx_dict:
-                msg = f"[CC Pair: {pruning_ctx_dict['cc_pair_id']}] {msg}"
-        elif len(doc_permission_sync_ctx_dict) > 0:
-            if "request_id" in doc_permission_sync_ctx_dict:
-                msg = f"[Doc Permissions Sync: {doc_permission_sync_ctx_dict['request_id']}] {msg}"
-        else:
+            doc_permission_sync_ctx_dict = doc_permission_sync_ctx.get()
+            if len(doc_permission_sync_ctx_dict) > 0:
+                if "request_id" in doc_permission_sync_ctx_dict:
+                    msg = f"[Doc Permissions Sync: {doc_permission_sync_ctx_dict['request_id']}] {msg}"
+                break
+
+            index_attempt_id = TaskAttemptSingleton.get_index_attempt_id()
+            cc_pair_id = TaskAttemptSingleton.get_connector_credential_pair_id()
+
             if index_attempt_id is not None:
                 msg = f"[Index Attempt: {index_attempt_id}] {msg}"
 
             if cc_pair_id is not None:
                 msg = f"[CC Pair: {cc_pair_id}] {msg}"
 
+            break
         # Add tenant information if it differs from default
         # This will always be the case for authenticated API requests
         if MULTI_TENANT:
             tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
-            if tenant_id != POSTGRES_DEFAULT_SCHEMA:
+            if tenant_id != POSTGRES_DEFAULT_SCHEMA and tenant_id is not None:
                 # Strip tenant_ prefix and take first 8 chars for cleaner logs
                 tenant_display = tenant_id.removeprefix(TENANT_ID_PREFIX)
                 short_tenant = (

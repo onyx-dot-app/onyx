@@ -18,7 +18,11 @@ import AdvancedFormPage from "./pages/Advanced";
 import DynamicConnectionForm from "./pages/DynamicConnectorCreationForm";
 import CreateCredential from "@/components/credentials/actions/CreateCredential";
 import ModifyCredential from "@/components/credentials/actions/ModifyCredential";
-import { ConfigurableSources, oauthSupportedSources } from "@/lib/types";
+import {
+  ConfigurableSources,
+  oauthSupportedSources,
+  ValidSources,
+} from "@/lib/types";
 import {
   Credential,
   credentialTemplates,
@@ -58,6 +62,7 @@ import {
 } from "@/lib/connectors/oauth";
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
+import { Button } from "@/components/ui/button";
 export interface AdvancedConfig {
   refreshFreq: number;
   pruneFreq: number;
@@ -415,7 +420,7 @@ export default function AddConnector({
           } else {
             const errorData = await linkCredentialResponse.json();
             setPopup({
-              message: errorData.message,
+              message: errorData.message || errorData.detail,
               type: "error",
             });
           }
@@ -446,7 +451,7 @@ export default function AddConnector({
               <CardSection>
                 <Title className="mb-2 text-lg">Select a credential</Title>
 
-                {connector == "gmail" ? (
+                {connector == ValidSources.Gmail ? (
                   <GmailMain />
                 ) : (
                   <>
@@ -462,8 +467,9 @@ export default function AddConnector({
                     {!createCredentialFormToggle && (
                       <div className="mt-6 flex space-x-4">
                         {/* Button to pop up a form to manually enter credentials */}
-                        <button
-                          className="mt-6 text-sm bg-background-900 px-2 py-1.5 flex text-text-200 flex-none rounded mr-4"
+                        <Button
+                          variant="secondary"
+                          className="mt-6 text-sm mr-4"
                           onClick={async () => {
                             if (oauthDetails && oauthDetails.oauth_enabled) {
                               if (oauthDetails.additional_kwargs.length > 0) {
@@ -493,14 +499,15 @@ export default function AddConnector({
                           }}
                         >
                           Create New
-                        </button>
+                        </Button>
                         {/* Button to sign in via OAuth */}
                         {oauthSupportedSources.includes(connector) &&
                           (NEXT_PUBLIC_CLOUD_ENABLED ||
                             NEXT_PUBLIC_TEST_ENV) && (
-                            <button
+                            <Button
+                              variant="navigate"
                               onClick={handleAuthorize}
-                              className="mt-6 text-sm bg-blue-500 px-2 py-1.5 flex text-text-200 flex-none rounded"
+                              className="mt-6 "
                               disabled={isAuthorizing}
                               hidden={!isAuthorizeVisible}
                             >
@@ -509,7 +516,7 @@ export default function AddConnector({
                                 : `Authorize with ${getSourceDisplayName(
                                     connector
                                   )}`}
-                            </button>
+                            </Button>
                           )}
                       </div>
                     )}

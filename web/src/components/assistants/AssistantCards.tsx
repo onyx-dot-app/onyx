@@ -7,6 +7,8 @@ import { FiBookmark, FiImage, FiSearch } from "react-icons/fi";
 import { MdDragIndicator } from "react-icons/md";
 
 import { Badge } from "../ui/badge";
+import { IIMAGE_GENERATION_TOOL_ID } from "@/app/chat/tools/constants";
+import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 
 export const AssistantCard = ({
   assistant,
@@ -19,14 +21,14 @@ export const AssistantCard = ({
 }) => {
   const renderBadgeContent = (tool: { name: string }) => {
     switch (tool.name) {
-      case "SearchTool":
+      case SEARCH_TOOL_ID:
         return (
           <>
             <FiSearch className="h-3 w-3 my-auto" />
             <span>Search</span>
           </>
         );
-      case "ImageGenerationTool":
+      case IIMAGE_GENERATION_TOOL_ID:
         return (
           <>
             <FiImage className="h-3 w-3 my-auto" />

@@ -81,6 +81,7 @@ class CustomModelServer(LLM):
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
     ) -> BaseMessage:
         return self._execute(prompt)
 
@@ -90,5 +91,6 @@ class CustomModelServer(LLM):
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
     ) -> Iterator[BaseMessage]:
         yield self._execute(prompt)

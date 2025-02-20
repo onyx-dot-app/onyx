@@ -18,12 +18,12 @@ const SidebarSwitch = ({
   label: string;
 }) => (
   <div className="flex justify-between items-center py-2">
-    <span className="text-sm text-gray-300">{label}</span>
+    <span className="text-sm text-text-300">{label}</span>
     <Switch
       checked={checked}
       onCheckedChange={onCheckedChange}
-      className="data-[state=checked]:bg-white data-[state=checked]:border-neutral-200 data-[state=unchecked]:bg-gray-600"
-      circleClassName="data-[state=checked]:bg-neutral-200"
+      className="data-[state=checked]:bg-white data-[state=checked]:border-background-200 data-[state=unchecked]:bg-background-600"
+      circleClassName="data-[state=checked]:bg-background-200"
     />
   </div>
 );
@@ -45,12 +45,12 @@ const RadioOption = ({
     <RadioGroupItem
       value={value}
       id={value}
-      className="mt-1 border border-gray-600 data-[state=checked]:border-white data-[state=checked]:bg-white"
+      className="mt-1 border border-background-600 data-[state=checked]:border-white data-[state=checked]:bg-white"
     />
     <Label htmlFor={value} className="flex flex-col">
-      <span className="text-sm text-gray-300">{label}</span>
+      <span className="text-sm text-text-300">{label}</span>
       {description && (
-        <span className="text-xs text-gray-500">{description}</span>
+        <span className="text-xs text-text-500">{description}</span>
       )}
     </Label>
   </div>
@@ -91,7 +91,7 @@ export const SettingsPanel = ({
 
   return (
     <div
-      className="fixed top-0 right-0 w-[360px] h-full bg-[#202124] text-gray-300 overflow-y-auto z-20 transition-transform duration-300 ease-in-out transform"
+      className="fixed top-0 right-0 w-[360px] h-full bg-background-800 text-text-300 overflow-y-auto z-20 transition-transform duration-300 ease-in-out transform"
       style={{
         transform: settingsOpen ? "translateX(0)" : "translateX(100%)",
         boxShadow: "-2px 0 10px rgba(0,0,0,0.3)",
@@ -105,7 +105,7 @@ export const SettingsPanel = ({
           <button
             aria-label="Close"
             onClick={toggleSettings}
-            className="text-gray-400 hover:text-white"
+            className="text-text-400 hover:text-white"
           >
             ✕
           </button>

@@ -28,6 +28,7 @@ import { Spinner } from "@/components/Spinner";
 import { deleteApiKey, regenerateApiKey } from "./lib";
 import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
 import { APIKey } from "./types";
+import CreateButton from "@/components/ui/createButton";
 
 const API_KEY_TEXT = `API Keys allow you to access Onyx APIs programmatically. Click the button below to generate a new API Key.`;
 
@@ -55,7 +56,7 @@ function NewApiKeyModal({
           <div className="flex mt-2">
             <b className="my-auto break-all">{apiKey}</b>
             <div
-              className="ml-2 my-auto p-2 hover:bg-hover rounded cursor-pointer"
+              className="ml-2 my-auto p-2 hover:bg-accent-background-hovered rounded cursor-pointer"
               onClick={() => {
                 setCopyClicked(true);
                 navigator.clipboard.writeText(apiKey);
@@ -111,14 +112,10 @@ function Main() {
   }
 
   const newApiKeyButton = (
-    <Button
-      variant="navigate"
-      size="sm"
-      className="mt-3"
+    <CreateButton
       onClick={() => setShowCreateUpdateForm(true)}
-    >
-      Create API Key
-    </Button>
+      text="Create API Key"
+    />
   );
 
   if (apiKeys.length === 0) {
@@ -185,7 +182,7 @@ function Main() {
                   flex 
                   mb-1 
                   w-fit 
-                  hover:bg-hover cursor-pointer
+                  hover:bg-accent-background-hovered cursor-pointer
                   p-2 
                   rounded-lg
                   border-border
@@ -209,7 +206,7 @@ function Main() {
                   flex 
                   mb-1 
                   w-fit 
-                  hover:bg-hover cursor-pointer
+                  hover:bg-accent-background-hovered cursor-pointer
                   p-2 
                   rounded-lg
                   border-border

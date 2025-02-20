@@ -142,6 +142,7 @@ def build_content_with_imgs(
     img_urls: list[str] | None = None,
     b64_imgs: list[str] | None = None,
     message_type: MessageType = MessageType.USER,
+    exclude_images: bool = False,
 ) -> str | list[str | dict[str, Any]]:  # matching Langchain's BaseMessage content type
     files = files or []
 
@@ -157,7 +158,7 @@ def build_content_with_imgs(
 
     message_main_content = _build_content(message, files)
 
-    if not img_files and not img_urls:
+    if exclude_images or (not img_files and not img_urls):
         return message_main_content
 
     return cast(
@@ -382,9 +383,19 @@ def _strip_colon_from_model_name(model_name: str) -> str:
     return ":".join(model_name.split(":")[:-1]) if ":" in model_name else model_name
 
 
-def _find_model_obj(
-    model_map: dict, provider: str, model_names: list[str | None]
-) -> dict | None:
+def _find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | None:
+    stripped_model_name = _strip_extra_provider_from_model_name(model_name)
+
+    model_names = [
+        model_name,
+        _strip_extra_provider_from_model_name(model_name),
+        # Remove leading extra provider. Usually for cases where user has a
+        # customer model proxy which appends another prefix
+        # remove :XXXX from the end, if present. Needed for ollama.
+        _strip_colon_from_model_name(model_name),
+        _strip_colon_from_model_name(stripped_model_name),
+    ]
+
     # Filter out None values and deduplicate model names
     filtered_model_names = [name for name in model_names if name]
 
@@ -417,21 +428,10 @@ def get_llm_max_tokens(
         return GEN_AI_MAX_TOKENS
 
     try:
-        extra_provider_stripped_model_name = _strip_extra_provider_from_model_name(
-            model_name
-        )
         model_obj = _find_model_obj(
             model_map,
             model_provider,
-            [
-                model_name,
-                # Remove leading extra provider. Usually for cases where user has a
-                # customer model proxy which appends another prefix
-                extra_provider_stripped_model_name,
-                # remove :XXXX from the end, if present. Needed for ollama.
-                _strip_colon_from_model_name(model_name),
-                _strip_colon_from_model_name(extra_provider_stripped_model_name),
-            ],
+            model_name,
         )
         if not model_obj:
             raise RuntimeError(
@@ -440,14 +440,14 @@ def get_llm_max_tokens(
 
         if "max_input_tokens" in model_obj:
             max_tokens = model_obj["max_input_tokens"]
-            logger.info(
+            logger.debug(
                 f"Max tokens for {model_name}: {max_tokens} (from max_input_tokens)"
             )
             return max_tokens
 
         if "max_tokens" in model_obj:
             max_tokens = model_obj["max_tokens"]
-            logger.info(f"Max tokens for {model_name}: {max_tokens} (from max_tokens)")
+            logger.debug(f"Max tokens for {model_name}: {max_tokens} (from max_tokens)")
             return max_tokens
 
         logger.error(f"No max tokens found for LLM: {model_name}")
@@ -523,3 +523,34 @@ def get_max_input_tokens(
         raise RuntimeError("No tokens for input for the LLM given settings")
 
     return input_toks
+
+
+def model_supports_image_input(model_name: str, model_provider: str) -> bool:
+    model_map = get_model_map()
+    try:
+        model_obj = _find_model_obj(
+            model_map,
+            model_provider,
+            model_name,
+        )
+        if not model_obj:
+            raise RuntimeError(
+                f"No litellm entry found for {model_provider}/{model_name}"
+            )
+        return model_obj.get("supports_vision", False)
+    except Exception:
+        logger.exception(
+            f"Failed to get model object for {model_provider}/{model_name}"
+        )
+        return False
+
+
+def model_is_reasoning_model(model_name: str) -> bool:
+    _REASONING_MODEL_NAMES = [
+        "o1",
+        "o1-mini",
+        "o3-mini",
+        "deepseek-reasoner",
+        "deepseek-r1",
+    ]
+    return model_name.lower() in _REASONING_MODEL_NAMES

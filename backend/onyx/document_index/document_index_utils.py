@@ -4,24 +4,63 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import ENABLE_MULTIPASS_INDEXING
+from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.indexing.models import MultipassConfig
 from shared_configs.configs import MULTI_TENANT
 
 DEFAULT_BATCH_SIZE = 30
 DEFAULT_INDEX_NAME = "danswer_chunk"
 
 
-def get_both_index_names(db_session: Session) -> tuple[str, str | None]:
+def should_use_multipass(search_settings: SearchSettings | None) -> bool:
+    """
+    Determines whether multipass should be used based on the search settings
+    or the default config if settings are unavailable.
+    """
+    if search_settings is not None:
+        return search_settings.multipass_indexing
+    return ENABLE_MULTIPASS_INDEXING
+
+
+def get_multipass_config(search_settings: SearchSettings) -> MultipassConfig:
+    """
+    Determines whether to enable multipass and large chunks by examining
+    the current search settings and the embedder configuration.
+    """
+    if not search_settings:
+        return MultipassConfig(multipass_indexing=False, enable_large_chunks=False)
+
+    multipass = should_use_multipass(search_settings)
+    enable_large_chunks = SearchSettings.can_use_large_chunks(
+        multipass, search_settings.model_name, search_settings.provider_type
+    )
+    return MultipassConfig(
+        multipass_indexing=multipass, enable_large_chunks=enable_large_chunks
+    )
+
+
+def get_both_index_properties(
+    db_session: Session,
+) -> tuple[str, str | None, bool, bool | None]:
     search_settings = get_current_search_settings(db_session)
+    config_1 = get_multipass_config(search_settings)
 
     search_settings_new = get_secondary_search_settings(db_session)
     if not search_settings_new:
-        return search_settings.index_name, None
+        return search_settings.index_name, None, config_1.enable_large_chunks, None
 
-    return search_settings.index_name, search_settings_new.index_name
+    config_2 = get_multipass_config(search_settings)
+    return (
+        search_settings.index_name,
+        search_settings_new.index_name,
+        config_1.enable_large_chunks,
+        config_2.enable_large_chunks,
+    )
 
 
 def translate_boost_count_to_multiplier(boost: int) -> float:
@@ -103,6 +142,8 @@ def get_uuid_from_chunk_info(
     tenant_id: str | None,
     large_chunk_id: int | None = None,
 ) -> UUID:
+    """NOTE: be VERY carefuly about changing this function. If changed without a migration,
+    this can cause deletion/update/insertion to function incorrectly."""
     doc_str = document_id
 
     # Web parsing URL duplicate catching

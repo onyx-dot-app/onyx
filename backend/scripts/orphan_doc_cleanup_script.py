@@ -5,6 +5,8 @@ import sys
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from onyx.document_index.document_index_utils import get_multipass_config
+
 # makes it so `PYTHONPATH=.` is not required when running this script
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
@@ -54,8 +56,14 @@ def main() -> None:
 
             # Setup Vespa index
             search_settings = get_current_search_settings(db_session)
+            multipass_config = get_multipass_config(search_settings)
             index_name = search_settings.index_name
-            vespa_index = VespaIndex(index_name=index_name, secondary_index_name=None)
+            vespa_index = VespaIndex(
+                index_name=index_name,
+                secondary_index_name=None,
+                large_chunks_enabled=multipass_config.enable_large_chunks,
+                secondary_large_chunks_enabled=None,
+            )
 
             # Delete chunks from Vespa first
             print("Deleting orphaned document chunks from Vespa")

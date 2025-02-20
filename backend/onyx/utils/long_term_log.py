@@ -29,24 +29,32 @@ class LongTermLogger:
         try:
             # Create directory if it doesn't exist
             os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
-        except Exception as e:
-            logger.error(f"Error creating directory for long-term logs: {e}")
+        except Exception:
+            # logger.error(f"Error creating directory for long-term logs: {e}")
+            pass
 
     def _cleanup_old_files(self, category_path: Path) -> None:
         try:
             files = sorted(
-                category_path.glob("*.json"),
+                [f for f in category_path.glob("*.json")],
                 key=lambda x: x.stat().st_mtime,  # Sort by modification time
                 reverse=True,
             )
+
             # Delete oldest files that exceed the limit
             for file in files[self.max_files_per_category :]:
+                if not file.is_file():
+                    logger.debug(f"File already deleted: {file}")
+                    continue
                 try:
                     file.unlink()
-                except Exception as e:
-                    logger.error(f"Error deleting old log file {file}: {e}")
-        except Exception as e:
-            logger.error(f"Error during log rotation cleanup: {e}")
+                except Exception:
+                    pass
+                    # logger.error(f"Error deleting old log file {file
+                    # }: {e}")
+        except Exception:
+            pass
+            # logger.error(f"Error during log rotation cleanup: {e}")
 
     def _record(self, message: Any, category: str) -> None:
         category_path = self.log_file_path / category
@@ -69,8 +77,9 @@ class LongTermLogger:
             with open(file_path, "w+") as f:
                 # default allows us to "ignore" unserializable objects
                 json.dump(final_record, f, default=lambda x: str(x))
-        except Exception as e:
-            logger.error(f"Error recording log: {e}")
+        except Exception:
+            # logger.error(f"Error recording log: {e}")
+            pass
 
     def record(self, message: JSON_ro, category: str = "default") -> None:
         try:

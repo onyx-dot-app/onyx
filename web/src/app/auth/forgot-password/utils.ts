@@ -28,6 +28,12 @@ export const resetPassword = async (
   });
 
   if (!response.ok) {
-    throw new Error("Failed to reset password");
+    const error = await response.json();
+    if (error?.detail?.code === "RESET_PASSWORD_INVALID_PASSWORD") {
+      throw new Error(error.detail.reason || "Invalid password");
+    }
+    const errorMessage =
+      error?.detail || "An error occurred during password reset.";
+    throw new Error(errorMessage);
   }
 };

@@ -34,38 +34,26 @@ import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 const ITEMS_PER_PAGE = 8;
 const PAGES_PER_BATCH = 8;
 
-export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
+export interface IndexingAttemptsTableProps {
+  ccPair: CCPairFullInfo;
+  indexAttempts: IndexAttemptSnapshot[];
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}
+
+export function IndexingAttemptsTable({
+  ccPair,
+  indexAttempts,
+  currentPage,
+  totalPages,
+  onPageChange,
+}: IndexingAttemptsTableProps) {
   const [indexAttemptTracePopupId, setIndexAttemptTracePopupId] = useState<
     number | null
   >(null);
 
-  const {
-    currentPageData: pageOfIndexAttempts,
-    isLoading,
-    error,
-    currentPage,
-    totalPages,
-    goToPage,
-  } = usePaginatedFetch<IndexAttemptSnapshot>({
-    itemsPerPage: ITEMS_PER_PAGE,
-    pagesPerBatch: PAGES_PER_BATCH,
-    endpoint: `${buildCCPairInfoUrl(ccPair.id)}/index-attempts`,
-  });
-
-  if (isLoading || !pageOfIndexAttempts) {
-    return <ThreeDotsLoader />;
-  }
-
-  if (error) {
-    return (
-      <ErrorCallout
-        errorTitle={`Failed to fetch info on Connector with ID ${ccPair.id}`}
-        errorMsg={error?.toString() || "Unknown error"}
-      />
-    );
-  }
-
-  if (!pageOfIndexAttempts?.length) {
+  if (!indexAttempts?.length) {
     return (
       <Callout
         className="mt-4"
@@ -78,7 +66,7 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
     );
   }
 
-  const indexAttemptToDisplayTraceFor = pageOfIndexAttempts?.find(
+  const indexAttemptToDisplayTraceFor = indexAttempts?.find(
     (indexAttempt) => indexAttempt.id === indexAttemptTracePopupId
   );
 
@@ -119,7 +107,7 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {pageOfIndexAttempts.map((indexAttempt) => {
+          {indexAttempts.map((indexAttempt) => {
             const docsPerMinute =
               getDocsProcessedPerMinute(indexAttempt)?.toFixed(2);
             return (
@@ -161,18 +149,6 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
                 <TableCell>{indexAttempt.total_docs_indexed}</TableCell>
                 <TableCell>
                   <div>
-                    {indexAttempt.error_count > 0 && (
-                      <Link
-                        className="cursor-pointer my-auto"
-                        href={`/admin/indexing/${indexAttempt.id}`}
-                      >
-                        <Text className="flex flex-wrap text-link whitespace-normal">
-                          <SearchIcon />
-                          &nbsp;View Errors
-                        </Text>
-                      </Link>
-                    )}
-
                     {indexAttempt.status === "success" && (
                       <Text className="flex flex-wrap whitespace-normal">
                         {"-"}
@@ -209,7 +185,7 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
             <PageSelector
               totalPages={totalPages}
               currentPage={currentPage}
-              onPageChange={goToPage}
+              onPageChange={onPageChange}
             />
           </div>
         </div>

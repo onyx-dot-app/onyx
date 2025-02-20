@@ -1,13 +1,12 @@
 import json
+from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
 from typing import cast
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.chat_utils import llm_doc_from_inference_section
-from onyx.chat.llm_response_handler import LLMCall
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ContextualPruningConfig
 from onyx.chat.models import DocumentPruningConfig
@@ -25,13 +24,13 @@ from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import QueryFlow
-from onyx.context.search.enums import SearchType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SearchRequest
 from onyx.context.search.pipeline import SearchPipeline
+from onyx.context.search.pipeline import section_relevance_list_impl
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.interfaces import LLM
@@ -39,6 +38,8 @@ from onyx.llm.models import PreviousMessage
 from onyx.secondary_llm_flows.choose_search import check_if_need_search
 from onyx.secondary_llm_flows.query_expansion import history_based_query_rephrase
 from onyx.tools.message import ToolCallSummary
+from onyx.tools.models import SearchQueryInfo
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_utils import llm_doc_to_dict
@@ -47,9 +48,6 @@ from onyx.tools.tool_implementations.search_like_tool_utils import (
 )
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
-)
-from onyx.tools.tool_implementations.search_like_tool_utils import (
-    ORIGINAL_CONTEXT_DOCUMENTS_ID,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
@@ -60,15 +58,13 @@ SEARCH_RESPONSE_SUMMARY_ID = "search_response_summary"
 SEARCH_DOC_CONTENT_ID = "search_doc_content"
 SECTION_RELEVANCE_LIST_ID = "section_relevance_list"
 SEARCH_EVALUATION_ID = "llm_doc_eval"
+QUERY_FIELD = "query"
 
 
-class SearchResponseSummary(BaseModel):
+class SearchResponseSummary(SearchQueryInfo):
     top_sections: list[InferenceSection]
     rephrased_query: str | None = None
     predicted_flow: QueryFlow | None
-    predicted_search: SearchType | None
-    final_filters: IndexFilters
-    recency_bias_multiplier: float
 
 
 SEARCH_TOOL_DESCRIPTION = """
@@ -83,7 +79,7 @@ HINT: if you are unfamiliar with the user input OR think the user input is a typ
 """
 
 
-class SearchTool(Tool):
+class SearchTool(Tool[SearchToolOverrideKwargs]):
     _NAME = "run_search"
     _DISPLAY_NAME = "Search Tool"
     _DESCRIPTION = SEARCH_TOOL_DESCRIPTION
@@ -184,12 +180,12 @@ class SearchTool(Tool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {
+                        QUERY_FIELD: {
                             "type": "string",
                             "description": "What to search for",
                         },
                     },
-                    "required": ["query"],
+                    "required": [QUERY_FIELD],
                 },
             },
         }
@@ -228,7 +224,7 @@ class SearchTool(Tool):
         rephrased_query = history_based_query_rephrase(
             query=query, history=history, llm=llm
         )
-        return {"query": rephrased_query}
+        return {QUERY_FIELD: rephrased_query}
 
     """Actual tool execution"""
 
@@ -281,8 +277,19 @@ class SearchTool(Tool):
 
         yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
 
-    def run(self, **kwargs: str) -> Generator[ToolResponse, None, None]:
-        query = cast(str, kwargs["query"])
+    def run(
+        self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
+    ) -> Generator[ToolResponse, None, None]:
+        query = cast(str, llm_kwargs[QUERY_FIELD])
+        force_no_rerank = False
+        alternate_db_session = None
+        retrieved_sections_callback = None
+        skip_query_analysis = False
+        if override_kwargs:
+            force_no_rerank = override_kwargs.force_no_rerank
+            alternate_db_session = override_kwargs.alternate_db_session
+            retrieved_sections_callback = override_kwargs.retrieved_sections_callback
+            skip_query_analysis = override_kwargs.skip_query_analysis
 
         if self.selected_sections:
             yield from self._build_response_for_specified_sections(query)
@@ -291,7 +298,9 @@ class SearchTool(Tool):
         search_pipeline = SearchPipeline(
             search_request=SearchRequest(
                 query=query,
-                evaluation_type=self.evaluation_type,
+                evaluation_type=LLMEvaluationType.SKIP
+                if force_no_rerank
+                else self.evaluation_type,
                 human_selected_filters=(
                     self.retrieval_options.filters if self.retrieval_options else None
                 ),
@@ -300,7 +309,16 @@ class SearchTool(Tool):
                     self.retrieval_options.offset if self.retrieval_options else None
                 ),
                 limit=self.retrieval_options.limit if self.retrieval_options else None,
-                rerank_settings=self.rerank_settings,
+                rerank_settings=RerankingDetails(
+                    rerank_model_name=None,
+                    rerank_api_url=None,
+                    rerank_provider_type=None,
+                    rerank_api_key=None,
+                    num_rerank=0,
+                    disable_rerank_for_streaming=True,
+                )
+                if force_no_rerank
+                else self.rerank_settings,
                 chunks_above=self.chunks_above,
                 chunks_below=self.chunks_below,
                 full_doc=self.full_doc,
@@ -313,57 +331,26 @@ class SearchTool(Tool):
             user=self.user,
             llm=self.llm,
             fast_llm=self.fast_llm,
+            skip_query_analysis=skip_query_analysis,
             bypass_acl=self.bypass_acl,
-            db_session=self.db_session,
+            db_session=alternate_db_session or self.db_session,
             prompt_config=self.prompt_config,
+            retrieved_sections_callback=retrieved_sections_callback,
         )
 
-        yield ToolResponse(
-            id=SEARCH_RESPONSE_SUMMARY_ID,
-            response=SearchResponseSummary(
-                rephrased_query=query,
-                top_sections=search_pipeline.final_context_sections,
-                predicted_flow=search_pipeline.predicted_flow,
-                predicted_search=search_pipeline.predicted_search_type,
-                final_filters=search_pipeline.search_query.filters,
-                recency_bias_multiplier=search_pipeline.search_query.recency_bias_multiplier,
-            ),
+        search_query_info = SearchQueryInfo(
+            predicted_search=search_pipeline.search_query.search_type,
+            final_filters=search_pipeline.search_query.filters,
+            recency_bias_multiplier=search_pipeline.search_query.recency_bias_multiplier,
         )
-
-        yield ToolResponse(
-            id=SEARCH_DOC_CONTENT_ID,
-            response=OnyxContexts(
-                contexts=[
-                    OnyxContext(
-                        content=section.combined_content,
-                        document_id=section.center_chunk.document_id,
-                        semantic_identifier=section.center_chunk.semantic_identifier,
-                        blurb=section.center_chunk.blurb,
-                    )
-                    for section in search_pipeline.reranked_sections
-                ]
-            ),
+        yield from yield_search_responses(
+            query,
+            search_pipeline.reranked_sections,
+            search_pipeline.final_context_sections,
+            search_query_info,
+            lambda: search_pipeline.section_relevance,
+            self,
         )
-
-        yield ToolResponse(
-            id=SECTION_RELEVANCE_LIST_ID,
-            response=search_pipeline.section_relevance,
-        )
-
-        pruned_sections = prune_sections(
-            sections=search_pipeline.final_context_sections,
-            section_relevance_list=search_pipeline.section_relevance_list,
-            prompt_config=self.prompt_config,
-            llm_config=self.llm.config,
-            question=query,
-            contextual_pruning_config=self.contextual_pruning_config,
-        )
-
-        llm_docs = [
-            llm_doc_from_inference_section(section) for section in pruned_sections
-        ]
-
-        yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
         final_docs = cast(
@@ -391,37 +378,63 @@ class SearchTool(Tool):
             prompt_config=self.prompt_config,
         )
 
-    """Other utility functions"""
 
-    @classmethod
-    def get_search_result(
-        cls, llm_call: LLMCall
-    ) -> tuple[list[LlmDoc], list[LlmDoc]] | None:
-        """
-        Returns the final search results and a map of docs to their original search rank (which is what is displayed to user)
-        """
-        if not llm_call.tool_call_info:
-            return None
+# Allows yielding the same responses as a SearchTool without being a SearchTool.
+# SearchTool passed in to allow for access to SearchTool properties.
+# We can't just call SearchTool methods in the graph because we're operating on
+# the retrieved docs (reranking, deduping, etc.) after the SearchTool has run.
+def yield_search_responses(
+    query: str,
+    reranked_sections: list[InferenceSection],
+    final_context_sections: list[InferenceSection],
+    search_query_info: SearchQueryInfo,
+    get_section_relevance: Callable[[], list[SectionRelevancePiece] | None],
+    search_tool: SearchTool,
+) -> Generator[ToolResponse, None, None]:
+    yield ToolResponse(
+        id=SEARCH_RESPONSE_SUMMARY_ID,
+        response=SearchResponseSummary(
+            rephrased_query=query,
+            top_sections=final_context_sections,
+            predicted_flow=QueryFlow.QUESTION_ANSWER,
+            predicted_search=search_query_info.predicted_search,
+            final_filters=search_query_info.final_filters,
+            recency_bias_multiplier=search_query_info.recency_bias_multiplier,
+        ),
+    )
 
-        final_search_results = []
-        initial_search_results = []
+    yield ToolResponse(
+        id=SEARCH_DOC_CONTENT_ID,
+        response=OnyxContexts(
+            contexts=[
+                OnyxContext(
+                    content=section.combined_content,
+                    document_id=section.center_chunk.document_id,
+                    semantic_identifier=section.center_chunk.semantic_identifier,
+                    blurb=section.center_chunk.blurb,
+                )
+                for section in reranked_sections
+            ]
+        ),
+    )
 
-        for yield_item in llm_call.tool_call_info:
-            if (
-                isinstance(yield_item, ToolResponse)
-                and yield_item.id == FINAL_CONTEXT_DOCUMENTS_ID
-            ):
-                final_search_results = cast(list[LlmDoc], yield_item.response)
-            elif (
-                isinstance(yield_item, ToolResponse)
-                and yield_item.id == ORIGINAL_CONTEXT_DOCUMENTS_ID
-            ):
-                search_contexts = yield_item.response.contexts
-                # original_doc_search_rank = 1
-                for doc in search_contexts:
-                    if doc.document_id not in initial_search_results:
-                        initial_search_results.append(doc)
+    section_relevance = get_section_relevance()
+    yield ToolResponse(
+        id=SECTION_RELEVANCE_LIST_ID,
+        response=section_relevance,
+    )
 
-                initial_search_results = cast(list[LlmDoc], initial_search_results)
+    pruned_sections = prune_sections(
+        sections=final_context_sections,
+        section_relevance_list=section_relevance_list_impl(
+            section_relevance, final_context_sections
+        ),
+        prompt_config=search_tool.prompt_config,
+        llm_config=search_tool.llm.config,
+        question=query,
+        contextual_pruning_config=search_tool.contextual_pruning_config,
+    )
 
-        return final_search_results, initial_search_results
+    llm_docs = [llm_doc_from_inference_section(section) for section in pruned_sections]
+
+    yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)

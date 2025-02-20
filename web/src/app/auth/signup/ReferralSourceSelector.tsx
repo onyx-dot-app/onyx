@@ -51,7 +51,7 @@ const ReferralSourceSelector: React.FC<ReferralSourceSelectorProps> = ({
       <Select value={referralSource} onValueChange={handleChange}>
         <SelectTrigger
           id="referral-source"
-          className="w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+          className="w-full border-background-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
         >
           <SelectValue placeholder="Select an option" />
         </SelectTrigger>

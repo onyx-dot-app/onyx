@@ -64,12 +64,12 @@ export function FilterDropdown({
                       select-none
                       cursor-pointer
                       flex-none
-                      w-fit
-                      text-emphasis
+                      w-full
+                      text-text-darker
                       items-center
                       gap-x-1
                       ${dropdownColor || "bg-background"}
-                      hover:bg-hover
+                      hover:bg-accent-background-hovered
                       ${
                         ind === options.length - 1
                           ? ""
@@ -108,7 +108,7 @@ export function FilterDropdown({
             border-border
             cursor-pointer 
             ${backgroundColor || "bg-background"}
-            hover:bg-hover-light`}
+            hover:bg-accent-background`}
         >
           <div className="flex-none my-auto">{icon}</div>
           {selected.length === 0 || resetValues ? (

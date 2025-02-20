@@ -149,7 +149,7 @@ export function AdvancedConfigDisplay({
     <>
       <Title className="mt-8 mb-2">Advanced Configuration</Title>
       <CardSection>
-        <ul className="w-full text-sm divide-y divide-background-200 dark:divide-background-700">
+        <ul className="w-full text-sm divide-y divide-neutral-200 dark:divide-neutral-700">
           {pruneFreq && (
             <li
               key={0}

@@ -26,6 +26,7 @@ class PersonaManager:
         is_public: bool = True,
         llm_filter_extraction: bool = True,
         recency_bias: RecencyBiasSetting = RecencyBiasSetting.AUTO,
+        datetime_aware: bool = False,
         prompt_ids: list[int] | None = None,
         document_set_ids: list[int] | None = None,
         tool_ids: list[int] | None = None,
@@ -46,6 +47,7 @@ class PersonaManager:
             description=description,
             system_prompt=system_prompt,
             task_prompt=task_prompt,
+            datetime_aware=datetime_aware,
             include_citations=include_citations,
             num_chunks=num_chunks,
             llm_relevance_filter=llm_relevance_filter,
@@ -64,7 +66,7 @@ class PersonaManager:
 
         response = requests.post(
             f"{API_SERVER_URL}/persona",
-            json=persona_creation_request.model_dump(),
+            json=persona_creation_request.model_dump(mode="json"),
             headers=user_performing_action.headers
             if user_performing_action
             else GENERAL_HEADERS,
@@ -104,6 +106,7 @@ class PersonaManager:
         is_public: bool | None = None,
         llm_filter_extraction: bool | None = None,
         recency_bias: RecencyBiasSetting | None = None,
+        datetime_aware: bool = False,
         prompt_ids: list[int] | None = None,
         document_set_ids: list[int] | None = None,
         tool_ids: list[int] | None = None,
@@ -116,11 +119,13 @@ class PersonaManager:
     ) -> DATestPersona:
         system_prompt = system_prompt or f"System prompt for {persona.name}"
         task_prompt = task_prompt or f"Task prompt for {persona.name}"
+
         persona_update_request = PersonaUpsertRequest(
             name=name or persona.name,
             description=description or persona.description,
             system_prompt=system_prompt,
             task_prompt=task_prompt,
+            datetime_aware=datetime_aware,
             include_citations=include_citations,
             num_chunks=num_chunks or persona.num_chunks,
             llm_relevance_filter=llm_relevance_filter or persona.llm_relevance_filter,
@@ -142,7 +147,7 @@ class PersonaManager:
 
         response = requests.patch(
             f"{API_SERVER_URL}/persona/{persona.id}",
-            json=persona_update_request.model_dump(),
+            json=persona_update_request.model_dump(mode="json"),
             headers=user_performing_action.headers
             if user_performing_action
             else GENERAL_HEADERS,

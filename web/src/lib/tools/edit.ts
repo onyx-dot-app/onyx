@@ -11,6 +11,7 @@ export async function createCustomTool(toolData: {
   description?: string;
   definition: Record<string, any>;
   custom_headers: { key: string; value: string }[];
+  passthrough_auth: boolean;
 }): Promise<ApiResponse<ToolSnapshot>> {
   try {
     const response = await fetch("/api/admin/tool/custom", {
@@ -41,6 +42,7 @@ export async function updateCustomTool(
     description?: string;
     definition?: Record<string, any>;
     custom_headers: { key: string; value: string }[];
+    passthrough_auth: boolean;
   }
 ): Promise<ApiResponse<ToolSnapshot>> {
   try {

@@ -62,12 +62,12 @@ const PageLink = ({
     leading-5 
     -ml-px 
     border-border
-    ${!unclickable ? "hover:bg-hover" : ""}
+    ${!unclickable ? "hover:bg-accent-background-hovered" : ""}
     ${!unclickable ? "cursor-pointer" : ""}
     first:ml-0 
     first:rounded-l-md 
     last:rounded-r-md
-    ${active ? "bg-background-strong" : ""}
+    ${active ? "bg-background-200" : ""}
   `}
     onClick={() => {
       if (pageChangeHandler) {

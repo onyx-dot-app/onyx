@@ -1,11 +1,12 @@
 import {
   CombinedSettings,
   EnterpriseSettings,
-  GatingType,
+  ApplicationStatus,
   Settings,
 } from "@/app/admin/settings/interfaces";
 import {
   CUSTOM_ANALYTICS_ENABLED,
+  HOST_URL,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
 } from "@/lib/constants";
 import { fetchSS } from "@/lib/utilsSS";
@@ -44,12 +45,14 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       if (results[0].status === 403 || results[0].status === 401) {
         settings = {
           auto_scroll: true,
-          product_gating: GatingType.NONE,
+          application_status: ApplicationStatus.ACTIVE,
           gpu_enabled: false,
           maximum_chat_retention_days: null,
           notifications: [],
           needs_reindexing: false,
           anonymous_user_enabled: false,
+          pro_search_disabled: false,
+          temperature_override_enabled: true,
         };
       } else {
         throw new Error(
@@ -92,6 +95,10 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       }
     }
 
+    if (enterpriseSettings && settings.pro_search_disabled == null) {
+      settings.pro_search_disabled = true;
+    }
+
     const webVersion = getWebVersion();
 
     const combinedSettings: CombinedSettings = {
@@ -99,6 +106,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       enterpriseSettings,
       customAnalyticsScript,
       webVersion,
+      webDomain: HOST_URL,
     };
 
     return combinedSettings;

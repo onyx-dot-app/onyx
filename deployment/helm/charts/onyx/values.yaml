@@ -2,62 +2,113 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+postgresql:
+  primary:
+    persistence:
+      storageClass: ""
+      size: 5Gi
+  enabled: true
+  auth:
+    existingSecret: onyx-secrets
+    secretKeys:
+      # overwriting as postgres typically expects 'postgres-password'
+      adminPasswordKey: postgres_password
+
+vespa:
+  name: da-vespa-0
+  service:
+    name: vespa-service
+  volumeClaimTemplates:
+    - metadata:
+        name: vespa-storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+        storageClassName: ""
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: vespa
+    pullPolicy: IfNotPresent
+    tag: "8.277.17"
+  podAnnotations: {}
+  podLabels:
+    app: vespa
+    app.kubernetes.io/instance: onyx
+    app.kubernetes.io/name: vespa
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  resources:
+    # The Vespa Helm chart specifies default resources, which are quite modest. We override
+    # them here to increase chances of the chart running successfully.
+    requests:
+      cpu: 1500m
+      memory: 4000Mi
+    limits:
+      cpu: 1500m
+      memory: 4000Mi
+
+persistent:
+  storageClassName: ""
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
 inferenceCapability:
   service:
-    name: inference-model-server-service
+    portName: modelserver
     type: ClusterIP
-    port: 9000
+    servicePort: 9000
+    targetPort: 9000
   pvc:
     name: inference-model-pvc
     accessModes:
       - ReadWriteOnce
     storage: 3Gi
-  deployment:
-    name: inference-model-server-deployment
-    replicas: 1
-    labels:
-      - key: app
-        value: inference-model-server
-    image:
-      repository: onyxdotapp/onyx-model-server
-      tag: latest
-      pullPolicy: IfNotPresent
-    command:
-      [
-        "uvicorn",
-        "model_server.main:app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "9000",
-      ]
-    port: 9000
-    volumeMounts:
-      - name: inference-model-storage
-        mountPath: /root/.cache
-    volumes:
-      - name: inference-model-storage
-        persistentVolumeClaim:
-          claimName: inference-model-pvc
+  name: inference-model-server
+  replicaCount: 1
+  labels:
+    - key: app
+      value: inference-model-server
+  image:
+    repository: onyxdotapp/onyx-model-server
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  containerPorts:
+    server: 9000
+  volumeMounts:
+    - name: inference-model-storage
+      mountPath: /root/.cache
+  volumes:
+    - name: inference-model-storage
+      persistentVolumeClaim:
+        claimName: inference-model-pvc
   podLabels:
     - key: app
       value: inference-model-server
 
 indexCapability:
   service:
+    portName: modelserver
     type: ClusterIP
-    port: 9000
-    name: indexing-model-server-port
+    servicePort: 9000
+    targetPort: 9000
+  replicaCount: 1
+  name: indexing-model-server
   deploymentLabels:
     app: indexing-model-server
   podLabels:
     app: indexing-model-server
   indexingOnly: "True"
   podAnnotations: {}
+  containerPorts:
+    server: 9000
   volumeMounts:
     - name: indexing-model-storage
       mountPath: /root/.cache
@@ -69,7 +120,12 @@ indexCapability:
     name: indexing-model-storage
     accessMode: "ReadWriteOnce"
     storage: "3Gi"
-
+  image:
+    repository: onyxdotapp/onyx-model-server
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  limitConcurrency: 10
 config:
   envConfigMapName: env-configmap
 
@@ -83,16 +139,6 @@ serviceAccount:
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
-
-postgresql:
-  primary:
-    persistence:
-      size: 5Gi
-  enabled: true
-  auth:
-    existingSecret: onyx-secrets
-    secretKeys:
-      adminPasswordKey: postgres_password # overwriting as postgres typically expects 'postgres-password'
 
 nginx:
   containerPorts:
@@ -135,9 +181,13 @@ webserver:
     # runAsNonRoot: true
     # runAsUser: 1000
 
+  containerPorts:
+    server: 3000
+
   service:
     type: ClusterIP
-    port: 3000
+    servicePort: 3000
+    targetPort: http
 
   resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -156,7 +206,7 @@ webserver:
     minReplicas: 1
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80
-    # targetMemoryUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
 
   # Additional volumes on the output Deployment definition.
   volumes: []
@@ -189,6 +239,9 @@ api:
     scope: onyx-backend
     app: api-server
 
+  containerPorts:
+    server: 8080
+
   podSecurityContext:
     {}
     # fsGroup: 2000
@@ -204,7 +257,9 @@ api:
 
   service:
     type: ClusterIP
-    port: 8080
+    servicePort: 8080
+    targetPort: api-server-port
+    portName: api-server-port
 
   resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -223,7 +278,7 @@ api:
     minReplicas: 1
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80
-    # targetMemoryUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
 
   # Additional volumes on the output Deployment definition.
   volumes: []
@@ -247,7 +302,7 @@ background:
     repository: onyxdotapp/onyx-backend
     pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
-    tag: latest
+    tag: ""
   podAnnotations: {}
   podLabels:
     scope: onyx-backend
@@ -257,15 +312,9 @@ background:
   podSecurityContext:
     {}
     # fsGroup: 2000
-
   securityContext:
-    {}
-    # capabilities:
-    #   drop:
-    #   - ALL
-    # readOnlyRootFilesystem: true
-    # runAsNonRoot: true
-    # runAsUser: 1000
+    privileged: true
+    runAsUser: 0
   enableMiniChunk: "true"
   resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -284,7 +333,7 @@ background:
     minReplicas: 1
     maxReplicas: 100
     targetCPUUtilizationPercentage: 80
-    # targetMemoryUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
 
   # Additional volumes on the output Deployment definition.
   volumes: []
@@ -298,40 +347,6 @@ background:
   # - name: foo
   #   mountPath: "/etc/foo"
   #   readOnly: true
-
-  nodeSelector: {}
-  tolerations: []
-
-vespa:
-  enabled: true
-  replicaCount: 1
-  image:
-    repository: vespa
-    pullPolicy: IfNotPresent
-    tag: "8.277.17"
-  podAnnotations: {}
-  podLabels:
-    app: vespa
-    app.kubernetes.io/instance: onyx
-    app.kubernetes.io/name: vespa
-
-  podSecurityContext:
-    {}
-    # fsGroup: 2000
-
-  securityContext:
-    privileged: true
-    runAsUser: 0
-
-  resources:
-    # The Vespa Helm chart specifies default resources, which are quite modest. We override
-    # them here to increase chances of the chart running successfully.
-    requests:
-      cpu: 1500m
-      memory: 4000Mi
-    limits:
-      cpu: 1500m
-      memory: 4000Mi
 
   nodeSelector: {}
   tolerations: []
@@ -377,19 +392,11 @@ redis:
 #  #    hosts:
 #  #      - chart-example.local
 
-persistence:
-  vespa:
-    enabled: true
-    existingClaim: ""
-    storageClassName: ""
-    accessModes:
-      - ReadWriteOnce
-    size: 5Gi
 
 auth:
-  # for storing smtp, oauth, slack, and other secrets
+  # existingSecret onyx-secret for storing smtp, oauth, slack, and other secrets
   # keys are lowercased version of env vars (e.g. SMTP_USER -> smtp_user)
-  existingSecret: "" # onyx-secrets
+  existingSecret: ""
   # optionally override the secret keys to reference in the secret
   # this is used to populate the env vars in individual deployments
   # the values here reference the keys in secrets below
@@ -413,14 +420,22 @@ auth:
     redis_password: "password"
 
 configMap:
-  AUTH_TYPE: "disabled" # Change this for production uses unless Onyx is only accessible behind VPN
-  SESSION_EXPIRE_TIME_SECONDS: "86400" # 1 Day Default
-  VALID_EMAIL_DOMAINS: "" # Can be something like onyx.app, as an extra double-check
-  SMTP_SERVER: "" # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
-  SMTP_PORT: "" # For sending verification emails, if unspecified then defaults to '587'
-  SMTP_USER: "" # 'your-email@company.com'
-  # SMTP_PASS: ""  # 'your-gmail-password'
-  EMAIL_FROM: "" # 'your-email@company.com' SMTP_USER missing used instead
+  # Change this for production uses unless Onyx is only accessible behind VPN
+  AUTH_TYPE: "disabled"
+  # 1 Day Default
+  SESSION_EXPIRE_TIME_SECONDS: "86400"
+  # Can be something like onyx.app, as an extra double-check
+  VALID_EMAIL_DOMAINS: ""
+  # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
+  SMTP_SERVER: ""
+  # For sending verification emails, if unspecified then defaults to '587'
+  SMTP_PORT: ""
+# 'your-email@company.com'
+  SMTP_USER: ""
+  # 'your-gmail-password'
+  # SMTP_PASS: ""
+  # 'your-email@company.com' SMTP_USER missing used instead
+  EMAIL_FROM: ""
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""
   QA_TIMEOUT: "60"
@@ -462,7 +477,7 @@ configMap:
   DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   DANSWER_BOT_DISPLAY_ERROR_MSGS: ""
   DANSWER_BOT_RESPOND_EVERY_CHANNEL: ""
-  DANSWER_BOT_DISABLE_COT: "" # Currently unused
+  DANSWER_BOT_DISABLE_COT: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
@@ -473,7 +488,8 @@ configMap:
   LOG_DANSWER_MODEL_INTERACTIONS: ""
   LOG_VESPA_TIMING_INFORMATION: ""
   # Shared or Non-backend Related
-  WEB_DOMAIN: "http://localhost:3000" # for web server and api server
-  DOMAIN: "localhost" # for nginx
+  WEB_DOMAIN: "http://localhost:3000"
+  # DOMAIN used by nginx
+  DOMAIN: "localhost"
   # Chat Configs
   HARD_DELETE_CHATS: ""

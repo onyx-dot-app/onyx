@@ -4,14 +4,12 @@ from onyx.db.models import UserRole
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
-from tests.integration.common_utils.managers.tenant import TenantManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
 # Test flow from creating tenant to registering as a user
 def test_tenant_creation(reset_multitenant: None) -> None:
-    TenantManager.create("tenant_dev", "test@test.com", "Data Plane Registration")
     test_user: DATestUser = UserManager.create(name="test", email="test@test.com")
 
     assert UserManager.is_role(test_user, UserRole.ADMIN)

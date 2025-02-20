@@ -20,7 +20,7 @@ function DeleteButton({ onDelete }: { onDelete: () => void }) {
         -right-1
         cursor-pointer
         border-none
-        bg-hover
+        bg-accent-background-hovered
         p-.5
         rounded-full
         z-10
@@ -119,7 +119,7 @@ export function InputBarPreview({
         flex
         items-center
         px-2
-        bg-hover
+        bg-accent-background-hovered
         border
         gap-x-1.5
         border-border
@@ -164,7 +164,7 @@ export function InputBarPreview({
           className="
             cursor-pointer
             border-none
-            bg-hover
+            bg-accent-background-hovered
             rounded-full
             z-10
           "

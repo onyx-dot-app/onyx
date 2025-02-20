@@ -38,7 +38,7 @@ const EditPropertyModal = ({
       >
         {({ isSubmitting, isValid, values }) => (
           <Form className="items-stretch">
-            <h2 className="text-2xl text-emphasis font-bold mb-3 flex items-center">
+            <h2 className="text-2xl text-text-darker font-bold mb-3 flex items-center">
               <EditIcon size={20} className="mr-2" />
               Edit {propertyTitle}
             </h2>

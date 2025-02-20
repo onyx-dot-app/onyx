@@ -180,23 +180,28 @@ class TeamsConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.graph_client: GraphClient | None = None
         self.requested_team_list: list[str] = teams
+        self.msal_app: msal.ConfidentialClientApplication | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         teams_client_id = credentials["teams_client_id"]
         teams_client_secret = credentials["teams_client_secret"]
         teams_directory_id = credentials["teams_directory_id"]
 
+        authority_url = f"https://login.microsoftonline.com/{teams_directory_id}"
+        self.msal_app = msal.ConfidentialClientApplication(
+            authority=authority_url,
+            client_id=teams_client_id,
+            client_credential=teams_client_secret,
+        )
+
         def _acquire_token_func() -> dict[str, Any]:
             """
             Acquire token via MSAL
             """
-            authority_url = f"https://login.microsoftonline.com/{teams_directory_id}"
-            app = msal.ConfidentialClientApplication(
-                authority=authority_url,
-                client_id=teams_client_id,
-                client_credential=teams_client_secret,
-            )
-            token = app.acquire_token_for_client(
+            if self.msal_app is None:
+                raise RuntimeError("MSAL app is not initialized")
+
+            token = self.msal_app.acquire_token_for_client(
                 scopes=["https://graph.microsoft.com/.default"]
             )
             return token

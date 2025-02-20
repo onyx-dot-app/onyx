@@ -155,7 +155,17 @@ export const connectorConfigs: Record<
         ],
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Scroll before scraping:",
+        label: "Scroll before scraping",
+        description:
+          "Enable if the website requires scrolling for the desired content to load",
+        name: "scroll_before_scraping",
+        optional: true,
+      },
+    ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
   github: {
@@ -226,6 +236,24 @@ export const connectorConfigs: Record<
         name: "include_issues",
         optional: true,
         hidden: true,
+      },
+    ],
+    advanced_values: [],
+  },
+  gitbook: {
+    description: "Configure GitBook connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the space ID:",
+        label: "Space ID",
+        name: "space_id",
+        optional: false,
+        description:
+          "The ID of the GitBook space to index. This can be found in the URL " +
+          "of a page in the space. For example, if your URL looks like " +
+          "`https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`, " +
+          "then your space ID is `8JkzVx8QCIGRrmxhGHU8`.",
       },
     ],
     advanced_values: [],
@@ -500,7 +528,9 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
         name: "sites",
         optional: true,
         description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
+
 • Specifying 'https://onyxai.sharepoint.com/sites/support' for example will only index documents within this site.
+
 • Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example will only index documents within this folder.
 `,
       },
@@ -789,7 +819,7 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     advanced_values: [],
   },
   linear: {
-    description: "Configure Dropbox connector",
+    description: "Configure Linear connector",
     values: [],
     advanced_values: [],
   },
@@ -1123,8 +1153,33 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         name: "table_name_or_id",
         optional: false,
       },
+      {
+        type: "checkbox",
+        label: "Treat all fields except attachments as metadata",
+        name: "treat_all_non_attachment_fields_as_metadata",
+        description:
+          "Choose this if the primary content to index are attachments and all other columns are metadata for these attachments.",
+        optional: false,
+      },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "text",
+        label: "View ID",
+        name: "view_id",
+        optional: true,
+        description:
+          "If you need to link to a specific View, put that ID here e.g. viwVUEJjWPd8XYjh8.",
+      },
+      {
+        type: "text",
+        label: "Share ID",
+        name: "share_id",
+        optional: true,
+        description:
+          "If you need to link to a specific Share, put that ID here e.g. shrkfjEzDmLaDtK83.",
+      },
+    ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
 };
@@ -1206,6 +1261,7 @@ export interface ConnectorBase<T> {
   indexing_start: Date | null;
   access_type: string;
   groups?: number[];
+  from_beginning?: boolean;
 }
 
 export interface Connector<T> extends ConnectorBase<T> {
@@ -1227,6 +1283,7 @@ export interface ConnectorSnapshot {
   indexing_start: number | null;
   time_created: string;
   time_updated: string;
+  from_beginning?: boolean;
 }
 
 export interface WebConfig {

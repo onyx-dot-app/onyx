@@ -2,6 +2,7 @@ import time
 from typing import cast
 from uuid import uuid4
 
+import redis
 from celery import Celery
 from redis import Redis
 from redis.lock import Lock as RedisLock
@@ -12,11 +13,11 @@ from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxRedisConstants
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document import (
-    construct_document_select_for_connector_credential_pair_by_needs_sync,
+    construct_document_id_select_for_connector_credential_pair_by_needs_sync,
 )
-from onyx.db.models import Document
 from onyx.redis.redis_object_helper import RedisObjectHelper
 
 
@@ -28,20 +29,13 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
     all connectors and is not per connector."""
 
     PREFIX = "connectorsync"
-    FENCE_PREFIX = PREFIX + "_fence"
     TASKSET_PREFIX = PREFIX + "_taskset"
-
-    SYNCING_PREFIX = PREFIX + ":vespa_syncing"
 
     def __init__(self, tenant_id: str | None, id: int) -> None:
         super().__init__(tenant_id, str(id))
 
         # documents that should be skipped
         self.skip_docs: set[str] = set()
-
-    @classmethod
-    def get_fence_key(cls) -> str:
-        return RedisConnectorCredentialPair.FENCE_PREFIX
 
     @classmethod
     def get_taskset_key(cls) -> str:
@@ -51,18 +45,13 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
     def taskset_key(self) -> str:
         """Notice that this is intentionally reusing the same taskset for all
         connector syncs"""
-        # example: connector_taskset
+        # example: connectorsync_taskset
         return f"{self.TASKSET_PREFIX}"
 
     def set_skip_docs(self, skip_docs: set[str]) -> None:
-        # documents that should be skipped. Note that this classes updates
+        # documents that should be skipped. Note that this class updates
         # the list on the fly
         self.skip_docs = skip_docs
-
-    @staticmethod
-    def make_redis_syncing_key(doc_id: str) -> str:
-        """used to create a key in redis to block a doc from syncing"""
-        return f"{RedisConnectorCredentialPair.SYNCING_PREFIX}:{doc_id}"
 
     def generate_tasks(
         self,
@@ -82,7 +71,8 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
 
         last_lock_time = time.monotonic()
 
-        async_results = []
+        num_tasks_sent = 0
+
         cc_pair = get_connector_credential_pair_from_id(
             db_session=db_session,
             cc_pair_id=int(self._id),
@@ -90,14 +80,14 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
         if not cc_pair:
             return None
 
-        stmt = construct_document_select_for_connector_credential_pair_by_needs_sync(
+        stmt = construct_document_id_select_for_connector_credential_pair_by_needs_sync(
             cc_pair.connector_id, cc_pair.credential_id
         )
 
         num_docs = 0
 
-        for doc in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
-            doc = cast(Document, doc)
+        for doc_id in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
+            doc_id = cast(str, doc_id)
             current_time = time.monotonic()
             if current_time - last_lock_time >= (
                 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4
@@ -108,17 +98,8 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
             num_docs += 1
 
             # check if we should skip the document (typically because it's already syncing)
-            if doc.id in self.skip_docs:
+            if doc_id in self.skip_docs:
                 continue
-
-            # an arbitrary number in seconds to prevent the same doc from syncing repeatedly
-            # SYNC_EXPIRATION = 24 * 60 * 60
-
-            # a quick hack that can be uncommented to prevent a doc from resyncing over and over
-            # redis_syncing_key = self.make_redis_syncing_key(doc.id)
-            # if redis_client.exists(redis_syncing_key):
-            #     continue
-            # redis_client.set(redis_syncing_key, custom_task_id, ex=SYNC_EXPIRATION)
 
             # celery's default task id format is "dd32ded3-00aa-4884-8b21-42f8332e7fac"
             # the key for the result is "celery-task-meta-dd32ded3-00aa-4884-8b21-42f8332e7fac"
@@ -133,18 +114,94 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
             )
 
             # Priority on sync's triggered by new indexing should be medium
-            result = celery_app.send_task(
+            celery_app.send_task(
                 OnyxCeleryTask.VESPA_METADATA_SYNC_TASK,
-                kwargs=dict(document_id=doc.id, tenant_id=tenant_id),
+                kwargs=dict(document_id=doc_id, tenant_id=tenant_id),
                 queue=OnyxCeleryQueues.VESPA_METADATA_SYNC,
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.MEDIUM,
+                ignore_result=True,
             )
 
-            async_results.append(result)
-            self.skip_docs.add(doc.id)
+            num_tasks_sent += 1
+            self.skip_docs.add(doc_id)
 
-            if len(async_results) >= max_tasks:
+            if num_tasks_sent >= max_tasks:
                 break
 
-        return len(async_results), num_docs
+        return num_tasks_sent, num_docs
+
+
+class RedisGlobalConnectorCredentialPair:
+    """This class is used to scan documents by cc_pair in the db and collect them into
+    a unified set for syncing.
+
+    It differs from the other redis helpers in that the taskset used spans
+    all connectors and is not per connector."""
+
+    PREFIX = "connectorsync"
+    FENCE_KEY = PREFIX + "_fence"
+    TASKSET_KEY = PREFIX + "_taskset"
+
+    def __init__(self, redis: redis.Redis) -> None:
+        self.redis = redis
+
+    @property
+    def fenced(self) -> bool:
+        if self.redis.exists(self.fence_key):
+            return True
+
+        return False
+
+    @property
+    def payload(self) -> int | None:
+        bytes = self.redis.get(self.fence_key)
+        if bytes is None:
+            return None
+
+        progress = int(cast(int, bytes))
+        return progress
+
+    def get_remaining(self) -> int:
+        remaining = cast(int, self.redis.scard(self.taskset_key))
+        return remaining
+
+    @property
+    def fence_key(self) -> str:
+        """Notice that this is intentionally reusing the same fence for all
+        connector syncs"""
+        # example: connectorsync_fence
+        return f"{self.FENCE_KEY}"
+
+    @property
+    def taskset_key(self) -> str:
+        """Notice that this is intentionally reusing the same taskset for all
+        connector syncs"""
+        # example: connectorsync_taskset
+        return f"{self.TASKSET_KEY}"
+
+    def set_fence(self, payload: int | None) -> None:
+        if payload is None:
+            self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
+            self.redis.delete(self.fence_key)
+            return
+
+        self.redis.set(self.fence_key, payload)
+        self.redis.sadd(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
+
+    def delete_taskset(self) -> None:
+        self.redis.delete(self.taskset_key)
+
+    def reset(self) -> None:
+        self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
+        self.redis.delete(self.taskset_key)
+        self.redis.delete(self.fence_key)
+
+    @staticmethod
+    def reset_all(r: redis.Redis) -> None:
+        r.srem(
+            OnyxRedisConstants.ACTIVE_FENCES,
+            RedisGlobalConnectorCredentialPair.FENCE_KEY,
+        )
+        r.delete(RedisGlobalConnectorCredentialPair.TASKSET_KEY)
+        r.delete(RedisGlobalConnectorCredentialPair.FENCE_KEY)

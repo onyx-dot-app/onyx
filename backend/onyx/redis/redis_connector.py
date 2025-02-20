@@ -17,6 +17,8 @@ class RedisConnector:
     associated background tasks / associated redis interactions."""
 
     def __init__(self, tenant_id: str | None, id: int) -> None:
+        """id: a connector credential pair id"""
+
         self.tenant_id: str | None = tenant_id
         self.id: int = id
         self.redis: redis.Redis = get_redis_client(tenant_id=tenant_id)

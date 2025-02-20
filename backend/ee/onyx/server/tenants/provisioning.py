@@ -24,6 +24,7 @@ from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
 from ee.onyx.server.tenants.user_mapping import user_owns_a_tenant
 from onyx.auth.users import exceptions
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
+from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.constants import MilestoneRecordType
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.engine import get_sqlalchemy_engine
@@ -85,7 +86,8 @@ async def create_tenant(email: str, referral_source: str | None = None) -> str:
         # Provision tenant on data plane
         await provision_tenant(tenant_id, email)
         # Notify control plane
-        await notify_control_plane(tenant_id, email, referral_source)
+        if not DEV_MODE:
+            await notify_control_plane(tenant_id, email, referral_source)
     except Exception as e:
         logger.error(f"Tenant provisioning failed: {e}")
         await rollback_tenant_provisioning(tenant_id)
@@ -116,7 +118,7 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
         # Await the Alembic migrations
         await asyncio.to_thread(run_alembic_migrations, tenant_id)
 
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             configure_default_api_keys(db_session)
 
             current_search_settings = (
@@ -132,7 +134,7 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
 
         add_users_to_tenant([email], tenant_id)
 
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             create_milestone_and_report(
                 user=None,
                 distinct_id=tenant_id,

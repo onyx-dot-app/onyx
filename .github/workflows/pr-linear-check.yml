@@ -1,0 +1,29 @@
+name: Ensure PR references Linear
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  linear-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR body for Linear link or override
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          # Looking for "https://linear.app" in the body
+          if echo "$PR_BODY" | grep -qE "https://linear\.app"; then
+            echo "Found a Linear link. Check passed."
+            exit 0
+          fi
+
+          # Looking for a checked override: "[x] Override Linear Check"
+          if echo "$PR_BODY" | grep -q "\[x\].*Override Linear Check"; then
+            echo "Override box is checked. Check passed."
+            exit 0
+          fi
+
+          # Otherwise, fail the run
+          echo "No Linear link or override found in the PR description."
+          exit 1

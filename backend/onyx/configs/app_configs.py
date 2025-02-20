@@ -3,6 +3,7 @@ import os
 import urllib.parse
 from typing import cast
 
+from onyx.auth.schemas import AuthBackend
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import DocumentIndexType
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
@@ -55,12 +56,12 @@ MASK_CREDENTIAL_PREFIX = (
     os.environ.get("MASK_CREDENTIAL_PREFIX", "True").lower() != "false"
 )
 
-REDIS_AUTH_EXPIRE_TIME_SECONDS = int(
-    os.environ.get("REDIS_AUTH_EXPIRE_TIME_SECONDS") or 86400 * 7
-)  # 7 days
+AUTH_BACKEND = AuthBackend(os.environ.get("AUTH_BACKEND") or AuthBackend.REDIS.value)
 
 SESSION_EXPIRE_TIME_SECONDS = int(
-    os.environ.get("SESSION_EXPIRE_TIME_SECONDS") or 86400 * 7
+    os.environ.get("SESSION_EXPIRE_TIME_SECONDS")
+    or os.environ.get("REDIS_AUTH_EXPIRE_TIME_SECONDS")
+    or 86400 * 7
 )  # 7 days
 
 # Default request timeout, mostly used by connectors
@@ -91,6 +92,12 @@ OAUTH_CLIENT_SECRET = (
 )
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
+
+# Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
+# By default, this is set to match the Redis expiry time for consistency.
+AUTH_COOKIE_EXPIRE_TIME_SECONDS = int(
+    os.environ.get("AUTH_COOKIE_EXPIRE_TIME_SECONDS") or 86400 * 7
+)  # 7 days
 
 # for basic auth
 REQUIRE_EMAIL_VERIFICATION = (
@@ -162,6 +169,11 @@ POSTGRES_API_SERVER_POOL_SIZE = int(
 POSTGRES_API_SERVER_POOL_OVERFLOW = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_OVERFLOW") or 10
 )
+
+# defaults to False
+# generally should only be used for
+POSTGRES_USE_NULL_POOL = os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() == "true"
+
 # defaults to False
 POSTGRES_POOL_PRE_PING = os.environ.get("POSTGRES_POOL_PRE_PING", "").lower() == "true"
 
@@ -193,6 +205,8 @@ REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
 
+# this assumes that other redis settings remain the same as the primary
+REDIS_REPLICA_HOST = os.environ.get("REDIS_REPLICA_HOST") or REDIS_HOST
 
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
 
@@ -400,6 +414,11 @@ EXPERIMENTAL_CHECKPOINTING_ENABLED = (
     os.environ.get("EXPERIMENTAL_CHECKPOINTING_ENABLED", "").lower() == "true"
 )
 
+LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE = (
+    os.environ.get("LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE", "").lower()
+    == "true"
+)
+
 PRUNING_DISABLED = -1
 DEFAULT_PRUNING_FREQ = 60 * 60 * 24  # Once a day
 
@@ -468,6 +487,12 @@ INDEXING_SIZE_WARNING_THRESHOLD = int(
 # during indexing, will log verbose memory diff stats every x batches and at the end.
 # 0 disables this behavior and is the default.
 INDEXING_TRACER_INTERVAL = int(os.environ.get("INDEXING_TRACER_INTERVAL") or 0)
+
+# Enable multi-threaded embedding model calls for parallel processing
+# Note: only applies for API-based embedding models
+INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
+    os.environ.get("INDEXING_EMBEDDING_MODEL_NUM_THREADS") or 1
+)
 
 # During an indexing attempt, specifies the number of batches which are allowed to
 # exception without aborting the attempt.
@@ -601,4 +626,11 @@ POD_NAMESPACE = os.environ.get("POD_NAMESPACE")
 
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
+MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
+
 TEST_ENV = os.environ.get("TEST_ENV", "").lower() == "true"
+
+# Set to true to mock LLM responses for testing purposes
+MOCK_LLM_RESPONSE = (
+    os.environ.get("MOCK_LLM_RESPONSE") if os.environ.get("MOCK_LLM_RESPONSE") else None
+)

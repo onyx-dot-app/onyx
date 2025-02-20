@@ -162,6 +162,11 @@ def load_personas_from_yaml(
                 else persona.get("is_visible")
             ),
             db_session=db_session,
+            is_default_persona=(
+                existing_persona.is_default_persona
+                if existing_persona is not None
+                else persona.get("is_default_persona", False)
+            ),
         )
 
 

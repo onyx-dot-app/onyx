@@ -106,7 +106,7 @@ def remove_scheduled_feedback_reminder(
 
 def handle_message(
     message_info: SlackMessageInfo,
-    slack_channel_config: SlackChannelConfig | None,
+    slack_channel_config: SlackChannelConfig,
     client: WebClient,
     feedback_reminder_id: str | None,
     tenant_id: str | None,
@@ -180,6 +180,13 @@ def handle_message(
         )
         return False
 
+    if slack_channel_config.channel_config.get("disabled") and not bypass_filters:
+        logger.info(
+            "Skipping message since the channel is configured such that "
+            "OnyxBot is disabled"
+        )
+        return False
+
     # List of user id to send message to, if None, send to everyone in channel
     send_to: list[str] | None = None
     missing_users: list[str] | None = None
@@ -211,7 +218,7 @@ def handle_message(
     except SlackApiError as e:
         logger.error(f"Was not able to react to user message due to: {e}")
 
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         if message_info.email:
             add_slack_user_if_not_exists(db_session, message_info.email)
 

@@ -181,7 +181,7 @@ class LocalFileConnector(LoadConnector):
         documents: list[Document] = []
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(self.tenant_id)
 
-        with get_session_with_tenant(self.tenant_id) as db_session:
+        with get_session_with_tenant(tenant_id=self.tenant_id) as db_session:
             for file_path in self.file_locations:
                 current_datetime = datetime.now(timezone.utc)
                 files = _read_files_and_metadata(

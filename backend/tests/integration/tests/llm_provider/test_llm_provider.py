@@ -3,6 +3,7 @@ import uuid
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -20,14 +21,15 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: str) -> dict | None
     return next((p for p in providers if p["id"] == provider_id), None)
 
 
-def test_create_llm_provider_without_display_model_names(
-    admin_user: DATestUser,
-) -> None:
+def test_create_llm_provider_without_display_model_names(reset: None) -> None:
     """Test creating an LLM provider without specifying
     display_model_names and verify it's null in response"""
+    # Create admin user
+    admin_user = UserManager.create(name="admin_user")
+
     # Create LLM provider without model_names
     response = requests.put(
-        f"{API_SERVER_URL}/admin/llm/provider",
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
             "name": str(uuid.uuid4()),
@@ -49,12 +51,15 @@ def test_create_llm_provider_without_display_model_names(
     assert provider_data["display_model_names"] is None
 
 
-def test_update_llm_provider_model_names(admin_user: DATestUser) -> None:
+def test_update_llm_provider_model_names(reset: None) -> None:
     """Test updating an LLM provider's model_names"""
+    # Create admin user
+    admin_user = UserManager.create(name="admin_user")
+
     # First create provider without model_names
     name = str(uuid.uuid4())
     response = requests.put(
-        f"{API_SERVER_URL}/admin/llm/provider",
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
             "name": name,
@@ -90,11 +95,14 @@ def test_update_llm_provider_model_names(admin_user: DATestUser) -> None:
     assert provider_data["model_names"] == _DEFAULT_MODELS
 
 
-def test_delete_llm_provider(admin_user: DATestUser) -> None:
+def test_delete_llm_provider(reset: None) -> None:
     """Test deleting an LLM provider"""
+    # Create admin user
+    admin_user = UserManager.create(name="admin_user")
+
     # Create a provider
     response = requests.put(
-        f"{API_SERVER_URL}/admin/llm/provider",
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
             "name": "test-provider-delete",

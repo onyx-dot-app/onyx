@@ -30,6 +30,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -263,20 +264,29 @@ class ConfluenceConnector(
         }
 
         # Get labels
-        label_dicts = confluence_object["metadata"]["labels"]["results"]
-        page_labels = [label["name"] for label in label_dicts]
+        label_dicts = (
+            confluence_object.get("metadata", {}).get("labels", {}).get("results", [])
+        )
+        page_labels = [label.get("name") for label in label_dicts if label.get("name")]
         if page_labels:
             doc_metadata["labels"] = page_labels
 
         # Get last modified and author email
-        last_modified = datetime_from_string(confluence_object["version"]["when"])
-        author_email = confluence_object["version"].get("by", {}).get("email")
+        version_dict = confluence_object.get("version", {})
+        last_modified = (
+            datetime_from_string(version_dict.get("when"))
+            if version_dict.get("when")
+            else None
+        )
+        author_email = version_dict.get("by", {}).get("email")
+
+        title = confluence_object.get("title", "Untitled Document")
 
         return Document(
             id=object_url,
             sections=[Section(link=object_url, text=object_text)],
             source=DocumentSource.CONFLUENCE,
-            semantic_identifier=confluence_object["title"],
+            semantic_identifier=title,
             doc_updated_at=last_modified,
             primary_owners=(
                 [BasicExpertInfo(email=author_email)] if author_email else None
@@ -341,6 +351,7 @@ class ConfluenceConnector(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         doc_metadata_list: list[SlimDocument] = []
 
@@ -407,5 +418,13 @@ class ConfluenceConnector(
             if len(doc_metadata_list) > _SLIM_DOC_BATCH_SIZE:
                 yield doc_metadata_list[:_SLIM_DOC_BATCH_SIZE]
                 doc_metadata_list = doc_metadata_list[_SLIM_DOC_BATCH_SIZE:]
+
+                if callback:
+                    if callback.should_stop():
+                        raise RuntimeError(
+                            "retrieve_all_slim_documents: Stop signal detected"
+                        )
+
+                    callback.progress("retrieve_all_slim_documents", 1)
 
         yield doc_metadata_list

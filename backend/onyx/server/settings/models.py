@@ -12,10 +12,10 @@ class PageType(str, Enum):
     SEARCH = "search"
 
 
-class GatingType(str, Enum):
-    FULL = "full"  # Complete restriction of access to the product or service
-    PARTIAL = "partial"  # Full access but warning (no credit card on file)
-    NONE = "none"  # No restrictions, full access to all features
+class ApplicationStatus(str, Enum):
+    PAYMENT_REMINDER = "payment_reminder"
+    GATED_ACCESS = "gated_access"
+    ACTIVE = "active"
 
 
 class Notification(BaseModel):
@@ -43,8 +43,12 @@ class Settings(BaseModel):
 
     maximum_chat_retention_days: int | None = None
     gpu_enabled: bool | None = None
-    product_gating: GatingType = GatingType.NONE
+    application_status: ApplicationStatus = ApplicationStatus.ACTIVE
     anonymous_user_enabled: bool | None = None
+    pro_search_disabled: bool | None = None
+
+    temperature_override_enabled: bool = False
+    auto_scroll: bool = False
 
 
 class UserSettings(Settings):

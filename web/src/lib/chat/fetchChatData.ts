@@ -22,6 +22,7 @@ import { cookies, headers } from "next/headers";
 import {
   SIDEBAR_TOGGLED_COOKIE_NAME,
   DOCUMENT_SIDEBAR_WIDTH_COOKIE_NAME,
+  PRO_SEARCH_TOGGLED_COOKIE_NAME,
 } from "@/components/resizable/constants";
 import { hasCompletedWelcomeFlowSS } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import {
@@ -41,10 +42,11 @@ interface FetchChatDataResult {
   folders: Folder[];
   openedFolders: Record<string, boolean>;
   defaultAssistantId?: number;
-  toggleSidebar: boolean;
+  sidebarInitiallyVisible: boolean;
   finalDocumentSidebarInitialWidth?: number;
   shouldShowWelcomeModal: boolean;
   inputPrompts: InputPrompt[];
+  proSearchToggled: boolean;
 }
 
 export async function fetchChatData(searchParams: {
@@ -175,7 +177,18 @@ export async function fetchChatData(searchParams: {
   );
   const sidebarToggled = requestCookies.get(SIDEBAR_TOGGLED_COOKIE_NAME);
 
-  const toggleSidebar = sidebarToggled
+  const proSearchToggled =
+    requestCookies.get(PRO_SEARCH_TOGGLED_COOKIE_NAME)?.value.toLowerCase() ===
+    "true";
+
+  // IF user is an anoymous user, we don't want to show the sidebar (they have no access to chat history)
+  const sidebarInitiallyVisible =
+    !user?.is_anonymous_user &&
+    (sidebarToggled
+      ? sidebarToggled.value.toLocaleLowerCase() == "true" || false
+      : NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN);
+
+  sidebarToggled
     ? sidebarToggled.value.toLocaleLowerCase() == "true" || false
     : NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN;
 
@@ -217,8 +230,9 @@ export async function fetchChatData(searchParams: {
     openedFolders,
     defaultAssistantId,
     finalDocumentSidebarInitialWidth,
-    toggleSidebar,
+    sidebarInitiallyVisible,
     shouldShowWelcomeModal,
     inputPrompts,
+    proSearchToggled,
   };
 }

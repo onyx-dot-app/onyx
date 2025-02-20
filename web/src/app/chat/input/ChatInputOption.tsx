@@ -15,6 +15,7 @@ interface ChatInputOptionProps {
   tooltipContent?: React.ReactNode;
   flexPriority?: "shrink" | "stiff" | "second";
   toggle?: boolean;
+  minimize?: boolean;
 }
 
 export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
@@ -26,27 +27,9 @@ export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
   tooltipContent,
   toggle,
   onClick,
+  minimize,
 }) => {
-  const [isDropupVisible, setDropupVisible] = useState(false);
-  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
   const componentRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        componentRef.current &&
-        !componentRef.current.contains(event.target as Node)
-      ) {
-        setIsTooltipVisible(false);
-        setDropupVisible(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   return (
     <TooltipProvider>
@@ -61,10 +44,12 @@ export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
             items-center 
             space-x-1
             group
-            text-text-700
-            !rounded-lg
+            rounded
+            text-input-text
             hover:bg-background-chat-hover
-            hover:text-emphasis
+            hover:text-neutral-900
+
+            dark:hover:text-neutral-50
             py-1.5
             px-2
             ${
@@ -82,15 +67,10 @@ export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
           `}
             onClick={onClick}
           >
-            <Icon
-              size={size}
-              className="h-4 w-4 my-auto text-[#4a4a4a] group-hover:text-text flex-none"
-            />
-            <div className="flex items-center">
+            <Icon size={size} className="h-4 w-4 my-auto  flex-none" />
+            <div className={`flex items-center ${minimize && "mobile:hidden"}`}>
               {name && (
-                <span className="text-sm text-[#4a4a4a] group-hover:text-text break-all line-clamp-1">
-                  {name}
-                </span>
+                <span className="text-sm  break-all line-clamp-1">{name}</span>
               )}
               {toggle && (
                 <ChevronDownIcon className="flex-none ml-1" size={size - 4} />

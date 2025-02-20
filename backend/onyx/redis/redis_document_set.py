@@ -13,8 +13,8 @@ from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.db.document_set import construct_document_select_by_docset
-from onyx.db.models import Document
+from onyx.configs.constants import OnyxRedisConstants
+from onyx.db.document_set import construct_document_id_select_by_docset
 from onyx.redis.redis_object_helper import RedisObjectHelper
 
 
@@ -35,10 +35,12 @@ class RedisDocumentSet(RedisObjectHelper):
 
     def set_fence(self, payload: int | None) -> None:
         if payload is None:
+            self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
             self.redis.delete(self.fence_key)
             return
 
         self.redis.set(self.fence_key, payload)
+        self.redis.sadd(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
 
     @property
     def payload(self) -> int | None:
@@ -63,10 +65,11 @@ class RedisDocumentSet(RedisObjectHelper):
         """
         last_lock_time = time.monotonic()
 
-        async_results = []
-        stmt = construct_document_select_by_docset(int(self._id), current_only=False)
-        for doc in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
-            doc = cast(Document, doc)
+        num_tasks_sent = 0
+
+        stmt = construct_document_id_select_by_docset(int(self._id), current_only=False)
+        for doc_id in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
+            doc_id = cast(str, doc_id)
             current_time = time.monotonic()
             if current_time - last_lock_time >= (
                 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4
@@ -83,19 +86,20 @@ class RedisDocumentSet(RedisObjectHelper):
             # add to the set BEFORE creating the task.
             redis_client.sadd(self.taskset_key, custom_task_id)
 
-            result = celery_app.send_task(
+            celery_app.send_task(
                 OnyxCeleryTask.VESPA_METADATA_SYNC_TASK,
-                kwargs=dict(document_id=doc.id, tenant_id=tenant_id),
+                kwargs=dict(document_id=doc_id, tenant_id=tenant_id),
                 queue=OnyxCeleryQueues.VESPA_METADATA_SYNC,
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.LOW,
             )
 
-            async_results.append(result)
+            num_tasks_sent += 1
 
-        return len(async_results), len(async_results)
+        return num_tasks_sent, num_tasks_sent
 
     def reset(self) -> None:
+        self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
         self.redis.delete(self.taskset_key)
         self.redis.delete(self.fence_key)
 

@@ -1,6 +1,8 @@
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
+from typing import Any
+from typing import cast
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -15,13 +17,22 @@ from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.shared_graph_utils.models import CombinedAgentMetrics
+from onyx.agents.agent_search.shared_graph_utils.models import (
+    SubQuestionAnswerResults,
+)
 from onyx.auth.schemas import UserRole
 from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
+from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDocs
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
+from onyx.context.search.utils import chunks_or_sections_to_search_docs
+from onyx.db.models import AgentSearchMetrics
+from onyx.db.models import AgentSubQuery
+from onyx.db.models import AgentSubQuestion
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ChatSession
@@ -37,9 +48,11 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatMessageDetail
+from onyx.server.query_and_chat.models import SubQueryDetail
+from onyx.server.query_and_chat.models import SubQuestionDetail
 from onyx.tools.tool_runner import ToolCallFinalResult
 from onyx.utils.logger import setup_logger
-
+from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
@@ -337,13 +350,17 @@ def delete_chat_session(
     user_id: UUID | None,
     chat_session_id: UUID,
     db_session: Session,
+    include_deleted: bool = False,
     hard_delete: bool = HARD_DELETE_CHATS,
 ) -> None:
     chat_session = get_chat_session_by_id(
-        chat_session_id=chat_session_id, user_id=user_id, db_session=db_session
+        chat_session_id=chat_session_id,
+        user_id=user_id,
+        db_session=db_session,
+        include_deleted=include_deleted,
     )
 
-    if chat_session.deleted:
+    if chat_session.deleted and not include_deleted:
         raise ValueError("Cannot delete an already deleted chat session")
 
     if hard_delete:
@@ -367,7 +384,15 @@ def delete_chat_sessions_older_than(days_old: int, db_session: Session) -> None:
     ).fetchall()
 
     for user_id, session_id in old_sessions:
-        delete_chat_session(user_id, session_id, db_session, hard_delete=True)
+        try:
+            delete_chat_session(
+                user_id, session_id, db_session, include_deleted=True, hard_delete=True
+            )
+        except Exception:
+            logger.exception(
+                "delete_chat_session exceptioned. "
+                f"user_id={user_id} session_id={session_id}"
+            )
 
 
 def get_chat_message(
@@ -496,6 +521,7 @@ def get_chat_messages_by_session(
     prefetch_tool_calls: bool = False,
 ) -> list[ChatMessage]:
     if not skip_permission_check:
+        # bug if we ever call this expecting the permission check to not be skipped
         get_chat_session_by_id(
             chat_session_id=chat_session_id, user_id=user_id, db_session=db_session
         )
@@ -507,7 +533,12 @@ def get_chat_messages_by_session(
     )
 
     if prefetch_tool_calls:
-        stmt = stmt.options(joinedload(ChatMessage.tool_call))
+        stmt = stmt.options(
+            joinedload(ChatMessage.tool_call),
+            joinedload(ChatMessage.sub_questions).joinedload(
+                AgentSubQuestion.sub_queries
+            ),
+        )
         result = db_session.scalars(stmt).unique().all()
     else:
         result = db_session.scalars(stmt).all()
@@ -597,6 +628,8 @@ def create_new_chat_message(
     commit: bool = True,
     reserved_message_id: int | None = None,
     overridden_model: str | None = None,
+    refined_answer_improvement: bool | None = None,
+    is_agentic: bool = False,
 ) -> ChatMessage:
     if reserved_message_id is not None:
         # Edit existing message
@@ -617,7 +650,8 @@ def create_new_chat_message(
         existing_message.error = error
         existing_message.alternate_assistant_id = alternate_assistant_id
         existing_message.overridden_model = overridden_model
-
+        existing_message.refined_answer_improvement = refined_answer_improvement
+        existing_message.is_agentic = is_agentic
         new_chat_message = existing_message
     else:
         # Create new message
@@ -636,6 +670,8 @@ def create_new_chat_message(
             error=error,
             alternate_assistant_id=alternate_assistant_id,
             overridden_model=overridden_model,
+            refined_answer_improvement=refined_answer_improvement,
+            is_agentic=is_agentic,
         )
         db_session.add(new_chat_message)
 
@@ -837,16 +873,61 @@ def translate_db_search_doc_to_server_search_doc(
     )
 
 
-def get_retrieval_docs_from_chat_message(
-    chat_message: ChatMessage, remove_doc_content: bool = False
+def translate_db_sub_questions_to_server_objects(
+    db_sub_questions: list[AgentSubQuestion],
+) -> list[SubQuestionDetail]:
+    sub_questions = []
+    for sub_question in db_sub_questions:
+        sub_queries = []
+        docs: dict[str, SearchDoc] = {}
+        doc_results = cast(
+            list[dict[str, JSON_ro]], sub_question.sub_question_doc_results
+        )
+        verified_doc_ids = [x["document_id"] for x in doc_results]
+        for sub_query in sub_question.sub_queries:
+            doc_ids = [doc.id for doc in sub_query.search_docs]
+            sub_queries.append(
+                SubQueryDetail(
+                    query=sub_query.sub_query,
+                    query_id=sub_query.id,
+                    doc_ids=doc_ids,
+                )
+            )
+            for doc in sub_query.search_docs:
+                docs[doc.document_id] = doc
+
+        verified_docs = [
+            docs[cast(str, doc_id)] for doc_id in verified_doc_ids if doc_id in docs
+        ]
+
+        sub_questions.append(
+            SubQuestionDetail(
+                level=sub_question.level,
+                level_question_num=sub_question.level_question_num,
+                question=sub_question.sub_question,
+                answer=sub_question.sub_answer,
+                sub_queries=sub_queries,
+                context_docs=get_retrieval_docs_from_search_docs(
+                    verified_docs, sort_by_score=False
+                ),
+            )
+        )
+    return sub_questions
+
+
+def get_retrieval_docs_from_search_docs(
+    search_docs: list[SearchDoc],
+    remove_doc_content: bool = False,
+    sort_by_score: bool = True,
 ) -> RetrievalDocs:
     top_documents = [
         translate_db_search_doc_to_server_search_doc(
             db_doc, remove_doc_content=remove_doc_content
         )
-        for db_doc in chat_message.search_docs
+        for db_doc in search_docs
     ]
-    top_documents = sorted(top_documents, key=lambda doc: doc.score, reverse=True)  # type: ignore
+    if sort_by_score:
+        top_documents = sorted(top_documents, key=lambda doc: doc.score, reverse=True)  # type: ignore
     return RetrievalDocs(top_documents=top_documents)
 
 
@@ -861,8 +942,8 @@ def translate_db_message_to_chat_message_detail(
         latest_child_message=chat_message.latest_child_message,
         message=chat_message.message,
         rephrased_query=chat_message.rephrased_query,
-        context_docs=get_retrieval_docs_from_chat_message(
-            chat_message, remove_doc_content=remove_doc_content
+        context_docs=get_retrieval_docs_from_search_docs(
+            chat_message.search_docs, remove_doc_content=remove_doc_content
         ),
         message_type=chat_message.message_type,
         time_sent=chat_message.time_sent,
@@ -877,6 +958,122 @@ def translate_db_message_to_chat_message_detail(
         else None,
         alternate_assistant_id=chat_message.alternate_assistant_id,
         overridden_model=chat_message.overridden_model,
+        sub_questions=translate_db_sub_questions_to_server_objects(
+            chat_message.sub_questions
+        ),
+        refined_answer_improvement=chat_message.refined_answer_improvement,
+        error=chat_message.error,
     )
 
     return chat_msg_detail
+
+
+def log_agent_metrics(
+    db_session: Session,
+    user_id: UUID | None,
+    persona_id: int | None,  # Can be none if temporary persona is used
+    agent_type: str,
+    start_time: datetime | None,
+    agent_metrics: CombinedAgentMetrics,
+) -> AgentSearchMetrics:
+    agent_timings = agent_metrics.timings
+    agent_base_metrics = agent_metrics.base_metrics
+    agent_refined_metrics = agent_metrics.refined_metrics
+    agent_additional_metrics = agent_metrics.additional_metrics
+
+    agent_metric_tracking = AgentSearchMetrics(
+        user_id=user_id,
+        persona_id=persona_id,
+        agent_type=agent_type,
+        start_time=start_time,
+        base_duration_s=agent_timings.base_duration_s,
+        full_duration_s=agent_timings.full_duration_s,
+        base_metrics=vars(agent_base_metrics) if agent_base_metrics else None,
+        refined_metrics=vars(agent_refined_metrics) if agent_refined_metrics else None,
+        all_metrics=vars(agent_additional_metrics)
+        if agent_additional_metrics
+        else None,
+    )
+
+    db_session.add(agent_metric_tracking)
+    db_session.flush()
+
+    return agent_metric_tracking
+
+
+def log_agent_sub_question_results(
+    db_session: Session,
+    chat_session_id: UUID | None,
+    primary_message_id: int | None,
+    sub_question_answer_results: list[SubQuestionAnswerResults],
+) -> None:
+    def _create_citation_format_list(
+        document_citations: list[InferenceSection],
+    ) -> list[dict[str, Any]]:
+        citation_list: list[dict[str, Any]] = []
+        for document_citation in document_citations:
+            document_citation_dict = {
+                "link": "",
+                "blurb": document_citation.center_chunk.blurb,
+                "content": document_citation.center_chunk.content,
+                "metadata": document_citation.center_chunk.metadata,
+                "updated_at": str(document_citation.center_chunk.updated_at),
+                "document_id": document_citation.center_chunk.document_id,
+                "source_type": "file",
+                "source_links": document_citation.center_chunk.source_links,
+                "match_highlights": document_citation.center_chunk.match_highlights,
+                "semantic_identifier": document_citation.center_chunk.semantic_identifier,
+            }
+
+            citation_list.append(document_citation_dict)
+
+        return citation_list
+
+    now = datetime.now()
+
+    for sub_question_answer_result in sub_question_answer_results:
+        level, level_question_num = [
+            int(x) for x in sub_question_answer_result.question_id.split("_")
+        ]
+        sub_question = sub_question_answer_result.question
+        sub_answer = sub_question_answer_result.answer
+        sub_document_results = _create_citation_format_list(
+            sub_question_answer_result.context_documents
+        )
+
+        sub_question_object = AgentSubQuestion(
+            chat_session_id=chat_session_id,
+            primary_question_id=primary_message_id,
+            level=level,
+            level_question_num=level_question_num,
+            sub_question=sub_question,
+            sub_answer=sub_answer,
+            sub_question_doc_results=sub_document_results,
+        )
+
+        db_session.add(sub_question_object)
+        db_session.commit()
+
+        sub_question_id = sub_question_object.id
+
+        for sub_query in sub_question_answer_result.sub_query_retrieval_results:
+            sub_query_object = AgentSubQuery(
+                parent_question_id=sub_question_id,
+                chat_session_id=chat_session_id,
+                sub_query=sub_query.query,
+                time_created=now,
+            )
+
+            db_session.add(sub_query_object)
+            db_session.commit()
+
+            search_docs = chunks_or_sections_to_search_docs(
+                sub_query.retrieved_documents
+            )
+            for doc in search_docs:
+                db_doc = create_db_search_doc(doc, db_session)
+                db_session.add(db_doc)
+                sub_query_object.search_docs.append(db_doc)
+            db_session.commit()
+
+    return None

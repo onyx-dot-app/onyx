@@ -18,11 +18,16 @@ from ee.onyx.server.tenants.anonymous_user_path import (
 from ee.onyx.server.tenants.anonymous_user_path import modify_anonymous_user_path
 from ee.onyx.server.tenants.anonymous_user_path import validate_anonymous_user_path
 from ee.onyx.server.tenants.billing import fetch_billing_information
+from ee.onyx.server.tenants.billing import fetch_stripe_checkout_session
 from ee.onyx.server.tenants.billing import fetch_tenant_stripe_information
 from ee.onyx.server.tenants.models import AnonymousUserPath
 from ee.onyx.server.tenants.models import BillingInformation
 from ee.onyx.server.tenants.models import ImpersonateRequest
 from ee.onyx.server.tenants.models import ProductGatingRequest
+from ee.onyx.server.tenants.models import ProductGatingResponse
+from ee.onyx.server.tenants.models import SubscriptionSessionResponse
+from ee.onyx.server.tenants.models import SubscriptionStatusResponse
+from ee.onyx.server.tenants.product_gating import store_product_gating
 from ee.onyx.server.tenants.provisioning import delete_user_from_control_plane
 from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
 from ee.onyx.server.tenants.user_mapping import remove_all_users_from_tenant
@@ -34,18 +39,17 @@ from onyx.auth.users import get_redis_strategy
 from onyx.auth.users import optional_user
 from onyx.auth.users import User
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.auth import get_user_count
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
+from onyx.db.engine import get_session_with_shared_schema
 from onyx.db.engine import get_session_with_tenant
-from onyx.db.notification import create_notification
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_user_by_email
 from onyx.server.manage.models import UserByEmail
-from onyx.server.settings.store import load_settings
-from onyx.server.settings.store import store_settings
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import get_current_tenant_id
 
 stripe.api_key = STRIPE_SECRET_KEY
 logger = setup_logger()
@@ -54,13 +58,14 @@ router = APIRouter(prefix="/tenants")
 
 @router.get("/anonymous-user-path")
 async def get_anonymous_user_path_api(
-    tenant_id: str | None = Depends(get_current_tenant_id),
     _: User | None = Depends(current_admin_user),
 ) -> AnonymousUserPath:
+    tenant_id = get_current_tenant_id()
+
     if tenant_id is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
-    with get_session_with_tenant(tenant_id=None) as db_session:
+    with get_session_with_shared_schema() as db_session:
         current_path = get_anonymous_user_path(tenant_id, db_session)
 
     return AnonymousUserPath(anonymous_user_path=current_path)
@@ -69,15 +74,15 @@ async def get_anonymous_user_path_api(
 @router.post("/anonymous-user-path")
 async def set_anonymous_user_path_api(
     anonymous_user_path: str,
-    tenant_id: str = Depends(get_current_tenant_id),
     _: User | None = Depends(current_admin_user),
 ) -> None:
+    tenant_id = get_current_tenant_id()
     try:
         validate_anonymous_user_path(anonymous_user_path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    with get_session_with_tenant(tenant_id=None) as db_session:
+    with get_session_with_shared_schema() as db_session:
         try:
             modify_anonymous_user_path(tenant_id, anonymous_user_path, db_session)
         except IntegrityError:
@@ -98,7 +103,7 @@ async def login_as_anonymous_user(
     anonymous_user_path: str,
     _: User | None = Depends(optional_user),
 ) -> Response:
-    with get_session_with_tenant(tenant_id=None) as db_session:
+    with get_session_with_shared_schema() as db_session:
         tenant_id = get_tenant_id_for_anonymous_user_path(
             anonymous_user_path, db_session
         )
@@ -111,6 +116,7 @@ async def login_as_anonymous_user(
     token = generate_anonymous_user_jwt_token(tenant_id)
 
     response = Response()
+    response.delete_cookie(FASTAPI_USERS_AUTH_COOKIE_NAME)
     response.set_cookie(
         key=ANONYMOUS_USER_COOKIE_NAME,
         value=token,
@@ -124,57 +130,69 @@ async def login_as_anonymous_user(
 @router.post("/product-gating")
 def gate_product(
     product_gating_request: ProductGatingRequest, _: None = Depends(control_plane_dep)
-) -> None:
+) -> ProductGatingResponse:
     """
     Gating the product means that the product is not available to the tenant.
     They will be directed to the billing page.
-    We gate the product when
-    1) User has ended free trial without adding payment method
-    2) User's card has declined
+    We gate the product when their subscription has ended.
     """
-    tenant_id = product_gating_request.tenant_id
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        store_product_gating(
+            product_gating_request.tenant_id, product_gating_request.application_status
+        )
+        return ProductGatingResponse(updated=True, error=None)
 
-    settings = load_settings()
-    settings.product_gating = product_gating_request.product_gating
-    store_settings(settings)
-
-    if product_gating_request.notification:
-        with get_session_with_tenant(tenant_id) as db_session:
-            create_notification(None, product_gating_request.notification, db_session)
-
-    if token is not None:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    except Exception as e:
+        logger.exception("Failed to gate product")
+        return ProductGatingResponse(updated=False, error=str(e))
 
 
-@router.get("/billing-information", response_model=BillingInformation)
+@router.get("/billing-information")
 async def billing_information(
     _: User = Depends(current_admin_user),
-) -> BillingInformation:
+) -> BillingInformation | SubscriptionStatusResponse:
     logger.info("Fetching billing information")
-    return BillingInformation(
-        **fetch_billing_information(CURRENT_TENANT_ID_CONTEXTVAR.get())
-    )
+    tenant_id = get_current_tenant_id()
+    return fetch_billing_information(tenant_id)
 
 
 @router.post("/create-customer-portal-session")
-async def create_customer_portal_session(_: User = Depends(current_admin_user)) -> dict:
+async def create_customer_portal_session(
+    _: User = Depends(current_admin_user),
+) -> dict:
+    tenant_id = get_current_tenant_id()
+
     try:
-        # Fetch tenant_id and current tenant's information
-        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
         stripe_info = fetch_tenant_stripe_information(tenant_id)
         stripe_customer_id = stripe_info.get("stripe_customer_id")
         if not stripe_customer_id:
             raise HTTPException(status_code=400, detail="Stripe customer ID not found")
         logger.info(stripe_customer_id)
+
         portal_session = stripe.billing_portal.Session.create(
             customer=stripe_customer_id,
-            return_url=f"{WEB_DOMAIN}/admin/cloud-settings",
+            return_url=f"{WEB_DOMAIN}/admin/billing",
         )
         logger.info(portal_session)
         return {"url": portal_session.url}
     except Exception as e:
         logger.exception("Failed to create customer portal session")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/create-subscription-session")
+async def create_subscription_session(
+    _: User = Depends(current_admin_user),
+) -> SubscriptionSessionResponse:
+    try:
+        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+        if not tenant_id:
+            raise HTTPException(status_code=400, detail="Tenant ID not found")
+        session_id = fetch_stripe_checkout_session(tenant_id)
+        return SubscriptionSessionResponse(sessionId=session_id)
+
+    except Exception as e:
+        logger.exception("Failed to create resubscription session")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -186,7 +204,7 @@ async def impersonate_user(
     """Allows a cloud superuser to impersonate another user by generating an impersonation JWT token"""
     tenant_id = get_tenant_id_for_email(impersonate_request.email)
 
-    with get_session_with_tenant(tenant_id) as tenant_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as tenant_session:
         user_to_impersonate = get_user_by_email(
             impersonate_request.email, tenant_session
         )
@@ -210,8 +228,9 @@ async def leave_organization(
     user_email: UserByEmail,
     current_user: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_current_tenant_id),
 ) -> None:
+    tenant_id = get_current_tenant_id()
+
     if current_user is None or current_user.email != user_email.user_email:
         raise HTTPException(
             status_code=403, detail="You can only leave the organization as yourself"

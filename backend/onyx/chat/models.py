@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from typing import Literal
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
@@ -15,6 +16,8 @@ from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import RetrievalDocs
+from onyx.db.models import SearchDoc as DbSearchDoc
+from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import PromptOverride
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
@@ -40,8 +43,13 @@ class LlmDoc(BaseModel):
     match_highlights: list[str] | None
 
 
+class SubQuestionIdentifier(BaseModel):
+    level: int | None = None
+    level_question_num: int | None = None
+
+
 # First chunk of info for streaming QA
-class QADocsResponse(RetrievalDocs):
+class QADocsResponse(RetrievalDocs, SubQuestionIdentifier):
     rephrased_query: str | None = None
     predicted_flow: QueryFlow | None
     predicted_search: SearchType | None
@@ -61,10 +69,19 @@ class QADocsResponse(RetrievalDocs):
 class StreamStopReason(Enum):
     CONTEXT_LENGTH = "context_length"
     CANCELLED = "cancelled"
+    FINISHED = "finished"
 
 
-class StreamStopInfo(BaseModel):
+class StreamType(Enum):
+    SUB_QUESTIONS = "sub_questions"
+    SUB_ANSWER = "sub_answer"
+    MAIN_ANSWER = "main_answer"
+
+
+class StreamStopInfo(SubQuestionIdentifier):
     stop_reason: StreamStopReason
+
+    stream_type: StreamType = StreamType.MAIN_ANSWER
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         data = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
@@ -105,7 +122,7 @@ class OnyxAnswerPiece(BaseModel):
 
 # An intermediate representation of citations, later translated into
 # a mapping of the citation [n] number to SearchDoc
-class CitationInfo(BaseModel):
+class CitationInfo(SubQuestionIdentifier):
     citation_num: int
     document_id: str
 
@@ -273,7 +290,7 @@ class AnswerStyleConfig(BaseModel):
 
 class PromptConfig(BaseModel):
     """Final representation of the Prompt configuration passed
-    into the `Answer` object."""
+    into the `PromptBuilder` object."""
 
     system_prompt: str
     task_prompt: str
@@ -299,6 +316,41 @@ class PromptConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class SubQueryPiece(SubQuestionIdentifier):
+    sub_query: str
+    query_id: int
+
+
+class AgentAnswerPiece(SubQuestionIdentifier):
+    answer_piece: str
+    answer_type: Literal["agent_sub_answer", "agent_level_answer"]
+
+
+class SubQuestionPiece(SubQuestionIdentifier):
+    sub_question: str
+
+
+class ExtendedToolResponse(ToolResponse, SubQuestionIdentifier):
+    pass
+
+
+class RefinedAnswerImprovement(BaseModel):
+    refined_answer_improvement: bool
+
+
+AgentSearchPacket = (
+    SubQuestionPiece
+    | AgentAnswerPiece
+    | SubQueryPiece
+    | ExtendedToolResponse
+    | RefinedAnswerImprovement
+)
+
+AnswerPacket = (
+    AnswerQuestionPossibleReturn | AgentSearchPacket | ToolCallKickoff | ToolResponse
+)
+
+
 ResponsePart = (
     OnyxAnswerPiece
     | CitationInfo
@@ -306,4 +358,33 @@ ResponsePart = (
     | ToolResponse
     | ToolCallFinalResult
     | StreamStopInfo
+    | AgentSearchPacket
 )
+
+AnswerStream = Iterator[AnswerPacket]
+
+
+class AnswerPostInfo(BaseModel):
+    ai_message_files: list[FileDescriptor]
+    qa_docs_response: QADocsResponse | None = None
+    reference_db_search_docs: list[DbSearchDoc] | None = None
+    dropped_indices: list[int] | None = None
+    tool_result: ToolCallFinalResult | None = None
+    message_specific_citations: MessageSpecificCitations | None = None
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class SubQuestionKey(BaseModel):
+    level: int
+    question_num: int
+
+    def __hash__(self) -> int:
+        return hash((self.level, self.question_num))
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, SubQuestionKey) and (
+            self.level,
+            self.question_num,
+        ) == (other.level, other.question_num)

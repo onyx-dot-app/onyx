@@ -61,6 +61,7 @@ services:
       # Other services
       - POSTGRES_HOST=relational_db
       - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
+      - POSTGRES_USE_NULL_POOL=${POSTGRES_USE_NULL_POOL:-}
       - VESPA_HOST=index
       - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-} # For frontend redirect auth purpose
@@ -96,6 +97,9 @@ services:
       # Lienar OAuth Configs
       - LINEAR_CLIENT_ID=${LINEAR_CLIENT_ID:-}
       - LINEAR_CLIENT_SECRET=${LINEAR_CLIENT_SECRET:-}
+
+      # Demo purposes
+      - MOCK_CONNECTOR_FILE_PATH=${MOCK_CONNECTOR_FILE_PATH:-}
 
       # Analytics Configs
       - SENTRY_DSN=${SENTRY_DSN:-}
@@ -171,6 +175,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
       - POSTGRES_DB=${POSTGRES_DB:-}
       - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
+      - POSTGRES_USE_NULL_POOL=${POSTGRES_USE_NULL_POOL:-}
       - VESPA_HOST=index
       - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-} # For frontend redirect auth purpose for OAuth2 connectors

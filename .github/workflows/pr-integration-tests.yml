@@ -94,23 +94,27 @@ jobs:
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
           MULTI_TENANT=true \
-          AUTH_TYPE=basic \
+          AUTH_TYPE=cloud \
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
-          docker compose -f docker-compose.dev.yml -p danswer-stack up -d
+          DEV_MODE=true \
+          docker compose -f docker-compose.multitenant-dev.yml -p onyx-stack up -d
         id: start_docker_multi_tenant
 
       # In practice, `cloud` Auth type would require OAUTH credentials to be set.
       - name: Run Multi-Tenant Integration Tests
         run: |
+          echo "Waiting for 3 minutes to ensure API server is ready..."
+          sleep 180
           echo "Running integration tests..."
-          docker run --rm --network danswer-stack_default \
+          docker run --rm --network onyx-stack_default \
             --name test-runner \
             -e POSTGRES_HOST=relational_db \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=password \
             -e POSTGRES_DB=postgres \
+            -e POSTGRES_USE_NULL_POOL=true \
             -e VESPA_HOST=index \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
@@ -119,6 +123,10 @@ jobs:
             -e TEST_WEB_HOSTNAME=test-runner \
             -e AUTH_TYPE=cloud \
             -e MULTI_TENANT=true \
+            -e REQUIRE_EMAIL_VERIFICATION=false \
+            -e DISABLE_TELEMETRY=true \
+            -e IMAGE_TAG=test \
+            -e DEV_MODE=true \
             onyxdotapp/onyx-integration:test \
             /app/tests/integration/multitenant_tests
         continue-on-error: true
@@ -126,34 +134,37 @@ jobs:
 
       - name: Check multi-tenant test results
         run: |
-          if [ ${{ steps.run_tests.outcome }} == 'failure' ]; then
-            echo "Integration tests failed. Exiting with error."
+          if [ ${{ steps.run_multitenant_tests.outcome }} == 'failure' ]; then
+            echo "Multi-tenant integration tests failed. Exiting with error."
             exit 1
           else
-            echo "All integration tests passed successfully."
+            echo "All multi-tenant integration tests passed successfully."
           fi
 
       - name: Stop multi-tenant Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p danswer-stack down -v
-
+          docker compose -f docker-compose.multitenant-dev.yml -p onyx-stack down -v
+      
+      # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
           AUTH_TYPE=basic \
+          POSTGRES_POOL_PRE_PING=true \
+          POSTGRES_USE_NULL_POOL=true \
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
-          docker compose -f docker-compose.dev.yml -p danswer-stack up -d
+          docker compose -f docker-compose.dev.yml -p onyx-stack up -d
         id: start_docker
 
       - name: Wait for service to be ready
         run: |
           echo "Starting wait-for-service script..."
 
-          docker logs -f danswer-stack-api_server-1 &
+          docker logs -f onyx-stack-api_server-1 &
 
           start_time=$(date +%s)
           timeout=300  # 5 minutes in seconds
@@ -183,15 +194,24 @@ jobs:
           done
           echo "Finished waiting for service."
 
+      - name: Start Mock Services
+        run: |
+          cd backend/tests/integration/mock_services
+          docker compose -f docker-compose.mock-it-services.yml \
+            -p mock-it-services-stack up -d
+      
+      # NOTE: Use pre-ping/null to reduce flakiness due to dropped connections
       - name: Run Standard Integration Tests
         run: |
           echo "Running integration tests..."
-          docker run --rm --network danswer-stack_default \
+          docker run --rm --network onyx-stack_default \
             --name test-runner \
             -e POSTGRES_HOST=relational_db \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=password \
             -e POSTGRES_DB=postgres \
+            -e POSTGRES_POOL_PRE_PING=true \
+            -e POSTGRES_USE_NULL_POOL=true \
             -e VESPA_HOST=index \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
@@ -201,6 +221,8 @@ jobs:
             -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
             -e CONFLUENCE_ACCESS_TOKEN=${CONFLUENCE_ACCESS_TOKEN} \
             -e TEST_WEB_HOSTNAME=test-runner \
+            -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
+            -e MOCK_CONNECTOR_SERVER_PORT=8001 \
             onyxdotapp/onyx-integration:test \
             /app/tests/integration/tests \
             /app/tests/integration/connector_job_tests
@@ -216,27 +238,30 @@ jobs:
             echo "All integration tests passed successfully."
           fi
 
-      # save before stopping the containers so the logs can be captured
-      - name: Save Docker logs
-        if: success() || failure()
+      # ------------------------------------------------------------
+      # Always gather logs BEFORE "down":
+      - name: Dump API server logs
+        if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p danswer-stack logs > docker-compose.log
-          mv docker-compose.log ${{ github.workspace }}/docker-compose.log
+          docker compose -f docker-compose.dev.yml -p onyx-stack logs --no-color api_server > $GITHUB_WORKSPACE/api_server.log || true
 
-      - name: Stop Docker containers
+      - name: Dump all-container logs (optional)
+        if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p danswer-stack down -v
+          docker compose -f docker-compose.dev.yml -p onyx-stack logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
 
       - name: Upload logs
-        if: success() || failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: docker-logs
+          name: docker-all-logs
           path: ${{ github.workspace }}/docker-compose.log
+      # ------------------------------------------------------------
 
       - name: Stop Docker containers
+        if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p danswer-stack down -v
+          docker compose -f docker-compose.dev.yml -p onyx-stack down -v

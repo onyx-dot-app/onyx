@@ -28,7 +28,7 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
     data: users,
     isLoading: userIsLoading,
     error: usersError,
-  } = useUsers();
+  } = useUsers({ includeApiKeys: true });
   const {
     data: ccPairs,
     isLoading: isCCPairsLoading,

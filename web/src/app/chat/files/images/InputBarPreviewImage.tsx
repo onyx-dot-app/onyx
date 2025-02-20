@@ -20,7 +20,7 @@ export function InputBarPreviewImage({ fileId }: { fileId: string }) {
           border-none
           flex
           items-center
-          bg-hover
+          bg-accent-background-hovered
           border
           border-border
           rounded-md

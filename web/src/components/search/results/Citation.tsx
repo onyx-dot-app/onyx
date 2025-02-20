@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { CompactDocumentCard } from "../DocumentDisplay";
+import { CompactDocumentCard, CompactQuestionCard } from "../DocumentDisplay";
 import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import {
   Tooltip,
@@ -8,46 +8,79 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { openDocument } from "@/lib/search/utils";
+import { SubQuestionDetail } from "@/app/chat/interfaces";
+
+export interface DocumentCardProps {
+  document: LoadedOnyxDocument;
+  updatePresentingDocument: (document: OnyxDocument) => void;
+  icon?: React.ReactNode;
+  url?: string;
+}
+export interface QuestionCardProps {
+  question: SubQuestionDetail;
+  openQuestion: (question: SubQuestionDetail) => void;
+}
 
 export function Citation({
   children,
-  document,
+  document_info,
+  question_info,
   index,
-  updatePresentingDocument,
-  icon,
-  url,
 }: {
+  document_info?: DocumentCardProps;
+  question_info?: QuestionCardProps;
   children?: JSX.Element | string | null | ReactNode;
   index?: number;
-  updatePresentingDocument: (document: OnyxDocument) => void;
-  document: LoadedOnyxDocument;
-  icon?: React.ReactNode;
-  url?: string;
 }) {
   const innerText = children
     ? children?.toString().split("[")[1].split("]")[0]
     : index;
 
+  if (!document_info && !question_info) {
+    return <>{children}</>;
+  }
   return (
     <TooltipProvider delayDuration={0}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div
-            onClick={() => openDocument(document, updatePresentingDocument)}
+          <span
+            onClick={() => {
+              document_info?.document
+                ? openDocument(
+                    document_info.document,
+                    document_info.updatePresentingDocument
+                  )
+                : question_info?.question
+                  ? question_info.openQuestion(question_info.question)
+                  : null;
+            }}
             className="inline-flex items-center cursor-pointer transition-all duration-200 ease-in-out"
           >
-            <span className="flex items-center justify-center w-5 h-5 text-[11px] font-medium text-gray-700 bg-neutral-100 rounded-full border border-gray-300 hover:bg-gray-200 hover:text-gray-900 shadow-sm">
+            <span
+              className="flex items-center justify-center  px-1 h-4 text-[10px] font-medium text-text-700 bg-background-100 rounded-full border border-background-300 hover:bg-background-200 hover:text-text-900 shadow-sm"
+              style={{ transform: "translateY(-10%)", lineHeight: "1" }}
+            >
               {innerText}
             </span>
-          </div>
+          </span>
         </TooltipTrigger>
-        <TooltipContent width="mb-2 max-w-lg" className="bg-background">
-          <CompactDocumentCard
-            updatePresentingDocument={updatePresentingDocument}
-            url={url}
-            icon={icon}
-            document={document}
-          />
+        <TooltipContent
+          className="border border-neutral-300  hover:text-neutral-900 bg-neutral-100 dark:!bg-[#000] dark:border-neutral-700"
+          width="mb-2 max-w-lg"
+        >
+          {document_info?.document ? (
+            <CompactDocumentCard
+              updatePresentingDocument={document_info.updatePresentingDocument}
+              url={document_info.url}
+              icon={document_info.icon}
+              document={document_info.document}
+            />
+          ) : (
+            <CompactQuestionCard
+              question={question_info?.question!}
+              openQuestion={question_info?.openQuestion!}
+            />
+          )}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

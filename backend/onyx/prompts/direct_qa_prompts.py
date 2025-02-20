@@ -91,7 +91,7 @@ SAMPLE RESPONSE:
 # similar to the chat flow, but with the option of including a
 # "conversation history" block
 CITATIONS_PROMPT = f"""
-Refer to the following context documents when responding to me.{DEFAULT_IGNORE_STATEMENT}
+Refer to the following {{context_type}} when responding to me.{DEFAULT_IGNORE_STATEMENT}
 
 CONTEXT:
 {GENERAL_SEP_PAT}
@@ -108,7 +108,7 @@ CONTEXT:
 # NOTE: need to add the extra line about "getting right to the point" since the
 # tool calling models from OpenAI tend to be more verbose
 CITATIONS_PROMPT_FOR_TOOL_CALLING = f"""
-Refer to the provided context documents when responding to me.{DEFAULT_IGNORE_STATEMENT} \
+Refer to the provided {{context_type}} when responding to me.{DEFAULT_IGNORE_STATEMENT} \
 You should always get right to the point, and never use extraneous language.
 
 {{history_block}}{{task_prompt}}

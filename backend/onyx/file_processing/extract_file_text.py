@@ -320,7 +320,13 @@ def eml_to_text(file: IO[Any]) -> str:
     text_content = []
     for part in message.walk():
         if part.get_content_type().startswith("text/plain"):
-            text_content.append(part.get_payload())
+            payload = part.get_payload()
+            if isinstance(payload, str):
+                text_content.append(payload)
+            elif isinstance(payload, list):
+                text_content.extend(item for item in payload if isinstance(item, str))
+            else:
+                logger.warning(f"Unexpected payload type: {type(payload)}")
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
@@ -358,8 +364,14 @@ def extract_file_text(
 
     try:
         if get_unstructured_api_key():
-            return unstructured_to_text(file, file_name)
-
+            try:
+                return unstructured_to_text(file, file_name)
+            except Exception as unstructured_error:
+                logger.error(
+                    f"Failed to process with Unstructured: {str(unstructured_error)}. Falling back to normal processing."
+                )
+                # Fall through to normal processing
+        final_extension: str
         if file_name or extension:
             if extension is not None:
                 final_extension = extension

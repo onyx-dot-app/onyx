@@ -1,4 +1,5 @@
 import traceback
+from collections import defaultdict
 from collections.abc import Callable
 from collections.abc import Iterator
 from functools import partial
@@ -6,16 +7,20 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.orchestration.nodes.call_tool import ToolCallException
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
+from onyx.chat.models import AgentSearchPacket
 from onyx.chat.models import AllCitations
+from onyx.chat.models import AnswerPostInfo
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ChatOnyxBotResponse
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import CitationInfo
 from onyx.chat.models import CustomToolResponse
 from onyx.chat.models import DocumentPruningConfig
+from onyx.chat.models import ExtendedToolResponse
 from onyx.chat.models import FileChatDisplay
 from onyx.chat.models import FinalUsedContextDocsResponse
 from onyx.chat.models import LLMRelevanceFilterResponse
@@ -25,20 +30,32 @@ from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import QADocsResponse
+from onyx.chat.models import RefinedAnswerImprovement
 from onyx.chat.models import StreamingError
 from onyx.chat.models import StreamStopInfo
+from onyx.chat.models import StreamStopReason
+from onyx.chat.models import SubQuestionKey
+from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
+from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
+from onyx.configs.constants import AGENT_SEARCH_INITIAL_KEY
+from onyx.configs.constants import BASIC_KEY
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
+from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDetails
-from onyx.context.search.retrieval.search_runner import inference_sections_from_ids
+from onyx.context.search.models import SearchRequest
+from onyx.context.search.retrieval.search_runner import (
+    inference_sections_from_ids,
+)
 from onyx.context.search.utils import chunks_or_sections_to_search_docs
 from onyx.context.search.utils import dedupe_documents
 from onyx.context.search.utils import drop_llm_indices
@@ -71,6 +88,7 @@ from onyx.file_store.utils import save_files
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
+from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
@@ -125,10 +143,10 @@ from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.timing import log_generator_function_time
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+ERROR_TYPE_CANCELLED = "cancelled"
 
 
 def _translate_citations(
@@ -159,12 +177,15 @@ def _handle_search_tool_response_summary(
 ) -> tuple[QADocsResponse, list[DbSearchDoc], list[int] | None]:
     response_sumary = cast(SearchResponseSummary, packet.response)
 
+    is_extended = isinstance(packet, ExtendedToolResponse)
     dropped_inds = None
     if not selected_search_docs:
         top_docs = chunks_or_sections_to_search_docs(response_sumary.top_sections)
 
         deduped_docs = top_docs
-        if dedupe_docs:
+        if (
+            dedupe_docs and not is_extended
+        ):  # Extended tool responses are already deduped
             deduped_docs, dropped_inds = dedupe_documents(top_docs)
 
         reference_db_search_docs = [
@@ -178,6 +199,10 @@ def _handle_search_tool_response_summary(
         translate_db_search_doc_to_server_search_doc(db_search_doc)
         for db_search_doc in reference_db_search_docs
     ]
+
+    level, question_num = None, None
+    if isinstance(packet, ExtendedToolResponse):
+        level, question_num = packet.level, packet.level_question_num
     return (
         QADocsResponse(
             rephrased_query=response_sumary.rephrased_query,
@@ -187,6 +212,8 @@ def _handle_search_tool_response_summary(
             applied_source_filters=response_sumary.final_filters.source_type,
             applied_time_cutoff=response_sumary.final_filters.time_cutoff,
             recency_bias_multiplier=response_sumary.recency_bias_multiplier,
+            level=level,
+            level_question_num=question_num,
         ),
         reference_db_search_docs,
         dropped_inds,
@@ -254,6 +281,7 @@ def _get_force_search_settings(
             and new_msg_req.retrieval_options.run_search
             == OptionalSearchSetting.ALWAYS,
             new_msg_req.search_doc_ids,
+            new_msg_req.query_override is not None,
             DISABLE_LLM_CHOOSE_SEARCH,
         ]
     )
@@ -281,6 +309,7 @@ ChatPacket = (
     | MessageSpecificCitations
     | MessageResponseIDInfo
     | StreamStopInfo
+    | AgentSearchPacket
 )
 ChatPacketStream = Iterator[ChatPacket]
 
@@ -314,7 +343,7 @@ def stream_chat_message_objects(
     3. [always] A set of streamed LLM tokens or an error anywhere along the line if something fails
     4. [always] Details on the final AI response message that is created
     """
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+    tenant_id = get_current_tenant_id()
     use_existing_user_message = new_msg_req.use_existing_user_message
     existing_assistant_message_id = new_msg_req.existing_assistant_message_id
 
@@ -322,6 +351,8 @@ def stream_chat_message_objects(
     # Chat is already token heavy and harder for the model to process plus it would roll history over much faster
     new_msg_req.chunks_above = 0
     new_msg_req.chunks_below = 0
+
+    llm: LLM
 
     try:
         user_id = user.id if user is not None else None
@@ -425,9 +456,7 @@ def stream_chat_message_objects(
         )
 
         search_settings = get_current_search_settings(db_session)
-        document_index = get_default_document_index(
-            primary_index_name=search_settings.index_name, secondary_index_name=None
-        )
+        document_index = get_default_document_index(search_settings, None)
 
         # Every chat Session begins with an empty root message
         root_message = get_or_create_root_message(
@@ -499,23 +528,12 @@ def stream_chat_message_objects(
                         f"existing assistant message id: {existing_assistant_message_id}"
                     )
 
-        # Disable Query Rephrasing for the first message
-        # This leads to a better first response since the LLM rephrasing the question
-        # leads to worst search quality
-        if not history_msgs:
-            new_msg_req.query_override = (
-                new_msg_req.query_override or new_msg_req.message
-            )
-
         # load all files needed for this chat chain in memory
         files = load_all_chat_files(
             history_msgs, new_msg_req.file_descriptors, db_session
         )
-        latest_query_files = [
-            file
-            for file in files
-            if file.file_id in [f["id"] for f in new_msg_req.file_descriptors]
-        ]
+        req_file_ids = [f["id"] for f in new_msg_req.file_descriptors]
+        latest_query_files = [file for file in files if file.file_id in req_file_ids]
 
         if user_message:
             attach_files_to_chat_message(
@@ -614,6 +632,7 @@ def stream_chat_message_objects(
             db_session=db_session,
             commit=False,
             reserved_message_id=reserved_message_id,
+            is_agentic=new_msg_req.use_agentic_search,
         )
 
         prompt_override = new_msg_req.prompt_override or chat_session.prompt_override
@@ -688,13 +707,58 @@ def stream_chat_message_objects(
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
 
+        # TODO: unify message history with single message history
+        message_history = [
+            PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
+        ]
+
+        search_request = SearchRequest(
+            query=final_msg.message,
+            evaluation_type=(
+                LLMEvaluationType.BASIC
+                if persona.llm_relevance_filter
+                else LLMEvaluationType.SKIP
+            ),
+            human_selected_filters=(
+                retrieval_options.filters if retrieval_options else None
+            ),
+            persona=persona,
+            offset=(retrieval_options.offset if retrieval_options else None),
+            limit=retrieval_options.limit if retrieval_options else None,
+            rerank_settings=new_msg_req.rerank_settings,
+            chunks_above=new_msg_req.chunks_above,
+            chunks_below=new_msg_req.chunks_below,
+            full_doc=new_msg_req.full_doc,
+            enable_auto_detect_filters=(
+                retrieval_options.enable_auto_detect_filters
+                if retrieval_options
+                else None
+            ),
+        )
+
+        force_use_tool = _get_force_search_settings(new_msg_req, tools)
+        prompt_builder = AnswerPromptBuilder(
+            user_message=default_build_user_message(
+                user_query=final_msg.message,
+                prompt_config=prompt_config,
+                files=latest_query_files,
+                single_message_history=single_message_history,
+            ),
+            system_message=default_build_system_message(prompt_config),
+            message_history=message_history,
+            llm_config=llm.config,
+            raw_user_query=final_msg.message,
+            raw_user_uploaded_files=latest_query_files or [],
+            single_message_history=single_message_history,
+        )
+        prompt_builder.update_system_prompt(default_build_system_message(prompt_config))
+
         # LLM prompt building, response capturing, etc.
         answer = Answer(
+            prompt_builder=prompt_builder,
             is_connected=is_connected,
-            question=final_msg.message,
             latest_query_files=latest_query_files,
             answer_style_config=answer_style_config,
-            prompt_config=prompt_config,
             llm=(
                 llm
                 or get_main_llm_from_tuple(
@@ -707,28 +771,46 @@ def stream_chat_message_objects(
                     )
                 )
             ),
-            message_history=[
-                PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
-            ],
+            fast_llm=fast_llm,
+            force_use_tool=force_use_tool,
+            search_request=search_request,
+            chat_session_id=chat_session_id,
+            current_agent_message_id=reserved_message_id,
             tools=tools,
-            force_use_tool=_get_force_search_settings(new_msg_req, tools),
-            single_message_history=single_message_history,
+            db_session=db_session,
+            use_agentic_search=new_msg_req.use_agentic_search,
         )
 
-        reference_db_search_docs = None
-        qa_docs_response = None
-        # any files to associate with the AI message e.g. dall-e generated images
-        ai_message_files = []
-        dropped_indices = None
-        tool_result = None
+        # reference_db_search_docs = None
+        # qa_docs_response = None
+        # # any files to associate with the AI message e.g. dall-e generated images
+        # ai_message_files = []
+        # dropped_indices = None
+        # tool_result = None
 
+        # TODO: different channels for stored info when it's coming from the agent flow
+        info_by_subq: dict[SubQuestionKey, AnswerPostInfo] = defaultdict(
+            lambda: AnswerPostInfo(ai_message_files=[])
+        )
+        refined_answer_improvement = True
         for packet in answer.processed_streamed_output:
             if isinstance(packet, ToolResponse):
+                level, level_question_num = (
+                    (packet.level, packet.level_question_num)
+                    if isinstance(packet, ExtendedToolResponse)
+                    else BASIC_KEY
+                )
+                assert level is not None
+                assert level_question_num is not None
+                info = info_by_subq[
+                    SubQuestionKey(level=level, question_num=level_question_num)
+                ]
+                # TODO: don't need to dedupe here when we do it in agent flow
                 if packet.id == SEARCH_RESPONSE_SUMMARY_ID:
                     (
-                        qa_docs_response,
-                        reference_db_search_docs,
-                        dropped_indices,
+                        info.qa_docs_response,
+                        info.reference_db_search_docs,
+                        info.dropped_indices,
                     ) = _handle_search_tool_response_summary(
                         packet=packet,
                         db_session=db_session,
@@ -740,29 +822,34 @@ def stream_chat_message_objects(
                             else False
                         ),
                     )
-                    yield qa_docs_response
+                    yield info.qa_docs_response
                 elif packet.id == SECTION_RELEVANCE_LIST_ID:
                     relevance_sections = packet.response
 
-                    if reference_db_search_docs is not None:
-                        llm_indices = relevant_sections_to_indices(
-                            relevance_sections=relevance_sections,
-                            items=[
-                                translate_db_search_doc_to_server_search_doc(doc)
-                                for doc in reference_db_search_docs
-                            ],
+                    if info.reference_db_search_docs is None:
+                        logger.warning(
+                            "No reference docs found for relevance filtering"
+                        )
+                        continue
+
+                    llm_indices = relevant_sections_to_indices(
+                        relevance_sections=relevance_sections,
+                        items=[
+                            translate_db_search_doc_to_server_search_doc(doc)
+                            for doc in info.reference_db_search_docs
+                        ],
+                    )
+
+                    if info.dropped_indices:
+                        llm_indices = drop_llm_indices(
+                            llm_indices=llm_indices,
+                            search_docs=info.reference_db_search_docs,
+                            dropped_indices=info.dropped_indices,
                         )
 
-                        if dropped_indices:
-                            llm_indices = drop_llm_indices(
-                                llm_indices=llm_indices,
-                                search_docs=reference_db_search_docs,
-                                dropped_indices=dropped_indices,
-                            )
-
-                        yield LLMRelevanceFilterResponse(
-                            llm_selected_doc_indices=llm_indices
-                        )
+                    yield LLMRelevanceFilterResponse(
+                        llm_selected_doc_indices=llm_indices
+                    )
                 elif packet.id == FINAL_CONTEXT_DOCUMENTS_ID:
                     yield FinalUsedContextDocsResponse(
                         final_context_docs=packet.response
@@ -782,22 +869,24 @@ def stream_chat_message_objects(
                         ],
                         tenant_id=tenant_id,
                     )
-                    ai_message_files = [
-                        FileDescriptor(id=str(file_id), type=ChatFileType.IMAGE)
-                        for file_id in file_ids
-                    ]
+                    info.ai_message_files.extend(
+                        [
+                            FileDescriptor(id=str(file_id), type=ChatFileType.IMAGE)
+                            for file_id in file_ids
+                        ]
+                    )
                     yield FileChatDisplay(
                         file_ids=[str(file_id) for file_id in file_ids]
                     )
                 elif packet.id == INTERNET_SEARCH_RESPONSE_ID:
                     (
-                        qa_docs_response,
-                        reference_db_search_docs,
+                        info.qa_docs_response,
+                        info.reference_db_search_docs,
                     ) = _handle_internet_search_tool_response_summary(
                         packet=packet,
                         db_session=db_session,
                     )
-                    yield qa_docs_response
+                    yield info.qa_docs_response
                 elif packet.id == CUSTOM_TOOL_RESPONSE_ID:
                     custom_tool_response = cast(CustomToolCallSummary, packet.response)
 
@@ -806,7 +895,7 @@ def stream_chat_message_objects(
                         or custom_tool_response.response_type == "csv"
                     ):
                         file_ids = custom_tool_response.tool_result.file_ids
-                        ai_message_files.extend(
+                        info.ai_message_files.extend(
                             [
                                 FileDescriptor(
                                     id=str(file_id),
@@ -831,10 +920,23 @@ def stream_chat_message_objects(
                     yield cast(OnyxContexts, packet.response)
 
             elif isinstance(packet, StreamStopInfo):
-                pass
+                if packet.stop_reason == StreamStopReason.FINISHED:
+                    yield packet
+            elif isinstance(packet, RefinedAnswerImprovement):
+                refined_answer_improvement = packet.refined_answer_improvement
+                yield packet
             else:
                 if isinstance(packet, ToolCallFinalResult):
-                    tool_result = packet
+                    level, level_question_num = (
+                        (packet.level, packet.level_question_num)
+                        if packet.level is not None
+                        and packet.level_question_num is not None
+                        else BASIC_KEY
+                    )
+                    info = info_by_subq[
+                        SubQuestionKey(level=level, question_num=level_question_num)
+                    ]
+                    info.tool_result = packet
                 yield cast(ChatPacket, packet)
         logger.debug("Reached end of stream")
     except ValueError as e:
@@ -846,62 +948,119 @@ def stream_chat_message_objects(
         return
 
     except Exception as e:
-        logger.exception("Failed to process chat message.")
-
+        logger.exception(f"Failed to process chat message due to {e}")
         error_msg = str(e)
         stack_trace = traceback.format_exc()
-        client_error_msg = litellm_exception_to_error_msg(e, llm)
-        if llm.config.api_key and len(llm.config.api_key) > 2:
-            error_msg = error_msg.replace(llm.config.api_key, "[REDACTED_API_KEY]")
-            stack_trace = stack_trace.replace(llm.config.api_key, "[REDACTED_API_KEY]")
 
-        yield StreamingError(error=client_error_msg, stack_trace=stack_trace)
+        if isinstance(e, ToolCallException):
+            yield StreamingError(error=error_msg, stack_trace=stack_trace)
+        else:
+            if llm:
+                client_error_msg = litellm_exception_to_error_msg(e, llm)
+                if llm.config.api_key and len(llm.config.api_key) > 2:
+                    error_msg = error_msg.replace(
+                        llm.config.api_key, "[REDACTED_API_KEY]"
+                    )
+                    stack_trace = stack_trace.replace(
+                        llm.config.api_key, "[REDACTED_API_KEY]"
+                    )
+
+                yield StreamingError(error=client_error_msg, stack_trace=stack_trace)
+
         db_session.rollback()
         return
 
     # Post-LLM answer processing
     try:
-        logger.debug("Post-LLM answer processing")
-        message_specific_citations: MessageSpecificCitations | None = None
-        if reference_db_search_docs:
-            message_specific_citations = _translate_citations(
-                citations_list=answer.citations,
-                db_docs=reference_db_search_docs,
-            )
-            if not answer.is_cancelled():
-                yield AllCitations(citations=answer.citations)
-
-        # Saving Gen AI answer and responding with message info
         tool_name_to_tool_id: dict[str, int] = {}
         for tool_id, tool_list in tool_dict.items():
             for tool in tool_list:
                 tool_name_to_tool_id[tool.name] = tool_id
 
+        subq_citations = answer.citations_by_subquestion()
+        for subq_key in subq_citations:
+            info = info_by_subq[subq_key]
+            logger.debug("Post-LLM answer processing")
+            if info.reference_db_search_docs:
+                info.message_specific_citations = _translate_citations(
+                    citations_list=subq_citations[subq_key],
+                    db_docs=info.reference_db_search_docs,
+                )
+
+            # TODO: AllCitations should contain subq info?
+            if not answer.is_cancelled():
+                yield AllCitations(citations=subq_citations[subq_key])
+
+        # Saving Gen AI answer and responding with message info
+
+        basic_key = SubQuestionKey(level=BASIC_KEY[0], question_num=BASIC_KEY[1])
+        info = (
+            info_by_subq[basic_key]
+            if basic_key in info_by_subq
+            else info_by_subq[
+                SubQuestionKey(
+                    level=AGENT_SEARCH_INITIAL_KEY[0],
+                    question_num=AGENT_SEARCH_INITIAL_KEY[1],
+                )
+            ]
+        )
         gen_ai_response_message = partial_response(
             message=answer.llm_answer,
             rephrased_query=(
-                qa_docs_response.rephrased_query if qa_docs_response else None
+                info.qa_docs_response.rephrased_query if info.qa_docs_response else None
             ),
-            reference_docs=reference_db_search_docs,
-            files=ai_message_files,
+            reference_docs=info.reference_db_search_docs,
+            files=info.ai_message_files,
             token_count=len(llm_tokenizer_encode_func(answer.llm_answer)),
             citations=(
-                message_specific_citations.citation_map
-                if message_specific_citations
+                info.message_specific_citations.citation_map
+                if info.message_specific_citations
                 else None
             ),
-            error=None,
+            error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
             tool_call=(
                 ToolCall(
-                    tool_id=tool_name_to_tool_id[tool_result.tool_name],
-                    tool_name=tool_result.tool_name,
-                    tool_arguments=tool_result.tool_args,
-                    tool_result=tool_result.tool_result,
+                    tool_id=tool_name_to_tool_id[info.tool_result.tool_name],
+                    tool_name=info.tool_result.tool_name,
+                    tool_arguments=info.tool_result.tool_args,
+                    tool_result=info.tool_result.tool_result,
                 )
-                if tool_result
+                if info.tool_result
                 else None
             ),
         )
+
+        # add answers for levels >= 1, where each level has the previous as its parent. Use
+        # the answer_by_level method in answer.py to get the answers for each level
+        next_level = 1
+        prev_message = gen_ai_response_message
+        agent_answers = answer.llm_answer_by_level()
+        while next_level in agent_answers:
+            next_answer = agent_answers[next_level]
+            info = info_by_subq[
+                SubQuestionKey(
+                    level=next_level, question_num=AGENT_SEARCH_INITIAL_KEY[1]
+                )
+            ]
+            next_answer_message = create_new_chat_message(
+                chat_session_id=chat_session_id,
+                parent_message=prev_message,
+                message=next_answer,
+                prompt_id=None,
+                token_count=len(llm_tokenizer_encode_func(next_answer)),
+                message_type=MessageType.ASSISTANT,
+                db_session=db_session,
+                files=info.ai_message_files,
+                reference_docs=info.reference_db_search_docs,
+                citations=info.message_specific_citations.citation_map
+                if info.message_specific_citations
+                else None,
+                error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
+                refined_answer_improvement=refined_answer_improvement,
+                is_agentic=True,
+            )
+            next_level += 1
+            prev_message = next_answer_message
 
         logger.debug("Committing messages")
         db_session.commit()  # actually save user / assistant message

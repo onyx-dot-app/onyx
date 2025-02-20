@@ -12,7 +12,32 @@ env:
   BUILDKIT_PROGRESS: plain
 
 jobs:
+  # 1) Preliminary job to check if the changed files are relevant
+  check_model_server_changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check if relevant files changed
+        id: check
+        run: |
+          # Default to "false"
+          echo "changed=false" >> $GITHUB_OUTPUT
+
+          # Compare the previous commit (github.event.before) to the current one (github.sha)
+          # If any file in backend/model_server/** or backend/Dockerfile.model_server is changed,
+          # set changed=true
+          if git diff --name-only ${{ github.event.before }} ${{ github.sha }} \
+             | grep -E '^backend/model_server/|^backend/Dockerfile.model_server'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
   build-amd64:
+    needs: [check_model_server_changes]
+    if: needs.check_model_server_changes.outputs.changed == 'true'
     runs-on:
       [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-amd64"]
     steps:
@@ -52,6 +77,8 @@ jobs:
           provenance: false
 
   build-arm64:
+    needs: [check_model_server_changes]
+    if: needs.check_model_server_changes.outputs.changed == 'true'
     runs-on:
       [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-arm64"]
     steps:
@@ -91,7 +118,8 @@ jobs:
           provenance: false
 
   merge-and-scan:
-    needs: [build-amd64, build-arm64]
+    needs: [build-amd64, build-arm64, check_model_server_changes]
+    if: needs.check_model_server_changes.outputs.changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Login to Docker Hub

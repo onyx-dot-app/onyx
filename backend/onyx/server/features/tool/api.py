@@ -41,6 +41,16 @@ def _validate_tool_definition(definition: dict[str, Any]) -> None:
         raise HTTPException(status_code=400, detail=str(e))
 
 
+def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> None:
+    if tool_data.passthrough_auth and tool_data.custom_headers:
+        for header in tool_data.custom_headers:
+            if header.key.lower() == "authorization":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot use passthrough auth with custom authorization headers",
+                )
+
+
 @admin_router.post("/custom")
 def create_custom_tool(
     tool_data: CustomToolCreate,
@@ -48,6 +58,7 @@ def create_custom_tool(
     user: User | None = Depends(current_admin_user),
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
+    _validate_auth_settings(tool_data)
     tool = create_tool(
         name=tool_data.name,
         description=tool_data.description,
@@ -55,6 +66,7 @@ def create_custom_tool(
         custom_headers=tool_data.custom_headers,
         user_id=user.id if user else None,
         db_session=db_session,
+        passthrough_auth=tool_data.passthrough_auth,
     )
     return ToolSnapshot.from_model(tool)
 
@@ -68,6 +80,7 @@ def update_custom_tool(
 ) -> ToolSnapshot:
     if tool_data.definition:
         _validate_tool_definition(tool_data.definition)
+    _validate_auth_settings(tool_data)
     updated_tool = update_tool(
         tool_id=tool_id,
         name=tool_data.name,
@@ -76,6 +89,7 @@ def update_custom_tool(
         custom_headers=tool_data.custom_headers,
         user_id=user.id if user else None,
         db_session=db_session,
+        passthrough_auth=tool_data.passthrough_auth,
     )
     return ToolSnapshot.from_model(updated_tool)
 

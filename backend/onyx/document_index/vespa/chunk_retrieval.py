@@ -231,21 +231,22 @@ def _get_chunks_via_visit_api(
     return document_chunks
 
 
-@retry(tries=10, delay=1, backoff=2)
-def get_all_vespa_ids_for_document_id(
-    document_id: str,
-    index_name: str,
-    filters: IndexFilters | None = None,
-    get_large_chunks: bool = False,
-) -> list[str]:
-    document_chunks = _get_chunks_via_visit_api(
-        chunk_request=VespaChunkRequest(document_id=document_id),
-        index_name=index_name,
-        filters=filters or IndexFilters(access_control_list=None),
-        field_names=[DOCUMENT_ID],
-        get_large_chunks=get_large_chunks,
-    )
-    return [chunk["id"].split("::", 1)[-1] for chunk in document_chunks]
+# TODO(rkuo): candidate for removal if not being used
+# @retry(tries=10, delay=1, backoff=2)
+# def get_all_vespa_ids_for_document_id(
+#     document_id: str,
+#     index_name: str,
+#     filters: IndexFilters | None = None,
+#     get_large_chunks: bool = False,
+# ) -> list[str]:
+#     document_chunks = _get_chunks_via_visit_api(
+#         chunk_request=VespaChunkRequest(document_id=document_id),
+#         index_name=index_name,
+#         filters=filters or IndexFilters(access_control_list=None),
+#         field_names=[DOCUMENT_ID],
+#         get_large_chunks=get_large_chunks,
+#     )
+#     return [chunk["id"].split("::", 1)[-1] for chunk in document_chunks]
 
 
 def parallel_visit_api_retrieval(

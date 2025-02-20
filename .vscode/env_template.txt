@@ -52,3 +52,9 @@ BING_API_KEY=<REPLACE THIS>
 # Enable the full set of Danswer Enterprise Edition features
 # NOTE: DO NOT ENABLE THIS UNLESS YOU HAVE A PAID ENTERPRISE LICENSE (or if you are using this for local testing/development)
 ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=False
+
+# Agent Search configs  # TODO: Remove give proper namings
+AGENT_RETRIEVAL_STATS=False   # Note: This setting will incur substantial re-ranking effort
+AGENT_RERANKING_STATS=True
+AGENT_MAX_QUERY_RETRIEVAL_RESULTS=20
+AGENT_RERANKING_MAX_QUERY_RETRIEVAL_RESULTS=20

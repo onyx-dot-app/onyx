@@ -60,6 +60,7 @@ class PersonaUpsertRequest(BaseModel):
     description: str
     system_prompt: str
     task_prompt: str
+    datetime_aware: bool
     document_set_ids: list[int]
     num_chunks: float
     include_citations: bool
@@ -111,7 +112,7 @@ class PersonaSnapshot(BaseModel):
     uploaded_image_id: str | None = None
     is_default_persona: bool
     search_start_date: datetime | None = None
-    labels: list["PersonaLabelSnapshot"]
+    labels: list["PersonaLabelSnapshot"] = []
 
     @classmethod
     def from_model(

@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
+from pydantic import model_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
@@ -150,6 +151,16 @@ class Document(DocumentBase):
     id: str  # This must be unique or during indexing/reindexing, chunks will be overwritten
     source: DocumentSource
 
+    def get_total_char_length(self) -> int:
+        """Calculate the total character length of the document including sections, metadata, and identifiers."""
+        section_length = sum(len(section.text) for section in self.sections)
+        identifier_length = len(self.semantic_identifier) + len(self.title or "")
+        metadata_length = sum(
+            len(k) + len(v) if isinstance(v, str) else len(k) + sum(len(x) for x in v)
+            for k, v in self.metadata.items()
+        )
+        return section_length + identifier_length + metadata_length
+
     def to_short_descriptor(self) -> str:
         """Used when logging the identity of a document"""
         return f"ID: '{self.id}'; Semantic ID: '{self.semantic_identifier}'"
@@ -177,36 +188,48 @@ class SlimDocument(BaseModel):
     perm_sync_data: Any | None = None
 
 
-class DocumentErrorSummary(BaseModel):
-    id: str
-    semantic_id: str
-    section_link: str | None
-
-    @classmethod
-    def from_document(cls, doc: Document) -> "DocumentErrorSummary":
-        section_link = doc.sections[0].link if len(doc.sections) > 0 else None
-        return cls(
-            id=doc.id, semantic_id=doc.semantic_identifier, section_link=section_link
-        )
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "DocumentErrorSummary":
-        return cls(
-            id=str(data.get("id")),
-            semantic_id=str(data.get("semantic_id")),
-            section_link=str(data.get("section_link")),
-        )
-
-    def to_dict(self) -> dict[str, str | None]:
-        return {
-            "id": self.id,
-            "semantic_id": self.semantic_id,
-            "section_link": self.section_link,
-        }
-
-
 class IndexAttemptMetadata(BaseModel):
     batch_num: int | None = None
-    num_exceptions: int = 0
     connector_id: int
     credential_id: int
+
+
+class ConnectorCheckpoint(BaseModel):
+    # TODO: maybe move this to something disk-based to handle extremely large checkpoints?
+    checkpoint_content: dict
+    has_more: bool
+
+    @classmethod
+    def build_dummy_checkpoint(cls) -> "ConnectorCheckpoint":
+        return ConnectorCheckpoint(checkpoint_content={}, has_more=True)
+
+
+class DocumentFailure(BaseModel):
+    document_id: str
+    document_link: str | None = None
+
+
+class EntityFailure(BaseModel):
+    entity_id: str
+    missed_time_range: tuple[datetime, datetime] | None = None
+
+
+class ConnectorFailure(BaseModel):
+    failed_document: DocumentFailure | None = None
+    failed_entity: EntityFailure | None = None
+    failure_message: str
+    exception: Exception | None = None
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    @model_validator(mode="before")
+    def check_failed_fields(cls, values: dict) -> dict:
+        failed_document = values.get("failed_document")
+        failed_entity = values.get("failed_entity")
+        if (failed_document is None and failed_entity is None) or (
+            failed_document is not None and failed_entity is not None
+        ):
+            raise ValueError(
+                "Exactly one of 'failed_document' or 'failed_entity' must be specified."
+            )
+        return values

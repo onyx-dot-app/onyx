@@ -33,7 +33,9 @@ export const ConnectorEditor = ({
           w-fit 
           flex 
           cursor-pointer ` +
-                (isSelected ? " bg-hover" : " hover:bg-hover-light")
+                (isSelected
+                  ? " bg-accent-background-hovered"
+                  : " hover:bg-accent-background")
               }
               onClick={() => {
                 if (isSelected) {

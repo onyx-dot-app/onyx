@@ -116,8 +116,8 @@ const RerankingDetailsForm = forwardRef<
                     onClick={() => setModelTab("cloud")}
                     className={`mr-2 p-2 font-bold  ${
                       modelTab == "cloud"
-                        ? "rounded bg-background-900 text-text-100 underline"
-                        : " hover:underline bg-background-100"
+                        ? "rounded bg-neutral-900 dark:bg-neutral-950 text-neutral-100 dark:text-neutral-300 underline"
+                        : " hover:underline bg-neutral-100 dark:bg-neutral-900"
                     }`}
                   >
                     Cloud-based
@@ -129,8 +129,8 @@ const RerankingDetailsForm = forwardRef<
                     onClick={() => setModelTab("open")}
                     className={` mx-2 p-2 font-bold  ${
                       modelTab == "open"
-                        ? "rounded bg-background-900 text-text-100 underline"
-                        : "hover:underline bg-background-100"
+                        ? "rounded bg-neutral-900 dark:bg-neutral-950 text-neutral-100 dark:text-neutral-300 underline"
+                        : "hover:underline bg-neutral-100 dark:bg-neutral-900"
                     }`}
                   >
                     Self-hosted
@@ -140,7 +140,7 @@ const RerankingDetailsForm = forwardRef<
                   <div className="px-2">
                     <button
                       onClick={() => resetRerankingValues()}
-                      className="mx-2 p-2 font-bold   rounded bg-background-100 text-text-900 hover:underline"
+                      className={`mx-2 p-2 font-bold rounded bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 hover:underline`}
                     >
                       Remove Reranking
                     </button>
@@ -177,8 +177,8 @@ const RerankingDetailsForm = forwardRef<
                         key={`${card.rerank_provider_type}-${card.modelName}`}
                         className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 ${
                           isSelected
-                            ? "border-blue-500 bg-blue-50 shadow-md"
-                            : "border-gray-200 hover:border-blue-300 hover:shadow-sm"
+                            ? "border-blue-800 bg-blue-50 dark:bg-blue-950 dark:border-blue-700 shadow-md"
+                            : "border-background-200 hover:border-blue-300 hover:shadow-sm dark:border-neutral-700 dark:hover:border-blue-300"
                         }`}
                         onClick={() => {
                           if (
@@ -240,10 +240,10 @@ const RerankingDetailsForm = forwardRef<
                             </a>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600 mb-2">
+                        <p className="text-sm text-text-600 mb-2">
                           {card.description}
                         </p>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-text-500">
                           {card.cloud ? "Cloud-based" : "Self-hosted"}
                         </div>
                       </div>

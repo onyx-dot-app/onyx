@@ -33,10 +33,14 @@ function PersonaItem({
           mx-1
           select-none 
           cursor-pointer 
-          text-emphasis
+          text-text-darker
           bg-background
-          hover:bg-hover-light
-          ${isSelected ? "bg-hover text-selected-emphasis" : ""}
+          hover:bg-accent-background
+          ${
+            isSelected
+              ? "bg-accent-background-hovered text-selected-emphasis"
+              : ""
+          }
         `}
         onClick={() => {
           onSelect(id);
@@ -51,7 +55,10 @@ function PersonaItem({
       </div>
       {isOwner && (
         <Link href={`/assistants/edit/${id}`} className="mx-2 my-auto">
-          <FiEdit2 className="hover:bg-hover p-0.5 my-auto" size={20} />
+          <FiEdit2
+            className="hover:bg-accent-background-hovered p-0.5 my-auto"
+            size={20}
+          />
         </Link>
       )}
     </div>
@@ -130,7 +137,7 @@ export function ChatPersonaSelector({
         </div>
       }
     >
-      <div className="select-none text-xl text-strong font-bold flex px-2 rounded cursor-pointer hover:bg-hover-light">
+      <div className="select-none text-xl text-strong font-bold flex px-2 rounded cursor-pointer hover:bg-accent-background">
         <div className="mt-auto">
           {currentlySelectedPersona?.name || "Default"}
         </div>

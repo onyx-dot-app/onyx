@@ -99,7 +99,7 @@ def _check_tokenizer_cache(
 
         if not tokenizer:
             logger.info(
-                f"Falling back to default embedding model: {DOCUMENT_ENCODER_MODEL}"
+                f"Falling back to default embedding model tokenizer: {DOCUMENT_ENCODER_MODEL}"
             )
             tokenizer = HuggingFaceTokenizer(DOCUMENT_ENCODER_MODEL)
 

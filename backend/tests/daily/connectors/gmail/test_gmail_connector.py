@@ -110,6 +110,8 @@ def test_docs_retrieval(
 
     for doc in retrieved_docs:
         id = doc.id
+        retrieved_primary_owner_emails: set[str | None] = set()
+        retrieved_secondary_owner_emails: set[str | None] = set()
         if doc.primary_owners:
             retrieved_primary_owner_emails = set(
                 [owner.email for owner in doc.primary_owners]

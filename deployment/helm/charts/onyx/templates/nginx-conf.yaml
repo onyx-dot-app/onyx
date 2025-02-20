@@ -5,11 +5,11 @@ metadata:
 data:
   nginx.conf: |
     upstream api_server {
-        server {{ include "onyx-stack.fullname" . }}-api-service:{{ .Values.api.service.port }} fail_timeout=0;
+        server {{ include "onyx-stack.fullname" . }}-api-service:{{ .Values.api.service.servicePort }} fail_timeout=0;
     }
 
     upstream web_server {
-        server {{ include "onyx-stack.fullname" . }}-webserver:{{ .Values.webserver.service.port }} fail_timeout=0;
+        server {{ include "onyx-stack.fullname" . }}-webserver:{{ .Values.webserver.service.servicePort }} fail_timeout=0;
     }
 
     server {

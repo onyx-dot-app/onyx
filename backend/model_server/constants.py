@@ -28,3 +28,9 @@ class EmbeddingModelTextType:
     @staticmethod
     def get_type(provider: EmbeddingProvider, text_type: EmbedTextType) -> str:
         return EmbeddingModelTextType.PROVIDER_TEXT_TYPE_MAP[provider][text_type]
+
+
+class GPUStatus:
+    CUDA = "cuda"
+    MAC_MPS = "mps"
+    NONE = "none"

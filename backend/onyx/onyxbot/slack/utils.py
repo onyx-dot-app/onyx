@@ -518,7 +518,7 @@ def read_slack_thread(
             message_type = MessageType.USER
         else:
             self_slack_bot_id = get_onyx_bot_slack_bot_id(client)
-
+            blocks: Any
             if reply.get("user") == self_slack_bot_id:
                 # OnyxBot response
                 message_type = MessageType.ASSISTANT
@@ -583,7 +583,7 @@ def slack_usage_report(
         logger.warning("Unable to find sender email")
 
     if sender_email is not None:
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             onyx_user = get_user_by_email(email=sender_email, db_session=db_session)
 
     optional_telemetry(

@@ -1,6 +1,8 @@
 import time
 from datetime import datetime
 from datetime import timezone
+from typing import Any
+from typing import cast
 
 import redis
 from celery import Celery
@@ -19,8 +21,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxRedisConstants
 from onyx.db.engine import get_db_current_time
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
@@ -37,7 +40,6 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_connector_index import RedisConnectorIndexPayload
 from onyx.redis.redis_pool import redis_lock_dump
-from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -91,42 +93,40 @@ def get_unfenced_index_attempt_ids(db_session: Session, r: redis.Redis) -> list[
     return unfenced_attempts
 
 
-class IndexingCallback(IndexingHeartbeatInterface):
+class IndexingCallbackBase(IndexingHeartbeatInterface):
     PARENT_CHECK_INTERVAL = 60
 
     def __init__(
         self,
         parent_pid: int,
-        stop_key: str,
-        generator_progress_key: str,
+        redis_connector: RedisConnector,
         redis_lock: RedisLock,
         redis_client: Redis,
     ):
         super().__init__()
         self.parent_pid = parent_pid
+        self.redis_connector: RedisConnector = redis_connector
         self.redis_lock: RedisLock = redis_lock
-        self.stop_key: str = stop_key
-        self.generator_progress_key: str = generator_progress_key
         self.redis_client = redis_client
         self.started: datetime = datetime.now(timezone.utc)
         self.redis_lock.reacquire()
 
-        self.last_tag: str = "IndexingCallback.__init__"
+        self.last_tag: str = f"{self.__class__.__name__}.__init__"
         self.last_lock_reacquire: datetime = datetime.now(timezone.utc)
         self.last_lock_monotonic = time.monotonic()
 
         self.last_parent_check = time.monotonic()
 
     def should_stop(self) -> bool:
-        if self.redis_client.exists(self.stop_key):
+        if self.redis_connector.stop.fenced:
             return True
 
         return False
 
     def progress(self, tag: str, amount: int) -> None:
         # rkuo: this shouldn't be necessary yet because we spawn the process this runs inside
-        # with daemon = True. It seems likely some indexing tasks will need to spawn other processes eventually
-        # so leave this code in until we're ready to test it.
+        # with daemon=True. It seems likely some indexing tasks will need to spawn other processes
+        # eventually, which daemon=True prevents, so leave this code in until we're ready to test it.
 
         # if self.parent_pid:
         #     # check if the parent pid is alive so we aren't running as a zombie
@@ -152,7 +152,7 @@ class IndexingCallback(IndexingHeartbeatInterface):
             self.last_tag = tag
         except LockError:
             logger.exception(
-                f"IndexingCallback - lock.reacquire exceptioned: "
+                f"{self.__class__.__name__} - lock.reacquire exceptioned: "
                 f"lock_timeout={self.redis_lock.timeout} "
                 f"start={self.started} "
                 f"last_tag={self.last_tag} "
@@ -163,7 +163,27 @@ class IndexingCallback(IndexingHeartbeatInterface):
             redis_lock_dump(self.redis_lock, self.redis_client)
             raise
 
-        self.redis_client.incrby(self.generator_progress_key, amount)
+
+class IndexingCallback(IndexingCallbackBase):
+    def __init__(
+        self,
+        parent_pid: int,
+        redis_connector: RedisConnector,
+        redis_lock: RedisLock,
+        redis_client: Redis,
+        redis_connector_index: RedisConnectorIndex,
+    ):
+        super().__init__(parent_pid, redis_connector, redis_lock, redis_client)
+
+        self.redis_connector_index: RedisConnectorIndex = redis_connector_index
+
+    def progress(self, tag: str, amount: int) -> None:
+        self.redis_connector_index.set_active()
+        self.redis_connector_index.set_connector_active()
+        super().progress(tag, amount)
+        self.redis_client.incrby(
+            self.redis_connector_index.generator_progress_key, amount
+        )
 
 
 def validate_indexing_fence(
@@ -234,7 +254,8 @@ def validate_indexing_fence(
         # it would be odd to get here as there isn't that much that can go wrong during
         # initial fence setup, but it's still worth making sure we can recover
         logger.info(
-            f"validate_indexing_fence - Resetting fence in basic state without any activity: fence={fence_key}"
+            f"validate_indexing_fence - "
+            f"Resetting fence in basic state without any activity: fence={fence_key}"
         )
         redis_connector_index.reset()
         return
@@ -291,21 +312,27 @@ def validate_indexing_fence(
 
 def validate_indexing_fences(
     tenant_id: str | None,
-    celery_app: Celery,
-    r: Redis,
+    r_replica: Redis,
     r_celery: Redis,
     lock_beat: RedisLock,
 ) -> None:
+    """Validates all indexing fences for this tenant ... aka makes sure
+    indexing tasks sent to celery are still in flight.
+    """
     reserved_indexing_tasks = celery_get_unacked_task_ids(
         OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
     )
 
-    # validate all existing indexing jobs
-    for key_bytes in r.scan_iter(
-        RedisConnectorIndex.FENCE_PREFIX + "*", count=SCAN_ITER_COUNT_DEFAULT
-    ):
-        lock_beat.reacquire()
-        with get_session_with_tenant(tenant_id) as db_session:
+    # Use replica for this because the worst thing that happens
+    # is that we don't run the validation on this pass
+    keys = cast(set[Any], r_replica.smembers(OnyxRedisConstants.ACTIVE_FENCES))
+    for key in keys:
+        key_bytes = cast(bytes, key)
+        key_str = key_bytes.decode("utf-8")
+        if not key_str.startswith(RedisConnectorIndex.FENCE_PREFIX):
+            continue
+
+        with get_session_with_current_tenant() as db_session:
             validate_indexing_fence(
                 tenant_id,
                 key_bytes,
@@ -313,6 +340,9 @@ def validate_indexing_fences(
                 r_celery,
                 db_session,
             )
+
+        lock_beat.reacquire()
+
     return
 
 
@@ -435,6 +465,7 @@ def try_creating_indexing_task(
     if not acquired:
         return None
 
+    redis_connector_index: RedisConnectorIndex
     try:
         redis_connector = RedisConnector(tenant_id, cc_pair.id)
         redis_connector_index = redis_connector.new_index(search_settings.id)

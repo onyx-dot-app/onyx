@@ -28,7 +28,7 @@ def get_tenant_id_for_email(email: str) -> str:
 
 
 def user_owns_a_tenant(email: str) -> bool:
-    with get_session_with_tenant(POSTGRES_DEFAULT_SCHEMA) as db_session:
+    with get_session_with_tenant(tenant_id=None) as db_session:
         result = (
             db_session.query(UserTenantMapping)
             .filter(UserTenantMapping.email == email)
@@ -38,7 +38,7 @@ def user_owns_a_tenant(email: str) -> bool:
 
 
 def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
-    with get_session_with_tenant(POSTGRES_DEFAULT_SCHEMA) as db_session:
+    with get_session_with_tenant(tenant_id=None) as db_session:
         try:
             for email in emails:
                 db_session.add(UserTenantMapping(email=email, tenant_id=tenant_id))
@@ -48,7 +48,7 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
 
 
 def remove_users_from_tenant(emails: list[str], tenant_id: str) -> None:
-    with get_session_with_tenant(POSTGRES_DEFAULT_SCHEMA) as db_session:
+    with get_session_with_tenant(tenant_id=None) as db_session:
         try:
             mappings_to_delete = (
                 db_session.query(UserTenantMapping)
@@ -71,7 +71,7 @@ def remove_users_from_tenant(emails: list[str], tenant_id: str) -> None:
 
 
 def remove_all_users_from_tenant(tenant_id: str) -> None:
-    with get_session_with_tenant(POSTGRES_DEFAULT_SCHEMA) as db_session:
+    with get_session_with_tenant(tenant_id=None) as db_session:
         db_session.query(UserTenantMapping).filter(
             UserTenantMapping.tenant_id == tenant_id
         ).delete()

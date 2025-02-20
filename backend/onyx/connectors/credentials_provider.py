@@ -55,7 +55,7 @@ class OnyxDBCredentialsProvider(
         return str(self._credential_id)
 
     def get_credentials(self) -> dict[str, Any]:
-        with get_session_with_tenant(self._tenant_id) as db_session:
+        with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
             credential = db_session.execute(
                 select(Credential).where(Credential.id == self._credential_id)
             ).scalar_one()
@@ -68,7 +68,7 @@ class OnyxDBCredentialsProvider(
             return credential.credential_json
 
     def set_credentials(self, credential_json: dict[str, Any]) -> None:
-        with get_session_with_tenant(self._tenant_id) as db_session:
+        with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
             try:
                 credential = db_session.execute(
                     select(Credential)

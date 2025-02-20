@@ -1,5 +1,8 @@
+import mimetypes
 import os
 import uuid
+import zipfile
+from io import BytesIO
 from typing import cast
 
 from fastapi import APIRouter
@@ -19,11 +22,13 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.background.celery.versioned_apps.primary import app as primary_app
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
+from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.google_utils.google_auth import (
     get_google_oauth_creds,
 )
@@ -57,6 +62,7 @@ from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TO
 from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
+from onyx.connectors.interfaces import ConnectorValidationError
 from onyx.db.connector import create_connector
 from onyx.db.connector import delete_connector
 from onyx.db.connector import fetch_connector_by_id
@@ -75,7 +81,6 @@ from onyx.db.credentials import delete_service_account_credentials
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
 from onyx.db.document import get_document_counts_for_cc_pairs
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import IndexingMode
@@ -115,6 +120,7 @@ from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -386,10 +392,43 @@ def upload_files(
     for file in files:
         if not file.filename:
             raise HTTPException(status_code=400, detail="File name cannot be empty")
+
+    # Skip directories and known macOS metadata entries
+    def should_process_file(file_path: str) -> bool:
+        normalized_path = os.path.normpath(file_path)
+        return not any(part.startswith(".") for part in normalized_path.split(os.sep))
+
     try:
         file_store = get_default_file_store(db_session)
         deduped_file_paths = []
+
         for file in files:
+            if file.content_type and file.content_type.startswith("application/zip"):
+                with zipfile.ZipFile(file.file, "r") as zf:
+                    for file_info in zf.namelist():
+                        if zf.getinfo(file_info).is_dir():
+                            continue
+
+                        if not should_process_file(file_info):
+                            continue
+
+                        sub_file_bytes = zf.read(file_info)
+                        sub_file_name = os.path.join(str(uuid.uuid4()), file_info)
+                        deduped_file_paths.append(sub_file_name)
+
+                        mime_type, __ = mimetypes.guess_type(file_info)
+                        if mime_type is None:
+                            mime_type = "application/octet-stream"
+
+                        file_store.save_file(
+                            file_name=sub_file_name,
+                            content=BytesIO(sub_file_bytes),
+                            display_name=os.path.basename(file_info),
+                            file_origin=FileOrigin.CONNECTOR,
+                            file_type=mime_type,
+                        )
+                continue
+
             file_path = os.path.join(str(uuid.uuid4()), cast(str, file.filename))
             deduped_file_paths.append(file_path)
             file_store.save_file(
@@ -573,9 +612,19 @@ def get_connector_indexing_status(
     get_editable: bool = Query(
         False, description="If true, return editable document sets"
     ),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> list[ConnectorIndexingStatus]:
+    tenant_id = get_current_tenant_id()
     indexing_statuses: list[ConnectorIndexingStatus] = []
+
+    if MOCK_CONNECTOR_FILE_PATH:
+        import json
+
+        with open(MOCK_CONNECTOR_FILE_PATH, "r") as f:
+            raw_data = json.load(f)
+            connector_indexing_statuses = [
+                ConnectorIndexingStatus(**status) for status in raw_data
+            ]
+        return connector_indexing_statuses
 
     # NOTE: If the connector is deleting behind the scenes,
     # accessing cc_pairs can be inconsistent and members like
@@ -727,8 +776,9 @@ def create_connector_from_model(
     connector_data: ConnectorUpdateRequest,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_current_tenant_id),
 ) -> ObjectCreationIdResponse:
+    tenant_id = get_current_tenant_id()
+
     try:
         _validate_connector_allowed(connector_data.source)
 
@@ -766,8 +816,9 @@ def create_connector_with_mock_credential(
     connector_data: ConnectorUpdateRequest,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse:
+    tenant_id = get_current_tenant_id()
+
     fetch_ee_implementation_or_noop(
         "onyx.db.user_group", "validate_object_creation_for_user", None
     )(
@@ -795,14 +846,37 @@ def create_connector_with_mock_credential(
             db_session=db_session,
         )
 
+        # Store the created connector and credential IDs
+        connector_id = cast(int, connector_response.id)
+        credential_id = credential.id
+
+        validate_ccpair_for_user(
+            connector_id=connector_id,
+            credential_id=credential_id,
+            db_session=db_session,
+            user=user,
+            tenant_id=tenant_id,
+        )
         response = add_credential_to_connector(
             db_session=db_session,
             user=user,
-            connector_id=cast(int, connector_response.id),  # will aways be an int
-            credential_id=credential.id,
+            connector_id=connector_id,
+            credential_id=credential_id,
             access_type=connector_data.access_type,
             cc_pair_name=connector_data.name,
             groups=connector_data.groups,
+        )
+
+        # trigger indexing immediately
+        primary_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_INDEXING,
+            priority=OnyxCeleryPriority.HIGH,
+            kwargs={"tenant_id": tenant_id},
+        )
+
+        logger.info(
+            f"create_connector_with_mock_credential - running check_for_indexing: "
+            f"cc_pair={response.data}"
         )
 
         create_milestone_and_report(
@@ -812,9 +886,12 @@ def create_connector_with_mock_credential(
             properties=None,
             db_session=db_session,
         )
-
         return response
 
+    except ConnectorValidationError as e:
+        raise HTTPException(
+            status_code=400, detail="Connector validation error: " + str(e)
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -885,10 +962,10 @@ def connector_run_once(
     run_info: RunConnectorRequest,
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse[int]:
     """Used to trigger indexing on a set of cc_pairs associated with a
     single connector."""
+    tenant_id = get_current_tenant_id()
 
     connector_id = run_info.connector_id
     specified_credential_ids = run_info.credential_ids
@@ -968,6 +1045,8 @@ def connector_run_once(
         priority=OnyxCeleryPriority.HIGH,
         kwargs={"tenant_id": tenant_id},
     )
+
+    logger.info("connector_run_once - running check_for_indexing")
 
     msg = f"Marked {num_triggers} index attempts with indexing triggers."
     return StatusResponse(

@@ -1,245 +1,138 @@
+from collections import defaultdict
 from collections.abc import Callable
-from collections.abc import Iterator
-from uuid import uuid4
+from uuid import UUID
 
-from langchain.schema.messages import BaseMessage
-from langchain_core.messages import AIMessageChunk
-from langchain_core.messages import ToolCall
+from sqlalchemy.orm import Session
 
-from onyx.chat.llm_response_handler import LLMResponseHandlerManager
-from onyx.chat.models import AnswerQuestionPossibleReturn
+from onyx.agents.agent_search.models import GraphConfig
+from onyx.agents.agent_search.models import GraphInputs
+from onyx.agents.agent_search.models import GraphPersistence
+from onyx.agents.agent_search.models import GraphSearchConfig
+from onyx.agents.agent_search.models import GraphTooling
+from onyx.agents.agent_search.run_graph import run_basic_graph
+from onyx.agents.agent_search.run_graph import run_main_graph
+from onyx.chat.models import AgentAnswerPiece
+from onyx.chat.models import AnswerPacket
+from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationInfo
 from onyx.chat.models import OnyxAnswerPiece
-from onyx.chat.models import PromptConfig
+from onyx.chat.models import StreamStopInfo
+from onyx.chat.models import StreamStopReason
+from onyx.chat.models import SubQuestionKey
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
-from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
-from onyx.chat.prompt_builder.answer_prompt_builder import LLMCall
-from onyx.chat.stream_processing.answer_response_handler import (
-    CitationResponseHandler,
-)
-from onyx.chat.stream_processing.answer_response_handler import (
-    DummyAnswerResponseHandler,
-)
-from onyx.chat.stream_processing.utils import (
-    map_document_id_order,
-)
-from onyx.chat.tool_handling.tool_response_handler import ToolResponseHandler
+from onyx.configs.constants import BASIC_KEY
+from onyx.context.search.models import SearchRequest
 from onyx.file_store.utils import InMemoryChatFile
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import PreviousMessage
-from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.tools.force import ForceUseTool
-from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.search.search_tool import QUERY_FIELD
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_runner import ToolCallKickoff
 from onyx.tools.utils import explicit_tool_calling_supported
+from onyx.utils.gpu_utils import gpu_status_request
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
-
-AnswerStream = Iterator[AnswerQuestionPossibleReturn | ToolCallKickoff | ToolResponse]
+BASIC_SQ_KEY = SubQuestionKey(level=BASIC_KEY[0], question_num=BASIC_KEY[1])
 
 
 class Answer:
     def __init__(
         self,
-        question: str,
+        prompt_builder: AnswerPromptBuilder,
         answer_style_config: AnswerStyleConfig,
         llm: LLM,
-        prompt_config: PromptConfig,
+        fast_llm: LLM,
         force_use_tool: ForceUseTool,
-        # must be the same length as `docs`. If None, all docs are considered "relevant"
-        message_history: list[PreviousMessage] | None = None,
-        single_message_history: str | None = None,
+        search_request: SearchRequest,
+        chat_session_id: UUID,
+        current_agent_message_id: int,
+        db_session: Session,
         # newly passed in files to include as part of this question
         # TODO THIS NEEDS TO BE HANDLED
         latest_query_files: list[InMemoryChatFile] | None = None,
-        files: list[InMemoryChatFile] | None = None,
         tools: list[Tool] | None = None,
         # NOTE: for native tool-calling, this is only supported by OpenAI atm,
         #       but we only support them anyways
         # if set to True, then never use the LLMs provided tool-calling functonality
         skip_explicit_tool_calling: bool = False,
-        # Returns the full document sections text from the search tool
-        return_contexts: bool = False,
         skip_gen_ai_answer_generation: bool = False,
         is_connected: Callable[[], bool] | None = None,
+        use_agentic_search: bool = False,
     ) -> None:
-        if single_message_history and message_history:
-            raise ValueError(
-                "Cannot provide both `message_history` and `single_message_history`"
-            )
-
-        self.question = question
         self.is_connected: Callable[[], bool] | None = is_connected
-
-        self.latest_query_files = latest_query_files or []
-        self.file_id_to_file = {file.file_id: file for file in (files or [])}
-
-        self.tools = tools or []
-        self.force_use_tool = force_use_tool
-
-        self.message_history = message_history or []
-        # used for QA flow where we only want to send a single message
-        self.single_message_history = single_message_history
-
-        self.answer_style_config = answer_style_config
-        self.prompt_config = prompt_config
-
-        self.llm = llm
-        self.llm_tokenizer = get_tokenizer(
-            provider_type=llm.config.model_provider,
-            model_name=llm.config.model_name,
-        )
-
-        self._final_prompt: list[BaseMessage] | None = None
-
-        self._streamed_output: list[str] | None = None
-        self._processed_stream: (
-            list[AnswerQuestionPossibleReturn | ToolResponse | ToolCallKickoff] | None
-        ) = None
-
-        self._return_contexts = return_contexts
-        self.skip_gen_ai_answer_generation = skip_gen_ai_answer_generation
+        self._processed_stream: (list[AnswerPacket] | None) = None
         self._is_cancelled = False
 
-        self.using_tool_calling_llm = (
+        search_tools = [tool for tool in (tools or []) if isinstance(tool, SearchTool)]
+        search_tool: SearchTool | None = None
+
+        if len(search_tools) > 1:
+            # TODO: handle multiple search tools
+            raise ValueError("Multiple search tools found")
+        elif len(search_tools) == 1:
+            search_tool = search_tools[0]
+
+        using_tool_calling_llm = (
             explicit_tool_calling_supported(
-                self.llm.config.model_provider, self.llm.config.model_name
+                llm.config.model_provider, llm.config.model_name
             )
             and not skip_explicit_tool_calling
         )
 
-    def _get_tools_list(self) -> list[Tool]:
-        if not self.force_use_tool.force_use:
-            return self.tools
+        rerank_settings = search_request.rerank_settings
 
-        tool = next(
-            (t for t in self.tools if t.name == self.force_use_tool.tool_name), None
+        using_cloud_reranking = (
+            rerank_settings is not None
+            and rerank_settings.rerank_provider_type is not None
         )
-        if tool is None:
-            raise RuntimeError(f"Tool '{self.force_use_tool.tool_name}' not found")
+        allow_agent_reranking = gpu_status_request() or using_cloud_reranking
 
-        logger.info(
-            f"Forcefully using tool='{tool.name}'"
-            + (
-                f" with args='{self.force_use_tool.args}'"
-                if self.force_use_tool.args is not None
-                else ""
-            )
-        )
-        return [tool]
-
-    def _handle_specified_tool_call(
-        self, llm_calls: list[LLMCall], tool: Tool, tool_args: dict
-    ) -> AnswerStream:
-        current_llm_call = llm_calls[-1]
-
-        # make a dummy tool handler
-        tool_handler = ToolResponseHandler([tool])
-
-        dummy_tool_call_chunk = AIMessageChunk(content="")
-        dummy_tool_call_chunk.tool_calls = [
-            ToolCall(name=tool.name, args=tool_args, id=str(uuid4()))
-        ]
-
-        response_handler_manager = LLMResponseHandlerManager(
-            tool_handler, DummyAnswerResponseHandler(), self.is_cancelled
-        )
-        yield from response_handler_manager.handle_llm_response(
-            iter([dummy_tool_call_chunk])
-        )
-
-        new_llm_call = response_handler_manager.next_llm_call(current_llm_call)
-        if new_llm_call:
-            yield from self._get_response(llm_calls + [new_llm_call])
-        else:
-            raise RuntimeError("Tool call handler did not return a new LLM call")
-
-    def _get_response(self, llm_calls: list[LLMCall]) -> AnswerStream:
-        current_llm_call = llm_calls[-1]
-
-        # handle the case where no decision has to be made; we simply run the tool
+        # TODO: this is a hack to force the query to be used for the search tool
+        #       this should be removed once we fully unify graph inputs (i.e.
+        #       remove SearchQuery entirely)
         if (
-            current_llm_call.force_use_tool.force_use
-            and current_llm_call.force_use_tool.args is not None
+            force_use_tool.force_use
+            and search_tool
+            and force_use_tool.args
+            and force_use_tool.tool_name == search_tool.name
+            and QUERY_FIELD in force_use_tool.args
         ):
-            tool_name, tool_args = (
-                current_llm_call.force_use_tool.tool_name,
-                current_llm_call.force_use_tool.args,
-            )
-            tool = next(
-                (t for t in current_llm_call.tools if t.name == tool_name), None
-            )
-            if not tool:
-                raise RuntimeError(f"Tool '{tool_name}' not found")
+            search_request.query = force_use_tool.args[QUERY_FIELD]
 
-            yield from self._handle_specified_tool_call(llm_calls, tool, tool_args)
-            return
-
-        # special pre-logic for non-tool calling LLM case
-        if not self.using_tool_calling_llm and current_llm_call.tools:
-            chosen_tool_and_args = (
-                ToolResponseHandler.get_tool_call_for_non_tool_calling_llm(
-                    current_llm_call, self.llm
-                )
-            )
-            if chosen_tool_and_args:
-                tool, tool_args = chosen_tool_and_args
-                yield from self._handle_specified_tool_call(llm_calls, tool, tool_args)
-                return
-
-        # if we're skipping gen ai answer generation, we should break
-        # out unless we're forcing a tool call. If we don't, we might generate an
-        # answer, which is a no-no!
-        if (
-            self.skip_gen_ai_answer_generation
-            and not current_llm_call.force_use_tool.force_use
-        ):
-            return
-
-        # set up "handlers" to listen to the LLM response stream and
-        # feed back the processed results + handle tool call requests
-        # + figure out what the next LLM call should be
-        tool_call_handler = ToolResponseHandler(current_llm_call.tools)
-
-        final_search_results, displayed_search_results = SearchTool.get_search_result(
-            current_llm_call
-        ) or ([], [])
-
-        answer_handler = CitationResponseHandler(
-            context_docs=final_search_results,
-            final_doc_id_to_rank_map=map_document_id_order(final_search_results),
-            display_doc_id_to_rank_map=map_document_id_order(displayed_search_results),
+        self.graph_inputs = GraphInputs(
+            search_request=search_request,
+            prompt_builder=prompt_builder,
+            files=latest_query_files,
+            structured_response_format=answer_style_config.structured_response_format,
         )
-
-        response_handler_manager = LLMResponseHandlerManager(
-            tool_call_handler, answer_handler, self.is_cancelled
+        self.graph_tooling = GraphTooling(
+            primary_llm=llm,
+            fast_llm=fast_llm,
+            search_tool=search_tool,
+            tools=tools or [],
+            force_use_tool=force_use_tool,
+            using_tool_calling_llm=using_tool_calling_llm,
         )
-
-        # DEBUG: good breakpoint
-        stream = self.llm.stream(
-            # For tool calling LLMs, we want to insert the task prompt as part of this flow, this is because the LLM
-            # may choose to not call any tools and just generate the answer, in which case the task prompt is needed.
-            prompt=current_llm_call.prompt_builder.build(),
-            tools=[tool.tool_definition() for tool in current_llm_call.tools] or None,
-            tool_choice=(
-                "required"
-                if current_llm_call.tools and current_llm_call.force_use_tool.force_use
-                else None
-            ),
-            structured_response_format=self.answer_style_config.structured_response_format,
+        self.graph_persistence = GraphPersistence(
+            db_session=db_session,
+            chat_session_id=chat_session_id,
+            message_id=current_agent_message_id,
         )
-        yield from response_handler_manager.handle_llm_response(stream)
-
-        new_llm_call = response_handler_manager.next_llm_call(current_llm_call)
-        if new_llm_call:
-            yield from self._get_response(llm_calls + [new_llm_call])
+        self.search_behavior_config = GraphSearchConfig(
+            use_agentic_search=use_agentic_search,
+            skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
+            allow_refinement=True,
+            allow_agent_reranking=allow_agent_reranking,
+        )
+        self.graph_config = GraphConfig(
+            inputs=self.graph_inputs,
+            tooling=self.graph_tooling,
+            persistence=self.graph_persistence,
+            behavior=self.search_behavior_config,
+        )
 
     @property
     def processed_streamed_output(self) -> AnswerStream:
@@ -247,35 +140,23 @@ class Answer:
             yield from self._processed_stream
             return
 
-        prompt_builder = AnswerPromptBuilder(
-            user_message=default_build_user_message(
-                user_query=self.question,
-                prompt_config=self.prompt_config,
-                files=self.latest_query_files,
-                single_message_history=self.single_message_history,
-            ),
-            message_history=self.message_history,
-            llm_config=self.llm.config,
-            raw_user_query=self.question,
-            raw_user_uploaded_files=self.latest_query_files or [],
-            single_message_history=self.single_message_history,
+        run_langgraph = (
+            run_main_graph
+            if self.graph_config.behavior.use_agentic_search
+            else run_basic_graph
         )
-        prompt_builder.update_system_prompt(
-            default_build_system_message(self.prompt_config)
-        )
-        llm_call = LLMCall(
-            prompt_builder=prompt_builder,
-            tools=self._get_tools_list(),
-            force_use_tool=self.force_use_tool,
-            files=self.latest_query_files,
-            tool_call_info=[],
-            using_tool_calling_llm=self.using_tool_calling_llm,
+        stream = run_langgraph(
+            self.graph_config,
         )
 
         processed_stream = []
-        for processed_packet in self._get_response([llm_call]):
-            processed_stream.append(processed_packet)
-            yield processed_packet
+        for packet in stream:
+            if self.is_cancelled():
+                packet = StreamStopInfo(stop_reason=StreamStopReason.CANCELLED)
+                yield packet
+                break
+            processed_stream.append(packet)
+            yield packet
 
         self._processed_stream = processed_stream
 
@@ -283,19 +164,59 @@ class Answer:
     def llm_answer(self) -> str:
         answer = ""
         for packet in self.processed_streamed_output:
-            if isinstance(packet, OnyxAnswerPiece) and packet.answer_piece:
+            # handle basic answer flow, plus level 0 agent answer flow
+            # since level 0 is the first answer the user sees and therefore the
+            # child message of the user message in the db (so it is handled
+            # like a basic flow answer)
+            if (isinstance(packet, OnyxAnswerPiece) and packet.answer_piece) or (
+                isinstance(packet, AgentAnswerPiece)
+                and packet.answer_piece
+                and packet.answer_type == "agent_level_answer"
+                and packet.level == 0
+            ):
                 answer += packet.answer_piece
 
         return answer
+
+    def llm_answer_by_level(self) -> dict[int, str]:
+        answer_by_level: dict[int, str] = defaultdict(str)
+        for packet in self.processed_streamed_output:
+            if (
+                isinstance(packet, AgentAnswerPiece)
+                and packet.answer_piece
+                and packet.answer_type == "agent_level_answer"
+            ):
+                assert packet.level is not None
+                answer_by_level[packet.level] += packet.answer_piece
+            elif isinstance(packet, OnyxAnswerPiece) and packet.answer_piece:
+                answer_by_level[BASIC_KEY[0]] += packet.answer_piece
+        return answer_by_level
 
     @property
     def citations(self) -> list[CitationInfo]:
         citations: list[CitationInfo] = []
         for packet in self.processed_streamed_output:
-            if isinstance(packet, CitationInfo):
+            if isinstance(packet, CitationInfo) and packet.level is None:
                 citations.append(packet)
 
         return citations
+
+    def citations_by_subquestion(self) -> dict[SubQuestionKey, list[CitationInfo]]:
+        citations_by_subquestion: dict[
+            SubQuestionKey, list[CitationInfo]
+        ] = defaultdict(list)
+        basic_subq_key = SubQuestionKey(level=BASIC_KEY[0], question_num=BASIC_KEY[1])
+        for packet in self.processed_streamed_output:
+            if isinstance(packet, CitationInfo):
+                if packet.level_question_num is not None and packet.level is not None:
+                    citations_by_subquestion[
+                        SubQuestionKey(
+                            level=packet.level, question_num=packet.level_question_num
+                        )
+                    ].append(packet)
+                elif packet.level is None:
+                    citations_by_subquestion[basic_subq_key].append(packet)
+        return citations_by_subquestion
 
     def is_cancelled(self) -> bool:
         if self._is_cancelled:

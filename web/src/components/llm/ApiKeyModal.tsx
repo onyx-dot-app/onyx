@@ -3,7 +3,7 @@
 import { ApiKeyForm } from "./ApiKeyForm";
 import { Modal } from "../Modal";
 import { useRouter } from "next/navigation";
-import { useProviderStatus } from "../chat_search/ProviderContext";
+import { useProviderStatus } from "../chat/ProviderContext";
 import { PopupSpec } from "../admin/connectors/Popup";
 
 export const ApiKeyModal = ({
@@ -31,7 +31,7 @@ export const ApiKeyModal = ({
       onOutsideClick={hide ? () => hide() : undefined}
     >
       <>
-        <div className="mb-5 text-sm text-gray-700">
+        <div className="mb-5 text-sm text-neutral-700 dark:text-neutral-200">
           Please provide an API Key – you can always change this or switch
           models later.
           <br />

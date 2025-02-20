@@ -65,27 +65,6 @@ export const useOnyxBotAnalytics = (timeRange: DateRangePickerValue) => {
   };
 };
 
-export const useQueryHistory = ({
-  selectedFeedbackType,
-  timeRange,
-}: {
-  selectedFeedbackType: Feedback | null;
-  timeRange: DateRange;
-}) => {
-  const url = buildApiPath("/api/admin/chat-session-history", {
-    feedback_type: selectedFeedbackType,
-    start: convertDateToStartOfDay(timeRange?.from)?.toISOString(),
-    end: convertDateToEndOfDay(timeRange?.to)?.toISOString(),
-  });
-
-  const swrResponse = useSWR<ChatSessionMinimal[]>(url, errorHandlingFetcher);
-
-  return {
-    ...swrResponse,
-    refreshQueryHistory: () => mutate(url),
-  };
-};
-
 export function getDatesList(startDate: Date): string[] {
   const datesList: string[] = [];
   const endDate = new Date(); // current date

@@ -90,11 +90,11 @@ export function SimplifiedChatInputBar({
               flex
               flex-col
               border
-              border-[#E5E7EB]
+              border-background-200
               rounded-lg
               relative
               text-text-chatbar
-              bg-background-chatbar
+              bg-white
               [&:has(textarea:focus)]::ring-1
               [&:has(textarea:focus)]::ring-black
             "
@@ -146,7 +146,7 @@ export function SimplifiedChatInputBar({
                 resize-none
                 rounded-lg
                 border-0
-                bg-background-chatbar
+                bg-white
                 placeholder:text-text-chatbar-subtle
                 ${
                   textAreaRef.current &&
@@ -232,10 +232,12 @@ export function SimplifiedChatInputBar({
           }}
         >
           <SendIcon
-            size={28}
-            className={`text-emphasis text-white p-1 rounded-full  ${
-              message ? "bg-submit-background" : "bg-disabled-submit-background"
-            } `}
+            size={22}
+            className={`text-neutral-50 dark:text-neutral-900 p-1 my-auto rounded-full ${
+              message
+                ? "bg-neutral-900 dark:bg-neutral-50"
+                : "bg-neutral-500 dark:bg-neutral-400"
+            }`}
           />
         </button>
       </div>
