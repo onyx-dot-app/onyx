@@ -2,6 +2,7 @@ import smtplib
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
 
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import EMAIL_FROM
@@ -152,6 +153,8 @@ def send_email(
     msg["To"] = user_email
     if mail_from:
         msg["From"] = mail_from
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid()
 
     part_text = MIMEText(text_body, "plain")
     part_html = MIMEText(html_body, "html")
