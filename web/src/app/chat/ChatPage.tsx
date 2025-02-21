@@ -1339,7 +1339,7 @@ export function ChatPage({
           searchParams.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
         useExistingUserMessage: isSeededChat,
         useLanggraph:
-          !settings?.settings.pro_search_disabled &&
+          settings?.settings.pro_search_enabled &&
           proSearchEnabled &&
           retrievalEnabled,
       });

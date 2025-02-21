@@ -60,9 +60,8 @@ def count_documents_by_needs_sync(session: Session) -> int:
     This function executes the query and returns the count of
     documents matching the criteria."""
 
-    count = (
-        session.query(func.count(DbDocument.id.distinct()))
-        .select_from(DbDocument)
+    return (
+        session.query(DbDocument.id)
         .join(
             DocumentByConnectorCredentialPair,
             DbDocument.id == DocumentByConnectorCredentialPair.id,
@@ -73,62 +72,52 @@ def count_documents_by_needs_sync(session: Session) -> int:
                 DbDocument.last_synced.is_(None),
             )
         )
-        .scalar()
+        .count()
     )
-
-    return count
 
 
 def construct_document_select_for_connector_credential_pair_by_needs_sync(
     connector_id: int, credential_id: int
 ) -> Select:
-    initial_doc_ids_stmt = select(DocumentByConnectorCredentialPair.id).where(
-        and_(
-            DocumentByConnectorCredentialPair.connector_id == connector_id,
-            DocumentByConnectorCredentialPair.credential_id == credential_id,
-        )
-    )
-
-    stmt = (
+    return (
         select(DbDocument)
-        .where(
-            DbDocument.id.in_(initial_doc_ids_stmt),
-            or_(
-                DbDocument.last_modified
-                > DbDocument.last_synced,  # last_modified is newer than last_synced
-                DbDocument.last_synced.is_(None),  # never synced
-            ),
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
         )
-        .distinct()
+        .where(
+            and_(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+                or_(
+                    DbDocument.last_modified > DbDocument.last_synced,
+                    DbDocument.last_synced.is_(None),
+                ),
+            )
+        )
     )
-
-    return stmt
 
 
 def construct_document_id_select_for_connector_credential_pair_by_needs_sync(
     connector_id: int, credential_id: int
 ) -> Select:
-    initial_doc_ids_stmt = select(DocumentByConnectorCredentialPair.id).where(
-        and_(
-            DocumentByConnectorCredentialPair.connector_id == connector_id,
-            DocumentByConnectorCredentialPair.credential_id == credential_id,
-        )
-    )
-
-    stmt = (
+    return (
         select(DbDocument.id)
-        .where(
-            DbDocument.id.in_(initial_doc_ids_stmt),
-            or_(
-                DbDocument.last_modified
-                > DbDocument.last_synced,  # last_modified is newer than last_synced
-                DbDocument.last_synced.is_(None),  # never synced
-            ),
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
         )
-        .distinct()
+        .where(
+            and_(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+                or_(
+                    DbDocument.last_modified > DbDocument.last_synced,
+                    DbDocument.last_synced.is_(None),
+                ),
+            )
+        )
     )
-
-    return stmt
 
 
 def get_all_documents_needing_vespa_sync_for_cc_pair(
