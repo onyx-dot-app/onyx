@@ -104,18 +104,16 @@ const DocumentDisplay = ({
 };
 
 export function Explorer({
-  initialSearchValue,
   connectors,
   documentSets,
 }: {
-  initialSearchValue: string | undefined;
   connectors: Connector<any>[];
   documentSets: DocumentSet[];
 }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
 
-  const [query, setQuery] = useState(initialSearchValue || "");
+  const [query, setQuery] = useState("");
   const [timeoutId, setTimeoutId] = useState<number | null>(null);
   const [results, setResults] = useState<OnyxDocument[]>([]);
 
@@ -142,6 +140,10 @@ export function Explorer({
       filterManager.selectedTags,
     ]
   );
+
+  useEffect(() => {
+    setQuery("");
+  }, []);
 
   useEffect(() => {
     if (timeoutId !== null) {
@@ -179,7 +181,9 @@ export function Explorer({
             placeholder="Find documents based on title / content..."
             value={query}
             onChange={(event) => {
-              setQuery(event.target.value);
+              setQuery(event.target.value.replace(/\n/g, ""));
+              onSearch(query);
+              event.preventDefault();
             }}
             onKeyDown={(event) => {
               if (
