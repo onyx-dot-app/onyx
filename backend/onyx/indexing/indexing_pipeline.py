@@ -10,6 +10,7 @@ from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.constants import DEFAULT_BOOST
+from onyx.configs.model_configs import USE_CONTENT_CLASSIFICATION
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
@@ -463,8 +464,12 @@ def index_doc_batch(
         chunks_with_embeddings_scores,
         chunk_content_scores,
         chunk_content_classification_failures,
-    ) = _get_aggregated_boost_factor(
-        chunks_with_embeddings, content_classification_model
+    ) = (
+        _get_aggregated_boost_factor(
+            chunks_with_embeddings, content_classification_model
+        )
+        if USE_CONTENT_CLASSIFICATION
+        else (chunks_with_embeddings, [1.0] * len(chunks_with_embeddings), [])
     )
 
     updatable_ids = [doc.id for doc in ctx.updatable_docs]
