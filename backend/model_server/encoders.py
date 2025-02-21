@@ -97,12 +97,22 @@ class CloudEmbedding:
                 )
             return final_embeddings
         except Exception as e:
-            error_string = (
-                f"Error embedding text with OpenAI: {str(e)} \n"
-                f"Model: {model} \n"
-                f"Provider: {self.provider} \n"
-                f"Texts: {texts}"
-            )
+            if isinstance(e, openai.AuthenticationError):
+                # Don't log text on authentication errors
+                error_string = (
+                    f"Exception embedding text with OpenAI - openai.AuthenticationError: "
+                    f"Model: {model} "
+                    f"Provider: {self.provider} "
+                    f"Exception: {e}"
+                )
+            else:
+                error_string = (
+                    f"Exception embedding text with OpenAI:"
+                    f"Model: {model} \n"
+                    f"Provider: {self.provider} \n"
+                    f"Exception: {e} \n"
+                    f"Texts: {texts}"
+                )
             logger.error(error_string)
             raise RuntimeError(error_string)
 
