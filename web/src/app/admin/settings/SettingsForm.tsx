@@ -221,7 +221,7 @@ export function SettingsForm() {
       />
       <Checkbox
         label="Override default temperature"
-        sublabel="If set, users will be able to override the default temperature for each assistant."
+        sublabel="If set, users will be able to override the default temperature for each assistant. This can be overridden by individual user settings."
         checked={settings.temperature_override_enabled}
         onChange={(e) =>
           handleToggleSettingsField(

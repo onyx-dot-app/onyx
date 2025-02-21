@@ -32,7 +32,10 @@ import { getSourceMetadata } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
-import { updateTemperatureOverrideForChatSession } from "@/app/chat/lib";
+import {
+  updateLLMOverrideForChatSession,
+  updateTemperatureOverrideForChatSession,
+} from "@/app/chat/lib";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -391,7 +394,8 @@ LLM Override is as follows (i.e. this order)
 - User preference (defaults to system wide default if no preference set)
 
 On switching to an existing or new chat session or a different assistant:
-- If we have a live assistant after any switch with a model override, use that- otherwise use the above hierarchy
+- If we have a chat session default- use that
+- Otherwise if we have a live assistant after any switch with a model override, use that- otherwise use the above hierarchy
 
 Thus, the input should be
 - User preference
@@ -502,12 +506,16 @@ export function useLlmOverride(
     const provider =
       newOverride.provider ||
       findProviderForModel(llmProviders, newOverride.modelName);
+
     const structuredValue = structureValue(
       newOverride.name,
       provider,
       newOverride.modelName
     );
     setLlmOverride(getValidLlmOverride(structuredValue));
+    if (currentChatSession) {
+      updateLLMOverrideForChatSession(currentChatSession.id, structuredValue);
+    }
   };
 
   const updateModelOverrideForChatSession = (chatSession?: ChatSession) => {
