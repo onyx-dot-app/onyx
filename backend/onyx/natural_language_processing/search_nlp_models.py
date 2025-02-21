@@ -36,10 +36,10 @@ from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import ConnectorClassificationRequest
 from shared_configs.model_server_models import ConnectorClassificationResponse
-from shared_configs.model_server_models import ContentClassificationResponses
 from shared_configs.model_server_models import Embedding
 from shared_configs.model_server_models import EmbedRequest
 from shared_configs.model_server_models import EmbedResponse
+from shared_configs.model_server_models import InformationContentClassificationResponses
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
 from shared_configs.model_server_models import RerankRequest
@@ -378,7 +378,7 @@ class QueryAnalysisModel:
         return response_model.is_keyword, response_model.keywords
 
 
-class ContentClassificationModel:
+class InformationContentClassificationModel:
     def __init__(
         self,
         model_server_host: str = MODEL_SERVER_HOST,
@@ -396,11 +396,11 @@ class ContentClassificationModel:
         response = requests.post(self.content_server_endpoint, json=queries)
         response.raise_for_status()
 
-        response_model = ContentClassificationResponses(
-            content_classifications=response.json()
+        response_model = InformationContentClassificationResponses(
+            information_content_classifications=response.json()
         )
 
-        return response_model.content_classifications
+        return response_model.information_content_classifications
 
 
 class ConnectorClassificationModel:
