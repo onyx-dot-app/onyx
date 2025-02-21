@@ -30,6 +30,7 @@ from onyx.background.celery.celery_redis import celery_find_task
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_queued_task_ids
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.tasks.shared.tasks import OnyxCeleryTaskCompletionStatus
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
@@ -473,6 +474,8 @@ def update_external_document_permissions_task(
 ) -> bool:
     start = time.monotonic()
 
+    completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED
+
     document_external_access = DocExternalAccess.from_dict(
         serialized_doc_external_access
     )
@@ -512,11 +515,19 @@ def update_external_document_permissions_task(
                 f"elapsed={elapsed:.2f}"
             )
 
+        completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
     except Exception:
         task_logger.exception(
-            f"Exception in update_external_document_permissions_task: "
+            f"update_external_document_permissions_task exceptioned: "
             f"connector_id={connector_id} doc_id={doc_id}"
         )
+        completion_status = OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
+    finally:
+        task_logger.info(
+            f"update_external_document_permissions_task completed: status={completion_status.value} doc={doc_id}"
+        )
+
+    if completion_status != OnyxCeleryTaskCompletionStatus.SUCCEEDED:
         return False
 
     return True
