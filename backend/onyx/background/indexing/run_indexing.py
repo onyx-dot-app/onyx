@@ -53,12 +53,14 @@ from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import build_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import (
-    ContentClassificationModel,
+    InformationContentClassificationModel,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.variable_functionality import global_version
+from shared_configs.configs import MODEL_SERVER_HOST
+from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -352,8 +354,8 @@ def _run_indexing(
             callback=callback,
         )
 
-    content_classification_model = ContentClassificationModel(
-        model_server_host="localhost", model_server_port=9000
+    information_content_classification_model = InformationContentClassificationModel(
+        model_server_host=MODEL_SERVER_HOST, model_server_port=MODEL_SERVER_PORT
     )
 
     document_index = get_default_document_index(
@@ -364,7 +366,7 @@ def _run_indexing(
 
     indexing_pipeline = build_indexing_pipeline(
         embedder=embedding_model,
-        content_classification_model=content_classification_model,
+        information_content_classification_model=information_content_classification_model,
         document_index=document_index,
         ignore_time_skip=(
             ctx.from_beginning

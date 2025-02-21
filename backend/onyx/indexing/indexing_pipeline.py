@@ -10,7 +10,7 @@ from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.constants import DEFAULT_BOOST
-from onyx.configs.model_configs import USE_CONTENT_CLASSIFICATION
+from onyx.configs.model_configs import USE_INFORMATION_CONTENT_CLASSIFICATION
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
@@ -47,7 +47,7 @@ from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
 from onyx.natural_language_processing.search_nlp_models import (
-    ContentClassificationModel,
+    InformationContentClassificationModel,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
@@ -131,7 +131,8 @@ def _upsert_documents_in_db(
 
 
 def _get_aggregated_boost_factor(
-    chunks: list[IndexChunk], content_classification_model: ContentClassificationModel
+    chunks: list[IndexChunk],
+    information_content_classification_model: InformationContentClassificationModel,
 ) -> tuple[list[IndexChunk], list[float], list[ConnectorFailure]]:
     """Calculates the aggregated boost factor for a chunk based on its content."""
 
@@ -144,7 +145,9 @@ def _get_aggregated_boost_factor(
     short_chunk_keys = list(short_chunk_content_dict.keys())
 
     try:
-        predictions = content_classification_model.predict(short_chunk_contents)
+        predictions = information_content_classification_model.predict(
+            short_chunk_contents
+        )
         # Create a mapping of chunk positions to their scores
         score_map = {
             short_chunk_keys[i]: score for i, (_, score) in enumerate(predictions)
@@ -167,7 +170,9 @@ def _get_aggregated_boost_factor(
             if len(chunk.content.split()) <= 10:
                 try:
                     chunk_content_scores.append(
-                        content_classification_model.predict([chunk.content])[0][1]
+                        information_content_classification_model.predict(
+                            [chunk.content]
+                        )[0][1]
                     )
                     chunks_with_scores.append(chunk)
                 except Exception as e:
@@ -225,7 +230,7 @@ def index_doc_batch_with_handler(
     *,
     chunker: Chunker,
     embedder: IndexingEmbedder,
-    content_classification_model: ContentClassificationModel,
+    information_content_classification_model: InformationContentClassificationModel,
     document_index: DocumentIndex,
     document_batch: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
@@ -237,7 +242,7 @@ def index_doc_batch_with_handler(
         index_pipeline_result = index_doc_batch(
             chunker=chunker,
             embedder=embedder,
-            content_classification_model=content_classification_model,
+            information_content_classification_model=information_content_classification_model,
             document_index=document_index,
             document_batch=document_batch,
             index_attempt_metadata=index_attempt_metadata,
@@ -387,7 +392,7 @@ def index_doc_batch(
     document_batch: list[Document],
     chunker: Chunker,
     embedder: IndexingEmbedder,
-    content_classification_model: ContentClassificationModel,
+    information_content_classification_model: InformationContentClassificationModel,
     document_index: DocumentIndex,
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
@@ -466,9 +471,9 @@ def index_doc_batch(
         chunk_content_classification_failures,
     ) = (
         _get_aggregated_boost_factor(
-            chunks_with_embeddings, content_classification_model
+            chunks_with_embeddings, information_content_classification_model
         )
-        if USE_CONTENT_CLASSIFICATION
+        if USE_INFORMATION_CONTENT_CLASSIFICATION
         else (chunks_with_embeddings, [1.0] * len(chunks_with_embeddings), [])
     )
 
@@ -612,7 +617,7 @@ def index_doc_batch(
 def build_indexing_pipeline(
     *,
     embedder: IndexingEmbedder,
-    content_classification_model: ContentClassificationModel,
+    information_content_classification_model: InformationContentClassificationModel,
     document_index: DocumentIndex,
     db_session: Session,
     tenant_id: str,
@@ -636,7 +641,7 @@ def build_indexing_pipeline(
         index_doc_batch_with_handler,
         chunker=chunker,
         embedder=embedder,
-        content_classification_model=content_classification_model,
+        information_content_classification_model=information_content_classification_model,
         document_index=document_index,
         ignore_time_skip=ignore_time_skip,
         db_session=db_session,

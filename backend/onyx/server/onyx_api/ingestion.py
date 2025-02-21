@@ -20,7 +20,7 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import build_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import (
-    ContentClassificationModel,
+    InformationContentClassificationModel,
 )
 from onyx.server.onyx_api.models import DocMinimalInfo
 from onyx.server.onyx_api.models import IngestionDocument
@@ -107,13 +107,13 @@ def upsert_ingestion_doc(
         search_settings=search_settings
     )
 
-    content_classification_model = ContentClassificationModel(
+    information_content_classification_model = InformationContentClassificationModel(
         model_server_host=MODEL_SERVER_HOST, model_server_port=MODEL_SERVER_PORT
     )
 
     indexing_pipeline = build_indexing_pipeline(
         embedder=index_embedding_model,
-        content_classification_model=content_classification_model,
+        information_content_classification_model=information_content_classification_model,
         document_index=curr_doc_index,
         ignore_time_skip=True,
         db_session=db_session,
@@ -148,7 +148,7 @@ def upsert_ingestion_doc(
 
         sec_ind_pipeline = build_indexing_pipeline(
             embedder=new_index_embedding_model,
-            content_classification_model=content_classification_model,
+            information_content_classification_model=information_content_classification_model,
             document_index=sec_doc_index,
             ignore_time_skip=True,
             db_session=db_session,
