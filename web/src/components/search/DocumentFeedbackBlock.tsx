@@ -1,12 +1,5 @@
-import { Lightbulb } from "@phosphor-icons/react/dist/ssr";
 import { PopupSpec } from "../admin/connectors/Popup";
-import {
-  BookmarkIcon,
-  ChevronsDownIcon,
-  ChevronsUpIcon,
-  LightBulbIcon,
-  LightSettingsIcon,
-} from "../icons/icons";
+import { ChevronsDownIcon, ChevronsUpIcon } from "../icons/icons";
 import { CustomTooltip } from "../tooltip/CustomTooltip";
 
 type DocumentFeedbackType = "endorse" | "reject" | "hide" | "unhide";

@@ -3,6 +3,7 @@ plugins = "sqlalchemy.ext.mypy.plugin"
 mypy_path = "$MYPY_CONFIG_FILE_DIR"
 explicit_package_bases = true
 disallow_untyped_defs = true
+enable_error_code = ["possibly-undefined"]
 
 [[tool.mypy.overrides]]
 module = "alembic.versions.*"

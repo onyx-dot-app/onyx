@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  mock_connector_server:
+    build:
+      context: ./mock_connector_server
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - onyx-stack_default
+networks:
+  onyx-stack_default:
+    name: onyx-stack_default
+    external: true

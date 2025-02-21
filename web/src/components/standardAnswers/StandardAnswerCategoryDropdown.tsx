@@ -5,7 +5,6 @@ import MultiSelectDropdown from "../MultiSelectDropdown";
 import { StandardAnswerCategory } from "@/lib/types";
 import { ErrorCallout } from "../ErrorCallout";
 import { LoadingAnimation } from "../Loading";
-import { Separator } from "@/components/ui/separator";
 
 interface StandardAnswerCategoryDropdownFieldProps {
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
@@ -37,7 +36,7 @@ export const StandardAnswerCategoryDropdownField: FC<
     <>
       <div>
         <Label>Standard Answer Categories</Label>
-        <div className="w-4/12">
+        <div className="w-64">
           <MultiSelectDropdown
             name="standard_answer_categories"
             label=""
@@ -64,8 +63,6 @@ export const StandardAnswerCategoryDropdownField: FC<
           />
         </div>
       </div>
-
-      <Separator />
     </>
   );
 };

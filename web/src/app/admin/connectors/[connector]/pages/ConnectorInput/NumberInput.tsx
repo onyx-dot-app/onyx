@@ -16,7 +16,7 @@ export default function NumberInput({
 }) {
   return (
     <div className="w-full flex flex-col">
-      <label className="block text-base font-medium text-text-700 mb-1">
+      <label className="block text-base font-medium text-text-700 dark:text-neutral-100 mb-1">
         {label}
         {optional && <span className="text-text-500 ml-1">(optional)</span>}
       </label>
@@ -27,10 +27,10 @@ export default function NumberInput({
         name={name}
         min="-1"
         className={`mt-2 block w-full px-3 py-2 
-                bg-white border border-gray-300 rounded-md 
-                text-sm shadow-sm placeholder-gray-400
+                bg-[#fff] dark:bg-transparent border border-background-300 rounded-md 
+                text-sm shadow-sm placeholder-text-400
                 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500
-                disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200 disabled:shadow-none
+                disabled:bg-background-50 disabled:text-text-500 disabled:border-background-200 disabled:shadow-none
                 invalid:border-pink-500 invalid:text-pink-600
                 focus:invalid:border-pink-500 focus:invalid:ring-pink-500`}
       />

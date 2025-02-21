@@ -21,3 +21,42 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 _Note:_ if you are having problems accessing the ^, try setting the `WEB_DOMAIN` env variable to
 `http://127.0.0.1:3000` and accessing it there.
+
+## Testing
+
+This testing process will reset your application into a clean state.
+Don't run these tests if you don't want to do this!
+
+Bring up the entire application.
+
+1. Reset the instance
+
+```cd backend
+export PYTEST_IGNORE_SKIP=true
+pytest -s tests/integration/tests/playwright/test_playwright.py
+```
+
+2. Run playwright
+
+```
+cd web
+npx playwright test
+```
+
+3. Inspect results
+
+By default, playwright.config.ts is configured to output the results to:
+
+```
+web/test-results
+```
+
+4. Upload results to Chromatic (Optional)
+
+This step would normally not be run by third party developers, but first party devs
+may use this for local troubleshooting and testing.
+
+```
+cd web
+npx chromatic --playwright --project-token={your token here}
+```

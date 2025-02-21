@@ -55,7 +55,7 @@ export function WhitelabelingForm() {
     <div>
       <Formik
         initialValues={{
-          auto_scroll: enterpriseSettings?.auto_scroll || false,
+          auto_scroll: settings?.settings?.auto_scroll || false,
           application_name: enterpriseSettings?.application_name || null,
           use_custom_logo: enterpriseSettings?.use_custom_logo || false,
           use_custom_logotype: enterpriseSettings?.use_custom_logotype || false,
@@ -207,7 +207,7 @@ export function WhitelabelingForm() {
                   >
                     the docs
                   </Link>{" "}
-                  to see whitelabelling examples in action.
+                  to see whitelabeling examples in action.
                 </Text>
 
                 <TextFormField

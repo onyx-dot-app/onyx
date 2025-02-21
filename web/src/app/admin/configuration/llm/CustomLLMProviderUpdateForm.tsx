@@ -348,7 +348,7 @@ export function CustomLLMProviderUpdateForm({
                           </div>
                           <div className="my-auto">
                             <FiX
-                              className="my-auto w-10 h-10 cursor-pointer hover:bg-hover rounded p-2"
+                              className="my-auto w-10 h-10 cursor-pointer hover:bg-accent-background-hovered rounded p-2"
                               onClick={() => arrayHelpers.remove(index)}
                             />
                           </div>

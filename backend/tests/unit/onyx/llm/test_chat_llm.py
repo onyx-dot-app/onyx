@@ -9,6 +9,7 @@ from litellm.types.utils import ChatCompletionDeltaToolCall
 from litellm.types.utils import Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
+from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.chat_llm import DefaultMultiLLM
 
 
@@ -143,6 +144,7 @@ def test_multiple_tool_calls(default_multi_llm: DefaultMultiLLM) -> None:
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
             parallel_tool_calls=False,
+            mock_response=MOCK_LLM_RESPONSE,
         )
 
 
@@ -287,4 +289,5 @@ def test_multiple_tool_calls_streaming(default_multi_llm: DefaultMultiLLM) -> No
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
             parallel_tool_calls=False,
+            mock_response=MOCK_LLM_RESPONSE,
         )

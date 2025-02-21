@@ -2,7 +2,6 @@ from typing import Any
 
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
-from onyx.configs.chat_configs import QA_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine import get_session_context_manager
@@ -88,8 +87,8 @@ def get_llms_for_persona(
 
 
 def get_default_llms(
-    timeout: int = QA_TIMEOUT,
-    temperature: float = GEN_AI_TEMPERATURE,
+    timeout: int | None = None,
+    temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
 ) -> tuple[LLM, LLM]:
@@ -138,7 +137,7 @@ def get_llm(
     api_version: str | None = None,
     custom_config: dict[str, str] | None = None,
     temperature: float | None = None,
-    timeout: int = QA_TIMEOUT,
+    timeout: int | None = None,
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
 ) -> LLM:

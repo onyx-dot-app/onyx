@@ -91,6 +91,28 @@ def celery_find_task(task_id: str, queue: str, r: Redis) -> int:
     return False
 
 
+def celery_get_queued_task_ids(queue: str, r: Redis) -> set[str]:
+    """This is a redis specific way to build a list of tasks in a queue.
+
+    This helps us read the queue once and then efficiently look for missing tasks
+    in the queue.
+    """
+
+    task_set: set[str] = set()
+
+    for priority in range(len(OnyxCeleryPriority)):
+        queue_name = f"{queue}{CELERY_SEPARATOR}{priority}" if priority > 0 else queue
+
+        tasks = cast(list[bytes], r.lrange(queue_name, 0, -1))
+        for task in tasks:
+            task_dict: dict[str, Any] = json.loads(task.decode("utf-8"))
+            task_id = task_dict.get("headers", {}).get("id")
+            if task_id:
+                task_set.add(task_id)
+
+    return task_set
+
+
 def celery_inspect_get_workers(name_filter: str | None, app: Celery) -> list[str]:
     """Returns a list of current workers containing name_filter, or all workers if
     name_filter is None.

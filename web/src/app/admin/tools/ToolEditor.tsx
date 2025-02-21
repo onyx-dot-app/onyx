@@ -24,6 +24,14 @@ import debounce from "lodash/debounce";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useAuthType } from "@/lib/hooks";
 
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
@@ -51,7 +59,11 @@ function ToolForm({
 }: {
   existingTool?: ToolSnapshot;
   values: ToolFormValues;
-  setFieldValue: (field: string, value: string) => void;
+  setFieldValue: <T = any>(
+    field: string,
+    value: T,
+    shouldValidate?: boolean
+  ) => void;
   isSubmitting: boolean;
   definitionErrorState: [
     string | null,
@@ -65,6 +77,9 @@ function ToolForm({
   const [definitionError, setDefinitionError] = definitionErrorState;
   const [methodSpecs, setMethodSpecs] = methodSpecsState;
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const authType = useAuthType();
+  const isOAuthEnabled = authType === "oidc" || authType === "google_oauth";
+
   const debouncedValidateDefinition = useCallback(
     (definition: string) => {
       const validateDefinition = async () => {
@@ -124,7 +139,7 @@ function ToolForm({
             py-1 
             px-3 
             text-sm
-            hover:bg-hover-light
+            hover:bg-accent-background
           "
           onClick={() => {
             const definition = values.definition;
@@ -178,7 +193,7 @@ function ToolForm({
         <div className="my-4">
           <h3 className="text-base font-semibold mb-2">Available methods</h3>
           <div className="overflow-x-auto">
-            <table className="min-w-full bg-white border border-gray-200">
+            <table className="min-w-full bg-white border border-background-200">
               <thead>
                 <tr>
                   <th className="px-4 py-2 border-b">Name</th>
@@ -213,48 +228,43 @@ function ToolForm({
           <h3 className="text-xl font-bold mb-2 text-primary-600">
             Custom Headers
           </h3>
-          <p className="text-sm mb-6 text-gray-600 italic">
+          <p className="text-sm mb-6 text-text-600 italic">
             Specify custom headers for each request to this tool&apos;s API.
           </p>
           <FieldArray
             name="customHeaders"
-            render={(arrayHelpers: ArrayHelpers) => (
-              <div className="space-y-4">
-                {values.customHeaders && values.customHeaders.length > 0 && (
-                  <div className="space-y-3">
-                    {values.customHeaders.map(
-                      (
-                        header: { key: string; value: string },
-                        index: number
-                      ) => (
-                        <div
-                          key={index}
-                          className="flex items-center space-x-2 bg-gray-50 p-3 rounded-lg shadow-sm"
+            render={(arrayHelpers) => (
+              <div>
+                <div className="space-y-2">
+                  {values.customHeaders.map(
+                    (header: { key: string; value: string }, index: number) => (
+                      <div
+                        key={index}
+                        className="flex items-center space-x-2 bg-background-50 p-3 rounded-lg shadow-sm"
+                      >
+                        <Field
+                          name={`customHeaders.${index}.key`}
+                          placeholder="Header Key"
+                          className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        />
+                        <Field
+                          name={`customHeaders.${index}.value`}
+                          placeholder="Header Value"
+                          className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        />
+                        <Button
+                          type="button"
+                          onClick={() => arrayHelpers.remove(index)}
+                          variant="destructive"
+                          size="sm"
+                          className="transition-colors duration-200 hover:bg-red-600"
                         >
-                          <Field
-                            name={`customHeaders.${index}.key`}
-                            placeholder="Header Key"
-                            className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                          />
-                          <Field
-                            name={`customHeaders.${index}.value`}
-                            placeholder="Header Value"
-                            className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                          />
-                          <Button
-                            type="button"
-                            onClick={() => arrayHelpers.remove(index)}
-                            variant="destructive"
-                            size="sm"
-                            className="transition-colors duration-200 hover:bg-red-600"
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      )
-                    )}
-                  </div>
-                )}
+                          Remove
+                        </Button>
+                      </div>
+                    )
+                  )}
+                </div>
 
                 <Button
                   type="button"
@@ -268,6 +278,75 @@ function ToolForm({
               </div>
             )}
           />
+
+          <div className="mt-6">
+            <h3 className="text-xl font-bold mb-2 text-primary-600">
+              Authentication
+            </h3>
+            {isOAuthEnabled ? (
+              <div className="flex flex-col gap-y-2">
+                <div className="flex items-center space-x-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <div
+                          className={
+                            values.customHeaders.some(
+                              (header) =>
+                                header.key.toLowerCase() === "authorization"
+                            )
+                              ? "opacity-50"
+                              : ""
+                          }
+                        >
+                          <Checkbox
+                            id="passthrough_auth"
+                            size="sm"
+                            checked={values.passthrough_auth}
+                            disabled={values.customHeaders.some(
+                              (header) =>
+                                header.key.toLowerCase() === "authorization" &&
+                                !values.passthrough_auth
+                            )}
+                            onCheckedChange={(checked) => {
+                              setFieldValue("passthrough_auth", checked, true);
+                            }}
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      {values.customHeaders.some(
+                        (header) => header.key.toLowerCase() === "authorization"
+                      ) && (
+                        <TooltipContent side="top" align="center">
+                          <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
+                            Cannot enable OAuth passthrough when an
+                            Authorization header is already set
+                          </p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
+                  <div className="flex flex-col">
+                    <label
+                      htmlFor="passthrough_auth"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Pass through user&apos;s OAuth token
+                    </label>
+                    <p className="text-xs text-subtle mt-1">
+                      When enabled, the user&apos;s OAuth token will be passed
+                      as the Authorization header for all API calls
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-subtle">
+                OAuth passthrough is only available when OIDC or OAuth
+                authentication is enabled
+              </p>
+            )}
+          </div>
         </div>
       )}
 
@@ -291,6 +370,7 @@ function ToolForm({
 interface ToolFormValues {
   definition: string;
   customHeaders: { key: string; value: string }[];
+  passthrough_auth: boolean;
 }
 
 const ToolSchema = Yup.object().shape({
@@ -303,6 +383,7 @@ const ToolSchema = Yup.object().shape({
       })
     )
     .default([]),
+  passthrough_auth: Yup.boolean().default(false),
 });
 
 export function ToolEditor({ tool }: { tool?: ToolSnapshot }) {
@@ -326,9 +407,27 @@ export function ToolEditor({ tool }: { tool?: ToolSnapshot }) {
               key: header.key,
               value: header.value,
             })) ?? [],
+          passthrough_auth: tool?.passthrough_auth ?? false,
         }}
         validationSchema={ToolSchema}
         onSubmit={async (values: ToolFormValues) => {
+          const hasAuthHeader = values.customHeaders?.some(
+            (header) => header.key.toLowerCase() === "authorization"
+          );
+          if (hasAuthHeader && values.passthrough_auth) {
+            setPopup({
+              message:
+                "Cannot enable passthrough auth when Authorization " +
+                "headers are present. Please remove any Authorization " +
+                "headers first.",
+              type: "error",
+            });
+            console.log(
+              "Cannot enable passthrough auth when Authorization headers are present. Please remove any Authorization headers first."
+            );
+            return;
+          }
+
           let definition: any;
           try {
             definition = parseJsonWithTrailingCommas(values.definition);
@@ -344,6 +443,7 @@ export function ToolEditor({ tool }: { tool?: ToolSnapshot }) {
             description: description || "",
             definition: definition,
             custom_headers: values.customHeaders,
+            passthrough_auth: values.passthrough_auth,
           };
           let response;
           if (tool) {

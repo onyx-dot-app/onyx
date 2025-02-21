@@ -38,6 +38,7 @@ def create_tool(
     custom_headers: list[Header] | None,
     user_id: UUID | None,
     db_session: Session,
+    passthrough_auth: bool,
 ) -> Tool:
     new_tool = Tool(
         name=name,
@@ -48,6 +49,7 @@ def create_tool(
         if custom_headers
         else [],
         user_id=user_id,
+        passthrough_auth=passthrough_auth,
     )
     db_session.add(new_tool)
     db_session.commit()
@@ -62,6 +64,7 @@ def update_tool(
     custom_headers: list[Header] | None,
     user_id: UUID | None,
     db_session: Session,
+    passthrough_auth: bool | None,
 ) -> Tool:
     tool = get_tool_by_id(tool_id, db_session)
     if tool is None:
@@ -79,6 +82,8 @@ def update_tool(
         tool.custom_headers = [
             cast(HeaderItemDict, header.model_dump()) for header in custom_headers
         ]
+    if passthrough_auth is not None:
+        tool.passthrough_auth = passthrough_auth
     db_session.commit()
 
     return tool

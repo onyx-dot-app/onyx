@@ -5,7 +5,7 @@ metadata:
   labels:
     {{- include "onyx-stack.labels" . | nindent 4 }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.indexCapability.replicaCount }}
   selector:
     matchLabels:
       {{- include "onyx-stack.selectorLabels" . | nindent 6 }}
@@ -25,12 +25,14 @@ spec:
         {{- end }}
     spec:
       containers:
-      - name: indexing-model-server
-        image: onyxdotapp/onyx-model-server:latest
-        imagePullPolicy: IfNotPresent
-        command: [ "uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "9000", "--limit-concurrency", "10" ]
+      - name: {{ .Values.indexCapability.name }}
+        image: "{{ .Values.indexCapability.image.repository }}:{{ .Values.indexCapability.image.tag | default .Chart.AppVersion }}"           
+        imagePullPolicy: {{ .Values.indexCapability.image.pullPolicy }}
+        command: [ "uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "{{ .Values.indexCapability.containerPorts.server }}", "--limit-concurrency", "{{ .Values.indexCapability.limitConcurrency }}" ]
         ports:
-        - containerPort: 9000
+        - name: model-server
+          containerPort: {{ .Values.indexCapability.containerPorts.server }}
+          protocol: TCP
         envFrom:
           - configMapRef:
               name: {{ .Values.config.envConfigMapName }}

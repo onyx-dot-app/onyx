@@ -7,6 +7,7 @@ import { createSlackBot, updateSlackBot } from "./new/lib";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useEffect } from "react";
+import { Switch } from "@/components/ui/switch";
 
 export const SlackTokensForm = ({
   isUpdate,
@@ -33,7 +34,9 @@ export const SlackTokensForm = ({
 
   return (
     <Formik
-      initialValues={initialValues}
+      initialValues={{
+        ...initialValues,
+      }}
       validationSchema={Yup.object().shape({
         bot_token: Yup.string().required(),
         app_token: Yup.string().required(),
@@ -64,7 +67,13 @@ export const SlackTokensForm = ({
           router.push(`/admin/bots/${encodeURIComponent(botId)}`);
         } else {
           const responseJson = await response.json();
-          const errorMsg = responseJson.detail || responseJson.message;
+          let errorMsg = responseJson.detail || responseJson.message;
+
+          if (errorMsg.includes("Invalid bot token:")) {
+            errorMsg = "Slack Bot Token is invalid";
+          } else if (errorMsg.includes("Invalid app token:")) {
+            errorMsg = "Slack App Token is invalid";
+          }
           setPopup({
             message: isUpdate
               ? `Error updating Slack Bot - ${errorMsg}`

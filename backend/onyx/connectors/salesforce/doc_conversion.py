@@ -59,6 +59,7 @@ def _clean_salesforce_dict(data: dict | list) -> dict | list:
     elif isinstance(data, list):
         filtered_list = []
         for item in data:
+            filtered_item: dict | list
             if isinstance(item, (dict, list)):
                 filtered_item = _clean_salesforce_dict(item)
                 # Only add non-empty dictionaries or lists

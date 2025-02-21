@@ -19,9 +19,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-MOST_BASIC_PROMPT = "You are a helpful AI assistant."
-DANSWER_DATETIME_REPLACEMENT = "DANSWER_DATETIME_REPLACEMENT"
-BASIC_TIME_STR = "The current date is {datetime_info}."
+_DANSWER_DATETIME_REPLACEMENT_PAT = "[[CURRENT_DATETIME]]"
+_BASIC_TIME_STR = "The current date is {datetime_info}."
 
 
 def get_current_llm_day_time(
@@ -38,23 +37,36 @@ def get_current_llm_day_time(
     return f"{formatted_datetime}"
 
 
-def add_date_time_to_prompt(prompt_str: str) -> str:
-    if DANSWER_DATETIME_REPLACEMENT in prompt_str:
+def build_date_time_string() -> str:
+    return ADDITIONAL_INFO.format(
+        datetime_info=_BASIC_TIME_STR.format(datetime_info=get_current_llm_day_time())
+    )
+
+
+def handle_onyx_date_awareness(
+    prompt_str: str,
+    prompt_config: PromptConfig,
+    add_additional_info_if_no_tag: bool = False,
+) -> str:
+    """
+    If there is a [[CURRENT_DATETIME]] tag, replace it with the current date and time no matter what.
+    If the prompt is datetime aware, and there are no [[CURRENT_DATETIME]] tags, add it to the prompt.
+    do nothing otherwise.
+    This can later be expanded to support other tags.
+    """
+
+    if _DANSWER_DATETIME_REPLACEMENT_PAT in prompt_str:
         return prompt_str.replace(
-            DANSWER_DATETIME_REPLACEMENT,
+            _DANSWER_DATETIME_REPLACEMENT_PAT,
             get_current_llm_day_time(full_sentence=False, include_day_of_week=True),
         )
-
-    if prompt_str:
-        return prompt_str + ADDITIONAL_INFO.format(
-            datetime_info=get_current_llm_day_time()
-        )
-    else:
-        return (
-            MOST_BASIC_PROMPT
-            + " "
-            + BASIC_TIME_STR.format(datetime_info=get_current_llm_day_time())
-        )
+    any_tag_present = any(
+        _DANSWER_DATETIME_REPLACEMENT_PAT in text
+        for text in [prompt_str, prompt_config.system_prompt, prompt_config.task_prompt]
+    )
+    if add_additional_info_if_no_tag and not any_tag_present:
+        return prompt_str + build_date_time_string()
+    return prompt_str
 
 
 def build_task_prompt_reminders(

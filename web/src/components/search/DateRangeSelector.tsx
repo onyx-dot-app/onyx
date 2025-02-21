@@ -42,14 +42,14 @@ export function DateRangeSelector({
             border 
             border-border 
             cursor-pointer 
-            hover:bg-hover`}
+            hover:bg-accent-background-hovered`}
         >
           <FiCalendar className="flex-none my-auto mr-2" />{" "}
           <p className="line-clamp-1">
             {isHorizontal ? (
               "Date"
             ) : value?.selectValue ? (
-              <div className="text-emphasis">{value.selectValue}</div>
+              <div className="text-text-darker">{value.selectValue}</div>
             ) : (
               "Any time..."
             )}

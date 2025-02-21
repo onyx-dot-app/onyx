@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.models import Document
 
 
 @pytest.fixture
@@ -41,6 +42,10 @@ def test_confluence_connector_basic(
 
     assert len(doc_batch) == 3
 
+    page_within_a_page_doc: Document | None = None
+    page_doc: Document | None = None
+    txt_doc: Document | None = None
+
     for doc in doc_batch:
         if doc.semantic_identifier == "DailyConnectorTestSpace Home":
             page_doc = doc
@@ -49,6 +54,7 @@ def test_confluence_connector_basic(
         elif doc.semantic_identifier == "Page Within A Page":
             page_within_a_page_doc = doc
 
+    assert page_within_a_page_doc is not None
     assert page_within_a_page_doc.semantic_identifier == "Page Within A Page"
     assert page_within_a_page_doc.primary_owners
     assert page_within_a_page_doc.primary_owners[0].email == "hagen@danswer.ai"
@@ -62,6 +68,7 @@ def test_confluence_connector_basic(
         == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/pages/200769540/Page+Within+A+Page"
     )
 
+    assert page_doc is not None
     assert page_doc.semantic_identifier == "DailyConnectorTestSpace Home"
     assert page_doc.metadata["labels"] == ["testlabel"]
     assert page_doc.primary_owners
@@ -75,6 +82,7 @@ def test_confluence_connector_basic(
         == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/overview"
     )
 
+    assert txt_doc is not None
     assert txt_doc.semantic_identifier == "small-file.txt"
     assert len(txt_doc.sections) == 1
     assert txt_doc.sections[0].text == "small"

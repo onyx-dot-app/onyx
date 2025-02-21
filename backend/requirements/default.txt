@@ -29,10 +29,15 @@ inflection==0.5.1
 jira==3.5.1
 jsonref==1.1.0
 trafilatura==1.12.2
-langchain==0.1.17
-langchain-core==0.1.50
-langchain-text-splitters==0.0.1
-litellm==1.55.4
+langchain==0.3.7
+langchain-core==0.3.24
+langchain-openai==0.2.9
+langchain-text-splitters==0.3.2
+langchainhub==0.1.21
+langgraph==0.2.72
+langgraph-checkpoint==2.0.13
+langgraph-sdk==0.1.44
+litellm==1.60.2
 lxml==5.3.0
 lxml_html_clean==0.2.2
 llama-index==0.9.45
@@ -41,7 +46,7 @@ msal==1.28.0
 nltk==3.8.1
 Office365-REST-Python-Client==2.5.9
 oauthlib==3.2.2
-openai==1.55.3
+openai==1.61.0
 openpyxl==3.1.2
 playwright==1.41.2
 psutil==5.9.5
@@ -81,6 +86,7 @@ hubspot-api-client==8.1.0
 asana==5.0.8
 dropbox==11.36.2
 boto3-stubs[s3]==1.34.133
+shapely==2.0.6
 stripe==10.12.0
 urllib3==2.2.3
 mistune==0.8.4

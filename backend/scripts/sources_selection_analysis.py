@@ -11,6 +11,8 @@ from typing import Optional
 
 import requests
 
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
@@ -374,7 +376,11 @@ class SelectionAnalysis:
         Returns:
             dict: The Onyx API response content
         """
-        cookies = {"fastapiusersauth": self._auth_cookie} if self._auth_cookie else {}
+        cookies = (
+            {FASTAPI_USERS_AUTH_COOKIE_NAME: self._auth_cookie}
+            if self._auth_cookie
+            else {}
+        )
 
         endpoint = f"http://127.0.0.1:{self._web_port}/api/direct-qa"
         query_json = {

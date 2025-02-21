@@ -36,15 +36,15 @@ export const ShortCut = ({
   const [faviconError, setFaviconError] = useState(false);
 
   return (
-    <div className="w-24 h-24 flex-none rounded-xl shadow-lg relative group transition-all duration-300 ease-in-out hover:scale-105 bg-white/10 backdrop-blur-sm">
+    <div className="w-24 h-24 flex-none rounded-xl shadow-lg relative group transition-all duration-300 ease-in-out hover:scale-105 bg-[#fff]/10 backdrop-blur-sm">
       <button
         onClick={(e) => {
           e.stopPropagation();
           onEdit(shortCut);
         }}
-        className="absolute top-1 right-1 p-1 bg-white/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+        className="absolute top-1 right-1 p-1 bg-[#fff]/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"
       >
-        <PencilIcon className="w-3 h-3 text-white" />
+        <PencilIcon className="w-3 h-3 text-[#fff]" />
       </button>
       <div
         onClick={() => window.open(shortCut.url, "_blank")}
@@ -61,10 +61,10 @@ export const ShortCut = ({
               onError={() => setFaviconError(true)}
             />
           ) : (
-            <QuestionMarkIcon size={32} className="text-white w-full h-full" />
+            <QuestionMarkIcon size={32} className="text-[#fff] w-full h-full" />
           )}
         </div>
-        <h1 className="text-white w-full text-center font-semibold text-sm truncate px-2">
+        <h1 className="text-[#fff] w-full text-center font-semibold text-sm truncate px-2">
           {shortCut.name}
         </h1>
       </div>
@@ -80,10 +80,10 @@ export const AddShortCut = ({
   return (
     <button
       onClick={openShortCutModal}
-      className="w-24 h-24 flex-none rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-sm transition-all duration-300 ease-in-out flex flex-col items-center justify-center"
+      className="w-24 h-24 flex-none rounded-xl bg-[#fff]/10 hover:bg-[#fff]/20 backdrop-blur-sm transition-all duration-300 ease-in-out flex flex-col items-center justify-center"
     >
-      <PlusIcon className="w-8 h-8 text-white mb-2" />
-      <h1 className="text-white text-xs font-medium">New Bookmark</h1>
+      <PlusIcon className="w-8 h-8 text-[#fff] mb-2" />
+      <h1 className="text-[#fff] text-xs font-medium">New Bookmark</h1>
     </button>
   );
 };
@@ -111,9 +111,11 @@ export const NewShortCutModal = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isValidUrl) {
-      const faviconUrl = `https://www.google.com/s2/favicons?domain=${
-        new URL(url).hostname
-      }&sz=64`;
+      const faviconUrl = isValidUrl
+        ? `https://www.google.com/s2/favicons?domain=${new URL(
+            url
+          ).hostname.replace(/^(cloud\.)?onyx\.app$/, "onyx.app")}&sz=64`
+        : "";
       onAdd({ name, url, favicon: faviconUrl });
       onClose();
     } else {
@@ -135,14 +137,15 @@ export const NewShortCutModal = ({
   useEffect(() => {
     setIsValidUrl(validateUrl(url));
   }, [url]);
-
   const faviconUrl = isValidUrl
-    ? `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=64`
+    ? `https://www.google.com/s2/favicons?domain=${new URL(
+        url
+      ).hostname.replace(/^(cloud\.)?onyx\.app$/, "onyx.app")}&sz=64`
     : "";
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95%] sm:max-w-[425px] bg-neutral-900 border-none text-white">
+      <DialogContent className="max-w-[95%] sm:max-w-[425px] bg-background-900 border-none text-[#fff]">
         <DialogHeader>
           <DialogTitle>
             {editingShortcut ? "Edit Shortcut" : "Add New Shortcut"}
@@ -158,7 +161,7 @@ export const NewShortCutModal = ({
             <div className="flex flex-col space-y-2">
               <Label
                 htmlFor="name"
-                className="text-sm font-medium text-neutral-300"
+                className="text-sm font-medium text-text-300"
               >
                 Name
               </Label>
@@ -166,14 +169,14 @@ export const NewShortCutModal = ({
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-neutral-800 border-neutral-700 text-white"
+                className="w-full bg-background-800 border-background-700 text-[#fff]"
                 placeholder="Enter shortcut name"
               />
             </div>
             <div className="flex flex-col space-y-2">
               <Label
                 htmlFor="url"
-                className="text-sm font-medium text-neutral-300"
+                className="text-sm font-medium text-text-300"
               >
                 URL
               </Label>
@@ -181,7 +184,7 @@ export const NewShortCutModal = ({
                 id="url"
                 value={url}
                 onChange={handleUrlChange}
-                className={`bg-neutral-800 border-neutral-700 text-white ${
+                className={`bg-background-800 border-background-700 text-[#fff] ${
                   !isValidUrl && url ? "border-red-500" : ""
                 }`}
                 placeholder="https://example.com"
@@ -191,7 +194,7 @@ export const NewShortCutModal = ({
               )}
             </div>
             <div className="flex items-center space-x-2">
-              <Label className="text-sm font-medium text-neutral-300">
+              <Label className="text-sm font-medium text-text-300">
                 Favicon Preview:
               </Label>
               <div className="w-8 h-8 relative flex items-center justify-center">
@@ -213,7 +216,7 @@ export const NewShortCutModal = ({
           <DialogFooter>
             <Button
               type="submit"
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-blue-600 hover:bg-blue-700 text-[#fff]"
               disabled={!isValidUrl || !name}
             >
               {editingShortcut ? "Save Changes" : "Add Shortcut"}
@@ -246,7 +249,7 @@ export const MaxShortcutsReachedModal = ({
       onOutsideClick={onClose}
     >
       <div className="flex flex-col gap-4">
-        <p className="text-left text-neutral-900">
+        <p className="text-left text-text-900">
           You&apos;ve reached the maximum limit of 8 shortcuts. To add a new
           shortcut, please remove an existing one.
         </p>

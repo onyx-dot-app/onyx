@@ -91,7 +91,7 @@ SAMPLE RESPONSE:
 # similar to the chat flow, but with the option of including a
 # "conversation history" block
 CITATIONS_PROMPT = f"""
-Refer to the following context documents when responding to me.{DEFAULT_IGNORE_STATEMENT}
+Refer to the following {{context_type}} when responding to me.{DEFAULT_IGNORE_STATEMENT}
 
 CONTEXT:
 {GENERAL_SEP_PAT}
@@ -108,7 +108,7 @@ CONTEXT:
 # NOTE: need to add the extra line about "getting right to the point" since the
 # tool calling models from OpenAI tend to be more verbose
 CITATIONS_PROMPT_FOR_TOOL_CALLING = f"""
-Refer to the provided context documents when responding to me.{DEFAULT_IGNORE_STATEMENT} \
+Refer to the provided {{context_type}} when responding to me.{DEFAULT_IGNORE_STATEMENT} \
 You should always get right to the point, and never use extraneous language.
 
 {{history_block}}{{task_prompt}}
@@ -116,32 +116,6 @@ You should always get right to the point, and never use extraneous language.
 {QUESTION_PAT.upper()}
 {{user_query}}
 """
-
-
-# This is only for visualization for the users to specify their own prompts
-# The actual flow does not work like this
-PARAMATERIZED_PROMPT = f"""
-{{system_prompt}}
-
-CONTEXT:
-{GENERAL_SEP_PAT}
-{{context_docs_str}}
-{GENERAL_SEP_PAT}
-
-{{task_prompt}}
-
-{QUESTION_PAT.upper()} {{user_query}}
-RESPONSE:
-""".strip()
-
-PARAMATERIZED_PROMPT_WITHOUT_CONTEXT = f"""
-{{system_prompt}}
-
-{{task_prompt}}
-
-{QUESTION_PAT.upper()} {{user_query}}
-RESPONSE:
-""".strip()
 
 
 # CURRENTLY DISABLED, CANNOT USE THIS ONE

@@ -20,6 +20,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
 from onyx.file_processing.html_utils import parse_html_page_basic
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.retry_wrapper import retry_builder
 
 
@@ -405,6 +406,7 @@ class ZendeskConnector(LoadConnector, PollConnector, SlimConnector):
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         slim_doc_batch: list[SlimDocument] = []
         if self.content_type == "articles":

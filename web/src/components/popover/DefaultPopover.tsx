@@ -44,7 +44,7 @@ export function DefaultPopover(props: {
             .map((child, index) => (
               <div
                 key={index}
-                className="cursor-pointer text-left text-sm p-2 hover:bg-hover-light"
+                className="cursor-pointer text-left text-sm p-2 hover:bg-accent-background"
                 onClick={() => setPopoverOpen(false)}
               >
                 {child}

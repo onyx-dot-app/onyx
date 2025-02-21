@@ -223,6 +223,8 @@ class Chunker:
                 large_chunk_id=None,
             )
 
+        section_link_text: str
+
         for section_idx, section in enumerate(document.sections):
             section_text = clean_text(section.text)
             section_link_text = section.link or ""

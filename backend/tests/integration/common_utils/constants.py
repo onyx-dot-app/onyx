@@ -1,5 +1,7 @@
 import os
 
+ADMIN_USER_NAME = "admin_user"
+
 API_SERVER_PROTOCOL = os.getenv("API_SERVER_PROTOCOL") or "http"
 API_SERVER_HOST = os.getenv("API_SERVER_HOST") or "localhost"
 API_SERVER_PORT = os.getenv("API_SERVER_PORT") or "8080"
@@ -9,3 +11,6 @@ MAX_DELAY = 45
 GENERAL_HEADERS = {"Content-Type": "application/json"}
 
 NUM_DOCS = 5
+
+MOCK_CONNECTOR_SERVER_HOST = os.getenv("MOCK_CONNECTOR_SERVER_HOST") or "localhost"
+MOCK_CONNECTOR_SERVER_PORT = os.getenv("MOCK_CONNECTOR_SERVER_PORT") or 8001

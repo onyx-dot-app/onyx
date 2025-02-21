@@ -13,7 +13,7 @@ export function MetadataBadge({
       text-xs 
       text-strong
       flex
-      bg-hover 
+      bg-accent-background-hovered 
       rounded-full 
       px-1
       py-0.5 

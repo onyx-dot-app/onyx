@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useContext } from "react";
 import { useUser } from "@/components/user/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
@@ -31,11 +31,12 @@ import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import { SettingsPanel } from "../../components/nrf/SettingsPanel";
 import { ShortcutsDisplay } from "../../components/nrf/ShortcutsDisplay";
 import LoginPage from "../../auth/login/LoginPage";
-import { AuthType, NEXT_PUBLIC_WEB_DOMAIN } from "@/lib/constants";
+import { AuthType } from "@/lib/constants";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 export default function NRFPage({
   requestCookies,
@@ -56,6 +57,7 @@ export default function NRFPage({
   const { isNight } = useNightTime();
   const { user } = useUser();
   const { ccPairs, documentSets, tags, llmProviders } = useChatContext();
+  const settings = useContext(SettingsContext);
 
   const { popup, setPopup } = usePopup();
 
@@ -196,7 +198,7 @@ export default function NRFPage({
     }
 
     const newHref =
-      `${NEXT_PUBLIC_WEB_DOMAIN}/chat?send-on-load=true&user-prompt=` +
+      `${settings?.webDomain}/chat?send-on-load=true&user-prompt=` +
       encodeURIComponent(userMessage) +
       filterString;
 
@@ -223,7 +225,7 @@ export default function NRFPage({
           onClick={toggleSettings}
           className="bg-white bg-opacity-70 rounded-full p-2.5 cursor-pointer hover:bg-opacity-80 transition-colors duration-200"
         >
-          <Menu size={12} className="text-neutral-900" />
+          <Menu size={12} className="text-text-900" />
         </button>
       </div>
 
@@ -236,7 +238,7 @@ export default function NRFPage({
             <div className="pointer-events-auto absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center w-[90%] lg:max-w-3xl">
               <h1
                 className={`pl-2 text-xl text-left w-full mb-4 ${
-                  theme === "light" ? "text-neutral-800" : "text-white"
+                  theme === "light" ? "text-text-800" : "text-white"
                 }`}
               >
                 {isNight
@@ -362,7 +364,7 @@ export default function NRFPage({
                 Welcome to Onyx
               </h2>
               <Button
-                className="bg-accent w-full hover:bg-accent-hover text-white"
+                className="bg-agent w-full hover:bg-accent-hover text-white"
                 onClick={() => {
                   if (window.top) {
                     window.top.location.href = "/auth/login";

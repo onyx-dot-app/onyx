@@ -20,10 +20,7 @@ OPEN_AI_TOOL_CALLING_MODELS = {
 
 
 def explicit_tool_calling_supported(model_provider: str, model_name: str) -> bool:
-    if model_provider == "openai" and model_name in OPEN_AI_TOOL_CALLING_MODELS:
-        return True
-
-    return False
+    return model_provider == "openai" and model_name in OPEN_AI_TOOL_CALLING_MODELS
 
 
 def compute_tool_tokens(tool: Tool, llm_tokenizer: BaseTokenizer) -> int:

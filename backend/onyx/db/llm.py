@@ -3,6 +3,8 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.constants import AuthType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import DocumentSet
 from onyx.db.models import LLMProvider as LLMProviderModel
@@ -124,10 +126,29 @@ def fetch_existing_tools(db_session: Session, tool_ids: list[int]) -> list[ToolM
 
 def fetch_existing_llm_providers(
     db_session: Session,
+) -> list[LLMProviderModel]:
+    stmt = select(LLMProviderModel)
+    return list(db_session.scalars(stmt).all())
+
+
+def fetch_existing_llm_providers_for_user(
+    db_session: Session,
     user: User | None = None,
 ) -> list[LLMProviderModel]:
     if not user:
-        return list(db_session.scalars(select(LLMProviderModel)).all())
+        if AUTH_TYPE != AuthType.DISABLED:
+            # User is anonymous
+            return list(
+                db_session.scalars(
+                    select(LLMProviderModel).where(
+                        LLMProviderModel.is_public == True  # noqa: E712
+                    )
+                ).all()
+            )
+        else:
+            # If auth is disabled, user has access to all providers
+            return fetch_existing_llm_providers(db_session)
+
     stmt = select(LLMProviderModel).distinct()
     user_groups_select = select(User__UserGroup.user_group_id).where(
         User__UserGroup.user_id == user.id

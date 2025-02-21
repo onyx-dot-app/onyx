@@ -74,7 +74,7 @@ export const UserGroupsTable = ({
                 <TableRow key={userGroup.id}>
                   <TableCell>
                     <Link
-                      className="whitespace-nowrap overflow-hidden text-ellipsis inline-flex items-center cursor-pointer p-2 rounded hover:bg-hover max-w-full"
+                      className="whitespace-nowrap overflow-hidden text-ellipsis inline-flex items-center cursor-pointer p-2 rounded hover:bg-accent-background-hovered max-w-full"
                       href={`/admin/groups/${userGroup.id}`}
                     >
                       <FiEdit2 className="mr-2 flex-shrink-0" />
@@ -247,7 +247,7 @@ export const UserGroupsTable = ({
                             <SimpleUserDisplay key={user.id} user={user} />
                           );
                         })}
-                      <div className="text-gray-300">
+                      <div className="text-text-300">
                         + {userGroup.users.length - MAX_USERS_TO_DISPLAY} more
                       </div>
                     </div>
@@ -257,7 +257,7 @@ export const UserGroupsTable = ({
               status: userGroup.is_up_to_date ? (
                 <div className="text-emerald-600">Up to date!</div>
               ) : (
-                <div className="text-gray-300 w-10">
+                <div className="text-text-300 w-10">
                   <LoadingAnimation text="Syncing" />
                 </div>
               ),

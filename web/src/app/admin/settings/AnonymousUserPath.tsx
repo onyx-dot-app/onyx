@@ -1,21 +1,21 @@
 "use client";
 
 import useSWR from "swr";
-import { useState } from "react";
+import { useContext, useState } from "react";
 
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { Button } from "@/components/ui/button";
-import { NEXT_PUBLIC_WEB_DOMAIN } from "@/lib/constants";
 import { ClipboardIcon } from "@/components/icons/icons";
 import { Input } from "@/components/ui/input";
 import { ThreeDotsLoader } from "@/components/Loading";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 export function AnonymousUserPath({
   setPopup,
 }: {
   setPopup: (popup: PopupSpec) => void;
 }) {
-  const fetcher = (url: string) => fetch(url).then((res) => res.json());
+  const settings = useContext(SettingsContext);
   const [customPath, setCustomPath] = useState<string | null>(null);
 
   const {
@@ -96,11 +96,11 @@ export function AnonymousUserPath({
   }
 
   return (
-    <div className="mt-4 ml-6 max-w-xl p-6 bg-white shadow-lg border border-gray-200 rounded-lg">
-      <h4 className="font-semibold text-lg text-gray-800 mb-3">
+    <div className="mt-4 ml-6 max-w-xl p-6 bg-white shadow-lg border border-background-200 rounded-lg">
+      <h4 className="font-semibold text-lg text-text-800 mb-3">
         Anonymous User Access
       </h4>
-      <p className="text-gray-600 text-sm mb-4">
+      <p className="text-text-600 text-sm mb-4">
         Enable this to allow non-authenticated users to access all documents
         indexed by public connectors in your workspace.
         {anonymousUserPath
@@ -115,12 +115,12 @@ export function AnonymousUserPath({
       ) : (
         <div className="flex flex-col gap-2 justify-center items-start">
           <div className="w-full flex-grow  flex items-center rounded-md shadow-sm">
-            <span className="inline-flex items-center rounded-l-md border border-r-0 border-gray-300 bg-gray-50 px-3 text-gray-500 sm:text-sm h-10">
-              {NEXT_PUBLIC_WEB_DOMAIN}/anonymous/
+            <span className="inline-flex items-center rounded-l-md border border-r-0 border-background-300 bg-background-50 px-3 text-text-500 sm:text-sm h-10">
+              {settings?.webDomain}/anonymous/
             </span>
             <Input
               type="text"
-              className="block w-full flex-grow flex-1 rounded-none rounded-r-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm h-10"
+              className="block w-full flex-grow flex-1 rounded-none rounded-r-md border-background-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm h-10"
               placeholder="your-custom-path"
               value={customPath ?? anonymousUserPath ?? ""}
               onChange={(e) => setCustomPath(e.target.value)}
@@ -141,7 +141,7 @@ export function AnonymousUserPath({
               className="h-10 px-4"
               onClick={() => {
                 navigator.clipboard.writeText(
-                  `${NEXT_PUBLIC_WEB_DOMAIN}/anonymous/${anonymousUserPath}`
+                  `${settings?.webDomain}/anonymous/${anonymousUserPath}`
                 );
                 setPopup({
                   message: "Invite link copied!",

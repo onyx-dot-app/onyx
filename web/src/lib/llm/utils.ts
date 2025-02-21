@@ -143,3 +143,11 @@ export const destructureValue = (value: string): LlmOverride => {
     modelName,
   };
 };
+
+export const findProviderForModel = (
+  llmProviders: LLMProviderDescriptor[],
+  modelName: string
+): string => {
+  const provider = llmProviders.find((p) => p.model_names.includes(modelName));
+  return provider ? provider.provider : "";
+};

@@ -52,7 +52,7 @@ def _sdk_partition_request(
 
 def unstructured_to_text(file: IO[Any], file_name: str) -> str:
     logger.debug(f"Starting to read file: {file_name}")
-    req = _sdk_partition_request(file, file_name, strategy="auto")
+    req = _sdk_partition_request(file, file_name, strategy="fast")
 
     unstructured_client = UnstructuredClient(api_key_auth=get_unstructured_api_key())
 

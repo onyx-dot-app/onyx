@@ -1,5 +1,6 @@
 import { FiImage, FiSearch } from "react-icons/fi";
 import { Persona } from "../admin/assistants/interfaces";
+import { SEARCH_TOOL_ID } from "../chat/tools/constants";
 
 export function AssistantTools({
   assistant,
@@ -13,7 +14,9 @@ export function AssistantTools({
   return (
     <div className="relative text-xs overflow-x-hidden flex text-subtle">
       <span
-        className={`${assistant.tools.length > 0 && "py-1"}  ${!list ? "font-semibold" : "text-subtle text-sm"}`}
+        className={`${assistant.tools.length > 0 && "py-1"}  ${
+          !list ? "font-semibold" : "text-subtle text-sm"
+        }`}
       >
         Tools:
       </span>{" "}
@@ -22,7 +25,7 @@ export function AssistantTools({
       ) : (
         <div className="ml-1 flex flex-wrap gap-1">
           {assistant.tools.map((tool, ind) => {
-            if (tool.name === "SearchTool") {
+            if (tool.name === SEARCH_TOOL_ID) {
               return (
                 <div
                   key={ind}
@@ -79,7 +82,13 @@ export function AssistantTools({
                   w-fit 
                   flex
                   items-center
-                  ${hovered ? "bg-background-300" : list ? "bg-background-125" : "bg-background-100"}`}
+                  ${
+                    hovered
+                      ? "bg-background-300"
+                      : list
+                        ? "bg-background-125"
+                        : "bg-background-100"
+                  }`}
                 >
                   <div className="flex gap-x-1">{tool.name}</div>
                 </div>

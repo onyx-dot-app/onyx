@@ -1,3 +1,4 @@
+import contextvars
 import threading
 import uuid
 from enum import Enum
@@ -11,7 +12,7 @@ from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.configs.constants import KV_CUSTOMER_UUID_KEY
 from onyx.configs.constants import KV_INSTANCE_DOMAIN_KEY
 from onyx.configs.constants import MilestoneRecordType
-from onyx.db.engine import get_sqlalchemy_engine
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.milestone import create_milestone_if_not_exists
 from onyx.db.models import User
 from onyx.key_value_store.factory import get_kv_store
@@ -21,7 +22,7 @@ from onyx.utils.variable_functionality import (
 )
 from onyx.utils.variable_functionality import noop_fallback
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import get_current_tenant_id
 
 _DANSWER_TELEMETRY_ENDPOINT = "https://telemetry.onyx.app/anonymous_telemetry"
 _CACHED_UUID: str | None = None
@@ -41,7 +42,7 @@ def _get_or_generate_customer_id_mt(tenant_id: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_X500, tenant_id))
 
 
-def get_or_generate_uuid(tenant_id: str | None = None) -> str:
+def get_or_generate_uuid() -> str:
     # TODO: split out the whole "instance UUID" generation logic into a separate
     # utility function. Telemetry should not be aware at all of how the UUID is
     # generated/stored.
@@ -74,7 +75,7 @@ def _get_or_generate_instance_domain() -> str | None:  #
     try:
         _CACHED_INSTANCE_DOMAIN = cast(str, kv_store.load(KV_INSTANCE_DOMAIN_KEY))
     except KvKeyNotFoundError:
-        with Session(get_sqlalchemy_engine()) as db_session:
+        with get_session_with_current_tenant() as db_session:
             first_user = db_session.query(User).first()
             if first_user:
                 _CACHED_INSTANCE_DOMAIN = first_user.email.split("@")[-1]
@@ -89,19 +90,19 @@ def optional_telemetry(
     record_type: RecordType,
     data: dict,
     user_id: str | None = None,
-    tenant_id: str | None = None,
+    tenant_id: str | None = None,  # Allows for override of tenant_id
 ) -> None:
     if DISABLE_TELEMETRY:
         return
+
+    tenant_id = tenant_id or get_current_tenant_id()
 
     try:
 
         def telemetry_logic() -> None:
             try:
                 customer_uuid = (
-                    _get_or_generate_customer_id_mt(
-                        tenant_id or CURRENT_TENANT_ID_CONTEXTVAR.get()
-                    )
+                    _get_or_generate_customer_id_mt(tenant_id)
                     if MULTI_TENANT
                     else get_or_generate_uuid()
                 )
@@ -121,12 +122,17 @@ def optional_telemetry(
                     headers={"Content-Type": "application/json"},
                     json=payload,
                 )
+
             except Exception:
                 # This way it silences all thread level logging as well
                 pass
 
-        # Run in separate thread to have minimal overhead in main flows
-        thread = threading.Thread(target=telemetry_logic, daemon=True)
+        # Run in separate thread with the same context as the current thread
+        # This is to ensure that the thread gets the current tenant ID
+        current_context = contextvars.copy_context()
+        thread = threading.Thread(
+            target=lambda: current_context.run(telemetry_logic), daemon=True
+        )
         thread.start()
     except Exception:
         # Should never interfere with normal functions of Onyx

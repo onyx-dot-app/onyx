@@ -18,6 +18,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { CreateRateLimitModal } from "./CreateRateLimitModal";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { ShieldIcon } from "@/components/icons/icons";
+import CreateButton from "@/components/ui/createButton";
 
 const BASE_URL = "/api/admin/token-rate-limits";
 const GLOBAL_TOKEN_FETCH_URL = `${BASE_URL}/global`;
@@ -138,15 +139,10 @@ function Main() {
         </li>
       </ul>
 
-      <Button
-        variant="navigate"
-        size="sm"
-        className="my-4"
+      <CreateButton
         onClick={() => setModalIsOpen(true)}
-      >
-        Create a Token Rate Limit
-      </Button>
-
+        text="Create a Token Rate Limit"
+      />
       {isPaidEnterpriseFeaturesEnabled && (
         <Tabs
           value={tabIndex.toString()}

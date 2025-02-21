@@ -91,6 +91,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
             f"&response_type=code"
             f"&scope=read"
             f"&state={state}"
+            f"&prompt=consent"  # prompts user for access; allows choosing workspace
         )
 
     @classmethod

@@ -99,18 +99,18 @@ class AsanaAPI:
         project = self.project_api.get_project(project_gid, opts={})
         if project["archived"]:
             logger.info(f"Skipping archived project: {project['name']} ({project_gid})")
-            return []
+            yield from []
         if not project["team"] or not project["team"]["gid"]:
             logger.info(
                 f"Skipping project without a team: {project['name']} ({project_gid})"
             )
-            return []
+            yield from []
         if project["privacy_setting"] == "private":
             if self.team_gid and project["team"]["gid"] != self.team_gid:
                 logger.info(
                     f"Skipping private project not in configured team: {project['name']} ({project_gid})"
                 )
-                return []
+                yield from []
             else:
                 logger.info(
                     f"Processing private project in configured team: {project['name']} ({project_gid})"

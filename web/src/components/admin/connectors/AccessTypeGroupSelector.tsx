@@ -110,7 +110,7 @@ export function AccessTypeGroupSelector({
               </div>
             </div>
             {userGroupsIsLoading ? (
-              <div className="animate-pulse bg-gray-200 h-8 w-32 rounded"></div>
+              <div className="animate-pulse bg-background-200 h-8 w-32 rounded"></div>
             ) : (
               <Text className="mb-3">
                 {isAdmin ? (
@@ -131,7 +131,7 @@ export function AccessTypeGroupSelector({
               render={(arrayHelpers: ArrayHelpers) => (
                 <div className="flex gap-2 flex-wrap mb-4">
                   {userGroupsIsLoading ? (
-                    <div className="animate-pulse bg-gray-200 h-8 w-32 rounded"></div>
+                    <div className="animate-pulse bg-background-200 h-8 w-32 rounded"></div>
                   ) : (
                     userGroups &&
                     userGroups.map((userGroup: UserGroup) => {
@@ -151,8 +151,8 @@ export function AccessTypeGroupSelector({
                             cursor-pointer 
                             ${
                               isSelected
-                                ? "bg-background-strong"
-                                : "hover:bg-hover"
+                                ? "bg-background-200"
+                                : "hover:bg-accent-background-hovered"
                             }
                         `}
                           onClick={() => {

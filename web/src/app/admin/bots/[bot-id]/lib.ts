@@ -21,6 +21,7 @@ interface SlackChannelConfigCreationRequest {
   usePersona: boolean;
   response_type: SlackBotResponseType;
   standard_answer_categories: number[];
+  disabled: boolean;
 }
 
 const buildFiltersFromCreationRequest = (
@@ -54,6 +55,7 @@ const buildRequestBodyFromCreationRequest = (
       : { document_sets: creationRequest.document_sets }),
     response_type: creationRequest.response_type,
     standard_answer_categories: creationRequest.standard_answer_categories,
+    disabled: creationRequest.disabled,
   });
 };
 
@@ -94,3 +96,17 @@ export const deleteSlackChannelConfig = async (id: number) => {
 export function isPersonaASlackBotPersona(persona: Persona) {
   return persona.name.startsWith("__slack_bot_persona__");
 }
+
+export const fetchSlackChannels = async (botId: number) => {
+  return fetch(`/api/manage/admin/slack-app/bots/${botId}/channels`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  }).then((response) => {
+    if (!response.ok) {
+      throw new Error("Failed to fetch Slack channels");
+    }
+    return response.json();
+  });
+};

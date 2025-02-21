@@ -1,14 +1,10 @@
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
-
 import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
-
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { cookies } from "next/headers";
 import { ChatProvider } from "@/components/context/ChatContext";
-import WrappedAssistantsStats from "./WrappedAssistantsStats";
-import CardSection from "@/components/admin/CardSection";
 import { AssistantStats } from "./AssistantStats";
 import { BackButton } from "@/components/BackButton";
 
@@ -30,7 +26,7 @@ export default async function GalleryPage(props: {
     chatSessions,
     folders,
     openedFolders,
-    toggleSidebar,
+    sidebarInitiallyVisible,
     shouldShowWelcomeModal,
     availableSources,
     ccPairs,
@@ -39,6 +35,7 @@ export default async function GalleryPage(props: {
     llmProviders,
     defaultAssistantId,
     inputPrompts,
+    proSearchToggled,
   } = data;
 
   return (
@@ -46,7 +43,8 @@ export default async function GalleryPage(props: {
       value={{
         inputPrompts,
         chatSessions,
-        toggledSidebar: toggleSidebar,
+        proSearchToggled,
+        sidebarInitiallyVisible,
         availableSources,
         ccPairs,
         documentSets,

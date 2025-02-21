@@ -35,9 +35,16 @@ export const statusToDisplay = (status: string) => {
 
 export const useBillingInformation = () => {
   const url = "/api/tenants/billing-information";
-  const swrResponse = useSWR<BillingInformation>(url, (url: string) =>
-    fetch(url).then((res) => res.json())
-  );
+  const swrResponse = useSWR<BillingInformation>(url, async (url: string) => {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(
+        errorData.message || "Failed to fetch billing information"
+      );
+    }
+    return res.json();
+  });
 
   return {
     ...swrResponse,

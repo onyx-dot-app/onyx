@@ -17,7 +17,7 @@ from requests import JSONDecodeError
 
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine import get_session_with_default_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
@@ -74,22 +74,39 @@ class CustomToolCallSummary(BaseModel):
     tool_result: Any  # The response data
 
 
+# override_kwargs is not supported for custom tools
 class CustomTool(BaseTool):
     def __init__(
         self,
         method_spec: MethodSpec,
         base_url: str,
         custom_headers: list[HeaderItemDict] | None = None,
+        user_oauth_token: str | None = None,
     ) -> None:
         self._base_url = base_url
         self._method_spec = method_spec
         self._tool_definition = self._method_spec.to_tool_definition()
+        self._user_oauth_token = user_oauth_token
 
         self._name = self._method_spec.name
         self._description = self._method_spec.summary
         self.headers = (
             header_list_to_header_dict(custom_headers) if custom_headers else {}
         )
+
+        # Check for both Authorization header and OAuth token
+        has_auth_header = any(
+            key.lower() == "authorization" for key in self.headers.keys()
+        )
+        if has_auth_header and self._user_oauth_token:
+            logger.warning(
+                f"Tool '{self._name}' has both an Authorization "
+                "header and OAuth token set. This is likely a configuration "
+                "error as the OAuth token will override the custom header."
+            )
+
+        if self._user_oauth_token:
+            self.headers["Authorization"] = f"Bearer {self._user_oauth_token}"
 
     @property
     def name(self) -> str:
@@ -188,7 +205,7 @@ class CustomTool(BaseTool):
     def _save_and_get_file_references(
         self, file_content: bytes | str, content_type: str
     ) -> List[str]:
-        with get_session_with_default_tenant() as db_session:
+        with get_session_with_current_tenant() as db_session:
             file_store = get_default_file_store(db_session)
 
             file_id = str(uuid.uuid4())
@@ -219,7 +236,9 @@ class CustomTool(BaseTool):
 
     """Actual execution of the tool"""
 
-    def run(self, **kwargs: Any) -> Generator[ToolResponse, None, None]:
+    def run(
+        self, override_kwargs: dict[str, Any] | None = None, **kwargs: Any
+    ) -> Generator[ToolResponse, None, None]:
         request_body = kwargs.get(REQUEST_BODY)
 
         path_params = {}
@@ -309,7 +328,7 @@ class CustomTool(BaseTool):
 
         # Load files from storage
         files = []
-        with get_session_with_default_tenant() as db_session:
+        with get_session_with_current_tenant() as db_session:
             file_store = get_default_file_store(db_session)
 
             for file_id in response.tool_result.file_ids:
@@ -348,6 +367,7 @@ def build_custom_tools_from_openapi_schema_and_headers(
     openapi_schema: dict[str, Any],
     custom_headers: list[HeaderItemDict] | None = None,
     dynamic_schema_info: DynamicSchemaInfo | None = None,
+    user_oauth_token: str | None = None,
 ) -> list[CustomTool]:
     if dynamic_schema_info:
         # Process dynamic schema information
@@ -366,7 +386,13 @@ def build_custom_tools_from_openapi_schema_and_headers(
     url = openapi_to_url(openapi_schema)
     method_specs = openapi_to_method_specs(openapi_schema)
     return [
-        CustomTool(method_spec, url, custom_headers) for method_spec in method_specs
+        CustomTool(
+            method_spec,
+            url,
+            custom_headers,
+            user_oauth_token=user_oauth_token,
+        )
+        for method_spec in method_specs
     ]
 
 

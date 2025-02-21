@@ -112,6 +112,7 @@ export const getAuthUrlSS = async (
   nextUrl: string | null
 ): Promise<string> => {
   // Returns the auth url for the given auth type
+
   switch (authType) {
     case "disabled":
       return "";
@@ -177,6 +178,7 @@ export const getCurrentUserSS = async (): Promise<User | null> => {
     if (!response.ok) {
       return null;
     }
+
     const user = await response.json();
     return user;
   } catch (e) {

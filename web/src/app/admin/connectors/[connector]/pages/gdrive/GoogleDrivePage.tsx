@@ -5,7 +5,7 @@ import useSWR, { mutate } from "swr";
 import { FetchError, errorHandlingFetcher } from "@/lib/fetcher";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { ValidSources } from "@/lib/types";
 import { usePublicCredentials } from "@/lib/hooks";
 import Title from "@/components/ui/title";
@@ -32,7 +32,11 @@ const useConnectorsByCredentialId = (credential_id: number | null) => {
   };
 };
 
-const GDriveMain = ({}: {}) => {
+const GDriveMain = ({
+  setPopup,
+}: {
+  setPopup: (popup: PopupSpec | null) => void;
+}) => {
   const { isAdmin, user } = useUser();
 
   // tries getting the uploaded credential json
@@ -96,8 +100,6 @@ const GDriveMain = ({}: {}) => {
     error: googleDriveConnectorsError,
     refreshConnectorsByCredentialId,
   } = useConnectorsByCredentialId(credential_id);
-
-  const { popup, setPopup } = usePopup();
 
   const appCredentialSuccessfullyFetched =
     appCredentialData ||
@@ -173,10 +175,7 @@ const GDriveMain = ({}: {}) => {
 
   return (
     <>
-      {popup}
-      <Title className="mb-2 mt-6 ml-auto mr-auto">
-        Step 1: Provide your Credentials
-      </Title>
+      <Title className="mb-2 mt-6">Step 1: Provide your Credentials</Title>
       <DriveJsonUploadSection
         setPopup={setPopup}
         appCredentialData={appCredentialData}
@@ -186,9 +185,7 @@ const GDriveMain = ({}: {}) => {
 
       {isAdmin && (
         <>
-          <Title className="mb-2 mt-6 ml-auto mr-auto">
-            Step 2: Authenticate with Onyx
-          </Title>
+          <Title className="mb-2 mt-6">Step 2: Authenticate with Onyx</Title>
           <DriveAuthSection
             setPopup={setPopup}
             refreshCredentials={refreshCredentials}

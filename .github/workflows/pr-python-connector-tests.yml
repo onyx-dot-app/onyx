@@ -39,6 +39,15 @@ env:
   AIRTABLE_TEST_TABLE_ID: ${{ secrets.AIRTABLE_TEST_TABLE_ID }}
   AIRTABLE_TEST_TABLE_NAME: ${{ secrets.AIRTABLE_TEST_TABLE_NAME }}
   AIRTABLE_ACCESS_TOKEN: ${{ secrets.AIRTABLE_ACCESS_TOKEN }}
+  # Sharepoint
+  SHAREPOINT_CLIENT_ID: ${{ secrets.SHAREPOINT_CLIENT_ID }}
+  SHAREPOINT_CLIENT_SECRET: ${{ secrets.SHAREPOINT_CLIENT_SECRET }}
+  SHAREPOINT_CLIENT_DIRECTORY_ID: ${{ secrets.SHAREPOINT_CLIENT_DIRECTORY_ID }}
+  SHAREPOINT_SITE: ${{ secrets.SHAREPOINT_SITE }}
+  # Gitbook
+  GITBOOK_SPACE_ID: ${{ secrets.GITBOOK_SPACE_ID }}
+  GITBOOK_API_KEY: ${{ secrets.GITBOOK_API_KEY }}
+
 jobs:
   connectors-check:
     # See https://runs-on.com/runners/linux/
@@ -65,7 +74,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
           pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
-
+          playwright install chromium
+          playwright install-deps chromium
+          
       - name: Run Tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/connectors

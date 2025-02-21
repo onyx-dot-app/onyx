@@ -197,7 +197,7 @@ ai_platform_doc = SeedPresaveDocument(
 )
 
 customer_support_doc = SeedPresaveDocument(
-    url="https://docs.onyx.app/more/use_cases/customer_support",
+    url="https://docs.onyx.app/more/use_cases/support",
     title=customer_support_title,
     content=customer_support,
     title_embedding=model.encode(f"search_document: {customer_support_title}"),

@@ -145,7 +145,7 @@ export function AssistantSharingModal({
 
           <div className="mb-8 flex flex-col gap-y-4">
             <h3 className="text-lg font-semibold">Current Status</h3>
-            <div className="bg-gray-50 rounded-lg">{sharedStatus}</div>
+            <div className="bg-background-50 rounded-lg">{sharedStatus}</div>
           </div>
 
           <div className="mb-8 flex flex-col gap-y-4">
@@ -175,8 +175,8 @@ export function AssistantSharingModal({
                 ]);
               }}
               itemComponent={({ option }) => (
-                <div className="flex items-center px-4 py-2.5 cursor-pointer hover:bg-gray-100">
-                  <UsersIcon className="mr-3 text-gray-500" />
+                <div className="flex items-center px-4 py-2.5 cursor-pointer hover:bg-background-100">
+                  <UsersIcon className="mr-3 text-text-500" />
                   <span className="flex-grow">{option.name}</span>
                   <FiPlus className="text-blue-500" />
                 </div>
@@ -186,7 +186,7 @@ export function AssistantSharingModal({
 
           {selectedUsers.length > 0 && (
             <div className="mb-6">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">
+              <h4 className="text-sm font-medium text-text-700 mb-2">
                 Selected Users:
               </h4>
               <div className="flex flex-wrap gap-2">

@@ -187,7 +187,7 @@ export default function EmbeddingForm() {
       return needsReIndex ? (
         <div className="flex mx-auto gap-x-1 ml-auto items-center">
           <button
-            className="enabled:cursor-pointer disabled:bg-accent/50 disabled:cursor-not-allowed bg-accent flex gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
+            className="enabled:cursor-pointer disabled:bg-accent/50 disabled:cursor-not-allowed bg-agent flex gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
             onClick={handleReindex}
           >
             Re-index
@@ -214,7 +214,7 @@ export default function EmbeddingForm() {
         </div>
       ) : (
         <button
-          className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-accent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
+          className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-agent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
           onClick={async () => {
             updateSearch();
             navigateToEmbeddingPage("search settings");

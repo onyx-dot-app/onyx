@@ -11,6 +11,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { Button } from "@/components/ui/button";
 
 import { useUser } from "@/components/user/UserProvider";
+import CreateButton from "@/components/ui/createButton";
 
 const Main = () => {
   const { popup, setPopup } = usePopup();
@@ -28,7 +29,7 @@ const Main = () => {
     data: users,
     isLoading: userIsLoading,
     error: usersError,
-  } = useUsers();
+  } = useUsers({ includeApiKeys: true });
 
   const { isAdmin } = useUser();
 
@@ -52,18 +53,13 @@ const Main = () => {
     <>
       {popup}
       {isAdmin && (
-        <div className="my-3">
-          <Button
-            size="sm"
-            variant="navigate"
-            onClick={() => setShowForm(true)}
-          >
-            Create New User Group
-          </Button>
-        </div>
+        <CreateButton
+          onClick={() => setShowForm(true)}
+          text="Create New User Group"
+        />
       )}
       {data.length > 0 && (
-        <div>
+        <div className="mt-2">
           <UserGroupsTable
             userGroups={data}
             setPopup={setPopup}

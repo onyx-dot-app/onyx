@@ -92,9 +92,9 @@ export const ExistingSlackBotForm = ({
 
         <div className="flex flex-col" ref={dropdownRef}>
           <div className="flex items-center gap-4">
-            <div className="border rounded-lg border-gray-200">
+            <div className="border rounded-lg border-background-200">
               <div
-                className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
+                className="flex items-center gap-2 cursor-pointer hover:bg-background-100 p-2"
                 onClick={() => setIsExpanded(!isExpanded)}
               >
                 {isExpanded ? (
@@ -117,7 +117,7 @@ export const ExistingSlackBotForm = ({
           </div>
 
           {isExpanded && (
-            <div className="bg-white border rounded-lg border-gray-200 shadow-lg absolute mt-12 right-0 z-10 w-full md:w-3/4 lg:w-1/2">
+            <div className="bg-white border rounded-lg border-background-200 shadow-lg absolute mt-12 right-0 z-10 w-full md:w-3/4 lg:w-1/2">
               <div className="p-4">
                 <SlackTokensForm
                   isUpdate={true}
@@ -134,7 +134,7 @@ export const ExistingSlackBotForm = ({
         </div>
       </div>
       <div className="mt-2">
-        <div className="inline-block border rounded-lg border-gray-200 p-2">
+        <div className="inline-block border rounded-lg border-background-200 p-2">
           <Checkbox
             label="Enabled"
             checked={formValues.enabled}

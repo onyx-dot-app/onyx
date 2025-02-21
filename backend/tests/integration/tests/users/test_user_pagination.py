@@ -43,12 +43,6 @@ def _verify_user_pagination(
     assert all_expected_emails == all_retrieved_emails
 
 
-def _verify_user_role_and_status(users: list) -> None:
-    for user in users:
-        assert UserManager.is_role(user, user.role)
-        assert UserManager.is_status(user, user.is_active)
-
-
 def test_user_pagination(reset: None) -> None:
     # Create an admin user to perform actions
     user_performing_action: DATestUser = UserManager.create(
@@ -108,7 +102,13 @@ def test_user_pagination(reset: None) -> None:
         + inactive_admins
         + searchable_curators
     )
-    _verify_user_role_and_status(all_users)
+    for user in all_users:
+        # Verify that the user's role in the db matches
+        # the role in the user object
+        assert UserManager.is_role(user, user.role)
+        # Verify that the user's status in the db matches
+        # the status in the user object
+        assert UserManager.is_status(user, user.is_active)
 
     # Verify pagination
     _verify_user_pagination(

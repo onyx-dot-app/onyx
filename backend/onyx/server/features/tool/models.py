@@ -13,6 +13,7 @@ class ToolSnapshot(BaseModel):
     display_name: str
     in_code_tool_id: str | None
     custom_headers: list[Any] | None
+    passthrough_auth: bool
 
     @classmethod
     def from_model(cls, tool: Tool) -> "ToolSnapshot":
@@ -24,6 +25,7 @@ class ToolSnapshot(BaseModel):
             display_name=tool.display_name or tool.name,
             in_code_tool_id=tool.in_code_tool_id,
             custom_headers=tool.custom_headers,
+            passthrough_auth=tool.passthrough_auth,
         )
 
 
@@ -37,6 +39,7 @@ class CustomToolCreate(BaseModel):
     description: str | None = None
     definition: dict[str, Any]
     custom_headers: list[Header] | None = None
+    passthrough_auth: bool
 
 
 class CustomToolUpdate(BaseModel):
@@ -44,3 +47,4 @@ class CustomToolUpdate(BaseModel):
     description: str | None = None
     definition: dict[str, Any] | None = None
     custom_headers: list[Header] | None = None
+    passthrough_auth: bool | None = None

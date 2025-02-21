@@ -1,4 +1,4 @@
-import { PacketType } from "@/app/chat/lib";
+import { isPacketType, PacketType } from "@/app/chat/lib";
 
 type NonEmptyObject = { [k: string]: any };
 
@@ -79,12 +79,18 @@ export async function* handleStream<T extends NonEmptyObject>(
 }
 
 export async function* handleSSEStream<T extends PacketType>(
-  streamingResponse: Response
+  streamingResponse: Response,
+  signal?: AbortSignal
 ): AsyncGenerator<T, void, unknown> {
   const reader = streamingResponse.body?.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-
+  if (signal) {
+    signal.addEventListener("abort", () => {
+      console.log("aborting");
+      reader?.cancel();
+    });
+  }
   while (true) {
     const rawChunk = await reader?.read();
     if (!rawChunk) {

@@ -56,9 +56,9 @@ const QAFeedback = ({
       className={"cursor-pointer " + paddingY}
     >
       {feedbackType === "like" ? (
-        <ThumbsUpIcon className="my-auto flex flex-shrink-0 text-gray-500" />
+        <ThumbsUpIcon className="my-auto flex flex-shrink-0 text-text-500" />
       ) : (
-        <ThumbsDownIcon className="my-auto flex flex-shrink-0 text-gray-500" />
+        <ThumbsDownIcon className="my-auto flex flex-shrink-0 text-text-500" />
       )}
     </div>
   );

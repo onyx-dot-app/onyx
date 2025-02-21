@@ -7,6 +7,7 @@ import requests
 from requests import HTTPError
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.models import FullUserSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -82,7 +83,7 @@ class UserManager:
         response.raise_for_status()
 
         cookies = response.cookies.get_dict()
-        session_cookie = cookies.get("fastapiusersauth")
+        session_cookie = cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
 
         if not session_cookie:
             raise Exception("Failed to login")
@@ -91,6 +92,7 @@ class UserManager:
 
         # Set cookies in the headers
         test_user.headers["Cookie"] = f"fastapiusersauth={session_cookie}; "
+        test_user.cookies = {"fastapiusersauth": session_cookie}
         return test_user
 
     @staticmethod
@@ -101,6 +103,7 @@ class UserManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_to_verify.headers,
+            cookies=user_to_verify.cookies,
         )
 
         if user_to_verify.is_active is False:
@@ -165,6 +168,7 @@ class UserManager:
         target_status: bool,
         user_performing_action: DATestUser,
     ) -> DATestUser:
+        url_substring: str
         if target_status is True:
             url_substring = "activate"
         elif target_status is False:
@@ -213,17 +217,16 @@ class UserManager:
         is_active_filter: bool | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> PaginatedReturn[FullUserSnapshot]:
-        query_params = {
+        query_params: dict[str, str | list[str] | int] = {
             "page_num": page_num,
             "page_size": page_size,
-            "q": search_query if search_query else None,
-            "roles": [role.value for role in role_filter] if role_filter else None,
-            "is_active": is_active_filter if is_active_filter is not None else None,
         }
-        # Remove None values
-        query_params = {
-            key: value for key, value in query_params.items() if value is not None
-        }
+        if search_query:
+            query_params["q"] = search_query
+        if role_filter:
+            query_params["roles"] = [role.value for role in role_filter]
+        if is_active_filter is not None:
+            query_params["is_active"] = is_active_filter
 
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/users/accepted?{urlencode(query_params, doseq=True)}",

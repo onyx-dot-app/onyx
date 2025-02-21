@@ -15,7 +15,7 @@ import { NavigationItem, Notification } from "@/app/admin/settings/interfaces";
 import DynamicFaIcon, { preloadIcons } from "./icons/DynamicFaIcon";
 import { useUser } from "./user/UserProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "./settings/usePaidEnterpriseFeaturesEnabled";
-import { Notifications } from "./chat_search/Notifications";
+import { Notifications } from "./chat/Notifications";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
@@ -35,7 +35,7 @@ const DropdownOption: React.FC<DropdownOptionProps> = ({
   openInNewTab,
 }) => {
   const content = (
-    <div className="flex py-1.5 text-sm px-2 gap-x-2 text-t text-sm cursor-pointer rounded hover:bg-[#f1eee8]">
+    <div className="flex py-1.5 text-sm px-2 gap-x-2 text-black text-sm cursor-pointer rounded hover:bg-background-300">
       {icon}
       {label}
     </div>
@@ -133,13 +133,14 @@ export function UserDropdown({
         onOpenChange={onOpenChange}
         content={
           <div
+            id="onyx-user-dropdown"
             onClick={() => setUserInfoVisible(!userInfoVisible)}
             className="flex relative cursor-pointer"
           >
             <div
               className="
                 my-auto
-                bg-userdropdown-background
+                bg-background-900
                 ring-2
                 ring-transparent
                 group-hover:ring-background-300/50
@@ -160,7 +161,7 @@ export function UserDropdown({
               {user && user.email ? user.email[0].toUpperCase() : "A"}
             </div>
             {notifications && notifications.length > 0 && (
-              <div className="absolute right-0 top-0 w-3 h-3 bg-red-500 rounded-full"></div>
+              <div className="absolute -right-0.5 -top-0.5 w-3 h-3 bg-red-500 rounded-full"></div>
             )}
           </div>
         }
@@ -168,12 +169,13 @@ export function UserDropdown({
           <div
             className={`
                 p-2
-                w-[175px]
+                ${page != "admin" && showNotifications ? "w-72" : "w-[175px]"}
                 text-strong 
                 text-sm
                 border 
                 border-border 
                 bg-background
+                dark:bg-[#2F2F2F]
                 rounded-lg
                 shadow-lg 
                 flex 

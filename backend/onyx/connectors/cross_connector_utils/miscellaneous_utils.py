@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from collections.abc import Iterator
 from datetime import datetime
@@ -24,16 +25,22 @@ def datetime_to_utc(dt: datetime) -> datetime:
 
 
 def time_str_to_utc(datetime_str: str) -> datetime:
+    # Remove all timezone abbreviations in parentheses
+    datetime_str = re.sub(r"\([A-Z]+\)", "", datetime_str).strip()
+
+    # Remove any remaining parentheses and their contents
+    datetime_str = re.sub(r"\(.*?\)", "", datetime_str).strip()
+
     try:
         dt = parse(datetime_str)
     except ValueError:
-        # Handle malformed timezone by attempting to fix common format issues
+        # Fix common format issues (e.g. "0000" => "+0000")
         if "0000" in datetime_str:
-            # Convert "0000" to "+0000" for proper timezone parsing
-            fixed_dt_str = datetime_str.replace(" 0000", " +0000")
-            dt = parse(fixed_dt_str)
+            datetime_str = datetime_str.replace(" 0000", " +0000")
+            dt = parse(datetime_str)
         else:
             raise
+
     return datetime_to_utc(dt)
 
 

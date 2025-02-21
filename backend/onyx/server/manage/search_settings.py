@@ -22,6 +22,7 @@ from onyx.db.search_settings import get_embedding_provider_from_provider_type
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_search_settings_status
+from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_processing.unstructured import delete_unstructured_api_key
 from onyx.file_processing.unstructured import get_unstructured_api_key
@@ -97,10 +98,9 @@ def set_new_search_settings(
     )
 
     # Ensure Vespa has the new index immediately
-    document_index = get_default_document_index(
-        primary_index_name=search_settings.index_name,
-        secondary_index_name=new_search_settings.index_name,
-    )
+    get_multipass_config(search_settings)
+    get_multipass_config(new_search_settings)
+    document_index = get_default_document_index(search_settings, new_search_settings)
 
     document_index.ensure_indices_exist(
         index_embedding_dim=search_settings.model_dim,

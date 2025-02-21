@@ -27,8 +27,8 @@ export function Bubble({
         (notSelectable
           ? " bg-background cursor-default"
           : isSelected
-            ? " bg-hover cursor-pointer"
-            : " bg-background hover:bg-hover-light cursor-pointer")
+            ? " bg-accent-background-hovered cursor-pointer"
+            : " bg-background hover:bg-accent-background cursor-pointer")
       }
       onClick={onClick}
     >

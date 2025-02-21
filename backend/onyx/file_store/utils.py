@@ -57,7 +57,7 @@ def save_file_from_url(url: str, tenant_id: str) -> str:
     """NOTE: using multiple sessions here, since this is often called
     using multithreading. In practice, sharing a session has resulted in
     weird errors."""
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         response = requests.get(url)
         response.raise_for_status()
 
@@ -76,7 +76,7 @@ def save_file_from_url(url: str, tenant_id: str) -> str:
 
 
 def save_file_from_base64(base64_string: str, tenant_id: str) -> str:
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         unique_id = str(uuid4())
         file_store = get_default_file_store(db_session)
         file_store.save_file(
