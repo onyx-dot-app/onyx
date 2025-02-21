@@ -18,6 +18,7 @@ from onyx.connectors.discourse.connector import DiscourseConnector
 from onyx.connectors.document360.connector import Document360Connector
 from onyx.connectors.dropbox.connector import DropboxConnector
 from onyx.connectors.egnyte.connector import EgnyteConnector
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.fireflies.connector import FirefliesConnector
 from onyx.connectors.freshdesk.connector import FreshdeskConnector
@@ -32,7 +33,6 @@ from onyx.connectors.guru.connector import GuruConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointConnector
-from onyx.connectors.interfaces import ConnectorValidationError
 from onyx.connectors.interfaces import EventConnector
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -219,6 +219,8 @@ def validate_ccpair_for_user(
             credential=credential,
             tenant_id=tenant_id,
         )
+    except ConnectorValidationError as e:
+        raise e
     except Exception as e:
         if enforce_creation:
             raise ConnectorValidationError(str(e))

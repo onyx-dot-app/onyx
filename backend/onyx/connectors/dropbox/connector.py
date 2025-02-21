@@ -10,10 +10,10 @@ from dropbox.files import FolderMetadata  # type:ignore
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import ConnectorValidationError
-from onyx.connectors.interfaces import CredentialInvalidError
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialInvalidError
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch

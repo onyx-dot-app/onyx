@@ -37,6 +37,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_external_group_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -417,8 +418,18 @@ def connector_external_group_sync_generator_task(
             logger.info(
                 f"Syncing external groups for {source_type} for cc_pair: {cc_pair_id}"
             )
-
-            external_user_groups: list[ExternalUserGroup] = ext_group_sync_func(cc_pair)
+            external_user_groups: list[ExternalUserGroup] = []
+            try:
+                external_user_groups = ext_group_sync_func(cc_pair)
+            except ConnectorValidationError as e:
+                msg = f"Error syncing external groups for {source_type} for cc_pair: {cc_pair_id} {e}"
+                update_connector_credential_pair(
+                    db_session=db_session,
+                    connector_id=cc_pair.connector.id,
+                    credential_id=cc_pair.credential.id,
+                    status=ConnectorCredentialPairStatus.INVALID,
+                )
+                raise e
 
             logger.info(
                 f"Syncing {len(external_user_groups)} external user groups for {source_type}"
