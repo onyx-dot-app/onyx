@@ -302,7 +302,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             if e.status_code == 401:
                 # fail gracefully, let the other impersonations continue
                 # one user without access shouldn't block the entire connector
-                logger.exception(
+                logger.warning(
                     f"User '{user_email}' does not have access to the drive APIs."
                 )
                 return

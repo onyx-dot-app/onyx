@@ -43,6 +43,7 @@ import {
   AirtableIcon,
   GlobeIcon2,
   FileIcon2,
+  GitbookIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import {
@@ -321,11 +322,24 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/connectors/airtable",
   },
+  gitbook: {
+    icon: GitbookIcon,
+    displayName: "GitBook",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/gitbook",
+  },
   // currently used for the Internet Search tool docs, which is why
   // a globe is used
   not_applicable: {
     icon: GlobeIcon,
     displayName: "Not Applicable",
+    category: SourceCategory.Other,
+  },
+
+  // Just so integration tests don't crash the UI
+  mock_connector: {
+    icon: GlobeIcon,
+    displayName: "Mock Connector",
     category: SourceCategory.Other,
   },
 } as SourceMap;

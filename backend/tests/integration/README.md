@@ -13,6 +13,7 @@ The idea is that each test can use the manager class to create (.create()) a "te
 
 1. Launch onyx (using Docker or running with a debugger), ensuring the API server is running on port 8080.
    a. If you'd like to set environment variables, you can do so by creating a `.env` file in the onyx/backend/tests/integration/ directory.
+   b. Onyx MUST be launched with AUTH_TYPE=basic and ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
 2. Navigate to `onyx/backend`.
 3. Run the following command in the terminal:
    ```sh

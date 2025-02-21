@@ -76,7 +76,8 @@ import r2Icon from "../../../public/r2.png";
 import salesforceIcon from "../../../public/Salesforce.png";
 import freshdeskIcon from "../../../public/Freshdesk.png";
 import firefliesIcon from "../../../public/Fireflies.png";
-
+import gitbookDarkIcon from "../../../public/GitBookDark.png";
+import gitbookLightIcon from "../../../public/GitBookLight.png";
 import sharepointIcon from "../../../public/Sharepoint.png";
 import teamsIcon from "../../../public/Teams.png";
 import mediawikiIcon from "../../../public/MediaWiki.svg";
@@ -2888,6 +2889,20 @@ export const AirtableIcon = ({
 }: IconProps) => {
   return <LogoIcon size={size} className={className} src={airtableIcon} />;
 };
+
+export const GitbookIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <div className="flex items-center justify-center">
+    <div className="dark:hidden">
+      <LogoIcon size={size} className={className} src={gitbookDarkIcon} />
+    </div>
+    <div className="hidden dark:block">
+      <LogoIcon size={size} className={className} src={gitbookLightIcon} />
+    </div>
+  </div>
+);
 
 export const PinnedIcon = ({
   size = 16,

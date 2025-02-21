@@ -239,13 +239,13 @@ export function FilterPopup({
   };
 
   const isDocumentSetSelected = (docSet: DocumentSet) =>
-    filterManager.selectedDocumentSets.includes(docSet.id.toString());
+    filterManager.selectedDocumentSets.includes(docSet.name);
 
   const toggleDocumentSet = (docSet: DocumentSet) => {
     filterManager.setSelectedDocumentSets((prev) =>
-      prev.includes(docSet.id.toString())
-        ? prev.filter((id) => id !== docSet.id.toString())
-        : [...prev, docSet.id.toString()]
+      prev.includes(docSet.name)
+        ? prev.filter((id) => id !== docSet.name)
+        : [...prev, docSet.name]
     );
   };
 

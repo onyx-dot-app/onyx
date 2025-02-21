@@ -6,7 +6,7 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "./LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 
-import { FilterManager, LlmOverrideManager } from "@/lib/hooks";
+import { FilterManager, LlmManager } from "@/lib/hooks";
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatFileType, FileDescriptor } from "../interfaces";
 import {
@@ -180,7 +180,7 @@ interface ChatInputBarProps {
   setMessage: (message: string) => void;
   stopGenerating: () => void;
   onSubmit: () => void;
-  llmOverrideManager: LlmOverrideManager;
+  llmManager: LlmManager;
   chatState: ChatState;
   alternativeAssistant: Persona | null;
   // assistants
@@ -225,7 +225,7 @@ export function ChatInputBar({
   availableSources,
   availableDocumentSets,
   availableTags,
-  llmOverrideManager,
+  llmManager,
   proSearchEnabled,
   setProSearchEnabled,
 }: ChatInputBarProps) {
@@ -781,7 +781,7 @@ export function ChatInputBar({
 
                 <LLMPopover
                   llmProviders={llmProviders}
-                  llmOverrideManager={llmOverrideManager}
+                  llmManager={llmManager}
                   requiresImageGeneration={false}
                   currentAssistant={selectedAssistant}
                 />
@@ -805,13 +805,12 @@ export function ChatInputBar({
                 )}
               </div>
               <div className="flex items-center my-auto">
-                {retrievalEnabled &&
-                  !settings?.settings.pro_search_disabled && (
-                    <AgenticToggle
-                      proSearchEnabled={proSearchEnabled}
-                      setProSearchEnabled={setProSearchEnabled}
-                    />
-                  )}
+                {retrievalEnabled && settings?.settings.pro_search_enabled && (
+                  <AgenticToggle
+                    proSearchEnabled={proSearchEnabled}
+                    setProSearchEnabled={setProSearchEnabled}
+                  />
+                )}
                 <button
                   id="onyx-chat-input-send-button"
                   className={`cursor-pointer ${

@@ -1,0 +1,15 @@
+{
+  "cookies": [
+    {
+      "name": "fastapiusersauth",
+      "value": "9HrehHtJj1-5UXudkc96qNBS1Aq5yFDFNCPlLR7PW7k",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1740532793.140733,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}

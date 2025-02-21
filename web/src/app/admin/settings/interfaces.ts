@@ -10,9 +10,10 @@ export interface Settings {
   notifications: Notification[];
   needs_reindexing: boolean;
   gpu_enabled: boolean;
-  pro_search_disabled: boolean | null;
+  pro_search_enabled: boolean | null;
   application_status: ApplicationStatus;
   auto_scroll: boolean;
+  temperature_override_enabled: boolean;
 }
 
 export enum NotificationType {
@@ -54,7 +55,6 @@ export interface EnterpriseSettings {
   custom_popup_header: string | null;
   custom_popup_content: string | null;
   enable_consent_screen: boolean | null;
-  auto_scroll: boolean;
 }
 
 export interface CombinedSettings {

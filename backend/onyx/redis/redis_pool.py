@@ -28,6 +28,8 @@ from onyx.configs.app_configs import REDIS_SSL_CERT_REQS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import DEFAULT_REDIS_PREFIX
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -152,14 +154,10 @@ class RedisPool:
             host=REDIS_REPLICA_HOST, ssl=REDIS_SSL
         )
 
-    def get_client(self, tenant_id: str | None) -> Redis:
-        if tenant_id is None:
-            tenant_id = "public"
+    def get_client(self, tenant_id: str) -> Redis:
         return TenantRedis(tenant_id, connection_pool=self._pool)
 
-    def get_replica_client(self, tenant_id: str | None) -> Redis:
-        if tenant_id is None:
-            tenant_id = "public"
+    def get_replica_client(self, tenant_id: str) -> Redis:
         return TenantRedis(tenant_id, connection_pool=self._replica_pool)
 
     @staticmethod
@@ -221,12 +219,34 @@ redis_pool = RedisPool()
 # print(value.decode())  # Output: 'value'
 
 
-def get_redis_client(*, tenant_id: str | None) -> Redis:
+def get_redis_client(
+    *,
+    #  This argument will be deprecated in the future
+    tenant_id: str | None = None,
+) -> Redis:
+    if tenant_id is None:
+        tenant_id = get_current_tenant_id()
+
     return redis_pool.get_client(tenant_id)
 
 
-def get_redis_replica_client(*, tenant_id: str | None) -> Redis:
+def get_redis_replica_client(
+    *,
+    # this argument will be deprecated in the future
+    tenant_id: str | None = None,
+) -> Redis:
+    if tenant_id is None:
+        tenant_id = get_current_tenant_id()
+
     return redis_pool.get_replica_client(tenant_id)
+
+
+def get_shared_redis_client() -> Redis:
+    return redis_pool.get_client(DEFAULT_REDIS_PREFIX)
+
+
+def get_shared_redis_replica_client() -> Redis:
+    return redis_pool.get_replica_client(DEFAULT_REDIS_PREFIX)
 
 
 SSL_CERT_REQS_MAP = {

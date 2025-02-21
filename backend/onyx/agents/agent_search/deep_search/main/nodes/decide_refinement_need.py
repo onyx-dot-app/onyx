@@ -11,8 +11,10 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.utils.timing import log_function_time
 
 
+@log_function_time(print_only=True)
 def decide_refinement_need(
     state: MainState, config: RunnableConfig
 ) -> RequireRefinemenEvalUpdate:
@@ -25,6 +27,19 @@ def decide_refinement_need(
     graph_config = cast(GraphConfig, config["metadata"]["config"])
 
     decision = True  # TODO: just for current testing purposes
+
+    if state.answer_error:
+        return RequireRefinemenEvalUpdate(
+            require_refined_answer_eval=False,
+            log_messages=[
+                get_langgraph_node_log_string(
+                    graph_component="main",
+                    node_name="decide refinement need",
+                    node_start_time=node_start_time,
+                    result="Timeout Error",
+                )
+            ],
+        )
 
     log_messages = [
         get_langgraph_node_log_string(

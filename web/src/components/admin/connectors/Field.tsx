@@ -432,7 +432,10 @@ export const MarkdownFormField = ({
         </div>
         {isPreviewOpen ? (
           <div className="p-4 border-t border-background-300">
-            <ReactMarkdown className="prose" remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown
+              className="prose dark:prose-invert"
+              remarkPlugins={[remarkGfm]}
+            >
               {field.value}
             </ReactMarkdown>
           </div>

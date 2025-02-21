@@ -159,6 +159,19 @@ function ConnectorRow({
           Paused
         </Badge>
       );
+    } else if (
+      ccPairsIndexingStatus.cc_pair_status ===
+      ConnectorCredentialPairStatus.INVALID
+    ) {
+      return (
+        <Badge
+          tooltip="Connector is in an invalid state. Please update the credentials or create a new connector."
+          circle
+          variant="invalid"
+        >
+          Invalid
+        </Badge>
+      );
     }
 
     // ACTIVE case

@@ -8,7 +8,7 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import LLM_MODEL_UPDATE_API_URL
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import LLMProvider
 
 
@@ -75,7 +75,7 @@ def check_for_llm_model_update(self: Task, *, tenant_id: str | None) -> bool | N
         return None
 
     # Then update the database with the fetched models
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_current_tenant() as db_session:
         # Get the default LLM provider
         default_provider = (
             db_session.query(LLMProvider)

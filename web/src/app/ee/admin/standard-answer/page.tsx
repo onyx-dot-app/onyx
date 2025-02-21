@@ -131,7 +131,7 @@ const StandardAnswersTableRow = ({
         />,
         <ReactMarkdown
           key={`answer-${standardAnswer.id}`}
-          className="prose"
+          className="prose dark:prose-invert"
           remarkPlugins={[remarkGfm]}
         >
           {standardAnswer.answer}

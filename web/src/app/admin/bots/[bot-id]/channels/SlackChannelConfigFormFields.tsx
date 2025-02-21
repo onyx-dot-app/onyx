@@ -197,9 +197,27 @@ export function SlackChannelConfigFormFields({
     <>
       <div className="w-full">
         {isDefault && (
-          <Badge variant="agent" className="bg-blue-100 text-blue-800">
-            Default Configuration
-          </Badge>
+          <>
+            <Badge variant="agent" className="bg-blue-100 text-blue-800">
+              Default Configuration
+            </Badge>
+            <p className="mt-2 text-sm text-gray-600">
+              This default configuration will apply across all Slack channels
+              the bot is added to in the Slack workspace, as well as direct
+              messages (DMs), unless disabled.
+            </p>
+            <div className="mt-4 p-4 bg-gray-100 rounded-md border border-gray-300">
+              <CheckFormField
+                name="disabled"
+                label="Disable Default Configuration"
+              />
+              <p className="mt-2 text-sm text-gray-600 italic">
+                Warning: Disabling the default configuration means the bot
+                won&apos;t respond in Slack channels or DMs unless explicitly
+                configured for them.
+              </p>
+            </div>
+          </>
         )}
         {!isDefault && (
           <>

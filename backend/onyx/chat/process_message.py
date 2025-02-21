@@ -7,10 +7,12 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.orchestration.nodes.tool_call import ToolCallException
+from onyx.agents.agent_search.orchestration.nodes.call_tool import ToolCallException
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
+from onyx.chat.models import AgenticMessageResponseIDInfo
+from onyx.chat.models import AgentMessageIDInfo
 from onyx.chat.models import AgentSearchPacket
 from onyx.chat.models import AllCitations
 from onyx.chat.models import AnswerPostInfo
@@ -143,9 +145,10 @@ from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.timing import log_generator_function_time
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+ERROR_TYPE_CANCELLED = "cancelled"
 
 
 def _translate_citations(
@@ -307,6 +310,7 @@ ChatPacket = (
     | CustomToolResponse
     | MessageSpecificCitations
     | MessageResponseIDInfo
+    | AgenticMessageResponseIDInfo
     | StreamStopInfo
     | AgentSearchPacket
 )
@@ -342,7 +346,7 @@ def stream_chat_message_objects(
     3. [always] A set of streamed LLM tokens or an error anywhere along the line if something fails
     4. [always] Details on the final AI response message that is created
     """
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+    tenant_id = get_current_tenant_id()
     use_existing_user_message = new_msg_req.use_existing_user_message
     existing_assistant_message_id = new_msg_req.existing_assistant_message_id
 
@@ -631,6 +635,7 @@ def stream_chat_message_objects(
             db_session=db_session,
             commit=False,
             reserved_message_id=reserved_message_id,
+            is_agentic=new_msg_req.use_agentic_search,
         )
 
         prompt_override = new_msg_req.prompt_override or chat_session.prompt_override
@@ -1015,7 +1020,7 @@ def stream_chat_message_objects(
                 if info.message_specific_citations
                 else None
             ),
-            error=None,
+            error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
             tool_call=(
                 ToolCall(
                     tool_id=tool_name_to_tool_id[info.tool_result.tool_name],
@@ -1033,6 +1038,7 @@ def stream_chat_message_objects(
         next_level = 1
         prev_message = gen_ai_response_message
         agent_answers = answer.llm_answer_by_level()
+        agentic_message_ids = []
         while next_level in agent_answers:
             next_answer = agent_answers[next_level]
             info = info_by_subq[
@@ -1053,7 +1059,12 @@ def stream_chat_message_objects(
                 citations=info.message_specific_citations.citation_map
                 if info.message_specific_citations
                 else None,
+                error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
                 refined_answer_improvement=refined_answer_improvement,
+                is_agentic=True,
+            )
+            agentic_message_ids.append(
+                AgentMessageIDInfo(level=next_level, message_id=next_answer_message.id)
             )
             next_level += 1
             prev_message = next_answer_message
@@ -1061,11 +1072,9 @@ def stream_chat_message_objects(
         logger.debug("Committing messages")
         db_session.commit()  # actually save user / assistant message
 
-        msg_detail_response = translate_db_message_to_chat_message_detail(
-            gen_ai_response_message
-        )
+        yield AgenticMessageResponseIDInfo(agentic_message_ids=agentic_message_ids)
 
-        yield msg_detail_response
+        yield translate_db_message_to_chat_message_detail(gen_ai_response_message)
     except Exception as e:
         error_msg = str(e)
         logger.exception(error_msg)

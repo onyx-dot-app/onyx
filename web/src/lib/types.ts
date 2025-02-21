@@ -59,6 +59,12 @@ export interface User {
   is_cloud_superuser?: boolean;
   organization_name: string | null;
   is_anonymous_user?: boolean;
+  // If user does not have a configured password
+  // (i.e.) they are using an oauth flow
+  // or are in a no-auth situation
+  // we don't want to show them things like the reset password
+  // functionality
+  password_configured?: boolean;
 }
 
 export interface AllUsersResponse {
@@ -92,6 +98,7 @@ export type ValidInputTypes =
   | "event"
   | "slim_retrieval";
 export type ValidStatuses =
+  | "invalid"
   | "success"
   | "completed_with_errors"
   | "canceled"
@@ -123,6 +130,7 @@ export interface FailedConnectorIndexingStatus {
 export interface IndexAttemptSnapshot {
   id: number;
   status: ValidStatuses | null;
+  from_beginning: boolean;
   new_docs_indexed: number;
   docs_removed_from_index: number;
   total_docs_indexed: number;
@@ -251,6 +259,7 @@ export interface ChannelConfig {
   respond_member_group_list?: string[];
   answer_filters?: AnswerFilterOption[];
   follow_up_tags?: string[];
+  disabled?: boolean;
 }
 
 export type SlackBotResponseType = "quotes" | "citations";
@@ -350,6 +359,7 @@ export enum ValidSources {
   Fireflies = "fireflies",
   Egnyte = "egnyte",
   Airtable = "airtable",
+  Gitbook = "gitbook",
 }
 
 export const validAutoSyncSources = [

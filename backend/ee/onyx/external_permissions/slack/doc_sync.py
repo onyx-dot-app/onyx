@@ -5,7 +5,7 @@ from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.slack.connector import get_channels
 from onyx.connectors.slack.connector import make_paginated_slack_api_call_w_retries
-from onyx.connectors.slack.connector import SlackPollConnector
+from onyx.connectors.slack.connector import SlackConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -17,7 +17,7 @@ logger = setup_logger()
 def _get_slack_document_ids_and_channels(
     cc_pair: ConnectorCredentialPair, callback: IndexingHeartbeatInterface | None
 ) -> dict[str, list[str]]:
-    slack_connector = SlackPollConnector(**cc_pair.connector.connector_specific_config)
+    slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)
     slack_connector.load_credentials(cc_pair.credential.credential_json)
 
     slim_doc_generator = slack_connector.retrieve_all_slim_documents(callback=callback)

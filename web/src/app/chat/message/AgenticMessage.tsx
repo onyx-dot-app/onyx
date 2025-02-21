@@ -9,6 +9,12 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
 import remarkGfm from "remark-gfm";
@@ -38,7 +44,7 @@ import { ValidSources } from "@/lib/types";
 import { useMouseTracking } from "./hooks";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import RegenerateOption from "../RegenerateOption";
-import { LlmOverride } from "@/lib/hooks";
+import { LlmDescriptor } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
 import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
@@ -81,6 +87,7 @@ export const AgenticMessage = ({
   agenticDocs,
   secondLevelSubquestions,
   toggleDocDisplay,
+  error,
 }: {
   isStreamingQuestions: boolean;
   isGenerating: boolean;
@@ -110,9 +117,10 @@ export const AgenticMessage = ({
   isComplete?: boolean;
   handleFeedback?: (feedbackType: FeedbackType) => void;
   overriddenModel?: string;
-  regenerate?: (modelOverRide: LlmOverride) => Promise<void>;
+  regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
   setPresentingDocument?: (document: OnyxDocument) => void;
   toggleDocDisplay?: (agentic: boolean) => void;
+  error?: string | null;
 }) => {
   const [noShowingMessage, setNoShowingMessage] = useState(isComplete);
 
@@ -272,6 +280,7 @@ export const AgenticMessage = ({
           ...(secondLevelSubquestions || []),
         ]}
         openQuestion={openQuestion}
+        href={props.href}
       >
         {props.children}
       </MemoizedAnchor>
@@ -306,7 +315,7 @@ export const AgenticMessage = ({
   const renderedAlternativeMarkdown = useMemo(() => {
     return (
       <ReactMarkdown
-        className="prose max-w-full text-base"
+        className="prose dark:prose-invert max-w-full text-base"
         components={{
           ...markdownComponents,
           code: ({ node, className, children }: any) => {
@@ -333,7 +342,7 @@ export const AgenticMessage = ({
   const renderedMarkdown = useMemo(() => {
     return (
       <ReactMarkdown
-        className="prose max-w-full text-base"
+        className="prose dark:prose-invert max-w-full text-base"
         components={markdownComponents}
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
@@ -491,11 +500,28 @@ export const AgenticMessage = ({
                           ) : (
                             content
                           )}
+                          {error && (
+                            <p className="mt-2 text-red-700 text-sm my-auto">
+                              {error}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </>
-                  ) : isComplete ? null : (
-                    <></>
+                  ) : isComplete ? (
+                    error && (
+                      <p className="mt-2 mx-4 text-red-700 text-sm my-auto">
+                        {error}
+                      </p>
+                    )
+                  ) : (
+                    <>
+                      {error && (
+                        <p className="mt-2 mx-4 text-red-700 text-sm my-auto">
+                          {error}
+                        </p>
+                      )}
+                    </>
                   )}
                   {handleFeedback &&
                     (isActive ? (

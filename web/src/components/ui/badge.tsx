@@ -1,6 +1,11 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
@@ -8,6 +13,8 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
+        invalid:
+          "border-orange-200 bg-orange-50 text-orange-600 dark:border-orange-700 dark:bg-orange-900 dark:text-orange-50",
         outline:
           "border-neutral-200 bg-neutral-50 text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50",
         purple:
@@ -57,11 +64,13 @@ function Badge({
   icon: Icon,
   size = "sm",
   circle,
+  tooltip,
   ...props
 }: BadgeProps & {
   icon?: React.ElementType;
   size?: "sm" | "md" | "xs";
   circle?: boolean;
+  tooltip?: string;
 }) {
   const sizeClasses = {
     sm: "px-2.5 py-0.5 text-xs",
@@ -69,7 +78,7 @@ function Badge({
     xs: "px-1.5 py-0.25 text-[.5rem]",
   };
 
-  return (
+  const BadgeContent = (
     <div
       className={cn(
         "flex-none inline-flex items-center whitespace-nowrap overflow-hidden",
@@ -98,6 +107,21 @@ function Badge({
       <span className="truncate">{props.children}</span>
     </div>
   );
+
+  if (tooltip) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>{BadgeContent}</TooltipTrigger>
+          <TooltipContent>
+            <p>{tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return BadgeContent;
 }
 
 export { Badge, badgeVariants };

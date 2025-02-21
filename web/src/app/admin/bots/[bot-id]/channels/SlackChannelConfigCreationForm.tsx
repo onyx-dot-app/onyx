@@ -124,6 +124,8 @@ export const SlackChannelConfigCreationForm = ({
             : existingSlackChannelConfig?.persona
               ? "document_sets"
               : "all_public",
+          disabled:
+            existingSlackChannelConfig?.channel_config?.disabled ?? false,
         }}
         validationSchema={Yup.object().shape({
           slack_bot_id: Yup.number().required(),
@@ -170,6 +172,7 @@ export const SlackChannelConfigCreationForm = ({
               "non_search_assistant",
             ])
             .required(),
+          disabled: Yup.boolean().optional().default(false),
         })}
         onSubmit={async (values, formikHelpers) => {
           formikHelpers.setSubmitting(true);
@@ -195,6 +198,7 @@ export const SlackChannelConfigCreationForm = ({
               (category: any) => category.id
             ),
             response_type: values.response_type as SlackBotResponseType,
+            disabled: values.disabled ?? false,
           };
 
           if (!cleanedValues.still_need_help_enabled) {

@@ -35,7 +35,7 @@ export const MinimalMarkdown: React.FC<MinimalMarkdownProps> = ({
 
   return (
     <ReactMarkdown
-      className={`w-full text-wrap break-word ${className}`}
+      className={`w-full text-wrap break-word prose dark:prose-invert ${className}`}
       components={markdownComponents}
       remarkPlugins={[remarkGfm]}
     >

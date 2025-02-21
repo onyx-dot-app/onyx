@@ -11,10 +11,14 @@ export const LeaveOrganizationButton = ({
   user,
   setPopup,
   mutate,
+  className,
+  children,
 }: {
   user: User;
   setPopup: (spec: PopupSpec) => void;
   mutate: () => void;
+  className?: string;
+  children?: React.ReactNode;
 }) => {
   const router = useRouter();
   const { trigger, isMutating } = useSWRMutation(
@@ -58,13 +62,12 @@ export const LeaveOrganizationButton = ({
       )}
 
       <Button
-        className="w-min"
+        className={className}
         onClick={() => setShowLeaveModal(true)}
         disabled={isMutating}
-        size="sm"
-        variant="destructive"
+        variant="ghost"
       >
-        Leave Organization
+        {children}
       </Button>
     </>
   );

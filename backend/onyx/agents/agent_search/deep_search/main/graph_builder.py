@@ -26,8 +26,8 @@ from onyx.agents.agent_search.deep_search.main.nodes.decide_refinement_need impo
 from onyx.agents.agent_search.deep_search.main.nodes.extract_entities_terms import (
     extract_entities_terms,
 )
-from onyx.agents.agent_search.deep_search.main.nodes.generate_refined_answer import (
-    generate_refined_answer,
+from onyx.agents.agent_search.deep_search.main.nodes.generate_validate_refined_answer import (
+    generate_validate_refined_answer,
 )
 from onyx.agents.agent_search.deep_search.main.nodes.ingest_refined_sub_answers import (
     ingest_refined_sub_answers,
@@ -43,14 +43,14 @@ from onyx.agents.agent_search.deep_search.main.states import MainState
 from onyx.agents.agent_search.deep_search.refinement.consolidate_sub_answers.graph_builder import (
     answer_refined_query_graph_builder,
 )
-from onyx.agents.agent_search.orchestration.nodes.basic_use_tool_response import (
-    basic_use_tool_response,
-)
-from onyx.agents.agent_search.orchestration.nodes.llm_tool_choice import llm_tool_choice
+from onyx.agents.agent_search.orchestration.nodes.call_tool import call_tool
+from onyx.agents.agent_search.orchestration.nodes.choose_tool import choose_tool
 from onyx.agents.agent_search.orchestration.nodes.prepare_tool_input import (
     prepare_tool_input,
 )
-from onyx.agents.agent_search.orchestration.nodes.tool_call import tool_call
+from onyx.agents.agent_search.orchestration.nodes.use_tool_response import (
+    basic_use_tool_response,
+)
 from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
 from onyx.utils.logger import setup_logger
 
@@ -77,13 +77,13 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
     # Choose the initial tool
     graph.add_node(
         node="initial_tool_choice",
-        action=llm_tool_choice,
+        action=choose_tool,
     )
 
     # Call the tool, if required
     graph.add_node(
-        node="tool_call",
-        action=tool_call,
+        node="call_tool",
+        action=call_tool,
     )
 
     # Use the tool response
@@ -126,8 +126,8 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
 
     # Node to generate the refined answer
     graph.add_node(
-        node="generate_refined_answer",
-        action=generate_refined_answer,
+        node="generate_validate_refined_answer",
+        action=generate_validate_refined_answer,
     )
 
     # Early node to extract the entities and terms from the initial answer,
@@ -168,11 +168,11 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
     graph.add_conditional_edges(
         "initial_tool_choice",
         route_initial_tool_choice,
-        ["tool_call", "start_agent_search", "logging_node"],
+        ["call_tool", "start_agent_search", "logging_node"],
     )
 
     graph.add_edge(
-        start_key="tool_call",
+        start_key="call_tool",
         end_key="basic_use_tool_response",
     )
     graph.add_edge(
@@ -215,11 +215,11 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
 
     graph.add_edge(
         start_key="ingest_refined_sub_answers",
-        end_key="generate_refined_answer",
+        end_key="generate_validate_refined_answer",
     )
 
     graph.add_edge(
-        start_key="generate_refined_answer",
+        start_key="generate_validate_refined_answer",
         end_key="compare_answers",
     )
     graph.add_edge(
@@ -252,9 +252,7 @@ if __name__ == "__main__":
             db_session, primary_llm, fast_llm, search_request
         )
 
-        inputs = MainInput(
-            base_question=graph_config.inputs.search_request.query, log_messages=[]
-        )
+        inputs = MainInput(log_messages=[])
 
         for thing in compiled_graph.stream(
             input=inputs,

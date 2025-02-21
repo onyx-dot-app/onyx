@@ -88,7 +88,6 @@ export interface ButtonProps
   tooltip?: string;
   reverse?: boolean;
 }
-
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (
     {
@@ -124,7 +123,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       return (
         <TooltipProvider>
           <Tooltip>
-            <TooltipTrigger asChild>{button}</TooltipTrigger>
+            <TooltipTrigger>
+              <div>{button}</div>
+            </TooltipTrigger>
             <TooltipContent showTick={true}>
               <p>{tooltip}</p>
             </TooltipContent>

@@ -190,7 +190,8 @@ def create_chat_chain(
             and previous_message.message_type == MessageType.ASSISTANT
             and mainline_messages
         ):
-            mainline_messages[-1] = current_message
+            if current_message.refined_answer_improvement:
+                mainline_messages[-1] = current_message
         else:
             mainline_messages.append(current_message)
 

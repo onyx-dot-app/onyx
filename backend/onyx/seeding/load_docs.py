@@ -61,10 +61,10 @@ def _create_indexable_chunks(
             doc_updated_at=None,
             primary_owners=[],
             secondary_owners=[],
-            chunk_count=1,
+            chunk_count=preprocessed_doc["chunk_ind"] + 1,
         )
-        if preprocessed_doc["chunk_ind"] == 0:
-            ids_to_documents[document.id] = document
+
+        ids_to_documents[document.id] = document
 
         chunk = DocMetadataAwareIndexChunk(
             chunk_id=preprocessed_doc["chunk_ind"],
@@ -92,6 +92,7 @@ def _create_indexable_chunks(
             boost=DEFAULT_BOOST,
             large_chunk_id=None,
         )
+
         chunks.append(chunk)
 
     return list(ids_to_documents.values()), chunks
@@ -192,6 +193,7 @@ def seed_initial_documents(
         last_successful_index_time=last_index_time,
         seeding_flow=True,
     )
+
     cc_pair_id = cast(int, result.data)
     processed_docs = fetch_versioned_implementation(
         "onyx.seeding.load_docs",
@@ -249,4 +251,5 @@ def seed_initial_documents(
             .values(chunk_count=doc.chunk_count)
         )
 
+    db_session.commit()
     kv_store.store(KV_DOCUMENTS_SEEDED_KEY, True)

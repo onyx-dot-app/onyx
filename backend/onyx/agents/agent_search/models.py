@@ -67,6 +67,7 @@ class GraphSearchConfig(BaseModel):
     # Whether to allow creation of refinement questions (and entity extraction, etc.)
     allow_refinement: bool = True
     skip_gen_ai_answer_generation: bool = False
+    allow_agent_reranking: bool = False
 
 
 class GraphConfig(BaseModel):

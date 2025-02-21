@@ -42,7 +42,7 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert",
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup",
     ]
 
     cmd_worker_heavy = [

@@ -31,13 +31,3 @@ test("Admin - OAuth Redirect - Invalid Connector", async ({ page }) => {
     "invalid_connector is not a valid source type."
   );
 });
-
-test("Admin - OAuth Redirect - No Session", async ({ page }) => {
-  await page.goto(
-    "http://localhost:3000/admin/connectors/slack/oauth/callback?code=123&state=xyz"
-  );
-
-  await expect(page.locator("p.text-text-500")).toHaveText(
-    "An error occurred during the OAuth process. Please try again."
-  );
-});

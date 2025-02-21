@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_admin_user
 from onyx.configs.constants import MilestoneRecordType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.models import ChannelConfig
 from onyx.db.models import User
@@ -36,6 +35,7 @@ from onyx.server.manage.models import SlackChannelConfigCreationRequest
 from onyx.server.manage.validate_tokens import validate_app_token
 from onyx.server.manage.validate_tokens import validate_bot_token
 from onyx.utils.telemetry import create_milestone_and_report
+from shared_configs.contextvars import get_current_tenant_id
 
 
 router = APIRouter(prefix="/manage")
@@ -92,6 +92,8 @@ def _form_channel_config(
     channel_config[
         "respond_to_bots"
     ] = slack_channel_config_creation_request.respond_to_bots
+
+    channel_config["disabled"] = slack_channel_config_creation_request.disabled
 
     return channel_config
 
@@ -194,6 +196,7 @@ def patch_slack_channel_config(
         channel_config=channel_config,
         standard_answer_category_ids=slack_channel_config_creation_request.standard_answer_categories,
         enable_auto_filters=slack_channel_config_creation_request.enable_auto_filters,
+        disabled=slack_channel_config_creation_request.disabled,
     )
     return SlackChannelConfig.from_model(slack_channel_config_model)
 
@@ -228,8 +231,9 @@ def create_bot(
     slack_bot_creation_request: SlackBotCreationRequest,
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_admin_user),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> SlackBot:
+    tenant_id = get_current_tenant_id()
+
     validate_app_token(slack_bot_creation_request.app_token)
     validate_bot_token(slack_bot_creation_request.bot_token)
 

@@ -152,7 +152,17 @@ export const connectorConfigs: Record<
         ],
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Scroll before scraping:",
+        label: "Scroll before scraping",
+        description:
+          "Enable if the website requires scrolling for the desired content to load",
+        name: "scroll_before_scraping",
+        optional: true,
+      },
+    ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
   github: {
@@ -223,6 +233,24 @@ export const connectorConfigs: Record<
         name: "include_issues",
         optional: true,
         hidden: true,
+      },
+    ],
+    advanced_values: [],
+  },
+  gitbook: {
+    description: "Configure GitBook connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the space ID:",
+        label: "Space ID",
+        name: "space_id",
+        optional: false,
+        description:
+          "The ID of the GitBook space to index. This can be found in the URL " +
+          "of a page in the space. For example, if your URL looks like " +
+          "`https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`, " +
+          "then your space ID is `8JkzVx8QCIGRrmxhGHU8`.",
       },
     ],
     advanced_values: [],
@@ -1214,6 +1242,7 @@ export interface ConnectorBase<T> {
   indexing_start: Date | null;
   access_type: string;
   groups?: number[];
+  from_beginning?: boolean;
 }
 
 export interface Connector<T> extends ConnectorBase<T> {
@@ -1235,6 +1264,7 @@ export interface ConnectorSnapshot {
   indexing_start: number | null;
   time_created: string;
   time_updated: string;
+  from_beginning?: boolean;
 }
 
 export interface WebConfig {
