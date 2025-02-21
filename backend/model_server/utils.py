@@ -72,7 +72,7 @@ def get_gpu_type() -> str:
     return GPUStatus.NONE
 
 
-def pass_keys(api_key: str) -> str | tuple[str, str, str]:
+def pass_aws_key(api_key: str) -> tuple[str, str, str]:
     if api_key.startswith("aws"):
         try:
             # Example of splitting AWS keys (assuming format like "aws_ACCESSKEY_SECRETKEY_REGION")
@@ -85,7 +85,7 @@ def pass_keys(api_key: str) -> str | tuple[str, str, str]:
             else:
                 raise "Invalid AWS key format"
         except Exception as e:
-            return f"Error processing key: {str(e)}"
+            raise f"Error parsing AWS key: {e}"
 
     # Return the API key as-is if it's not an AWS key
-    raise "API key is not an AWS key"
+    raise "API key is not an AWS key needed aws_ prefix"

@@ -29,7 +29,7 @@ from model_server.constants import DEFAULT_VERTEX_MODEL
 from model_server.constants import DEFAULT_VOYAGE_MODEL
 from model_server.constants import EmbeddingModelTextType
 from model_server.constants import EmbeddingProvider
-from model_server.utils import pass_keys
+from model_server.utils import pass_aws_key
 from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
@@ -618,7 +618,7 @@ async def process_rerank_request(rerank_request: RerankRequest) -> RerankRespons
         elif rerank_request.provider_type == RerankerProvider.BEDROCK:
             if rerank_request.api_key is None:
                 raise RuntimeError("Bedrock Rerank Requires an API Key")
-            aws_access_key_id, aws_secret_access_key, aws_region = pass_keys(
+            aws_access_key_id, aws_secret_access_key, aws_region = pass_aws_key(
                 rerank_request.api_key
             )
             sim_scores = await cohere_rerank_aws(
