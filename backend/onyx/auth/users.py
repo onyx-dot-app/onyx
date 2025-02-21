@@ -4,6 +4,7 @@ import secrets
 import string
 import uuid
 from collections.abc import AsyncGenerator
+from collections.abc import Awaitable
 from datetime import datetime
 from datetime import timezone
 from typing import cast
@@ -292,6 +293,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
             verify_email_is_invited(user_create.email)
             verify_email_domain(user_create.email)
+
             if MULTI_TENANT:
                 tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
                     db_session, User, OAuthAccount
@@ -311,7 +313,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             try:
                 user = await super().create(user_create, safe=safe, request=request)  # type: ignore
             except exceptions.UserAlreadyExists:
-                user = await self.get_by_email(user_create.email)
+                user = await cast(
+                    Awaitable[User], self.user_db.get_by_email(user_create.email)
+                )
+
                 # Handle case where user has used product outside of web and is now creating an account through web
                 if not user.role.is_web_login() and user_create.role.is_web_login():
                     user_update = UserUpdateWithRole(
