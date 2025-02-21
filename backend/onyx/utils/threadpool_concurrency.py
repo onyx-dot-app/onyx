@@ -42,6 +42,9 @@ def run_functions_tuples_in_parallel(
 
     results = []
     with ThreadPoolExecutor(max_workers=workers) as executor:
+        # The primary reason for propagating contextvars is to allow acquiring a db session
+        # that respects tenant id. Context.run is expected to be low-overhead, but if we later
+        # find that it is increasing latency we can make using it optional.
         future_to_index = {
             executor.submit(contextvars.copy_context().run, func, *args): i
             for i, (func, args) in enumerate(functions_with_args)
