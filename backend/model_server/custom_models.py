@@ -2,10 +2,12 @@ import torch
 import torch.nn.functional as F
 from fastapi import APIRouter
 from huggingface_hub import snapshot_download  # type: ignore
+from setfit import SetFitModel  # type: ignore[import]
 from transformers import AutoTokenizer  # type: ignore
 from transformers import BatchEncoding  # type: ignore
 from transformers import PreTrainedTokenizer  # type: ignore
 
+from model_server.constants import CONTENT_MODEL_WARM_UP_STRING
 from model_server.constants import MODEL_WARM_UP_STRING
 from model_server.onyx_torch_model import ConnectorClassifier
 from model_server.onyx_torch_model import HybridClassifier
@@ -13,6 +15,7 @@ from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_REPO
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_TAG
+from shared_configs.configs import CONTENT_MODEL_VERSION
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import INTENT_MODEL_TAG
 from shared_configs.configs import INTENT_MODEL_VERSION
@@ -20,6 +23,7 @@ from shared_configs.model_server_models import ConnectorClassificationRequest
 from shared_configs.model_server_models import ConnectorClassificationResponse
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
+
 
 logger = setup_logger()
 
@@ -30,6 +34,10 @@ _CONNECTOR_CLASSIFIER_MODEL: ConnectorClassifier | None = None
 
 _INTENT_TOKENIZER: AutoTokenizer | None = None
 _INTENT_MODEL: HybridClassifier | None = None
+
+_CONTENT_MODEL: SetFitModel | None = None
+
+_TEMPERATURE_CONTENT_CLASSIFICATION = 4.0
 
 
 def get_connector_classifier_tokenizer() -> AutoTokenizer:
@@ -110,6 +118,13 @@ def get_local_intent_model(
                 )
                 raise
     return _INTENT_MODEL
+
+
+def get_local_content_model() -> SetFitModel:
+    global _CONTENT_MODEL
+    if _CONTENT_MODEL is None:
+        _CONTENT_MODEL = SetFitModel(CONTENT_MODEL_VERSION)
+    return _CONTENT_MODEL
 
 
 def tokenize_connector_classification_query(
@@ -195,6 +210,16 @@ def warm_up_intent_model() -> None:
     )
 
 
+def warm_up_content_model() -> None:
+    logger.notice(
+        "Warming up Content Model"
+    )  # TODO: add version once we have proper model
+
+    content_model = get_local_content_model()
+    content_model.device
+    content_model(CONTENT_MODEL_WARM_UP_STRING)
+
+
 @simple_log_function_time()
 def run_inference(tokens: BatchEncoding) -> tuple[list[float], list[float]]:
     intent_model = get_local_intent_model()
@@ -216,6 +241,29 @@ def run_inference(tokens: BatchEncoding) -> tuple[list[float], list[float]]:
     token_positive_probs = token_probabilities[:, 1].tolist()
 
     return intent_probabilities.tolist(), token_positive_probs
+
+
+@simple_log_function_time()
+def run_content_classification_inference(
+    text_inputs: list[str],
+) -> list[tuple[int, float]]:
+    get_local_content_model()
+
+    # output_classes = list([x.numpy() for x in content_model(text_inputs)])
+    # base_output_probabilities = list([x[1].numpy() for x in content_model.predict_proba(text_inputs)])
+    # logits = [np.log(p/(1-p)) for p in  base_output_probabilities]
+    # scaled_logits = [l/_TEMPERATURE_CONTENT_CLASSIFICATION for l in logits]
+    # output_probabilities_with_temp = [np.exp(scaled_logit)/(1 + np.exp(scaled_logit)) for scaled_logit in scaled_logits]
+
+    output_classes = [1] * len(text_inputs)
+    output_probabilities_with_temp = [0.9] * len(text_inputs)
+
+    return [
+        (predicted_label, predicted_probability)
+        for predicted_label, predicted_probability in zip(
+            output_classes, output_probabilities_with_temp
+        )
+    ]
 
 
 def map_keywords(
@@ -362,3 +410,13 @@ async def process_analysis_request(
 
     is_keyword, keywords = run_analysis(intent_request)
     return IntentResponse(is_keyword=is_keyword, keywords=keywords)
+
+
+@router.post("/content-classification")
+async def process_content_classification_request(
+    content_classification_requests: list[str],
+) -> list[tuple[int, float]]:
+    content_classification_result = run_content_classification_inference(
+        content_classification_requests
+    )
+    return content_classification_result
