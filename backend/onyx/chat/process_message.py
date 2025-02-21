@@ -747,14 +747,13 @@ def stream_chat_message_objects(
                 files=latest_query_files,
                 single_message_history=single_message_history,
             ),
-            system_message=default_build_system_message(prompt_config),
+            system_message=default_build_system_message(prompt_config, llm.config),
             message_history=message_history,
             llm_config=llm.config,
             raw_user_query=final_msg.message,
             raw_user_uploaded_files=latest_query_files or [],
             single_message_history=single_message_history,
         )
-        prompt_builder.update_system_prompt(default_build_system_message(prompt_config))
 
         # LLM prompt building, response capturing, etc.
         answer = Answer(
