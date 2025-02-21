@@ -32,10 +32,13 @@ AutoTokenizer.from_pretrained('distilbert-base-uncased'); \
 AutoTokenizer.from_pretrained('mixedbread-ai/mxbai-rerank-xsmall-v1'); \
 from huggingface_hub import snapshot_download; \
 snapshot_download(repo_id='danswer/hybrid-intent-token-classifier', revision='v1.0.3'); \
+snapshot_download(repo_id='sentence-transformers/paraphrase-mpnet-base-v2'); \
 snapshot_download('nomic-ai/nomic-embed-text-v1'); \
 snapshot_download('mixedbread-ai/mxbai-rerank-xsmall-v1'); \
 from sentence_transformers import SentenceTransformer; \
-SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True);"
+SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True); \
+from setfit import SetFitModel; \
+SetFitModel.from_pretrained('sentence-transformers/paraphrase-mpnet-base-v2');"
 
 # In case the user has volumes mounted to /root/.cache/huggingface that they've downloaded while
 # running Onyx, don't overwrite it with the built in cache folder

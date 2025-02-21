@@ -25,6 +25,9 @@ CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
 CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
 INTENT_MODEL_VERSION = "danswer/hybrid-intent-token-classifier"
 INTENT_MODEL_TAG = "v1.0.3"
+CONTENT_MODEL_VERSION = (
+    "sentence-transformers/paraphrase-mpnet-base-v2"  # TODO: replace with Onyx FT model
+)
 
 
 # Bi-Encoder, other details
