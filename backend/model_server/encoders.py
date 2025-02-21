@@ -97,23 +97,18 @@ class CloudEmbedding:
                 )
             return final_embeddings
         except Exception as e:
-            if isinstance(e, openai.AuthenticationError):
-                # Don't log text on authentication errors
-                error_string = (
-                    f"Exception embedding text with OpenAI - openai.AuthenticationError: "
-                    f"Model: {model} "
-                    f"Provider: {self.provider} "
-                    f"Exception: {e}"
-                )
-            else:
-                error_string = (
-                    f"Exception embedding text with OpenAI:"
-                    f"Model: {model} \n"
-                    f"Provider: {self.provider} \n"
-                    f"Exception: {e} \n"
-                    f"Texts: {texts}"
-                )
+            error_string = (
+                f"Exception embedding text with OpenAI - {type(e)}: "
+                f"Model: {model} "
+                f"Provider: {self.provider} "
+                f"Exception: {e}"
+            )
             logger.error(error_string)
+
+            # only log text when it's not an authentication error.
+            if not isinstance(e, openai.AuthenticationError):
+                logger.debug(f"Exception texts: {texts}")
+
             raise RuntimeError(error_string)
 
     async def _embed_cohere(
