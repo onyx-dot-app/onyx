@@ -236,7 +236,7 @@ export async function* sendMessage({
           }
         : null,
     use_existing_user_message: useExistingUserMessage,
-    use_agentic_search: Boolean(useLanggraph),
+    use_agentic_search: useLanggraph ?? false,
   });
 
   const response = await fetch(`/api/chat/send-message`, {
