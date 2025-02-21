@@ -73,6 +73,14 @@ class IntentResponse(BaseModel):
     keywords: list[str]
 
 
+class ContentClassificationRequests(BaseModel):
+    queries: list[str]
+
+
+class ContentClassificationResponses(BaseModel):
+    content_classifications: list[tuple[int, float]]
+
+
 class SupportedEmbeddingModel(BaseModel):
     name: str
     dim: int

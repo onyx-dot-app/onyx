@@ -43,7 +43,11 @@ from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.indexing.models import IndexChunk
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
+from onyx.natural_language_processing.search_nlp_models import (
+    ContentClassificationModel,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
@@ -125,6 +129,81 @@ def _upsert_documents_in_db(
             )
 
 
+def _get_aggregated_boost_factor(
+    chunks: list[IndexChunk], content_classification_model: ContentClassificationModel
+) -> tuple[list[IndexChunk], list[float], list[ConnectorFailure]]:
+    """Calculates the aggregated boost factor for a chunk based on its content."""
+
+    short_chunk_content_dict = {
+        chunk_num: chunk.content
+        for chunk_num, chunk in enumerate(chunks)
+        if len(chunk.content.split()) <= 10
+    }
+    short_chunk_contents = list(short_chunk_content_dict.values())
+    short_chunk_keys = list(short_chunk_content_dict.keys())
+
+    try:
+        short_content_classification_predictions = content_classification_model.predict(
+            short_chunk_contents
+        )
+        short_content_classification_results = [
+            raw_score for _, raw_score in short_content_classification_predictions
+        ]
+        short_content_classification_results_dict = {
+            short_chunk_keys[i]: short_content_classification_results[i]
+            for i in range(len(short_chunk_keys))
+        }
+        chunk_content_scores = [
+            1.0
+            if chunk_num not in short_chunk_keys
+            else short_content_classification_results_dict[chunk_num]
+            for chunk_num in range(len(chunks))
+        ]
+
+        return chunks, chunk_content_scores, []
+
+    except Exception as e:
+        logger.exception(
+            f"Error predicting content classification for chunks: {e}. Falling back to individual examples."
+        )
+
+        chunks_with_scores: list[IndexChunk] = []
+        chunk_content_scores = []
+        failures: list[ConnectorFailure] = []
+
+        for chunk in chunks:
+            if len(chunk.content.split()) <= 10:
+                try:
+                    chunk_content_scores.append(
+                        content_classification_model.predict([chunk.content])[0][1]
+                    )
+                    chunks_with_scores.append(chunk)
+                except Exception as e:
+                    logger.exception(
+                        f"Error predicting content classification for chunk: {e}. Adding to missed content classifications."
+                    )
+                    # chunk_content_scores.append(1.0)
+                    failures.append(
+                        ConnectorFailure(
+                            failed_document=DocumentFailure(
+                                document_id=chunk.source_document.id,
+                                document_link=(
+                                    chunk.source_document.sections[0].link
+                                    if chunk.source_document.sections
+                                    else None
+                                ),
+                            ),
+                            failure_message=str(e),
+                            exception=e,
+                        )
+                    )
+            else:
+                chunk_content_scores.append(1.0)
+                chunks_with_scores.append(chunk)
+
+        return chunks_with_scores, chunk_content_scores, failures
+
+
 def get_doc_ids_to_update(
     documents: list[Document], db_docs: list[DBDocument]
 ) -> list[Document]:
@@ -154,6 +233,7 @@ def index_doc_batch_with_handler(
     *,
     chunker: Chunker,
     embedder: IndexingEmbedder,
+    content_classification_model: ContentClassificationModel,
     document_index: DocumentIndex,
     document_batch: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
@@ -165,6 +245,7 @@ def index_doc_batch_with_handler(
         index_pipeline_result = index_doc_batch(
             chunker=chunker,
             embedder=embedder,
+            content_classification_model=content_classification_model,
             document_index=document_index,
             document_batch=document_batch,
             index_attempt_metadata=index_attempt_metadata,
@@ -314,6 +395,7 @@ def index_doc_batch(
     document_batch: list[Document],
     chunker: Chunker,
     embedder: IndexingEmbedder,
+    content_classification_model: ContentClassificationModel,
     document_index: DocumentIndex,
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
@@ -386,6 +468,14 @@ def index_doc_batch(
         else ([], [])
     )
 
+    (
+        chunks_with_embeddings_scores,
+        chunk_content_scores,
+        chunk_content_classification_failures,
+    ) = _get_aggregated_boost_factor(
+        chunks_with_embeddings, content_classification_model
+    )
+
     updatable_ids = [doc.id for doc in ctx.updatable_docs]
 
     # Acquires a lock on the documents so that no other process can modify them
@@ -414,7 +504,7 @@ def index_doc_batch(
             document_id: len(
                 [
                     chunk
-                    for chunk in chunks_with_embeddings
+                    for chunk in chunks_with_embeddings_scores
                     if chunk.source_document.id == document_id
                 ]
             )
@@ -439,8 +529,9 @@ def index_doc_batch(
                     else DEFAULT_BOOST
                 ),
                 tenant_id=tenant_id,
+                aggregated_boost_factor=chunk_content_scores[chunk_num],
             )
-            for chunk in chunks_with_embeddings
+            for chunk_num, chunk in enumerate(chunks_with_embeddings_scores)
         ]
 
         logger.debug(
@@ -514,7 +605,9 @@ def index_doc_batch(
         new_docs=len([r for r in insertion_records if r.already_existed is False]),
         total_docs=len(filtered_documents),
         total_chunks=len(access_aware_chunks),
-        failures=vector_db_write_failures + embedding_failures,
+        failures=vector_db_write_failures
+        + embedding_failures
+        + chunk_content_classification_failures,
     )
 
     return result
@@ -523,6 +616,7 @@ def index_doc_batch(
 def build_indexing_pipeline(
     *,
     embedder: IndexingEmbedder,
+    content_classification_model: ContentClassificationModel,
     document_index: DocumentIndex,
     db_session: Session,
     tenant_id: str,
@@ -546,6 +640,7 @@ def build_indexing_pipeline(
         index_doc_batch_with_handler,
         chunker=chunker,
         embedder=embedder,
+        content_classification_model=content_classification_model,
         document_index=document_index,
         ignore_time_skip=ignore_time_skip,
         db_session=db_session,
