@@ -143,22 +143,13 @@ def _get_aggregated_boost_factor(
     short_chunk_keys = list(short_chunk_content_dict.keys())
 
     try:
-        short_content_classification_predictions = content_classification_model.predict(
-            short_chunk_contents
-        )
-        short_content_classification_results = [
-            raw_score for _, raw_score in short_content_classification_predictions
-        ]
-        short_content_classification_results_dict = {
-            short_chunk_keys[i]: short_content_classification_results[i]
-            for i in range(len(short_chunk_keys))
+        predictions = content_classification_model.predict(short_chunk_contents)
+        # Create a mapping of chunk positions to their scores
+        score_map = {
+            short_chunk_keys[i]: score for i, (_, score) in enumerate(predictions)
         }
-        chunk_content_scores = [
-            1.0
-            if chunk_num not in short_chunk_keys
-            else short_content_classification_results_dict[chunk_num]
-            for chunk_num in range(len(chunks))
-        ]
+        # Default to 1.0 for longer chunks, use predicted score for short chunks
+        chunk_content_scores = [score_map.get(i, 1.0) for i in range(len(chunks))]
 
         return chunks, chunk_content_scores, []
 
