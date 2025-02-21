@@ -123,6 +123,19 @@ jobs:
             --data '{"text":"Scheduled Model Tests failed! Check the run at: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
             $SLACK_WEBHOOK
             
+      - name: Dump all-container logs (optional)
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.dev.yml -p onyx-stack logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-all-logs
+          path: ${{ github.workspace }}/docker-compose.log
+          
       - name: Stop Docker containers
         if: always()
         run: |
