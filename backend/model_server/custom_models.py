@@ -8,19 +8,21 @@ from transformers import AutoTokenizer  # type: ignore
 from transformers import BatchEncoding  # type: ignore
 from transformers import PreTrainedTokenizer  # type: ignore
 
-from model_server.constants import CONTENT_MODEL_WARM_UP_STRING
+from model_server.constants import INFORMATION_CONTENT_MODEL_WARM_UP_STRING
 from model_server.constants import MODEL_WARM_UP_STRING
 from model_server.onyx_torch_model import ConnectorClassifier
 from model_server.onyx_torch_model import HybridClassifier
 from model_server.utils import simple_log_function_time
-from onyx.configs.model_configs import INDEXING_CONTENT_CLASSIFICATION_MAX
-from onyx.configs.model_configs import INDEXING_CONTENT_CLASSIFICATION_MIN
-from onyx.configs.model_configs import INDEXING_CONTENT_CLASSIFICATION_TEMPERATURE
+from onyx.configs.model_configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX
+from onyx.configs.model_configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
+from onyx.configs.model_configs import (
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_REPO
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_TAG
-from shared_configs.configs import CONTENT_MODEL_VERSION
 from shared_configs.configs import INDEXING_ONLY
+from shared_configs.configs import INFORMATION_CONTENT_MODEL_VERSION
 from shared_configs.configs import INTENT_MODEL_TAG
 from shared_configs.configs import INTENT_MODEL_VERSION
 from shared_configs.model_server_models import ConnectorClassificationRequest
@@ -39,9 +41,9 @@ _CONNECTOR_CLASSIFIER_MODEL: ConnectorClassifier | None = None
 _INTENT_TOKENIZER: AutoTokenizer | None = None
 _INTENT_MODEL: HybridClassifier | None = None
 
-_CONTENT_MODEL: SetFitModel | None = None
+_INFORMATION_CONTENT_MODEL: SetFitModel | None = None
 
-_CONTENT_MODEL_PROMPT_PREFIX: str = (
+_INFORMATION_CONTENT_MODEL_PROMPT_PREFIX: str = (
     "Does this sentence have very specific information: "  # spec to model version!
 )
 
@@ -126,11 +128,11 @@ def get_local_intent_model(
     return _INTENT_MODEL
 
 
-def get_local_content_model() -> SetFitModel:
-    global _CONTENT_MODEL
-    if _CONTENT_MODEL is None:
-        _CONTENT_MODEL = SetFitModel(CONTENT_MODEL_VERSION)
-    return _CONTENT_MODEL
+def get_local_information_content_model() -> SetFitModel:
+    global _INFORMATION_CONTENT_MODEL
+    if _INFORMATION_CONTENT_MODEL is None:
+        _INFORMATION_CONTENT_MODEL = SetFitModel(INFORMATION_CONTENT_MODEL_VERSION)
+    return _INFORMATION_CONTENT_MODEL
 
 
 def tokenize_connector_classification_query(
@@ -216,14 +218,14 @@ def warm_up_intent_model() -> None:
     )
 
 
-def warm_up_content_model() -> None:
+def warm_up_information_content_model() -> None:
     logger.notice(
         "Warming up Content Model"
     )  # TODO: add version once we have proper model
 
-    content_model = get_local_content_model()
-    content_model.device
-    content_model(CONTENT_MODEL_WARM_UP_STRING)
+    information_content_model = get_local_information_content_model()
+    information_content_model.device
+    information_content_model(INFORMATION_CONTENT_MODEL_WARM_UP_STRING)
 
 
 @simple_log_function_time()
@@ -261,15 +263,15 @@ def run_content_classification_inference(
         else:
             raw_score = 1.0
         return (
-            INDEXING_CONTENT_CLASSIFICATION_MIN
+            INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
             + (
-                INDEXING_CONTENT_CLASSIFICATION_MAX
-                - INDEXING_CONTENT_CLASSIFICATION_MIN
+                INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX
+                - INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
             )
             * raw_score
         )
 
-    content_model = get_local_content_model()
+    content_model = get_local_information_content_model()
 
     output_classes = list([x.numpy() for x in content_model(text_inputs)])
     base_output_probabilities = list(
@@ -277,7 +279,8 @@ def run_content_classification_inference(
     )
     logits = [np.log(p / (1 - p)) for p in base_output_probabilities]
     scaled_logits = [
-        logit / INDEXING_CONTENT_CLASSIFICATION_TEMPERATURE for logit in logits
+        logit / INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE
+        for logit in logits
     ]
     output_probabilities_with_temp = [
         np.exp(scaled_logit) / (1 + np.exp(scaled_logit))
@@ -448,6 +451,9 @@ async def process_content_classification_request(
     content_classification_requests: list[str],
 ) -> list[tuple[int, float]]:
     content_classification_result = run_content_classification_inference(
-        [_CONTENT_MODEL_PROMPT_PREFIX + req for req in content_classification_requests]
+        [
+            _INFORMATION_CONTENT_MODEL_PROMPT_PREFIX + req
+            for req in content_classification_requests
+        ]
     )
     return content_classification_result
