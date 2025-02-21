@@ -173,7 +173,10 @@ def index_doc_batch_with_handler(
             tenant_id=tenant_id,
         )
     except Exception as e:
-        logger.exception(f"Failed to index document batch: {document_batch}")
+        # don't log the batch directly, it's too much text
+        document_ids = [doc.id for doc in document_batch]
+        logger.exception(f"Failed to index document batch: {document_ids}")
+
         index_pipeline_result = IndexingPipelineResult(
             new_docs=0,
             total_docs=len(document_batch),
