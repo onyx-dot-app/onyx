@@ -1,5 +1,7 @@
 import {
-  OAuthGoogleDriveCallbackResponse,
+  OAuthBaseCallbackResponse,
+  OAuthConfluenceFinalizeResponse,
+  OAuthConfluencePrepareFinalizationResponse,
   OAuthPrepareAuthorizationResponse,
   OAuthSlackCallbackResponse,
 } from "./types";
@@ -53,6 +55,10 @@ export async function handleOAuthAuthorizationResponse(
     return handleOAuthGoogleDriveAuthorizationResponse(code, state);
   }
 
+  if (connector === "confluence") {
+    return handleOAuthConfluenceAuthorizationResponse(code, state);
+  }
+
   return;
 }
 
@@ -75,7 +81,7 @@ export async function handleOAuthSlackAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth authorization response: ${response.status}`;
+    let errorDetails = `Failed to handle OAuth Slack authorization response: ${response.status}`;
 
     try {
       const responseBody = await response.text(); // Read the body as text
@@ -96,12 +102,10 @@ export async function handleOAuthSlackAuthorizationResponse(
   return data;
 }
 
-// server side handler to process the oauth redirect callback
-// https://api.slack.com/authentication/oauth-v2#exchanging
 export async function handleOAuthGoogleDriveAuthorizationResponse(
   code: string,
   state: string
-): Promise<OAuthGoogleDriveCallbackResponse> {
+): Promise<OAuthBaseCallbackResponse> {
   const url = `/api/oauth/connector/google-drive/callback?code=${encodeURIComponent(
     code
   )}&state=${encodeURIComponent(state)}`;
@@ -115,7 +119,7 @@ export async function handleOAuthGoogleDriveAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth authorization response: ${response.status}`;
+    let errorDetails = `Failed to handle OAuth Google Drive authorization response: ${response.status}`;
 
     try {
       const responseBody = await response.text(); // Read the body as text
@@ -132,6 +136,137 @@ export async function handleOAuthGoogleDriveAuthorizationResponse(
   }
 
   // Parse the JSON response
-  const data = (await response.json()) as OAuthGoogleDriveCallbackResponse;
+  const data = (await response.json()) as OAuthBaseCallbackResponse;
+  return data;
+}
+
+// call server side helper
+// https://developer.atlassian.com/cloud/confluence/oauth-2-3lo-apps
+export async function handleOAuthConfluenceAuthorizationResponse(
+  code: string,
+  state: string
+): Promise<OAuthBaseCallbackResponse> {
+  const url = `/api/oauth/connector/confluence/callback?code=${encodeURIComponent(
+    code
+  )}&state=${encodeURIComponent(state)}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ code, state }),
+  });
+
+  if (!response.ok) {
+    let errorDetails = `Failed to handle OAuth Confluence authorization response: ${response.status}`;
+
+    try {
+      const responseBody = await response.text(); // Read the body as text
+      errorDetails += `\nResponse Body: ${responseBody}`;
+    } catch (err) {
+      if (err instanceof Error) {
+        errorDetails += `\nUnable to read response body: ${err.message}`;
+      } else {
+        errorDetails += `\nUnable to read response body: Unknown error type`;
+      }
+    }
+
+    throw new Error(errorDetails);
+  }
+
+  // Parse the JSON response
+  const data = (await response.json()) as OAuthBaseCallbackResponse;
+  return data;
+}
+
+export async function handleOAuthPrepareFinalization(
+  connector: string,
+  credential: number
+) {
+  if (connector === "confluence") {
+    return handleOAuthConfluencePrepareFinalization(credential);
+  }
+
+  return;
+}
+
+// call server side helper
+// https://developer.atlassian.com/cloud/confluence/oauth-2-3lo-apps
+export async function handleOAuthConfluencePrepareFinalization(
+  credential: number
+): Promise<OAuthConfluencePrepareFinalizationResponse> {
+  const url = `/api/oauth/connector/confluence/accessible-resources?credential_id=${encodeURIComponent(
+    credential
+  )}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    let errorDetails = `Failed to handle OAuth Confluence prepare finalization response: ${response.status}`;
+
+    try {
+      const responseBody = await response.text(); // Read the body as text
+      errorDetails += `\nResponse Body: ${responseBody}`;
+    } catch (err) {
+      if (err instanceof Error) {
+        errorDetails += `\nUnable to read response body: ${err.message}`;
+      } else {
+        errorDetails += `\nUnable to read response body: Unknown error type`;
+      }
+    }
+
+    throw new Error(errorDetails);
+  }
+
+  // Parse the JSON response
+  const data =
+    (await response.json()) as OAuthConfluencePrepareFinalizationResponse;
+  return data;
+}
+
+export async function handleOAuthConfluenceFinalize(
+  credential_id: number,
+  cloud_id: string,
+  cloud_name: string,
+  cloud_url: string
+): Promise<OAuthConfluenceFinalizeResponse> {
+  const url = `/api/oauth/connector/confluence/finalize?credential_id=${encodeURIComponent(
+    credential_id
+  )}&cloud_id=${encodeURIComponent(cloud_id)}&cloud_name=${encodeURIComponent(
+    cloud_name
+  )}&cloud_url=${encodeURIComponent(cloud_url)}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    let errorDetails = `Failed to handle OAuth Confluence finalization response: ${response.status}`;
+
+    try {
+      const responseBody = await response.text(); // Read the body as text
+      errorDetails += `\nResponse Body: ${responseBody}`;
+    } catch (err) {
+      if (err instanceof Error) {
+        errorDetails += `\nUnable to read response body: ${err.message}`;
+      } else {
+        errorDetails += `\nUnable to read response body: Unknown error type`;
+      }
+    }
+
+    throw new Error(errorDetails);
+  }
+
+  // Parse the JSON response
+  const data = (await response.json()) as OAuthConfluenceFinalizeResponse;
   return data;
 }

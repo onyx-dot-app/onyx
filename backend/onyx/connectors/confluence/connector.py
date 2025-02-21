@@ -9,13 +9,16 @@ from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.confluence.onyx_confluence import build_confluence_client
+from onyx.connectors.confluence.onyx_confluence import attachment_to_content
+from onyx.connectors.confluence.onyx_confluence import (
+    extract_text_from_confluence_html,
+)
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.confluence.utils import attachment_to_content
 from onyx.connectors.confluence.utils import build_confluence_document_id
 from onyx.connectors.confluence.utils import datetime_from_string
-from onyx.connectors.confluence.utils import extract_text_from_confluence_html
 from onyx.connectors.confluence.utils import validate_attachment_filetype
+from onyx.connectors.interfaces import CredentialsConnector
+from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -77,7 +80,9 @@ _FULL_EXTENSION_FILTER_STRING = "".join(
 )
 
 
-class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
+class ConfluenceConnector(
+    LoadConnector, PollConnector, SlimConnector, CredentialsConnector
+):
     def __init__(
         self,
         wiki_base: str,
@@ -96,7 +101,6 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> None:
         self.batch_size = batch_size
         self.continue_on_failure = continue_on_failure
-        self._confluence_client: OnyxConfluence | None = None
         self.is_cloud = is_cloud
 
         # Remove trailing slash from wiki_base if present
@@ -131,6 +135,19 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             self.cql_label_filter = f" and label not in ({comma_separated_labels})"
 
         self.timezone: timezone = timezone(offset=timedelta(hours=timezone_offset))
+        self.credentials_provider: CredentialsProviderInterface | None = None
+
+        self.probe_kwargs = {
+            "max_backoff_retries": 6,
+            "max_backoff_seconds": 10,
+        }
+
+        self.final_kwargs = {
+            "max_backoff_retries": 10,
+            "max_backoff_seconds": 60,
+        }
+
+        self._confluence_client: OnyxConfluence | None = None
 
     @property
     def confluence_client(self) -> OnyxConfluence:
@@ -138,15 +155,22 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             raise ConnectorMissingCredentialError("Confluence")
         return self._confluence_client
 
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        # see https://github.com/atlassian-api/atlassian-python-api/blob/master/atlassian/rest_client.py
-        # for a list of other hidden constructor args
-        self._confluence_client = build_confluence_client(
-            credentials=credentials,
-            is_cloud=self.is_cloud,
-            wiki_base=self.wiki_base,
+    def set_credentials_provider(
+        self, credentials_provider: CredentialsProviderInterface
+    ) -> None:
+        self.credentials_provider = credentials_provider
+
+        # raises exception if there's a problem
+        confluence_client = OnyxConfluence(
+            self.is_cloud, self.wiki_base, credentials_provider
         )
-        return None
+        confluence_client._probe_connection(**self.probe_kwargs)
+        confluence_client._initialize_connection(**self.final_kwargs)
+
+        self._confluence_client = confluence_client
+
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        raise NotImplementedError("Use set_credentials_provider with this connector.")
 
     def _construct_page_query(
         self,
@@ -196,12 +220,17 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         return comment_string
 
     def _convert_object_to_document(
-        self, confluence_object: dict[str, Any]
+        self,
+        confluence_object: dict[str, Any],
+        parent_content_id: str | None = None,
     ) -> Document | None:
         """
         Takes in a confluence object, extracts all metadata, and converts it into a document.
         If its a page, it extracts the text, adds the comments for the document text.
         If its an attachment, it just downloads the attachment and converts that into a document.
+
+        parent_content_id: if the object is an attachment, specifies the content id that
+        the attachment is attached to
         """
         # The url and the id are the same
         object_url = build_confluence_document_id(
@@ -220,7 +249,9 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             object_text += self._get_comment_string_for_page_id(confluence_object["id"])
         elif confluence_object["type"] == "attachment":
             object_text = attachment_to_content(
-                confluence_client=self.confluence_client, attachment=confluence_object
+                confluence_client=self.confluence_client,
+                attachment=confluence_object,
+                parent_content_id=parent_content_id,
             )
 
         if object_text is None:
@@ -296,7 +327,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                 cql=attachment_query,
                 expand=",".join(_ATTACHMENT_EXPANSION_FIELDS),
             ):
-                doc = self._convert_object_to_document(attachment)
+                doc = self._convert_object_to_document(attachment, confluence_page_id)
                 if doc is not None:
                     doc_batch.append(doc)
                 if len(doc_batch) >= self.batch_size:
