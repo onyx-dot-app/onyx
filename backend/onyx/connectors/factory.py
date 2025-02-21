@@ -31,6 +31,7 @@ from onyx.connectors.guru.connector import GuruConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import ConnectorValidationError
 from onyx.connectors.interfaces import EventConnector
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -52,8 +53,11 @@ from onyx.connectors.wikipedia.connector import WikipediaConnector
 from onyx.connectors.xenforo.connector import XenforoConnector
 from onyx.connectors.zendesk.connector import ZendeskConnector
 from onyx.connectors.zulip.connector import ZulipConnector
+from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import backend_update_credential_json
+from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.models import Credential
+from onyx.db.models import User
 
 
 class ConnectorMissingException(Exception):
@@ -174,3 +178,43 @@ def instantiate_connector(
         backend_update_credential_json(credential, new_credentials, db_session)
 
     return connector
+
+
+def validate_ccpair_for_user(
+    connector_id: int,
+    credential_id: int,
+    db_session: Session,
+    user: User | None,
+    tenant_id: str | None,
+) -> None:
+    # Validate the connector settings
+    connector = fetch_connector_by_id(connector_id, db_session)
+    credential = fetch_credential_by_id_for_user(
+        credential_id,
+        user,
+        db_session,
+        get_editable=False,
+    )
+
+    if not connector:
+        raise ValueError("Connector not found")
+
+    if connector.source == DocumentSource.INGESTION_API:
+        return
+
+    if not credential:
+        raise ValueError("Credential not found")
+
+    try:
+        runnable_connector = instantiate_connector(
+            db_session=db_session,
+            source=connector.source,
+            input_type=connector.input_type,
+            connector_specific_config=connector.connector_specific_config,
+            credential=credential,
+            tenant_id=tenant_id,
+        )
+    except Exception as e:
+        raise ConnectorValidationError(str(e))
+
+    runnable_connector.validate_connector_settings()

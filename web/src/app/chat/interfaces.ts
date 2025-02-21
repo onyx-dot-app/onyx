@@ -155,6 +155,15 @@ export interface MessageResponseIDInfo {
   reserved_assistant_message_id: number;
 }
 
+export interface AgentMessageIDInfo {
+  level: number;
+  message_id: number;
+}
+
+export interface AgenticMessageResponseIDInfo {
+  agentic_message_ids: AgentMessageIDInfo[];
+}
+
 export interface DocumentsResponse {
   top_documents: OnyxDocument[];
   rephrased_query: string | null;

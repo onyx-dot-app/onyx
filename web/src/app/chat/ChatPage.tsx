@@ -1,6 +1,11 @@
 "use client";
 
-import { redirect, useRouter, useSearchParams } from "next/navigation";
+import {
+  redirect,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import {
   BackendChatSession,
   BackendMessage,
@@ -18,6 +23,7 @@ import {
   SubQuestionDetail,
   constructSubQuestions,
   DocumentsResponse,
+  AgenticMessageResponseIDInfo,
 } from "./interfaces";
 
 import Prism from "prismjs";
@@ -130,6 +136,7 @@ import {
 } from "@/lib/browserUtilities";
 import { Button } from "@/components/ui/button";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { MessageChannel } from "node:worker_threads";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -1145,6 +1152,7 @@ export function ChatPage({
     regenerationRequest?: RegenerationRequest | null;
     overrideFileDescriptors?: FileDescriptor[];
   } = {}) => {
+    navigatingAway.current = false;
     let frozenSessionId = currentSessionId();
     updateCanContinue(false, frozenSessionId);
 
@@ -1267,13 +1275,14 @@ export function ChatPage({
     let stackTrace: string | null = null;
 
     let sub_questions: SubQuestionDetail[] = [];
-    let second_level_sub_questions: SubQuestionDetail[] = [];
     let is_generating: boolean = false;
     let second_level_generating: boolean = false;
     let finalMessage: BackendMessage | null = null;
     let toolCall: ToolCallMetadata | null = null;
     let isImprovement: boolean | undefined = undefined;
     let isStreamingQuestions = true;
+    let includeAgentic = false;
+    let secondLevelMessageId: number | null = null;
 
     let initialFetchDetails: null | {
       user_message_id: number;
@@ -1290,8 +1299,9 @@ export function ChatPage({
         getLastSuccessfulMessageId(currMessageHistory) || systemMessage;
 
       const stack = new CurrentMessageFIFO();
+
       updateCurrentMessageFIFO(stack, {
-        signal: controller.signal, // Add this line
+        signal: controller.signal,
         message: currMessage,
         alternateAssistantId: currentAssistantId,
         fileDescriptors: overrideFileDescriptors || currentMessageFiles,
@@ -1329,7 +1339,7 @@ export function ChatPage({
           searchParams.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
         useExistingUserMessage: isSeededChat,
         useLanggraph:
-          !settings?.settings.pro_search_disabled &&
+          settings?.settings.pro_search_enabled &&
           proSearchEnabled &&
           retrievalEnabled,
       });
@@ -1410,6 +1420,17 @@ export function ChatPage({
             resetRegenerationState();
           } else {
             const { user_message_id, frozenMessageMap } = initialFetchDetails;
+            if (Object.hasOwn(packet, "agentic_message_ids")) {
+              const agenticMessageIds = (packet as AgenticMessageResponseIDInfo)
+                .agentic_message_ids;
+              const level1MessageId = agenticMessageIds.find(
+                (item) => item.level === 1
+              )?.message_id;
+              if (level1MessageId) {
+                secondLevelMessageId = level1MessageId;
+                includeAgentic = true;
+              }
+            }
 
             setChatState((prevState) => {
               if (prevState.get(chatSessionIdRef.current!) === "loading") {
@@ -1561,7 +1582,10 @@ export function ChatPage({
                   };
                 }
               );
-            } else if (Object.hasOwn(packet, "error")) {
+            } else if (
+              Object.hasOwn(packet, "error") &&
+              (packet as any).error != null
+            ) {
               if (
                 sub_questions.length > 0 &&
                 sub_questions
@@ -1573,8 +1597,8 @@ export function ChatPage({
                 setAgenticGenerating(false);
                 setAlternativeGeneratingAssistant(null);
                 setSubmittedMessage("");
-                return;
-                // throw new Error((packet as StreamingError).error);
+
+                throw new Error((packet as StreamingError).error);
               } else {
                 error = (packet as StreamingError).error;
                 stackTrace = (packet as StreamingError).stack_trace;
@@ -1657,6 +1681,19 @@ export function ChatPage({
                 second_level_generating: second_level_generating,
                 agentic_docs: agenticDocs,
               },
+              ...(includeAgentic
+                ? [
+                    {
+                      messageId: secondLevelMessageId!,
+                      message: second_level_answer,
+                      type: "assistant" as const,
+                      files: [],
+                      toolCall: null,
+                      parentMessageId:
+                        initialFetchDetails.assistant_message_id!,
+                    },
+                  ]
+                : []),
             ]);
           }
         }
@@ -1712,7 +1749,10 @@ export function ChatPage({
         const newUrl = buildChatUrl(searchParams, currChatSessionId, null);
         // newUrl is like /chat?chatId=10
         // current page is like /chat
-        router.push(newUrl, { scroll: false });
+
+        if (pathname == "/chat" && !navigatingAway.current) {
+          router.push(newUrl, { scroll: false });
+        }
       }
     }
     if (
@@ -1860,9 +1900,7 @@ export function ChatPage({
   });
 
   const autoScrollEnabled =
-    user?.preferences?.auto_scroll == null
-      ? settings?.enterpriseSettings?.auto_scroll || false
-      : user?.preferences?.auto_scroll! && !agenticGenerating;
+    (user?.preferences?.auto_scroll && !agenticGenerating) ?? false;
 
   useScrollonStream({
     chatState: currentSessionChatState,
@@ -2086,6 +2124,31 @@ export function ChatPage({
     llmOverrideManager.updateImageFilesPresent(imageFileInMessageHistory);
   }, [imageFileInMessageHistory]);
 
+  const pathname = usePathname();
+  useEffect(() => {
+    return () => {
+      // Cleanup which only runs when the component unmounts (i.e. when you navigate away).
+      const currentSession = currentSessionId();
+      const controller = abortControllersRef.current.get(currentSession);
+      if (controller) {
+        controller.abort();
+        navigatingAway.current = true;
+        setAbortControllers((prev) => {
+          const newControllers = new Map(prev);
+          newControllers.delete(currentSession);
+          return newControllers;
+        });
+      }
+    };
+  }, [pathname]);
+
+  const navigatingAway = useRef(false);
+  // Keep a ref to abortControllers to ensure we always have the latest value
+  const abortControllersRef = useRef(abortControllers);
+  useEffect(() => {
+    abortControllersRef.current = abortControllers;
+  }, [abortControllers]);
+
   useSidebarShortcut(router, toggleSidebar);
 
   const [sharedChatSession, setSharedChatSession] =
@@ -2300,7 +2363,7 @@ export function ChatPage({
                 fixed
                 left-0
                 z-40
-                bg-background-100
+                bg-neutral-200
                 h-screen
                 transition-all
                 bg-opacity-80
@@ -2557,12 +2620,21 @@ export function ChatPage({
                                 ) {
                                   return <></>;
                                 }
+                                const nextMessage =
+                                  messageHistory.length > i + 1
+                                    ? messageHistory[i + 1]
+                                    : null;
                                 return (
                                   <div
                                     id={`message-${message.messageId}`}
                                     key={messageReactComponentKey}
                                   >
                                     <HumanMessage
+                                      disableSwitchingForStreaming={
+                                        (nextMessage &&
+                                          nextMessage.is_generating) ||
+                                        false
+                                      }
                                       stopGenerating={stopGenerating}
                                       content={message.message}
                                       files={message.files}
@@ -2650,6 +2722,11 @@ export function ChatPage({
                                     ? messageHistory[i + 1]?.documents
                                     : undefined;
 
+                                const nextMessage =
+                                  messageHistory[i + 1]?.type === "assistant"
+                                    ? messageHistory[i + 1]
+                                    : undefined;
+
                                 return (
                                   <div
                                     className="text-text"
@@ -2678,7 +2755,10 @@ export function ChatPage({
                                             selectedMessageForDocDisplay ==
                                               secondLevelMessage?.messageId)
                                         }
-                                        isImprovement={message.isImprovement}
+                                        isImprovement={
+                                          message.isImprovement ||
+                                          nextMessage?.isImprovement
+                                        }
                                         secondLevelGenerating={
                                           (message.second_level_generating &&
                                             currentSessionChatState !==

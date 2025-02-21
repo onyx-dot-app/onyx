@@ -114,7 +114,7 @@ def handle_generate_answer_button(
         thread_ts=thread_ts,
     )
 
-    with get_session_with_tenant(client.tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=client.tenant_id) as db_session:
         slack_channel_config = get_slack_channel_config_for_bot_and_channel(
             db_session=db_session,
             slack_bot_id=client.slack_bot_id,
@@ -155,7 +155,7 @@ def handle_slack_feedback(
 ) -> None:
     message_id, doc_id, doc_rank = decompose_action_id(feedback_id)
 
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         if feedback_type in [LIKE_BLOCK_ACTION_ID, DISLIKE_BLOCK_ACTION_ID]:
             create_chat_message_feedback(
                 is_positive=feedback_type == LIKE_BLOCK_ACTION_ID,
@@ -246,7 +246,7 @@ def handle_followup_button(
 
     tag_ids: list[str] = []
     group_ids: list[str] = []
-    with get_session_with_tenant(client.tenant_id) as db_session:
+    with get_session_with_tenant(tenant_id=client.tenant_id) as db_session:
         channel_name, is_dm = get_channel_name_from_id(
             client=client.web_client, channel_id=channel_id
         )

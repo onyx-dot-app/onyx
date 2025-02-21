@@ -36,12 +36,12 @@ from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
 from onyx.db.credentials import create_credential
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 
 logger = setup_logger()
@@ -271,12 +271,12 @@ def prepare_authorization_request(
     connector: DocumentSource,
     redirect_on_success: str | None,
     user: User = Depends(current_user),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     """Used by the frontend to generate the url for the user's browser during auth request.
 
     Example: https://www.oauth.com/oauth2-servers/authorization/the-authorization-request/
     """
+    tenant_id = get_current_tenant_id()
 
     # create random oauth state param for security and to retrieve user data later
     oauth_uuid = uuid.uuid4()
@@ -329,7 +329,6 @@ def handle_slack_oauth_callback(
     state: str,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     if not SlackOAuth.CLIENT_ID or not SlackOAuth.CLIENT_SECRET:
         raise HTTPException(
@@ -337,7 +336,7 @@ def handle_slack_oauth_callback(
             detail="Slack client ID or client secret is not configured.",
         )
 
-    r = get_redis_client(tenant_id=tenant_id)
+    r = get_redis_client()
 
     # recover the state
     padded_state = state + "=" * (
@@ -523,7 +522,6 @@ def handle_google_drive_oauth_callback(
     state: str,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     if not GoogleDriveOAuth.CLIENT_ID or not GoogleDriveOAuth.CLIENT_SECRET:
         raise HTTPException(
@@ -531,7 +529,7 @@ def handle_google_drive_oauth_callback(
             detail="Google Drive client ID or client secret is not configured.",
         )
 
-    r = get_redis_client(tenant_id=tenant_id)
+    r = get_redis_client()
 
     # recover the state
     padded_state = state + "=" * (

@@ -133,6 +133,7 @@ else:
 MULTI_TENANT = os.environ.get("MULTI_TENANT", "").lower() == "true"
 
 POSTGRES_DEFAULT_SCHEMA = os.environ.get("POSTGRES_DEFAULT_SCHEMA") or "public"
+DEFAULT_REDIS_PREFIX = os.environ.get("DEFAULT_REDIS_PREFIX") or "default"
 
 
 async def async_return_default_schema(*args: Any, **kwargs: Any) -> str:

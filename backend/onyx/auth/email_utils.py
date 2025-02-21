@@ -10,6 +10,7 @@ from onyx.configs.app_configs import SMTP_PORT
 from onyx.configs.app_configs import SMTP_SERVER
 from onyx.configs.app_configs import SMTP_USER
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.constants import AuthType
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.models import User
 
@@ -187,23 +188,51 @@ def send_subscription_cancellation_email(user_email: str) -> None:
     send_email(user_email, subject, html_content, text_content)
 
 
-def send_user_email_invite(user_email: str, current_user: User) -> None:
+def send_user_email_invite(
+    user_email: str, current_user: User, auth_type: AuthType
+) -> None:
     subject = "Invitation to Join Onyx Organization"
     heading = "You've Been Invited!"
-    message = (
-        f"<p>You have been invited by {current_user.email} to join an organization on Onyx.</p>"
-        "<p>To join the organization, please click the button below to set a password "
-        "or login with Google and complete your registration.</p>"
-    )
+
+    # the exact action taken by the user, and thus the message, depends on the auth type
+    message = f"<p>You have been invited by {current_user.email} to join an organization on Onyx.</p>"
+    if auth_type == AuthType.CLOUD:
+        message += (
+            "<p>To join the organization, please click the button below to set a password "
+            "or login with Google and complete your registration.</p>"
+        )
+    elif auth_type == AuthType.BASIC:
+        message += (
+            "<p>To join the organization, please click the button below to set a password "
+            "and complete your registration.</p>"
+        )
+    elif auth_type == AuthType.GOOGLE_OAUTH:
+        message += (
+            "<p>To join the organization, please click the button below to login with Google "
+            "and complete your registration.</p>"
+        )
+    elif auth_type == AuthType.OIDC or auth_type == AuthType.SAML:
+        message += (
+            "<p>To join the organization, please click the button below to"
+            " complete your registration.</p>"
+        )
+    else:
+        raise ValueError(f"Invalid auth type: {auth_type}")
+
     cta_text = "Join Organization"
     cta_link = f"{WEB_DOMAIN}/auth/signup?email={user_email}"
     html_content = build_html_email(heading, message, cta_text, cta_link)
+
+    # text content is the fallback for clients that don't support HTML
+    # not as critical, so not having special cases for each auth type
     text_content = (
         f"You have been invited by {current_user.email} to join an organization on Onyx.\n"
         "To join the organization, please visit the following link:\n"
         f"{WEB_DOMAIN}/auth/signup?email={user_email}\n"
-        "You'll be asked to set a password or login with Google to complete your registration."
     )
+    if auth_type == AuthType.CLOUD:
+        text_content += "You'll be asked to set a password or login with Google to complete your registration."
+
     send_email(user_email, subject, html_content, text_content)
 
 

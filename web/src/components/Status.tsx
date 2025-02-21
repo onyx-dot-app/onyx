@@ -10,6 +10,7 @@ import {
   FiPauseCircle,
 } from "react-icons/fi";
 import { HoverPopup } from "./HoverPopup";
+import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 
 export function IndexAttemptStatus({
   status,
@@ -70,6 +71,12 @@ export function IndexAttemptStatus({
         Canceled
       </Badge>
     );
+  } else if (status === "invalid") {
+    badge = (
+      <Badge variant="invalid" icon={FiAlertTriangle}>
+        Invalid
+      </Badge>
+    );
   } else {
     badge = (
       <Badge variant="outline" icon={FiMinus}>
@@ -83,27 +90,31 @@ export function IndexAttemptStatus({
 
 export function CCPairStatus({
   status,
-  disabled,
-  isDeleting,
+  ccPairStatus,
   size = "md",
 }: {
   status: ValidStatuses;
-  disabled: boolean;
-  isDeleting: boolean;
+  ccPairStatus: ConnectorCredentialPairStatus;
   size?: "xs" | "sm" | "md" | "lg";
 }) {
   let badge;
 
-  if (isDeleting) {
+  if (ccPairStatus == ConnectorCredentialPairStatus.DELETING) {
     badge = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
         Deleting
       </Badge>
     );
-  } else if (disabled) {
+  } else if (ccPairStatus == ConnectorCredentialPairStatus.PAUSED) {
     badge = (
       <Badge variant="paused" icon={FiPauseCircle}>
         Paused
+      </Badge>
+    );
+  } else if (ccPairStatus == ConnectorCredentialPairStatus.INVALID) {
+    badge = (
+      <Badge variant="invalid" icon={FiAlertTriangle}>
+        Invalid
       </Badge>
     );
   } else if (status === "failed") {

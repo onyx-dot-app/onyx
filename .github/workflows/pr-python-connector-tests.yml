@@ -74,7 +74,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
           pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
-
+          playwright install chromium
+          playwright install-deps chromium
+          
       - name: Run Tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/connectors

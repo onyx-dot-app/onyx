@@ -9,6 +9,12 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
 import remarkGfm from "remark-gfm";
@@ -274,6 +280,7 @@ export const AgenticMessage = ({
           ...(secondLevelSubquestions || []),
         ]}
         openQuestion={openQuestion}
+        href={props.href}
       >
         {props.children}
       </MemoizedAnchor>
@@ -308,7 +315,7 @@ export const AgenticMessage = ({
   const renderedAlternativeMarkdown = useMemo(() => {
     return (
       <ReactMarkdown
-        className="prose max-w-full text-base"
+        className="prose dark:prose-invert max-w-full text-base"
         components={{
           ...markdownComponents,
           code: ({ node, className, children }: any) => {
@@ -335,7 +342,7 @@ export const AgenticMessage = ({
   const renderedMarkdown = useMemo(() => {
     return (
       <ReactMarkdown
-        className="prose max-w-full text-base"
+        className="prose dark:prose-invert max-w-full text-base"
         components={markdownComponents}
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}

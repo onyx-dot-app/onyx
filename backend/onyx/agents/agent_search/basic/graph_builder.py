@@ -5,14 +5,14 @@ from langgraph.graph import StateGraph
 from onyx.agents.agent_search.basic.states import BasicInput
 from onyx.agents.agent_search.basic.states import BasicOutput
 from onyx.agents.agent_search.basic.states import BasicState
-from onyx.agents.agent_search.orchestration.nodes.basic_use_tool_response import (
-    basic_use_tool_response,
-)
-from onyx.agents.agent_search.orchestration.nodes.llm_tool_choice import llm_tool_choice
+from onyx.agents.agent_search.orchestration.nodes.call_tool import call_tool
+from onyx.agents.agent_search.orchestration.nodes.choose_tool import choose_tool
 from onyx.agents.agent_search.orchestration.nodes.prepare_tool_input import (
     prepare_tool_input,
 )
-from onyx.agents.agent_search.orchestration.nodes.tool_call import tool_call
+from onyx.agents.agent_search.orchestration.nodes.use_tool_response import (
+    basic_use_tool_response,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -33,13 +33,13 @@ def basic_graph_builder() -> StateGraph:
     )
 
     graph.add_node(
-        node="llm_tool_choice",
-        action=llm_tool_choice,
+        node="choose_tool",
+        action=choose_tool,
     )
 
     graph.add_node(
-        node="tool_call",
-        action=tool_call,
+        node="call_tool",
+        action=call_tool,
     )
 
     graph.add_node(
@@ -51,12 +51,12 @@ def basic_graph_builder() -> StateGraph:
 
     graph.add_edge(start_key=START, end_key="prepare_tool_input")
 
-    graph.add_edge(start_key="prepare_tool_input", end_key="llm_tool_choice")
+    graph.add_edge(start_key="prepare_tool_input", end_key="choose_tool")
 
-    graph.add_conditional_edges("llm_tool_choice", should_continue, ["tool_call", END])
+    graph.add_conditional_edges("choose_tool", should_continue, ["call_tool", END])
 
     graph.add_edge(
-        start_key="tool_call",
+        start_key="call_tool",
         end_key="basic_use_tool_response",
     )
 
@@ -73,7 +73,7 @@ def should_continue(state: BasicState) -> str:
         # If there are no tool calls, basic graph already streamed the answer
         END
         if state.tool_choice is None
-        else "tool_call"
+        else "call_tool"
     )
 
 

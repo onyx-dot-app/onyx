@@ -73,7 +73,7 @@ from onyx.document_index.vespa_constants import VESPA_DIM_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.factory import get_shared_kv_store
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -193,7 +193,7 @@ class VespaIndex(DocumentIndex):
             SEARCH_THREAD_NUMBER_PAT, str(VESPA_SEARCHER_THREADS)
         )
 
-        kv_store = get_kv_store()
+        kv_store = get_shared_kv_store()
 
         needs_reindexing = False
         try:
@@ -240,6 +240,9 @@ class VespaIndex(DocumentIndex):
         headers = {"Content-Type": "application/zip"}
         response = requests.post(deploy_url, headers=headers, data=zip_file)
         if response.status_code != 200:
+            logger.error(
+                f"Failed to prepare Vespa Onyx Index. Response: {response.text}"
+            )
             raise RuntimeError(
                 f"Failed to prepare Vespa Onyx Index. Response: {response.text}"
             )
@@ -277,7 +280,7 @@ class VespaIndex(DocumentIndex):
             SEARCH_THREAD_NUMBER_PAT, str(VESPA_SEARCHER_THREADS)
         )
 
-        kv_store = get_kv_store()
+        kv_store = get_shared_kv_store()
 
         needs_reindexing = False
         try:

@@ -25,8 +25,12 @@ from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
 from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.connectors.interfaces import CredentialExpiredError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import LoadConnector
+from onyx.connectors.interfaces import UnexpectedError
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.file_processing.extract_file_text import read_pdf_file
@@ -36,6 +40,8 @@ from onyx.utils.sitemap import list_pages_for_site
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS = 20
 
 
 class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
@@ -170,25 +176,34 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
-    response = requests.get(sitemap_url)
-    response.raise_for_status()
+    try:
+        response = requests.get(sitemap_url)
+        response.raise_for_status()
 
-    soup = BeautifulSoup(response.content, "html.parser")
-    urls = [
-        _ensure_absolute_url(sitemap_url, loc_tag.text)
-        for loc_tag in soup.find_all("loc")
-    ]
+        soup = BeautifulSoup(response.content, "html.parser")
+        urls = [
+            _ensure_absolute_url(sitemap_url, loc_tag.text)
+            for loc_tag in soup.find_all("loc")
+        ]
 
-    if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
-        # the given url doesn't look like a sitemap, let's try to find one
-        urls = list_pages_for_site(sitemap_url)
+        if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
+            # the given url doesn't look like a sitemap, let's try to find one
+            urls = list_pages_for_site(sitemap_url)
 
-    if len(urls) == 0:
-        raise ValueError(
-            f"No URLs found in sitemap {sitemap_url}. Try using the 'single' or 'recursive' scraping options instead."
+        if len(urls) == 0:
+            raise ValueError(
+                f"No URLs found in sitemap {sitemap_url}. Try using the 'single' or 'recursive' scraping options instead."
+            )
+
+        return urls
+    except requests.RequestException as e:
+        raise RuntimeError(f"Failed to fetch sitemap from {sitemap_url}: {e}")
+    except ValueError as e:
+        raise RuntimeError(f"Error processing sitemap {sitemap_url}: {e}")
+    except Exception as e:
+        raise RuntimeError(
+            f"Unexpected error while processing sitemap {sitemap_url}: {e}"
         )
-
-    return urls
 
 
 def _ensure_absolute_url(source_url: str, maybe_relative_url: str) -> str:
@@ -225,10 +240,14 @@ class WebConnector(LoadConnector):
         web_connector_type: str = WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value,
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
+        scroll_before_scraping: bool = False,
+        **kwargs: Any,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
         self.batch_size = batch_size
         self.recursive = False
+        self.scroll_before_scraping = scroll_before_scraping
+        self.web_connector_type = web_connector_type
 
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
@@ -344,6 +363,18 @@ class WebConnector(LoadConnector):
                         continue
                     visited_links.add(current_url)
 
+                if self.scroll_before_scraping:
+                    scroll_attempts = 0
+                    previous_height = page.evaluate("document.body.scrollHeight")
+                    while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
+                        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                        page.wait_for_load_state("networkidle", timeout=30000)
+                        new_height = page.evaluate("document.body.scrollHeight")
+                        if new_height == previous_height:
+                            break  # Stop scrolling when no more content is loaded
+                        previous_height = new_height
+                        scroll_attempts += 1
+
                 content = page.content()
                 soup = BeautifulSoup(content, "html.parser")
 
@@ -401,6 +432,53 @@ class WebConnector(LoadConnector):
             if last_error:
                 raise RuntimeError(last_error)
             raise RuntimeError("No valid pages found.")
+
+    def validate_connector_settings(self) -> None:
+        # Make sure we have at least one valid URL to check
+        if not self.to_visit_list:
+            raise ConnectorValidationError(
+                "No URL configured. Please provide at least one valid URL."
+            )
+
+        if self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value:
+            return None
+
+        # We'll just test the first URL for connectivity and correctness
+        test_url = self.to_visit_list[0]
+
+        # Check that the URL is allowed and well-formed
+        try:
+            protected_url_check(test_url)
+        except ValueError as e:
+            raise ConnectorValidationError(
+                f"Protected URL check failed for '{test_url}': {e}"
+            )
+        except ConnectionError as e:
+            # Typically DNS or other network issues
+            raise ConnectorValidationError(str(e))
+
+        # Make a quick request to see if we get a valid response
+        try:
+            check_internet_connection(test_url)
+        except Exception as e:
+            err_str = str(e)
+            if "401" in err_str:
+                raise CredentialExpiredError(
+                    f"Unauthorized access to '{test_url}': {e}"
+                )
+            elif "403" in err_str:
+                raise InsufficientPermissionsError(
+                    f"Forbidden access to '{test_url}': {e}"
+                )
+            elif "404" in err_str:
+                raise ConnectorValidationError(f"Page not found for '{test_url}': {e}")
+            elif "Max retries exceeded" in err_str and "NameResolutionError" in err_str:
+                raise ConnectorValidationError(
+                    f"Unable to resolve hostname for '{test_url}'. Please check the URL and your internet connection."
+                )
+            else:
+                # Could be a 5xx or another error, treat as unexpected
+                raise UnexpectedError(f"Unexpected error validating '{test_url}': {e}")
 
 
 if __name__ == "__main__":

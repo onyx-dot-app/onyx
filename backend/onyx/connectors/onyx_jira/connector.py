@@ -12,8 +12,11 @@ from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.app_configs import JIRA_CONNECTOR_MAX_TICKET_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.connectors.interfaces import CredentialExpiredError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -271,6 +274,40 @@ class JiraConnector(LoadConnector, PollConnector, SlimConnector):
                 slim_doc_batch = []
 
         yield slim_doc_batch
+
+    def validate_connector_settings(self) -> None:
+        if self._jira_client is None:
+            raise ConnectorMissingCredentialError("Jira")
+
+        if not self._jira_project:
+            raise ConnectorValidationError(
+                "Invalid connector settings: 'jira_project' must be provided."
+            )
+
+        try:
+            self.jira_client.project(self._jira_project)
+
+        except Exception as e:
+            status_code = getattr(e, "status_code", None)
+
+            if status_code == 401:
+                raise CredentialExpiredError(
+                    "Jira credential appears to be expired or invalid (HTTP 401)."
+                )
+            elif status_code == 403:
+                raise InsufficientPermissionsError(
+                    "Your Jira token does not have sufficient permissions for this project (HTTP 403)."
+                )
+            elif status_code == 404:
+                raise ConnectorValidationError(
+                    f"Jira project not found with key: {self._jira_project}"
+                )
+            elif status_code == 429:
+                raise ConnectorValidationError(
+                    "Validation failed due to Jira rate-limits being exceeded. Please try again later."
+                )
+            else:
+                raise Exception(f"Unexpected Jira error during validation: {e}")
 
 
 if __name__ == "__main__":

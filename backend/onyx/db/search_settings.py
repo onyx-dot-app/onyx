@@ -13,7 +13,7 @@ from onyx.configs.model_configs import OLD_DEFAULT_DOCUMENT_ENCODER_MODEL
 from onyx.configs.model_configs import OLD_DEFAULT_MODEL_DOC_EMBEDDING_DIM
 from onyx.configs.model_configs import OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.engine import get_session_with_default_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_embedding_provider
 from onyx.db.models import CloudEmbeddingProvider
 from onyx.db.models import IndexAttempt
@@ -189,7 +189,7 @@ def get_all_search_settings(db_session: Session) -> list[SearchSettings]:
 
 def get_multilingual_expansion(db_session: Session | None = None) -> list[str]:
     if db_session is None:
-        with get_session_with_default_tenant() as db_session:
+        with get_session_with_current_tenant() as db_session:
             search_settings = get_current_search_settings(db_session)
     else:
         search_settings = get_current_search_settings(db_session)

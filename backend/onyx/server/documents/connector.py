@@ -28,6 +28,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.google_utils.google_auth import (
     get_google_oauth_creds,
 )
@@ -61,6 +62,7 @@ from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TO
 from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
+from onyx.connectors.interfaces import ConnectorValidationError
 from onyx.db.connector import create_connector
 from onyx.db.connector import delete_connector
 from onyx.db.connector import fetch_connector_by_id
@@ -79,7 +81,6 @@ from onyx.db.credentials import delete_service_account_credentials
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
 from onyx.db.document import get_document_counts_for_cc_pairs
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import IndexingMode
@@ -119,6 +120,7 @@ from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -610,8 +612,8 @@ def get_connector_indexing_status(
     get_editable: bool = Query(
         False, description="If true, return editable document sets"
     ),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> list[ConnectorIndexingStatus]:
+    tenant_id = get_current_tenant_id()
     indexing_statuses: list[ConnectorIndexingStatus] = []
 
     if MOCK_CONNECTOR_FILE_PATH:
@@ -774,8 +776,9 @@ def create_connector_from_model(
     connector_data: ConnectorUpdateRequest,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_current_tenant_id),
 ) -> ObjectCreationIdResponse:
+    tenant_id = get_current_tenant_id()
+
     try:
         _validate_connector_allowed(connector_data.source)
 
@@ -813,15 +816,8 @@ def create_connector_with_mock_credential(
     connector_data: ConnectorUpdateRequest,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse:
-    """NOTE(rkuo): internally discussed and the consensus is this endpoint
-    and associate_credential_to_connector should be combined.
-
-    The intent of this endpoint is to handle connectors that don't need credentials,
-    AKA web, file, etc ... but there isn't any reason a single endpoint couldn't
-    server this purpose.
-    """
+    tenant_id = get_current_tenant_id()
 
     fetch_ee_implementation_or_noop(
         "onyx.db.user_group", "validate_object_creation_for_user", None
@@ -850,11 +846,22 @@ def create_connector_with_mock_credential(
             db_session=db_session,
         )
 
+        # Store the created connector and credential IDs
+        connector_id = cast(int, connector_response.id)
+        credential_id = credential.id
+
+        validate_ccpair_for_user(
+            connector_id=connector_id,
+            credential_id=credential_id,
+            db_session=db_session,
+            user=user,
+            tenant_id=tenant_id,
+        )
         response = add_credential_to_connector(
             db_session=db_session,
             user=user,
-            connector_id=cast(int, connector_response.id),  # will aways be an int
-            credential_id=credential.id,
+            connector_id=connector_id,
+            credential_id=credential_id,
             access_type=connector_data.access_type,
             cc_pair_name=connector_data.name,
             groups=connector_data.groups,
@@ -879,9 +886,12 @@ def create_connector_with_mock_credential(
             properties=None,
             db_session=db_session,
         )
-
         return response
 
+    except ConnectorValidationError as e:
+        raise HTTPException(
+            status_code=400, detail="Connector validation error: " + str(e)
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -952,10 +962,10 @@ def connector_run_once(
     run_info: RunConnectorRequest,
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse[int]:
     """Used to trigger indexing on a set of cc_pairs associated with a
     single connector."""
+    tenant_id = get_current_tenant_id()
 
     connector_id = run_info.connector_id
     specified_credential_ids = run_info.credential_ids

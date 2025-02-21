@@ -297,6 +297,7 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
                 userId=user_email,
                 fields=THREAD_LIST_FIELDS,
                 q=query,
+                continue_on_404_or_403=True,
             ):
                 full_threads = execute_paginated_retrieval(
                     retrieval_function=gmail_service.users().threads().get,

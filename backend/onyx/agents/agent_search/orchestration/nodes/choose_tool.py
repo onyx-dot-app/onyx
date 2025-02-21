@@ -25,7 +25,7 @@ logger = setup_logger()
 # and a function that handles extracting the necessary fields
 # from the state and config
 # TODO: fan-out to multiple tool call nodes? Make this configurable?
-def llm_tool_choice(
+def choose_tool(
     state: ToolChoiceState,
     config: RunnableConfig,
     writer: StreamWriter = lambda _: None,

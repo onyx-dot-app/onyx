@@ -73,6 +73,7 @@ class ConnectorCredentialPairStatus(str, PyEnum):
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
     DELETING = "DELETING"
+    INVALID = "INVALID"
 
     def is_active(self) -> bool:
         return self == ConnectorCredentialPairStatus.ACTIVE

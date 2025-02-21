@@ -36,7 +36,9 @@ def build_vespa_filters(
 
         eq_elems = [f'{key} contains "{elem}"' for elem in valid_vals]
         or_clause = " or ".join(eq_elems)
-        return f"({or_clause}) and "
+        result = f"({or_clause}) and "
+
+        return result
 
     def _build_time_filter(
         cutoff: datetime | None,

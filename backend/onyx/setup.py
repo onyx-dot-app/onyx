@@ -252,7 +252,7 @@ def setup_vespa(
             logger.notice("Vespa setup complete.")
             return True
         except Exception:
-            logger.notice(
+            logger.exception(
                 f"Vespa setup did not succeed. The Vespa service may not be ready yet. Retrying in {WAIT_SECONDS} seconds."
             )
             time.sleep(WAIT_SECONDS)

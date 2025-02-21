@@ -142,6 +142,15 @@ class MessageResponseIDInfo(BaseModel):
     reserved_assistant_message_id: int
 
 
+class AgentMessageIDInfo(BaseModel):
+    level: int
+    message_id: int
+
+
+class AgenticMessageResponseIDInfo(BaseModel):
+    agentic_message_ids: list[AgentMessageIDInfo]
+
+
 class StreamingError(BaseModel):
     error: str
     stack_trace: str | None = None

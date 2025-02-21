@@ -23,6 +23,7 @@ class PreviousMessage(BaseModel):
     message_type: MessageType
     files: list[InMemoryChatFile]
     tool_call: ToolCallFinalResult | None
+    refined_answer_improvement: bool | None
 
     @classmethod
     def from_chat_message(
@@ -47,6 +48,7 @@ class PreviousMessage(BaseModel):
             )
             if chat_message.tool_call
             else None,
+            refined_answer_improvement=chat_message.refined_answer_improvement,
         )
 
     def to_langchain_msg(self) -> BaseMessage:

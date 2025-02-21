@@ -58,6 +58,7 @@ SEARCH_RESPONSE_SUMMARY_ID = "search_response_summary"
 SEARCH_DOC_CONTENT_ID = "search_doc_content"
 SECTION_RELEVANCE_LIST_ID = "section_relevance_list"
 SEARCH_EVALUATION_ID = "llm_doc_eval"
+QUERY_FIELD = "query"
 
 
 class SearchResponseSummary(SearchQueryInfo):
@@ -179,12 +180,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {
+                        QUERY_FIELD: {
                             "type": "string",
                             "description": "What to search for",
                         },
                     },
-                    "required": ["query"],
+                    "required": [QUERY_FIELD],
                 },
             },
         }
@@ -223,7 +224,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         rephrased_query = history_based_query_rephrase(
             query=query, history=history, llm=llm
         )
-        return {"query": rephrased_query}
+        return {QUERY_FIELD: rephrased_query}
 
     """Actual tool execution"""
 
@@ -279,7 +280,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     def run(
         self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
     ) -> Generator[ToolResponse, None, None]:
-        query = cast(str, llm_kwargs["query"])
+        query = cast(str, llm_kwargs[QUERY_FIELD])
         force_no_rerank = False
         alternate_db_session = None
         retrieved_sections_callback = None

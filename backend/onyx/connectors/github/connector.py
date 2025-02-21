@@ -9,6 +9,7 @@ from typing import cast
 from github import Github
 from github import RateLimitExceededException
 from github import Repository
+from github.GithubException import GithubException
 from github.Issue import Issue
 from github.PaginatedList import PaginatedList
 from github.PullRequest import PullRequest
@@ -16,16 +17,19 @@ from github.PullRequest import PullRequest
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.connectors.interfaces import CredentialExpiredError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import UnexpectedError
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -225,6 +229,48 @@ class GithubConnector(LoadConnector, PollConnector):
             adjusted_start_datetime = epoch
 
         return self._fetch_from_github(adjusted_start_datetime, end_datetime)
+
+    def validate_connector_settings(self) -> None:
+        if self.github_client is None:
+            raise ConnectorMissingCredentialError("GitHub credentials not loaded.")
+
+        if not self.repo_owner or not self.repo_name:
+            raise ConnectorValidationError(
+                "Invalid connector settings: 'repo_owner' and 'repo_name' must be provided."
+            )
+
+        try:
+            test_repo = self.github_client.get_repo(
+                f"{self.repo_owner}/{self.repo_name}"
+            )
+            test_repo.get_contents("")
+
+        except RateLimitExceededException:
+            raise UnexpectedError(
+                "Validation failed due to GitHub rate-limits being exceeded. Please try again later."
+            )
+
+        except GithubException as e:
+            if e.status == 401:
+                raise CredentialExpiredError(
+                    "GitHub credential appears to be invalid or expired (HTTP 401)."
+                )
+            elif e.status == 403:
+                raise InsufficientPermissionsError(
+                    "Your GitHub token does not have sufficient permissions for this repository (HTTP 403)."
+                )
+            elif e.status == 404:
+                raise ConnectorValidationError(
+                    f"GitHub repository not found with name: {self.repo_owner}/{self.repo_name}"
+                )
+            else:
+                raise ConnectorValidationError(
+                    f"Unexpected GitHub error (status={e.status}): {e.data}"
+                )
+        except Exception as exc:
+            raise Exception(
+                f"Unexpected error during GitHub settings validation: {exc}"
+            )
 
 
 if __name__ == "__main__":

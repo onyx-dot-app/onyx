@@ -118,7 +118,7 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
         # Await the Alembic migrations
         await asyncio.to_thread(run_alembic_migrations, tenant_id)
 
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             configure_default_api_keys(db_session)
 
             current_search_settings = (
@@ -134,7 +134,7 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
 
         add_users_to_tenant([email], tenant_id)
 
-        with get_session_with_tenant(tenant_id) as db_session:
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             create_milestone_and_report(
                 user=None,
                 distinct_id=tenant_id,

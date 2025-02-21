@@ -18,7 +18,6 @@ from onyx.auth.users import current_user
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NotificationType
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.models import StarterMessageModel as StarterMessage
 from onyx.db.models import User
@@ -56,6 +55,7 @@ from onyx.server.models import DisplayPriorityRequest
 from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -201,8 +201,9 @@ def create_persona(
     persona_upsert_request: PersonaUpsertRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> PersonaSnapshot:
+    tenant_id = get_current_tenant_id()
+
     prompt_id = (
         persona_upsert_request.prompt_ids[0]
         if persona_upsert_request.prompt_ids

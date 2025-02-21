@@ -25,6 +25,9 @@ from onyx.background.celery.versioned_apps.primary import app as primary_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.connectors.factory import validate_ccpair_for_user
+from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.db.connector import delete_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
@@ -35,8 +38,6 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.document import get_documents_for_cc_pair
-from onyx.db.engine import CURRENT_TENANT_ID_CONTEXTVAR
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -62,6 +63,7 @@ from onyx.server.documents.models import PaginatedReturn
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 router = APIRouter(prefix="/manage")
@@ -106,8 +108,9 @@ def get_cc_pair_full_info(
     cc_pair_id: int,
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> CCPairFullInfo:
+    tenant_id = get_current_tenant_id()
+
     cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id, db_session, user, get_editable=False
     )
@@ -172,7 +175,6 @@ def update_cc_pair_status(
     status_update_request: CCStatusUpdateRequest,
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     """This method returns nearly immediately. It simply sets some signals and
     optimistically assumes any running background processes will clean themselves up.
@@ -180,6 +182,8 @@ def update_cc_pair_status(
 
     Returns HTTPStatus.OK if everything finished.
     """
+    tenant_id = get_current_tenant_id()
+
     cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
@@ -340,9 +344,9 @@ def prune_cc_pair(
     cc_pair_id: int,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> StatusResponse[list[int]]:
     """Triggers pruning on a particular cc_pair immediately"""
+    tenant_id = get_current_tenant_id()
 
     cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
@@ -356,7 +360,7 @@ def prune_cc_pair(
             detail="Connection not found for current user's permissions",
         )
 
-    r = get_redis_client(tenant_id=tenant_id)
+    r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.prune.fenced:
@@ -372,7 +376,7 @@ def prune_cc_pair(
         f"{cc_pair.connector.name} connector."
     )
     payload_id = try_creating_prune_generator_task(
-        primary_app, cc_pair, db_session, r, CURRENT_TENANT_ID_CONTEXTVAR.get()
+        primary_app, cc_pair, db_session, r, tenant_id
     )
     if not payload_id:
         raise HTTPException(
@@ -414,9 +418,9 @@ def sync_cc_pair(
     cc_pair_id: int,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> StatusResponse[list[int]]:
     """Triggers permissions sync on a particular cc_pair immediately"""
+    tenant_id = get_current_tenant_id()
 
     cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
@@ -430,7 +434,7 @@ def sync_cc_pair(
             detail="Connection not found for current user's permissions",
         )
 
-    r = get_redis_client(tenant_id=tenant_id)
+    r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.permissions.fenced:
@@ -446,7 +450,7 @@ def sync_cc_pair(
         f"{cc_pair.connector.name} connector."
     )
     payload_id = try_creating_permissions_sync_task(
-        primary_app, cc_pair_id, r, CURRENT_TENANT_ID_CONTEXTVAR.get()
+        primary_app, cc_pair_id, r, tenant_id
     )
     if not payload_id:
         raise HTTPException(
@@ -488,9 +492,9 @@ def sync_cc_pair_groups(
     cc_pair_id: int,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> StatusResponse[list[int]]:
     """Triggers group sync on a particular cc_pair immediately"""
+    tenant_id = get_current_tenant_id()
 
     cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id=cc_pair_id,
@@ -504,7 +508,7 @@ def sync_cc_pair_groups(
             detail="Connection not found for current user's permissions",
         )
 
-    r = get_redis_client(tenant_id=tenant_id)
+    r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.external_group_sync.fenced:
@@ -520,7 +524,7 @@ def sync_cc_pair_groups(
         f"{cc_pair.connector.name} connector."
     )
     payload_id = try_creating_external_group_sync_task(
-        primary_app, cc_pair_id, r, CURRENT_TENANT_ID_CONTEXTVAR.get()
+        primary_app, cc_pair_id, r, tenant_id
     )
     if not payload_id:
         raise HTTPException(
@@ -616,6 +620,10 @@ def associate_credential_to_connector(
     )
 
     try:
+        validate_ccpair_for_user(
+            connector_id, credential_id, db_session, user, tenant_id
+        )
+
         response = add_credential_to_connector(
             db_session=db_session,
             user=user,
@@ -640,9 +648,26 @@ def associate_credential_to_connector(
         )
 
         return response
+
+    except ConnectorValidationError as e:
+        # If validation fails, delete the connector and commit the changes
+        # Ensures we don't leave invalid connectors in the database
+        # NOTE: consensus is that it makes sense to unify connector and ccpair creation flows
+        # which would rid us of needing to handle cases like these
+        delete_connector(db_session, connector_id)
+        db_session.commit()
+
+        raise HTTPException(
+            status_code=400, detail="Connector validation error: " + str(e)
+        )
+
     except IntegrityError as e:
         logger.error(f"IntegrityError: {e}")
         raise HTTPException(status_code=400, detail="Name must be unique")
+
+    except Exception as e:
+        logger.exception(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="Unexpected error")
 
 
 @router.delete("/connector/{connector_id}/credential/{credential_id}")
