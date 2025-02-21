@@ -11,7 +11,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { SEARCH_PARAM_NAMES } from "../searchParams";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { structureValue } from "@/lib/llm/utils";
-import { LlmOverride } from "@/lib/hooks";
+import { LlmDescriptor } from "@/lib/hooks";
 import { Separator } from "@/components/ui/separator";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 
@@ -38,7 +38,7 @@ async function generateShareLink(chatSessionId: string) {
 async function generateSeedLink(
   message?: string,
   assistantId?: number,
-  modelOverride?: LlmOverride
+  modelOverride?: LlmDescriptor
 ) {
   const baseUrl = `${window.location.protocol}//${window.location.host}`;
   const model = modelOverride
@@ -92,7 +92,7 @@ export function ShareChatSessionModal({
   onClose: () => void;
   message?: string;
   assistantId?: number;
-  modelOverride?: LlmOverride;
+  modelOverride?: LlmDescriptor;
 }) {
   const [shareLink, setShareLink] = useState<string>(
     existingSharedStatus === ChatSessionSharedStatus.Public

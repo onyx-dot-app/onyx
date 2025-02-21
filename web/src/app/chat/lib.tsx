@@ -65,7 +65,7 @@ export function getChatRetentionInfo(
   };
 }
 
-export async function updateModelOverrideForChatSession(
+export async function updateLlmOverrideForChatSession(
   chatSessionId: string,
   newAlternateModel: string
 ) {
