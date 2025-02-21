@@ -4,7 +4,13 @@ on:
   schedule:
     # This cron expression runs the job daily at 16:00 UTC (9am PT)
     - cron: "0 16 * * *"
-
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to run the workflow on'
+        required: false
+        default: 'main'
+        
 env:
   # Bedrock
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
