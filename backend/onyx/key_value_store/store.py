@@ -5,7 +5,6 @@ from typing import cast
 
 from fastapi import HTTPException
 from redis.client import Redis
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.db.engine import get_sqlalchemy_engine
@@ -40,17 +39,23 @@ class PgRedisKVStore(KeyValueStore):
     @contextmanager
     def _get_session(self) -> Iterator[Session]:
         engine = get_sqlalchemy_engine()
-        with Session(engine, expire_on_commit=False) as session:
-            if MULTI_TENANT:
-                if self.tenant_id == POSTGRES_DEFAULT_SCHEMA:
-                    raise HTTPException(
-                        status_code=401, detail="User must authenticate"
-                    )
-                if not is_valid_schema_name(self.tenant_id):
-                    raise HTTPException(status_code=400, detail="Invalid tenant ID")
-                # Set the search_path to the tenant's schema
-                session.execute(text(f'SET search_path = "{self.tenant_id}"'))
-            yield session
+        if MULTI_TENANT:
+            if self.tenant_id == POSTGRES_DEFAULT_SCHEMA:
+                raise HTTPException(status_code=401, detail="User must authenticate")
+            if not is_valid_schema_name(self.tenant_id):
+                raise HTTPException(status_code=400, detail="Invalid tenant ID")
+
+            schema_translate_map = {None: self.tenant_id}
+            with engine.connect().execution_options(
+                schema_translate_map=schema_translate_map
+            ) as connection:
+                with Session(bind=connection, expire_on_commit=False) as session:
+                    yield session
+        else:
+            # single tenant
+            with engine.connect() as connection:
+                with Session(bind=connection, expire_on_commit=False) as session:
+                    yield session
 
     def store(self, key: str, val: JSON_ro, encrypt: bool = False) -> None:
         # Not encrypted in Redis, but encrypted in Postgres
