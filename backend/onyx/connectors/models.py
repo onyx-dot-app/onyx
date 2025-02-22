@@ -29,6 +29,7 @@ class ConnectorMissingCredentialError(PermissionError):
 class Section(BaseModel):
     text: str
     link: str | None
+    image_url: str | None
 
 
 class BasicExpertInfo(BaseModel):

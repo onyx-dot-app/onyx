@@ -76,6 +76,7 @@ PRIMARY_OWNERS = "primary_owners"
 SECONDARY_OWNERS = "secondary_owners"
 RECENCY_BIAS = "recency_bias"
 HIDDEN = "hidden"
+SOURCE_IMAGE_URL = "source_image_url"
 
 # Specific to Vespa, needed for highlighting matching keywords / section
 CONTENT_SUMMARY = "content_summary"

@@ -66,6 +66,9 @@ schema DANSWER_CHUNK_NAME {
         field source_links type string {
             indexing: summary | attribute
         }
+        field source_image_url type string {
+            indexing: summary | attribute
+        }
         field section_continuation type bool {
             indexing: summary | attribute
         }
