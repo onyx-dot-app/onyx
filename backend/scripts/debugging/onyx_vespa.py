@@ -336,8 +336,8 @@ def list_documents(n: int = 10, tenant_id: Optional[str] = None) -> None:
     # List documents from any source, filtered by tenant if provided.
     logger.info(f"Listing up to {n} documents for tenant={tenant_id or 'ALL'}")
     yql = "select * from sources * where true"
-    # if tenant_id:
-    #     yql += f" and tenant_id contains '{tenant_id}'"
+    if tenant_id:
+        yql += f" and tenant_id contains '{tenant_id}'"
     documents = query_vespa(yql, tenant_id=tenant_id, limit=n)
     print(f"Total documents found: {len(documents)}")
     logger.info(f"Total documents found: {len(documents)}")
