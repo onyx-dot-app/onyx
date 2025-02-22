@@ -9,7 +9,6 @@ from email.parser import Parser as EmailParser
 from io import BytesIO
 from pathlib import Path
 from typing import Any
-from typing import Dict
 from typing import IO
 from typing import List
 from typing import Tuple
@@ -207,7 +206,7 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
     Extract text from a PDF. For embedded images, a more complex approach is needed.
     This is a minimal approach returning text only.
     """
-    text, _ = read_pdf_file(file, pdf_pass)
+    text, _, _ = read_pdf_file(file, pdf_pass)
     return text
 
 
@@ -217,8 +216,8 @@ def read_pdf_file(
     """
     Returns the text, basic PDF metadata, and optionally extracted images.
     """
-    metadata: Dict[str, Any] = {}
-    extracted_images: List[Tuple[bytes, str]] = []
+    metadata: dict[str, Any] = {}
+    extracted_images: list[tuple[bytes, str]] = []
     try:
         pdf_reader = PdfReader(file)
 
@@ -256,10 +255,13 @@ def read_pdf_file(
                     image = Image.open(io.BytesIO(image_file_object.data))
                     img_byte_arr = io.BytesIO()
                     image.save(img_byte_arr, format=image.format)
-                    img_byte_arr = img_byte_arr.getvalue()
+                    img_bytes = img_byte_arr.getvalue()
 
-                    image_name = f"page_{page_num + 1}_image_{image_file_object.name}.{image.format.lower()}"
-                    extracted_images.append((img_byte_arr, image_name))
+                    image_name = (
+                        f"page_{page_num + 1}_image_{image_file_object.name}."
+                        f"{image.format.lower() if image.format else 'png'}"
+                    )
+                    extracted_images.append((img_bytes, image_name))
 
         return text, metadata, extracted_images
 

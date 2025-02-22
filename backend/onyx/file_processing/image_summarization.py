@@ -1,13 +1,14 @@
 import base64
 from io import BytesIO
 
+from langchain_core.messages import BaseMessage
+from langchain_core.messages import HumanMessage
+from langchain_core.messages import SystemMessage
 from PIL import Image
 
-from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -17,7 +18,7 @@ def summarize_image_pipeline(
     image_data: bytes,
     query: str | None = None,
     system_prompt: str | None = None,
-) -> str | None:
+) -> str:
     """Pipeline to generate a summary of an image.
     Resizes images if it is bigger than 20MB. Encodes image as a base64 string.
     And finally uses the Default LLM to generate a textual summary of the image."""
@@ -42,21 +43,17 @@ def _summarize_image(
     llm: LLM,
     query: str | None = None,
     system_prompt: str | None = None,
-) -> str | None:
+) -> str:
     """Use default LLM (if it is multimodal) to generate a summary of an image."""
 
-    messages = [
-        {
-            "role": "system",
-            "content": system_prompt,
-        },
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": query},
+    messages: list[BaseMessage] = [
+        SystemMessage(content=system_prompt or ""),
+        HumanMessage(
+            content=[
+                {"type": "text", "text": query or ""},
                 {"type": "image_url", "image_url": {"url": encoded_image}},
-            ],
-        },
+            ]
+        ),
     ]
 
     try:
@@ -65,14 +62,7 @@ def _summarize_image(
         return model_output
 
     except Exception as e:
-        if CONTINUE_ON_CONNECTOR_FAILURE:
-            # Summary of this image will be empty
-            # prevents and infinity retry-loop of the indexing if single summaries fail
-            # for example because content filters got triggert...
-            logger.warning(f"Summarization failed with error: {e}.")
-            return None
-        else:
-            raise ValueError(f"Summarization failed. Messages: {messages}") from e
+        raise ValueError(f"Summarization failed. Messages: {messages}") from e
 
 
 def _encode_image(image_data: bytes) -> str:

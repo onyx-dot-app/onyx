@@ -226,7 +226,9 @@ def _process_file(
     if extension in IMAGE_EXTENSIONS:
         # Summarize or produce empty doc
         image_data = file.read()
-        image_section = _create_image_section(llm, image_data, pg_record.id, title)
+        image_section = _create_image_section(
+            llm, image_data, pg_record.file_name, title
+        )
         return [
             Document(
                 id=doc_id,
@@ -305,6 +307,7 @@ class LocalFileConnector(LoadConnector):
         self.batch_size = batch_size
         self.tenant_id = tenant_id
         self.pdf_pass: str | None = None
+        self.llm: LLM | None = None
 
         # Check if image summarization is enabled and if the LLM has vision
         if FILE_IMAGE_SUMMARIZATION_ENABLED:

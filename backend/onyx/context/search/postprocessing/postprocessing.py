@@ -3,6 +3,9 @@ from collections.abc import Iterator
 from typing import cast
 
 import numpy
+from langchain_core.messages import BaseMessage
+from langchain_core.messages import HumanMessage
+from langchain_core.messages import SystemMessage
 
 from onyx.chat.models import SectionRelevancePiece
 from onyx.configs.app_configs import BLURB_SIZE
@@ -50,14 +53,10 @@ def update_image_sections_with_query(
         for chunk in section.chunks:
             if chunk.source_image_url:
                 # Build an LLM message using the user query plus a special image prompt
-                messages = [
-                    {
-                        "role": "system",
-                        "content": SYSTEM_PROMPT,
-                    },
-                    {
-                        "role": "user",
-                        "content": [
+                messages: list[BaseMessage] = [
+                    SystemMessage(content=SYSTEM_PROMPT),
+                    HumanMessage(
+                        content=[
                             {
                                 "type": "text",
                                 "text": (
@@ -69,8 +68,8 @@ def update_image_sections_with_query(
                                 "type": "image_url",
                                 "image_url": {"url": chunk.source_image_url},
                             },
-                        ],
-                    },
+                        ]
+                    ),
                 ]
                 try:
                     raw_response = llm.invoke(messages)

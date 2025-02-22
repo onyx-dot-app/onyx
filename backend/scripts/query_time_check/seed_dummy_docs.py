@@ -71,6 +71,7 @@ def generate_dummy_chunk(
         title_embedding=generate_random_embedding(embedding_dim),
         large_chunk_id=None,
         large_chunk_reference_ids=[],
+        source_image_url=None,
     )
 
     document_set_names = []

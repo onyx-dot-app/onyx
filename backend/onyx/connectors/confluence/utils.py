@@ -193,7 +193,7 @@ def attachment_to_content(
     confluence_client: OnyxConfluence,
     attachment: dict[str, Any],
     page_context: str,
-    llm: LLM,
+    llm: LLM | None,
 ) -> str | None:
     """If it returns None, assume that we should skip this attachment."""
     download_link = confluence_client.url + attachment["_links"]["download"]
@@ -207,7 +207,7 @@ def attachment_to_content(
         return None
 
     if media_type.startswith("image/"):
-        if True:
+        if llm:
             try:
                 # get images from page
                 summarization = _summarize_image_attachment(
