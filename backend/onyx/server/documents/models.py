@@ -215,6 +215,8 @@ class CCPairFullInfo(BaseModel):
     indexing: bool
     creator: UUID | None
     creator_email: str | None
+    last_successful_index_time: datetime | None
+    last_time_perm_sync: datetime | None
 
     @classmethod
     def from_models(
@@ -255,8 +257,10 @@ class CCPairFullInfo(BaseModel):
             ),
             number_of_index_attempts=number_of_index_attempts,
             last_index_attempt_status=last_indexing_status,
+            last_successful_index_time=cc_pair_model.last_successful_index_time,
             latest_deletion_attempt=latest_deletion_attempt,
             access_type=cc_pair_model.access_type,
+            last_time_perm_sync=cc_pair_model.last_time_perm_sync,
             is_editable_for_current_user=is_editable_for_current_user,
             deletion_failure_message=cc_pair_model.deletion_failure_message,
             indexing=indexing,
@@ -308,6 +312,7 @@ class ConnectorIndexingStatus(ConnectorStatus):
     last_finished_status: IndexingStatus | None
     last_status: IndexingStatus | None
     last_success: datetime | None
+    perm_sync_completed: bool
     latest_index_attempt: IndexAttemptSnapshot | None
     docs_indexed: int
     in_progress: bool

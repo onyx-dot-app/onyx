@@ -726,6 +726,7 @@ def get_connector_indexing_status(
                 last_finished_status=(
                     latest_finished_attempt.status if latest_finished_attempt else None
                 ),
+                perm_sync_completed=cc_pair.last_time_external_group_sync is not None,
                 last_status=(
                     latest_index_attempt.status if latest_index_attempt else None
                 ),

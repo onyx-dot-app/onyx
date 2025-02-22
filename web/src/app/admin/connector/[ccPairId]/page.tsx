@@ -39,11 +39,13 @@ import EditPropertyModal from "@/components/modals/EditPropertyModal";
 
 import * as Yup from "yup";
 import { AlertCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import IndexAttemptErrorsModal from "./IndexAttemptErrorsModal";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 import { IndexAttemptSnapshot } from "@/lib/types";
 import { Spinner } from "@/components/Spinner";
 import { Callout } from "@/components/ui/callout";
+import { FiAlertCircle } from "react-icons/fi";
 
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
@@ -378,10 +380,25 @@ function Main({ ccPairId }: { ccPairId: number }) {
           </div>
         )}
       </div>
-      <CCPairStatus
-        status={ccPair.last_index_attempt_status || "not_started"}
-        ccPairStatus={ccPair.status}
-      />
+      <div className="flex items-center gap-x-2">
+        <CCPairStatus
+          status={ccPair.last_index_attempt_status || "not_started"}
+          ccPairStatus={ccPair.status}
+        />
+
+        {!ccPair.last_successful_index_time ? (
+          <Badge icon={FiAlertCircle} variant="destructive">
+            No successful index
+          </Badge>
+        ) : ccPair.access_type == "sync" && !ccPair.last_time_perm_sync ? (
+          <Badge icon={FiAlertCircle} variant="destructive">
+            Syncing
+          </Badge>
+        ) : (
+          <></>
+        )}
+      </div>
+
       <div className="text-sm mt-1">
         Creator:{" "}
         <b className="text-emphasis">{ccPair.creator_email ?? "Unknown"}</b>

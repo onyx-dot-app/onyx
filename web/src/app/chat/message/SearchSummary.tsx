@@ -11,10 +11,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useUser } from "@/components/user/UserProvider";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { FiCheck, FiEdit2, FiSearch, FiX } from "react-icons/fi";
+import { NoDocuments } from "./NoDocuments";
 
 export function ShowHideDocsButton({
   messageId,
@@ -63,6 +66,7 @@ export function SearchSummary({
   const [isOverflowed, setIsOverflowed] = useState(false);
   const searchingForRef = useRef<HTMLDivElement>(null);
   const editQueryRef = useRef<HTMLInputElement>(null);
+  const { isAdmin } = useUser();
 
   useEffect(() => {
     const checkOverflow = () => {
@@ -120,7 +124,9 @@ export function SearchSummary({
 
       <div className="desktop:hidden">
         {" "}
-        {docs && (
+        {docs && docs.length === 0 ? (
+          finished && <NoDocuments />
+        ) : (
           <button
             className="cursor-pointer mr-2 flex items-center gap-0.5"
             onClick={() => toggleDocumentSelection()}
