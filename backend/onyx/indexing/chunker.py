@@ -235,6 +235,7 @@ class Chunker:
         Loops through sections of the document, converting them into one or more chunks.
         If a section has an image_link, we treat it as a dedicated chunk.
         """
+
         chunks: list[DocAwareChunk] = []
         link_offsets: dict[int, str] = {}
         chunk_text = ""
@@ -243,7 +244,7 @@ class Chunker:
             section_text = clean_text(section.text)
             section_link_text = section.link or ""
             # ADDED: if the Section has an image link
-            image_url = getattr(section, "image_link", None)
+            image_url = section.image_url
 
             # If there is no useful content, skip
             if not section_text and (not document.title or section_idx > 0):

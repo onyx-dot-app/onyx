@@ -19,7 +19,7 @@ from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
-from onyx.file_processing.extract_file_text import docx_to_text
+from onyx.file_processing.extract_file_text import docx_to_text_and_images
 from onyx.file_processing.extract_file_text import pptx_to_text
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.unstructured import get_unstructured_api_key
@@ -159,8 +159,12 @@ def _extract_sections_basic(
                 ]
 
             if mime_type == GDriveMimeType.WORD_DOC.value:
+                text, images = docx_to_text_and_images(
+                    file=io.BytesIO(response), embed_images=True
+                )
                 return [
-                    Section(link=link, text=docx_to_text(file=io.BytesIO(response)))
+                    Section(link=link, text=text),
+                    *[Section(link=link, image_url=image_url) for image_url in images],
                 ]
             elif mime_type == GDriveMimeType.PDF.value:
                 text, _ = read_pdf_file(file=io.BytesIO(response))

@@ -409,6 +409,10 @@ class DefaultMultiLLM(LLM):
         self._record_call(processed_prompt)
 
         try:
+            print("-" * 8, "----\n-------")
+
+            print(prompt)
+            print("-" * 8, "----\n-------")
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice

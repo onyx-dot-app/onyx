@@ -22,12 +22,65 @@ from onyx.document_index.document_index_utils import (
     translate_boost_count_to_multiplier,
 )
 from onyx.llm.interfaces import LLM
+from onyx.llm.utils import message_to_string
 from onyx.natural_language_processing.search_nlp_models import RerankingModel
 from onyx.secondary_llm_flows.chunk_usefulness import llm_batch_eval_sections
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from onyx.utils.timing import log_function_time
+
+
+def update_image_sections_with_query(
+    sections: list[InferenceSection],
+    query: str,
+    llm: LLM,
+) -> None:
+    """
+    For each chunk in each section that has an image URL, call an LLM to produce
+    a new 'content' string that directly addresses the user's query about that image.
+    """
+    # Example system prompt. You can customize further or add more context
+    SYSTEM_PROMPT = (
+        "You are an AI assistant specialized in describing images.\n"
+        "You will receive a user question plus an image URL. Provide a concise textual answer.\n"
+    )
+
+    for section in sections:
+        for chunk in section.chunks:
+            if chunk.source_image_url:
+                # Build an LLM message using the user query plus a special image prompt
+                messages = [
+                    {
+                        "role": "system",
+                        "content": SYSTEM_PROMPT,
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    f"The user's question is: '{query}'. "
+                                    "Please analyze the following image in that context:\n"
+                                ),
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": chunk.source_image_url},
+                            },
+                        ],
+                    },
+                ]
+                try:
+                    raw_response = llm.invoke(messages)
+                    answer_text = message_to_string(raw_response).strip()
+                    chunk.content = (
+                        answer_text if answer_text else "No relevant info found."
+                    )
+
+                except Exception as e:
+                    chunk.content = f"(Failed to retrieve image summary: {str(e)})"
 
 
 logger = setup_logger()
@@ -286,6 +339,7 @@ def search_postprocessing(
         # NOTE: if we don't rerank, we can return the chunks immediately
         # since we know this is the final order.
         # This way the user experience isn't delayed by the LLM step
+        update_image_sections_with_query(retrieved_sections, search_query.query, llm)
         _log_top_section_links(search_query.search_type.value, retrieved_sections)
         yield retrieved_sections
         sections_yielded = True
@@ -323,6 +377,10 @@ def search_postprocessing(
             )
         else:
             _log_top_section_links(search_query.search_type.value, reranked_sections)
+
+            # Add the image processing step here
+            update_image_sections_with_query(reranked_sections, search_query.query, llm)
+
             yield reranked_sections
 
     llm_selected_section_ids = (

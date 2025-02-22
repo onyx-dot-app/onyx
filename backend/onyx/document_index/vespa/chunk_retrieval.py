@@ -42,6 +42,7 @@ from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
 from onyx.document_index.vespa_constants import SECONDARY_OWNERS
 from onyx.document_index.vespa_constants import SECTION_CONTINUATION
 from onyx.document_index.vespa_constants import SEMANTIC_IDENTIFIER
+from onyx.document_index.vespa_constants import SOURCE_IMAGE_URL
 from onyx.document_index.vespa_constants import SOURCE_LINKS
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TITLE
@@ -130,6 +131,7 @@ def _vespa_hit_to_inference_chunk(
         section_continuation=fields[SECTION_CONTINUATION],
         document_id=fields[DOCUMENT_ID],
         source_type=fields[SOURCE_TYPE],
+        source_image_url=fields.get(SOURCE_IMAGE_URL),
         title=fields.get(TITLE),
         semantic_identifier=fields[SEMANTIC_IDENTIFIER],
         boost=fields.get(BOOST, 1),
@@ -211,6 +213,7 @@ def _get_chunks_via_visit_api(
 
         # Check if the response contains any documents
         response_data = response.json()
+
         if "documents" in response_data:
             for document in response_data["documents"]:
                 if filters.access_control_list:

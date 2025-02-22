@@ -94,6 +94,7 @@ YQL_BASE = (
     f"{SEMANTIC_IDENTIFIER}, "
     f"{TITLE}, "
     f"{SECTION_CONTINUATION}, "
+    f"{SOURCE_IMAGE_URL}, "
     f"{BOOST}, "
     f"{HIDDEN}, "
     f"{DOC_UPDATED_AT}, "

@@ -55,6 +55,9 @@ schema DANSWER_CHUNK_NAME {
         field blurb type string {
             indexing: summary | attribute
         }
+        field source_image_url type string {
+            indexing: summary | attribute
+        }
         # https://docs.vespa.ai/en/attributes.html potential enum store for speed, but probably not worth it
         field source_type type string {
             indexing: summary | attribute
@@ -64,9 +67,6 @@ schema DANSWER_CHUNK_NAME {
         # Can also index links https://docs.vespa.ai/en/reference/schema-reference.html#attribute
         # URL type matching
         field source_links type string {
-            indexing: summary | attribute
-        }
-        field source_image_url type string {
             indexing: summary | attribute
         }
         field section_continuation type bool {

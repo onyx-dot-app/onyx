@@ -347,17 +347,19 @@ class SearchPipeline:
         if self.retrieved_sections_callback is not None:
             self.retrieved_sections_callback(retrieved_sections)
 
+        print("Running postprocessing...")
         self._postprocessing_generator = search_postprocessing(
             search_query=self.search_query,
             retrieved_sections=retrieved_sections,
             llm=self.fast_llm,
             rerank_metrics_callback=self.rerank_metrics_callback,
         )
+        print("Postprocessing complete")
 
         self._reranked_sections = cast(
             list[InferenceSection], next(self._postprocessing_generator)
         )
-
+        print("Reranking complete")
         return self._reranked_sections
 
     @property
