@@ -63,6 +63,8 @@ def generate_dummy_chunk(
         title_prefix=f"Title prefix for doc {doc_id}",
         metadata_suffix_semantic="",
         metadata_suffix_keyword="",
+        doc_summary="",
+        chunk_context="",
         mini_chunk_texts=None,
         embeddings=ChunkEmbedding(
             full_embedding=generate_random_embedding(embedding_dim),
