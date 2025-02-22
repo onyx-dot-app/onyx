@@ -129,17 +129,12 @@ def _create_image_section(
 
     summary_text = ""
     if FILE_IMAGE_SUMMARIZATION_ENABLED and llm:
-        print("summarizing image")
         try:
-            print("summarizing image", image_data)
             summary_text = _summarize_image(llm, image_data, display_name) or ""
         except Exception as e:
-            print("error summarizing image", e)
             logger.error(f"Unable to summarize embedded image: {e}")
             if not CONTINUE_ON_CONNECTOR_FAILURE:
                 raise
-    else:
-        print("not summarizing image")
 
     return Section(text=summary_text, image_url=internal_url)
 
@@ -251,7 +246,6 @@ def _process_file(
     file.seek(0)
     text_content = ""
     embedded_images: list[tuple[bytes, str]] = []
-    print("Extracting text and images")
 
     text_content, embedded_images = extract_text_and_images(
         file=file,
@@ -259,18 +253,12 @@ def _process_file(
         pdf_pass=pdf_pass,
         embedded_image_support=FILE_EMBEDDED_IMAGE_EXTRACTION_ENABLED,
     )
-    print("Done extracting text and images")
-    print("length of embedded_images", len(embedded_images))
-    # print("embedded_images", embedded_images)
 
     # Build sections: first the text as a single Section
     sections = []
     link_in_meta = metadata.get("link")
     if text_content.strip():
         sections.append(Section(link=link_in_meta, text=text_content.strip()))
-
-    print("sections", sections)
-    print("Number of sections", len(sections))
 
     # Then any extracted images from docx, etc.
     for idx, (img_data, img_name) in enumerate(embedded_images, start=1):
@@ -281,15 +269,11 @@ def _process_file(
         # with a suffix or keep the same ID.
         # If you want actual image retrieval, you'd have to store them separately.
         # For now, we just simulate an internal URL:
-        print("ADDING IMAGE SECTION")
         faux_image_id = f"{pg_record.file_name}_embedded_{idx}"
         image_section = _create_image_section(
             llm, img_data, faux_image_id, f"{title} - image {idx}"
         )
         sections.append(image_section)
-
-    print("sections", sections)
-    print("Number of sections", len(sections))
     return [
         Document(
             id=doc_id,
