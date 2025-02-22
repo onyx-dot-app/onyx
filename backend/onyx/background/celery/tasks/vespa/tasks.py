@@ -19,6 +19,7 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.background.celery.tasks.shared.tasks import LIGHT_SOFT_TIME_LIMIT
 from onyx.background.celery.tasks.shared.tasks import LIGHT_TIME_LIMIT
+from onyx.background.celery.tasks.shared.tasks import OnyxCeleryTaskCompletionStatus
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import VESPA_SYNC_MAX_TASKS
 from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
@@ -527,6 +528,8 @@ def vespa_metadata_sync_task(
 ) -> bool:
     start = time.monotonic()
 
+    completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED
+
     try:
         with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
@@ -540,75 +543,103 @@ def vespa_metadata_sync_task(
 
             doc = get_document(document_id, db_session)
             if not doc:
-                return False
+                elapsed = time.monotonic() - start
+                task_logger.info(
+                    f"doc={document_id} "
+                    f"action=no_operation "
+                    f"elapsed={elapsed:.2f}"
+                )
+                completion_status = OnyxCeleryTaskCompletionStatus.SKIPPED
+            else:
+                # document set sync
+                doc_sets = fetch_document_sets_for_document(document_id, db_session)
+                update_doc_sets: set[str] = set(doc_sets)
 
-            # document set sync
-            doc_sets = fetch_document_sets_for_document(document_id, db_session)
-            update_doc_sets: set[str] = set(doc_sets)
+                # User group sync
+                doc_access = get_access_for_document(
+                    document_id=document_id, db_session=db_session
+                )
 
-            # User group sync
-            doc_access = get_access_for_document(
-                document_id=document_id, db_session=db_session
-            )
+                fields = VespaDocumentFields(
+                    document_sets=update_doc_sets,
+                    access=doc_access,
+                    boost=doc.boost,
+                    hidden=doc.hidden,
+                )
 
-            fields = VespaDocumentFields(
-                document_sets=update_doc_sets,
-                access=doc_access,
-                boost=doc.boost,
-                hidden=doc.hidden,
-            )
+                # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
+                chunks_affected = retry_index.update_single(
+                    document_id,
+                    tenant_id=tenant_id,
+                    chunk_count=doc.chunk_count,
+                    fields=fields,
+                )
 
-            # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
-            chunks_affected = retry_index.update_single(
-                document_id,
-                tenant_id=tenant_id,
-                chunk_count=doc.chunk_count,
-                fields=fields,
-            )
+                # update db last. Worst case = we crash right before this and
+                # the sync might repeat again later
+                mark_document_as_synced(document_id, db_session)
 
-            # update db last. Worst case = we crash right before this and
-            # the sync might repeat again later
-            mark_document_as_synced(document_id, db_session)
-
-            elapsed = time.monotonic() - start
-            task_logger.info(
-                f"doc={document_id} "
-                f"action=sync "
-                f"chunks={chunks_affected} "
-                f"elapsed={elapsed:.2f}"
-            )
+                elapsed = time.monotonic() - start
+                task_logger.info(
+                    f"doc={document_id} "
+                    f"action=sync "
+                    f"chunks={chunks_affected} "
+                    f"elapsed={elapsed:.2f}"
+                )
+                completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
-        return False
+        completion_status = OnyxCeleryTaskCompletionStatus.SOFT_TIME_LIMIT
     except Exception as ex:
         e: Exception | None = None
-        if isinstance(ex, RetryError):
-            task_logger.warning(
-                f"Tenacity retry failed: num_attempts={ex.last_attempt.attempt_number}"
+        while True:
+            if isinstance(ex, RetryError):
+                task_logger.warning(
+                    f"Tenacity retry failed: num_attempts={ex.last_attempt.attempt_number}"
+                )
+
+                # only set the inner exception if it is of type Exception
+                e_temp = ex.last_attempt.exception()
+                if isinstance(e_temp, Exception):
+                    e = e_temp
+            else:
+                e = ex
+
+            if isinstance(e, httpx.HTTPStatusError):
+                if e.response.status_code == HTTPStatus.BAD_REQUEST:
+                    task_logger.exception(
+                        f"Non-retryable HTTPStatusError: "
+                        f"doc={document_id} "
+                        f"status={e.response.status_code}"
+                    )
+                completion_status = (
+                    OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
+                )
+                break
+
+            task_logger.exception(
+                f"vespa_metadata_sync_task exceptioned: doc={document_id}"
             )
 
-            # only set the inner exception if it is of type Exception
-            e_temp = ex.last_attempt.exception()
-            if isinstance(e_temp, Exception):
-                e = e_temp
-        else:
-            e = ex
-
-        if isinstance(e, httpx.HTTPStatusError):
-            if e.response.status_code == HTTPStatus.BAD_REQUEST:
-                task_logger.exception(
-                    f"Non-retryable HTTPStatusError: "
-                    f"doc={document_id} "
-                    f"status={e.response.status_code}"
+            completion_status = OnyxCeleryTaskCompletionStatus.RETRYABLE_EXCEPTION
+            if (
+                self.max_retries is not None
+                and self.request.retries >= self.max_retries
+            ):
+                completion_status = (
+                    OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
                 )
-            return False
 
-        task_logger.exception(
-            f"Unexpected exception during vespa metadata sync: doc={document_id}"
+            # Exponential backoff from 2^4 to 2^6 ... i.e. 16, 32, 64
+            countdown = 2 ** (self.request.retries + 4)
+            self.retry(exc=e, countdown=countdown)  # this will raise a celery exception
+            break  # we won't hit this, but it looks weird not to have it
+    finally:
+        task_logger.info(
+            f"vespa_metadata_sync_task completed: status={completion_status.value} doc={document_id}"
         )
 
-        # Exponential backoff from 2^4 to 2^6 ... i.e. 16, 32, 64
-        countdown = 2 ** (self.request.retries + 4)
-        self.retry(exc=e, countdown=countdown)
+    if completion_status != OnyxCeleryTaskCompletionStatus.SUCCEEDED:
+        return False
 
     return True
