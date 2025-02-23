@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accesssible_user
 from onyx.db.engine import get_session_context_manager
-from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import TokenRateLimit
@@ -39,13 +38,13 @@ def check_token_rate_limits(
         return
 
     versioned_rate_limit_strategy = fetch_versioned_implementation(
-        "onyx.server.query_and_chat.token_limit", "_check_token_rate_limits"
+        "onyx.server.query_and_chat.token_limit", _check_token_rate_limits.__name__
     )
     return versioned_rate_limit_strategy(user, get_current_tenant_id())
 
 
-def _check_token_rate_limits(_: User | None, tenant_id: str | None) -> None:
-    _user_is_rate_limited_by_global(tenant_id)
+def _check_token_rate_limits(_: User | None) -> None:
+    _user_is_rate_limited_by_global()
 
 
 """
@@ -53,8 +52,8 @@ Global rate limits
 """
 
 
-def _user_is_rate_limited_by_global(tenant_id: str | None) -> None:
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+def _user_is_rate_limited_by_global() -> None:
+    with get_session_context_manager() as db_session:
         global_rate_limits = fetch_all_global_token_rate_limits(
             db_session=db_session, enabled_only=True, ordered=False
         )

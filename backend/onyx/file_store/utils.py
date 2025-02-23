@@ -8,7 +8,7 @@ import requests
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_context_manager
 from onyx.db.models import ChatMessage
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
@@ -53,11 +53,11 @@ def load_all_chat_files(
     return files
 
 
-def save_file_from_url(url: str, tenant_id: str) -> str:
+def save_file_from_url(url: str) -> str:
     """NOTE: using multiple sessions here, since this is often called
     using multithreading. In practice, sharing a session has resulted in
     weird errors."""
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+    with get_session_context_manager() as db_session:
         response = requests.get(url)
         response.raise_for_status()
 
@@ -75,8 +75,8 @@ def save_file_from_url(url: str, tenant_id: str) -> str:
         return unique_id
 
 
-def save_file_from_base64(base64_string: str, tenant_id: str) -> str:
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+def save_file_from_base64(base64_string: str) -> str:
+    with get_session_context_manager() as db_session:
         unique_id = str(uuid4())
         file_store = get_default_file_store(db_session)
         file_store.save_file(
@@ -90,7 +90,6 @@ def save_file_from_base64(base64_string: str, tenant_id: str) -> str:
 
 
 def save_file(
-    tenant_id: str,
     url: str | None = None,
     base64_data: str | None = None,
 ) -> str:
@@ -111,9 +110,9 @@ def save_file(
         raise ValueError("Cannot specify both url and base64_data")
 
     if url is not None:
-        return save_file_from_url(url, tenant_id)
+        return save_file_from_url(url)
     elif base64_data is not None:
-        return save_file_from_base64(base64_data, tenant_id)
+        return save_file_from_base64(base64_data)
     else:
         raise ValueError("Must specify either url or base64_data")
 
@@ -122,11 +121,11 @@ def save_files(urls: list[str], base64_files: list[str], tenant_id: str) -> list
     # NOTE: be explicit about typing so that if we change things, we get notified
     funcs: list[
         tuple[
-            Callable[[str, str | None, str | None], str],
-            tuple[str, str | None, str | None],
+            Callable[[str | None, str | None], str],
+            tuple[str | None, str | None],
         ]
-    ] = [(save_file, (tenant_id, url, None)) for url in urls] + [
-        (save_file, (tenant_id, None, base64_file)) for base64_file in base64_files
+    ] = [(save_file, (url, None)) for url in urls] + [
+        (save_file, (None, base64_file)) for base64_file in base64_files
     ]
 
     return run_functions_tuples_in_parallel(funcs)
