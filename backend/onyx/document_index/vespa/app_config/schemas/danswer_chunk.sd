@@ -148,7 +148,7 @@ schema DANSWER_CHUNK_NAME {
         }
 
         function inline document_aggregated_boost_factor() {
-            # Time in years (91.3 days ~= 3 Months ~= 1 fiscal quarter if no age found)
+            # Aggregated boost factor, currently only used for information content classification
             expression: if(isNan(attribute(aggregated_boost_factor)) == 1, 1.0, attribute(aggregated_boost_factor))
         }
 
