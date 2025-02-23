@@ -9,6 +9,8 @@ from typing import IO
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
+from onyx.configs.app_configs import EMBEDDED_IMAGE_EXTRACTION_ENABLED
+from onyx.configs.app_configs import IMAGE_SUMMARIZATION_ENABLED
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
@@ -28,41 +30,13 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.factory import get_default_llms
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import model_supports_image_input
+from onyx.prompts.image_analysis import IMAGE_SUMMARIZATION_SYSTEM_PROMPT
+from onyx.prompts.image_analysis import IMAGE_SUMMARIZATION_USER_PROMPT
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
-
-# -------------------------------------------------------------------
-# Additional environment-based configs for image summarization:
-
-FILE_IMAGE_SUMMARIZATION_ENABLED = True
-# (
-#     os.environ.get("FILE_IMAGE_SUMMARIZATION_ENABLED", "").lower() == "true"
-# )
-FILE_IMAGE_SUMMARIZATION_SYSTEM_PROMPT = (
-    os.environ.get("FILE_IMAGE_SUMMARIZATION_SYSTEM_PROMPT")
-    or """
-You are an assistant for summarizing images for retrieval.
-Summarize the content of the following image and be as precise as possible.
-The summary will be embedded and used to retrieve the original image.
-Therefore, write a concise summary of the image that is optimized for retrieval.
-"""
-)
-FILE_IMAGE_SUMMARIZATION_USER_PROMPT = (
-    os.environ.get("FILE_IMAGE_SUMMARIZATION_USER_PROMPT")
-    or """
-The image has the file name '{title}'.
-Describe precisely and concisely what the image shows.
-"""
-)
-
-# NEW: optionally parse images embedded in docx, PDF, etc.
-FILE_EMBEDDED_IMAGE_EXTRACTION_ENABLED = True
-# (
-#     os.environ.get("FILE_EMBEDDED_IMAGE_EXTRACTION_ENABLED", "").lower() == "true"
-# )
 
 
 def _summarize_image(
@@ -73,13 +47,13 @@ def _summarize_image(
     """
     Summarizes a single embedded image.
     """
-    user_prompt = FILE_IMAGE_SUMMARIZATION_USER_PROMPT.format(title=file_display_name)
+    user_prompt = IMAGE_SUMMARIZATION_USER_PROMPT.format(title=file_display_name)
     try:
         return summarize_image_pipeline(
             llm,
             image_data,
             user_prompt,
-            system_prompt=FILE_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+            system_prompt=IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
         )
     except Exception as e:
         if CONTINUE_ON_CONNECTOR_FAILURE:
@@ -128,7 +102,7 @@ def _create_image_section(
     internal_url = f"INTERNAL_URL/api/file/{pg_record_id}"
 
     summary_text = ""
-    if FILE_IMAGE_SUMMARIZATION_ENABLED and llm:
+    if IMAGE_SUMMARIZATION_ENABLED and llm:
         try:
             summary_text = _summarize_image(llm, image_data, display_name) or ""
         except Exception as e:
@@ -149,7 +123,7 @@ def _process_file(
 ) -> list[Document]:
     """
     Processes a single file, returning a list of Documents (typically one).
-    Also handles embedded images if 'FILE_EMBEDDED_IMAGE_EXTRACTION_ENABLED' is true.
+    Also handles embedded images if 'EMBEDDED_IMAGE_EXTRACTION_ENABLED' is true.
     """
     extension = get_file_ext(file_name)
 
@@ -253,7 +227,7 @@ def _process_file(
         file=file,
         file_name=file_name,
         pdf_pass=pdf_pass,
-        embedded_image_support=FILE_EMBEDDED_IMAGE_EXTRACTION_ENABLED,
+        embedded_image_support=EMBEDDED_IMAGE_EXTRACTION_ENABLED,
     )
 
     # Build sections: first the text as a single Section
@@ -310,7 +284,7 @@ class LocalFileConnector(LoadConnector):
         self.llm: LLM | None = None
 
         # Check if image summarization is enabled and if the LLM has vision
-        if FILE_IMAGE_SUMMARIZATION_ENABLED:
+        if IMAGE_SUMMARIZATION_ENABLED:
             llm, _ = get_default_llms()
             if not model_supports_image_input(
                 llm.config.model_name, llm.config.model_provider

@@ -5,13 +5,11 @@ from typing import Any
 from urllib.parse import quote
 
 import bs4
-import requests
 
 from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
 )
-from onyx.configs.chat_configs import CONFLUENCE_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
-from onyx.configs.chat_configs import CONFLUENCE_IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.configs.app_configs import IMAGE_SUMMARIZATION_ENABLED
 from onyx.connectors.confluence.onyx_confluence import (
     OnyxConfluence,
 )
@@ -19,6 +17,8 @@ from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.file_processing.image_summarization import summarize_image_pipeline
 from onyx.llm.interfaces import LLM
+from onyx.prompts.image_analysis import IMAGE_SUMMARIZATION_SYSTEM_PROMPT
+from onyx.prompts.image_analysis import IMAGE_SUMMARIZATION_USER_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -318,27 +318,23 @@ def _summarize_image_attachment(
     page_context: str,
     confluence_client: OnyxConfluence,
     llm: LLM,
-) -> str:
-    title = attachment["title"]
-    download_link = _attachment_to_download_link(confluence_client, attachment)
+) -> str | None:
+    """Summarize an image attachment using the LLM."""
+    if not IMAGE_SUMMARIZATION_ENABLED:
+        return None
 
     try:
-        # get image from url
-        image_data = confluence_client.get(
-            download_link, absolute=True, not_json_response=True
+        user_prompt = IMAGE_SUMMARIZATION_USER_PROMPT.format(
+            title=attachment["title"],
+            page_title=attachment["title"],
+            confluence_xml=page_context,
         )
-    except requests.exceptions.RequestException as e:
-        raise ValueError(
-            f"Failed to fetch image for summarization from {download_link}"
-        ) from e
-
-    # get image summary
-    # format user prompt: add page title and XML content of page to provide a better summarization
-    user_prompt = CONFLUENCE_IMAGE_SUMMARIZATION_USER_PROMPT.format(
-        title=title, page_title=attachment["title"], confluence_xml=page_context
-    )
-    summary = summarize_image_pipeline(
-        llm, image_data, user_prompt, CONFLUENCE_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
-    )
-
-    return summary
+        return summarize_image_pipeline(
+            llm,
+            attachment["_links"]["download"],
+            user_prompt,
+            system_prompt=IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+        )
+    except Exception as e:
+        logger.warning(f"Image summarization failed for {attachment['title']}: {e}")
+        return None
