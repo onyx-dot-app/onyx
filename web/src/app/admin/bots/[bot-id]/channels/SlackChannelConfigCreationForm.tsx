@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
-import { Formik, Form, Field } from "formik";
+import React, { useMemo } from "react";
+import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
@@ -13,17 +13,13 @@ import {
   createSlackChannelConfig,
   isPersonaASlackBotPersona,
   updateSlackChannelConfig,
-  fetchSlackChannels,
 } from "../lib";
 import CardSection from "@/components/admin/CardSection";
 import { useRouter } from "next/navigation";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
-import { SEARCH_TOOL_ID, SEARCH_TOOL_NAME } from "@/app/chat/tools/constants";
-import {
-  SlackChannelConfigFormFields,
-  SlackChannelConfigFormFieldsProps,
-} from "./SlackChannelConfigFormFields";
+import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
+import { SlackChannelConfigFormFields } from "./SlackChannelConfigFormFields";
 
 export const SlackChannelConfigCreationForm = ({
   slack_bot_id,
