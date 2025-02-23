@@ -259,7 +259,7 @@ def run_content_classification_inference(
         if prob < 0.25:
             raw_score = 0.0
         elif prob < 0.75:
-            raw_score = (prob - 0.25) / 0.5
+            raw_score = min(1.0, (prob - 0.25) / 0.5)
         else:
             raw_score = 1.0
         return (
@@ -291,8 +291,8 @@ def run_content_classification_inference(
         _prob_to_score(p_temp) for p_temp in output_probabilities_with_temp
     ]
 
-    output_classes = [1] * len(text_inputs)
-    output_scores = [0.9] * len(text_inputs)
+    # output_classes = [1] * len(text_inputs)
+    # output_scores = [0.9] * len(text_inputs)
 
     return [
         (predicted_label, output_score)
