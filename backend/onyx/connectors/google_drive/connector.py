@@ -615,17 +615,6 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             raise e
 
     def validate_connector_settings(self) -> None:
-        """
-        Validate that we can connect to Google Drive (and optionally Admin APIs) with the provided credentials.
-        Attempts a small listing of files to confirm scope and access.
-
-        Raises:
-            ConnectorMissingCredentialError: If no credentials are loaded.
-            CredentialExpiredError: If credentials are invalid/expired (HTTP 401).
-            InsufficientPermissionsError: If we lack the Drive scope or are otherwise denied (HTTP 403).
-            ConnectorValidationError: Any other unexpected errors (e.g. missing domain, no files).
-        """
-
         if self._creds is None:
             raise ConnectorMissingCredentialError(
                 "Google Drive credentials not loaded."
@@ -638,16 +627,8 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             )
 
         try:
-            # Try a minimal file listing to confirm we have scope and valid credentials
             drive_service = get_drive_service(self._creds, self._primary_admin_email)
-            response = (
-                drive_service.files().list(pageSize=1, fields="files(id)").execute()
-            )
-
-            # If listing returns no files, that's OK for validation
-            # but we've at least confirmed we have the necessary scopes and can connect.
-            # If you *require* at least 1 file in Drive, you could handle that here.
-            _ = response.get("files", [])
+            drive_service.files().list(pageSize=1, fields="files(id)").execute()
 
             if isinstance(self._creds, ServiceAccountCredentials):
                 retry_builder()(get_root_folder_id)(drive_service)
@@ -659,7 +640,6 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
                     "Invalid or expired Google Drive credentials (401)."
                 )
             elif status_code == 403:
-                # Could mean missing scopes or the account lacks permission
                 raise InsufficientPermissionsError(
                     "Google Drive app lacks required permissions (403). "
                     "Please ensure the necessary scopes are granted and Drive "

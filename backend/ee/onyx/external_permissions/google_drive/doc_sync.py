@@ -129,9 +129,11 @@ def _get_permissions_from_slim_doc(
         elif permission_type == "anyone":
             public = True
 
-    logger.info(
-        f"Skipped {skipped_permissions} permissions for document {slim_doc.id}– {len(permissions_list)} permissions fetched"
-    )
+    if skipped_permissions > 0:
+        logger.warning(
+            f"Skipped {skipped_permissions} permissions for document {slim_doc.id}– {len(permissions_list)} permissions fetched"
+        )
+
     drive_id = permission_info.get("drive_id")
     group_ids = group_emails | ({drive_id} if drive_id is not None else set())
 

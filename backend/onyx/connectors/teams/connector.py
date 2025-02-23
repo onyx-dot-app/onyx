@@ -285,17 +285,6 @@ class TeamsConnector(LoadConnector, PollConnector):
         return self._fetch_from_teams(start=start_datetime, end=end_datetime)
 
     def validate_connector_settings(self) -> None:
-        """
-        Validate that we can connect to Microsoft Teams with the provided MSAL/Graph credentials
-        and that we can see at least one Team. If the user has specified a list of Teams by name,
-        confirm at least one of them is found.
-
-        Raises:
-            ConnectorMissingCredentialError: If the Graph client is not yet set (missing credentials).
-            CredentialExpiredError: If credentials appear invalid/expired (e.g. 401 Unauthorized).
-            InsufficientPermissionsError: If the app lacks required permissions to read Teams.
-            ConnectorValidationError: If no Teams are found, or if requested Teams are not found.
-        """
         if self.graph_client is None:
             raise ConnectorMissingCredentialError("Teams credentials not loaded.")
 
@@ -303,7 +292,6 @@ class TeamsConnector(LoadConnector, PollConnector):
             # Minimal call to confirm we can retrieve Teams
             found_teams = self._get_all_teams()
 
-        # You may optionally catch the Graph/Office365 request exception if available:
         except ClientRequestException as e:
             status_code = e.response.status_code
             if status_code == 401:
@@ -335,7 +323,6 @@ class TeamsConnector(LoadConnector, PollConnector):
                 f"Unexpected error during Teams validation: {e}"
             )
 
-        # If we get this far, the Graph call succeeded. Check for presence of Teams:
         if not found_teams:
             raise ConnectorValidationError(
                 "No Teams found for the given credentials. "

@@ -671,9 +671,9 @@ class SlackConnector(SlimConnector, CheckpointConnector):
 
     def validate_connector_settings(self) -> None:
         """
-        1. Verifies the bot token is valid for the workspace (via auth_test).
-        2. Ensures the bot has enough scope to list channels.
-        3. Checks that every channel specified in self.channels exists.
+        1. Verify the bot token is valid for the workspace (via auth_test).
+        2. Ensure the bot has enough scope to list channels.
+        3. Check that every channel specified in self.channels exists.
         """
         if self.client is None:
             raise ConnectorMissingCredentialError("Slack credentials not loaded.")
@@ -716,9 +716,6 @@ class SlackConnector(SlimConnector, CheckpointConnector):
                 accessible_channel_ids = {ch["id"] for ch in accessible_channels}
 
                 for user_channel in self.channels:
-                    # If your connector expects channel "names" (e.g., "general"),
-                    # verify user_channel is in channel names. Otherwise, if you
-                    # expect channel "ids" (e.g., "C12345"), check accessible_channel_ids.
                     if (
                         user_channel not in accessible_channel_names
                         and user_channel not in accessible_channel_ids
@@ -730,8 +727,6 @@ class SlackConnector(SlimConnector, CheckpointConnector):
         except SlackApiError as e:
             slack_error = e.response.get("error", "")
             if slack_error == "missing_scope":
-                # The needed scope is typically "channels:read" or "groups:read"
-                # for reading channels. The error may contain more detail.
                 raise InsufficientPermissionsError(
                     "Slack bot token lacks the necessary scope to list/access channels. "
                     "Please ensure your Slack app has 'channels:read' (and/or 'groups:read' for private channels)."
