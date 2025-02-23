@@ -42,8 +42,10 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
+from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
@@ -193,12 +195,19 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
                     monitor_ccpair_permissions_taskset(
                         tenant_id, key_bytes, r, db_session
                     )
+        task_logger.info(f"check_for_doc_permissions_sync finished: tenant={tenant_id}")
     except SoftTimeLimitExceeded:
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
         )
-    except Exception:
-        task_logger.exception(f"Unexpected exception: tenant={tenant_id}")
+    except Exception as e:
+        error_msg = str(e).replace("\n", " ")
+        task_logger.warning(
+            f"Unexpected check_for_doc_permissions_sync exception: tenant={tenant_id} {error_msg}"
+        )
+        task_logger.exception(
+            f"Unexpected check_for_doc_permissions_sync exception: tenant={tenant_id}"
+        )
     finally:
         if lock_beat.owned():
             lock_beat.release()
@@ -282,13 +291,19 @@ def try_creating_permissions_sync_task(
         redis_connector.permissions.set_fence(payload)
 
         payload_id = payload.id
-    except Exception:
-        task_logger.exception(f"Unexpected exception: cc_pair={cc_pair_id}")
+    except Exception as e:
+        error_msg = str(e).replace("\n", " ")
+        task_logger.warning(
+            f"Unexpected try_creating_permissions_sync_task exception: cc_pair={cc_pair_id} {error_msg}"
+        )
         return None
     finally:
         if lock.owned():
             lock.release()
 
+    task_logger.info(
+        f"try_creating_permissions_sync_task finished: cc_pair={cc_pair_id} payload_id={payload_id}"
+    )
     return payload_id
 
 
@@ -388,6 +403,30 @@ def connector_permission_sync_generator_task(
                     f"No connector credential pair found for id: {cc_pair_id}"
                 )
 
+            try:
+                created = validate_ccpair_for_user(
+                    cc_pair.connector.id,
+                    cc_pair.credential.id,
+                    db_session,
+                    tenant_id,
+                    enforce_creation=False,
+                )
+                if not created:
+                    task_logger.warning(
+                        f"Unable to create connector credential pair for id: {cc_pair_id}"
+                    )
+            except Exception:
+                task_logger.exception(
+                    f"validate_ccpair_permissions_sync exceptioned: cc_pair={cc_pair_id}"
+                )
+                update_connector_credential_pair(
+                    db_session=db_session,
+                    connector_id=cc_pair.connector.id,
+                    credential_id=cc_pair.credential.id,
+                    status=ConnectorCredentialPairStatus.INVALID,
+                )
+                raise
+
             source_type = cc_pair.connector.source
 
             doc_sync_func = DOC_PERMISSIONS_FUNC_MAP.get(source_type)
@@ -439,6 +478,10 @@ def connector_permission_sync_generator_task(
             redis_connector.permissions.generator_complete = tasks_generated
 
     except Exception as e:
+        error_msg = str(e).replace("\n", " ")
+        task_logger.warning(
+            f"Permission sync exceptioned: cc_pair={cc_pair_id} payload_id={payload_id} {error_msg}"
+        )
         task_logger.exception(
             f"Permission sync exceptioned: cc_pair={cc_pair_id} payload_id={payload_id}"
         )
@@ -512,13 +555,20 @@ def update_external_document_permissions_task(
                 f"elapsed={elapsed:.2f}"
             )
 
-    except Exception:
+    except Exception as e:
+        error_msg = str(e).replace("\n", " ")
+        task_logger.warning(
+            f"Exception in update_external_document_permissions_task: connector_id={connector_id} doc_id={doc_id} {error_msg}"
+        )
         task_logger.exception(
             f"Exception in update_external_document_permissions_task: "
             f"connector_id={connector_id} doc_id={doc_id}"
         )
         return False
 
+    task_logger.info(
+        f"update_external_document_permissions_task finished: connector_id={connector_id} doc_id={doc_id}"
+    )
     return True
 
 

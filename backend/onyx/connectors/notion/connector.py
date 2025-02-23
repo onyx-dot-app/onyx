@@ -16,10 +16,11 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rl_requests,
 )
-from onyx.connectors.interfaces import ConnectorValidationError
-from onyx.connectors.interfaces import CredentialExpiredError
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import UnexpectedError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -670,12 +671,12 @@ class NotionConnector(LoadConnector, PollConnector):
                     "Please try again later."
                 )
             else:
-                raise Exception(
+                raise UnexpectedError(
                     f"Unexpected Notion HTTP error (status={status_code}): {http_err}"
                 ) from http_err
 
         except Exception as exc:
-            raise Exception(
+            raise UnexpectedError(
                 f"Unexpected error during Notion settings validation: {exc}"
             )
 

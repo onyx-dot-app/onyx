@@ -305,6 +305,7 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
                     userId=user_email,
                     fields=THREAD_FIELDS,
                     id=thread["id"],
+                    continue_on_404_or_403=True,
                 )
                 # full_threads is an iterator containing a single thread
                 # so we need to convert it to a list and grab the first element
@@ -336,6 +337,7 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
                 userId=user_email,
                 fields=THREAD_LIST_FIELDS,
                 q=query,
+                continue_on_404_or_403=True,
             ):
                 doc_batch.append(
                     SlimDocument(

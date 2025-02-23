@@ -48,7 +48,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
-from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import fetch_connector_credential_pairs
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -77,6 +77,7 @@ from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import SENTRY_DSN
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -617,6 +618,12 @@ def connector_indexing_task(
     This will cause the primary worker to abort the indexing attempt and clean up.
     """
 
+    tenant_id_from_context = CURRENT_TENANT_ID_CONTEXTVAR.get()
+    logger.info(f"connector_indexing_task with tenant_id={tenant_id_from_context}")
+    logger.info(
+        f"connector_indexing_task with args={index_attempt_id}, {cc_pair_id}, {search_settings_id}, {is_ee}, {tenant_id}"
+    )
+
     # Since connector_indexing_proxy_task spawns a new process using this function as
     # the entrypoint, we init Sentry here.
     if SENTRY_DSN:
@@ -924,6 +931,7 @@ def connector_indexing_proxy_task(
         task_logger.error("self.request.id is None!")
 
     client = SimpleJobClient()
+    task_logger.info(f"submitting connector_indexing_task with tenant_id={tenant_id}")
 
     job = client.submit(
         connector_indexing_task,
@@ -1070,6 +1078,7 @@ def connector_indexing_proxy_task(
 
                     if not index_attempt.is_finished():
                         continue
+
             except Exception:
                 # if the DB exceptioned, just restart the check.
                 # polling the index attempt status doesn't need to be strongly consistent
@@ -1079,6 +1088,7 @@ def connector_indexing_proxy_task(
                     )
                 )
                 continue
+
     except Exception as e:
         result.status = IndexingWatchdogTerminalStatus.WATCHDOG_EXCEPTIONED
         if isinstance(e, ConnectorValidationError):

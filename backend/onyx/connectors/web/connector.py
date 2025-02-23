@@ -25,12 +25,12 @@ from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
 from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import ConnectorValidationError
-from onyx.connectors.interfaces import CredentialExpiredError
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import UnexpectedError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import UnexpectedError
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.file_processing.extract_file_text import read_pdf_file
@@ -440,7 +440,10 @@ class WebConnector(LoadConnector):
                 "No URL configured. Please provide at least one valid URL."
             )
 
-        if self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value:
+        if (
+            self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value
+            or self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value
+        ):
             return None
 
         # We'll just test the first URL for connectivity and correctness

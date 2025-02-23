@@ -194,12 +194,14 @@ def check_for_pruning(self: Task, *, tenant_id: str | None) -> bool | None:
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
         )
-    except Exception:
+    except Exception as e:
+        error_msg = str(e).replace("\n", " ")
+        task_logger.warning(f"Unexpected pruning check exception: {error_msg}")
         task_logger.exception("Unexpected exception during pruning check")
     finally:
         if lock_beat.owned():
             lock_beat.release()
-
+    task_logger.info(f"check_for_pruning finished: tenant={tenant_id}")
     return True
 
 
@@ -301,13 +303,19 @@ def try_creating_prune_generator_task(
         redis_connector.prune.set_fence(payload)
 
         payload_id = payload.id
-    except Exception:
+    except Exception as e:
+        error_msg = str(e).replace("\n", " ")
+        task_logger.warning(
+            f"Unexpected try_creating_prune_generator_task exception: cc_pair={cc_pair.id} {error_msg}"
+        )
         task_logger.exception(f"Unexpected exception: cc_pair={cc_pair.id}")
         return None
     finally:
         if lock.owned():
             lock.release()
-
+    task_logger.info(
+        f"try_creating_prune_generator_task finished: cc_pair={cc_pair.id} payload_id={payload_id}"
+    )
     return payload_id
 
 

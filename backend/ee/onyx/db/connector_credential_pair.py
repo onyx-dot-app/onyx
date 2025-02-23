@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.enums import AccessType
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import UserGroup__ConnectorCredentialPair
@@ -36,6 +37,7 @@ def get_cc_pairs_by_source(
     db_session: Session,
     source_type: DocumentSource,
     only_sync: bool,
+    only_valid: bool,
 ) -> list[ConnectorCredentialPair]:
     """
     Get all cc_pairs for a given source type (and optionally only sync)
@@ -50,6 +52,11 @@ def get_cc_pairs_by_source(
 
     if only_sync:
         query = query.filter(ConnectorCredentialPair.access_type == AccessType.SYNC)
+
+    if only_valid:
+        query = query.filter(
+            ConnectorCredentialPair.status == ConnectorCredentialPairStatus.ACTIVE
+        )
 
     cc_pairs = query.all()
     return cc_pairs
