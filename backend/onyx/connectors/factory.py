@@ -190,7 +190,6 @@ def validate_ccpair_for_user(
     if INTEGRATION_TESTS_MODE:
         return True
 
-    
     # Validate the connector settings
     connector = fetch_connector_by_id(connector_id, db_session)
     credential = fetch_credential_by_id(
@@ -205,7 +204,7 @@ def validate_ccpair_for_user(
         connector.source == DocumentSource.INGESTION_API
         or connector.source == DocumentSource.MOCK_CONNECTOR
     ):
-        return
+        return True
 
     if not credential:
         raise ValueError("Credential not found")
