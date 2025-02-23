@@ -271,6 +271,7 @@ def monitor_connector_deletion_taskset(
     if fence_data.num_tasks is None:
         # the fence is setting up but isn't ready yet
         return
+    redis_connector.delete.detect_stuck_subtasks(cc_pair_id, r)
 
     remaining = redis_connector.delete.get_remaining()
     task_logger.info(

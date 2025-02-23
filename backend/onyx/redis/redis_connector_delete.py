@@ -32,6 +32,8 @@ class RedisConnectorDelete:
     PREFIX = "connectordeletion"
     FENCE_PREFIX = f"{PREFIX}_fence"  # "connectordeletion_fence"
     TASKSET_PREFIX = f"{PREFIX}_taskset"  # "connectordeletion_taskset"
+    SUBTASK_CREATION_TIMES_PREFIX = f"{PREFIX}_subtask_creation_times"
+    SUBTASK_HEARTBEAT_PREFIX = f"{PREFIX}_subtask_heartbeat"
 
     def __init__(self, tenant_id: str | None, id: int, redis: redis.Redis) -> None:
         self.tenant_id: str | None = tenant_id
@@ -40,6 +42,9 @@ class RedisConnectorDelete:
 
         self.fence_key: str = f"{self.FENCE_PREFIX}_{id}"
         self.taskset_key = f"{self.TASKSET_PREFIX}_{id}"
+
+        self.subtask_creation_times_key = f"{self.SUBTASK_CREATION_TIMES_PREFIX}_{id}"
+        self.subtask_heartbeat_prefix = f"{self.SUBTASK_HEARTBEAT_PREFIX}_{id}"
 
     def taskset_clear(self) -> None:
         self.redis.delete(self.taskset_key)
@@ -120,6 +125,11 @@ class RedisConnectorDelete:
             # note that for the moment we are using a single taskset key, not differentiated by cc_pair id
             self.redis.sadd(self.taskset_key, custom_task_id)
 
+            # Record creation time in a dedicated hash
+            self.redis.hset(
+                self.subtask_creation_times_key, custom_task_id, str(time.time())
+            )
+
             # Priority on sync's triggered by new indexing should be medium
             result = celery_app.send_task(
                 OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
@@ -127,6 +137,7 @@ class RedisConnectorDelete:
                     document_id=doc.id,
                     connector_id=cc_pair.connector_id,
                     credential_id=cc_pair.credential_id,
+                    flow_type="delete",
                     tenant_id=self.tenant_id,
                 ),
                 queue=OnyxCeleryQueues.CONNECTOR_DELETION,
@@ -147,8 +158,86 @@ class RedisConnectorDelete:
     @staticmethod
     def remove_from_taskset(id: int, task_id: str, r: redis.Redis) -> None:
         taskset_key = f"{RedisConnectorDelete.TASKSET_PREFIX}_{id}"
+        creation_times_key = (
+            f"{RedisConnectorDelete.SUBTASK_CREATION_TIMES_PREFIX}_{id}"
+        )
+
         r.srem(taskset_key, task_id)
-        return
+        r.hdel(creation_times_key, task_id)
+
+    @staticmethod
+    def update_subtask_heartbeat(id: int, task_id: str, r: redis.Redis) -> None:
+        """
+        Subtask calls this to mark 'I am alive'.
+        """
+        heartbeat_key = (
+            f"{RedisConnectorDelete.SUBTASK_HEARTBEAT_PREFIX}_{id}:{task_id}"
+        )
+        r.set(heartbeat_key, time.time(), ex=300)  # e.g. 5-min TTL
+
+    @staticmethod
+    def _parse_float(val: bytes | str) -> float:
+        """
+        Safely parse the raw Redis value (bytes/str) into a float or raise ValueError.
+        """
+        if isinstance(val, bytes):
+            val_str = val.decode("utf-8")
+        else:
+            val_str = str(val)
+
+        return float(val_str)
+
+    @staticmethod
+    def detect_stuck_subtasks(
+        id: int,
+        r: redis.Redis,
+        threshold_s: float = 600,
+    ) -> None:
+        """
+        Removes stale or never-started subtasks from the deletion taskset
+        if their heartbeat or creation time exceeds threshold_s seconds.
+        """
+        taskset_key = f"{RedisConnectorDelete.TASKSET_PREFIX}_{id}"
+        creation_times_key = (
+            f"{RedisConnectorDelete.SUBTASK_CREATION_TIMES_PREFIX}_{id}"
+        )
+        heartbeat_prefix = f"{RedisConnectorDelete.SUBTASK_HEARTBEAT_PREFIX}_{id}"
+
+        now = time.time()
+
+        for subtask_id_bytes in r.sscan_iter(taskset_key):
+            subtask_id = subtask_id_bytes.decode("utf-8")
+            hb_key = f"{heartbeat_prefix}:{subtask_id}"
+            last_beat_raw = cast(bytes, r.get(hb_key))
+
+            if last_beat_raw is not None:
+                # Subtask heartbeated; check if stale
+                try:
+                    last_beat_val = RedisConnectorDelete._parse_float(last_beat_raw)
+                except ValueError:
+                    raise ValueError(
+                        f"Failed to parse heartbeat value for subtask {subtask_id}"
+                    )
+
+                if now - last_beat_val > threshold_s:
+                    r.srem(taskset_key, subtask_id)
+                    r.hdel(creation_times_key, subtask_id)
+            else:
+                # No heartbeat; check creation time
+                creation_time_raw = cast(bytes, r.hget(creation_times_key, subtask_id))
+                if creation_time_raw is not None:
+                    try:
+                        creation_time_val = RedisConnectorDelete._parse_float(
+                            creation_time_raw
+                        )
+                    except ValueError:
+                        raise ValueError(
+                            f"Failed to parse creation time value for subtask {subtask_id}"
+                        )
+
+                    if now - creation_time_val > threshold_s:
+                        r.srem(taskset_key, subtask_id)
+                        r.hdel(creation_times_key, subtask_id)
 
     @staticmethod
     def reset_all(r: redis.Redis) -> None:

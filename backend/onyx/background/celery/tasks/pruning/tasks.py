@@ -532,6 +532,9 @@ def monitor_ccpair_pruning_taskset(
     if initial is None:
         return
 
+    # Check for stuck subtasks
+    redis_connector.prune.detect_stuck_subtasks(cc_pair_id, r)
+
     remaining = redis_connector.prune.get_remaining()
     task_logger.info(
         f"Connector pruning progress: cc_pair={cc_pair_id} remaining={remaining} initial={initial}"

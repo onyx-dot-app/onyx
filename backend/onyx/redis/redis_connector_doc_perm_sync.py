@@ -52,6 +52,9 @@ class RedisConnectorPermissionSync:
     ACTIVE_PREFIX = PREFIX + "_active"
     ACTIVE_TTL = CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT * 2
 
+    SUBTASK_CREATION_TIMES_PREFIX = f"{PREFIX}_subtask_creation_times"
+    SUBTASK_HEARTBEAT_PREFIX = f"{PREFIX}_subtask_heartbeat"
+
     def __init__(self, tenant_id: str | None, id: int, redis: redis.Redis) -> None:
         self.tenant_id: str | None = tenant_id
         self.id = id
@@ -66,6 +69,9 @@ class RedisConnectorPermissionSync:
 
         self.subtask_prefix: str = f"{self.SUBTASK_PREFIX}_{id}"
         self.active_key = f"{self.ACTIVE_PREFIX}_{id}"
+
+        self.subtask_creation_times_key = f"{self.SUBTASK_CREATION_TIMES_PREFIX}_{id}"
+        self.subtask_heartbeat_prefix = f"{self.SUBTASK_HEARTBEAT_PREFIX}_{id}"
 
     def taskset_clear(self) -> None:
         self.redis.delete(self.taskset_key)
@@ -163,41 +169,45 @@ class RedisConnectorPermissionSync:
     def generate_tasks(
         self,
         celery_app: Celery,
-        lock: RedisLock | None,
+        lock: RedisLock,
         new_permissions: list[DocExternalAccess],
         source_string: str,
         connector_id: int,
         credential_id: int,
     ) -> int | None:
         last_lock_time = time.monotonic()
-        async_results = []
 
-        # Create a task for each document permission sync
-        for doc_perm in new_permissions:
+        async_results = []
+        for doc_external_access in new_permissions:
             current_time = time.monotonic()
-            if lock and current_time - last_lock_time >= (
-                CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4
-            ):
+            if current_time - last_lock_time >= (CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4):
                 lock.reacquire()
                 last_lock_time = current_time
-            # Add task for document permissions sync
+
             custom_task_id = f"{self.subtask_prefix}_{uuid4()}"
+
+            # Add to the tracking taskset in redis
             self.redis.sadd(self.taskset_key, custom_task_id)
+
+            # Record creation time as a string
+            self.redis.hset(
+                self.subtask_creation_times_key, custom_task_id, str(time.time())
+            )
 
             result = celery_app.send_task(
                 OnyxCeleryTask.UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK,
                 kwargs=dict(
                     tenant_id=self.tenant_id,
-                    serialized_doc_external_access=doc_perm.to_dict(),
+                    serialized_doc_external_access=doc_external_access.to_dict(),
                     source_string=source_string,
                     connector_id=connector_id,
                     credential_id=credential_id,
                 ),
                 queue=OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT,
                 task_id=custom_task_id,
-                priority=OnyxCeleryPriority.HIGH,
-                ignore_result=True,
+                priority=OnyxCeleryPriority.MEDIUM,
             )
+
             async_results.append(result)
 
         return len(async_results)
@@ -213,8 +223,82 @@ class RedisConnectorPermissionSync:
     @staticmethod
     def remove_from_taskset(id: int, task_id: str, r: redis.Redis) -> None:
         taskset_key = f"{RedisConnectorPermissionSync.TASKSET_PREFIX}_{id}"
+        creation_times_key = (
+            f"{RedisConnectorPermissionSync.SUBTASK_CREATION_TIMES_PREFIX}_{id}"
+        )
         r.srem(taskset_key, task_id)
+        r.hdel(creation_times_key, task_id)
         return
+
+    @staticmethod
+    def update_subtask_heartbeat(id: int, subtask_id: str, r: redis.Redis) -> None:
+        heartbeat_key = (
+            f"{RedisConnectorPermissionSync.SUBTASK_HEARTBEAT_PREFIX}_{id}:{subtask_id}"
+        )
+        r.set(heartbeat_key, str(time.time()), ex=300)  # TTL set to 5 minutes
+
+    @staticmethod
+    def _parse_float(val: bytes | str) -> float:
+        if isinstance(val, bytes):
+            val_str = val.decode("utf-8")
+        else:
+            val_str = str(val)
+
+        return float(val_str)
+
+    @staticmethod
+    def detect_stuck_subtasks(
+        id: int,
+        r: redis.Redis,
+        threshold_s: float = 600,
+    ) -> None:
+        """
+        Removes stale or never-started subtasks from the permission sync taskset
+        if their heartbeat or creation time exceeds threshold_s seconds.
+        """
+        taskset_key = f"{RedisConnectorPermissionSync.TASKSET_PREFIX}_{id}"
+        creation_times_key = (
+            f"{RedisConnectorPermissionSync.SUBTASK_CREATION_TIMES_PREFIX}_{id}"
+        )
+        heartbeat_prefix = (
+            f"{RedisConnectorPermissionSync.SUBTASK_HEARTBEAT_PREFIX}_{id}"
+        )
+
+        now = time.time()
+
+        for subtask_id_bytes in r.sscan_iter(taskset_key):
+            subtask_id = subtask_id_bytes.decode("utf-8")
+            hb_key = f"{heartbeat_prefix}:{subtask_id}"
+            last_beat_raw = cast(bytes, r.get(hb_key))
+
+            if last_beat_raw is not None:
+                try:
+                    last_beat_val = RedisConnectorPermissionSync._parse_float(
+                        last_beat_raw
+                    )
+                except ValueError:
+                    raise ValueError(
+                        f"Failed to parse heartbeat value for subtask {subtask_id}"
+                    )
+
+                if now - last_beat_val > threshold_s:
+                    r.srem(taskset_key, subtask_id)
+                    r.hdel(creation_times_key, subtask_id)
+            else:
+                creation_time_raw = cast(bytes, r.hget(creation_times_key, subtask_id))
+                if creation_time_raw is not None:
+                    try:
+                        creation_time_val = RedisConnectorPermissionSync._parse_float(
+                            creation_time_raw
+                        )
+                    except ValueError:
+                        raise ValueError(
+                            f"Failed to parse creation time value for subtask {subtask_id}"
+                        )
+
+                    if now - creation_time_val > threshold_s:
+                        r.srem(taskset_key, subtask_id)
+                        r.hdel(creation_times_key, subtask_id)
 
     @staticmethod
     def reset_all(r: redis.Redis) -> None:

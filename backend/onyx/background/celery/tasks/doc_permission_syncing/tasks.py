@@ -812,6 +812,9 @@ def monitor_ccpair_permissions_taskset(
     if not payload:
         return
 
+    # Check for stuck subtasks
+    redis_connector.permissions.detect_stuck_subtasks(cc_pair_id, r)
+
     remaining = redis_connector.permissions.get_remaining()
     task_logger.info(
         f"Permissions sync progress: "
