@@ -218,6 +218,7 @@ class SqlEngine:
             final_engine_kwargs.update(engine_kwargs)
 
         logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
+        # echo=True here for inspecting all emitted db queries
         engine = create_engine(connection_string, **final_engine_kwargs)
 
         if USE_IAM_AUTH:
