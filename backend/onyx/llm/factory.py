@@ -101,7 +101,7 @@ def get_default_llm_with_vision(
         llm_providers = fetch_existing_llm_providers(db_session)
 
     if not llm_providers:
-        raise ValueError("No LLM providers found")
+        return None
 
     for provider in llm_providers:
         model_name = provider.default_model_name
