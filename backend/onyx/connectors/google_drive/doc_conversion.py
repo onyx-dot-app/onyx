@@ -4,7 +4,7 @@ from datetime import datetime
 from datetime import timezone
 from tempfile import NamedTemporaryFile
 
-import pandas as pd
+import openpyxl
 from googleapiclient.discovery import build  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
@@ -131,21 +131,28 @@ def _extract_sections_basic(
                     tmp.write(response)
                     tmp_path = tmp.name
 
-                xls = pd.ExcelFile(tmp_path)
-                sections = []
-                for sheet_name in xls.sheet_names:
-                    df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
-                    df.dropna(how="all")
-                    values = [df.columns.tolist()] + df.fillna("").astype(
-                        str
-                    ).values.tolist()
+                TEXT_SECTION_SEPARATOR = "\n\n"
 
-                    if values:
-                        text = f"Sheet: {sheet_name}\n"
-                        for row in values:
-                            text += "\t".join(str(cell) for cell in row) + "\n"
-                        sections.append(Section(link=link, text=text))
+                workbook = openpyxl.load_workbook(tmp_path, read_only=True)
+
+                sections = []
+
+                for sheet in workbook.worksheets:
+                    sheet_string = TEXT_SECTION_SEPARATOR.join(
+                        ",".join(map(str, row))
+                        for row in sheet.iter_rows(min_row=1, values_only=True)
+                    )
+
+                    if sheet_string.strip():
+                        sections.append(
+                            Section(
+                                link=link,
+                                text=f"Sheet: {sheet.title}\n\n{sheet_string}",
+                            )
+                        )
+
                 os.remove(tmp_path)
+
                 return sections
 
             except Exception as e:
