@@ -198,6 +198,14 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
 
         self._retrieved_ids: set[str] = set()
 
+        # Check if image summarization is enabled and if the LLM has vision
+        if IMAGE_SUMMARIZATION_ENABLED:
+            self.llm = get_default_llm_with_vision()
+            if self.llm is None:
+                logger.warning(
+                    "No LLM with vision found, image summarization will be disabled"
+                )
+
     @property
     def primary_admin_email(self) -> str:
         if self._primary_admin_email is None:
@@ -235,16 +243,6 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             credentials=credentials,
             source=DocumentSource.GOOGLE_DRIVE,
         )
-
-        # Check if image summarization is enabled and if the LLM has vision
-        if IMAGE_SUMMARIZATION_ENABLED:
-            llm = get_default_llm_with_vision()
-            if llm:
-                self.llm = llm
-            else:
-                logger.warning(
-                    "No LLM with vision found, image summarization will be disabled"
-                )
 
         return new_creds_dict
 

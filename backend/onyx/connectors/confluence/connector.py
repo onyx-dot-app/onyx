@@ -12,7 +12,6 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.onyx_confluence import build_confluence_client
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.confluence.utils import _attachment_to_download_link
 from onyx.connectors.confluence.utils import _summarize_image_attachment
 from onyx.connectors.confluence.utils import attachment_to_content
 from onyx.connectors.confluence.utils import build_confluence_document_id
@@ -123,6 +122,13 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
 
         self.timezone: timezone = timezone(offset=timedelta(hours=timezone_offset))
 
+        if IMAGE_SUMMARIZATION_ENABLED:
+            self.vision_llm = get_default_llm_with_vision()
+            if self.vision_llm is None:
+                logger.warning(
+                    "No LLM with vision found, image summarization will be disabled"
+                )
+
     @property
     def confluence_client(self) -> OnyxConfluence:
         if self._confluence_client is None:
@@ -135,14 +141,6 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             is_cloud=self.is_cloud,
             wiki_base=self.wiki_base,
         )
-        if IMAGE_SUMMARIZATION_ENABLED:
-            llm = get_default_llm_with_vision()
-            if llm:
-                self.llm = llm
-            else:
-                logger.warning(
-                    "No LLM with vision found, image summarization will be disabled"
-                )
 
         return None
 
@@ -291,23 +289,23 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                     continue
 
                 # Attempt to get textual content or image summarization:
-                if media_type.startswith("image/") and self.llm:
+                if media_type.startswith("image/") and self.vision_llm:
                     # Summarize image
+                    logger.notice(f"Summarizing image attachment {attachment['title']}")
+
                     try:
-                        summary = _summarize_image_attachment(
+                        summary, download_link = _summarize_image_attachment(
                             attachment=attachment,
                             page_context=confluence_xml,
                             confluence_client=self.confluence_client,
-                            llm=self.llm,
+                            llm=self.vision_llm,
                         )
+                        logger.notice(f"Summary: {summary}")
                         if summary:
-                            image_download_link = _attachment_to_download_link(
-                                self.confluence_client, attachment
-                            )
                             doc.sections.append(
                                 Section(
                                     text=summary,
-                                    image_url=image_download_link,
+                                    image_url=download_link,
                                 )
                             )
                     except Exception as e:
@@ -320,14 +318,20 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                 else:
                     # Attempt normal text extraction
                     try:
-                        content_text = attachment_to_content(
+                        response = attachment_to_content(
                             confluence_client=self.confluence_client,
                             attachment=attachment,
                             page_context=confluence_xml,
-                            llm=self.llm,  # will be None if summarization is disabled
+                            llm=self.vision_llm,  # will be None if summarization is disabled
                         )
+                        if response is None:
+                            continue
+
+                        content_text, image_file_name = response
                         if content_text:
-                            doc.sections.append(Section(text=content_text))
+                            doc.sections.append(
+                                Section(text=content_text, image_url=image_file_name)
+                            )
                     except Exception as e:
                         logger.error(
                             f"Failed to extract attachment {attachment['title']}",

@@ -280,18 +280,15 @@ class LocalFileConnector(LoadConnector):
         self.pdf_pass: str | None = None
         self.llm: LLM | None = None
 
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self.pdf_pass = credentials.get("pdf_password")
-
-        # Check if image summarization is enabled and if the LLM has vision
         if IMAGE_SUMMARIZATION_ENABLED:
-            llm = get_default_llm_with_vision()
-            if llm:
-                self.llm = llm
-            else:
+            self.llm = get_default_llm_with_vision()
+            if self.llm is None:
                 logger.warning(
                     "No LLM with vision found, image summarization will be disabled"
                 )
+
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        self.pdf_pass = credentials.get("pdf_password")
 
         return None
 

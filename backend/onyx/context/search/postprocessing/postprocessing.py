@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from typing import cast
 
 import numpy
+import requests
 from langchain_core.messages import BaseMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
@@ -25,6 +26,7 @@ from onyx.context.search.models import SearchQuery
 from onyx.document_index.document_index_utils import (
     translate_boost_count_to_multiplier,
 )
+from onyx.file_processing.image_summarization import prepare_image_bytes
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
 from onyx.natural_language_processing.search_nlp_models import RerankingModel
@@ -53,6 +55,8 @@ def update_image_sections_with_query(
     for section in sections:
         for chunk in section.chunks:
             if chunk.source_image_url:
+                image_bytes = requests.get(chunk.source_image_url).content
+                encoded_image = prepare_image_bytes(image_bytes)
                 # Build an LLM message using the user query plus a special image prompt
                 messages: list[BaseMessage] = [
                     SystemMessage(content=SYSTEM_PROMPT),
@@ -67,7 +71,7 @@ def update_image_sections_with_query(
                             },
                             {
                                 "type": "image_url",
-                                "image_url": {"url": chunk.source_image_url},
+                                "image_url": {"url": encoded_image},
                             },
                         ]
                     ),
@@ -80,6 +84,9 @@ def update_image_sections_with_query(
                     )
 
                 except Exception as e:
+                    logger.exception(
+                        f"Error updating image section with query: {e} source image url: {chunk.source_image_url}"
+                    )
                     chunk.content = f"(Failed to retrieve image summary: {str(e)})"
 
 

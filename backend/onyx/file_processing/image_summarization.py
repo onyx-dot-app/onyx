@@ -13,6 +13,17 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def prepare_image_bytes(image_data: bytes) -> str:
+    """Prepare image bytes for summarization.
+    Resizes image if it's larger than 20MB. Encodes image as a base64 string."""
+    image_data = _resize_image_if_needed(image_data)
+
+    # encode image (base64)
+    encoded_image = _encode_image(image_data)
+
+    return encoded_image
+
+
 def summarize_image_pipeline(
     llm: LLM,
     image_data: bytes,
@@ -23,10 +34,7 @@ def summarize_image_pipeline(
     Resizes images if it is bigger than 20MB. Encodes image as a base64 string.
     And finally uses the Default LLM to generate a textual summary of the image."""
     # resize image if it's bigger than 20MB
-    image_data = _resize_image_if_needed(image_data)
-
-    # encode image (base64)
-    encoded_image = _encode_image(image_data)
+    encoded_image = prepare_image_bytes(image_data)
 
     summary = _summarize_image(
         encoded_image,
@@ -46,20 +54,22 @@ def _summarize_image(
 ) -> str:
     """Use default LLM (if it is multimodal) to generate a summary of an image."""
 
-    messages: list[BaseMessage] = [
-        SystemMessage(content=system_prompt or ""),
+    messages: list[BaseMessage] = []
+
+    if system_prompt:
+        messages.append(SystemMessage(content=system_prompt))
+
+    messages.append(
         HumanMessage(
             content=[
-                {"type": "text", "text": query or ""},
+                {"type": "text", "text": query},
                 {"type": "image_url", "image_url": {"url": encoded_image}},
-            ]
+            ],
         ),
-    ]
+    )
 
     try:
-        model_output = message_to_string(llm.invoke(messages))
-
-        return model_output
+        return message_to_string(llm.invoke(messages))
 
     except Exception as e:
         raise ValueError(f"Summarization failed. Messages: {messages}") from e

@@ -1,18 +1,24 @@
 import io
 from datetime import datetime
 from datetime import timezone
+from io import BytesIO
 from typing import Any
 from urllib.parse import quote
 
 import bs4
+from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
 )
-from onyx.configs.app_configs import IMAGE_SUMMARIZATION_ENABLED
+from onyx.configs.constants import FileOrigin
 from onyx.connectors.confluence.onyx_confluence import (
     OnyxConfluence,
 )
+from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.models import PGFileStore
+from onyx.db.pg_file_store import create_populate_lobj
+from onyx.db.pg_file_store import upsert_pgfilestore
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.file_processing.image_summarization import summarize_image_pipeline
@@ -194,7 +200,9 @@ def attachment_to_content(
     attachment: dict[str, Any],
     page_context: str,
     llm: LLM | None,
-) -> str | None:
+) -> (
+    tuple[str, str | None] | None
+):  # if the image is summarized, the file name is returned
     """If it returns None, assume that we should skip this attachment."""
     download_link = confluence_client.url + attachment["_links"]["download"]
 
@@ -210,13 +218,13 @@ def attachment_to_content(
         if llm:
             try:
                 # get images from page
-                summarization = _summarize_image_attachment(
+                summarization, file_name = _summarize_image_attachment(
                     attachment=attachment,
                     page_context=page_context,
                     confluence_client=confluence_client,
                     llm=llm,
                 )
-                return summarization
+                return summarization, file_name
             except Exception as e:
                 logger.error(f"Failed to summarize image: {attachment}", exc_info=e)
         else:
@@ -255,7 +263,7 @@ def attachment_to_content(
         )
         return None
 
-    return extracted_text
+    return extracted_text, None
 
 
 def build_confluence_document_id(
@@ -306,6 +314,33 @@ def datetime_from_string(datetime_string: str) -> datetime:
     return datetime_object
 
 
+def attachment_to_file_record(
+    confluence_client: OnyxConfluence,
+    attachment: dict[str, Any],
+    db_session: Session,
+) -> tuple[PGFileStore, bytes]:
+    """Save an attachment to the file store and return the file record."""
+    download_link = _attachment_to_download_link(confluence_client, attachment)
+    image_data = confluence_client.get(
+        download_link, absolute=True, not_json_response=True
+    )
+
+    # Save image to file store
+    file_name = f"confluence_attachment_{attachment['id']}"
+    lobj_oid = create_populate_lobj(BytesIO(image_data), db_session)
+    pgfilestore = upsert_pgfilestore(
+        file_name=file_name,
+        display_name=attachment["title"],
+        file_origin=FileOrigin.OTHER,
+        file_type=attachment["metadata"]["mediaType"],
+        lobj_oid=lobj_oid,
+        db_session=db_session,
+        commit=True,
+    )
+
+    return pgfilestore, image_data
+
+
 def _attachment_to_download_link(
     confluence_client: OnyxConfluence, attachment: dict[str, Any]
 ) -> str:
@@ -316,25 +351,34 @@ def _attachment_to_download_link(
 def _summarize_image_attachment(
     attachment: dict[str, Any],
     page_context: str,
-    confluence_client: OnyxConfluence,
     llm: LLM,
-) -> str | None:
-    """Summarize an image attachment using the LLM."""
-    if not IMAGE_SUMMARIZATION_ENABLED:
-        return None
-
+    confluence_client: OnyxConfluence,
+) -> tuple[str, str]:
+    """Summarize an image attachment using the LLM and save to file store."""
     try:
         user_prompt = IMAGE_SUMMARIZATION_USER_PROMPT.format(
             title=attachment["title"],
             page_title=attachment["title"],
             confluence_xml=page_context,
         )
-        return summarize_image_pipeline(
-            llm,
-            attachment["_links"]["download"],
-            user_prompt,
-            system_prompt=IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+        with get_session_with_current_tenant() as db_session:
+            file_record, file_data = attachment_to_file_record(
+                confluence_client=confluence_client,
+                attachment=attachment,
+                db_session=db_session,
+            )
+
+        return (
+            summarize_image_pipeline(
+                llm=llm,
+                image_data=file_data,
+                query=user_prompt,
+                system_prompt=IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+            ),
+            file_record.file_name,
         )
+
     except Exception as e:
-        logger.warning(f"Image summarization failed for {attachment['title']}: {e}")
-        return None
+        raise ValueError(
+            f"Image summarization failed for {attachment['title']}: {e}"
+        ) from e
