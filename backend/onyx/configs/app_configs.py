@@ -636,5 +636,10 @@ MOCK_LLM_RESPONSE = (
 )
 
 # Image summarization and extraction configs
-IMAGE_SUMMARIZATION_ENABLED = True
-EMBEDDED_IMAGE_EXTRACTION_ENABLED = True
+IMAGE_SUMMARIZATION_ENABLED = (
+    os.environ.get("IMAGE_SUMMARIZATION_ENABLED", "true").lower() == "true"
+)
+
+SEARCH_TIME_IMAGE_ANALYSIS = (
+    os.environ.get("SEARCH_TIME_IMAGE_ANALYSIS", "true").lower() == "true"
+)

@@ -9,6 +9,7 @@ from langchain_core.messages import SystemMessage
 
 from onyx.chat.models import SectionRelevancePiece
 from onyx.configs.app_configs import BLURB_SIZE
+from onyx.configs.app_configs import SEARCH_TIME_IMAGE_ANALYSIS
 from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MAX
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MIN
@@ -338,7 +339,10 @@ def search_postprocessing(
         # NOTE: if we don't rerank, we can return the chunks immediately
         # since we know this is the final order.
         # This way the user experience isn't delayed by the LLM step
-        update_image_sections_with_query(retrieved_sections, search_query.query, llm)
+        if SEARCH_TIME_IMAGE_ANALYSIS:
+            update_image_sections_with_query(
+                retrieved_sections, search_query.query, llm
+            )
         _log_top_section_links(search_query.search_type.value, retrieved_sections)
         yield retrieved_sections
         sections_yielded = True
@@ -378,7 +382,10 @@ def search_postprocessing(
             _log_top_section_links(search_query.search_type.value, reranked_sections)
 
             # Add the image processing step here
-            update_image_sections_with_query(reranked_sections, search_query.query, llm)
+            if SEARCH_TIME_IMAGE_ANALYSIS:
+                update_image_sections_with_query(
+                    reranked_sections, search_query.query, llm
+                )
 
             yield reranked_sections
 

@@ -274,7 +274,7 @@ def read_pdf_file(
 
 
 def docx_to_text_and_images(
-    file: IO[Any], embed_images: bool
+    file: IO[Any],
 ) -> Tuple[str, List[Tuple[bytes, str]]]:
     """
     Extract text from a docx. If embed_images=True, also extract inline images.
@@ -289,23 +289,18 @@ def docx_to_text_and_images(
     for paragraph in doc.paragraphs:
         paragraphs.append(paragraph.text)
 
-    # Optionally find images in the document. The python-docx
-    # library exposes `inline_shapes` in the doc, or each shape
-    # might have an image blob. A minimal example:
-    if embed_images:
-        # Reset position so we can re-load the doc (python-docx has read the stream)
-        # Note: if python-docx has fully consumed the stream, you may need to open it again from memory.
-        # For large docs, a more robust approach is needed.
-        # This is a simplified example.
-        pass
+    # Reset position so we can re-load the doc (python-docx has read the stream)
+    # Note: if python-docx has fully consumed the stream, you may need to open it again from memory.
+    # For large docs, a more robust approach is needed.
+    # This is a simplified example.
 
-        for rel_id, rel in doc.part.rels.items():
-            if "image" in rel.reltype:
-                # image is typically in rel.target_part.blob
-                image_bytes = rel.target_part.blob
-                image_name = rel.target_part.partname
-                # store
-                embedded_images.append((image_bytes, os.path.basename(str(image_name))))
+    for rel_id, rel in doc.part.rels.items():
+        if "image" in rel.reltype:
+            # image is typically in rel.target_part.blob
+            image_bytes = rel.target_part.blob
+            image_name = rel.target_part.partname
+            # store
+            embedded_images.append((image_bytes, os.path.basename(str(image_name))))
 
     text_content = "\n".join(paragraphs)
     return text_content, embedded_images
@@ -383,9 +378,7 @@ def extract_file_text(
     """
     extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
         ".pdf": pdf_to_text,
-        ".docx": lambda f: docx_to_text_and_images(f, embed_images=False)[
-            0
-        ],  # no images
+        ".docx": lambda f: docx_to_text_and_images(f)[0],  # no images
         ".pptx": pptx_to_text,
         ".xlsx": xlsx_to_text,
         ".eml": eml_to_text,
@@ -430,17 +423,15 @@ def extract_text_and_images(
     file: IO[Any],
     file_name: str,
     pdf_pass: str | None = None,
-    embedded_image_support: bool = False,
 ) -> Tuple[str, List[Tuple[bytes, str]]]:
     """
     Primary new function for the updated connector.
     Returns (text_content, [(embedded_img_bytes, embedded_img_name), ...]).
-    If embedded_image_support=False, we return empty list for images.
     """
 
     try:
         # Attempt unstructured if env var is set
-        if get_unstructured_api_key() and not embedded_image_support:
+        if get_unstructured_api_key():
             # If the user doesn't want embedded images, unstructured is fine
             file.seek(0)
             text_content = unstructured_to_text(file, file_name)
@@ -451,18 +442,14 @@ def extract_text_and_images(
         # docx example for embedded images
         if extension == ".docx":
             file.seek(0)
-            text_content, images = docx_to_text_and_images(
-                file, embed_images=embedded_image_support
-            )
+            text_content, images = docx_to_text_and_images(file)
             return (text_content, images)
 
         # PDF example: we do not show complicated PDF image extraction here
         # so we simply extract text for now and skip images.
         if extension == ".pdf":
             file.seek(0)
-            text_content, _, images = read_pdf_file(
-                file, pdf_pass, extract_images=embedded_image_support
-            )
+            text_content, _, images = read_pdf_file(file, pdf_pass, extract_images=True)
             return (text_content, images)
 
         # For PPTX, XLSX, EML, etc., we do not show embedded image logic here.

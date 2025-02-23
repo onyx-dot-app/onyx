@@ -9,7 +9,6 @@ from typing import IO
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
-from onyx.configs.app_configs import EMBEDDED_IMAGE_EXTRACTION_ENABLED
 from onyx.configs.app_configs import IMAGE_SUMMARIZATION_ENABLED
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
@@ -227,7 +226,6 @@ def _process_file(
         file=file,
         file_name=file_name,
         pdf_pass=pdf_pass,
-        embedded_image_support=EMBEDDED_IMAGE_EXTRACTION_ENABLED,
     )
 
     # Build sections: first the text as a single Section

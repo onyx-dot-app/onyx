@@ -222,7 +222,6 @@ def _extract_sections_basic(
                 # Use docx_to_text_and_images to get text plus embedded images
                 text, embedded_images = docx_to_text_and_images(
                     file=io.BytesIO(response_bytes),
-                    embed_images=True,  # we do want embedded images
                 )
                 sections = []
                 if text.strip():
