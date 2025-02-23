@@ -13,7 +13,7 @@ interface UserContextType {
   isCurator: boolean;
   refreshUser: () => Promise<void>;
   isCloudSuperuser: boolean;
-  updateUserAutoScroll: (autoScroll: boolean | null) => Promise<void>;
+  updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
   toggleAssistantPinnedStatus: (
     currentPinnedAssistantIDs: number[],
@@ -163,7 +163,7 @@ export function UserProvider({
     }
   };
 
-  const updateUserAutoScroll = async (autoScroll: boolean | null) => {
+  const updateUserAutoScroll = async (autoScroll: boolean) => {
     try {
       const response = await fetch("/api/auto-scroll", {
         method: "PATCH",
