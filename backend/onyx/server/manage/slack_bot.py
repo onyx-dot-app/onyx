@@ -6,6 +6,8 @@ from fastapi import HTTPException
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
+import time
+import threading
 
 from onyx.auth.users import current_admin_user
 from onyx.configs.constants import MilestoneRecordType
@@ -36,9 +38,11 @@ from onyx.server.manage.validate_tokens import validate_app_token
 from onyx.server.manage.validate_tokens import validate_bot_token
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
+from onyx.utils.logger import setup_logger
 
 
 router = APIRouter(prefix="/manage")
+logger = setup_logger()
 
 
 def _form_channel_config(
@@ -344,6 +348,57 @@ def list_bot_configs(
         for slack_bot_config_model in slack_bot_config_models
     ]
 
+# channels per bot_id
+global_channels = {}
+currently_populating = {}
+
+# given a bot_id, let's populate the channels[bot_id] with the channels
+def populate_channels(bot_id: int, bot_token: str):
+    client = WebClient(token=bot_token)
+
+    if bot_id in currently_populating:
+        return
+    
+    currently_populating[bot_id] = True
+
+    currentchannels = []
+    cursor = None
+    logger.info(f"Populating channels for bot_id: {bot_id}")
+    while True:
+        try:
+            response = client.conversations_list(
+                types="public_channel,private_channel",
+                exclude_archived=True,
+                limit=200,
+                cursor=cursor,
+            )
+            for channel in response["channels"]:
+                currentchannels.append(SlackChannel(id=channel["id"], name=channel["name"]))
+
+            logger.info(f"Populated {len(currentchannels)} channels for bot_id: {bot_id}")
+
+            response_metadata: dict[str, Any] = response.get("response_metadata", {})
+            if isinstance(response_metadata, dict):
+                cursor = response_metadata.get("next_cursor")
+                if not cursor:
+                    break
+            else:
+                break
+        except SlackApiError as e:
+            if e.response["error"] == "ratelimited":
+                time.sleep(5)
+            else:
+                currently_populating.pop(bot_id)
+                logger.info(f"Error populating channels for bot_id: {bot_id}")
+                raise e
+    logger.info(f"Populated channels for bot_id: {bot_id}")
+    global_channels[bot_id] = currentchannels
+    currently_populating.pop(bot_id)
+
+
+def thread_populate_channels(bot_id: int, bot_token: str):
+    threading.Thread(target=populate_channels, args=(bot_id, bot_token)).start()
+
 
 @router.get(
     "/admin/slack-app/bots/{bot_id}/channels",
@@ -365,23 +420,40 @@ def get_all_channels_from_slack_api(
     try:
         channels = []
         cursor = None
+        now = time.time()
         while True:
-            response = client.conversations_list(
-                types="public_channel,private_channel",
-                exclude_archived=True,
-                limit=1000,
-                cursor=cursor,
-            )
-            for channel in response["channels"]:
-                channels.append(SlackChannel(id=channel["id"], name=channel["name"]))
+            try:
+                response = client.conversations_list(
+                    types="public_channel,private_channel",
+                    exclude_archived=True,
+                    limit=200,
+                    cursor=cursor,
+                )
+                for channel in response["channels"]:
+                    channels.append(SlackChannel(id=channel["id"], name=channel["name"]))
 
-            response_metadata: dict[str, Any] = response.get("response_metadata", {})
-            if isinstance(response_metadata, dict):
-                cursor = response_metadata.get("next_cursor")
-                if not cursor:
+                if time.time() - now > 10:
+                    thread_populate_channels(bot_id, bot_token)
+                    if bot_id not in global_channels:
+                        raise HTTPException(
+                            status_code=202,
+                            detail="Fetching channels from Slack API is taking too long. Please try again later.",
+                        )
+                    else:
+                        return global_channels[bot_id]
+
+                response_metadata: dict[str, Any] = response.get("response_metadata", {})
+                if isinstance(response_metadata, dict):
+                    cursor = response_metadata.get("next_cursor")
+                    if not cursor:
+                        break
+                else:
                     break
-            else:
-                break
+            except SlackApiError as e:
+                if e.response["error"] == "ratelimited":
+                    time.sleep(2)
+                else:
+                    raise e
 
         return channels
     except SlackApiError as e:
