@@ -113,7 +113,6 @@ export function AssistantEditor({
   documentSets,
   user,
   defaultPublic,
-  redirectType,
   llmProviders,
   tools,
   shouldAddAssistantToUserPreferences,
@@ -124,7 +123,6 @@ export function AssistantEditor({
   documentSets: DocumentSet[];
   user: User | null;
   defaultPublic: boolean;
-  redirectType: SuccessfulPersonaUpdateRedirectType;
   llmProviders: FullLLMProvider[];
   tools: ToolSnapshot[];
   shouldAddAssistantToUserPreferences?: boolean;
@@ -502,7 +500,7 @@ export function AssistantEditor({
             )
             .map((message: { message: string; name?: string }) => ({
               message: message.message,
-              name: message.name || message.message,
+              name: message.message,
             }));
 
           // don't set groups if marked as public
