@@ -10,6 +10,7 @@ from google.oauth2.credentials import Credentials as OAuthCredentials  # type: i
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
+from onyx.configs.app_configs import IMAGE_SUMMARIZATION_ENABLED
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import MAX_FILE_SIZE_BYTES
 from onyx.configs.constants import DocumentSource
@@ -43,6 +44,8 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.llm.factory import get_default_llm_with_vision
+from onyx.llm.interfaces import LLM
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -62,7 +65,10 @@ def _extract_ids_from_urls(urls: list[str]) -> list[str]:
 
 
 def _convert_single_file(
-    creds: Any, primary_admin_email: str, file: dict[str, Any]
+    creds: Any,
+    primary_admin_email: str,
+    file: dict[str, Any],
+    llm: LLM | None,
 ) -> Any:
     user_email = file.get("owners", [{}])[0].get("emailAddress") or primary_admin_email
     user_drive_service = get_drive_service(creds, user_email=user_email)
@@ -71,11 +77,14 @@ def _convert_single_file(
         file=file,
         drive_service=user_drive_service,
         docs_service=docs_service,
+        llm=llm,  # pass the LLM so doc_conversion can summarize images
     )
 
 
 def _process_files_batch(
-    files: list[GoogleDriveFileType], convert_func: Callable, batch_size: int
+    files: list[GoogleDriveFileType],
+    convert_func: Callable[[GoogleDriveFileType], Any],
+    batch_size: int,
 ) -> GenerateDocumentsOutput:
     doc_batch = []
     with ThreadPoolExecutor(max_workers=min(16, len(files))) as executor:
@@ -233,6 +242,17 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             credentials=credentials,
             source=DocumentSource.GOOGLE_DRIVE,
         )
+
+        # Check if image summarization is enabled and if the LLM has vision
+        if IMAGE_SUMMARIZATION_ENABLED:
+            llm = get_default_llm_with_vision()
+            if llm:
+                self.llm = llm
+            else:
+                logger.warning(
+                    "No LLM with vision found, image summarization will be disabled"
+                )
+
         return new_creds_dict
 
     def _update_traversed_parent_ids(self, folder_id: str) -> None:
@@ -520,7 +540,10 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> GenerateDocumentsOutput:
         # Create a larger process pool for file conversion
         convert_func = partial(
-            _convert_single_file, self.creds, self.primary_admin_email
+            _convert_single_file,
+            self.creds,
+            self.primary_admin_email,
+            llm=self.llm,
         )
 
         # Process files in larger batches

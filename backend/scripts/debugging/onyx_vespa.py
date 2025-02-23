@@ -207,7 +207,7 @@ def query_vespa(
     yql: str, tenant_id: Optional[str] = None, limit: int = 10
 ) -> List[Dict[str, Any]]:
     # Perform a Vespa query using YQL syntax.
-    filters = IndexFilters(tenant_id=tenant_id, access_control_list=[])
+    filters = IndexFilters(tenant_id=None, access_control_list=[])
     filter_string = build_vespa_filters(filters, remove_trailing_and=True)
     full_yql = yql.strip()
     if filter_string:
@@ -635,6 +635,7 @@ def delete_where(
     Removes visited documents in `cluster` where the given selection
     is true, using Vespa's 'delete where' endpoint.
 
+
     :param index_name: Typically <namespace>/<document-type> from your schema
     :param selection:  The selection string, e.g., "true" or "foo contains 'bar'"
     :param cluster:    The name of the cluster where documents reside
@@ -798,7 +799,7 @@ def main() -> None:
     args = parser.parse_args()
     vespa_debug = VespaDebugging(args.tenant_id)
 
-    CURRENT_TENANT_ID_CONTEXTVAR.set(args.tenant_id)
+    CURRENT_TENANT_ID_CONTEXTVAR.set("public")
     if args.action == "delete-all-documents":
         if not args.tenant_id:
             parser.error("--tenant-id is required for delete-all-documents action")

@@ -9,12 +9,16 @@ import bs4
 from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
 )
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
+from onyx.configs.app_configs import IMAGE_SUMMARIZATION_ENABLED
 from onyx.connectors.confluence.onyx_confluence import (
     OnyxConfluence,
 )
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.html_utils import format_document_soup
+from onyx.file_processing.image_summarization import summarize_image_pipeline
+from onyx.llm.interfaces import LLM
+from onyx.prompts.image_analysis import IMAGE_SUMMARIZATION_SYSTEM_PROMPT
+from onyx.prompts.image_analysis import IMAGE_SUMMARIZATION_USER_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -179,35 +183,48 @@ def extract_text_from_confluence_html(
     return format_document_soup(soup)
 
 
-def validate_attachment_filetype(attachment: dict[str, Any]) -> bool:
-    return attachment["metadata"]["mediaType"] not in [
-        "image/jpeg",
-        "image/png",
-        "image/gif",
-        "image/svg+xml",
-        "video/mp4",
-        "video/quicktime",
-    ]
+def validate_attachment_filetype(media_type: str) -> bool:
+    if media_type.startswith("video/") or media_type == "application/gliffy+json":
+        return False
+    return True
 
 
 def attachment_to_content(
     confluence_client: OnyxConfluence,
     attachment: dict[str, Any],
+    page_context: str,
+    llm: LLM | None,
 ) -> str | None:
     """If it returns None, assume that we should skip this attachment."""
-    if not validate_attachment_filetype(attachment):
-        return None
-
     download_link = confluence_client.url + attachment["_links"]["download"]
 
-    attachment_size = attachment["extensions"]["fileSize"]
-    if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
+    media_type = attachment["metadata"]["mediaType"]
+
+    if media_type.startswith("video/") or media_type == "application/gliffy+json":
         logger.warning(
-            f"Skipping {download_link} due to size. "
-            f"size={attachment_size} "
-            f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD}"
+            f"Cannot convert attachment {download_link} with unsupported media type to text: {media_type}."
         )
         return None
+
+    if media_type.startswith("image/"):
+        if llm:
+            try:
+                # get images from page
+                summarization = _summarize_image_attachment(
+                    attachment=attachment,
+                    page_context=page_context,
+                    confluence_client=confluence_client,
+                    llm=llm,
+                )
+                return summarization
+            except Exception as e:
+                logger.error(f"Failed to summarize image: {attachment}", exc_info=e)
+        else:
+            logger.warning(
+                "Image summarization is disabled. Skipping image attachment %s",
+                download_link,
+            )
+            return None
 
     logger.info(f"_attachment_to_content - _session.get: link={download_link}")
     response = confluence_client._session.get(download_link)
@@ -222,9 +239,17 @@ def attachment_to_content(
         file_name=attachment["title"],
         break_on_unprocessable=False,
     )
+
+    if not extracted_text:
+        logger.warning(
+            "Text conversion of attachment %s resulted in an empty string.",
+            download_link,
+        )
+        return None
+
     if len(extracted_text) > CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD:
         logger.warning(
-            f"Skipping {download_link} due to char count. "
+            f"Skipping attachment {download_link} due to char count. "
             f"char count={len(extracted_text)} "
             f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD}"
         )
@@ -279,3 +304,37 @@ def datetime_from_string(datetime_string: str) -> datetime:
         datetime_object = datetime_object.astimezone(timezone.utc)
 
     return datetime_object
+
+
+def _attachment_to_download_link(
+    confluence_client: OnyxConfluence, attachment: dict[str, Any]
+) -> str:
+    """Extracts the download link to images."""
+    return confluence_client.url + attachment["_links"]["download"]
+
+
+def _summarize_image_attachment(
+    attachment: dict[str, Any],
+    page_context: str,
+    confluence_client: OnyxConfluence,
+    llm: LLM,
+) -> str | None:
+    """Summarize an image attachment using the LLM."""
+    if not IMAGE_SUMMARIZATION_ENABLED:
+        return None
+
+    try:
+        user_prompt = IMAGE_SUMMARIZATION_USER_PROMPT.format(
+            title=attachment["title"],
+            page_title=attachment["title"],
+            confluence_xml=page_context,
+        )
+        return summarize_image_pipeline(
+            llm,
+            attachment["_links"]["download"],
+            user_prompt,
+            system_prompt=IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+        )
+    except Exception as e:
+        logger.warning(f"Image summarization failed for {attachment['title']}: {e}")
+        return None
