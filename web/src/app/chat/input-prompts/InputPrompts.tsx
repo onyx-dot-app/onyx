@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { Button } from "@/components/ui/button";
 import { PlusIcon } from "@/components/icons/icons";
@@ -164,7 +164,7 @@ export default function InputPrompts() {
           <Title>Prompt Shortcuts</Title>
           <Text>
             Manage and customize prompt shortcuts for your assistants. Use your
-            prompt shortcuts by starting a new message " /" in chat.
+            prompt shortcuts by starting a new message &quot; / &quot; in chat.
           </Text>
         </div>
       </div>
