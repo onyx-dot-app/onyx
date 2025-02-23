@@ -41,7 +41,7 @@ def default_build_system_message(
         and llm_config.model_provider == OPENAI_PROVIDER_NAME
         and llm_config.model_name.startswith("o")
     ):
-        system_prompt += "\n" + CODE_BLOCK_MARKDOWN
+        system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
     tag_handled_prompt = handle_onyx_date_awareness(
         system_prompt,
         prompt_config,
