@@ -30,9 +30,6 @@ def create_milestone(
 def create_milestone_if_not_exists(
     user: User | None, event_type: MilestoneRecordType, db_session: Session
 ) -> tuple[Milestone, bool]:
-    # print(f"Setting search path to {CURRENT_TENANT_ID_CONTEXTVAR.get()}")
-    # Set the search path using the connection directly
-    # db_session.connection().execute(f"SET search_path TO {CURRENT_TENANT_ID_CONTEXTVAR.get()}")
     # Check if it exists
     milestone = db_session.execute(
         select(Milestone).where(Milestone.event_type == event_type)
