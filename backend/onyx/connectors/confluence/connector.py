@@ -7,6 +7,7 @@ from urllib.parse import quote
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
+from onyx.configs.app_configs import IMAGE_SUMMARIZATION_ENABLED
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.onyx_confluence import build_confluence_client
@@ -30,8 +31,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.llm.factory import get_default_llms
-from onyx.llm.interfaces import LLM
+from onyx.llm.factory import get_default_llm_with_vision
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -123,13 +123,6 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
 
         self.timezone: timezone = timezone(offset=timedelta(hours=timezone_offset))
 
-        # If image summarization is enabled, check LLM support:
-        llm, _ = get_default_llms()
-        if True:
-            self.llm: LLM | None = llm
-        else:
-            self.llm = None
-
     @property
     def confluence_client(self) -> OnyxConfluence:
         if self._confluence_client is None:
@@ -142,6 +135,15 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             is_cloud=self.is_cloud,
             wiki_base=self.wiki_base,
         )
+        if IMAGE_SUMMARIZATION_ENABLED:
+            llm = get_default_llm_with_vision()
+            if llm:
+                self.llm = llm
+            else:
+                logger.warning(
+                    "No LLM with vision found, image summarization will be disabled"
+                )
+
         return None
 
     def _construct_page_query(

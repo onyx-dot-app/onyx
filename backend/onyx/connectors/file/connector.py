@@ -26,9 +26,8 @@ from onyx.file_processing.extract_file_text import is_valid_file_ext
 from onyx.file_processing.extract_file_text import load_files_from_zip
 from onyx.file_processing.image_summarization import summarize_image_pipeline
 from onyx.file_store.file_store import get_default_file_store
-from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_default_llm_with_vision
 from onyx.llm.interfaces import LLM
-from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.image_analysis import IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 from onyx.prompts.image_analysis import IMAGE_SUMMARIZATION_USER_PROMPT
 from onyx.utils.logger import setup_logger
@@ -281,22 +280,19 @@ class LocalFileConnector(LoadConnector):
         self.pdf_pass: str | None = None
         self.llm: LLM | None = None
 
-        # Check if image summarization is enabled and if the LLM has vision
-        if IMAGE_SUMMARIZATION_ENABLED:
-            llm, _ = get_default_llms()
-            if not model_supports_image_input(
-                llm.config.model_name, llm.config.model_provider
-            ):
-                raise ValueError(
-                    f"The configured default LLM {llm.config.model_provider}/{llm.config.model_name} "
-                    "does not appear to support image input for summarization."
-                )
-            self.llm = llm
-        else:
-            self.llm = None
-
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.pdf_pass = credentials.get("pdf_password")
+
+        # Check if image summarization is enabled and if the LLM has vision
+        if IMAGE_SUMMARIZATION_ENABLED:
+            llm = get_default_llm_with_vision()
+            if llm:
+                self.llm = llm
+            else:
+                logger.warning(
+                    "No LLM with vision found, image summarization will be disabled"
+                )
+
         return None
 
     def load_from_state(self) -> GenerateDocumentsOutput:

@@ -10,6 +10,7 @@ from google.oauth2.credentials import Credentials as OAuthCredentials  # type: i
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
+from onyx.configs.app_configs import IMAGE_SUMMARIZATION_ENABLED
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import MAX_FILE_SIZE_BYTES
 from onyx.configs.constants import DocumentSource
@@ -43,9 +44,8 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_default_llm_with_vision
 from onyx.llm.interfaces import LLM
-from onyx.llm.utils import model_supports_image_input
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -235,11 +235,16 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             credentials=credentials,
             source=DocumentSource.GOOGLE_DRIVE,
         )
-        loaded_llm, _ = get_default_llms()
-        if model_supports_image_input(
-            loaded_llm.config.model_name, loaded_llm.config.model_provider
-        ):
-            self.llm = loaded_llm
+
+        # Check if image summarization is enabled and if the LLM has vision
+        if IMAGE_SUMMARIZATION_ENABLED:
+            llm = get_default_llm_with_vision()
+            if llm:
+                self.llm = llm
+            else:
+                logger.warning(
+                    "No LLM with vision found, image summarization will be disabled"
+                )
 
         return new_creds_dict
 
