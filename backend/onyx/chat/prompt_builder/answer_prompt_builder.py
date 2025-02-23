@@ -33,12 +33,11 @@ from onyx.tools.tool import Tool
 
 def default_build_system_message(
     prompt_config: PromptConfig,
-    llm_config: LLMConfig | None = None,
+    llm_config: LLMConfig,
 ) -> SystemMessage | None:
     system_prompt = prompt_config.system_prompt.strip()
     if (
-        llm_config
-        and llm_config.model_provider == OPENAI_PROVIDER_NAME
+        llm_config.model_provider == OPENAI_PROVIDER_NAME
         and llm_config.model_name.startswith("o")
     ):
         system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
