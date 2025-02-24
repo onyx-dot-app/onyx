@@ -16,7 +16,11 @@ from typing import Optional
 
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME
 from onyx.db.engine import SqlEngine
+<<<<<<< HEAD
 from onyx.utils.logger import setup_logger
+=======
+from onyx.setup import setup_logger
+>>>>>>> e472f0037 (fix slack bot logic)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -67,6 +71,8 @@ def _initializer(
     # 2. Set the tenant context before running anything
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
+    # 2. Set the tenant context before running anything
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     # Reset the engine in the child process
     SqlEngine.reset_engine()
 
@@ -94,7 +100,12 @@ def _initializer(
 
         sys.exit(255)  # use 255 to indicate a generic exception
     finally:
+<<<<<<< HEAD
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+=======
+        if token:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+>>>>>>> e472f0037 (fix slack bot logic)
 
 
 def _run_in_process(
