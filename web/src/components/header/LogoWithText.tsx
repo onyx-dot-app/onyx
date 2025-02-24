@@ -13,11 +13,13 @@ import { pageType } from "@/app/chat/sessionSidebar/types";
 import { Logo } from "../logo/Logo";
 import Link from "next/link";
 import { LogoComponent } from "@/components/logo/FixedLogo";
+import { Search } from "lucide-react";
 
 export default function LogoWithText({
   toggleSidebar,
   hideOnMobile,
   handleNewChat,
+  toggleChatSessionSearchModal,
   page,
   toggled,
   showArrow,
@@ -27,6 +29,7 @@ export default function LogoWithText({
   hideOnMobile?: boolean;
   toggleSidebar?: () => void;
   handleNewChat?: () => void;
+  toggleChatSessionSearchModal?: () => void;
   page: pageType;
   toggled?: boolean;
   showArrow?: boolean;
@@ -110,37 +113,59 @@ export default function LogoWithText({
           </Tooltip>
         </TooltipProvider>
       )}
+      <div className="flex ml-auto gap-x-2">
+        {toggleChatSessionSearchModal && (
+          <TooltipProvider delayDuration={1000}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="my-auto mobile:hidden"
+                  onClick={() => {
+                    toggleChatSessionSearchModal();
+                  }}
+                >
+                  <Search
+                    className="ml-2 flex-none text-text-mobile-sidebar"
+                    size={20}
+                  />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Search Chats</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
 
-      {showArrow && toggleSidebar && (
-        <TooltipProvider delayDuration={0}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="mr-2  my-auto ml-auto"
-                onClick={() => {
-                  toggleSidebar();
-                  if (toggled) {
-                    explicitlyUntoggle();
-                  }
-                }}
-              >
-                {!toggled && !combinedSettings?.isMobile ? (
-                  <RightToLineIcon className="mobile:hidden text-sidebar-toggle" />
-                ) : (
-                  <LeftToLineIcon className="mobile:hidden text-sidebar-toggle" />
-                )}
-                <FiSidebar
-                  size={20}
-                  className="hidden mobile:block text-text-mobile-sidebar"
-                />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="!border-none">
-              {toggled ? `Unpin sidebar` : "Pin sidebar"}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
+        {showArrow && toggleSidebar && (
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="mr-2 my-auto"
+                  onClick={() => {
+                    toggleSidebar();
+                    if (toggled) {
+                      explicitlyUntoggle();
+                    }
+                  }}
+                >
+                  {!toggled && !combinedSettings?.isMobile ? (
+                    <RightToLineIcon className="mobile:hidden text-sidebar-toggle" />
+                  ) : (
+                    <LeftToLineIcon className="mobile:hidden text-sidebar-toggle" />
+                  )}
+                  <FiSidebar
+                    size={20}
+                    className="hidden mobile:block text-text-mobile-sidebar"
+                  />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="!border-none">
+                {toggled ? `Unpin sidebar` : "Pin sidebar"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
     </div>
   );
 }

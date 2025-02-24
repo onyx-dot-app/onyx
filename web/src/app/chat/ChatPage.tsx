@@ -142,6 +142,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { MessageChannel } from "node:worker_threads";
+import { ChatSearchModal } from "./chat_search/ChatSearchModal";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -870,6 +871,7 @@ export function ChatPage({
   }, [liveAssistant]);
 
   const filterManager = useFilters();
+  const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
 
   const [currentFeedback, setCurrentFeedback] = useState<
     [FeedbackType, number] | null
@@ -2329,6 +2331,11 @@ export function ChatPage({
         />
       )}
 
+      <ChatSearchModal
+        open={isChatSearchModalOpen}
+        onClose={() => setIsChatSearchModalOpen(false)}
+      />
+
       {retrievalEnabled && documentSidebarVisible && settings?.isMobile && (
         <div className="md:hidden">
           <Modal
@@ -2436,6 +2443,9 @@ export function ChatPage({
             >
               <div className="w-full relative">
                 <HistorySidebar
+                  toggleChatSessionSearchModal={() =>
+                    setIsChatSearchModalOpen((open) => !open)
+                  }
                   liveAssistant={liveAssistant}
                   setShowAssistantsModal={setShowAssistantsModal}
                   explicitlyUntoggle={explicitlyUntoggle}
@@ -2452,6 +2462,7 @@ export function ChatPage({
                   showDeleteAllModal={() => setShowDeleteAllModal(true)}
                 />
               </div>
+
               <div
                 className={`
                 flex-none
