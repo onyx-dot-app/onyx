@@ -18,6 +18,7 @@ from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
+from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import delete_document_by_connector_credential_pair__no_commit
 from onyx.db.document import delete_documents_complete__no_commit
 from onyx.db.document import fetch_chunk_count_for_document
@@ -32,6 +33,8 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.httpx.httpx_pool import HttpxPool
+from onyx.redis.redis_connector_delete import RedisConnectorDelete
+from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -43,6 +46,8 @@ DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES = 3
 # 5 seconds more than RetryDocumentIndex STOP_AFTER+MAX_WAIT
 LIGHT_SOFT_TIME_LIMIT = 105
 LIGHT_TIME_LIMIT = LIGHT_SOFT_TIME_LIMIT + 15
+
+DOCUMENT_PERMISSIONS_UPDATE_MAX_RETRIES = 3
 
 
 @shared_task(
@@ -57,6 +62,7 @@ def document_by_cc_pair_cleanup_task(
     document_id: str,
     connector_id: int,
     credential_id: int,
+    flow_type: str,  # "prune" or "delete"
     tenant_id: str | None,
 ) -> bool:
     """A lightweight subtask used to clean up document to cc pair relationships.
@@ -78,8 +84,32 @@ def document_by_cc_pair_cleanup_task(
 
     start = time.monotonic()
 
+    cc_pair = None
+    request_id = self.request.id if self.request.id is not None else "missing-task-id"
+
     try:
         with get_session_with_current_tenant() as db_session:
+            cc_pair_local = get_connector_credential_pair(
+                db_session=db_session,
+                connector_id=connector_id,
+                credential_id=credential_id,
+            )
+            if not cc_pair_local:
+                task_logger.warning(
+                    f"cc_pair not found for {connector_id} {credential_id}"
+                )
+                return False
+
+            cc_pair = cc_pair_local
+            if flow_type == "prune":
+                RedisConnectorPrune.update_subtask_heartbeat(
+                    cc_pair.id, request_id, get_redis_client()
+                )
+            elif flow_type == "delete":
+                RedisConnectorDelete.update_subtask_heartbeat(
+                    cc_pair.id, request_id, get_redis_client()
+                )
+
             action = "skip"
             chunks_affected = 0
 
@@ -166,6 +196,8 @@ def document_by_cc_pair_cleanup_task(
                 f"chunks={chunks_affected} "
                 f"elapsed={elapsed:.2f}"
             )
+        return True
+
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
         return False
