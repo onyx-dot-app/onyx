@@ -1,26 +1,22 @@
-"""migration
+"""discord_bot
 
-Revision ID: 82f52948359d
+Revision ID: 38afd77fc912
 Revises: 027381bce97c
-Create Date: 2025-01-17 11:15:22.751328
+Create Date: 2025-02-24 18:05:10.416216
 
 """
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-
 from onyx.db.models import EncryptedString
 
-
-# revision identifiers, used by Alembic.
-revision = "82f52948359d"
+revision = "[will_be_auto_generated]"
 down_revision = "027381bce97c"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    # Create discord_bot table
     op.create_table(
         "discord_bot",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -31,7 +27,6 @@ def upgrade() -> None:
         sa.UniqueConstraint("discord_bot_token"),
     )
 
-    # Create discord_channel_config table
     op.create_table(
         "discord_channel_config",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -52,7 +47,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    # Create discord_channel_config__standard_answer_category table
     op.create_table(
         "discord_channel_config__standard_answer_category",
         sa.Column("discord_channel_config_id", sa.Integer(), nullable=False),
@@ -70,9 +64,13 @@ def upgrade() -> None:
         ),
     )
 
+    op.add_column(
+        "chat_session", sa.Column("discord_thread_id", sa.String(), nullable=True)
+    )
+
 
 def downgrade() -> None:
-    # Drop tables in reverse order of creation to handle foreign key constraints
+    op.drop_column("chat_session", "discord_thread_id")
     op.drop_table("discord_channel_config__standard_answer_category")
     op.drop_table("discord_channel_config")
     op.drop_table("discord_bot")
