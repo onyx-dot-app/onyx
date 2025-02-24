@@ -19,8 +19,8 @@ env:
 
   # API keys for testing
   COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
-  LITE_LLM_API_KEY: ${{ secrets.LITE_LLM_API_KEY }}
-  LITE_LLM_API_URL: ${{ secrets.LITE_LLM_API_URL }}
+  LITELLM_API_KEY: ${{ secrets.LITELLM_API_KEY }}
+  LITELLM_API_URL: ${{ secrets.LITELLM_API_URL }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   AZURE_API_KEY: ${{ secrets.AZURE_API_KEY }}
   AZURE_API_URL: ${{ secrets.AZURE_API_URL }}
