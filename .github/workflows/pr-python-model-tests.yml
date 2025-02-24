@@ -72,7 +72,7 @@ jobs:
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
           IMAGE_TAG=test \
-          docker compose -f docker-compose.dev.yml -p onyx-stack up -d indexing_model_server
+          docker compose -f docker-compose.model-server-test.yml -p onyx-stack up -d indexing_model_server
         id: start_docker
 
       - name: Wait for service to be ready
@@ -127,7 +127,7 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
+          docker compose -f docker-compose.model-server-test.yml -p onyx-stack logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
 
       - name: Upload logs
         if: always()
@@ -140,5 +140,5 @@ jobs:
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack down -v
+          docker compose -f docker-compose.model-server-test.yml -p onyx-stack down -v
           
