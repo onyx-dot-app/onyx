@@ -137,7 +137,9 @@ def check_for_connector_deletion_task(
                     )
                 except TaskDependencyError as e:
                     # this means we wanted to start deleting but dependent tasks were running
-                    # Leave a stop signal to clear indexing and pruning tasks more quickly
+                    # on the first error, we set a stop signal and revoke the dependent tasks
+                    # on subsequent errors, we hard reset blocking fences after our specified timeout
+                    # is exceeded
                     task_logger.info(str(e))
 
                     if not redis_connector.stop.fenced:
