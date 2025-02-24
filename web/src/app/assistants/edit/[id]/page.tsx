@@ -21,11 +21,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
         <div className="px-32">
           <div className="mx-auto container">
             <CardSection className="!border-none !bg-transparent !ring-none">
-              <AssistantEditor
-                {...values}
-                defaultPublic={false}
-                redirectType={SuccessfulPersonaUpdateRedirectType.CHAT}
-              />
+              <AssistantEditor {...values} defaultPublic={false} />
             </CardSection>
           </div>
         </div>
