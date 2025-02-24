@@ -570,6 +570,14 @@ class Document(Base):
         back_populates="documents",
     )
 
+    __table_args__ = (
+        Index(
+            "ix_document_sync_status",
+            last_modified,
+            last_synced,
+        ),
+    )
+
 
 class Tag(Base):
     __tablename__ = "tag"

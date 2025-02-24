@@ -16,7 +16,7 @@ import {
   LLMProviderDescriptor,
 } from "@/app/admin/configuration/llm/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { LlmOverrideManager } from "@/lib/hooks";
+import { LlmManager } from "@/lib/hooks";
 
 import {
   Tooltip,
@@ -31,21 +31,19 @@ import { useUser } from "@/components/user/UserProvider";
 
 interface LLMPopoverProps {
   llmProviders: LLMProviderDescriptor[];
-  llmOverrideManager: LlmOverrideManager;
+  llmManager: LlmManager;
   requiresImageGeneration?: boolean;
   currentAssistant?: Persona;
 }
 
 export default function LLMPopover({
   llmProviders,
-  llmOverrideManager,
+  llmManager,
   requiresImageGeneration,
   currentAssistant,
 }: LLMPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useUser();
-  const { llmOverride, updateLLMOverride } = llmOverrideManager;
-  const currentLlm = llmOverride.modelName;
 
   const llmOptionsByProvider: {
     [provider: string]: {
@@ -93,19 +91,19 @@ export default function LLMPopover({
     : null;
 
   const [localTemperature, setLocalTemperature] = useState(
-    llmOverrideManager.temperature ?? 0.5
+    llmManager.temperature ?? 0.5
   );
 
   useEffect(() => {
-    setLocalTemperature(llmOverrideManager.temperature ?? 0.5);
-  }, [llmOverrideManager.temperature]);
+    setLocalTemperature(llmManager.temperature ?? 0.5);
+  }, [llmManager.temperature]);
 
   const handleTemperatureChange = (value: number[]) => {
     setLocalTemperature(value[0]);
   };
 
   const handleTemperatureChangeComplete = (value: number[]) => {
-    llmOverrideManager.updateTemperature(value[0]);
+    llmManager.updateTemperature(value[0]);
   };
 
   return (
@@ -120,15 +118,15 @@ export default function LLMPopover({
             toggle
             flexPriority="stiff"
             name={getDisplayNameForModel(
-              llmOverrideManager?.llmOverride.modelName ||
+              llmManager?.currentLlm.modelName ||
                 defaultModelDisplayName ||
                 "Models"
             )}
             Icon={getProviderIcon(
-              llmOverrideManager?.llmOverride.provider ||
+              llmManager?.currentLlm.provider ||
                 defaultProvider?.provider ||
                 "anthropic",
-              llmOverrideManager?.llmOverride.modelName ||
+              llmManager?.currentLlm.modelName ||
                 defaultProvider?.default_model_name ||
                 "claude-3-5-sonnet-20240620"
             )}
@@ -147,12 +145,12 @@ export default function LLMPopover({
                 <button
                   key={index}
                   className={`w-full flex items-center gap-x-2 px-3 py-2 text-sm text-left hover:bg-background-100 dark:hover:bg-neutral-800 transition-colors duration-150 ${
-                    currentLlm === name
+                    llmManager.currentLlm.modelName === name
                       ? "bg-background-100 dark:bg-neutral-900 text-text"
                       : "text-text-darker"
                   }`}
                   onClick={() => {
-                    updateLLMOverride(destructureValue(value));
+                    llmManager.updateCurrentLlm(destructureValue(value));
                     setIsOpen(false);
                   }}
                 >
@@ -172,7 +170,7 @@ export default function LLMPopover({
                       );
                     }
                   })()}
-                  {llmOverrideManager.imageFilesPresent &&
+                  {llmManager.imageFilesPresent &&
                     !checkLLMSupportsImageInput(name) && (
                       <TooltipProvider>
                         <Tooltip delayDuration={0}>
@@ -199,7 +197,7 @@ export default function LLMPopover({
             <div className="w-full px-3 py-2">
               <Slider
                 value={[localTemperature]}
-                max={llmOverrideManager.maxTemperature}
+                max={llmManager.maxTemperature}
                 min={0}
                 step={0.01}
                 onValueChange={handleTemperatureChange}

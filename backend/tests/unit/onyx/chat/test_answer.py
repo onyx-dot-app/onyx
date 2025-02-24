@@ -70,7 +70,7 @@ def _answer_fixture_impl(
                 files=[],
                 single_message_history=None,
             ),
-            system_message=default_build_system_message(prompt_config),
+            system_message=default_build_system_message(prompt_config, mock_llm.config),
             message_history=[],
             llm_config=mock_llm.config,
             raw_user_query=QUERY,

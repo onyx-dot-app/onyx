@@ -220,7 +220,14 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
         return self._creds
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, str] | None:
-        self._primary_admin_email = credentials[DB_CREDENTIALS_PRIMARY_ADMIN_KEY]
+        try:
+            self._primary_admin_email = credentials[DB_CREDENTIALS_PRIMARY_ADMIN_KEY]
+        except KeyError:
+            raise ValueError(
+                "Primary admin email missing, "
+                "should not call this property "
+                "before calling load_credentials"
+            )
 
         self._creds, new_creds_dict = get_google_creds(
             credentials=credentials,

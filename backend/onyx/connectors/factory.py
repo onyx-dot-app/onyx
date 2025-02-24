@@ -3,6 +3,7 @@ from typing import Type
 
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceRequiringTenantContext
 from onyx.connectors.airtable.airtable_connector import AirtableConnector
@@ -187,6 +188,9 @@ def validate_ccpair_for_user(
     user: User | None,
     tenant_id: str | None,
 ) -> None:
+    if INTEGRATION_TESTS_MODE:
+        return
+
     # Validate the connector settings
     connector = fetch_connector_by_id(connector_id, db_session)
     credential = fetch_credential_by_id_for_user(
@@ -199,7 +203,10 @@ def validate_ccpair_for_user(
     if not connector:
         raise ValueError("Connector not found")
 
-    if connector.source == DocumentSource.INGESTION_API:
+    if (
+        connector.source == DocumentSource.INGESTION_API
+        or connector.source == DocumentSource.MOCK_CONNECTOR
+    ):
         return
 
     if not credential:
