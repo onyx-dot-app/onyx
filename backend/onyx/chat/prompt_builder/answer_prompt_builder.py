@@ -36,6 +36,8 @@ def default_build_system_message(
     llm_config: LLMConfig,
 ) -> SystemMessage | None:
     system_prompt = prompt_config.system_prompt.strip()
+    # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
+    # for o-series markdown generation
     if (
         llm_config.model_provider == OPENAI_PROVIDER_NAME
         and llm_config.model_name.startswith("o")
