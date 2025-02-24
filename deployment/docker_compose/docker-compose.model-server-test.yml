@@ -30,6 +30,8 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+    ports:
+      - "9000:9000"  # <-- Add this line to expose the port to the host
 
 volumes:
   indexing_huggingface_model_cache:
