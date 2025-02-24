@@ -17,7 +17,10 @@ env:
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AWS_REGION_NAME: ${{ secrets.AWS_REGION_NAME }}
 
-  # OpenAI
+  # API keys for testing
+  COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+  LITE_LLM_API_KEY: ${{ secrets.LITE_LLM_API_KEY }}
+  LITE_LLM_API_URL: ${{ secrets.LITE_LLM_API_URL }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 jobs:
