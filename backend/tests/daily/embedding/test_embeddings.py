@@ -71,9 +71,9 @@ def litellm_embedding_model() -> EmbeddingModel:
         normalize=True,
         query_prefix=None,
         passage_prefix=None,
-        api_key=os.getenv("LITE_LLM_API_KEY"),
+        api_key=os.getenv("LITELLM_API_KEY"),
         provider_type=EmbeddingProvider.LITELLM,
-        api_url=os.getenv("LITE_LLM_API_URL"),
+        api_url=os.getenv("LITELLM_API_URL"),
     )
 
 
