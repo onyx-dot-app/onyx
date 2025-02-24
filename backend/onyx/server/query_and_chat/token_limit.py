@@ -20,7 +20,6 @@ from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
-from shared_configs.contextvars import get_current_tenant_id
 
 
 logger = setup_logger()
@@ -40,7 +39,7 @@ def check_token_rate_limits(
     versioned_rate_limit_strategy = fetch_versioned_implementation(
         "onyx.server.query_and_chat.token_limit", _check_token_rate_limits.__name__
     )
-    return versioned_rate_limit_strategy(user, get_current_tenant_id())
+    return versioned_rate_limit_strategy(user)
 
 
 def _check_token_rate_limits(_: User | None) -> None:

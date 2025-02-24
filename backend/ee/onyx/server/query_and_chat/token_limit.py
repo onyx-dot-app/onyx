@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.api_key import is_api_key_email_address
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import TokenRateLimit
@@ -53,7 +53,7 @@ User rate limits
 
 
 def _user_is_rate_limited(user_id: UUID) -> None:
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         user_rate_limits = fetch_all_user_token_rate_limits(
             db_session=db_session, enabled_only=True, ordered=False
         )
@@ -94,7 +94,7 @@ User Group rate limits
 
 
 def _user_is_rate_limited_by_group(user_id: UUID) -> None:
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         group_rate_limits = _fetch_all_user_group_rate_limits(user_id, db_session)
 
         if group_rate_limits:

@@ -870,7 +870,6 @@ def stream_chat_message_objects(
                             for img in img_generation_response
                             if img.image_data
                         ],
-                        tenant_id=tenant_id,
                     )
                     info.ai_message_files.extend(
                         [
