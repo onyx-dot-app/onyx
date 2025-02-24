@@ -77,6 +77,7 @@ def litellm_embedding_model() -> EmbeddingModel:
     )
 
 
+@pytest.mark.skip(reason="re-enable when we can get the correct litellm key and url")
 def test_litellm_embedding(litellm_embedding_model: EmbeddingModel) -> None:
     _run_embeddings(VALID_SAMPLE, litellm_embedding_model, 1536)
     _run_embeddings(TOO_LONG_SAMPLE, litellm_embedding_model, 1536)
