@@ -117,6 +117,11 @@ def azure_embedding_model() -> EmbeddingModel:
     )
 
 
+def test_azure_embedding(azure_embedding_model: EmbeddingModel) -> None:
+    _run_embeddings(VALID_SAMPLE, azure_embedding_model, 1536)
+    _run_embeddings(TOO_LONG_SAMPLE, azure_embedding_model, 1536)
+
+
 # NOTE (chris): this test doesn't work, and I do not know why
 # def test_azure_embedding_model_rate_limit(azure_embedding_model: EmbeddingModel):
 #     """NOTE: this test relies on a very low rate limit for the Azure API +
