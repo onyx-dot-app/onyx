@@ -5,7 +5,7 @@ from slack_sdk.errors import SlackApiError
 
 from onyx.configs.onyxbot_configs import DANSWER_BOT_FEEDBACK_REMINDER
 from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import SlackChannelConfig
 from onyx.db.users import add_slack_user_if_not_exists
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks
@@ -109,7 +109,6 @@ def handle_message(
     slack_channel_config: SlackChannelConfig,
     client: WebClient,
     feedback_reminder_id: str | None,
-    tenant_id: str | None,
 ) -> bool:
     """Potentially respond to the user message depending on filters and if an answer was generated
 
@@ -135,9 +134,7 @@ def handle_message(
         action = "slack_tag_message"
     elif is_bot_dm:
         action = "slack_dm_message"
-    slack_usage_report(
-        action=action, sender_id=sender_id, client=client, tenant_id=tenant_id
-    )
+    slack_usage_report(action=action, sender_id=sender_id, client=client)
 
     document_set_names: list[str] | None = None
     persona = slack_channel_config.persona if slack_channel_config else None
@@ -218,7 +215,7 @@ def handle_message(
     except SlackApiError as e:
         logger.error(f"Was not able to react to user message due to: {e}")
 
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+    with get_session_with_current_tenant() as db_session:
         if message_info.email:
             add_slack_user_if_not_exists(db_session, message_info.email)
 
@@ -244,6 +241,5 @@ def handle_message(
             channel=channel,
             logger=logger,
             feedback_reminder_id=feedback_reminder_id,
-            tenant_id=tenant_id,
         )
         return issue_with_regular_answer

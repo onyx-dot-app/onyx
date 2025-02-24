@@ -16,7 +16,10 @@ from typing import Optional
 
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME
 from onyx.db.engine import SqlEngine
-from onyx.utils.logger import setup_logger
+from onyx.setup import setup_logger
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import TENANT_ID_PREFIX
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -53,8 +56,15 @@ def _initializer(
     if kwargs is None:
         kwargs = {}
 
-    logger.info("Initializing spawned worker child process.")
+    # 1. Get tenant_id from args or fallback to default
+    tenant_id = POSTGRES_DEFAULT_SCHEMA
+    for arg in reversed(args):
+        if arg.startswith(TENANT_ID_PREFIX):
+            tenant_id = arg
+            break
 
+    # 2. Set the tenant context before running anything
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     # Reset the engine in the child process
     SqlEngine.reset_engine()
 
@@ -81,6 +91,9 @@ def _initializer(
         queue.put(error_msg)  # Send the exception to the parent process
 
         sys.exit(255)  # use 255 to indicate a generic exception
+    finally:
+        if token:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 def _run_in_process(
