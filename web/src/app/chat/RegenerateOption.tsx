@@ -1,8 +1,8 @@
 import { useChatContext } from "@/components/context/ChatContext";
 import {
   getDisplayNameForModel,
-  LlmOverride,
-  useLlmOverride,
+  LlmDescriptor,
+  useLlmManager,
 } from "@/lib/hooks";
 import { StringOrNumberOption } from "@/components/Dropdown";
 
@@ -106,13 +106,13 @@ export default function RegenerateOption({
   onDropdownVisibleChange,
 }: {
   selectedAssistant: Persona;
-  regenerate: (modelOverRide: LlmOverride) => Promise<void>;
+  regenerate: (modelOverRide: LlmDescriptor) => Promise<void>;
   overriddenModel?: string;
   onHoverChange: (isHovered: boolean) => void;
   onDropdownVisibleChange: (isVisible: boolean) => void;
 }) {
   const { llmProviders } = useChatContext();
-  const llmOverrideManager = useLlmOverride(llmProviders);
+  const llmManager = useLlmManager(llmProviders);
 
   const [_, llmName] = getFinalLLM(llmProviders, selectedAssistant, null);
 
@@ -148,7 +148,7 @@ export default function RegenerateOption({
   );
 
   const currentModelName =
-    llmOverrideManager?.llmOverride.modelName ||
+    llmManager?.currentLlm.modelName ||
     (selectedAssistant
       ? selectedAssistant.llm_model_version_override || llmName
       : llmName);

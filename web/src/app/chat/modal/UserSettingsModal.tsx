@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
-import { getDisplayNameForModel, LlmOverride } from "@/lib/hooks";
+import { getDisplayNameForModel, LlmDescriptor } from "@/lib/hooks";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 
 import { destructureValue, structureValue } from "@/lib/llm/utils";
@@ -31,12 +31,12 @@ export function UserSettingsModal({
   setPopup,
   llmProviders,
   onClose,
-  setLlmOverride,
+  setCurrentLlm,
   defaultModel,
 }: {
   setPopup: (popupSpec: PopupSpec | null) => void;
   llmProviders: LLMProviderDescriptor[];
-  setLlmOverride?: (newOverride: LlmOverride) => void;
+  setCurrentLlm?: (newLlm: LlmDescriptor) => void;
   onClose: () => void;
   defaultModel: string | null;
 }) {
@@ -127,18 +127,14 @@ export function UserSettingsModal({
     );
   });
 
-  const llmOptions = Object.entries(llmOptionsByProvider).flatMap(
-    ([provider, options]) => [...options]
-  );
-
   const router = useRouter();
   const handleChangedefaultModel = async (defaultModel: string | null) => {
     try {
       const response = await setUserDefaultModel(defaultModel);
 
       if (response.ok) {
-        if (defaultModel && setLlmOverride) {
-          setLlmOverride(destructureValue(defaultModel));
+        if (defaultModel && setCurrentLlm) {
+          setCurrentLlm(destructureValue(defaultModel));
         }
         setPopup({
           message: "Default model updated successfully",

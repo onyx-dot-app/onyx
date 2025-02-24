@@ -47,6 +47,7 @@ import {
   removeMessage,
   sendMessage,
   setMessageAsLatest,
+  updateLlmOverrideForChatSession,
   updateParentChildren,
   uploadFilesForChat,
   useScrollonStream,
@@ -65,7 +66,7 @@ import {
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES, shouldSubmitOnLoad } from "./searchParams";
 import { useDocumentSelection } from "./useDocumentSelection";
-import { LlmOverride, useFilters, useLlmOverride } from "@/lib/hooks";
+import { LlmDescriptor, useFilters, useLlmManager } from "@/lib/hooks";
 import { ChatState, FeedbackType, RegenerationState } from "./types";
 import { DocumentResults } from "./documentSidebar/DocumentResults";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
@@ -89,7 +90,11 @@ import {
 import { buildFilters } from "@/lib/search/utils";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
-import { checkLLMSupportsImageInput, getFinalLLM } from "@/lib/llm/utils";
+import {
+  checkLLMSupportsImageInput,
+  getFinalLLM,
+  structureValue,
+} from "@/lib/llm/utils";
 import { ChatInputBar } from "./input/ChatInputBar";
 import { useChatContext } from "@/components/context/ChatContext";
 import { v4 as uuidv4 } from "uuid";
@@ -194,16 +199,6 @@ export function ChatPage({
     return screenSize;
   }
 
-  const { height: screenHeight } = useScreenSize();
-
-  const getContainerHeight = () => {
-    if (autoScrollEnabled) return undefined;
-
-    if (screenHeight < 600) return "20vh";
-    if (screenHeight < 1200) return "30vh";
-    return "40vh";
-  };
-
   // handle redirect if chat page is disabled
   // NOTE: this must be done here, in a client component since
   // settings are passed in via Context and therefore aren't
@@ -222,6 +217,7 @@ export function ChatPage({
     setProSearchEnabled(!proSearchEnabled);
   };
 
+  const isInitialLoad = useRef(true);
   const [userSettingsToggled, setUserSettingsToggled] = useState(false);
 
   const {
@@ -356,7 +352,7 @@ export function ChatPage({
     ]
   );
 
-  const llmOverrideManager = useLlmOverride(
+  const llmManager = useLlmManager(
     llmProviders,
     selectedChatSession,
     liveAssistant
@@ -520,8 +516,17 @@ export function ChatPage({
       scrollInitialized.current = false;
 
       if (!hasPerformedInitialScroll) {
+        if (isInitialLoad.current) {
+          setHasPerformedInitialScroll(true);
+          isInitialLoad.current = false;
+        }
         clientScrollToBottom();
+
+        setTimeout(() => {
+          setHasPerformedInitialScroll(true);
+        }, 100);
       } else if (isChatSessionSwitch) {
+        setHasPerformedInitialScroll(true);
         clientScrollToBottom(true);
       }
 
@@ -1130,6 +1135,56 @@ export function ChatPage({
     });
   };
   const [uncaughtError, setUncaughtError] = useState<string | null>(null);
+  const [agenticGenerating, setAgenticGenerating] = useState(false);
+
+  const autoScrollEnabled =
+    (user?.preferences?.auto_scroll && !agenticGenerating) ?? false;
+
+  useScrollonStream({
+    chatState: currentSessionChatState,
+    scrollableDivRef,
+    scrollDist,
+    endDivRef,
+    debounceNumber,
+    mobile: settings?.isMobile,
+    enableAutoScroll: autoScrollEnabled,
+  });
+
+  // Track whether a message has been sent during this page load, keyed by chat session id
+  const [sessionHasSentLocalUserMessage, setSessionHasSentLocalUserMessage] =
+    useState<Map<string | null, boolean>>(new Map());
+
+  // Update the local state for a session once the user sends a message
+  const markSessionMessageSent = (sessionId: string | null) => {
+    setSessionHasSentLocalUserMessage((prev) => {
+      const newMap = new Map(prev);
+      newMap.set(sessionId, true);
+      return newMap;
+    });
+  };
+  const currentSessionHasSentLocalUserMessage = useMemo(
+    () => (sessionId: string | null) => {
+      return sessionHasSentLocalUserMessage.size === 0
+        ? undefined
+        : sessionHasSentLocalUserMessage.get(sessionId) || false;
+    },
+    [sessionHasSentLocalUserMessage]
+  );
+
+  const { height: screenHeight } = useScreenSize();
+
+  const getContainerHeight = useMemo(() => {
+    return () => {
+      if (!currentSessionHasSentLocalUserMessage(chatSessionIdRef.current)) {
+        return undefined;
+      }
+      if (autoScrollEnabled) return undefined;
+
+      if (screenHeight < 600) return "40vh";
+      if (screenHeight < 1200) return "50vh";
+      return "60vh";
+    };
+  }, [autoScrollEnabled, screenHeight, currentSessionHasSentLocalUserMessage]);
 
   const onSubmit = async ({
     messageIdToResend,
@@ -1138,7 +1193,7 @@ export function ChatPage({
     forceSearch,
     isSeededChat,
     alternativeAssistantOverride = null,
-    modelOverRide,
+    modelOverride,
     regenerationRequest,
     overrideFileDescriptors,
   }: {
@@ -1148,13 +1203,16 @@ export function ChatPage({
     forceSearch?: boolean;
     isSeededChat?: boolean;
     alternativeAssistantOverride?: Persona | null;
-    modelOverRide?: LlmOverride;
+    modelOverride?: LlmDescriptor;
     regenerationRequest?: RegenerationRequest | null;
     overrideFileDescriptors?: FileDescriptor[];
   } = {}) => {
     navigatingAway.current = false;
     let frozenSessionId = currentSessionId();
     updateCanContinue(false, frozenSessionId);
+
+    // Mark that we've sent a message for this session in the current page load
+    markSessionMessageSent(frozenSessionId);
 
     if (currentChatState() != "input") {
       if (currentChatState() == "uploading") {
@@ -1191,6 +1249,22 @@ export function ChatPage({
       currChatSessionId = chatSessionIdRef.current as string;
     }
     frozenSessionId = currChatSessionId;
+    // update the selected model for the chat session if one is specified so that
+    // it persists across page reloads. Do not `await` here so that the message
+    // request can continue and this will just happen in the background.
+    // NOTE: only set the model override for the chat session once we send a
+    // message with it. If the user switches models and then starts a new
+    // chat session, it is unexpected for that model to be used when they
+    // return to this session the next day.
+    let finalLLM = modelOverride || llmManager.currentLlm;
+    updateLlmOverrideForChatSession(
+      currChatSessionId,
+      structureValue(
+        finalLLM.name || "",
+        finalLLM.provider || "",
+        finalLLM.modelName || ""
+      )
+    );
 
     updateStatesWithNewSessionId(currChatSessionId);
 
@@ -1250,11 +1324,14 @@ export function ChatPage({
         : null) ||
       (messageMap.size === 1 ? Array.from(messageMap.values())[0] : null);
 
-    const currentAssistantId = alternativeAssistantOverride
-      ? alternativeAssistantOverride.id
-      : alternativeAssistant
-        ? alternativeAssistant.id
-        : liveAssistant.id;
+    let currentAssistantId;
+    if (alternativeAssistantOverride) {
+      currentAssistantId = alternativeAssistantOverride.id;
+    } else if (alternativeAssistant) {
+      currentAssistantId = alternativeAssistant.id;
+    } else {
+      currentAssistantId = liveAssistant.id;
+    }
 
     resetInputBar();
     let messageUpdates: Message[] | null = null;
@@ -1326,15 +1403,13 @@ export function ChatPage({
         forceSearch,
         regenerate: regenerationRequest !== undefined,
         modelProvider:
-          modelOverRide?.name ||
-          llmOverrideManager.llmOverride.name ||
-          undefined,
+          modelOverride?.name || llmManager.currentLlm.name || undefined,
         modelVersion:
-          modelOverRide?.modelName ||
-          llmOverrideManager.llmOverride.modelName ||
+          modelOverride?.modelName ||
+          llmManager.currentLlm.modelName ||
           searchParams.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
           undefined,
-        temperature: llmOverrideManager.temperature || undefined,
+        temperature: llmManager.temperature || undefined,
         systemPromptOverride:
           searchParams.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
         useExistingUserMessage: isSeededChat,
@@ -1802,7 +1877,7 @@ export function ChatPage({
     const [_, llmModel] = getFinalLLM(
       llmProviders,
       liveAssistant,
-      llmOverrideManager.llmOverride
+      llmManager.currentLlm
     );
     const llmAcceptsImages = checkLLMSupportsImageInput(llmModel);
 
@@ -1857,7 +1932,6 @@ export function ChatPage({
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
   const [untoggled, setUntoggled] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
-  const [agenticGenerating, setAgenticGenerating] = useState(false);
 
   const explicitlyUntoggle = () => {
     setShowHistorySidebar(false);
@@ -1897,19 +1971,6 @@ export function ChatPage({
     setToggled: removeToggle,
     mobile: settings?.isMobile,
     isAnonymousUser: user?.is_anonymous_user,
-  });
-
-  const autoScrollEnabled =
-    (user?.preferences?.auto_scroll && !agenticGenerating) ?? false;
-
-  useScrollonStream({
-    chatState: currentSessionChatState,
-    scrollableDivRef,
-    scrollDist,
-    endDivRef,
-    debounceNumber,
-    mobile: settings?.isMobile,
-    enableAutoScroll: autoScrollEnabled,
   });
 
   // Virtualization + Scrolling related effects and functions
@@ -2121,7 +2182,7 @@ export function ChatPage({
   }, [searchParams, router]);
 
   useEffect(() => {
-    llmOverrideManager.updateImageFilesPresent(imageFileInMessageHistory);
+    llmManager.updateImageFilesPresent(imageFileInMessageHistory);
   }, [imageFileInMessageHistory]);
 
   const pathname = usePathname();
@@ -2175,9 +2236,9 @@ export function ChatPage({
 
   function createRegenerator(regenerationRequest: RegenerationRequest) {
     // Returns new function that only needs `modelOverRide` to be specified when called
-    return async function (modelOverRide: LlmOverride) {
+    return async function (modelOverride: LlmDescriptor) {
       return await onSubmit({
-        modelOverRide,
+        modelOverride,
         messageIdToResend: regenerationRequest.parentMessage.messageId,
         regenerationRequest,
         forceSearch: regenerationRequest.forceSearch,
@@ -2258,9 +2319,7 @@ export function ChatPage({
       {(settingsToggled || userSettingsToggled) && (
         <UserSettingsModal
           setPopup={setPopup}
-          setLlmOverride={(newOverride) =>
-            llmOverrideManager.updateLLMOverride(newOverride)
-          }
+          setCurrentLlm={(newLlm) => llmManager.updateCurrentLlm(newLlm)}
           defaultModel={user?.preferences.default_model!}
           llmProviders={llmProviders}
           onClose={() => {
@@ -2324,7 +2383,7 @@ export function ChatPage({
         <ShareChatSessionModal
           assistantId={liveAssistant?.id}
           message={message}
-          modelOverride={llmOverrideManager.llmOverride}
+          modelOverride={llmManager.currentLlm}
           chatSessionId={sharedChatSession.id}
           existingSharedStatus={sharedChatSession.shared_status}
           onClose={() => setSharedChatSession(null)}
@@ -2342,7 +2401,7 @@ export function ChatPage({
         <ShareChatSessionModal
           message={message}
           assistantId={liveAssistant?.id}
-          modelOverride={llmOverrideManager.llmOverride}
+          modelOverride={llmManager.currentLlm}
           chatSessionId={chatSessionIdRef.current}
           existingSharedStatus={chatSessionSharedStatus}
           onClose={() => setSharingModalVisible(false)}
@@ -2572,6 +2631,7 @@ export function ChatPage({
                             style={{ overflowAnchor: "none" }}
                             key={currentSessionId()}
                             className={
+                              (hasPerformedInitialScroll ? "" : " hidden ") +
                               "desktop:-ml-4 w-full mx-auto " +
                               "absolute mobile:top-0 desktop:top-0 left-0 " +
                               (settings?.enterpriseSettings
@@ -3058,7 +3118,7 @@ export function ChatPage({
                                               messageId: message.messageId,
                                               parentMessage: parentMessage!,
                                               forceSearch: true,
-                                            })(llmOverrideManager.llmOverride);
+                                            })(llmManager.currentLlm);
                                           } else {
                                             setPopup({
                                               type: "error",
@@ -3203,7 +3263,7 @@ export function ChatPage({
                               availableDocumentSets={documentSets}
                               availableTags={tags}
                               filterManager={filterManager}
-                              llmOverrideManager={llmOverrideManager}
+                              llmManager={llmManager}
                               removeDocs={() => {
                                 clearSelectedDocuments();
                               }}

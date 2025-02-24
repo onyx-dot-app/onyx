@@ -65,7 +65,7 @@ export function getChatRetentionInfo(
   };
 }
 
-export async function updateModelOverrideForChatSession(
+export async function updateLlmOverrideForChatSession(
   chatSessionId: string,
   newAlternateModel: string
 ) {
@@ -236,7 +236,7 @@ export async function* sendMessage({
           }
         : null,
     use_existing_user_message: useExistingUserMessage,
-    use_agentic_search: useLanggraph,
+    use_agentic_search: useLanggraph ?? false,
   });
 
   const response = await fetch(`/api/chat/send-message`, {
