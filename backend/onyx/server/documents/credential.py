@@ -106,7 +106,6 @@ def swap_credentials_for_connector(
         credential_swap_req.connector_id,
         credential_swap_req.new_credential_id,
         db_session,
-        user,
         tenant_id,
     )
 

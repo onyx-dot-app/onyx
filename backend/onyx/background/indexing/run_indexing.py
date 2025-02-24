@@ -21,8 +21,8 @@ from onyx.configs.app_configs import POLL_CONNECTOR_OFFSET
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MilestoneRecordType
 from onyx.connectors.connector_runner import ConnectorRunner
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import instantiate_connector
-from onyx.connectors.interfaces import ConnectorValidationError
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document

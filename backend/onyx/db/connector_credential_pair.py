@@ -401,8 +401,8 @@ def add_credential_to_connector(
     # If we are in the seeding flow, we shouldn't need to check if the credential belongs to the user
     if seeding_flow:
         credential = fetch_credential_by_id(
-            db_session=db_session,
             credential_id=credential_id,
+            db_session=db_session,
         )
     else:
         credential = fetch_credential_by_id_for_user(

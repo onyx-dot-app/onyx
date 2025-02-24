@@ -123,7 +123,8 @@ export function ReIndexButton({
         disabled={
           isDisabled ||
           ccPairStatus == ConnectorCredentialPairStatus.DELETING ||
-          ccPairStatus == ConnectorCredentialPairStatus.PAUSED
+          ccPairStatus == ConnectorCredentialPairStatus.PAUSED ||
+          ccPairStatus == ConnectorCredentialPairStatus.INVALID
         }
         tooltip={getCCPairStatusMessage(isDisabled, isIndexing, ccPairStatus)}
       >

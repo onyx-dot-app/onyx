@@ -11,6 +11,7 @@ from atlassian import Confluence  # type:ignore
 from pydantic import BaseModel
 from requests import HTTPError
 
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -508,11 +509,15 @@ def build_confluence_client(
     is_cloud: bool,
     wiki_base: str,
 ) -> OnyxConfluence:
-    _validate_connector_configuration(
-        credentials=credentials,
-        is_cloud=is_cloud,
-        wiki_base=wiki_base,
-    )
+    try:
+        _validate_connector_configuration(
+            credentials=credentials,
+            is_cloud=is_cloud,
+            wiki_base=wiki_base,
+        )
+    except Exception as e:
+        raise ConnectorValidationError(str(e))
+
     return OnyxConfluence(
         api_version="cloud" if is_cloud else "latest",
         # Remove trailing slash from wiki_base if present

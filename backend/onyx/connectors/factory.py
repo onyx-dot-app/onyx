@@ -18,6 +18,7 @@ from onyx.connectors.discourse.connector import DiscourseConnector
 from onyx.connectors.document360.connector import Document360Connector
 from onyx.connectors.dropbox.connector import DropboxConnector
 from onyx.connectors.egnyte.connector import EgnyteConnector
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.fireflies.connector import FirefliesConnector
 from onyx.connectors.freshdesk.connector import FreshdeskConnector
@@ -32,7 +33,6 @@ from onyx.connectors.guru.connector import GuruConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointConnector
-from onyx.connectors.interfaces import ConnectorValidationError
 from onyx.connectors.interfaces import EventConnector
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -56,9 +56,8 @@ from onyx.connectors.zendesk.connector import ZendeskConnector
 from onyx.connectors.zulip.connector import ZulipConnector
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import backend_update_credential_json
-from onyx.db.credentials import fetch_credential_by_id_for_user
+from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.models import Credential
-from onyx.db.models import User
 
 
 class ConnectorMissingException(Exception):
@@ -185,19 +184,17 @@ def validate_ccpair_for_user(
     connector_id: int,
     credential_id: int,
     db_session: Session,
-    user: User | None,
     tenant_id: str | None,
-) -> None:
+    enforce_creation: bool = True,
+) -> bool:
     if INTEGRATION_TESTS_MODE:
-        return
+        return True
 
     # Validate the connector settings
     connector = fetch_connector_by_id(connector_id, db_session)
-    credential = fetch_credential_by_id_for_user(
+    credential = fetch_credential_by_id(
         credential_id,
-        user,
         db_session,
-        get_editable=False,
     )
 
     if not connector:
@@ -207,7 +204,7 @@ def validate_ccpair_for_user(
         connector.source == DocumentSource.INGESTION_API
         or connector.source == DocumentSource.MOCK_CONNECTOR
     ):
-        return
+        return True
 
     if not credential:
         raise ValueError("Credential not found")
@@ -221,7 +218,13 @@ def validate_ccpair_for_user(
             credential=credential,
             tenant_id=tenant_id,
         )
+    except ConnectorValidationError as e:
+        raise e
     except Exception as e:
-        raise ConnectorValidationError(str(e))
+        if enforce_creation:
+            raise ConnectorValidationError(str(e))
+        else:
+            return False
 
     runnable_connector.validate_connector_settings()
+    return True
