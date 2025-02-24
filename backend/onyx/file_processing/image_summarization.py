@@ -67,6 +67,8 @@ def _summarize_image(
             ],
         ),
     )
+    logger.info("chonk comp")
+    logger.info(messages)
 
     try:
         return message_to_string(llm.invoke(messages))

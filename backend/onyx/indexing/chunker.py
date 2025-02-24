@@ -277,7 +277,9 @@ class Chunker:
                     document,
                     chunks,
                     section_text,
-                    links={},  # No text offsets needed for images
+                    links={0: section_link_text}
+                    if section_link_text
+                    else {},  # No text offsets needed for images
                     image_url=image_url,
                     title_prefix=title_prefix,
                     metadata_suffix_semantic=metadata_suffix_semantic,

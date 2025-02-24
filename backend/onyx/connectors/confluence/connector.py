@@ -12,9 +12,8 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.onyx_confluence import build_confluence_client
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.confluence.utils import _summarize_image_attachment
-from onyx.connectors.confluence.utils import attachment_to_content
 from onyx.connectors.confluence.utils import build_confluence_document_id
+from onyx.connectors.confluence.utils import convert_attachment_to_content
 from onyx.connectors.confluence.utils import datetime_from_string
 from onyx.connectors.confluence.utils import extract_text_from_confluence_html
 from onyx.connectors.confluence.utils import validate_attachment_filetype
@@ -126,7 +125,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             self.vision_llm = get_default_llm_with_vision()
             if self.vision_llm is None:
                 logger.warning(
-                    "No LLM with vision found, image summarization will be disabled"
+                    "No LLM with vision found; image summarization will be disabled"
                 )
 
     @property
@@ -141,7 +140,6 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
             is_cloud=self.is_cloud,
             wiki_base=self.wiki_base,
         )
-
         return None
 
     def _construct_page_query(
@@ -150,7 +148,6 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         end: SecondsSinceUnixEpoch | None = None,
     ) -> str:
         page_query = self.base_cql_page_query + self.cql_label_filter
-
         # Add time filters
         if start:
             formatted_start_time = datetime.fromtimestamp(
@@ -162,7 +159,6 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                 "%Y-%m-%d %H:%M"
             )
             page_query += f" and lastmodified <= '{formatted_end_time}'"
-
         return page_query
 
     def _construct_attachment_query(self, confluence_page_id: str) -> str:
@@ -236,9 +232,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
 
         return Document(
             id=object_url,
-            sections=[
-                Section(text=object_text, link=object_url, image_url=None)
-            ],  # page body as a single section
+            sections=[Section(text=object_text, link=object_url, image_url=None)],
             source=DocumentSource.CONFLUENCE,
             semantic_identifier=page_title,
             doc_updated_at=last_modified,
@@ -257,8 +251,8 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         Yields batches of Documents. For each page:
          - Create a Document with 1 Section for the page text/comments
          - Then fetch attachments. For each attachment:
-             - If it's an image and summarization is enabled, create a Section with text= the LLM summary, image_url= direct link.
-             - Otherwise, try to convert it to text (if convertible), then add a new Section with that text.
+             - Attempt to convert it with convert_attachment_to_content(...)
+             - If successful, create a new Section with the extracted text or summary.
         """
         doc_batch: list[Document] = []
 
@@ -289,56 +283,37 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                     continue
 
                 # Attempt to get textual content or image summarization:
-                if media_type.startswith("image/") and self.vision_llm:
-                    # Summarize image
-                    logger.notice(f"Summarizing image attachment {attachment['title']}")
+                try:
+                    response = convert_attachment_to_content(
+                        confluence_client=self.confluence_client,
+                        attachment=attachment,
+                        page_context=confluence_xml,
+                        llm=self.vision_llm,
+                    )
+                    if response is None:
+                        continue
 
-                    try:
-                        summary, download_link = _summarize_image_attachment(
-                            attachment=attachment,
-                            page_context=confluence_xml,
-                            confluence_client=self.confluence_client,
-                            llm=self.vision_llm,
-                        )
-                        logger.notice(f"Summary: {summary}")
-                        if summary:
-                            doc.sections.append(
-                                Section(
-                                    text=summary,
-                                    image_url=download_link,
-                                )
-                            )
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to summarize image attachment {attachment['title']}",
-                            exc_info=e,
-                        )
-                        if not self.continue_on_failure:
-                            raise
-                else:
-                    # Attempt normal text extraction
-                    try:
-                        response = attachment_to_content(
-                            confluence_client=self.confluence_client,
-                            attachment=attachment,
-                            page_context=confluence_xml,
-                            llm=self.vision_llm,  # will be None if summarization is disabled
-                        )
-                        if response is None:
-                            continue
+                    content_text, file_storage_name = response
 
-                        content_text, image_file_name = response
-                        if content_text:
-                            doc.sections.append(
-                                Section(text=content_text, image_url=image_file_name)
+                    object_url = build_confluence_document_id(
+                        self.wiki_base, page["_links"]["webui"], self.is_cloud
+                    )
+
+                    if content_text:
+                        doc.sections.append(
+                            Section(
+                                text=content_text,
+                                link=object_url,
+                                image_url=file_storage_name,
                             )
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to extract attachment {attachment['title']}",
-                            exc_info=e,
                         )
-                        if not self.continue_on_failure:
-                            raise
+                except Exception as e:
+                    logger.error(
+                        f"Failed to extract/summarize attachment {attachment['title']}",
+                        exc_info=e,
+                    )
+                    if not self.continue_on_failure:
+                        raise
 
             doc_batch.append(doc)
 
@@ -406,7 +381,6 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                 limit=_SLIM_DOC_BATCH_SIZE,
             ):
                 # If you skip images, you'll skip them in the permission sync
-                # but typically you'd want them included. So do a separate check here:
                 media_type = attachment["metadata"].get("mediaType", "")
                 if not validate_attachment_filetype(media_type):
                     continue

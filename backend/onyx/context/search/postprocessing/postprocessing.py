@@ -1,9 +1,9 @@
+import base64
 from collections.abc import Callable
 from collections.abc import Iterator
 from typing import cast
 
 import numpy
-import requests
 from langchain_core.messages import BaseMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
@@ -23,10 +23,11 @@ from onyx.context.search.models import MAX_METRICS_CONTENT
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RerankMetricsContainer
 from onyx.context.search.models import SearchQuery
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.document_index.document_index_utils import (
     translate_boost_count_to_multiplier,
 )
-from onyx.file_processing.image_summarization import prepare_image_bytes
+from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
 from onyx.natural_language_processing.search_nlp_models import RerankingModel
@@ -55,8 +56,20 @@ def update_image_sections_with_query(
     for section in sections:
         for chunk in section.chunks:
             if chunk.source_image_url:
-                image_bytes = requests.get(chunk.source_image_url).content
-                encoded_image = prepare_image_bytes(image_bytes)
+                with get_session_with_current_tenant() as db_session:
+                    #                 get_default_file_store(db_session).read_file(
+                    #     file_descriptor["id"], mode="b"
+                    # )
+                    file_record = get_default_file_store(db_session).read_file(
+                        chunk.source_image_url, mode="b"
+                    )
+                    if not file_record:
+                        raise Exception("File not found")
+                    file_content = file_record.read()
+                    image_base64 = base64.b64encode(file_content).decode()
+
+                # image_bytes = requests.get(chunk.source_image_url).content
+                # encoded_image = prepare_image_bytes(image_bytes)
                 # Build an LLM message using the user query plus a special image prompt
                 messages: list[BaseMessage] = [
                     SystemMessage(content=SYSTEM_PROMPT),
@@ -71,7 +84,9 @@ def update_image_sections_with_query(
                             },
                             {
                                 "type": "image_url",
-                                "image_url": {"url": encoded_image},
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{image_base64}",
+                                },
                             },
                         ]
                     ),
@@ -87,7 +102,7 @@ def update_image_sections_with_query(
                     logger.exception(
                         f"Error updating image section with query: {e} source image url: {chunk.source_image_url}"
                     )
-                    chunk.content = f"(Failed to retrieve image summary: {str(e)})"
+                    logger.error(messages)
 
 
 logger = setup_logger()
