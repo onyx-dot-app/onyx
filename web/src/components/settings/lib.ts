@@ -95,7 +95,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       }
     }
 
-    if (enterpriseSettings && settings.pro_search_enabled == null) {
+    if (settings.pro_search_enabled == null) {
       settings.pro_search_enabled = true;
     }
 

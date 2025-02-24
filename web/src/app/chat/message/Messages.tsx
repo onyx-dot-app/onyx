@@ -58,7 +58,7 @@ import { useMouseTracking } from "./hooks";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import GeneratingImageDisplay from "../tools/GeneratingImageDisplay";
 import RegenerateOption from "../RegenerateOption";
-import { LlmOverride } from "@/lib/hooks";
+import { LlmDescriptor } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
 import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
@@ -213,7 +213,7 @@ export const AIMessage = ({
   handleForceSearch?: () => void;
   retrievalDisabled?: boolean;
   overriddenModel?: string;
-  regenerate?: (modelOverRide: LlmOverride) => Promise<void>;
+  regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
   setPresentingDocument: (document: OnyxDocument) => void;
   removePadding?: boolean;
 }) => {

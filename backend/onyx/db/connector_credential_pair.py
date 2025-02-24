@@ -194,9 +194,14 @@ def get_connector_credential_pair_from_id_for_user(
 def get_connector_credential_pair_from_id(
     db_session: Session,
     cc_pair_id: int,
+    eager_load_credential: bool = False,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair).distinct()
     stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
+
+    if eager_load_credential:
+        stmt = stmt.options(joinedload(ConnectorCredentialPair.credential))
+
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
 

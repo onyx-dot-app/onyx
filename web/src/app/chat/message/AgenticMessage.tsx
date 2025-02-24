@@ -44,7 +44,7 @@ import { ValidSources } from "@/lib/types";
 import { useMouseTracking } from "./hooks";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import RegenerateOption from "../RegenerateOption";
-import { LlmOverride } from "@/lib/hooks";
+import { LlmDescriptor } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
 import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
@@ -117,7 +117,7 @@ export const AgenticMessage = ({
   isComplete?: boolean;
   handleFeedback?: (feedbackType: FeedbackType) => void;
   overriddenModel?: string;
-  regenerate?: (modelOverRide: LlmOverride) => Promise<void>;
+  regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
   setPresentingDocument?: (document: OnyxDocument) => void;
   toggleDocDisplay?: (agentic: boolean) => void;
   error?: string | null;

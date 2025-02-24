@@ -1,11 +1,11 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { LlmOverride } from "@/lib/hooks";
+import { LlmDescriptor } from "@/lib/hooks";
 
 export function getFinalLLM(
   llmProviders: LLMProviderDescriptor[],
   persona: Persona | null,
-  llmOverride: LlmOverride | null
+  currentLlm: LlmDescriptor | null
 ): [string, string] {
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
@@ -26,9 +26,9 @@ export function getFinalLLM(
     model = persona.llm_model_version_override || model;
   }
 
-  if (llmOverride) {
-    provider = llmOverride.provider || provider;
-    model = llmOverride.modelName || model;
+  if (currentLlm) {
+    provider = currentLlm.provider || provider;
+    model = currentLlm.modelName || model;
   }
 
   return [provider, model];
@@ -37,7 +37,7 @@ export function getFinalLLM(
 export function getLLMProviderOverrideForPersona(
   liveAssistant: Persona,
   llmProviders: LLMProviderDescriptor[]
-): LlmOverride | null {
+): LlmDescriptor | null {
   const overrideProvider = liveAssistant.llm_model_provider_override;
   const overrideModel = liveAssistant.llm_model_version_override;
 
@@ -135,7 +135,7 @@ export const structureValue = (
   return `${name}__${provider}__${modelName}`;
 };
 
-export const destructureValue = (value: string): LlmOverride => {
+export const destructureValue = (value: string): LlmDescriptor => {
   const [displayName, provider, modelName] = value.split("__");
   return {
     name: displayName,

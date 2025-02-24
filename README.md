@@ -26,12 +26,12 @@
 
 <strong>[Onyx](https://www.onyx.app/)</strong> (formerly Danswer) is the AI platform connected to your company's docs, apps, and people.
 Onyx provides a feature rich Chat interface and plugs into any LLM of your choice.
-There are over 40 supported connectors such as Google Drive, Slack, Confluence, Salesforce, etc. which keep knowledge and permissions up to date.
-Create custom AI agents with unique prompts, knowledge, and actions the agents can take.
+Keep knowledge and access controls sync-ed across over 40 connectors like Google Drive, Slack, Confluence, Salesforce, etc.
+Create custom AI agents with unique prompts, knowledge, and actions that the agents can take.
 Onyx can be deployed securely anywhere and for any scale - on a laptop, on-premise, or to cloud.
 
 
-<h3>Feature Showcase</h3>
+<h3>Feature Highlights</h3>
 
 **Deep research over your team's knowledge:**
 
@@ -63,20 +63,19 @@ We also have built-in support for high-availability/scalable deployment on Kuber
 References [here](https://github.com/onyx-dot-app/onyx/tree/main/deployment).
 
 
+## 🔍 Other Notable Benefits of Onyx
+- Custom deep learning models for indexing and inference time, only through Onyx + learning from user feedback.
+- Flexible security features like SSO (OIDC/SAML/OAuth2), RBAC, encryption of credentials, etc.
+- Knowledge curation features like document-sets, query history, usage analytics, etc.
+- Scalable deployment options tested up to many tens of thousands users and hundreds of millions of documents.
+
+
 ## 🚧 Roadmap
-- Extensions to the Chrome Plugin
-- Latest methods in information retrieval (StructRAG, LightGraphRAG, etc.)
+- New methods in information retrieval (StructRAG, LightGraphRAG, etc.)
 - Personalized Search
 - Organizational understanding and ability to locate and suggest experts from your team.
 - Code Search
 - SQL and Structured Query Language
-
-
-## 🔍 Other Notable Benefits of Onyx
-- Custom deep learning models only through Onyx + learn from user feedback.
-- Flexible security features like SSO (OIDC/SAML/OAuth2), RBAC, encryption of credentials, etc.
-- Knowledge curation features like document-sets, query history, usage analytics, etc.
-- Scalable deployment options tested up to many tens of thousands users and hundreds of millions of documents.
 
 
 ## 🔌 Connectors

@@ -26,7 +26,6 @@ export default async function Page() {
               <AssistantEditor
                 {...values}
                 defaultPublic={false}
-                redirectType={SuccessfulPersonaUpdateRedirectType.CHAT}
                 shouldAddAssistantToUserPreferences={true}
               />
             </CardSection>
