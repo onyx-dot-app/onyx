@@ -88,8 +88,6 @@ class UserManager:
         if not session_cookie:
             raise Exception("Failed to login")
 
-        print(f"Logged in as {test_user.email}")
-
         # Set cookies in the headers
         test_user.headers["Cookie"] = f"fastapiusersauth={session_cookie}; "
         test_user.cookies = {"fastapiusersauth": session_cookie}

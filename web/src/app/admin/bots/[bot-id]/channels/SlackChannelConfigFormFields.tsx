@@ -1,13 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import {
-  FieldArray,
-  Form,
-  useFormikContext,
-  ErrorMessage,
-  Field,
-} from "formik";
+import { FieldArray, useFormikContext, ErrorMessage, Field } from "formik";
 import { CCPairDescriptor, DocumentSet } from "@/lib/types";
 import {
   Label,
@@ -18,14 +12,13 @@ import {
 } from "@/components/admin/connectors/Field";
 import { Button } from "@/components/ui/button";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { StandardAnswerCategoryDropdownField } from "@/components/standardAnswers/StandardAnswerCategoryDropdown";
 import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
-import { AlertCircle, View } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   Tooltip,
@@ -50,6 +43,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 
 import { CheckFormField } from "@/components/ui/CheckField";
+import { Input } from "@/components/ui/input";
 
 export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
@@ -178,9 +172,13 @@ export function SlackChannelConfigFormFields({
     );
   }, [documentSets]);
 
-  const { data: channelOptions, isLoading } = useSWR(
+  const {
+    data: channelOptions,
+    error,
+    isLoading,
+  } = useSWR(
     `/api/manage/admin/slack-app/bots/${slack_bot_id}/channels`,
-    async (url: string) => {
+    async () => {
       const channels = await fetchSlackChannels(slack_bot_id);
       return channels.map((channel: any) => ({
         name: channel.name,
@@ -227,20 +225,34 @@ export function SlackChannelConfigFormFields({
             >
               Select A Slack Channel:
             </label>{" "}
-            <Field name="channel_name">
-              {({ field, form }: { field: any; form: any }) => (
-                <SearchMultiSelectDropdown
-                  options={channelOptions || []}
-                  onSelect={(selected) => {
-                    form.setFieldValue("channel_name", selected.name);
-                  }}
-                  initialSearchTerm={field.value}
-                  onSearchTermChange={(term) => {
-                    form.setFieldValue("channel_name", term);
-                  }}
+            {error ? (
+              <div>
+                <div className="text-red-600 text-sm mb-4">
+                  {error.message || "Unable to fetch Slack channels."}
+                  {" Please enter the channel name manually."}
+                </div>
+                <TextFormField
+                  name="channel_name"
+                  label="Channel Name"
+                  placeholder="Enter channel name"
                 />
-              )}
-            </Field>
+              </div>
+            ) : (
+              <Field name="channel_name">
+                {({ field, form }: { field: any; form: any }) => (
+                  <SearchMultiSelectDropdown
+                    options={channelOptions || []}
+                    onSelect={(selected) => {
+                      form.setFieldValue("channel_name", selected.name);
+                    }}
+                    initialSearchTerm={field.value}
+                    onSearchTermChange={(term) => {
+                      form.setFieldValue("channel_name", term);
+                    }}
+                  />
+                )}
+              </Field>
+            )}
           </>
         )}
         <div className="space-y-2 mt-4">

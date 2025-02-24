@@ -94,7 +94,7 @@ jobs:
             # Use curl with error handling to ignore specific exit code 56
             response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9000/api/health || echo "curl_error")
             
-            if [ "$response" -eq 200 ]; then
+            if [ "$response" = "200" ]; then
               echo "Service is ready!"
               break
             elif [ "$response" = "curl_error" ]; then

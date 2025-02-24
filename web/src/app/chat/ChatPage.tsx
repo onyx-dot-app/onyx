@@ -199,16 +199,6 @@ export function ChatPage({
     return screenSize;
   }
 
-  const { height: screenHeight } = useScreenSize();
-
-  const getContainerHeight = () => {
-    if (autoScrollEnabled) return undefined;
-
-    if (screenHeight < 600) return "20vh";
-    if (screenHeight < 1200) return "30vh";
-    return "40vh";
-  };
-
   // handle redirect if chat page is disabled
   // NOTE: this must be done here, in a client component since
   // settings are passed in via Context and therefore aren't
@@ -227,6 +217,7 @@ export function ChatPage({
     setProSearchEnabled(!proSearchEnabled);
   };
 
+  const isInitialLoad = useRef(true);
   const [userSettingsToggled, setUserSettingsToggled] = useState(false);
 
   const {
@@ -525,8 +516,17 @@ export function ChatPage({
       scrollInitialized.current = false;
 
       if (!hasPerformedInitialScroll) {
+        if (isInitialLoad.current) {
+          setHasPerformedInitialScroll(true);
+          isInitialLoad.current = false;
+        }
         clientScrollToBottom();
+
+        setTimeout(() => {
+          setHasPerformedInitialScroll(true);
+        }, 100);
       } else if (isChatSessionSwitch) {
+        setHasPerformedInitialScroll(true);
         clientScrollToBottom(true);
       }
 
@@ -1135,6 +1135,56 @@ export function ChatPage({
     });
   };
   const [uncaughtError, setUncaughtError] = useState<string | null>(null);
+  const [agenticGenerating, setAgenticGenerating] = useState(false);
+
+  const autoScrollEnabled =
+    (user?.preferences?.auto_scroll && !agenticGenerating) ?? false;
+
+  useScrollonStream({
+    chatState: currentSessionChatState,
+    scrollableDivRef,
+    scrollDist,
+    endDivRef,
+    debounceNumber,
+    mobile: settings?.isMobile,
+    enableAutoScroll: autoScrollEnabled,
+  });
+
+  // Track whether a message has been sent during this page load, keyed by chat session id
+  const [sessionHasSentLocalUserMessage, setSessionHasSentLocalUserMessage] =
+    useState<Map<string | null, boolean>>(new Map());
+
+  // Update the local state for a session once the user sends a message
+  const markSessionMessageSent = (sessionId: string | null) => {
+    setSessionHasSentLocalUserMessage((prev) => {
+      const newMap = new Map(prev);
+      newMap.set(sessionId, true);
+      return newMap;
+    });
+  };
+  const currentSessionHasSentLocalUserMessage = useMemo(
+    () => (sessionId: string | null) => {
+      return sessionHasSentLocalUserMessage.size === 0
+        ? undefined
+        : sessionHasSentLocalUserMessage.get(sessionId) || false;
+    },
+    [sessionHasSentLocalUserMessage]
+  );
+
+  const { height: screenHeight } = useScreenSize();
+
+  const getContainerHeight = useMemo(() => {
+    return () => {
+      if (!currentSessionHasSentLocalUserMessage(chatSessionIdRef.current)) {
+        return undefined;
+      }
+      if (autoScrollEnabled) return undefined;
+
+      if (screenHeight < 600) return "40vh";
+      if (screenHeight < 1200) return "50vh";
+      return "60vh";
+    };
+  }, [autoScrollEnabled, screenHeight, currentSessionHasSentLocalUserMessage]);
 
   const onSubmit = async ({
     messageIdToResend,
@@ -1160,6 +1210,9 @@ export function ChatPage({
     navigatingAway.current = false;
     let frozenSessionId = currentSessionId();
     updateCanContinue(false, frozenSessionId);
+
+    // Mark that we've sent a message for this session in the current page load
+    markSessionMessageSent(frozenSessionId);
 
     if (currentChatState() != "input") {
       if (currentChatState() == "uploading") {
@@ -1879,7 +1932,6 @@ export function ChatPage({
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
   const [untoggled, setUntoggled] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
-  const [agenticGenerating, setAgenticGenerating] = useState(false);
 
   const explicitlyUntoggle = () => {
     setShowHistorySidebar(false);
@@ -1919,19 +1971,6 @@ export function ChatPage({
     setToggled: removeToggle,
     mobile: settings?.isMobile,
     isAnonymousUser: user?.is_anonymous_user,
-  });
-
-  const autoScrollEnabled =
-    (user?.preferences?.auto_scroll && !agenticGenerating) ?? false;
-
-  useScrollonStream({
-    chatState: currentSessionChatState,
-    scrollableDivRef,
-    scrollDist,
-    endDivRef,
-    debounceNumber,
-    mobile: settings?.isMobile,
-    enableAutoScroll: autoScrollEnabled,
   });
 
   // Virtualization + Scrolling related effects and functions
@@ -2592,6 +2631,7 @@ export function ChatPage({
                             style={{ overflowAnchor: "none" }}
                             key={currentSessionId()}
                             className={
+                              (hasPerformedInitialScroll ? "" : " hidden ") +
                               "desktop:-ml-4 w-full mx-auto " +
                               "absolute mobile:top-0 desktop:top-0 left-0 " +
                               (settings?.enterpriseSettings
