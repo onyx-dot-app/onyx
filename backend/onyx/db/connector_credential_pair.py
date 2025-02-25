@@ -9,6 +9,7 @@ from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_AUTH
@@ -106,13 +107,17 @@ def get_connector_credential_pairs_for_user(
     eager_load_credential: bool = False,
     eager_load_user: bool = False,
 ) -> list[ConnectorCredentialPair]:
+    if eager_load_user:
+        assert (
+            eager_load_credential
+        ), "eager_load_credential must be True if eager_load_user is True"
     stmt = select(ConnectorCredentialPair).distinct()
 
     if eager_load_connector:
-        stmt = stmt.options(joinedload(ConnectorCredentialPair.connector))
+        stmt = stmt.options(selectinload(ConnectorCredentialPair.connector))
 
     if eager_load_credential:
-        load_opts = joinedload(ConnectorCredentialPair.credential)
+        load_opts = selectinload(ConnectorCredentialPair.credential)
         if eager_load_user:
             load_opts = load_opts.joinedload(Credential.user)
         stmt = stmt.options(load_opts)
@@ -187,6 +192,9 @@ def get_cc_pair_groups_for_ids(
     return list(db_session.scalars(stmt).all())
 
 
+# For use with our thread-level parallelism utils. Note that any relationships
+# you wish to use MUST be eagerly loaded, as the session will not be available
+# after this function to allow lazy loading.
 def get_cc_pair_groups_for_ids_parallel(
     cc_pair_ids: list[int],
 ) -> list[UserGroup__ConnectorCredentialPair]:

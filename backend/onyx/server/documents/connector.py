@@ -621,6 +621,9 @@ def get_connector_indexing_status(
         False, description="If true, return editable document sets"
     ),
 ) -> list[ConnectorIndexingStatus]:
+    import time
+
+    start_time = time.time()
     tenant_id = get_current_tenant_id()
     indexing_statuses: list[ConnectorIndexingStatus] = []
 
@@ -651,14 +654,17 @@ def get_connector_indexing_status(
     ) = run_functions_tuples_in_parallel(
         [
             (
+                # Gets the connector/credential pairs for the user
                 get_connector_credential_pairs_for_user_parallel,
                 (user, get_editable, None, True, True, True),
             ),
             (
+                # Gets the most recent index attempt for each connector/credential pair
                 get_latest_index_attempts_parallel,
                 (secondary_index, True, False),
             ),
             (
+                # Gets the most recent FINISHED index attempt for each connector/credential pair
                 get_latest_index_attempts_parallel,
                 (secondary_index, True, True),
             ),
@@ -687,7 +693,15 @@ def get_connector_indexing_status(
         [
             (
                 get_document_counts_for_cc_pairs_parallel,
-                (cc_pairs,),
+                (
+                    [
+                        ConnectorCredentialPairIdentifier(
+                            connector_id=cc_pair.connector_id,
+                            credential_id=cc_pair.credential_id,
+                        )
+                        for cc_pair in cc_pairs
+                    ],
+                ),
             ),
             (
                 get_cc_pair_groups_for_ids_parallel,
@@ -788,6 +802,8 @@ def get_connector_indexing_status(
         properties=None,
         db_session=db_session,
     )
+    end_time = time.time()
+    print(f"Time taken: {end_time - start_time} seconds")
 
     return indexing_statuses
 

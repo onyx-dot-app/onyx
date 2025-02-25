@@ -230,7 +230,7 @@ def get_document_connector_counts(
 
 
 def get_document_counts_for_cc_pairs(
-    db_session: Session, cc_pairs: list[ConnectorCredentialPair]
+    db_session: Session, cc_pairs: list[ConnectorCredentialPairIdentifier]
 ) -> Sequence[tuple[int, int, int]]:
     """Returns a sequence of tuples of (connector_id, credential_id, document count)"""
 
@@ -261,8 +261,11 @@ def get_document_counts_for_cc_pairs(
     return db_session.execute(stmt).all()  # type: ignore
 
 
+# For use with our thread-level parallelism utils. Note that any relationships
+# you wish to use MUST be eagerly loaded, as the session will not be available
+# after this function to allow lazy loading.
 def get_document_counts_for_cc_pairs_parallel(
-    cc_pairs: list[ConnectorCredentialPair],
+    cc_pairs: list[ConnectorCredentialPairIdentifier],
 ) -> Sequence[tuple[int, int, int]]:
     with get_session_context_manager() as db_session:
         return get_document_counts_for_cc_pairs(db_session, cc_pairs)

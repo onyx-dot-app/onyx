@@ -426,6 +426,9 @@ def get_latest_index_attempts(
     return db_session.execute(stmt).scalars().unique().all()
 
 
+# For use with our thread-level parallelism utils. Note that any relationships
+# you wish to use MUST be eagerly loaded, as the session will not be available
+# after this function to allow lazy loading.
 def get_latest_index_attempts_parallel(
     secondary_index: bool,
     eager_load_cc_pair: bool = False,
