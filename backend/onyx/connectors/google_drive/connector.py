@@ -10,7 +10,7 @@ from google.oauth2.credentials import Credentials as OAuthCredentials  # type: i
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
-from onyx.configs.app_configs import IMAGE_SUMMARIZATION_ENABLED
+from onyx.configs.app_configs import DISABLE_INDEXING_TIME_IMAGE_ANALYSIS
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import MAX_FILE_SIZE_BYTES
 from onyx.configs.constants import DocumentSource
@@ -199,9 +199,9 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
         self._retrieved_ids: set[str] = set()
 
         # Check if image summarization is enabled and if the LLM has vision
-        if IMAGE_SUMMARIZATION_ENABLED:
-            self.llm = get_default_llm_with_vision()
-            if self.llm is None:
+        if not DISABLE_INDEXING_TIME_IMAGE_ANALYSIS:
+            self.image_analysis_llm = get_default_llm_with_vision()
+            if self.image_analysis_llm is None:
                 logger.warning(
                     "No LLM with vision found, image summarization will be disabled"
                 )
@@ -534,7 +534,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
             _convert_single_file,
             self.creds,
             self.primary_admin_email,
-            llm=self.llm,
+            llm=self.image_analysis_llm,
         )
 
         # Process files in larger batches

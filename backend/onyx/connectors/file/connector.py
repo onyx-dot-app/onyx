@@ -9,7 +9,7 @@ from typing import IO
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
-from onyx.configs.app_configs import IMAGE_SUMMARIZATION_ENABLED
+from onyx.configs.app_configs import DISABLE_INDEXING_TIME_IMAGE_ANALYSIS
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
@@ -100,7 +100,7 @@ def _create_image_section(
     internal_url = f"INTERNAL_URL/api/file/{pg_record_id}"
 
     summary_text = ""
-    if IMAGE_SUMMARIZATION_ENABLED and llm:
+    if llm:
         try:
             summary_text = _summarize_image(llm, image_data, display_name) or ""
         except Exception as e:
@@ -278,11 +278,11 @@ class LocalFileConnector(LoadConnector):
         self.batch_size = batch_size
         self.tenant_id = tenant_id
         self.pdf_pass: str | None = None
-        self.llm: LLM | None = None
+        self.image_analysis_llm: LLM | None = None
 
-        if IMAGE_SUMMARIZATION_ENABLED:
-            self.llm = get_default_llm_with_vision()
-            if self.llm is None:
+        if not DISABLE_INDEXING_TIME_IMAGE_ANALYSIS:
+            self.image_analysis_llm = get_default_llm_with_vision()
+            if self.image_analysis_llm is None:
                 logger.warning(
                     "No LLM with vision found, image summarization will be disabled"
                 )
@@ -319,7 +319,7 @@ class LocalFileConnector(LoadConnector):
                         metadata=metadata,
                         pdf_pass=self.pdf_pass,
                         db_session=db_session,
-                        llm=self.llm,
+                        llm=self.image_analysis_llm,
                     )
                     documents.extend(new_docs)
 

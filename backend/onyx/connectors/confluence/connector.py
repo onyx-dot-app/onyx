@@ -7,7 +7,7 @@ from urllib.parse import quote
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
-from onyx.configs.app_configs import IMAGE_SUMMARIZATION_ENABLED
+from onyx.configs.app_configs import DISABLE_INDEXING_TIME_IMAGE_ANALYSIS
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.onyx_confluence import build_confluence_client
@@ -121,9 +121,9 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
 
         self.timezone: timezone = timezone(offset=timedelta(hours=timezone_offset))
 
-        if IMAGE_SUMMARIZATION_ENABLED:
-            self.vision_llm = get_default_llm_with_vision()
-            if self.vision_llm is None:
+        if not DISABLE_INDEXING_TIME_IMAGE_ANALYSIS:
+            self.image_analysis_llm = get_default_llm_with_vision()
+            if self.image_analysis_llm is None:
                 logger.warning(
                     "No LLM with vision found; image summarization will be disabled"
                 )
@@ -288,7 +288,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                         confluence_client=self.confluence_client,
                         attachment=attachment,
                         page_context=confluence_xml,
-                        llm=self.vision_llm,
+                        llm=self.image_analysis_llm,
                     )
                     if response is None:
                         continue

@@ -180,7 +180,7 @@ export default function TextView({
                 ) : isSupportedIframeFormat(fileType) ? (
                   <iframe
                     src={`${fileUrl}#toolbar=0`}
-                    className="w-full h-full bg-blue-200 border-none"
+                    className="w-full h-full border-none"
                     title="File Viewer"
                   />
                 ) : isMarkdownFormat(fileType) ? (

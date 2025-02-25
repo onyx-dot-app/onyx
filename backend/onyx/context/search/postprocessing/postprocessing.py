@@ -46,6 +46,7 @@ def update_image_sections_with_query(
     """
     For each chunk in each section that has an image URL, call an LLM to produce
     a new 'content' string that directly addresses the user's query about that image.
+    This implementation uses parallel processing for efficiency.
     """
     # Example system prompt. You can customize further or add more context
     SYSTEM_PROMPT = (
@@ -53,56 +54,82 @@ def update_image_sections_with_query(
         "You will receive a user question plus an image URL. Provide a concise textual answer.\n"
     )
 
+    # Collect all chunks with images that need processing
+    chunks_with_images = []
     for section in sections:
         for chunk in section.chunks:
             if chunk.source_image_url:
-                with get_session_with_current_tenant() as db_session:
-                    #                 get_default_file_store(db_session).read_file(
-                    #     file_descriptor["id"], mode="b"
-                    # )
-                    file_record = get_default_file_store(db_session).read_file(
-                        chunk.source_image_url, mode="b"
-                    )
-                    if not file_record:
-                        raise Exception("File not found")
-                    file_content = file_record.read()
-                    image_base64 = base64.b64encode(file_content).decode()
+                chunks_with_images.append(chunk)
 
-                # image_bytes = requests.get(chunk.source_image_url).content
-                # encoded_image = prepare_image_bytes(image_bytes)
-                # Build an LLM message using the user query plus a special image prompt
-                messages: list[BaseMessage] = [
-                    SystemMessage(content=SYSTEM_PROMPT),
-                    HumanMessage(
-                        content=[
-                            {
-                                "type": "text",
-                                "text": (
-                                    f"The user's question is: '{query}'. "
-                                    "Please analyze the following image in that context:\n"
-                                ),
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_base64}",
-                                },
-                            },
-                        ]
-                    ),
-                ]
-                try:
-                    raw_response = llm.invoke(messages)
-                    answer_text = message_to_string(raw_response).strip()
-                    chunk.content = (
-                        answer_text if answer_text else "No relevant info found."
-                    )
+    if not chunks_with_images:
+        return  # No images to process
 
-                except Exception as e:
-                    logger.exception(
-                        f"Error updating image section with query: {e} source image url: {chunk.source_image_url}"
-                    )
-                    logger.error(messages)
+    # Define the function to process a single image chunk
+    def process_image_chunk(chunk: InferenceChunk) -> tuple[str, str]:
+        try:
+            with get_session_with_current_tenant() as db_session:
+                file_record = get_default_file_store(db_session).read_file(
+                    chunk.source_image_url, mode="b"
+                )
+                if not file_record:
+                    raise Exception("File not found")
+                file_content = file_record.read()
+                image_base64 = base64.b64encode(file_content).decode()
+
+            messages: list[BaseMessage] = [
+                SystemMessage(content=SYSTEM_PROMPT),
+                HumanMessage(
+                    content=[
+                        {
+                            "type": "text",
+                            "text": (
+                                f"The user's question is: '{query}'. "
+                                "Please analyze the following image in that context:\n"
+                            ),
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}",
+                            },
+                        },
+                    ]
+                ),
+            ]
+
+            raw_response = llm.invoke(messages)
+            answer_text = message_to_string(raw_response).strip()
+            return (
+                chunk.unique_id,
+                answer_text if answer_text else "No relevant info found.",
+            )
+
+        except Exception as e:
+            logger.exception(
+                f"Error updating image section with query: {e} source image url: {chunk.source_image_url}"
+            )
+            return chunk.unique_id, "Error analyzing image."
+
+    # Create parallel tasks for each image chunk
+    image_processing_tasks = [
+        FunctionCall(process_image_chunk, (chunk,)) for chunk in chunks_with_images
+    ]
+
+    # Run the image processing tasks in parallel
+    image_processing_results = run_functions_in_parallel(image_processing_tasks)
+
+    # Create a mapping of chunk IDs to their processed content
+    chunk_id_to_content = {}
+    for _, result in image_processing_results.items():
+        if result:
+            chunk_id, content = result
+            chunk_id_to_content[chunk_id] = content
+
+    # Update the chunks with the processed content
+    for section in sections:
+        for chunk in section.chunks:
+            if chunk.unique_id in chunk_id_to_content:
+                chunk.content = chunk_id_to_content[chunk.unique_id]
 
 
 logger = setup_logger()

@@ -350,7 +350,7 @@ def convert_attachment_to_content(
     llm: LLM | None,
 ) -> tuple[str | None, str | None] | None:
     """
-    Facade function that:
+    Facade function which:
       1. Validates attachment type
       2. Extracts or summarizes content
       3. Returns (content_text, stored_file_name) or None if we should skip it
