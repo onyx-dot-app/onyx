@@ -26,6 +26,8 @@ import {
   FiUnlock,
   FiRefreshCw,
   FiPauseCircle,
+  FiCheckCircle,
+  FiAlertCircle,
 } from "react-icons/fi";
 import {
   Tooltip,
@@ -72,6 +74,24 @@ function SummaryRow({
           </div>
           <SourceIcon iconSize={20} sourceType={source} />
           {getSourceDisplayName(source)}
+          {summary.not_ready > 0 && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge className="py-1 text-sm" variant="warning">
+                    {summary.not_ready} source
+                    {summary.not_ready > 1 ? "s " : " "}
+                    {summary.not_ready > 1 ? "have" : "has"} not finished
+                    indexing / syncing
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Some sources have not completed their initial indexing or sync
+                  process.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
       </TableCell>
 
@@ -211,8 +231,50 @@ border border-border dark:border-neutral-700
       }}
     >
       <TableCell className="">
-        <p className="lg:w-[200px] xl:w-[400px] inline-block ellipsis truncate">
-          {ccPairsIndexingStatus.name}
+        <p className="lg:w-[500px] flex gap-x-2 xl:w-[600px] inline-block ellipsis truncate">
+          <span>{ccPairsIndexingStatus.name}</span>
+
+          {!ccPairsIndexingStatus.last_success && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="secondary"
+                    icon={FiAlertCircle}
+                    className="text-xs"
+                  >
+                    Has not been successfully indexed yet
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>This connector has not been successfully indexed yet.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {!ccPairsIndexingStatus.perm_sync_completed &&
+            ccPairsIndexingStatus.access_type === "sync" && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="purple"
+                      icon={FiAlertCircle}
+                      className="text-xs"
+                    >
+                      Permissions sync in progress
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      Permissions are currently being synchronized for this
+                      connector.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
         </p>
       </TableCell>
       <TableCell>
@@ -226,12 +288,14 @@ border border-border dark:border-neutral-700
               Public
             </Badge>
           ) : ccPairsIndexingStatus.access_type === "sync" ? (
-            <Badge
-              variant={isEditable ? "auto-sync" : "default"}
-              icon={FiRefreshCw}
-            >
-              Auto-Sync
-            </Badge>
+            <div className="flex items-center gap-x-1">
+              <Badge
+                variant={isEditable ? "auto-sync" : "default"}
+                icon={FiRefreshCw}
+              >
+                <div className="flex items-center gap-x-1">Auto-Sync</div>
+              </Badge>
+            </div>
           ) : (
             <Badge variant={isEditable ? "private" : "default"} icon={FiLock}>
               Private
@@ -245,16 +309,6 @@ border border-border dark:border-neutral-700
           status={ccPairsIndexingStatus.last_finished_status || null}
           errorMsg={ccPairsIndexingStatus?.latest_index_attempt?.error_msg}
         />
-      </TableCell>
-      <TableCell>
-        {isEditable && (
-          <CustomTooltip content="Manage Connector">
-            <FiSettings
-              className="cursor-pointer"
-              onClick={handleManageClick}
-            />
-          </CustomTooltip>
-        )}
       </TableCell>
     </TableRow>
   );
@@ -321,6 +375,12 @@ export function CCPairIndexingStatusTable({
       const statuses = grouped[source];
       summaries[source] = {
         count: statuses.length,
+        not_ready: statuses.filter(
+          (status) =>
+            status.last_success === null ||
+            (status.connector.access_type === "sync" &&
+              !status.perm_sync_completed)
+        ).length,
         active: statuses.filter(
           (status) =>
             status.cc_pair_status === ConnectorCredentialPairStatus.ACTIVE
@@ -411,6 +471,7 @@ export function CCPairIndexingStatusTable({
               credential_json: {},
               admin_public: false,
             },
+            perm_sync_completed: false,
             access_type: "public",
             docs_indexed: 1000,
             last_success: "2023-07-01T12:00:00Z",

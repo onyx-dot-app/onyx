@@ -40,9 +40,11 @@ export interface CCPairFullInfo {
   access_type: AccessType;
   is_editable_for_current_user: boolean;
   deletion_failure_message: string | null;
+  last_time_perm_sync: string | null;
   indexing: boolean;
   creator: UUID | null;
   creator_email: string | null;
+  last_successful_index_time: string | null;
 }
 
 export interface PaginatedIndexAttempts {

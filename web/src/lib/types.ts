@@ -158,6 +158,7 @@ export interface ConnectorIndexingStatus<
   last_success: string | null;
   last_status: ValidStatuses | null;
   last_finished_status: ValidStatuses | null;
+  perm_sync_completed: boolean;
   cc_pair_status: ConnectorCredentialPairStatus;
   latest_index_attempt: IndexAttemptSnapshot | null;
   docs_indexed: number;
@@ -191,6 +192,7 @@ export type ConnectorSummary = {
   active: number;
   public: number;
   totalDocsIndexed: number;
+  not_ready: number;
   errors: number; // New field for error count
 };
 

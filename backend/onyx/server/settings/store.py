@@ -15,6 +15,7 @@ def load_settings() -> Settings:
     kv_store = get_kv_store()
     try:
         stored_settings = kv_store.load(KV_SETTINGS_KEY)
+
         settings = (
             Settings.model_validate(stored_settings) if stored_settings else Settings()
         )
