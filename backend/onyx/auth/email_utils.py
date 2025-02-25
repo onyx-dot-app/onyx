@@ -2,6 +2,8 @@ import smtplib
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate
+from email.utils import make_msgid
 
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import EMAIL_FROM
@@ -150,8 +152,9 @@ def send_email(
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["To"] = user_email
-    if mail_from:
-        msg["From"] = mail_from
+    msg["From"] = mail_from
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain="onyx.app")
 
     part_text = MIMEText(text_body, "plain")
     part_html = MIMEText(html_body, "html")
@@ -173,7 +176,7 @@ def send_subscription_cancellation_email(user_email: str) -> None:
     subject = "Your Onyx Subscription Has Been Canceled"
     heading = "Subscription Canceled"
     message = (
-        "<p>We’re sorry to see you go.</p>"
+        "<p>We're sorry to see you go.</p>"
         "<p>Your subscription has been canceled and will end on your next billing date.</p>"
         "<p>If you change your mind, you can always come back!</p>"
     )
