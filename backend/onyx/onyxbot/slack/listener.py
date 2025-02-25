@@ -17,6 +17,7 @@ from prometheus_client import Gauge
 from prometheus_client import start_http_server
 from redis.lock import Lock
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from sqlalchemy.orm import Session
@@ -416,6 +417,7 @@ class SlackbotHandler:
 
         try:
             bot_info = socket_client.web_client.auth_test()
+
             if bot_info["ok"]:
                 bot_user_id = bot_info["user_id"]
                 user_info = socket_client.web_client.users_info(user=bot_user_id)
@@ -426,9 +428,22 @@ class SlackbotHandler:
                     logger.info(
                         f"Started socket client for Slackbot with name '{bot_name}' (tenant: {tenant_id}, app: {slack_bot_id})"
                     )
+        except SlackApiError as e:
+            # Only error out if we get a not_authed error
+            if "not_authed" in str(e):
+                self.tenant_ids.add(tenant_id)
+                logger.error(
+                    f"Could not fetch bot name: {e} for tenant: {tenant_id}, app: {slack_bot_id}"
+                )
+                return
+            # Log other Slack API errors but continue
+            logger.error(
+                f"Slack API error fetching bot info: {e} for tenant: {tenant_id}, app: {slack_bot_id}"
+            )
         except Exception as e:
-            logger.warning(
-                f"Could not fetch bot name: {e} for tenant: {tenant_id}, app: {slack_bot_id}"
+            # Log other exceptions but continue
+            logger.error(
+                f"Error fetching bot info: {e} for tenant: {tenant_id}, app: {slack_bot_id}"
             )
 
         # Append the event handler
