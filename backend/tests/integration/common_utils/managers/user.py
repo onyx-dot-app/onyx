@@ -94,6 +94,32 @@ class UserManager:
         return test_user
 
     @staticmethod
+    def invite_users(
+        user_performing_action: DATestUser,
+        emails: list[str],
+    ) -> int:
+        response = requests.put(
+            url=f"{API_SERVER_URL}/manage/admin/users",
+            json={"emails": emails},
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
+    def remove_invited_user(
+        user_performing_action: DATestUser,
+        user_email: str,
+    ) -> int:
+        response = requests.patch(
+            url=f"{API_SERVER_URL}/manage/admin/remove-invited-user",
+            json={"user_email": user_email},
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
     def is_role(
         user_to_verify: DATestUser,
         target_role: UserRole,
