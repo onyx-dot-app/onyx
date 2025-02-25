@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import desc
 from sqlalchemy import func
 from sqlalchemy import literal
+from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import union_all
 from sqlalchemy.orm import joinedload
@@ -61,12 +62,14 @@ def search_chat_sessions(
     message_matches = []
     for word in words:
         word_like = f"%{word}%"
-        message_match = select(
-            ChatMessage.chat_session_id, literal(1.0).label("search_rank")
-        ).where(func.lower(ChatMessage.message).like(word_like))
+        message_match: Select = (
+            select(ChatMessage.chat_session_id, literal(1.0).label("search_rank"))
+            .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+            .where(func.lower(ChatMessage.message).like(word_like))
+        )
 
         if user_id:
-            message_match = message_match.where(ChatMessage.user_id == user_id)
+            message_match = message_match.where(ChatSession.user_id == user_id)
 
         message_matches.append(message_match)
 
