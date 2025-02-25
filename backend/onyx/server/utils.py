@@ -39,7 +39,7 @@ def get_json_line(
     Returns:
         A JSON string representation of the input dictionary with a newline character.
     """
-    return json.dumps(json_dict, cls=encoder) + "\n"
+    return json.dumps(json_dict, cls=encoder, ensure_ascii=False) + "\n"
 
 
 def mask_string(sensitive_str: str) -> str:
