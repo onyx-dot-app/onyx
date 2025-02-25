@@ -1,4 +1,3 @@
-from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
@@ -16,14 +15,14 @@ from onyx.db.models import ChatSession
 
 
 def search_chat_sessions(
-    user_id: UUID,
+    user_id: UUID | None,
     db_session: Session,
     query: Optional[str] = None,
     page: int = 1,
     page_size: int = 10,
     include_deleted: bool = False,
     include_onyxbot_flows: bool = False,
-) -> Tuple[List[ChatSession], bool, Optional[Dict[UUID, List[str]]]]:
+) -> Tuple[List[ChatSession], bool]:
     """
     Search for chat sessions based on the provided query.
     If no query is provided, returns recent chat sessions.
@@ -31,7 +30,9 @@ def search_chat_sessions(
     Returns a tuple of (chat_sessions, has_more)
     """
     # Base query for chat sessions
-    stmt = select(ChatSession).where(ChatSession.user_id == user_id)
+    stmt = select(ChatSession)
+    if user_id:
+        stmt = stmt.where(ChatSession.user_id == user_id)
 
     if not include_onyxbot_flows:
         stmt = stmt.where(ChatSession.onyxbot_flow.is_(False))
@@ -77,7 +78,7 @@ def search_chat_sessions(
         ranked_messages = db_session.execute(message_match_sql).all()
 
         # Extract chat session IDs with their ranks
-        chat_session_ranks = {}
+        chat_session_ranks: dict[UUID, float] = {}
         for row in ranked_messages:
             chat_id = row.chat_session_id
             rank = row.search_rank
@@ -155,4 +156,4 @@ def search_chat_sessions(
     has_more = len(chat_sessions) > page_size
     if has_more:
         chat_sessions = chat_sessions[:page_size]
-    return chat_sessions, has_more
+    return list(chat_sessions), has_more

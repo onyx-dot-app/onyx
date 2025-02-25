@@ -15,7 +15,7 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
     # Create a basic index on the lowercase message column for direct text matching
     op.execute(
         """
@@ -25,6 +25,6 @@ def upgrade():
     )
 
 
-def downgrade():
+def downgrade() -> None:
     # Drop the index
     op.execute("DROP INDEX IF EXISTS idx_chat_message_message_lower;")
