@@ -70,6 +70,8 @@ LARGE_CHUNK_REFERENCE_IDS = "large_chunk_reference_ids"
 METADATA = "metadata"
 METADATA_LIST = "metadata_list"
 METADATA_SUFFIX = "metadata_suffix"
+DOC_SUMMARY = "doc_summary"
+CHUNK_CONTEXT = "chunk_context"
 BOOST = "boost"
 DOC_UPDATED_AT = "doc_updated_at"  # Indexed as seconds since epoch
 PRIMARY_OWNERS = "primary_owners"
@@ -101,6 +103,8 @@ YQL_BASE = (
     f"{LARGE_CHUNK_REFERENCE_IDS}, "
     f"{METADATA}, "
     f"{METADATA_SUFFIX}, "
+    f"{DOC_SUMMARY}, "
+    f"{CHUNK_CONTEXT}, "
     f"{CONTENT_SUMMARY} "
     f"from {{index_name}} where "
 )

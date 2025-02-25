@@ -76,6 +76,7 @@ class SavedSearchSettings(InferenceSettings, IndexingSetting):
             provider_type=search_settings.provider_type,
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
+            enable_contextual_rag=search_settings.enable_contextual_rag,
             # Reranking Details
             rerank_model_name=search_settings.rerank_model_name,
             rerank_provider_type=search_settings.rerank_provider_type,
@@ -208,6 +209,8 @@ class InferenceChunk(BaseChunk):
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "he couldn't find an <hi>answer</hi>"]
     match_highlights: list[str]
+    doc_summary: str
+    chunk_context: str
 
     # when the doc was last updated
     updated_at: datetime | None
