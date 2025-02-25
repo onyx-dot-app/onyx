@@ -2,6 +2,7 @@ import os
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from typing import IO
@@ -12,6 +13,7 @@ from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import DISABLE_INDEXING_TIME_IMAGE_ANALYSIS
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -19,7 +21,9 @@ from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.pg_file_store import create_populate_lobj
 from onyx.db.pg_file_store import get_pgfilestore_by_file_name
+from onyx.db.pg_file_store import upsert_pgfilestore
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.extract_file_text import is_valid_file_ext
@@ -89,16 +93,45 @@ def _read_files_and_metadata(
 def _create_image_section(
     llm: LLM | None,
     image_data: bytes,
-    pg_record_id: str,
+    db_session: Session,
+    parent_file_name: str,
     display_name: str,
-) -> Section:
+    idx: int = 0,
+) -> tuple[Section, str | None]:
     """
-    Create a Section object for a single image. If summarization is enabled and we have an LLM,
-    summarize the image. Otherwise, empty text.
-    The image_url references the internal file URL.
-    """
-    internal_url = f"INTERNAL_URL/api/file/{pg_record_id}"
+    Create a Section object for a single image and store the image in PGFileStore.
+    If summarization is enabled and we have an LLM, summarize the image.
 
+    Returns:
+        tuple: (Section object, file_name in PGFileStore or None if storage failed)
+    """
+    # Store the image in PGFileStore
+    file_name = None
+    try:
+        # Create a unique file name for the embedded image
+        file_name = f"{parent_file_name}_embedded_{idx}"
+
+        # Store the image in PGFileStore
+        lobj_oid = create_populate_lobj(BytesIO(image_data), db_session)
+        pgfilestore = upsert_pgfilestore(
+            file_name=file_name,
+            display_name=display_name,
+            file_origin=FileOrigin.OTHER,
+            file_type="image/unknown",  # We could try to detect the image type
+            lobj_oid=lobj_oid,
+            db_session=db_session,
+            commit=True,
+        )
+
+        # Use the actual file name from the record
+        file_name = pgfilestore.file_name
+    except Exception as e:
+        logger.error(f"Failed to store embedded image in PGFileStore: {e}")
+        file_name = None
+        if not CONTINUE_ON_CONNECTOR_FAILURE:
+            raise
+
+    # Summarize the image if we have an LLM
     summary_text = ""
     if llm:
         try:
@@ -108,7 +141,7 @@ def _create_image_section(
             if not CONTINUE_ON_CONNECTOR_FAILURE:
                 raise
 
-    return Section(text=summary_text, image_url=internal_url)
+    return Section(text=summary_text, image_url=file_name), file_name
 
 
 def _process_file(
@@ -194,12 +227,12 @@ def _process_file(
     title = metadata.get("title") or file_display_name
 
     # 1) If the file itself is an image, handle that scenario quickly
-    IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff"}
+    IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
     if extension in IMAGE_EXTENSIONS:
         # Summarize or produce empty doc
         image_data = file.read()
-        image_section = _create_image_section(
-            llm, image_data, pg_record.file_name, title
+        image_section, _ = _create_image_section(
+            llm, image_data, db_session, pg_record.file_name, title
         )
         return [
             Document(
@@ -235,16 +268,15 @@ def _process_file(
 
     # Then any extracted images from docx, etc.
     for idx, (img_data, img_name) in enumerate(embedded_images, start=1):
-        # We create a new section with an image summary
-        # We do not store each embedded image separately in Postgres by default:
-        # so we can't do the best "INTERNAL_URL/api/file/<id>" for each embedded image
-        # unless you store them separately. For demonstration, we'll re-use the doc's ID
-        # with a suffix or keep the same ID.
-        # If you want actual image retrieval, you'd have to store them separately.
-        # For now, we just simulate an internal URL:
-        faux_image_id = f"{pg_record.file_name}_embedded_{idx}"
-        image_section = _create_image_section(
-            llm, img_data, faux_image_id, f"{title} - image {idx}"
+        # Store each embedded image as a separate file in PGFileStore
+        # and create a section with the image summary
+        image_section, _ = _create_image_section(
+            llm,
+            img_data,
+            db_session,
+            pg_record.file_name,
+            f"{title} - image {idx}",
+            idx,
         )
         sections.append(image_section)
     return [

@@ -267,38 +267,58 @@ def _extract_or_summarize_attachment(
             text=None, file_name=None, error="Download returned no bytes"
         )
 
-    # Summarize Image
     if media_type.startswith("image/") and llm:
-        try:
-            with get_session_with_current_tenant() as db_session:
-                saved_record = _save_attachment_to_pgfilestore(
-                    db_session=db_session,
-                    raw_bytes=raw_bytes,
-                    media_type=media_type,
-                    attachment_id=attachment["id"],
-                    display_name=attachment["title"],
-                )
-            user_prompt = IMAGE_SUMMARIZATION_USER_PROMPT.format(
-                title=attachment["title"],
-                page_title=attachment["title"],
-                confluence_xml=page_context,
-            )
-            summary_text = summarize_image_pipeline(
-                llm=llm,
-                image_data=raw_bytes,
-                query=user_prompt,
-                system_prompt=IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
-            )
-            return AttachmentProcessingResult(
-                text=summary_text, file_name=saved_record.file_name, error=None
-            )
-        except Exception as e:
-            msg = f"Image summarization failed for {attachment['title']}: {e}"
-            logger.error(msg, exc_info=e)
-            return AttachmentProcessingResult(text=None, file_name=None, error=msg)
+        return _process_image_attachment(
+            confluence_client, attachment, page_context, llm, raw_bytes, media_type
+        )
+    else:
+        return _process_text_attachment(attachment, raw_bytes, media_type)
 
-    # Attempt text-based extraction for other file types
-    extracted_text = None
+
+def _process_image_attachment(
+    confluence_client: OnyxConfluence,
+    attachment: dict[str, Any],
+    page_context: str,
+    llm: LLM,
+    raw_bytes: bytes,
+    media_type: str,
+) -> AttachmentProcessingResult:
+    """Process an image attachment by saving it and generating a summary."""
+    try:
+        with get_session_with_current_tenant() as db_session:
+            saved_record = _save_attachment_to_pgfilestore(
+                db_session=db_session,
+                raw_bytes=raw_bytes,
+                media_type=media_type,
+                attachment_id=attachment["id"],
+                display_name=attachment["title"],
+            )
+        user_prompt = IMAGE_SUMMARIZATION_USER_PROMPT.format(
+            title=attachment["title"],
+            page_title=attachment["title"],
+            confluence_xml=page_context,
+        )
+        summary_text = summarize_image_pipeline(
+            llm=llm,
+            image_data=raw_bytes,
+            query=user_prompt,
+            system_prompt=IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+        )
+        return AttachmentProcessingResult(
+            text=summary_text, file_name=saved_record.file_name, error=None
+        )
+    except Exception as e:
+        msg = f"Image summarization failed for {attachment['title']}: {e}"
+        logger.error(msg, exc_info=e)
+        return AttachmentProcessingResult(text=None, file_name=None, error=msg)
+
+
+def _process_text_attachment(
+    attachment: dict[str, Any],
+    raw_bytes: bytes,
+    media_type: str,
+) -> AttachmentProcessingResult:
+    """Process a text-based attachment by extracting its content."""
     try:
         extracted_text = extract_file_text(
             io.BytesIO(raw_bytes),
@@ -315,6 +335,7 @@ def _extract_or_summarize_attachment(
         msg = f"No text extracted for {attachment['title']}"
         logger.warning(msg)
         return AttachmentProcessingResult(text=None, file_name=None, error=msg)
+
     if len(extracted_text) > CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD:
         msg = (
             f"Skipping attachment {attachment['title']} due to char count "
@@ -323,7 +344,7 @@ def _extract_or_summarize_attachment(
         logger.warning(msg)
         return AttachmentProcessingResult(text=None, file_name=None, error=msg)
 
-    # Save the attachment even if it's only text
+    # Save the attachment
     try:
         with get_session_with_current_tenant() as db_session:
             saved_record = _save_attachment_to_pgfilestore(
@@ -340,7 +361,9 @@ def _extract_or_summarize_attachment(
             text=extracted_text, file_name=None, error=msg
         )
 
-    return AttachmentProcessingResult(text=extracted_text, file_name=None, error=None)
+    return AttachmentProcessingResult(
+        text=extracted_text, file_name=saved_record.file_name, error=None
+    )
 
 
 def convert_attachment_to_content(

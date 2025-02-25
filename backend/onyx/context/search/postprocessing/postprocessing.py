@@ -10,7 +10,7 @@ from langchain_core.messages import SystemMessage
 
 from onyx.chat.models import SectionRelevancePiece
 from onyx.configs.app_configs import BLURB_SIZE
-from onyx.configs.app_configs import SEARCH_TIME_IMAGE_ANALYSIS
+from onyx.configs.app_configs import DISABLE_SEARCH_TIME_IMAGE_ANALYSIS
 from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MAX
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MIN
@@ -31,6 +31,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
 from onyx.natural_language_processing.search_nlp_models import RerankingModel
+from onyx.prompts.image_analysis import IMAGE_ANALYSIS_SYSTEM_PROMPT
 from onyx.secondary_llm_flows.chunk_usefulness import llm_batch_eval_sections
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import FunctionCall
@@ -48,17 +49,13 @@ def update_image_sections_with_query(
     a new 'content' string that directly addresses the user's query about that image.
     This implementation uses parallel processing for efficiency.
     """
-    # Example system prompt. You can customize further or add more context
-    SYSTEM_PROMPT = (
-        "You are an AI assistant specialized in describing images.\n"
-        "You will receive a user question plus an image URL. Provide a concise textual answer.\n"
-    )
+    #
 
     # Collect all chunks with images that need processing
     chunks_with_images = []
     for section in sections:
         for chunk in section.chunks:
-            if chunk.source_image_url:
+            if chunk.image_file_name:
                 chunks_with_images.append(chunk)
 
     if not chunks_with_images:
@@ -69,7 +66,7 @@ def update_image_sections_with_query(
         try:
             with get_session_with_current_tenant() as db_session:
                 file_record = get_default_file_store(db_session).read_file(
-                    chunk.source_image_url, mode="b"
+                    cast(str, chunk.image_file_name), mode="b"
                 )
                 if not file_record:
                     raise Exception("File not found")
@@ -77,7 +74,7 @@ def update_image_sections_with_query(
                 image_base64 = base64.b64encode(file_content).decode()
 
             messages: list[BaseMessage] = [
-                SystemMessage(content=SYSTEM_PROMPT),
+                SystemMessage(content=IMAGE_ANALYSIS_SYSTEM_PROMPT),
                 HumanMessage(
                     content=[
                         {
@@ -106,7 +103,7 @@ def update_image_sections_with_query(
 
         except Exception as e:
             logger.exception(
-                f"Error updating image section with query: {e} source image url: {chunk.source_image_url}"
+                f"Error updating image section with query: {e} source image url: {chunk.image_file_name}"
             )
             return chunk.unique_id, "Error analyzing image."
 
@@ -388,7 +385,7 @@ def search_postprocessing(
         # NOTE: if we don't rerank, we can return the chunks immediately
         # since we know this is the final order.
         # This way the user experience isn't delayed by the LLM step
-        if SEARCH_TIME_IMAGE_ANALYSIS:
+        if not DISABLE_SEARCH_TIME_IMAGE_ANALYSIS:
             update_image_sections_with_query(
                 retrieved_sections, search_query.query, llm
             )
@@ -431,7 +428,7 @@ def search_postprocessing(
             _log_top_section_links(search_query.search_type.value, reranked_sections)
 
             # Add the image processing step here
-            if SEARCH_TIME_IMAGE_ANALYSIS:
+            if not DISABLE_SEARCH_TIME_IMAGE_ANALYSIS:
                 update_image_sections_with_query(
                     reranked_sections, search_query.query, llm
                 )

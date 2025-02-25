@@ -73,7 +73,7 @@ def _combine_chunks(chunks: list[DocAwareChunk], large_chunk_id: int) -> DocAwar
         blurb=chunks[0].blurb,
         content=chunks[0].content,
         source_links=chunks[0].source_links or {},
-        source_image_url=None,  # Merged chunk typically won't store a single image link
+        image_file_name=None,
         section_continuation=(chunks[0].chunk_id > 0),
         title_prefix=chunks[0].title_prefix,
         metadata_suffix_semantic=chunks[0].metadata_suffix_semantic,
@@ -213,7 +213,7 @@ class Chunker:
             blurb=self._extract_blurb(text),
             content=text,
             source_links=links or {0: ""},
-            source_image_url=image_url,  # store the image link here
+            image_file_name=image_url,
             section_continuation=is_continuation,
             title_prefix=title_prefix,
             metadata_suffix_semantic=metadata_suffix_semantic,

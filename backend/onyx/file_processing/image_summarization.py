@@ -67,8 +67,6 @@ def _summarize_image(
             ],
         ),
     )
-    logger.info("chonk comp")
-    logger.info(messages)
 
     try:
         return message_to_string(llm.invoke(messages))
@@ -90,8 +88,6 @@ def _resize_image_if_needed(image_data: bytes, max_size_mb: int = 20) -> bytes:
 
     if len(image_data) > max_size_bytes:
         with Image.open(BytesIO(image_data)) as img:
-            logger.info("resizing image...")
-
             # Reduce dimensions for better size reduction
             img.thumbnail((800, 800), Image.Resampling.LANCZOS)
             output = BytesIO()

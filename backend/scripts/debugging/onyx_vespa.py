@@ -64,7 +64,6 @@ from onyx.document_index.vespa_constants import VESPA_APP_CONTAINER_URL
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
@@ -508,7 +507,7 @@ def get_number_of_chunks_we_think_exist(
 class VespaDebugging:
     # Class for managing Vespa debugging actions.
     def __init__(self, tenant_id: str | None = None):
-        self.tenant_id = POSTGRES_DEFAULT_SCHEMA if not tenant_id else tenant_id
+        self.tenant_id = tenant_id
         self.index_name = get_index_name(self.tenant_id)
 
     def sample_document_counts(self) -> None:

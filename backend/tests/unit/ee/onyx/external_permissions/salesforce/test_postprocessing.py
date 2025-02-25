@@ -31,7 +31,7 @@ def create_test_chunk(
         metadata={},
         match_highlights=[],
         updated_at=datetime.now(),
-        source_image_url=None,
+        image_file_name=None,
     )
 
 

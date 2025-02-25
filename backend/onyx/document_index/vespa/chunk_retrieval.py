@@ -31,6 +31,7 @@ from onyx.document_index.vespa_constants import DOC_UPDATED_AT
 from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import HIDDEN
+from onyx.document_index.vespa_constants import IMAGE_FILE_NAME
 from onyx.document_index.vespa_constants import LARGE_CHUNK_REFERENCE_IDS
 from onyx.document_index.vespa_constants import MAX_ID_SEARCH_QUERY_SIZE
 from onyx.document_index.vespa_constants import MAX_OR_CONDITIONS
@@ -42,7 +43,6 @@ from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
 from onyx.document_index.vespa_constants import SECONDARY_OWNERS
 from onyx.document_index.vespa_constants import SECTION_CONTINUATION
 from onyx.document_index.vespa_constants import SEMANTIC_IDENTIFIER
-from onyx.document_index.vespa_constants import SOURCE_IMAGE_URL
 from onyx.document_index.vespa_constants import SOURCE_LINKS
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TITLE
@@ -131,7 +131,7 @@ def _vespa_hit_to_inference_chunk(
         section_continuation=fields[SECTION_CONTINUATION],
         document_id=fields[DOCUMENT_ID],
         source_type=fields[SOURCE_TYPE],
-        source_image_url=fields.get(SOURCE_IMAGE_URL),
+        image_file_name=fields.get(IMAGE_FILE_NAME),
         title=fields.get(TITLE),
         semantic_identifier=fields[SEMANTIC_IDENTIFIER],
         boost=fields.get(BOOST, 1),

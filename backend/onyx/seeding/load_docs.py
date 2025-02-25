@@ -95,7 +95,7 @@ def _create_indexable_chunks(
             document_sets=set(),
             boost=DEFAULT_BOOST,
             large_chunk_id=None,
-            source_image_url=None,
+            image_file_name=None,
         )
 
         chunks.append(chunk)

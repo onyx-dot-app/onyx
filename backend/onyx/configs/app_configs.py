@@ -640,6 +640,6 @@ DISABLE_INDEXING_TIME_IMAGE_ANALYSIS = (
     os.environ.get("DISABLE_INDEXING_TIME_IMAGE_ANALYSIS", "false").lower() == "true"
 )
 
-SEARCH_TIME_IMAGE_ANALYSIS = (
-    os.environ.get("SEARCH_TIME_IMAGE_ANALYSIS", "true").lower() == "true"
+DISABLE_SEARCH_TIME_IMAGE_ANALYSIS = (
+    os.environ.get("DISABLE_SEARCH_TIME_IMAGE_ANALYSIS", "false").lower() == "true"
 )
