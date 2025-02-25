@@ -53,6 +53,7 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
       threshold: 0.1,
     };
 
+    // Scrolling util
     const observer = new IntersectionObserver((entries) => {
       const [entry] = entries;
       if (entry.isIntersecting && hasMore && !isLoading) {
@@ -112,7 +113,6 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
             </div>
           </div>
 
-          {/* Chat list */}
           <ScrollArea
             className="flex-grow bg-white relative dark:bg-neutral-800"
             ref={scrollAreaRef}

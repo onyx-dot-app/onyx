@@ -13,13 +13,11 @@ import { pageType } from "@/app/chat/sessionSidebar/types";
 import { Logo } from "../logo/Logo";
 import Link from "next/link";
 import { LogoComponent } from "@/components/logo/FixedLogo";
-import { Search } from "lucide-react";
 
 export default function LogoWithText({
   toggleSidebar,
   hideOnMobile,
   handleNewChat,
-  toggleChatSessionSearchModal,
   page,
   toggled,
   showArrow,
@@ -29,7 +27,6 @@ export default function LogoWithText({
   hideOnMobile?: boolean;
   toggleSidebar?: () => void;
   handleNewChat?: () => void;
-  toggleChatSessionSearchModal?: () => void;
   page: pageType;
   toggled?: boolean;
   showArrow?: boolean;
@@ -114,27 +111,6 @@ export default function LogoWithText({
         </TooltipProvider>
       )}
       <div className="flex ml-auto gap-x-4">
-        {toggleChatSessionSearchModal && (
-          <TooltipProvider delayDuration={1000}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="my-auto mobile:hidden"
-                  onClick={() => {
-                    toggleChatSessionSearchModal();
-                  }}
-                >
-                  <Search
-                    className="flex-none text-text-mobile-sidebar"
-                    size={16}
-                  />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Search Chats</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-
         {showArrow && toggleSidebar && (
           <TooltipProvider delayDuration={0}>
             <Tooltip>

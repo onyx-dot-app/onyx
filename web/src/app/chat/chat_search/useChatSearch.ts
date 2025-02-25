@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { fetchChatSessions, createNewChat, deleteChat } from "./api/client";
-import { ChatSessionGroup, ChatSessionSummary } from "./api/models";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { fetchChatSessions } from "./api/client";
+import { ChatSessionGroup } from "./api/models";
 
 interface UseChatSearchOptions {
   pageSize?: number;
@@ -28,15 +28,9 @@ export function useChatSearch(
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const currentAbortController = useRef<AbortController | null>(null);
   const PAGE_SIZE = pageSize;
 
-  // NEW: Keep a reference to the current AbortController so we can cancel any
-  // ongoing request when a new request starts.
-  const currentAbortController = useRef<AbortController | null>(null);
-
-  // ---------------------------------------------------------------------------
-  // 1. Fetch function that can be aborted
-  // ---------------------------------------------------------------------------
   const fetchInitialChats = useCallback(
     async (signal?: AbortSignal) => {
       setIsLoading(true);
@@ -47,21 +41,19 @@ export function useChatSearch(
           query: searchQuery,
           page: 1,
           page_size: PAGE_SIZE,
-          // Pass the signal to your fetch or other HTTP client if supported
-          signal, // <--- This is key if your fetchChatSessions can handle AbortSignal
+          signal,
         });
 
-        // If the request was aborted, signal.aborted will be true
         if (signal && signal.aborted) {
-          return; // Do not update state if this request is canceled
+          return;
         }
 
         setChatGroups(response.groups);
         setHasMore(response.has_more);
       } catch (error) {
-        // If the fetch was aborted, the error might be an AbortError depending on your environment:
         if ((error as any)?.name === "AbortError") {
           console.log("Request was aborted.");
+          setIsLoading(false);
           return;
         }
         console.error("Error fetching chats:", error);
@@ -72,17 +64,11 @@ export function useChatSearch(
     [searchQuery, PAGE_SIZE]
   );
 
-  // ---------------------------------------------------------------------------
-  // 2. Pagination
-  // ---------------------------------------------------------------------------
   const fetchMoreChats = useCallback(async () => {
     if (isLoading || !hasMore) return;
 
     setIsLoading(true);
 
-    // Because "fetchMoreChats" is typically triggered by scrolling,
-    // you might choose not to cancel previous requests here. But you *can* do so
-    // if you want only one in-flight request at a time:
     if (currentAbortController.current) {
       currentAbortController.current.abort();
     }
@@ -99,7 +85,7 @@ export function useChatSearch(
       });
 
       if (localSignal.aborted) {
-        return; // if aborted, do not update state
+        return;
       }
 
       setChatGroups((prev) => [...prev, ...response.groups]);
@@ -108,6 +94,7 @@ export function useChatSearch(
     } catch (error) {
       if ((error as any)?.name === "AbortError") {
         console.log("Pagination request was aborted.");
+        setIsLoading(false);
         return;
       }
       console.error("Error fetching more chats:", error);
@@ -116,9 +103,6 @@ export function useChatSearch(
     }
   }, [isLoading, hasMore, page, searchQuery, PAGE_SIZE]);
 
-  // ---------------------------------------------------------------------------
-  // 3. Debounced search
-  // ---------------------------------------------------------------------------
   const handleSearch = useCallback(
     (query: string) => {
       setSearchQuery(query);
@@ -137,7 +121,6 @@ export function useChatSearch(
 
       searchTimeoutRef.current = setTimeout(() => {
         fetchInitialChats(localSignal).finally(() => {
-          // Always revert to false when the request finishes—aborted or not
           setIsSearching(false);
         });
       }, 1000);
@@ -145,29 +128,20 @@ export function useChatSearch(
     [fetchInitialChats]
   );
 
-  // ---------------------------------------------------------------------------
-  // 4. Initial load (runs on mount / whenever fetchInitialChats changes)
-  // ---------------------------------------------------------------------------
   useEffect(() => {
-    // When component mounts or the effect re-runs, fetch initial data
-    // Typically not searching yet, so no debounce needed here
     const controller = new AbortController();
     currentAbortController.current = controller;
 
     fetchInitialChats(controller.signal);
 
-    // Cleanup: if component unmounts or re-renders, abort the request
     return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
+      // if (searchTimeoutRef.current) {
+      //   clearTimeout(searchTimeoutRef.current);
+      // }
       controller.abort();
     };
   }, [fetchInitialChats]);
 
-  // ---------------------------------------------------------------------------
-  // 5. Expose result
-  // ---------------------------------------------------------------------------
   return {
     searchQuery,
     setSearchQuery: handleSearch,
