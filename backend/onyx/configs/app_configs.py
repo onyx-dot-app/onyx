@@ -626,6 +626,8 @@ POD_NAMESPACE = os.environ.get("POD_NAMESPACE")
 
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
+INTEGRATION_TESTS_MODE = os.environ.get("INTEGRATION_TESTS_MODE", "").lower() == "true"
+
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 TEST_ENV = os.environ.get("TEST_ENV", "").lower() == "true"

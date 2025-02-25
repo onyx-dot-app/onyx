@@ -11,6 +11,8 @@ from onyx.agents.agent_search.orchestration.nodes.call_tool import ToolCallExcep
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
+from onyx.chat.models import AgenticMessageResponseIDInfo
+from onyx.chat.models import AgentMessageIDInfo
 from onyx.chat.models import AgentSearchPacket
 from onyx.chat.models import AllCitations
 from onyx.chat.models import AnswerPostInfo
@@ -308,6 +310,7 @@ ChatPacket = (
     | CustomToolResponse
     | MessageSpecificCitations
     | MessageResponseIDInfo
+    | AgenticMessageResponseIDInfo
     | StreamStopInfo
     | AgentSearchPacket
 )
@@ -744,14 +747,13 @@ def stream_chat_message_objects(
                 files=latest_query_files,
                 single_message_history=single_message_history,
             ),
-            system_message=default_build_system_message(prompt_config),
+            system_message=default_build_system_message(prompt_config, llm.config),
             message_history=message_history,
             llm_config=llm.config,
             raw_user_query=final_msg.message,
             raw_user_uploaded_files=latest_query_files or [],
             single_message_history=single_message_history,
         )
-        prompt_builder.update_system_prompt(default_build_system_message(prompt_config))
 
         # LLM prompt building, response capturing, etc.
         answer = Answer(
@@ -867,7 +869,6 @@ def stream_chat_message_objects(
                             for img in img_generation_response
                             if img.image_data
                         ],
-                        tenant_id=tenant_id,
                     )
                     info.ai_message_files.extend(
                         [
@@ -1035,6 +1036,7 @@ def stream_chat_message_objects(
         next_level = 1
         prev_message = gen_ai_response_message
         agent_answers = answer.llm_answer_by_level()
+        agentic_message_ids = []
         while next_level in agent_answers:
             next_answer = agent_answers[next_level]
             info = info_by_subq[
@@ -1059,17 +1061,18 @@ def stream_chat_message_objects(
                 refined_answer_improvement=refined_answer_improvement,
                 is_agentic=True,
             )
+            agentic_message_ids.append(
+                AgentMessageIDInfo(level=next_level, message_id=next_answer_message.id)
+            )
             next_level += 1
             prev_message = next_answer_message
 
         logger.debug("Committing messages")
         db_session.commit()  # actually save user / assistant message
 
-        msg_detail_response = translate_db_message_to_chat_message_detail(
-            gen_ai_response_message
-        )
+        yield AgenticMessageResponseIDInfo(agentic_message_ids=agentic_message_ids)
 
-        yield msg_detail_response
+        yield translate_db_message_to_chat_message_detail(gen_ai_response_message)
     except Exception as e:
         error_msg = str(e)
         logger.exception(error_msg)

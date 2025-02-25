@@ -169,8 +169,8 @@ def fetch_credential_by_id_for_user(
 
 
 def fetch_credential_by_id(
-    db_session: Session,
     credential_id: int,
+    db_session: Session,
 ) -> Credential | None:
     stmt = select(Credential).distinct()
     stmt = stmt.where(Credential.id == credential_id)
@@ -422,8 +422,8 @@ def create_initial_public_credential(db_session: Session) -> None:
         "There must exist an empty public credential for data connectors that do not require additional Auth."
     )
     first_credential = fetch_credential_by_id(
-        db_session=db_session,
         credential_id=PUBLIC_CREDENTIAL_ID,
+        db_session=db_session,
     )
 
     if first_credential is not None:

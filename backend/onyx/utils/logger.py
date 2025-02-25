@@ -253,3 +253,8 @@ def print_loggers() -> None:
 
         print(f"  Propagate: {logger.propagate}")
         print()
+
+
+def format_error_for_logging(e: Exception) -> str:
+    """Clean error message by removing newlines for better logging."""
+    return str(e).replace("\n", " ")

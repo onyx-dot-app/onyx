@@ -194,9 +194,14 @@ def get_connector_credential_pair_from_id_for_user(
 def get_connector_credential_pair_from_id(
     db_session: Session,
     cc_pair_id: int,
+    eager_load_credential: bool = False,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair).distinct()
     stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
+
+    if eager_load_credential:
+        stmt = stmt.options(joinedload(ConnectorCredentialPair.credential))
+
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -396,8 +401,8 @@ def add_credential_to_connector(
     # If we are in the seeding flow, we shouldn't need to check if the credential belongs to the user
     if seeding_flow:
         credential = fetch_credential_by_id(
-            db_session=db_session,
             credential_id=credential_id,
+            db_session=db_session,
         )
     else:
         credential = fetch_credential_by_id_for_user(

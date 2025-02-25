@@ -311,19 +311,23 @@ def bulk_invite_users(
     all_emails = list(set(new_invited_emails) | set(initial_invited_users))
     number_of_invited_users = write_invited_users(all_emails)
 
+    # send out email invitations if enabled
+    if ENABLE_EMAIL_INVITES:
+        try:
+            for email in new_invited_emails:
+                send_user_email_invite(email, current_user, AUTH_TYPE)
+        except Exception as e:
+            logger.error(f"Error sending email invite to invited users: {e}")
+
     if not MULTI_TENANT:
         return number_of_invited_users
+
+    # for billing purposes, write to the control plane about the number of new users
     try:
         logger.info("Registering tenant users")
         fetch_ee_implementation_or_noop(
             "onyx.server.tenants.billing", "register_tenant_users", None
         )(tenant_id, get_total_users_count(db_session))
-        if ENABLE_EMAIL_INVITES:
-            try:
-                for email in new_invited_emails:
-                    send_user_email_invite(email, current_user)
-            except Exception as e:
-                logger.error(f"Error sending email invite to invited users: {e}")
 
         return number_of_invited_users
     except Exception as e:

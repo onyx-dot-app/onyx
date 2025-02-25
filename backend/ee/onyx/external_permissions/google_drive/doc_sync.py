@@ -62,12 +62,14 @@ def _fetch_permissions_for_permission_ids(
         user_email=(owner_email or google_drive_connector.primary_admin_email),
     )
 
+    # We continue on 404 or 403 because the document may not exist or the user may not have access to it
     fetched_permissions = execute_paginated_retrieval(
         retrieval_function=drive_service.permissions().list,
         list_key="permissions",
         fileId=doc_id,
         fields="permissions(id, emailAddress, type, domain)",
         supportsAllDrives=True,
+        continue_on_404_or_403=True,
     )
 
     permissions_for_doc_id = []
@@ -104,7 +106,13 @@ def _get_permissions_from_slim_doc(
     user_emails: set[str] = set()
     group_emails: set[str] = set()
     public = False
+    skipped_permissions = 0
+
     for permission in permissions_list:
+        if not permission:
+            skipped_permissions += 1
+            continue
+
         permission_type = permission["type"]
         if permission_type == "user":
             user_emails.add(permission["emailAddress"])
@@ -120,6 +128,11 @@ def _get_permissions_from_slim_doc(
                 )
         elif permission_type == "anyone":
             public = True
+
+    if skipped_permissions > 0:
+        logger.warning(
+            f"Skipped {skipped_permissions} permissions of {len(permissions_list)} for document {slim_doc.id}"
+        )
 
     drive_id = permission_info.get("drive_id")
     group_ids = group_emails | ({drive_id} if drive_id is not None else set())

@@ -15,13 +15,14 @@ from onyx.background.indexing.memory_tracer import MemoryTracer
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import INDEXING_SIZE_WARNING_THRESHOLD
 from onyx.configs.app_configs import INDEXING_TRACER_INTERVAL
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE
 from onyx.configs.app_configs import POLL_CONNECTOR_OFFSET
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MilestoneRecordType
 from onyx.connectors.connector_runner import ConnectorRunner
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import instantiate_connector
-from onyx.connectors.interfaces import ConnectorValidationError
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
@@ -89,8 +90,8 @@ def _get_connector_runner(
         )
 
         # validate the connector settings
-
-        runnable_connector.validate_connector_settings()
+        if not INTEGRATION_TESTS_MODE:
+            runnable_connector.validate_connector_settings()
 
     except Exception as e:
         logger.exception("Unable to instantiate connector.")

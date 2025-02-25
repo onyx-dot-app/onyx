@@ -508,6 +508,7 @@ def get_number_of_chunks_we_think_exist(
 class VespaDebugging:
     # Class for managing Vespa debugging actions.
     def __init__(self, tenant_id: str | None = None):
+        CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         self.tenant_id = POSTGRES_DEFAULT_SCHEMA if not tenant_id else tenant_id
         self.index_name = get_index_name(self.tenant_id)
 

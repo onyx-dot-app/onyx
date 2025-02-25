@@ -52,6 +52,51 @@ class TaskDependencyError(RuntimeError):
     with connector deletion."""
 
 
+def revoke_tasks_blocking_deletion(
+    redis_connector: RedisConnector, db_session: Session, app: Celery
+) -> None:
+    search_settings_list = get_all_search_settings(db_session)
+    for search_settings in search_settings_list:
+        redis_connector_index = redis_connector.new_index(search_settings.id)
+        try:
+            index_payload = redis_connector_index.payload
+            if index_payload and index_payload.celery_task_id:
+                app.control.revoke(index_payload.celery_task_id)
+                task_logger.info(
+                    f"Revoked indexing task {index_payload.celery_task_id}."
+                )
+        except Exception:
+            task_logger.exception("Exception while revoking indexing task")
+
+    try:
+        permissions_sync_payload = redis_connector.permissions.payload
+        if permissions_sync_payload and permissions_sync_payload.celery_task_id:
+            app.control.revoke(permissions_sync_payload.celery_task_id)
+            task_logger.info(
+                f"Revoked permissions sync task {permissions_sync_payload.celery_task_id}."
+            )
+    except Exception:
+        task_logger.exception("Exception while revoking pruning task")
+
+    try:
+        prune_payload = redis_connector.prune.payload
+        if prune_payload and prune_payload.celery_task_id:
+            app.control.revoke(prune_payload.celery_task_id)
+            task_logger.info(f"Revoked pruning task {prune_payload.celery_task_id}.")
+    except Exception:
+        task_logger.exception("Exception while revoking permissions sync task")
+
+    try:
+        external_group_sync_payload = redis_connector.external_group_sync.payload
+        if external_group_sync_payload and external_group_sync_payload.celery_task_id:
+            app.control.revoke(external_group_sync_payload.celery_task_id)
+            task_logger.info(
+                f"Revoked external group sync task {external_group_sync_payload.celery_task_id}."
+            )
+    except Exception:
+        task_logger.exception("Exception while revoking external group sync task")
+
+
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
     ignore_result=True,
@@ -70,7 +115,7 @@ def check_for_connector_deletion_task(
         timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     )
 
-    # these tasks should never overlap
+    # Prevent this task from overlapping with itself
     if not lock_beat.acquire(blocking=False):
         return None
 
@@ -92,9 +137,38 @@ def check_for_connector_deletion_task(
                     )
                 except TaskDependencyError as e:
                     # this means we wanted to start deleting but dependent tasks were running
-                    # Leave a stop signal to clear indexing and pruning tasks more quickly
+                    # on the first error, we set a stop signal and revoke the dependent tasks
+                    # on subsequent errors, we hard reset blocking fences after our specified timeout
+                    # is exceeded
                     task_logger.info(str(e))
-                    redis_connector.stop.set_fence(True)
+
+                    if not redis_connector.stop.fenced:
+                        # one time revoke of celery tasks
+                        task_logger.info("Revoking any tasks blocking deletion.")
+                        revoke_tasks_blocking_deletion(
+                            redis_connector, db_session, self.app
+                        )
+                        redis_connector.stop.set_fence(True)
+                        redis_connector.stop.set_timeout()
+                    else:
+                        # stop signal already set
+                        if redis_connector.stop.timed_out:
+                            # waiting too long, just reset blocking fences
+                            task_logger.info(
+                                "Timed out waiting for tasks blocking deletion. Resetting blocking fences."
+                            )
+                            search_settings_list = get_all_search_settings(db_session)
+                            for search_settings in search_settings_list:
+                                redis_connector_index = redis_connector.new_index(
+                                    search_settings.id
+                                )
+                                redis_connector_index.reset()
+                            redis_connector.prune.reset()
+                            redis_connector.permissions.reset()
+                            redis_connector.external_group_sync.reset()
+                        else:
+                            # just wait
+                            pass
                 else:
                     # clear the stop signal if it exists ... no longer needed
                     redis_connector.stop.set_fence(False)

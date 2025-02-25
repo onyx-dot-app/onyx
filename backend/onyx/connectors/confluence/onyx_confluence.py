@@ -1276,3 +1276,32 @@ def extract_text_from_confluence_html(
             logger.warning(f"Error processing ac:link-body: {e}")
 
     return format_document_soup(soup)
+
+
+# def build_confluence_client(
+#     credentials: dict[str, Any],
+#     is_cloud: bool,
+#     wiki_base: str,
+# ) -> OnyxConfluence:
+#     try:
+#         _validate_connector_configuration(
+#             credentials=credentials,
+#             is_cloud=is_cloud,
+#             wiki_base=wiki_base,
+#         )
+#     except Exception as e:
+#         raise ConnectorValidationError(str(e))
+
+#     return OnyxConfluence(
+#         api_version="cloud" if is_cloud else "latest",
+#         # Remove trailing slash from wiki_base if present
+#         url=wiki_base.rstrip("/"),
+#         # passing in username causes issues for Confluence data center
+#         username=credentials["confluence_username"] if is_cloud else None,
+#         password=credentials["confluence_access_token"] if is_cloud else None,
+#         token=credentials["confluence_access_token"] if not is_cloud else None,
+#         backoff_and_retry=True,
+#         max_backoff_retries=10,
+#         max_backoff_seconds=60,
+#         cloud=is_cloud,
+#     )
