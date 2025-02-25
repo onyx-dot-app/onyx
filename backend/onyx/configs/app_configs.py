@@ -636,8 +636,8 @@ MOCK_LLM_RESPONSE = (
 )
 
 # Image summarization and extraction configs
-IMAGE_SUMMARIZATION_ENABLED = (
-    os.environ.get("IMAGE_SUMMARIZATION_ENABLED", "true").lower() == "true"
+DISABLE_INDEXING_TIME_IMAGE_ANALYSIS = (
+    os.environ.get("DISABLE_INDEXING_TIME_IMAGE_ANALYSIS", "false").lower() == "true"
 )
 
 SEARCH_TIME_IMAGE_ANALYSIS = (
