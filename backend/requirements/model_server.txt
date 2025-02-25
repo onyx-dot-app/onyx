@@ -9,7 +9,7 @@ retry==0.9.2
 safetensors==0.4.2
 sentence-transformers==2.6.1
 torch==2.2.0
-transformers==4.39.2
+transformers==4.48.0
 uvicorn==0.21.1
 voyageai==0.2.3
 litellm==1.60.2
