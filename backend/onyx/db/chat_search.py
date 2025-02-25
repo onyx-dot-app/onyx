@@ -16,56 +16,6 @@ from onyx.configs.constants import MessageType
 from onyx.db.models import ChatSession
 
 
-def update_message_tsv_column(db_session: Session) -> dict:
-    """
-    Manually update the message_tsv column for all chat messages.
-    This can be used if the trigger isn't working or if the migration didn't properly populate the column.
-
-    Returns:
-        A dictionary with the results of the update operation.
-    """
-    try:
-        # Count total messages
-        total_count_query = text("SELECT COUNT(*) FROM chat_message")
-        total_count = db_session.execute(total_count_query).scalar_one()
-
-        # Count messages with NULL message_tsv
-        null_count_query = text(
-            "SELECT COUNT(*) FROM chat_message WHERE message_tsv IS NULL"
-        )
-        null_count_before = db_session.execute(null_count_query).scalar_one()
-
-        # Update all messages using the improved approach with both English and simple dictionaries
-        update_query = text(
-            """
-            UPDATE chat_message
-            SET message_tsv =
-                setweight(to_tsvector('english', message), 'A') ||
-                setweight(to_tsvector('simple', message), 'B')
-            WHERE message_tsv IS NULL OR
-                  message_tsv != (
-                      setweight(to_tsvector('english', message), 'A') ||
-                      setweight(to_tsvector('simple', message), 'B')
-                  )
-            """
-        )
-        db_session.execute(update_query)
-        db_session.commit()
-
-        # Count messages with NULL message_tsv after update
-        null_count_after = db_session.execute(null_count_query).scalar_one()
-
-        return {
-            "total_messages": total_count,
-            "null_before_update": null_count_before,
-            "null_after_update": null_count_after,
-            "updated_count": null_count_before - null_count_after,
-        }
-    except Exception as e:
-        db_session.rollback()
-        return {"error": str(e)}
-
-
 def search_chat_sessions(
     user_id: UUID,
     db_session: Session,
@@ -110,19 +60,6 @@ def search_chat_sessions(
         if len(search_terms.split()) > 1:
             search_terms = " & ".join(search_terms.split())
 
-        print(f"Searching for messages with terms: '{search_terms}'")
-
-        # Debug: Check if message_tsv column exists and has data
-        check_tsv_column = text(
-            """
-            SELECT COUNT(*)
-            FROM chat_message
-            WHERE message_tsv IS NOT NULL
-            """
-        )
-        tsv_count = db_session.execute(check_tsv_column).scalar_one()
-        print(f"Number of messages with non-null message_tsv: {tsv_count}")
-
         # Try full-text search first with both English and simple dictionaries
         # This approach works better with short words and partial matches
         ranked_messages_sql = text(
@@ -145,11 +82,8 @@ def search_chat_sessions(
         )
 
         ranked_messages = db_session.execute(ranked_messages_sql).all()
-        print(f"Full-text search message matches count: {len(ranked_messages)}")
 
-        # If no matches, use direct query that found matches in the debug output
         if len(ranked_messages) == 0:
-            print("No matches found with previous methods, trying direct content match")
             direct_match_sql = text(
                 """
                 SELECT
@@ -161,26 +95,6 @@ def search_chat_sessions(
             ).bindparams(simple_query=f"%{query}%")
 
             ranked_messages = db_session.execute(direct_match_sql).all()
-            print(f"Direct match search found {len(ranked_messages)} matches")
-
-        # Debug: If still no matches, show some sample messages
-        # if len(ranked_messages) == 0:
-        #     debug_query = text(
-        #         """
-        #         SELECT id, message, message_tsv, chat_session_id
-        #         FROM chat_message
-        #         WHERE message ILIKE :simple_query
-        #         LIMIT 5
-        #         """
-        #     ).bindparams(simple_query=f"%{query}%")
-
-        #     debug_results = db_session.execute(debug_query).all()
-        #     print(f"Debug query found {len(debug_results)} potential matches")
-
-        #     # If debug query found matches but our search didn't, use these matches directly
-        #     if debug_results:
-        #         ranked_messages = [(row.chat_session_id, 0.1) for row in debug_results]
-        #         print(f"Using {len(ranked_messages)} matches from debug query")
 
         # Extract chat session IDs with their ranks
         chat_session_ranks = {}
@@ -194,8 +108,6 @@ def search_chat_sessions(
 
         # Get chat session IDs from message matches
         message_match_ids = list(chat_session_ranks.keys())
-
-        print(f"Unique chat sessions with message matches: {len(message_match_ids)}")
 
         # Combine the two queries
         stmt = stmt.where(

@@ -23,10 +23,7 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
     isSearching,
     hasMore,
     fetchMoreChats,
-    createChat,
-  } = useChatSearch({
-    includeHighlights: true, // Enable search highlights
-  });
+  } = useChatSearch();
 
   const router = useRouter();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -34,15 +31,14 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const handleChatSelect = (chatId: string) => {
-    router.push(`/chat/${chatId}`);
+    router.push(`/chat?chatId=${chatId}`);
     onClose();
   };
 
   const handleNewChat = async () => {
     try {
-      const chatId = await createChat();
       onClose();
-      router.push(`/chat/${chatId}`);
+      router.push(`/chat`);
     } catch (error) {
       console.error("Error creating new chat:", error);
     }
@@ -85,7 +81,6 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
         backgroundColor="bg-neutral-950/20 shadow-xl"
       >
         <div className="w-full flex flex-col bg-white dark:bg-neutral-800 h-[80vh] max-h-[600px]">
-          {/* Search header */}
           <div className="sticky top-0 z-20 px-6 py-3 w-full flex items-center justify-between bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700">
             <div className="relative w-full">
               <div className="flex items-center">
@@ -124,18 +119,14 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
             type="auto"
           >
             <div className="px-4  py-2">
-              {/* New chat button */}
-
               <NewChatButton onClick={handleNewChat} />
 
-              {/* Initial loading state */}
               {isLoading && chatGroups.length === 0 && (
                 <div className="py-8">
                   <LoadingSpinner size="large" className="mx-auto" />
                 </div>
               )}
 
-              {/* Chat groups with sticky headers */}
               {chatGroups.length > 0 ? (
                 <>
                   {chatGroups.map((group, groupIndex) => (
@@ -147,7 +138,6 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
                     />
                   ))}
 
-                  {/* Load more indicator */}
                   <div ref={loadMoreRef} className="py-4">
                     {isLoading && hasMore && (
                       <LoadingSpinner className="mx-auto" />

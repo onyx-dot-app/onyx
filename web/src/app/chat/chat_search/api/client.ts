@@ -4,6 +4,7 @@ const API_BASE_URL = "/api";
 
 export interface ExtendedChatSearchRequest extends ChatSearchRequest {
   include_highlights?: boolean;
+  signal?: AbortSignal;
 }
 
 export async function fetchChatSessions(

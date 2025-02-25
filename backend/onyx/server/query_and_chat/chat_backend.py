@@ -805,9 +805,6 @@ def fetch_chat_file(
     return StreamingResponse(file_io, media_type=media_type)
 
 
-# ############################################################
-
-
 @router.get("/search", response_model=ChatSearchResponse)
 async def search_chats(
     query: Optional[str] = Query(None),
