@@ -621,9 +621,6 @@ def get_connector_indexing_status(
         False, description="If true, return editable document sets"
     ),
 ) -> list[ConnectorIndexingStatus]:
-    import time
-
-    start_time = time.time()
     tenant_id = get_current_tenant_id()
     indexing_statuses: list[ConnectorIndexingStatus] = []
 
@@ -802,8 +799,6 @@ def get_connector_indexing_status(
         properties=None,
         db_session=db_session,
     )
-    end_time = time.time()
-    print(f"Time taken: {end_time - start_time} seconds")
 
     return indexing_statuses
 
