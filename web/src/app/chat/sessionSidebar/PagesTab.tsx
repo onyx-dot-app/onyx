@@ -18,6 +18,13 @@ import { Caret } from "@/components/icons/icons";
 import { groupSessionsByDateRange } from "../lib";
 import React from "react";
 import {
+  Tooltip,
+  TooltipProvider,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import { Search } from "lucide-react";
+import {
   DndContext,
   closestCenter,
   KeyboardSensor,
@@ -101,10 +108,12 @@ export function PagesTab({
   showShareModal,
   showDeleteModal,
   showDeleteAllModal,
+  toggleChatSessionSearchModal,
 }: {
   existingChats?: ChatSession[];
   currentChatId?: string;
   folders?: Folder[];
+  toggleChatSessionSearchModal?: () => void;
   closeSidebar?: () => void;
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
@@ -318,8 +327,28 @@ export function PagesTab({
     <div className="flex flex-col gap-y-2 flex-grow">
       {popup}
       <div className="px-4 mt-2 group mr-2 bg-background-sidebar dark:bg-transparent z-20">
-        <div className="flex justify-between text-sm gap-x-2 text-text-300/80 items-center font-normal leading-normal">
+        <div className="flex  group justify-between text-sm gap-x-2 text-text-300/80 items-center font-normal leading-normal">
           <p>Chats</p>
+
+          <TooltipProvider delayDuration={1000}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="my-auto mr-auto  group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal mobile:hidden"
+                  onClick={() => {
+                    toggleChatSessionSearchModal?.();
+                  }}
+                >
+                  <Search
+                    className="flex-none text-text-mobile-sidebar"
+                    size={12}
+                  />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Search Chats</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           <button
             onClick={handleCreateFolder}
             className="flex group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal"

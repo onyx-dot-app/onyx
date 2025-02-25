@@ -66,6 +66,7 @@ interface HistorySidebarProps {
   explicitlyUntoggle: () => void;
   showDeleteAllModal?: () => void;
   setShowAssistantsModal: (show: boolean) => void;
+  toggleChatSessionSearchModal?: () => void;
 }
 
 interface SortableAssistantProps {
@@ -180,6 +181,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
       toggleSidebar,
       removeToggle,
       showShareModal,
+      toggleChatSessionSearchModal,
       showDeleteModal,
       showDeleteAllModal,
     },
@@ -318,7 +320,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
               )}
             </div>
           )}
-
           <div className="h-full  relative overflow-x-hidden overflow-y-auto">
             <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-[#D4D4D4] items-center font-normal leading-normal">
               Assistants
@@ -395,6 +396,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             </div>
 
             <PagesTab
+              toggleChatSessionSearchModal={toggleChatSessionSearchModal}
               showDeleteModal={showDeleteModal}
               showShareModal={showShareModal}
               closeSidebar={removeToggle}
