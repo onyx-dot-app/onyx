@@ -52,7 +52,6 @@ export default function StarterMessagesList({
           <TextFormField
             name={`starter_messages.${index}.message`}
             label=""
-            value={starterMessage.message}
             onChange={(e) => handleInputChange(index, e.target.value)}
             className="flex-grow"
             removeLabel

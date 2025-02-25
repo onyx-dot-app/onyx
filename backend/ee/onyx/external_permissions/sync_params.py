@@ -20,6 +20,7 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 # Defining the input/output types for the sync functions
 DocSyncFuncType = Callable[
     [
+        str | None,
         ConnectorCredentialPair,
         IndexingHeartbeatInterface | None,
     ],
@@ -28,6 +29,7 @@ DocSyncFuncType = Callable[
 
 GroupSyncFuncType = Callable[
     [
+        str | None,
         ConnectorCredentialPair,
     ],
     list[ExternalUserGroup],
