@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { fetchChatSessions } from "./api/utils";
-import { ChatSessionGroup, ChatSessionSummary } from "./api/interfaces";
+import { fetchChatSessions } from "./utils";
+import { ChatSessionGroup, ChatSessionSummary } from "./interfaces";
 
 interface UseChatSearchOptions {
   pageSize?: number;
@@ -21,7 +21,7 @@ export function useChatSearch(
   options: UseChatSearchOptions = {}
 ): UseChatSearchResult {
   const { pageSize = 10 } = options;
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQueryInternal] = useState("");
   const [chatGroups, setChatGroups] = useState<ChatSessionGroup[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -29,6 +29,7 @@ export function useChatSearch(
   const [page, setPage] = useState(1);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const currentAbortController = useRef<AbortController | null>(null);
+  const activeSearchIdRef = useRef<number>(0); // Add a unique ID for each search
   const PAGE_SIZE = pageSize;
 
   // Helper function to merge groups properly
@@ -74,36 +75,39 @@ export function useChatSearch(
   );
 
   const fetchInitialChats = useCallback(
-    async (signal?: AbortSignal) => {
-      setIsLoading(true);
-      setPage(1);
-
+    async (query: string, searchId: number, signal?: AbortSignal) => {
       try {
+        setIsLoading(true);
+        setPage(1);
+
         const response = await fetchChatSessions({
-          query: searchQuery,
+          query,
           page: 1,
           page_size: PAGE_SIZE,
           signal,
         });
 
-        if (signal && signal.aborted) {
-          return;
+        // Only update state if this is still the active search
+        if (activeSearchIdRef.current === searchId && !signal?.aborted) {
+          setChatGroups(response.groups);
+          setHasMore(response.has_more);
         }
-
-        setChatGroups(response.groups);
-        setHasMore(response.has_more);
-      } catch (error) {
-        if ((error as any)?.name === "AbortError") {
-          console.log("Request was aborted.");
-          setIsLoading(false);
-          return;
+      } catch (error: any) {
+        if (
+          error?.name !== "AbortError" &&
+          activeSearchIdRef.current === searchId
+        ) {
+          console.error("Error fetching chats:", error);
         }
-        console.error("Error fetching chats:", error);
       } finally {
-        setIsLoading(false);
+        // Only update loading state if this is still the active search
+        if (activeSearchIdRef.current === searchId) {
+          setIsLoading(false);
+          setIsSearching(false); // Always reset search state when done
+        }
       }
     },
-    [searchQuery, PAGE_SIZE]
+    [PAGE_SIZE]
   );
 
   const fetchMoreChats = useCallback(async () => {
@@ -114,8 +118,13 @@ export function useChatSearch(
     if (currentAbortController.current) {
       currentAbortController.current.abort();
     }
-    currentAbortController.current = new AbortController();
-    const localSignal = currentAbortController.current.signal;
+
+    const newSearchId = activeSearchIdRef.current + 1;
+    activeSearchIdRef.current = newSearchId;
+
+    const controller = new AbortController();
+    currentAbortController.current = controller;
+    const localSignal = controller.signal;
 
     try {
       const nextPage = page + 1;
@@ -126,56 +135,74 @@ export function useChatSearch(
         signal: localSignal,
       });
 
-      if (localSignal.aborted) {
-        return;
+      if (activeSearchIdRef.current === newSearchId && !localSignal.aborted) {
+        // Use mergeGroups instead of just concatenating
+        setChatGroups((prevGroups) => mergeGroups(prevGroups, response.groups));
+        setHasMore(response.has_more);
+        setPage(nextPage);
       }
-
-      // Use mergeGroups instead of just concatenating
-      setChatGroups((prevGroups) => mergeGroups(prevGroups, response.groups));
-      setHasMore(response.has_more);
-      setPage(nextPage);
-    } catch (error) {
-      if ((error as any)?.name === "AbortError") {
-        console.log("Pagination request was aborted.");
-        setIsLoading(false);
-        return;
+    } catch (error: any) {
+      if (
+        error?.name !== "AbortError" &&
+        activeSearchIdRef.current === newSearchId
+      ) {
+        console.error("Error fetching more chats:", error);
       }
-      console.error("Error fetching more chats:", error);
     } finally {
-      setIsLoading(false);
+      if (activeSearchIdRef.current === newSearchId) {
+        setIsLoading(false);
+      }
     }
   }, [isLoading, hasMore, page, searchQuery, PAGE_SIZE, mergeGroups]);
 
-  const handleSearch = useCallback(
+  const setSearchQuery = useCallback(
     (query: string) => {
-      setSearchQuery(query);
+      setSearchQueryInternal(query);
 
+      // Clear any pending timeouts
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = null;
       }
 
+      // Abort any in-flight requests
       if (currentAbortController.current) {
         currentAbortController.current.abort();
+        currentAbortController.current = null;
       }
-      currentAbortController.current = new AbortController();
-      const localSignal = currentAbortController.current.signal;
 
-      setIsSearching(true);
+      // Create a new search ID
+      const newSearchId = activeSearchIdRef.current + 1;
+      activeSearchIdRef.current = newSearchId;
 
-      searchTimeoutRef.current = setTimeout(() => {
-        fetchInitialChats(localSignal).finally(() => {
-          setIsSearching(false);
-        });
-      }, 1000);
+      if (query.trim()) {
+        setIsSearching(true);
+
+        const controller = new AbortController();
+        currentAbortController.current = controller;
+
+        searchTimeoutRef.current = setTimeout(() => {
+          fetchInitialChats(query, newSearchId, controller.signal);
+        }, 500);
+      } else {
+        // For empty queries, clear search state immediately
+        setIsSearching(false);
+        // Optionally fetch initial unfiltered results
+        fetchInitialChats("", newSearchId);
+      }
     },
     [fetchInitialChats]
   );
 
+  // Initial fetch on mount
   useEffect(() => {
+    const newSearchId = activeSearchIdRef.current + 1;
+    activeSearchIdRef.current = newSearchId;
+
     const controller = new AbortController();
     currentAbortController.current = controller;
 
-    fetchInitialChats(controller.signal);
+    fetchInitialChats(searchQuery, newSearchId, controller.signal);
 
     return () => {
       if (searchTimeoutRef.current) {
@@ -183,17 +210,28 @@ export function useChatSearch(
       }
       controller.abort();
     };
-  }, [fetchInitialChats]);
+  }, [fetchInitialChats, searchQuery]);
 
   return {
     searchQuery,
-    setSearchQuery: handleSearch,
+    setSearchQuery,
     chatGroups,
     isLoading,
     isSearching,
     hasMore,
     fetchMoreChats,
-    refreshChats: () =>
-      fetchInitialChats(currentAbortController.current?.signal),
+    refreshChats: () => {
+      const newSearchId = activeSearchIdRef.current + 1;
+      activeSearchIdRef.current = newSearchId;
+
+      if (currentAbortController.current) {
+        currentAbortController.current.abort();
+      }
+
+      const controller = new AbortController();
+      currentAbortController.current = controller;
+
+      return fetchInitialChats(searchQuery, newSearchId, controller.signal);
+    },
   };
 }

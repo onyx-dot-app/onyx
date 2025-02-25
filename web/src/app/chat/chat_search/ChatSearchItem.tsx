@@ -1,6 +1,6 @@
 import React from "react";
 import { MessageSquare } from "lucide-react";
-import { ChatSessionSummary } from "./api/interfaces";
+import { ChatSessionSummary } from "./interfaces";
 
 interface ChatSearchItemProps {
   chat: ChatSessionSummary;
