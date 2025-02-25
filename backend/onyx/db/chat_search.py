@@ -12,7 +12,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import MessageType
 from onyx.db.models import ChatSession
 
 
@@ -42,59 +41,40 @@ def search_chat_sessions(
 
     # If a search query is provided, filter by description or message content
     if query and query.strip():
-        # For description search, we can still use LIKE for simplicity
+        # For description search, we can use LIKE for simplicity
         query_lower = f"%{query.lower()}%"
         description_matches = select(ChatSession.id).where(
             ChatSession.user_id == user_id,
             func.lower(ChatSession.description).like(query_lower),
         )
+        # For message content search, use direct text matching
+        # Split the query into words for multi-word search
+        words = query.lower().split()
+        params = {}
 
-        # Debug: Count description matches
-        description_match_count = db_session.execute(
-            select(func.count()).select_from(description_matches.subquery())
-        ).scalar_one()
-        print(f"Description matches count: {description_match_count}")
+        for i, word in enumerate(words):
+            param_name = f"word_{i}"
+            params[param_name] = f"%{word}%"
 
-        # For message content search, first try PostgreSQL's full-text search
-        search_terms = query.strip()
-        if len(search_terms.split()) > 1:
-            search_terms = " & ".join(search_terms.split())
+        # Build the SQL text with proper parameter binding
+        sql_parts = [
+            "SELECT",
+            "    chat_session_id,",
+            "    1.0 AS search_rank",
+            "FROM chat_message",
+            "WHERE (",
+        ]
 
-        # Try full-text search first with both English and simple dictionaries
-        # This approach works better with short words and partial matches
-        ranked_messages_sql = text(
-            """
-            SELECT
-                chat_session_id,
-                ts_rank(message_tsv, to_tsquery('english', :english_query)) +
-                ts_rank(message_tsv, to_tsquery('simple', :simple_query)) AS search_rank
-            FROM chat_message
-            WHERE message_type = :message_type
-            AND (
-                message_tsv @@ to_tsquery('english', :english_query)
-                OR message_tsv @@ to_tsquery('simple', :simple_query)
-            )
-            """
-        ).bindparams(
-            english_query=f"{search_terms}:*",  # Add prefix matching
-            simple_query=f"{search_terms}:*",  # Add prefix matching
-            message_type=MessageType.USER.value,
-        )
+        # Add each condition with proper parameter binding
+        condition_parts = []
+        for i in range(len(words)):
+            condition_parts.append(f"LOWER(message) LIKE :word_{i}")
 
-        ranked_messages = db_session.execute(ranked_messages_sql).all()
+        sql_parts.append(" OR ".join(condition_parts))
+        sql_parts.append(")")
 
-        if len(ranked_messages) == 0:
-            direct_match_sql = text(
-                """
-                SELECT
-                    chat_session_id,
-                    0.25 AS search_rank
-                FROM chat_message
-                WHERE message ILIKE :simple_query
-                """
-            ).bindparams(simple_query=f"%{query}%")
-
-            ranked_messages = db_session.execute(direct_match_sql).all()
+        message_match_sql = text("\n".join(sql_parts)).bindparams(**params)
+        ranked_messages = db_session.execute(message_match_sql).all()
 
         # Extract chat session IDs with their ranks
         chat_session_ranks = {}
@@ -139,7 +119,6 @@ def search_chat_sessions(
             )
 
             # Apply pagination manually
-            len(chat_sessions)
             offset = (page - 1) * page_size
             end_idx = offset + page_size + 1  # Get one extra to check if there are more
 
@@ -176,5 +155,4 @@ def search_chat_sessions(
     has_more = len(chat_sessions) > page_size
     if has_more:
         chat_sessions = chat_sessions[:page_size]
-
     return chat_sessions, has_more

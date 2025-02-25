@@ -1,6 +1,6 @@
 import React from "react";
 import { ChatSearchItem } from "./ChatSearchItem";
-import { ChatSessionSummary } from "./api/models";
+import { ChatSessionSummary } from "./api/interfaces";
 
 interface ChatSearchGroupProps {
   title: string;

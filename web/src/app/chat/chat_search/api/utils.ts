@@ -1,4 +1,4 @@
-import { ChatSearchRequest, ChatSearchResponse } from "./models";
+import { ChatSearchRequest, ChatSearchResponse } from "./interfaces";
 
 const API_BASE_URL = "/api";
 

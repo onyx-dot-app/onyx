@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { fetchChatSessions } from "./api/client";
-import { ChatSessionGroup } from "./api/models";
+import { fetchChatSessions } from "./api/utils";
+import { ChatSessionGroup } from "./api/interfaces";
 
 interface UseChatSearchOptions {
   pageSize?: number;
