@@ -170,32 +170,59 @@ export const connectorConfigs: Record<
     values: [
       {
         type: "text",
-        query: "Enter the repository owner:",
+        query: "Enter the GitHub username or organization:",
         label: "Repository Owner",
         name: "repo_owner",
         optional: false,
       },
       {
-        type: "text",
-        query: "Enter the repository name:",
-        label: "Repository Name",
-        name: "repo_name",
-        optional: false,
+        type: "tab",
+        name: "github_mode",
+        label: "What should we index from GitHub?",
+        optional: true,
+        tabs: [
+          {
+            value: "repo",
+            label: "Specific Repository",
+            fields: [
+              {
+                type: "text",
+                query: "Enter the repository name:",
+                label: "Repository Name",
+                name: "repo_name",
+                optional: false,
+              },
+            ],
+          },
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything",
+                description:
+                  "This connector will index all repositories the provided credentials have access to!",
+              },
+            ],
+          },
+        ],
       },
       {
         type: "checkbox",
         query: "Include pull requests?",
         label: "Include pull requests?",
-        description: "Index pull requests from this repository",
+        description: "Index pull requests from repositories",
         name: "include_prs",
         optional: true,
       },
       {
         type: "checkbox",
         query: "Include issues?",
-        label: "Include Issues",
+        label: "Include Issues?",
         name: "include_issues",
-        description: "Index issues from this repository",
+        description: "Index issues from repositories",
         optional: true,
       },
     ],
