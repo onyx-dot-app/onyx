@@ -636,3 +636,12 @@ TEST_ENV = os.environ.get("TEST_ENV", "").lower() == "true"
 MOCK_LLM_RESPONSE = (
     os.environ.get("MOCK_LLM_RESPONSE") if os.environ.get("MOCK_LLM_RESPONSE") else None
 )
+
+# Image summarization and extraction configs
+DISABLE_INDEXING_TIME_IMAGE_ANALYSIS = (
+    os.environ.get("DISABLE_INDEXING_TIME_IMAGE_ANALYSIS", "false").lower() == "true"
+)
+
+SEARCH_TIME_IMAGE_ANALYSIS = (
+    os.environ.get("SEARCH_TIME_IMAGE_ANALYSIS", "true").lower() == "true"
+)
