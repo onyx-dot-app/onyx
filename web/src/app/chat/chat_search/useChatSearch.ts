@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchChatSessions } from "./api/utils";
-import { ChatSessionGroup } from "./api/interfaces";
+import { ChatSessionGroup, ChatSessionSummary } from "./api/interfaces";
 
 interface UseChatSearchOptions {
   pageSize?: number;
@@ -30,6 +30,48 @@ export function useChatSearch(
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const currentAbortController = useRef<AbortController | null>(null);
   const PAGE_SIZE = pageSize;
+
+  // Helper function to merge groups properly
+  const mergeGroups = useCallback(
+    (
+      existingGroups: ChatSessionGroup[],
+      newGroups: ChatSessionGroup[]
+    ): ChatSessionGroup[] => {
+      const mergedGroups: Record<string, ChatSessionSummary[]> = {};
+
+      // Initialize with existing groups
+      existingGroups.forEach((group) => {
+        mergedGroups[group.title] = [
+          ...(mergedGroups[group.title] || []),
+          ...group.chats,
+        ];
+      });
+
+      // Merge in new groups
+      newGroups.forEach((group) => {
+        mergedGroups[group.title] = [
+          ...(mergedGroups[group.title] || []),
+          ...group.chats,
+        ];
+      });
+
+      // Convert back to array format
+      return Object.entries(mergedGroups)
+        .map(([title, chats]) => ({ title, chats }))
+        .sort((a, b) => {
+          // Custom sort order for time periods
+          const order = [
+            "Today",
+            "Yesterday",
+            "This Week",
+            "This Month",
+            "Older",
+          ];
+          return order.indexOf(a.title) - order.indexOf(b.title);
+        });
+    },
+    []
+  );
 
   const fetchInitialChats = useCallback(
     async (signal?: AbortSignal) => {
@@ -88,7 +130,8 @@ export function useChatSearch(
         return;
       }
 
-      setChatGroups((prev) => [...prev, ...response.groups]);
+      // Use mergeGroups instead of just concatenating
+      setChatGroups((prevGroups) => mergeGroups(prevGroups, response.groups));
       setHasMore(response.has_more);
       setPage(nextPage);
     } catch (error) {
@@ -101,7 +144,7 @@ export function useChatSearch(
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, hasMore, page, searchQuery, PAGE_SIZE]);
+  }, [isLoading, hasMore, page, searchQuery, PAGE_SIZE, mergeGroups]);
 
   const handleSearch = useCallback(
     (query: string) => {
@@ -135,9 +178,9 @@ export function useChatSearch(
     fetchInitialChats(controller.signal);
 
     return () => {
-      // if (searchTimeoutRef.current) {
-      //   clearTimeout(searchTimeoutRef.current);
-      // }
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
       controller.abort();
     };
   }, [fetchInitialChats]);
