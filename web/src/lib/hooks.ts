@@ -774,6 +774,12 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
 };
 
 export function getDisplayNameForModel(modelName: string): string {
+  if (modelName.startsWith("bedrock")) {
+    const parts = modelName.split("/");
+    const lastPart = parts[parts.length - 1];
+    return MODEL_DISPLAY_NAMES[lastPart] || lastPart;
+  }
+
   return MODEL_DISPLAY_NAMES[modelName] || modelName;
 }
 
