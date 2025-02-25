@@ -1,4 +1,4 @@
-import { ChatSessionSharedStatus } from "@/types/chat";
+import { ChatSessionSharedStatus } from "../interfaces";
 
 export interface ChatSessionSummary {
   id: string;
