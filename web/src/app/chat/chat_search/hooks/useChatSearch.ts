@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { fetchChatSessions } from "./utils";
-import { ChatSessionGroup, ChatSessionSummary } from "./interfaces";
+import { fetchChatSessions } from "../utils";
+import { ChatSessionGroup, ChatSessionSummary } from "../interfaces";
 
 interface UseChatSearchOptions {
   pageSize?: number;
@@ -26,11 +26,29 @@ export function useChatSearch(
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [debouncedIsSearching, setDebouncedIsSearching] = useState(false);
+
   const [page, setPage] = useState(1);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const currentAbortController = useRef<AbortController | null>(null);
   const activeSearchIdRef = useRef<number>(0); // Add a unique ID for each search
   const PAGE_SIZE = pageSize;
+
+  useEffect(() => {
+    // Only set a timeout if we're not already in the desired state
+    if (!isSearching) {
+      const timeout = setTimeout(() => {
+        setDebouncedIsSearching(isSearching);
+      }, 300);
+
+      // Keep track of the timeout reference to clear it on cleanup
+      const timeoutRef = timeout;
+
+      return () => clearTimeout(timeoutRef);
+    } else {
+      setDebouncedIsSearching(isSearching);
+    }
+  }, [isSearching, debouncedIsSearching]);
 
   // Helper function to merge groups properly
   const mergeGroups = useCallback(
@@ -103,7 +121,7 @@ export function useChatSearch(
         // Only update loading state if this is still the active search
         if (activeSearchIdRef.current === searchId) {
           setIsLoading(false);
-          setIsSearching(false); // Always reset search state when done
+          setIsSearching(false);
         }
       }
     },
@@ -217,7 +235,7 @@ export function useChatSearch(
     setSearchQuery,
     chatGroups,
     isLoading,
-    isSearching,
+    isSearching: debouncedIsSearching,
     hasMore,
     fetchMoreChats,
     refreshChats: () => {

@@ -2333,7 +2333,7 @@ export function ChatPage({
 
       <ChatSearchModal
         open={isChatSearchModalOpen}
-        onClose={() => setIsChatSearchModalOpen(false)}
+        onCloseModal={() => setIsChatSearchModalOpen(false)}
       />
 
       {retrievalEnabled && documentSidebarVisible && settings?.isMobile && (

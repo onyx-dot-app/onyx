@@ -3,18 +3,19 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatSearchGroup } from "./ChatSearchGroup";
 import { NewChatButton } from "./NewChatButton";
-import { useChatSearch } from "./useChatSearch";
+import { useChatSearch } from "./hooks/useChatSearch";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { useRouter } from "next/navigation";
 import { SearchInput } from "./components/SearchInput";
+import { ChatSearchSkeletonList } from "./components/ChatSearchSkeleton";
 import { useIntersectionObserver } from "./hooks/useIntersectionObserver";
 
 interface ChatSearchModalProps {
   open: boolean;
-  onClose: () => void;
+  onCloseModal: () => void;
 }
 
-export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
+export function ChatSearchModal({ open, onCloseModal }: ChatSearchModalProps) {
   const {
     searchQuery,
     setSearchQuery,
@@ -24,6 +25,11 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
     hasMore,
     fetchMoreChats,
   } = useChatSearch();
+
+  const onClose = () => {
+    setSearchQuery("");
+    onCloseModal();
+  };
 
   const router = useRouter();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -72,13 +78,13 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
             <div className="px-4 py-2">
               <NewChatButton onClick={handleNewChat} />
 
-              {isLoading && chatGroups.length === 0 && (
+              {isSearching ? (
+                <ChatSearchSkeletonList />
+              ) : isLoading && chatGroups.length === 0 ? (
                 <div className="py-8">
                   <LoadingSpinner size="large" className="mx-auto" />
                 </div>
-              )}
-
-              {chatGroups.length > 0 ? (
+              ) : chatGroups.length > 0 ? (
                 <>
                   {chatGroups.map((group, groupIndex) => (
                     <ChatSearchGroup
